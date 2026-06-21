@@ -1,0 +1,407 @@
+status: approved
+language: en
+approved_at: "2026-06-20"
+scope: R1 local CLI and CI artifact code review engine
+human_approval:
+  status: approved
+  recorded_from: user_request_in_current_thread
+  recorded_at: "2026-06-20"
+open_decisions: []
+deterministic_checks:
+  spec_checker:
+    command: node /Users/sebastianwessel/.agents/skills/spec-readiness-review/scripts/check_specs.mjs spec
+    status: passed
+  dependency_metadata:
+    command: npm view selected packages version license engines --json
+    status: passed
+  typecheck:
+    command: npm run typecheck
+    status: passed
+  tests:
+    command: npm test
+    status: passed
+  build:
+    command: npm run build
+    status: passed
+no_drift_gate:
+  status: passed
+  evidence:
+    - specs/README.md
+    - specs/00-conventions.md
+    - specs/_registry.yaml
+ambiguity_gate:
+  status: passed
+  evidence:
+    - no open decisions
+    - ambiguity scan has no matches
+semantic_alignment_gate:
+  status: passed
+  evidence:
+    - specs/10-state-of-the-art-research-synthesis.md
+spec_structure_gate:
+  status: passed
+  evidence:
+    - specs/00-vision.md
+    - specs/00-stack.md
+    - specs/00-conventions.md
+    - specs/00-architecture-overview.md
+    - specs/00-file-structure.md
+    - specs/glossary.md
+    - specs/02-capabilities/capability-inventory.md
+    - specs/03-flows/e2e-coverage.md
+visualization_gate:
+  status: passed
+  evidence:
+    - text architecture flow in specs/00-architecture-overview.md
+requirements_quality_gate:
+  status: passed
+  evidence:
+    - specs/00-vision.md
+    - specs/00-scope-and-glossary.md
+    - specs/02-capabilities/capability-inventory.md
+end_to_end_definition_gate:
+  status: passed
+  evidence:
+    - specs/03-flows/e2e-coverage.md
+file_structure_gate:
+  status: passed
+  evidence:
+    - specs/00-file-structure.md
+    - specs/01-architecture-and-structure.md
+current_dependency_research_gate:
+  status: passed
+  evidence:
+    - specs/08-dependencies-and-release.md
+    - specs/10-state-of-the-art-research-synthesis.md
+    - npm metadata retrieved 2026-06-20
+concise_spec_gate:
+  status: passed
+  evidence:
+    - shared facts live once and are linked through specs/_registry.yaml
+client_consumer_coverage_gate:
+  status: passed
+  evidence:
+    - CLI, CI, reviewer, model, and maintainer consumers covered in specs/03-flows/e2e-coverage.md
+frontend_ux_integration_gate:
+  status: passed
+  evidence:
+    - frontend/browser UI marked not applicable for R1 in specs/03-flows/e2e-coverage.md
+standards_first_gate:
+  status: passed
+  evidence:
+    - JSON Schema 2020-12 for config and report contracts
+    - SARIF 2.1.0 export
+    - OpenTelemetry no-content telemetry guidance
+machine_readable_contract_gate:
+  status: passed
+  evidence:
+    - specs/03-contracts/config.schema.json
+    - specs/03-contracts/review-report.schema.json
+async_semantics_gate:
+  status: passed
+  evidence:
+    - specs/00-stack.md execution_semantics
+    - specs/05-review-workflow-and-runtime.md
+clean_rebuild_boundary_gate:
+  status: passed
+  evidence:
+    - specs/00-architecture-overview.md
+    - specs/03-contracts/generation-map.md
+generation_map_gate:
+  status: passed
+  evidence:
+    - specs/03-contracts/generation-map.md
+strong_boundary_type_gate:
+  status: passed
+  evidence:
+    - specs/00-conventions.md
+    - specs/03-contracts/generation-map.md
+interface_gate:
+  status: passed
+  evidence:
+    - specs/00-stack.md Public API Inventory
+    - specs/03-contracts/config.schema.json
+    - specs/03-contracts/review-report.schema.json
+e2e_gate:
+  status: passed
+  evidence:
+    - specs/03-flows/e2e-coverage.md
+unhappy_path_gate:
+  status: passed
+  evidence:
+    - specs/03-flows/e2e-coverage.md
+    - specs/05-review-workflow-and-runtime.md
+security_privacy_gate:
+  status: passed
+  evidence:
+    - specs/07-security-privacy-operations.md
+observability_gate:
+  status: passed
+  evidence:
+    - specs/07-security-privacy-operations.md
+performance_resilience_gate:
+  status: passed
+  evidence:
+    - specs/06-evaluation-and-quality-gates.md
+data_integrity_recovery_gate:
+  status: passed
+  evidence:
+    - specs/03-flows/e2e-coverage.md
+    - specs/05-review-workflow-and-runtime.md
+production_readiness_gate:
+  status: passed
+  evidence:
+    - specs/07-security-privacy-operations.md
+    - specs/08-dependencies-and-release.md
+supply_chain_gate:
+  status: passed
+  evidence:
+    - specs/08-dependencies-and-release.md
+wave_readiness:
+  status: passed
+  evidence:
+    - capabilities can be split into contract, intake, config, provider, workflow, admission, reporting, eval, and security waves
+migration_gate:
+  status: passed
+  evidence:
+    - no database, no old boundary, no public release migration in R1
+checklist_walk_gate:
+  status: passed
+  evidence:
+    - checklist_walk records every relevant topic as covered or not applicable
+contradiction_check:
+  status: passed
+  evidence:
+    - no conflicting scope found in readiness review
+semantic_judge_gate:
+  status: passed
+  evidence:
+    - manual semantic review by readiness agent completed
+self_audit_gate:
+  status: passed
+  evidence:
+    - specs/09-readiness-self-audit.md
+gate_simulation:
+  status: passed
+  evidence:
+    - planning agents can create tickets without deciding behavior, contracts, security, tests, dependencies, or file placement
+spec_judge_loop:
+  status: passed
+  run_timing: approval_only
+  uncertainty: []
+  blocking_findings_count: 0
+  reviewed_flows:
+    - flow_id: FLOW-REVIEW-LOCAL
+      capability: CAP-CLI-001
+      result: passed
+    - flow_id: FLOW-CONFIG-VALIDATE
+      capability: CAP-CLI-002
+      result: passed
+    - flow_id: FLOW-REPO-INTAKE
+      capability: CAP-REPO-001
+      result: passed
+    - flow_id: FLOW-TS-ADAPTER
+      capability: CAP-LANG-001
+      result: passed
+    - flow_id: FLOW-PROVIDER
+      capability: CAP-PROV-001
+      result: passed
+    - flow_id: FLOW-INSTRUCTIONS
+      capability: CAP-INSTR-001
+      result: passed
+    - flow_id: FLOW-SKILLS
+      capability: CAP-SKILL-001
+      result: passed
+    - flow_id: FLOW-HARNESS
+      capability: CAP-WF-001
+      result: passed
+    - flow_id: FLOW-ADMISSION
+      capability: CAP-ADM-001
+      result: passed
+    - flow_id: FLOW-BASELINE
+      capability: CAP-BASE-001
+      result: passed
+    - flow_id: FLOW-REPORT-JSON
+      capability: CAP-REP-001
+      result: passed
+    - flow_id: FLOW-REPORT-MD
+      capability: CAP-REP-002
+      result: passed
+    - flow_id: FLOW-REPORT-SARIF
+      capability: CAP-REP-003
+      result: passed
+    - flow_id: FLOW-CONTEXT-LEDGER
+      capability: CAP-CTX-001
+      result: passed
+    - flow_id: FLOW-EVAL
+      capability: CAP-EVAL-001
+      result: passed
+    - flow_id: FLOW-GATE
+      capability: CAP-GATE-001
+      result: passed
+    - flow_id: FLOW-OBS
+      capability: CAP-OPS-001
+      result: passed
+checklist_walk:
+  status: passed
+  blocking_findings_count: 0
+  topics:
+    core:
+      applicability: relevant
+      checklist: checklist-core.md
+      evidence:
+        - specs/00-vision.md
+        - specs/02-capabilities/capability-inventory.md
+      gaps: []
+    end_to_end:
+      applicability: relevant
+      checklist: checklist-end-to-end-definition.md
+      evidence:
+        - specs/03-flows/e2e-coverage.md
+      gaps: []
+    architecture_structure:
+      applicability: relevant
+      checklist: checklist-architecture-structure.md
+      evidence:
+        - specs/00-file-structure.md
+        - specs/01-architecture-and-structure.md
+      gaps: []
+    contracts_generation:
+      applicability: relevant
+      checklist: checklist-contracts-generation.md
+      evidence:
+        - specs/03-contracts/config.schema.json
+        - specs/03-contracts/review-report.schema.json
+        - specs/03-contracts/generation-map.md
+      gaps: []
+    service_topology:
+      applicability: relevant
+      checklist: checklist-service-topology.md
+      evidence:
+        - specs/00-architecture-overview.md
+      gaps: []
+    testing_verification:
+      applicability: relevant
+      checklist: checklist-testing-verification.md
+      evidence:
+        - specs/06-evaluation-and-quality-gates.md
+        - specs/03-flows/e2e-coverage.md
+      gaps: []
+    security_abuse:
+      applicability: relevant
+      checklist: checklist-security-abuse.md
+      evidence:
+        - specs/07-security-privacy-operations.md
+      gaps: []
+    secrets_privacy:
+      applicability: relevant
+      checklist: checklist-secrets-privacy.md
+      evidence:
+        - specs/07-security-privacy-operations.md
+      gaps: []
+    performance_capacity:
+      applicability: relevant
+      checklist: checklist-performance-capacity.md
+      evidence:
+        - specs/04-configuration-and-providers.md
+        - specs/06-evaluation-and-quality-gates.md
+      gaps: []
+    runtime_platform:
+      applicability: relevant
+      checklist: checklist-runtime-platform.md
+      evidence:
+        - specs/00-stack.md
+        - specs/08-dependencies-and-release.md
+      gaps: []
+    dependencies_research:
+      applicability: relevant
+      checklist: checklist-dependencies-research.md
+      evidence:
+        - specs/08-dependencies-and-release.md
+        - specs/10-state-of-the-art-research-synthesis.md
+      gaps: []
+    data_persistence:
+      applicability: limited
+      checklist: checklist-data-persistence.md
+      evidence:
+        - specs/03-flows/e2e-coverage.md
+      gaps: []
+    auth_permissions:
+      applicability: limited
+      checklist: checklist-auth-permissions.md
+      evidence:
+        - specs/07-security-privacy-operations.md
+        - specs/03-flows/e2e-coverage.md
+      gaps: []
+    async_integrations:
+      applicability: relevant
+      checklist: checklist-async-integrations.md
+      evidence:
+        - specs/00-stack.md
+        - specs/05-review-workflow-and-runtime.md
+      gaps: []
+    reporting_analytics:
+      applicability: relevant
+      checklist: checklist-search-reporting-analytics.md
+      evidence:
+        - specs/03-contracts/finding-evidence-report.md
+        - specs/06-evaluation-and-quality-gates.md
+      gaps: []
+    ai_automation:
+      applicability: relevant
+      checklist: checklist-ai-ml-automation.md
+      evidence:
+        - specs/04-configuration-and-providers.md
+        - specs/05-review-workflow-and-runtime.md
+        - specs/06-evaluation-and-quality-gates.md
+        - specs/07-security-privacy-operations.md
+      gaps: []
+    operations_release:
+      applicability: relevant
+      checklist: checklist-operations-release.md
+      evidence:
+        - specs/07-security-privacy-operations.md
+        - specs/08-dependencies-and-release.md
+      gaps: []
+    frontend_ux:
+      applicability: not_applicable
+      checklist: checklist-index-frontend.md
+      evidence:
+        - specs/03-flows/e2e-coverage.md
+      gaps: []
+    admin_support_governance:
+      applicability: not_applicable
+      checklist: checklist-admin-support-governance.md
+      evidence:
+        - specs/02-capabilities/capability-inventory.md
+      gaps: []
+    payments_entitlements:
+      applicability: not_applicable
+      checklist: checklist-payments-entitlements.md
+      evidence:
+        - specs/02-capabilities/capability-inventory.md
+      gaps: []
+    notifications:
+      applicability: not_applicable
+      checklist: checklist-notifications-communications.md
+      evidence:
+        - specs/02-capabilities/capability-inventory.md
+      gaps: []
+    files_media:
+      applicability: not_applicable
+      checklist: checklist-files-media.md
+      evidence:
+        - specs/02-capabilities/capability-inventory.md
+      gaps: []
+    import_export_sync:
+      applicability: not_applicable
+      checklist: checklist-import-export-sync.md
+      evidence:
+        - specs/02-capabilities/capability-inventory.md
+      gaps: []
+    i18n_content_seo:
+      applicability: not_applicable
+      checklist: checklist-i18n-content-seo.md
+      evidence:
+        - specs/03-flows/e2e-coverage.md
+      gaps: []

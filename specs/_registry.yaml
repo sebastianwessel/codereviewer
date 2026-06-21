@@ -1,0 +1,22 @@
+schema_version: "1.0"
+status: approved
+updated_at: "2026-06-20"
+spec_root: specs
+source_of_truth:
+  - specs/README.md
+  - specs/00-vision.md
+  - specs/00-scope-and-glossary.md
+  - specs/01-architecture-and-structure.md
+capability_inventory: specs/02-capabilities/capability-inventory.md
+e2e_coverage: specs/03-flows/e2e-coverage.md
+contracts:
+  config_schema: specs/03-contracts/config.schema.json
+  review_report_schema: specs/03-contracts/review-report.schema.json
+  generation_map: specs/03-contracts/generation-map.md
+planning_allowed_after:
+  readiness_report: specs/.readiness-report.yaml
+  human_approval_status: approved
+forbidden_authority:
+  - concept/
+  - untracked research notes
+  - prior conversation context

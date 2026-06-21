@@ -1,0 +1,59 @@
+{
+  "name": "@sebastianwessel/codereviewer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Harness-based evidence-first code review engine.",
+  "type": "module",
+  "bin": {
+    "codereviewer": "./dist/cli/main.js"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./cli": "./dist/cli/index.js"
+  },
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "generate:schemas": "tsx scripts/generate-schemas.mjs",
+    "generate:schemas:check": "tsx scripts/generate-schemas.mjs --check",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "lint": "npm run typecheck",
+    "dev": "tsx src/index.ts",
+    "audit:high": "npm audit --audit-level=high"
+  },
+  "dependencies": {
+    "@ast-grep/lang-go": "^0.0.6",
+    "@ast-grep/lang-java": "^0.0.7",
+    "@ast-grep/lang-python": "^0.0.6",
+    "@ast-grep/lang-rust": "^0.0.7",
+    "@ast-grep/napi": "^0.43.0",
+    "@purista/harness": "^1.5.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "@vitest/coverage-v8": "^4.1.9",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  },
+  "peerDependencies": {
+    "@purista/harness-azure-foundry": "^1.5.1",
+    "@purista/harness-bedrock": "^1.5.1",
+    "@purista/harness-openai": "^1.5.1"
+  },
+  "peerDependenciesMeta": {
+    "@purista/harness-azure-foundry": {
+      "optional": true
+    },
+    "@purista/harness-bedrock": {
+      "optional": true
+    },
+    "@purista/harness-openai": {
+      "optional": true
+    }
+  }
+}

@@ -1,0 +1,123 @@
+import { describe, expect, test } from 'vitest'
+import { CodeReviewerConfigSchema, RepositoryRelativePathSchema } from './config.schema.js'
+
+describe('CodeReviewerConfigSchema', () => {
+  test('accepts an empty config and applies safe defaults', () => {
+    const parsed = CodeReviewerConfigSchema.parse({})
+
+    expect(parsed.review.mode).toBe('local')
+    expect(parsed.review.depth).toBe('balanced')
+    expect(parsed.instructions.files).toEqual([])
+    expect(parsed.skills.enabled).toBe(false)
+    expect(parsed.skills.allowTools).toEqual(['read', 'list', 'grep'])
+    expect(parsed.paths.exclude).toEqual(
+      expect.arrayContaining([
+        '.git/**',
+        'node_modules/**',
+        'dist/**',
+        'coverage/**',
+        '.review/**'
+      ])
+    )
+    expect(parsed.security.captureContentTelemetry).toBe(false)
+    expect(parsed.drift).toEqual({
+      enabled: true,
+      failOn: ['generated-artifact-drift', 'security-drift'],
+      warnOn: [
+        'documentation-drift',
+        'spec-drift',
+        'implementation-drift',
+        'ambiguity'
+      ],
+      includeDocs: true,
+      includeSpecs: true,
+      includeGenerated: true
+    })
+    expect(parsed.reporting.formats).toEqual(['json', 'markdown', 'sarif'])
+  })
+
+  test('accepts an openai-compatible provider only with baseUrl', () => {
+    const parsed = CodeReviewerConfigSchema.parse({
+      provider: {
+        id: 'openai-compatible',
+        model: 'model-a',
+        baseUrl: 'https://provider.example/v1'
+      }
+    })
+
+    expect(parsed.provider?.id).toBe('openai-compatible')
+  })
+
+  test('rejects unknown top-level and nested keys', () => {
+    expect(() => CodeReviewerConfigSchema.parse({ unknown: true })).toThrow()
+    expect(() => CodeReviewerConfigSchema.parse({ review: { unknown: true } })).toThrow()
+  })
+
+  test('rejects unsafe repository-relative paths', () => {
+    expect(() => RepositoryRelativePathSchema.parse('/absolute/path')).toThrow()
+    expect(() => RepositoryRelativePathSchema.parse('C:/absolute/path')).toThrow()
+    expect(() => RepositoryRelativePathSchema.parse('../escape')).toThrow()
+    expect(() => RepositoryRelativePathSchema.parse('safe/../escape')).toThrow()
+    expect(() => RepositoryRelativePathSchema.parse('bad\0path')).toThrow()
+  })
+
+  test('rejects invalid provider and telemetry settings', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        provider: { id: 'openai-compatible', model: 'model-a' }
+      })
+    ).toThrow()
+
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: { captureContentTelemetry: true }
+      })
+    ).toThrow()
+
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: { allowShell: true }
+      })
+    ).toThrow()
+
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: { allowNetwork: true }
+      })
+    ).toThrow()
+
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: { allowFilesystemWrite: true }
+      })
+    ).toThrow()
+
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        skills: {
+          allowTools: ['bash']
+        }
+      })
+    ).toThrow()
+  })
+
+  test('accepts configurable drift gates', () => {
+    const parsed = CodeReviewerConfigSchema.parse({
+      drift: {
+        failOn: ['security-drift', 'ambiguity'],
+        warnOn: ['documentation-drift']
+      }
+    })
+
+    expect(parsed.drift.failOn).toEqual(['security-drift', 'ambiguity'])
+    expect(parsed.drift.warnOn).toEqual(['documentation-drift'])
+  })
+
+  test('rejects git refs that start with a dash', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        review: { baseRef: '-bad' }
+      })
+    ).toThrow()
+  })
+})

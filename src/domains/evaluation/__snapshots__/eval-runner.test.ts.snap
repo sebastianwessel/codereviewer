@@ -1,0 +1,135 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`eval runner > validates fixture samples and returns a deterministic eval report 1`] = `
+{
+  "caseResults": [
+    {
+      "caseId": "typescript-positive",
+      "costUsd": 0.1,
+      "durationMs": 1000,
+      "falsePositiveFindingIds": [],
+      "matchedFindings": [
+        {
+          "expectedIndex": 0,
+          "findingId": "find_eval1",
+          "lineOverlaps": true,
+          "semanticScore": 0.833333,
+          "severityMatches": true,
+        },
+      ],
+      "noFindingZoneFalsePositiveIds": [],
+      "parseValid": true,
+      "providerErrored": false,
+      "unmatchedExpectedIndexes": [],
+      "warnings": [],
+    },
+    {
+      "caseId": "typescript-negative",
+      "costUsd": 0.1,
+      "durationMs": 1000,
+      "falsePositiveFindingIds": [
+        "find_noise1",
+      ],
+      "matchedFindings": [],
+      "noFindingZoneFalsePositiveIds": [
+        "find_noise1",
+      ],
+      "parseValid": true,
+      "providerErrored": false,
+      "unmatchedExpectedIndexes": [],
+      "warnings": [],
+    },
+  ],
+  "fixtureCount": 2,
+  "generatedAt": "2026-06-20T00:00:02.000Z",
+  "metrics": {
+    "actionableRate": 1,
+    "commentsPerDiffHunk": 0.666667,
+    "commentsPerKloc": 33.333333,
+    "contextMutationRate": 0,
+    "costUsd": 0.2,
+    "durationMs": 2000,
+    "f1": 0.666667,
+    "falsePositiveCount": 1,
+    "incompleteCoverageRate": 0,
+    "lineAccuracy": 1,
+    "noFindingZoneFalsePositiveCount": 1,
+    "parseValidity": 1,
+    "precision": 0.5,
+    "providerErrorRate": 0,
+    "recall": 1,
+    "severityAccuracy": 1,
+    "severityWeightedF1": 0.666667,
+    "severityWeightedPrecision": 0.5,
+    "severityWeightedRecall": 1,
+  },
+  "regressionGate": {
+    "failingCaseIds": [
+      "typescript-negative",
+    ],
+    "passed": false,
+    "reasons": [
+      "falsePositiveCount above threshold: 1 > 0",
+    ],
+    "thresholds": {
+      "failOnProviderError": true,
+      "maxFalsePositiveCount": 0,
+      "minParseValidity": 1,
+      "minRecall": 1,
+    },
+  },
+  "schemaVersion": "1.0",
+}
+`;
+
+exports[`eval runner > validates fixture samples and returns a deterministic eval report 2`] = `
+"# Evaluation Summary
+
+Gate: FAIL
+Generated: 2026-06-20T00:00:02.000Z
+Fixtures: 2
+
+## Metrics
+
+| Metric | Value |
+| --- | --- |
+| Recall | 100.0% |
+| Precision | 50.0% |
+| F1 | 66.7% |
+| Severity weighted F1 | 66.7% |
+| Line accuracy | 100.0% |
+| Severity accuracy | 100.0% |
+| Parse validity | 100.0% |
+| Provider error rate | 0.0% |
+| False positives | 1 |
+| No-finding-zone hits | 1 |
+| Actionable rate | 100.0% |
+| Incomplete coverage rate | 0.0% |
+| Context mutation rate | 0.0% |
+| Duration | 2.0s |
+| Cost | $0.2000 |
+
+## Cases
+
+| Case | Status | Expected | Matched | False positives | Notes |
+| --- | --- | ---: | ---: | ---: | --- |
+| typescript-positive | PASS | 1 | 1 | 0 | - |
+| typescript-negative | FAIL | 0 | 0 | 1 | false positives 1; no-finding-zone hits 1 |
+
+## Gate Reasons
+
+- falsePositiveCount above threshold: 1 > 0
+
+## Attention Needed
+
+### typescript-negative
+
+False positive finding IDs: find_noise1
+No-finding-zone hit IDs: find_noise1
+
+## Artifacts
+
+- .review/eval/eval-report.json
+- .review/eval/eval-summary.md
+"
+`;

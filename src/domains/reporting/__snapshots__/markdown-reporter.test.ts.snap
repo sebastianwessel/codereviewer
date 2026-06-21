@@ -1,0 +1,57 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Markdown reporter > renders deterministic report sections and escapes user-controlled text 1`] = `
+"# Review Report
+
+Run: test-run
+Mode: ci
+Depth: balanced
+Duration: 1000 ms
+
+## Quality Gate
+
+Passed: no
+Failing findings: 1
+
+## Coverage
+
+Status: complete
+Files: 1/1
+Bytes: 160/160
+
+## Severity Counts
+
+- high: 1
+
+## Category Counts
+
+- bug: 1
+
+## Admitted Findings
+
+### HIGH: Bad \\\\| title &lt;script&gt;alert\\(1\\)&lt;/script&gt; \\#\\# Forged
+
+- ID: find_abc123
+- Category: bug
+- Location: src/app.ts:4
+- Baseline: new
+- Suggested fix: Return the computed value from the changed branch.
+- Fix evidence: ev_diff1
+- Fix edits:
+  - src/app.ts:4-4: return computedValue - Replace the incorrect return value.
+
+Leaked token \\[REDACTED\\] should not appear. \\!\\[secret\\]\\(https://example.invalid/x.png\\)
+
+## Rejected Candidates
+
+- cand_weak1: insufficient-evidence (needs-more-evidence)
+
+## Skipped Files
+
+- dist/generated.js: excluded
+
+## Cost And Timing
+
+- Duration: 1000 ms
+"
+`;

@@ -1,0 +1,20 @@
+{
+  "id": "benchmark-typescript-syntax-slice",
+  "title": "TypeScript syntax regression slice",
+  "description": "A minimal repository slice that proves benchmark-style cases can carry their own repo tree and expected finding metadata.",
+  "source": "project-owned",
+  "capturedAt": "2026-06-20",
+  "language": "typescript",
+  "changedFiles": ["src/app.ts"],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "high",
+      "path": "src/app.ts",
+      "lineRange": [1, 1],
+      "semanticSummary": "parse diagnostic blocks reliable review syntax reported typescript analyzer"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": ["slice", "benchmark", "typescript", "positive"]
+}

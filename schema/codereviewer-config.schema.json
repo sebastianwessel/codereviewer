@@ -1,0 +1,729 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "review": {
+      "default": {
+        "mode": "local",
+        "depth": "balanced",
+        "baseRef": "main",
+        "headRef": "HEAD",
+        "maxConcurrentTasks": 4,
+        "maxFiles": 500,
+        "maxFileBytes": 500000,
+        "inlineSeverityThreshold": "high"
+      },
+      "type": "object",
+      "properties": {
+        "mode": {
+          "default": "local",
+          "type": "string",
+          "enum": [
+            "local",
+            "ci",
+            "pr",
+            "full"
+          ]
+        },
+        "depth": {
+          "default": "balanced",
+          "type": "string",
+          "enum": [
+            "fast",
+            "balanced",
+            "thorough"
+          ]
+        },
+        "baseRef": {
+          "default": "main",
+          "type": "string",
+          "minLength": 1
+        },
+        "headRef": {
+          "default": "HEAD",
+          "type": "string",
+          "minLength": 1
+        },
+        "maxConcurrentTasks": {
+          "default": 4,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32
+        },
+        "maxFiles": {
+          "default": 500,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000
+        },
+        "maxFileBytes": {
+          "default": 500000,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000000
+        },
+        "contextMaxFiles": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000
+        },
+        "contextMaxBytes": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 10000000
+        },
+        "inlineSeverityThreshold": {
+          "default": "high",
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "info"
+          ]
+        },
+        "maxCostUsd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "runTimeoutMs": {
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 7200000
+        }
+      },
+      "required": [
+        "mode",
+        "depth",
+        "baseRef",
+        "headRef",
+        "maxConcurrentTasks",
+        "maxFiles",
+        "maxFileBytes",
+        "inlineSeverityThreshold"
+      ],
+      "additionalProperties": false
+    },
+    "provider": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "openai-compatible",
+            "bedrock",
+            "azure"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "temperature": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "maxOutputTokens": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "timeoutMs": {
+          "default": 120000,
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 600000
+        },
+        "maxRetries": {
+          "default": 2,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        }
+      },
+      "required": [
+        "id",
+        "model",
+        "temperature",
+        "timeoutMs",
+        "maxRetries"
+      ],
+      "additionalProperties": false
+    },
+    "instructions": {
+      "default": {
+        "files": [],
+        "inline": ""
+      },
+      "type": "object",
+      "properties": {
+        "files": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "inline": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "required": [
+        "files",
+        "inline"
+      ],
+      "additionalProperties": false
+    },
+    "skills": {
+      "default": {
+        "enabled": false,
+        "directories": [
+          ".review/skills"
+        ],
+        "allowTools": [
+          "read",
+          "list",
+          "grep"
+        ]
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "directories": {
+          "default": [
+            ".review/skills"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allowTools": {
+          "default": [
+            "read",
+            "list",
+            "grep"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "read",
+              "list",
+              "grep"
+            ]
+          }
+        }
+      },
+      "required": [
+        "enabled",
+        "directories",
+        "allowTools"
+      ],
+      "additionalProperties": false
+    },
+    "paths": {
+      "default": {
+        "include": [
+          "**/*"
+        ],
+        "exclude": [
+          ".git/**",
+          "node_modules/**",
+          "dist/**",
+          "coverage/**",
+          ".review/**",
+          ".codereviewer/**"
+        ],
+        "artifactDir": ".review/runs"
+      },
+      "type": "object",
+      "properties": {
+        "include": {
+          "default": [
+            "**/*"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "default": [
+            ".git/**",
+            "node_modules/**",
+            "dist/**",
+            "coverage/**",
+            ".review/**",
+            ".codereviewer/**"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "artifactDir": {
+          "default": ".review/runs",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "include",
+        "exclude",
+        "artifactDir"
+      ],
+      "additionalProperties": false
+    },
+    "baseline": {
+      "default": {
+        "enabled": true,
+        "path": ".review/baseline.json",
+        "failOnNewOnly": true,
+        "includeResolvedInReport": true
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "path": {
+          "default": ".review/baseline.json",
+          "type": "string",
+          "minLength": 1
+        },
+        "failOnNewOnly": {
+          "default": true,
+          "type": "boolean"
+        },
+        "includeResolvedInReport": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "path",
+        "failOnNewOnly",
+        "includeResolvedInReport"
+      ],
+      "additionalProperties": false
+    },
+    "qualityGate": {
+      "default": {
+        "maxCritical": 0,
+        "maxHigh": 0,
+        "minEvidenceLevel": "non-model",
+        "failOnProviderError": true
+      },
+      "type": "object",
+      "properties": {
+        "maxCritical": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxHigh": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxMedium": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "minEvidenceLevel": {
+          "default": "non-model",
+          "type": "string",
+          "enum": [
+            "non-model",
+            "model-ok"
+          ]
+        },
+        "failOnProviderError": {
+          "default": true,
+          "type": "boolean"
+        },
+        "failOnNewOnly": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "maxCritical",
+        "maxHigh",
+        "minEvidenceLevel",
+        "failOnProviderError"
+      ],
+      "additionalProperties": false
+    },
+    "security": {
+      "default": {
+        "allowShell": false,
+        "allowNetwork": false,
+        "allowFilesystemWrite": false,
+        "captureContentTelemetry": false
+      },
+      "type": "object",
+      "properties": {
+        "allowShell": {
+          "default": false,
+          "type": "boolean",
+          "const": false
+        },
+        "allowNetwork": {
+          "default": false,
+          "type": "boolean",
+          "const": false
+        },
+        "allowFilesystemWrite": {
+          "default": false,
+          "type": "boolean",
+          "const": false
+        },
+        "captureContentTelemetry": {
+          "default": false,
+          "type": "boolean",
+          "const": false
+        }
+      },
+      "required": [
+        "allowShell",
+        "allowNetwork",
+        "allowFilesystemWrite",
+        "captureContentTelemetry"
+      ],
+      "additionalProperties": false
+    },
+    "reporting": {
+      "default": {
+        "formats": [
+          "json",
+          "markdown",
+          "sarif"
+        ],
+        "sarif": {
+          "target": "generic",
+          "category": "codereviewer",
+          "maxResults": 5000,
+          "includeSuppressed": false,
+          "redact": true
+        }
+      },
+      "type": "object",
+      "properties": {
+        "formats": {
+          "default": [
+            "json",
+            "markdown",
+            "sarif"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "json",
+              "markdown",
+              "sarif"
+            ]
+          }
+        },
+        "sarif": {
+          "default": {
+            "target": "generic",
+            "category": "codereviewer",
+            "maxResults": 5000,
+            "includeSuppressed": false,
+            "redact": true
+          },
+          "type": "object",
+          "properties": {
+            "target": {
+              "default": "generic",
+              "type": "string",
+              "enum": [
+                "generic",
+                "github"
+              ]
+            },
+            "category": {
+              "default": "codereviewer",
+              "type": "string",
+              "minLength": 1
+            },
+            "maxResults": {
+              "default": 5000,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25000
+            },
+            "includeSuppressed": {
+              "default": false,
+              "type": "boolean"
+            },
+            "redact": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "target",
+            "category",
+            "maxResults",
+            "includeSuppressed",
+            "redact"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "formats",
+        "sarif"
+      ],
+      "additionalProperties": false
+    },
+    "evaluation": {
+      "default": {
+        "enabled": false
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
+    "drift": {
+      "default": {
+        "enabled": true,
+        "failOn": [
+          "generated-artifact-drift",
+          "security-drift"
+        ],
+        "warnOn": [
+          "documentation-drift",
+          "spec-drift",
+          "implementation-drift",
+          "ambiguity"
+        ],
+        "includeDocs": true,
+        "includeSpecs": true,
+        "includeGenerated": true
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": true,
+          "type": "boolean"
+        },
+        "failOn": {
+          "default": [
+            "generated-artifact-drift",
+            "security-drift"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "documentation-drift",
+              "spec-drift",
+              "implementation-drift",
+              "generated-artifact-drift",
+              "ambiguity",
+              "security-drift"
+            ]
+          }
+        },
+        "warnOn": {
+          "default": [
+            "documentation-drift",
+            "spec-drift",
+            "implementation-drift",
+            "ambiguity"
+          ],
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "documentation-drift",
+              "spec-drift",
+              "implementation-drift",
+              "generated-artifact-drift",
+              "ambiguity",
+              "security-drift"
+            ]
+          }
+        },
+        "includeDocs": {
+          "default": true,
+          "type": "boolean"
+        },
+        "includeSpecs": {
+          "default": true,
+          "type": "boolean"
+        },
+        "includeGenerated": {
+          "default": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "failOn",
+        "warnOn",
+        "includeDocs",
+        "includeSpecs",
+        "includeGenerated"
+      ],
+      "additionalProperties": false
+    },
+    "observability": {
+      "default": {
+        "logging": {
+          "level": "silent"
+        },
+        "openTelemetry": {
+          "enabled": false,
+          "headers": {},
+          "serviceName": "codereviewer"
+        }
+      },
+      "type": "object",
+      "properties": {
+        "logging": {
+          "default": {
+            "level": "silent"
+          },
+          "type": "object",
+          "properties": {
+            "level": {
+              "default": "silent",
+              "type": "string",
+              "enum": [
+                "trace",
+                "debug",
+                "info",
+                "warn",
+                "error",
+                "fatal",
+                "silent"
+              ]
+            }
+          },
+          "required": [
+            "level"
+          ],
+          "additionalProperties": false
+        },
+        "openTelemetry": {
+          "default": {
+            "enabled": false,
+            "headers": {},
+            "serviceName": "codereviewer"
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "endpoint": {
+              "type": "string",
+              "format": "uri"
+            },
+            "headers": {
+              "default": {},
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "serviceName": {
+              "default": "codereviewer",
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "enabled",
+            "headers",
+            "serviceName"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "logging",
+        "openTelemetry"
+      ],
+      "additionalProperties": false
+    },
+    "costs": {
+      "default": {
+        "currency": "USD"
+      },
+      "type": "object",
+      "properties": {
+        "inputPerMillion": {
+          "type": "number",
+          "minimum": 0
+        },
+        "outputPerMillion": {
+          "type": "number",
+          "minimum": 0
+        },
+        "currency": {
+          "default": "USD",
+          "type": "string",
+          "const": "USD"
+        }
+      },
+      "required": [
+        "currency"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "review",
+    "instructions",
+    "skills",
+    "paths",
+    "baseline",
+    "qualityGate",
+    "security",
+    "reporting",
+    "evaluation",
+    "drift",
+    "observability",
+    "costs"
+  ],
+  "additionalProperties": false,
+  "$id": "https://codereviewer.local/schemas/config.schema.json",
+  "title": "CodeReviewerConfig"
+}
