@@ -50,6 +50,15 @@ For OpenAI-compatible providers:
 
 Provider secrets belong in `.env` or the CI secret store, not in config files.
 
+## Retry Behavior
+
+Provider task calls are retried under a single classified policy. Transient
+failures (network errors, HTTP 408/425/5xx) and rate limits (HTTP 429, honoring
+`Retry-After`) are retried with bounded exponential backoff; oversized context,
+authentication, payment/quota, and cancellation failures are not. Total attempts
+are `maxRetries + 1`, each backoff is capped by `retryMaxDelayMs`, and a
+rate-limit window longer than that cap fails the run instead of waiting.
+
 `temperature` is supported by configuration, but the resolver omits it for
 OpenAI `gpt-5*` models because those models reject the parameter. Compatible
 providers keep the configured value because their model behavior is

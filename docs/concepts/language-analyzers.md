@@ -33,6 +33,12 @@ and Java are exposed as first-class analyzer adapters. Adapters may share parser
 helpers, but registry dispatch routes files first and calls only the owning
 adapter.
 
+ast-grep runs as a local deterministic analyzer dependency. It is not a
+prompting layer in normal review runs: the system does not send ast-grep
+documentation, raw AST dumps, generated rule traces, or MCP transcripts to a
+model provider. Developer-time rule authoring can use ast-grep guidance, but
+product behavior comes from checked-in analyzer code and fixture tests.
+
 Each file has one analyzer owner based on its normalized repository-relative
 path and extension. Unsupported paths are excluded before parser invocation, and
 language-specific parsers reject mismatched paths at their public boundary. This
@@ -54,3 +60,35 @@ Facts are normalized across languages:
 | `moduleSpecifier` | Optional import/export target. |
 | `line` | 1-based source line. |
 | `contentHash` | SHA-256 of the analyzed file content. |
+
+## Pipeline Role
+
+```mermaid
+flowchart LR
+  Source["Changed source file"]
+  Router["Language router"]
+  Parser["Owning parser or ast-grep grammar"]
+  Facts["Language facts"]
+  Tests["Test mappings"]
+  Planner["Review planner"]
+  Context["Task context"]
+  Workers["Review workers"]
+
+  Source --> Router --> Parser
+  Parser --> Facts
+  Parser --> Tests
+  Facts --> Planner
+  Tests --> Planner
+  Planner --> Context --> Workers
+```
+
+The review planner uses import facts to group dependency clusters and uses test
+mappings to attach related tests to the same review context. Provider-backed
+runs receive compact analyzer-output JSON only when it is relevant to the task.
+Analyzer output can reduce model work by focusing the task packet, but it does
+not consume model tokens until included in a provider-backed task packet.
+
+The `observability.json` artifact records safe `language_analysis` metadata:
+structural engine, ast-grep version, fact count, evidence count, language count,
+and test-mapping count. These fields are operational metadata and never contain
+source snippets.

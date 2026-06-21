@@ -91,6 +91,13 @@ language-specific test discovery. Semgrep and SCIP are optional ingestion
 targets, not core runtime dependencies in the first language-analysis
 implementation.
 
+The ast-grep prompting and MCP guidance is useful for developer-time rule
+authoring and debugging, but R1 must not make normal review quality depend on
+LLM-generated rules at runtime. Any rule or traversal produced with AI
+assistance must be checked into the analyzer implementation with fixtures before
+it affects product review behavior. Runtime prompts receive compact normalized
+facts, not ast-grep manuals, raw AST dumps, or iterative rule traces.
+
 ## SARIF Posture
 
 SARIF is required because it is the common interchange format for static
@@ -141,6 +148,7 @@ All links were retrieved or verified on 2026-06-20:
 - Node Tree-sitter bindings: <https://github.com/tree-sitter/node-tree-sitter>
 - ast-grep: <https://ast-grep.github.io/>
 - ast-grep JavaScript API: <https://ast-grep.github.io/guide/api-usage/js-api.html>
+- ast-grep prompting guide: <https://ast-grep.github.io/advanced/prompting.html>
 - ast-grep supported languages: <https://ast-grep.github.io/reference/languages.html>
 - Semgrep supported languages: <https://docs.semgrep.dev/supported-languages>
 - SCIP Code Intelligence Protocol: <https://scip-code.org/>

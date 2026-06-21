@@ -22,14 +22,17 @@ define contracts, errors, permissions, observability, acceptance, and tests.
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-002 | Markdown report | ACT-DEV, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-003 | SARIF report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md` |
+| CAP-REP-004 | GitHub PR review-comment artifact | ACT-DEV, ACT-CI, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `06-evaluation-and-quality-gates.md` |
 | CAP-BASE-001 | Baseline matching | ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-CTX-001 | Context ledger | ACT-OPS, ACT-DEV | Yes | `05-review-workflow-and-runtime.md`, `07-security-privacy-operations.md` |
 | CAP-COV-001 | Review coverage certificate | ACT-DEV, ACT-CI, ACT-OPS | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-EVAL-001 | Evaluation runner | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
+| CAP-EVAL-002 | Evaluation analysis commands | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
+| CAP-EVAL-003 | Semantic judge matching | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-GATE-001 | Quality gate result | ACT-CI | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-OPS-001 | Run observability | ACT-OPS | Yes | `07-security-privacy-operations.md` |
 | CAP-DRIFT-001 | Drift, gap, and ambiguity checks | ACT-DEV, ACT-CI, ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `07-security-privacy-operations.md` |
-| CAP-PR-001 | PR comment publishing | ACT-REVIEWER | No | Future spec required |
+| CAP-PR-001 | Network PR comment publishing | ACT-REVIEWER | No | Future spec required |
 | CAP-FIX-001 | Automatic fix application | ACT-DEV | No | Future spec required |
 | CAP-UI-001 | Browser UI | ACT-DEV | No | Future spec required |
 
@@ -79,6 +82,10 @@ define contracts, errors, permissions, observability, acceptance, and tests.
   Python, Go, Rust, or Java.
 - Contracts: emits language-neutral facts, diagnostics, test mappings, and
   evidence only.
+- Runtime posture: ast-grep-backed structural analysis runs locally inside the
+  analyzer boundary; rule-authoring prompts, MCP transcripts, raw AST dumps, and
+  ast-grep documentation are developer-time aids only and are not normal review
+  prompt inputs.
 - Side effects: none in R1.
 - Final state: analyzer output can be consumed without language-specific fields
   in core finding, admission, report, or evaluation contracts.
@@ -163,6 +170,29 @@ define contracts, errors, permissions, observability, acceptance, and tests.
 - Verification: SARIF schema validation, GitHub-target subset validation when
   configured, and redaction snapshot tests.
 
+### CAP-REP-004 GitHub PR Review-Comment Artifact
+
+- Trigger: review completion when `reporting.formats` includes
+  `github-review-comments`.
+- Contract: renders a deterministic local JSON array of GitHub review-comment
+  drafts from the canonical `ReviewReport`.
+- Preconditions: admitted finding has `reporterEligibility = inline`, a
+  resolvable new-side diff location, and severity at or above the configured
+  inline threshold.
+- Line placement: inline eligibility requires a source-derived reviewed
+  head-file line range and, when diff maps are available, overlap with a
+  changed new-side diff hunk. Invalid new-side or whole-file line ranges are
+  rejected before report rendering, and old-side or outside-hunk findings are
+  never inline comment candidates in R1.
+- Side effects: writes `github-review-comments.json` in the run artifact
+  directory only. It performs no network IO and does not publish comments.
+- Final state: each comment draft carries repository-relative path, line or
+  start-line range, side, redacted body, source finding ID, and an optional
+  GitHub suggestion block only when a single safe structured fix edit maps to
+  the same path and contiguous line range.
+- Verification: renderer tests for single-line, multi-line, ineligible,
+  summary-only, old-side, and unsafe multi-edit fix cases.
+
 ### CAP-BASE-001 Baseline Matching
 
 - Trigger: after admission, before reporting and quality gates.
@@ -201,9 +231,36 @@ define contracts, errors, permissions, observability, acceptance, and tests.
 
 - Trigger: `codereviewer eval run` CLI command.
 - Side effects: writes eval report artifacts.
-- Final state: metrics include recall, precision, F1, line accuracy, severity
-  accuracy, latency, cost, and parse validity.
-- Verification: golden fixture tests.
+- Final state: metrics include recall, precision, F1, severity-weighted
+  precision/recall/F1, line accuracy, severity accuracy, false-positive count,
+  actionable rate, comments per KLOC, comments per diff hunk, degraded-review
+  rate, context-truncation rate, latency, cost, and parse validity. The report
+  records `scoring.semanticMatcher` and per-case match-mode counts.
+- Verification: golden fixture tests; metric calculator tests.
+
+### CAP-EVAL-002 Evaluation Analysis Commands
+
+- Trigger: `codereviewer eval compare`, `eval recall-report`, and
+  `eval slice-manifest` CLI commands.
+- Side effects: print deterministic artifacts (comparison/recall reports,
+  benchmark slice manifest) to stdout; no repository writes.
+- Final state: outputs are deterministic and source-free; slice collection
+  rejects symlink escapes and uses portable POSIX paths.
+- Verification: command tests for comparison, recall report, and slice manifest
+  determinism and redaction.
+
+### CAP-EVAL-003 Semantic Judge Matching
+
+- Trigger: `codereviewer eval run --semantic-judge`.
+- Preconditions: explicit provider configuration and credentials; opt-in only.
+- Side effects: provider calls receive only expected summary and admitted
+  title/description (no source, diff, prompts, or secrets).
+- Final state: deterministic matching runs first; the judge only resolves
+  unmatched `semantic-only`/`path-semantic` expectations; the report sets
+  `scoring.semanticMatcher = "semantic-judge"`. Without provider config the
+  command exits `2`.
+- Verification: matcher tests proving deterministic-first ordering and that
+  `path-line` expectations are never judged.
 
 ### CAP-GATE-001 Quality Gate Result
 

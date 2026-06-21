@@ -147,6 +147,18 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 5
+        },
+        "retryBackoffMs": {
+          "default": 500,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "retryMaxDelayMs": {
+          "default": 30000,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 600000
         }
       },
       "required": [
@@ -154,7 +166,9 @@
         "model",
         "temperature",
         "timeoutMs",
-        "maxRetries"
+        "maxRetries",
+        "retryBackoffMs",
+        "retryMaxDelayMs"
       ],
       "additionalProperties": false
     },
@@ -441,7 +455,8 @@
             "enum": [
               "json",
               "markdown",
-              "sarif"
+              "sarif",
+              "github-review-comments"
             ]
           }
         },

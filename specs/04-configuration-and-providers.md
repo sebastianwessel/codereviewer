@@ -126,7 +126,13 @@ Provider schema:
 | `temperature` | no | number 0..2 | Default `0`. |
 | `maxOutputTokens` | no | integer >= 1 | Default provider adapter setting. |
 | `timeoutMs` | no | integer 1000..600000 | Default `120000`. |
-| `maxRetries` | no | integer 0..5 | Default `2`. |
+| `maxRetries` | no | integer 0..5 | Default `2`. Classified retries of provider task calls; total attempts are `maxRetries + 1`. |
+| `retryBackoffMs` | no | integer 0..60000 | Default `500`. Base delay for exponential backoff between retries. |
+| `retryMaxDelayMs` | no | integer 0..600000 | Default `30000`. Maximum single backoff wait; a longer required wait (e.g. a long rate-limit `Retry-After`) fails the run. |
+
+Retry classification: transient failures (network, HTTP 408/425/5xx) and rate
+limits (HTTP 429, honoring `Retry-After` within `retryMaxDelayMs`) are retried;
+oversized context, authentication, payment/quota, and cancellation are not.
 
 Provider resolver rules:
 
@@ -295,8 +301,10 @@ configuration block:
 | `sarif.redact` | boolean | `true` |
 
 JSON is always generated even if omitted from `formats`, because it is the
-canonical machine-readable artifact. Markdown and SARIF rendering can be
-disabled only when their format is absent from `formats`.
+canonical machine-readable artifact. Markdown, SARIF, and GitHub review-comment
+artifact rendering can be disabled only when their format is absent from
+`formats`. The `github-review-comments` format writes local PR review-comment
+draft JSON only and performs no network publishing.
 
 ## Observability Config
 

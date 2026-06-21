@@ -66,4 +66,29 @@ describe('JSON reporter', () => {
       exitCode: 5
     })
   })
+
+  test('writes GitHub review comment artifact when enabled', async () => {
+    const writes = new Map<string, string>()
+    const artifacts = await writeReportingArtifacts({
+      report: createReportFixture(),
+      formats: ['json', 'github-review-comments'],
+      writer: async (artifactPath, content) => {
+        writes.set(artifactPath, content)
+      }
+    })
+
+    expect(artifacts.map((artifact) => artifact.artifact.format)).toEqual([
+      'json',
+      'github-review-comments'
+    ])
+    expect(writes.has('github-review-comments.json')).toBe(true)
+    expect(JSON.parse(writes.get('github-review-comments.json') ?? '[]')).toEqual([
+      expect.objectContaining({
+        path: 'src/app.ts',
+        line: 4,
+        side: 'RIGHT',
+        findingId: 'find_abc123'
+      })
+    ])
+  })
 })

@@ -36,8 +36,22 @@ export const CandidateFindingSchema = z.strictObject({
 
 export type CandidateFinding = z.infer<typeof CandidateFindingSchema>
 
+export type ReviewedLineRange = {
+  readonly path: string
+  readonly startLine: number
+  readonly endLine: number
+}
+
+export type ReviewedDiffRange = {
+  readonly path: string
+  readonly startLine: number
+  readonly endLine: number
+}
+
 export type AdmissionPolicy = {
   readonly reviewedPaths: readonly string[]
+  readonly reviewedLineRanges?: readonly ReviewedLineRange[]
+  readonly reviewedDiffRanges?: readonly ReviewedDiffRange[]
   readonly minimumSeverity?: Severity
   readonly inlineSeverityThreshold: Severity
   readonly provenance: Omit<FindingProvenance, 'instructionHashes' | 'skillHashes'> & {
@@ -114,6 +128,71 @@ const isReviewedLocation = (
   reviewedPaths: readonly string[]
 ): boolean => reviewedPaths.includes(locationPath)
 
+export const sourceLineCount = (content: string): number =>
+  content.length === 0 ? 0 : content.split(/\r\n|\n|\r/u).length
+
+export const reviewedLineRangeForContent = (
+  input: {
+    readonly path: string
+    readonly content: string
+  }
+): ReviewedLineRange => ({
+  path: input.path,
+  startLine: 1,
+  endLine: sourceLineCount(input.content)
+})
+
+const reviewedLineRangeForPath = (
+  path: string,
+  ranges: readonly ReviewedLineRange[]
+): ReviewedLineRange | undefined =>
+  ranges.find((range) => range.path === path)
+
+const locationLineRangeIsValid = (
+  candidate: CandidateFinding,
+  ranges: readonly ReviewedLineRange[] | undefined
+): boolean => {
+  if (candidate.location.side === 'old' || ranges === undefined) {
+    return true
+  }
+
+  const reviewedRange = reviewedLineRangeForPath(candidate.location.path, ranges)
+  const endLine = candidate.location.endLine ?? candidate.location.startLine
+
+  return (
+    reviewedRange !== undefined &&
+    candidate.location.startLine >= reviewedRange.startLine &&
+    endLine <= reviewedRange.endLine
+  )
+}
+
+const lineRangesOverlap = (
+  left: { readonly startLine: number; readonly endLine: number },
+  right: { readonly startLine: number; readonly endLine: number }
+): boolean => left.startLine <= right.endLine && right.startLine <= left.endLine
+
+const locationDiffRangeIsInlineEligible = (
+  candidate: CandidateFinding,
+  ranges: readonly ReviewedDiffRange[] | undefined
+): boolean => {
+  if (ranges === undefined) {
+    return true
+  }
+
+  if (candidate.location.side !== 'new') {
+    return false
+  }
+
+  const candidateRange = {
+    startLine: candidate.location.startLine,
+    endLine: candidate.location.endLine ?? candidate.location.startLine
+  }
+
+  return ranges
+    .filter((range) => range.path === candidate.location.path)
+    .some((range) => lineRangesOverlap(candidateRange, range))
+}
+
 const selectedEvidence = (
   candidate: CandidateFinding,
   evidence: readonly EvidenceRecord[]
@@ -189,10 +268,18 @@ const hasDuplicateEvidenceLocation = (
 }
 
 const reporterEligibilityFor = (
+  candidate: CandidateFinding,
   severity: Severity,
-  threshold: Severity
+  threshold: Severity,
+  lineRangeIsValid: boolean,
+  diffRangeIsInlineEligible: boolean
 ): ReporterEligibility =>
-  severityRank[severity] >= severityRank[threshold] ? 'inline' : 'summary-only'
+  candidate.location.side === 'new' &&
+  lineRangeIsValid &&
+  diffRangeIsInlineEligible &&
+  severityRank[severity] >= severityRank[threshold]
+    ? 'inline'
+    : 'summary-only'
 
 const redactCandidateText = (value: string): string =>
   createRedactor().redact(value)
@@ -277,6 +364,27 @@ export const admitCandidate = (
     }
   }
 
+  const lineRangeIsValid = locationLineRangeIsValid(
+    candidate,
+    input.policy.reviewedLineRanges
+  )
+  const diffRangeIsInlineEligible = locationDiffRangeIsInlineEligible(
+    candidate,
+    input.policy.reviewedDiffRanges
+  )
+
+  if (!lineRangeIsValid) {
+    return {
+      status: 'rejected',
+      rejectedFinding: makeRejectedFinding({
+        candidateId: candidate.id,
+        reason: 'location-invalid',
+        message: 'Candidate location line range is outside reviewed source input.',
+        evidenceIds: candidate.evidenceIds
+      })
+    }
+  }
+
   const evidence = selectedEvidence(candidate, input.evidence).map((record) =>
     EvidenceRecordSchema.parse(record)
   )
@@ -350,8 +458,11 @@ export const admitCandidate = (
     admittedAt: input.policy.admittedAt,
     admissionEvidenceIds: evidence.map((record) => record.id),
     reporterEligibility: reporterEligibilityFor(
+      candidate,
       candidate.severity,
-      input.policy.inlineSeverityThreshold
+      input.policy.inlineSeverityThreshold,
+      lineRangeIsValid,
+      diffRangeIsInlineEligible
     ),
     provenance: {
       ...input.policy.provenance,

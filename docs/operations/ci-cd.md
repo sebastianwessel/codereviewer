@@ -10,7 +10,10 @@ flowchart LR
   Typecheck --> Drift["Drift Check"]
   Drift --> Test["Tests"]
   Test --> Review["Review"]
-  Review --> Artifacts["Upload Artifacts"]
+  Review --> Analysis["Local structural analysis"]
+  Analysis --> Workers["Bounded review workers"]
+  Workers --> Reports["Report gates"]
+  Reports --> Artifacts["Upload Artifacts"]
 ```
 
 ## Commands
@@ -38,6 +41,11 @@ need native post-install setup:
 npm ci --ignore-scripts
 npm rebuild @ast-grep/napi esbuild
 ```
+
+The review command runs ast-grep-backed structural analysis locally through
+`@ast-grep/napi`. It does not require a separate ast-grep CLI step. If the CI
+runner installs with `--ignore-scripts`, rebuild `@ast-grep/napi` before
+typecheck, tests, or review so the analyzer stage can load its native binding.
 
 | Mode | Use When | Tradeoff |
 | --- | --- | --- |

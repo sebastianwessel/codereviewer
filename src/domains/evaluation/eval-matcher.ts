@@ -48,6 +48,20 @@ export type EvalMatcherResult = {
   readonly noFindingZoneFalsePositiveIds: readonly string[]
 }
 
+export type EvalSemanticJudgeInput = {
+  readonly expected: ExpectedFinding
+  readonly finding: AdmittedFinding
+}
+
+export type EvalSemanticJudgeResult = {
+  readonly match: boolean
+  readonly confidence: number
+}
+
+export type EvalSemanticJudge = (
+  input: EvalSemanticJudgeInput
+) => Promise<EvalSemanticJudgeResult>
+
 type CandidatePair = {
   readonly expectedIndex: number
   readonly findingIndex: number
@@ -118,7 +132,17 @@ const lineRulePasses = (
 ): boolean =>
   expected.lineRange === undefined
     ? true
-    : rangesOverlap(expected.lineRange, findingLineRange(finding), LINE_TOLERANCE)
+      : rangesOverlap(expected.lineRange, findingLineRange(finding), LINE_TOLERANCE)
+
+const matchModeFor = (
+  expected: ExpectedFinding
+): 'path-line' | 'path-semantic' | 'semantic-only' =>
+  expected.matchMode ??
+  (expected.path === undefined
+    ? 'semantic-only'
+    : expected.lineRange === undefined
+      ? 'path-semantic'
+      : 'path-line')
 
 const semanticScoreFor = (
   expected: ExpectedFinding,
@@ -137,11 +161,16 @@ const pairFor = (
   expectedIndex: number,
   findingIndex: number
 ): CandidatePair | undefined => {
-  if (expected.path !== finding.location.path) {
+  const matchMode = matchModeFor(expected)
+
+  if (
+    matchMode !== 'semantic-only' &&
+    expected.path !== finding.location.path
+  ) {
     return undefined
   }
 
-  if (!lineRulePasses(expected, finding)) {
+  if (matchMode === 'path-line' && !lineRulePasses(expected, finding)) {
     return undefined
   }
 
@@ -155,7 +184,44 @@ const pairFor = (
     expectedIndex,
     findingIndex,
     semanticScore,
-    lineOverlaps: true,
+    lineOverlaps:
+      matchMode === 'path-line' ? lineRulePasses(expected, finding) : false,
+    severityMatches: expected.severity === finding.severity
+  }
+}
+
+const pairForJudgedMatch = async (
+  expected: ExpectedFinding,
+  finding: AdmittedFinding,
+  expectedIndex: number,
+  findingIndex: number,
+  judge: EvalSemanticJudge
+): Promise<CandidatePair | undefined> => {
+  const matchMode = matchModeFor(expected)
+
+  if (
+    matchMode !== 'semantic-only' &&
+    expected.path !== finding.location.path
+  ) {
+    return undefined
+  }
+
+  if (matchMode === 'path-line' && !lineRulePasses(expected, finding)) {
+    return undefined
+  }
+
+  const judged = await judge({ expected, finding })
+
+  if (!judged.match) {
+    return undefined
+  }
+
+  return {
+    expectedIndex,
+    findingIndex,
+    semanticScore: roundScore(judged.confidence),
+    lineOverlaps:
+      matchMode === 'path-line' ? lineRulePasses(expected, finding) : false,
     severityMatches: expected.severity === finding.severity
   }
 }
@@ -175,34 +241,27 @@ const isInNoFindingZone = (
   return rangesOverlap(zone.lineRange, findingLineRange(finding), 0)
 }
 
-export const matchEvalFindings = (
+const buildMatchResult = (
   input: {
     readonly evalCase: EvalCase
     readonly admittedFindings: readonly AdmittedFinding[]
+    readonly candidatePairs: readonly CandidatePair[]
+    // Matches already assigned by an earlier pass (e.g. deterministic matching
+    // before the semantic judge). Their expected/finding indexes are reserved.
+    readonly seededMatches?: readonly EvalFindingMatch[]
+    readonly reservedExpectedIndexes?: ReadonlySet<number>
+    readonly reservedFindingIndexes?: ReadonlySet<number>
   }
 ): EvalMatcherResult => {
-  const candidatePairs: CandidatePair[] = []
-
-  input.evalCase.expectedFindings.forEach((expected, expectedIndex) => {
-    input.admittedFindings.forEach((finding, findingIndex) => {
-      const pair = pairFor(expected, finding, expectedIndex, findingIndex)
-
-      if (pair !== undefined) {
-        candidatePairs.push(pair)
-      }
-    })
-  })
-
-  candidatePairs.sort(
+  const matchedExpectedIndexes = new Set<number>(input.reservedExpectedIndexes)
+  const matchedFindingIndexes = new Set<number>(input.reservedFindingIndexes)
+  const matches: EvalFindingMatch[] = [...(input.seededMatches ?? [])]
+  const candidatePairs = [...input.candidatePairs].sort(
     (left, right) =>
       right.semanticScore - left.semanticScore ||
       left.expectedIndex - right.expectedIndex ||
       left.findingIndex - right.findingIndex
   )
-
-  const matchedExpectedIndexes = new Set<number>()
-  const matchedFindingIndexes = new Set<number>()
-  const matches: EvalFindingMatch[] = []
 
   for (const pair of candidatePairs) {
     if (
@@ -255,4 +314,91 @@ export const matchEvalFindings = (
     falsePositiveFindingIds,
     noFindingZoneFalsePositiveIds
   }
+}
+
+export const matchEvalFindings = (
+  input: {
+    readonly evalCase: EvalCase
+    readonly admittedFindings: readonly AdmittedFinding[]
+  }
+): EvalMatcherResult => {
+  const candidatePairs: CandidatePair[] = []
+
+  input.evalCase.expectedFindings.forEach((expected, expectedIndex) => {
+    input.admittedFindings.forEach((finding, findingIndex) => {
+      const pair = pairFor(expected, finding, expectedIndex, findingIndex)
+
+      if (pair !== undefined) {
+        candidatePairs.push(pair)
+      }
+    })
+  })
+
+  return buildMatchResult({
+    evalCase: input.evalCase,
+    admittedFindings: input.admittedFindings,
+    candidatePairs
+  })
+}
+
+export const matchEvalFindingsWithSemanticJudge = async (
+  input: {
+    readonly evalCase: EvalCase
+    readonly admittedFindings: readonly AdmittedFinding[]
+    readonly judge: EvalSemanticJudge
+  }
+): Promise<EvalMatcherResult> => {
+  // Deterministic matching runs first. The LLM judge only resolves expected
+  // findings the deterministic matcher left unmatched, and only for
+  // `semantic-only` / `path-semantic` expectations — never `path-line`, which is
+  // line-anchored and stays deterministic. Deterministic matches always win.
+  const deterministic = matchEvalFindings({
+    evalCase: input.evalCase,
+    admittedFindings: input.admittedFindings
+  })
+  const findingIndexById = new Map(
+    input.admittedFindings.map((finding, index) => [finding.id, index])
+  )
+  const reservedExpectedIndexes = new Set(
+    deterministic.matches.map((match) => match.expectedIndex)
+  )
+  const reservedFindingIndexes = new Set(
+    deterministic.matches
+      .map((match) => findingIndexById.get(match.findingId))
+      .filter((index): index is number => index !== undefined)
+  )
+
+  const judgedPairs = (
+    await Promise.all(
+      input.evalCase.expectedFindings.flatMap((expected, expectedIndex) => {
+        if (
+          reservedExpectedIndexes.has(expectedIndex) ||
+          matchModeFor(expected) === 'path-line'
+        ) {
+          return []
+        }
+
+        return input.admittedFindings.map((finding, findingIndex) =>
+          reservedFindingIndexes.has(findingIndex)
+            ? Promise.resolve(undefined)
+            : pairForJudgedMatch(
+                expected,
+                finding,
+                expectedIndex,
+                findingIndex,
+                input.judge
+              )
+        )
+      })
+    )
+  ).filter((pair): pair is CandidatePair => pair !== undefined)
+
+  return buildMatchResult({
+    evalCase: input.evalCase,
+    admittedFindings: input.admittedFindings,
+    candidatePairs: judgedPairs,
+    seededMatches: deterministic.matches,
+    reservedExpectedIndexes,
+    reservedFindingIndexes
+  })
 }

@@ -163,6 +163,25 @@ describe('ReviewReportSchema', () => {
     ).toThrow()
   })
 
+  test('rejects locations whose end line precedes the start line', () => {
+    expect(() =>
+      ReviewReportSchema.parse({
+        ...validReport,
+        admittedFindings: [
+          {
+            ...validReport.admittedFindings[0],
+            location: {
+              path: 'src/example.ts',
+              startLine: 10,
+              endLine: 9,
+              side: 'new'
+            }
+          }
+        ]
+      })
+    ).toThrow()
+  })
+
   test('rejects sensitive artifact markers', () => {
     expect(() =>
       ReviewReportSchema.parse({

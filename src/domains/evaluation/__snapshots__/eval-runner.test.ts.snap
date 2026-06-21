@@ -7,7 +7,23 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "caseId": "typescript-positive",
       "costUsd": 0.1,
       "durationMs": 1000,
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "expectedIndex": 0,
+          "lineRange": [
+            4,
+            4,
+          ],
+          "matchMode": "path-line",
+          "path": "src/app.ts",
+          "semanticSummary": "incorrect return value from changed branch",
+          "severity": "high",
+        },
+      ],
       "falsePositiveFindingIds": [],
+      "falsePositiveFindings": [],
+      "inlineFindingCount": 1,
       "matchedFindings": [
         {
           "expectedIndex": 0,
@@ -27,9 +43,21 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "caseId": "typescript-negative",
       "costUsd": 0.1,
       "durationMs": 1000,
+      "expectedFindings": [],
       "falsePositiveFindingIds": [
         "find_noise1",
       ],
+      "falsePositiveFindings": [
+        {
+          "category": "bug",
+          "findingId": "find_noise1",
+          "line": 3,
+          "path": "src/format.ts",
+          "severity": "high",
+          "title": "Style-only note",
+        },
+      ],
+      "inlineFindingCount": 1,
       "matchedFindings": [],
       "noFindingZoneFalsePositiveIds": [
         "find_noise1",
@@ -42,6 +70,156 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
   ],
   "fixtureCount": 2,
   "generatedAt": "2026-06-20T00:00:02.000Z",
+  "metricGroups": [
+    {
+      "caseIds": [
+        "typescript-positive",
+        "typescript-negative",
+      ],
+      "fixtureCount": 2,
+      "groupBy": "sourceProfile",
+      "key": "project",
+      "metrics": {
+        "actionableRate": 1,
+        "commentsPerDiffHunk": 0.666667,
+        "commentsPerKloc": 33.333333,
+        "contextMutationRate": 0,
+        "costUsd": 0.2,
+        "durationMs": 2000,
+        "f1": 0.666667,
+        "falsePositiveCount": 1,
+        "incompleteCoverageRate": 0,
+        "lineAccuracy": 1,
+        "noFindingZoneFalsePositiveCount": 1,
+        "parseValidity": 1,
+        "precision": 0.5,
+        "providerErrorRate": 0,
+        "recall": 1,
+        "severityAccuracy": 1,
+        "severityWeightedF1": 0.666667,
+        "severityWeightedPrecision": 0.5,
+        "severityWeightedRecall": 1,
+      },
+    },
+    {
+      "caseIds": [
+        "typescript-positive",
+        "typescript-negative",
+      ],
+      "fixtureCount": 2,
+      "groupBy": "language",
+      "key": "typescript",
+      "metrics": {
+        "actionableRate": 1,
+        "commentsPerDiffHunk": 0.666667,
+        "commentsPerKloc": 33.333333,
+        "contextMutationRate": 0,
+        "costUsd": 0.2,
+        "durationMs": 2000,
+        "f1": 0.666667,
+        "falsePositiveCount": 1,
+        "incompleteCoverageRate": 0,
+        "lineAccuracy": 1,
+        "noFindingZoneFalsePositiveCount": 1,
+        "parseValidity": 1,
+        "precision": 0.5,
+        "providerErrorRate": 0,
+        "recall": 1,
+        "severityAccuracy": 1,
+        "severityWeightedF1": 0.666667,
+        "severityWeightedPrecision": 0.5,
+        "severityWeightedRecall": 1,
+      },
+    },
+    {
+      "caseIds": [
+        "typescript-negative",
+      ],
+      "fixtureCount": 1,
+      "groupBy": "tag",
+      "key": "negative",
+      "metrics": {
+        "actionableRate": 1,
+        "commentsPerDiffHunk": 1,
+        "commentsPerKloc": 100,
+        "contextMutationRate": 0,
+        "costUsd": 0.1,
+        "durationMs": 1000,
+        "f1": 0,
+        "falsePositiveCount": 1,
+        "incompleteCoverageRate": 0,
+        "lineAccuracy": 1,
+        "noFindingZoneFalsePositiveCount": 1,
+        "parseValidity": 1,
+        "precision": 0,
+        "providerErrorRate": 0,
+        "recall": 1,
+        "severityAccuracy": 1,
+        "severityWeightedF1": 0,
+        "severityWeightedPrecision": 0,
+        "severityWeightedRecall": 1,
+      },
+    },
+    {
+      "caseIds": [
+        "typescript-positive",
+      ],
+      "fixtureCount": 1,
+      "groupBy": "tag",
+      "key": "positive",
+      "metrics": {
+        "actionableRate": 1,
+        "commentsPerDiffHunk": 0.5,
+        "commentsPerKloc": 20,
+        "contextMutationRate": 0,
+        "costUsd": 0.1,
+        "durationMs": 1000,
+        "f1": 1,
+        "falsePositiveCount": 0,
+        "incompleteCoverageRate": 0,
+        "lineAccuracy": 1,
+        "noFindingZoneFalsePositiveCount": 0,
+        "parseValidity": 1,
+        "precision": 1,
+        "providerErrorRate": 0,
+        "recall": 1,
+        "severityAccuracy": 1,
+        "severityWeightedF1": 1,
+        "severityWeightedPrecision": 1,
+        "severityWeightedRecall": 1,
+      },
+    },
+    {
+      "caseIds": [
+        "typescript-positive",
+        "typescript-negative",
+      ],
+      "fixtureCount": 2,
+      "groupBy": "tag",
+      "key": "typescript",
+      "metrics": {
+        "actionableRate": 1,
+        "commentsPerDiffHunk": 0.666667,
+        "commentsPerKloc": 33.333333,
+        "contextMutationRate": 0,
+        "costUsd": 0.2,
+        "durationMs": 2000,
+        "f1": 0.666667,
+        "falsePositiveCount": 1,
+        "incompleteCoverageRate": 0,
+        "lineAccuracy": 1,
+        "noFindingZoneFalsePositiveCount": 1,
+        "parseValidity": 1,
+        "precision": 0.5,
+        "providerErrorRate": 0,
+        "recall": 1,
+        "severityAccuracy": 1,
+        "severityWeightedF1": 0.666667,
+        "severityWeightedPrecision": 0.5,
+        "severityWeightedRecall": 1,
+      },
+    },
+  ],
   "metrics": {
     "actionableRate": 1,
     "commentsPerDiffHunk": 0.666667,
@@ -79,6 +257,17 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     },
   },
   "schemaVersion": "1.0",
+  "scoring": {
+    "semanticMatcher": "deterministic",
+  },
+  "selection": {
+    "caseFilters": [],
+    "fixtureSource": "default",
+    "selectedCaseIds": [
+      "typescript-positive",
+      "typescript-negative",
+    ],
+  },
 }
 `;
 
@@ -88,6 +277,16 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
 Gate: FAIL
 Generated: 2026-06-20T00:00:02.000Z
 Fixtures: 2
+
+## Selection
+
+| Field | Value |
+| --- | --- |
+| Fixture source | default |
+| Slice root | - |
+| Case filters | - |
+| Selected cases | typescript-positive, typescript-negative |
+| Semantic matcher | deterministic |
 
 ## Metrics
 
@@ -109,12 +308,19 @@ Fixtures: 2
 | Duration | 2.0s |
 | Cost | $0.2000 |
 
+## Metric Groups
+
+| Group | Key | Fixtures | Recall | Precision | F1 | Line accuracy | False positives |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| sourceProfile | project | 2 | 100.0% | 50.0% | 66.7% | 100.0% | 1 |
+| language | typescript | 2 | 100.0% | 50.0% | 66.7% | 100.0% | 1 |
+
 ## Cases
 
-| Case | Status | Expected | Matched | False positives | Notes |
-| --- | --- | ---: | ---: | ---: | --- |
-| typescript-positive | PASS | 1 | 1 | 0 | - |
-| typescript-negative | FAIL | 0 | 0 | 1 | false positives 1; no-finding-zone hits 1 |
+| Case | Profile | Status | Expected | Matched | Inline | False positives | Notes |
+| --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| typescript-positive | project | PASS | 1 | 1 | 1 | 0 | - |
+| typescript-negative | project | FAIL | 0 | 0 | 1 | 1 | false positives 1; no-finding-zone hits 1 |
 
 ## Gate Reasons
 
@@ -124,12 +330,14 @@ Fixtures: 2
 
 ### typescript-negative
 
-False positive finding IDs: find_noise1
+False positive findings:
+- find_noise1 high bug src/format.ts:3 - Style-only note
 No-finding-zone hit IDs: find_noise1
 
 ## Artifacts
 
 - .review/eval/eval-report.json
 - .review/eval/eval-summary.md
+- .review/eval/eval-recall-report.md
 "
 `;

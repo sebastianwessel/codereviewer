@@ -9,6 +9,7 @@ flowchart LR
   Config["Configuration"]
   Intake["Repository Intake"]
   Analyzers["Language Analyzers"]
+  AstGrep["ast-grep Structural Parse"]
   Planner["Review Planning"]
   Context["Shared Context"]
   Ledger["Context Ledger"]
@@ -21,6 +22,8 @@ flowchart LR
   CLI --> Config
   CLI --> Intake
   Intake --> Analyzers
+  Analyzers --> AstGrep
+  AstGrep --> Analyzers
   Analyzers --> Planner
   Planner --> Context
   Planner --> Workflow
@@ -39,7 +42,7 @@ flowchart LR
 | --- | --- |
 | Configuration | Defaults, JSON config, env overrides, validation, redacted summaries. |
 | Repository Intake | Git refs, file selection, diff-aware inputs, path normalization. |
-| Language Analyzers | AST-backed parsing, language-neutral facts, diagnostics, test mapping. |
+| Language Analyzers | AST-backed parsing, language-neutral facts, diagnostics, test mapping, and structural engine observability. |
 | Review Planning | Task planning, dependency clustering, and queue leasing. |
 | Shared Context | Compact append-only entries, exact task events, evidence references, candidates, and decisions. |
 | Context Ledger | Redacted record of every context item considered for provider transfer. |
@@ -53,10 +56,12 @@ flowchart LR
 | Rule | Reason |
 | --- | --- |
 | Analyzers do not execute project code. | Keeps local and CI review safer. |
+| ast-grep stays inside analyzer adapters. | Structural parsing improves deterministic context without adding ast-grep docs, raw AST dumps, or rule-authoring traces to provider prompts. |
 | Provider packages are optional. | Minimal deployments can omit optional adapters and install only the selected provider package. |
 | Reports use evidence IDs and redacted summaries. | Avoids leaking raw source snippets by default. |
 | Config and contracts are typed. | Keeps CLI, workflow, and reports aligned. |
 | Provider review gets only bounded, ledgered, coverage-complete context. | Makes external processing explicit and auditable without claiming success after omitted source. |
 | Provider calls are task-scoped and round-gated. | Avoids one oversized model call and preserves task-level recovery. |
+| Worker agents cooperate through admitted shared context. | Each worker reviews one bounded task; later workers see compact admitted summaries, not raw candidates from unfinished or rejected work. |
 | Provider workflows keep runtime state in memory. | Avoids source-bearing runtime/session persistence and sandbox workspace trees; JSON artifacts are the run record. |
 | Evidence is unfolded by reference. | Keeps shared summaries compact while retaining traceability. |

@@ -46,14 +46,23 @@ export const ContractIdSchema = z
 
 export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/)
 
-export const CodeLocationSchema = z.strictObject({
-  path: RepositoryRelativePathSchema,
-  startLine: z.int().min(1),
-  startColumn: z.int().min(1).optional(),
-  endLine: z.int().min(1).optional(),
-  endColumn: z.int().min(1).optional(),
-  side: z.enum(['new', 'old', 'file'])
-})
+export const CodeLocationSchema = z
+  .strictObject({
+    path: RepositoryRelativePathSchema,
+    startLine: z.int().min(1),
+    startColumn: z.int().min(1).optional(),
+    endLine: z.int().min(1).optional(),
+    endColumn: z.int().min(1).optional(),
+    side: z.enum(['new', 'old', 'file'])
+  })
+  .refine(
+    (location) =>
+      location.endLine === undefined || location.endLine >= location.startLine,
+    {
+      path: ['endLine'],
+      message: 'endLine must be greater than or equal to startLine.'
+    }
+  )
 
 export const RelatedLocationSchema = z.strictObject({
   id: z.string().min(1),

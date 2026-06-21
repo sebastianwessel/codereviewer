@@ -182,8 +182,15 @@ const createModelAlias = (
   provider: modelProvider,
   model: provider.model,
   capabilities: ['object', 'tool_use'],
+  // Retry is handled by the harness model retry policy, which classifies
+  // failures (transient/network/timeout/rate-limit/5xx are retried; oversized
+  // context, auth, and payment are not), honors `Retry-After`, and fails fast
+  // (`longRetry: 'error'`) when a provider asks us to wait longer than the cap.
   retry: {
-    maxAttempts: provider.maxRetries + 1
+    maxAttempts: provider.maxRetries + 1,
+    minDelayMs: provider.retryBackoffMs,
+    maxActiveDelayMs: provider.retryMaxDelayMs,
+    longRetry: 'error'
   },
   defaults: {
     ...(modelSupportsTemperatureDefault(provider)

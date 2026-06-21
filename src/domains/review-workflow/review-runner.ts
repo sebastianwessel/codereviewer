@@ -32,10 +32,13 @@ import {
   CandidateFindingSchema,
   evaluateQualityGate,
   matchBaselineFindings,
+  reviewedLineRangeForContent,
   resolveBaselineFingerprints,
   type BaselineFingerprintRecord,
   type CandidateFinding,
-  type QualityGateThresholds
+  type QualityGateThresholds,
+  type ReviewedDiffRange,
+  type ReviewedLineRange
 } from '../admission/index.js'
 import {
   createReviewTaskQueue,
@@ -66,6 +69,7 @@ import {
   analyzeFirstClassLanguageFiles,
   assertAnalyzerEvidenceOwnsPath,
   assertAnalyzerFactOwnsPath,
+  astGrepVersion,
   languageAnalyzerVersions,
   discoverFirstClassLanguageTests,
   type LanguageSourceFile
@@ -74,7 +78,7 @@ import {
   resolveProviderModelAlias,
   type ProviderImport
 } from '../provider-resolution/index.js'
-import { collectRepositoryIntake } from '../repository-intake/index.js'
+import { collectRepositoryIntake, type DiffMap } from '../repository-intake/index.js'
 import {
   createModelBackedReviewHarness,
   isReviewTaskExecutionError,
@@ -108,6 +112,7 @@ export type RunReviewOptions = {
   readonly configWarnings?: readonly string[]
   readonly baselineExplicitlyConfigured?: boolean
   readonly explicitFiles?: readonly string[]
+  readonly reviewDiffMaps?: readonly DiffMap[]
   readonly baseRef?: string
   readonly headRef?: string
   readonly environment?: Readonly<Record<string, string | undefined>>
@@ -361,13 +366,59 @@ const readChangedSourceFiles = async (
     }))
   )
 
+const reviewedLineRangesForSourceFiles = (
+  sourceFiles: readonly LanguageSourceFile[]
+): readonly ReviewedLineRange[] =>
+  sourceFiles.map((sourceFile) =>
+    reviewedLineRangeForContent({
+      path: sourceFile.path,
+      content: sourceFile.content
+    })
+  )
+
+const reviewedDiffRangesForDiffMaps = (
+  diffMaps: readonly DiffMap[]
+): readonly ReviewedDiffRange[] =>
+  diffMaps.flatMap((diffMap) =>
+    diffMap.hunks
+      .filter((hunk) => hunk.newLineCount > 0)
+      .map((hunk) => ({
+        path: diffMap.path,
+        startLine: hunk.newStartLine,
+        endLine: hunk.newStartLine + hunk.newLineCount - 1
+      }))
+  )
+
+const sourceRangeOverlapsReviewedDiffRange = (
+  location: EvidenceRecord['location'],
+  ranges: readonly ReviewedDiffRange[]
+): boolean => {
+  if (location === undefined || location.side !== 'file') {
+    return false
+  }
+
+  const candidateRange = {
+    startLine: location.startLine,
+    endLine: location.endLine ?? location.startLine
+  }
+
+  return ranges
+    .filter((range) => range.path === location.path)
+    .some(
+      (range) =>
+        candidateRange.startLine <= range.endLine &&
+        range.startLine <= candidateRange.endLine
+    )
+}
+
 const candidateHash = (value: string): string => sha256(value).slice(0, 16)
 
 const taskIdFor = (pathValue: string): string =>
   `task_${candidateHash(pathValue)}`
 
 const candidateFromDiagnostic = (
-  evidence: EvidenceRecord
+  evidence: EvidenceRecord,
+  reviewedDiffRanges: readonly ReviewedDiffRange[]
 ): CandidateFinding | undefined => {
   if (evidence.kind !== 'diagnostic' || evidence.location === undefined) {
     return undefined
@@ -384,7 +435,15 @@ const candidateFromDiagnostic = (
     severity: 'high',
     title: 'Parse diagnostic blocks reliable review',
     description: `Syntax parse diagnostic reported by ${evidence.source}: ${evidence.summary}`,
-    location: evidence.location,
+    location: {
+      ...evidence.location,
+      side: sourceRangeOverlapsReviewedDiffRange(
+        evidence.location,
+        reviewedDiffRanges
+      )
+        ? 'new'
+        : evidence.location.side
+    },
     evidenceIds: [evidence.id],
     proposedBy: evidence.source,
     confidence: 0.95,
@@ -398,10 +457,11 @@ const candidateFromDiagnostic = (
 }
 
 const createAnalyzerCandidates = (
-  evidence: readonly EvidenceRecord[]
+  evidence: readonly EvidenceRecord[],
+  reviewedDiffRanges: readonly ReviewedDiffRange[]
 ): readonly CandidateFinding[] =>
   evidence
-    .map(candidateFromDiagnostic)
+    .map((record) => candidateFromDiagnostic(record, reviewedDiffRanges))
     .filter((candidate): candidate is CandidateFinding => candidate !== undefined)
 
 const bytesOf = (value: string): number => Buffer.byteLength(value)
@@ -931,6 +991,8 @@ const loadBaselineFingerprints = async (
 const runAdmissionOnly = (
   input: {
     readonly reviewedPaths: readonly string[]
+    readonly reviewedLineRanges: readonly ReviewedLineRange[]
+    readonly reviewedDiffRanges: readonly ReviewedDiffRange[]
     readonly candidates: readonly CandidateFinding[]
     readonly evidence: readonly EvidenceRecord[]
     readonly config: CodeReviewerConfig
@@ -963,6 +1025,8 @@ const runAdmissionOnly = (
       existingAdmittedFindings: admittedFindings,
       policy: {
         reviewedPaths: input.reviewedPaths,
+        reviewedLineRanges: input.reviewedLineRanges,
+        reviewedDiffRanges: input.reviewedDiffRanges,
         minimumSeverity: 'info',
         inlineSeverityThreshold: input.config.review.inlineSeverityThreshold,
         provenance: {
@@ -1020,6 +1084,8 @@ const createWorkflowInput = (
   input: {
     readonly runId: string
     readonly reviewedPaths: readonly string[]
+    readonly reviewedLineRanges: readonly ReviewedLineRange[]
+    readonly reviewedDiffRanges: readonly ReviewedDiffRange[]
     readonly evidence: readonly EvidenceRecord[]
     readonly candidates: readonly CandidateFinding[]
     readonly config: CodeReviewerConfig
@@ -1036,6 +1102,8 @@ const createWorkflowInput = (
 ): ScriptedReviewWorkflowInput => ({
   runId: input.runId,
   reviewedPaths: [...input.reviewedPaths],
+  reviewedLineRanges: input.reviewedLineRanges.map((range) => ({ ...range })),
+  reviewedDiffRanges: input.reviewedDiffRanges.map((range) => ({ ...range })),
   evidence: input.evidence.map((record) => ({ ...record })),
   candidates: input.candidates.map((candidate) => ({ ...candidate })),
   instructions: input.instructions.map((instruction) => ({ ...instruction })),
@@ -1566,6 +1634,8 @@ export const runReview = async (
       changed_file_count: intake.changedFiles.length,
       skipped_file_count: intake.skippedFiles.length
     })
+    const effectiveDiffMaps = options.reviewDiffMaps ?? intake.diffMaps
+    const effectiveDiffRanges = reviewedDiffRangesForDiffMaps(effectiveDiffMaps)
     const sourceReadStep = observability.startStep('source_read', {
       fileCount: intake.changedFiles.length
     })
@@ -1578,9 +1648,14 @@ export const runReview = async (
     })
     sourceReadStep.end({ fileCount: sourceFiles.length })
     logger.debug('Source read completed.', { file_count: sourceFiles.length })
-    const analysisStep = observability.startStep('language_analysis')
+    const analysisStep = observability.startStep('language_analysis', {
+      structuralEngine: 'typescript-compiler+ast-grep',
+      astGrepVersion: `ast-grep@${astGrepVersion}`,
+      fileCount: sourceFiles.length
+    })
     logger.debug('Language analysis started.', { file_count: sourceFiles.length })
     const analysis = analyzeFirstClassLanguageFiles(sourceFiles)
+    const testMappings = discoverFirstClassLanguageTests(sourceFiles)
     for (const fact of analysis.facts) {
       assertAnalyzerFactOwnsPath(fact)
     }
@@ -1592,13 +1667,20 @@ export const runReview = async (
     }
     analysisStep.end({
       factCount: analysis.facts.length,
-      evidenceCount: evidence.length
+      evidenceCount: evidence.length,
+      languageCount: new Set(analysis.facts.map((fact) => fact.language)).size,
+      testMappingCount: testMappings.length,
+      structuralEngine: 'typescript-compiler+ast-grep',
+      astGrepVersion: `ast-grep@${astGrepVersion}`
     })
     logger.debug('Language analysis completed.', {
       fact_count: analysis.facts.length,
       evidence_count: evidence.length
     })
-    const analyzerCandidates = createAnalyzerCandidates(evidence)
+    const analyzerCandidates = createAnalyzerCandidates(
+      evidence,
+      effectiveDiffRanges
+    )
     const planningStep = observability.startStep('task_planning')
     logger.debug('Task planning started.')
     const reviewTasks = planReviewTasks({
@@ -1663,6 +1745,8 @@ export const runReview = async (
     const workflowInput = createWorkflowInput({
         runId,
         reviewedPaths: intake.changedFiles.map((file) => file.path),
+        reviewedLineRanges: reviewedLineRangesForSourceFiles(sourceFiles),
+        reviewedDiffRanges: effectiveDiffRanges,
         evidence,
         candidates: analyzerCandidates,
         config: options.config,
@@ -1835,6 +1919,8 @@ export const runReview = async (
       providerWorkflowOutput === undefined
         ? runAdmissionOnly({
             reviewedPaths: intake.changedFiles.map((file) => file.path),
+            reviewedLineRanges: reviewedLineRangesForSourceFiles(sourceFiles),
+            reviewedDiffRanges: effectiveDiffRanges,
             candidates: analyzerCandidates,
             evidence,
             config: options.config,

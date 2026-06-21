@@ -33,9 +33,12 @@ import {
   CandidateFindingSchema,
   evaluateQualityGate,
   matchBaselineFindings,
+  reviewedLineRangeForContent,
   type BaselineFingerprintRecord,
   type CandidateFinding,
-  type QualityGateThresholds
+  type QualityGateThresholds,
+  type ReviewedDiffRange,
+  type ReviewedLineRange
 } from '../admission/index.js'
 import {
   createReviewSharedContext,
@@ -104,6 +107,18 @@ const WorkflowAdmissionPolicySchema = z.strictObject({
   admittedAt: z.string().datetime()
 })
 
+const ReviewedLineRangeSchema = z.strictObject({
+  path: RepositoryRelativePathSchema,
+  startLine: z.int().min(1),
+  endLine: z.int().min(0)
+})
+
+const ReviewedDiffRangeSchema = z.strictObject({
+  path: RepositoryRelativePathSchema,
+  startLine: z.int().min(1),
+  endLine: z.int().min(0)
+})
+
 const WorkflowProvenanceInputSchema = FindingProvenanceSchema.omit({
   instructionHashes: true,
   skillHashes: true
@@ -121,6 +136,8 @@ const BaselineFingerprintRecordSchema = z.strictObject({
 export const ScriptedReviewWorkflowInputSchema = z.strictObject({
   runId: z.string().min(1),
   reviewedPaths: z.array(RepositoryRelativePathSchema),
+  reviewedLineRanges: z.array(ReviewedLineRangeSchema).optional(),
+  reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).optional(),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
   instructions: z.array(ContextDocumentSchema),
@@ -354,6 +371,11 @@ const runAdmission = (
   const admittedFindings: AdmittedFinding[] = []
   const rejectedFindings: RejectedFinding[] = []
   const admissionDecisions: AdmissionDecisionRecord[] = []
+  const reviewedLineRanges =
+    input.workflowInput.reviewedLineRanges ??
+    reviewedLineRangesFromReviewContext(input.workflowInput.reviewContext ?? [])
+  const reviewedDiffRanges: readonly ReviewedDiffRange[] | undefined =
+    input.workflowInput.reviewedDiffRanges
 
   for (const evidence of input.workflowInput.evidence) {
     assertAnalyzerEvidenceOwnsPath(evidence)
@@ -368,6 +390,8 @@ const runAdmission = (
       existingAdmittedFindings: admittedFindings,
       policy: {
         reviewedPaths: input.workflowInput.reviewedPaths,
+        ...(reviewedLineRanges === undefined ? {} : { reviewedLineRanges }),
+        ...(reviewedDiffRanges === undefined ? {} : { reviewedDiffRanges }),
         minimumSeverity: 'info',
         inlineSeverityThreshold:
           input.workflowInput.admissionPolicy.inlineSeverityThreshold,
@@ -404,6 +428,23 @@ const runAdmission = (
   }
 
   return { admittedFindings, rejectedFindings, admissionDecisions }
+}
+
+const reviewedLineRangesFromReviewContext = (
+  reviewContext: readonly z.infer<typeof ReviewContextDocumentSchema>[]
+): readonly ReviewedLineRange[] | undefined => {
+  const ranges = reviewContext
+    .filter(
+      (document) => document.kind === 'file' && document.path !== undefined
+    )
+    .map((document) =>
+      reviewedLineRangeForContent({
+        path: document.path!,
+        content: document.content
+      })
+    )
+
+  return ranges.length === 0 ? undefined : ranges
 }
 
 const mergeCandidates = (
@@ -822,6 +863,9 @@ const runQueuedTasks = async <R>(
       const sharedDigest =
         input.sharedDigest?.() ?? '(no admitted shared context yet)'
 
+      // Provider-call retries (transient/network/timeout/rate-limit, classified)
+      // are handled inside the harness model retry policy on the model alias, so
+      // the queue runs each task exactly once.
       try {
         const result = await input.runTask(task, sharedDigest)
 

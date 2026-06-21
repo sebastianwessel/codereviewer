@@ -6,13 +6,19 @@ import {
   resolveWritePathInsideRoot
 } from '../platform/path-service.js'
 import {
+  EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
   EvalReportSchema,
+  calculateEvalDiffStats,
+  createModelSemanticJudge,
+  createEvalSliceManifest,
   type EvalCaseOutput,
   loadEvalCasesFromFixtures,
   renderEvalComparison,
+  renderEvalRecallReport,
   renderEvalSummary,
   runEvaluation,
+  runEvaluationWithSemanticJudge,
 } from '../domains/evaluation/index.js'
 import { runDriftCheck } from '../domains/drift/index.js'
 import {
@@ -20,6 +26,11 @@ import {
   runReview as runReviewPipeline,
   type PartialReviewRunState
 } from '../domains/review-workflow/index.js'
+import { parseGitDiffMaps } from '../domains/repository-intake/index.js'
+import {
+  resolveProviderModelAlias,
+  type ProviderImport
+} from '../domains/provider-resolution/index.js'
 import {
   createReviewLogger,
   ReviewLogLevelSchema,
@@ -49,6 +60,7 @@ export type CliRunOptions = {
   readonly cwd: string
   readonly environment?: Readonly<Record<string, string | undefined>>
   readonly logSink?: ReviewLogSink
+  readonly providerImport?: ProviderImport
 }
 
 const usageError = (message: string): CliResult => ({
@@ -171,6 +183,33 @@ const parseOptionValue = (
   }
 
   return value
+}
+
+const parseOptionValues = (
+  args: readonly string[],
+  optionName: string
+): readonly string[] => {
+  const values: string[] = []
+
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] !== optionName) {
+      continue
+    }
+
+    const value = args[index + 1]
+    if (
+      value === undefined ||
+      value.length === 0 ||
+      value.startsWith('-')
+    ) {
+      throw new TypeError(`${optionName} requires a value`)
+    }
+
+    values.push(value)
+    index += 1
+  }
+
+  return values
 }
 
 const parseLogLevelOverride = (
@@ -461,6 +500,25 @@ const countChangedLines = async (
   return counts.reduce((total, count) => total + count, 0)
 }
 
+const calculateEvalCaseSize = async (
+  input: {
+    readonly fixtureRoot: string
+    readonly evalCase: Awaited<ReturnType<typeof loadEvalCasesFromFixtures>>[number]
+  }
+): Promise<{ readonly changedLineCount: number; readonly diffHunkCount: number }> => {
+  if (input.evalCase.diff !== undefined) {
+    return calculateEvalDiffStats(input.evalCase.diff)
+  }
+
+  return {
+    changedLineCount: await countChangedLines(
+      input.fixtureRoot,
+      input.evalCase.changedFiles
+    ),
+    diffHunkCount: input.evalCase.changedFiles.length
+  }
+}
+
 const runEvalCase = async (
   input: {
     readonly root: string
@@ -469,16 +527,17 @@ const runEvalCase = async (
     readonly baselineExplicitlyConfigured: boolean
     readonly environment: Readonly<Record<string, string | undefined>>
     readonly evalCase: Awaited<ReturnType<typeof loadEvalCasesFromFixtures>>[number]
+    readonly providerImport?: ProviderImport
   }
 ): Promise<EvalCaseOutput> => {
   const fixtureRoot = await resolveExistingPathInsideRoot(
     input.root,
-    path.posix.join('eval', input.evalCase.repositoryFixture)
+    input.evalCase.repositoryFixture
   )
-  const changedLineCount = await countChangedLines(
+  const evalCaseSize = await calculateEvalCaseSize({
     fixtureRoot,
-    input.evalCase.changedFiles
-  )
+    evalCase: input.evalCase
+  })
 
   try {
     const result = await runReviewPipeline({
@@ -487,19 +546,25 @@ const runEvalCase = async (
       configWarnings: input.configWarnings,
       baselineExplicitlyConfigured: input.baselineExplicitlyConfigured,
       explicitFiles: input.evalCase.changedFiles,
+      ...(input.evalCase.diff === undefined
+        ? {}
+        : { reviewDiffMaps: parseGitDiffMaps(input.evalCase.diff) }),
       ...(input.evalCase.baseRef === undefined
         ? {}
         : { baseRef: input.evalCase.baseRef }),
       ...(input.evalCase.headRef === undefined
         ? {}
         : { headRef: input.evalCase.headRef }),
-      environment: input.environment
+      environment: input.environment,
+      ...(input.providerImport === undefined
+        ? {}
+        : { providerImport: input.providerImport })
     })
 
     return {
       caseId: input.evalCase.id,
-      changedLineCount,
-      diffHunkCount: input.evalCase.changedFiles.length,
+      changedLineCount: evalCaseSize.changedLineCount,
+      diffHunkCount: evalCaseSize.diffHunkCount,
       contextLedger: result.contextLedger.map((entry) => ({
         consideredForModelContext: entry.decision === 'included' || entry.decision === 'truncated',
         truncated: entry.decision === 'truncated'
@@ -518,8 +583,8 @@ const runEvalCase = async (
 
     return {
       caseId: input.evalCase.id,
-      changedLineCount,
-      diffHunkCount: input.evalCase.changedFiles.length,
+      changedLineCount: evalCaseSize.changedLineCount,
+      diffHunkCount: evalCaseSize.diffHunkCount,
       contextLedger: [],
       result: {
         status: 'provider-error',
@@ -536,13 +601,46 @@ const runEval = async (
 ): Promise<CliResult> => {
   try {
     const configPath = parseConfigPath(args)
+    const sliceRoot = parseOptionValue(args, '--slice-root')
+    const caseFilters = parseOptionValues(args, '--case')
+    const semanticJudgeEnabled = args.includes('--semantic-judge')
     const loadedConfig = await loadCodeReviewerConfig({
       repositoryRoot: options.cwd,
       environment: options.environment ?? {},
       loadDotEnv: false,
       ...(configPath === undefined ? {} : { configPath })
     })
-    const evalCases = await loadEvalCasesFromFixtures(options.cwd)
+    const loadedEvalCases = await loadEvalCasesFromFixtures(options.cwd, {
+      ...(sliceRoot === undefined ? {} : { sliceRoot })
+    })
+    const evalCases =
+      caseFilters.length === 0
+        ? loadedEvalCases
+        : loadedEvalCases.filter((evalCase) => caseFilters.includes(evalCase.id))
+
+    if (evalCases.length === 0) {
+      return usageError('eval run selected no cases')
+    }
+
+    if (semanticJudgeEnabled && loadedConfig.config.provider === undefined) {
+      return usageError('eval run --semantic-judge requires provider configuration')
+    }
+
+    const semanticJudge =
+      semanticJudgeEnabled && loadedConfig.config.provider !== undefined
+        ? createModelSemanticJudge({
+            modelAlias: (
+              await resolveProviderModelAlias({
+                provider: loadedConfig.config.provider,
+                environment: loadedConfig.environment,
+                ...(options.providerImport === undefined
+                  ? {}
+                  : { importProvider: options.providerImport })
+              })
+            ).modelAlias
+          })
+        : undefined
+
     const evalArtifactRoot = path.posix.join('.review', 'eval')
     const evalDirectory = await resolveArtifactWritePath(options.cwd, evalArtifactRoot)
     const outputs = await Promise.all(
@@ -553,13 +651,25 @@ const runEval = async (
           configWarnings: loadedConfig.warnings,
           baselineExplicitlyConfigured: loadedConfig.baselineExplicitlyConfigured,
           environment: loadedConfig.environment,
-          evalCase
+          evalCase,
+          ...(options.providerImport === undefined
+            ? {}
+            : { providerImport: options.providerImport })
         })
       )
     )
-    const result = runEvaluation({
+    const evaluationInput = {
       cases: evalCases,
       outputs,
+      selection: {
+        fixtureSource:
+          sliceRoot === undefined
+            ? 'default' as const
+            : 'slice-root' as const,
+        ...(sliceRoot === undefined ? {} : { sliceRoot }),
+        caseFilters,
+        selectedCaseIds: evalCases.map((evalCase) => evalCase.id)
+      },
       thresholds: {
         minParseValidity: 1,
         minRecall: 1,
@@ -567,7 +677,14 @@ const runEval = async (
         failOnProviderError: true
       },
       generatedAt: '2026-06-20T00:00:02.000Z'
-    })
+    }
+    const result =
+      semanticJudge === undefined
+        ? runEvaluation(evaluationInput)
+        : await runEvaluationWithSemanticJudge({
+            ...evaluationInput,
+            judge: semanticJudge
+          })
 
     await ensureDirectory(evalDirectory)
     await writeFile(
@@ -590,6 +707,22 @@ const runEval = async (
       ),
       summary
     )
+    const recallReport = renderEvalRecallReport({
+      reports: [
+        {
+          label: result.artifactName,
+          report: result.report
+        }
+      ]
+    })
+
+    await writeFile(
+      await resolveArtifactWritePath(
+        options.cwd,
+        path.posix.join(evalArtifactRoot, EVAL_RECALL_REPORT_ARTIFACT_NAME)
+      ),
+      recallReport
+    )
 
     return {
       exitCode: result.report.regressionGate.passed ? 0 : 1,
@@ -598,6 +731,47 @@ const runEval = async (
     }
   } catch (error) {
     return mapErrorResult(error, 'internal')
+  }
+}
+
+const runEvalRecallReport = async (
+  args: readonly string[],
+  options: CliRunOptions
+): Promise<CliResult> => {
+  const reportPaths = parseOptionValues(args, '--report')
+  const selectedReportPaths =
+    reportPaths.length === 0
+      ? [path.posix.join('.review', 'eval', 'eval-report.json')]
+      : reportPaths
+
+  try {
+    const reports = await Promise.all(
+      selectedReportPaths.map(async (reportPath) => ({
+        label: reportPath,
+        report: EvalReportSchema.parse(
+          JSON.parse(
+            await readFile(
+              await resolveExistingPathInsideRoot(options.cwd, reportPath),
+              'utf8'
+            )
+          )
+        )
+      }))
+    )
+
+    return {
+      exitCode: 0,
+      stdout: `${renderEvalRecallReport({ reports })}\n`,
+      stderr: ''
+    }
+  } catch (error) {
+    if (isFileSystemError(error)) {
+      return usageError(
+        `Eval report not found or unreadable: ${selectedReportPaths.join(', ')}`
+      )
+    }
+
+    return mapErrorResult(error, 'config')
   }
 }
 
@@ -642,6 +816,32 @@ const runEvalCompare = async (
     }
   } catch (error) {
     return mapErrorResult(error, 'config')
+  }
+}
+
+const runEvalSliceManifest = async (
+  args: readonly string[],
+  options: CliRunOptions
+): Promise<CliResult> => {
+  try {
+    const sliceRoot = parseOptionValue(args, '--slice-root')
+
+    if (sliceRoot === undefined) {
+      return usageError('eval slice-manifest requires --slice-root')
+    }
+
+    const manifest = await createEvalSliceManifest({
+      repositoryRoot: options.cwd,
+      sliceRoot
+    })
+
+    return {
+      exitCode: 0,
+      stdout: jsonResult(manifest),
+      stderr: ''
+    }
+  } catch (error) {
+    return mapErrorResult(error, 'repository')
   }
 }
 
@@ -700,6 +900,14 @@ export const runCli = async (
     if (subcommand === 'compare') {
       return runEvalCompare(rest, options)
     }
+
+    if (subcommand === 'recall-report') {
+      return runEvalRecallReport(rest, options)
+    }
+
+    if (subcommand === 'slice-manifest') {
+      return runEvalSliceManifest(rest, options)
+    }
   }
 
   if (command === 'drift') {
@@ -710,6 +918,6 @@ export const runCli = async (
   }
 
   return usageError(
-    'Expected command: config validate, review, eval run, eval compare, or drift check'
+    'Expected command: config validate, review, eval run, eval compare, eval recall-report, eval slice-manifest, or drift check'
   )
 }

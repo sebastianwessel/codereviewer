@@ -9,6 +9,12 @@ export {
   renderSarifReport,
   type SarifRenderOptions
 } from './sarif-reporter.js'
+export {
+  buildGithubReviewComments,
+  GithubReviewCommentDraftSchema,
+  renderGithubReviewComments,
+  type GithubReviewCommentDraft
+} from './github-review-comments.js'
 export { renderRunSummaryJson } from './run-summary.js'
 export {
   createReportArtifact,
@@ -17,4 +23,3 @@ export {
   sortAdmittedFindings,
   validateReviewReport
 } from './reporting-utils.js'
-

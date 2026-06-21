@@ -61,6 +61,13 @@ const candidate: CandidateFinding = {
 
 const policy: AdmissionPolicy = {
   reviewedPaths: ['src/app.ts'],
+  reviewedLineRanges: [
+    {
+      path: 'src/app.ts',
+      startLine: 1,
+      endLine: 20
+    }
+  ],
   minimumSeverity: 'low',
   inlineSeverityThreshold: 'high',
   provenance: {
@@ -77,13 +84,24 @@ const policy: AdmissionPolicy = {
   admittedAt: '2026-06-20T00:00:00.000Z'
 }
 
+const diffBackedPolicy = {
+  ...policy,
+  reviewedDiffRanges: [
+    {
+      path: 'src/app.ts',
+      startLine: 4,
+      endLine: 4
+    }
+  ]
+}
+
 describe('admission gate', () => {
   test('admits candidates with reviewed locations and non-model evidence', () => {
     const result = admitCandidate({
       candidate,
       evidence: [diffEvidence],
       existingAdmittedFindings: [],
-      policy
+      policy: diffBackedPolicy
     })
 
     expect(result.status).toBe('admitted')
@@ -101,6 +119,86 @@ describe('admission gate', () => {
     expect(result.admittedFinding?.fingerprints[0]?.algorithm).toBe(
       'v1-category-rule-path-location-title-evidence'
     )
+  })
+
+  test('marks source-valid candidates outside changed hunks as summary-only', () => {
+    const result = admitCandidate({
+      candidate: {
+        ...candidate,
+        location: {
+          path: 'src/app.ts',
+          startLine: 6,
+          side: 'new'
+        }
+      },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy: diffBackedPolicy
+    })
+
+    expect(result.status).toBe('admitted')
+    expect(result.admittedFinding?.reporterEligibility).toBe('summary-only')
+  })
+
+  test('does not invent inline eligibility when diff maps are explicitly empty', () => {
+    const result = admitCandidate({
+      candidate,
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy: {
+        ...policy,
+        reviewedDiffRanges: []
+      }
+    })
+
+    expect(result.status).toBe('admitted')
+    expect(result.admittedFinding?.reporterEligibility).toBe('summary-only')
+  })
+
+  test('rejects new-side candidates outside reviewed source line ranges', () => {
+    const result = admitCandidate({
+      candidate: {
+        ...candidate,
+        location: {
+          path: 'src/app.ts',
+          startLine: 99,
+          side: 'new'
+        }
+      },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy
+    })
+
+    expect(result).toEqual({
+      status: 'rejected',
+      rejectedFinding: {
+        candidateId: 'cand_bug1',
+        status: 'rejected',
+        reason: 'location-invalid',
+        message: 'Candidate location line range is outside reviewed source input.',
+        evidenceIds: ['ev_diff1']
+      }
+    })
+  })
+
+  test('keeps old-side candidates out of inline eligibility', () => {
+    const result = admitCandidate({
+      candidate: {
+        ...candidate,
+        location: {
+          path: 'src/app.ts',
+          startLine: 4,
+          side: 'old'
+        }
+      },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy
+    })
+
+    expect(result.status).toBe('admitted')
+    expect(result.admittedFinding?.reporterEligibility).toBe('summary-only')
   })
 
   test('rejects schema-invalid candidates', () => {

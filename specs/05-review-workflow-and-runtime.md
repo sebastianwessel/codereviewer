@@ -96,6 +96,9 @@ Generic analyzer requirements:
   or shared context;
 - use `@ast-grep/napi` as the preferred generic multi-language AST layer for
   syntax facts across first-class languages;
+- keep ast-grep execution inside the deterministic analyzer stage. Normal
+  review runs must not add ast-grep documentation, raw AST dumps, generated rule
+  authoring traces, or MCP transcripts to provider prompts;
 - allow language-native analyzers when they provide materially better evidence
   than the generic AST layer, for example TypeScript compiler diagnostics,
   `go test`/`go list` metadata, Rust crate metadata, or Java build metadata;
@@ -187,6 +190,34 @@ Task queue rules:
   repository context as one model call.
 - deterministic analyzer-only review uses the same task queue state machine and
   records planned, running, and completed task events in shared context.
+
+## Structural Analysis Pipeline
+
+The review pipeline treats ast-grep-backed analysis as a deterministic local
+stage before task planning:
+
+1. Repository intake selects reviewable files and rejects unsupported paths.
+2. The language-analyzer registry routes each file to one owning adapter.
+3. TypeScript and JavaScript analyzers use language-native parsing where it
+   provides stronger diagnostics; Python, Go, Rust, and Java use
+   `@ast-grep/napi` with registered grammars for AST facts.
+4. Analyzer output is normalized to `LanguageFact`, `EvidenceRecord`, and
+   `TestMapping` data before it can enter planning or shared context.
+5. Task planning uses import and test-mapping facts to build bounded task
+   groups.
+6. Context assembly may include compact analyzer-output JSON in task packets,
+   but it must not include raw AST dumps or rule-authoring traces.
+
+This stage does not call a model provider and does not consume model tokens by
+itself. Provider token use changes only when compact analyzer output is included
+in a task packet, where it replaces or focuses broader source context instead
+of expanding prompts with ast-grep documentation.
+
+The no-content observability artifact must record the `language_analysis` step
+with safe metadata for structural engine provenance, ast-grep version, fact
+count, evidence count, language count, and test-mapping count. These attributes
+must not include source snippets, prompts, raw AST node text, or provider
+responses.
 
 ## Drift And Security Preflight
 
@@ -302,6 +333,16 @@ Rules:
   and redacted task packets. Compact per-task replay requires a future storage
   contract that stores only sanitized task-local references and output, not
   source-bearing task input.
+- Provider task calls must be retried by the harness model retry policy
+  (`ModelRetryPolicy` on the model alias), not by bespoke application retry logic.
+  The policy classifies failures: transient/network/timeout, rate limits (HTTP
+  429), and provider-unavailable/5xx are retried; oversized context, invalid
+  request, authentication, payment/quota, and cancellation are not. Rate limits
+  honor `Retry-After`, and provider-instructed waits beyond the active-delay cap
+  fail fast (`longRetry: 'error'`) rather than blocking for hours. The policy is
+  mapped from provider config: `maxAttempts = provider.maxRetries + 1`,
+  `minDelayMs = provider.retryBackoffMs`, `maxActiveDelayMs =
+  provider.retryMaxDelayMs`.
 - Model prompts must include strong reviewer instructions: prioritize correctness,
   security, reliability, maintainability, minimal noise, evidence-backed
   findings, and concrete suggested remediation. Prompt output must be parsed
@@ -346,6 +387,24 @@ Rules:
   writes;
 - structured edit suggestions must stay manual-review only, must be scoped to a
   reviewed task path, and must be redacted before admission/report rendering;
+- admission must receive source-derived reviewed line ranges for every reviewed
+  head-file path; new-side or whole-file candidate locations outside those
+  ranges must be rejected as `location-invalid`;
+- `reporterEligibility = inline` is allowed only for new-side findings whose
+  line range is valid in reviewed head-file content and whose severity meets the
+  configured inline threshold;
+- when repository intake provides `DiffMap[]`, `reporterEligibility = inline`
+  is allowed only when the finding's new-side line range overlaps a changed
+  diff hunk for the same path;
+- review execution may receive a trusted precomputed `DiffMap[]` from eval or
+  test harnesses; this override is used only for inline-eligibility policy and
+  must not replace normal repository intake, changed-file discovery, source
+  reading, or coverage accounting;
+- deterministic analyzer findings built from whole-file source diagnostics may
+  be marked `side = "new"` only when the effective diff map proves the line
+  range overlaps a changed new-side hunk for the same path;
+- old-side and whole-file findings may remain in local reports when otherwise
+  valid, but they are not inline PR comment candidates in R1;
 - Markdown and SARIF outputs must render suggested fixes when present;
 - future automatic patch application requires a separate spec and approval.
 

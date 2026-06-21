@@ -2,7 +2,12 @@ import { z } from 'zod'
 
 export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'info'])
 
-export const ReportFormatSchema = z.enum(['json', 'markdown', 'sarif'])
+export const ReportFormatSchema = z.enum([
+  'json',
+  'markdown',
+  'sarif',
+  'github-review-comments'
+])
 
 export const RepositoryRelativePathSchema = z
   .string()
@@ -40,7 +45,15 @@ export const ProviderConfigSchema = z
     temperature: z.number().min(0).max(2).default(0),
     maxOutputTokens: z.int().min(1).optional(),
     timeoutMs: z.int().min(1000).max(600000).default(120000),
-    maxRetries: z.int().min(0).max(5).default(2)
+    // Classified retry of provider task calls: total attempts = maxRetries + 1.
+    // Transient failures (network/5xx/timeout) and rate limits are retried;
+    // oversized context, auth, and payment failures are not.
+    maxRetries: z.int().min(0).max(5).default(2),
+    // Base delay for exponential backoff between retries.
+    retryBackoffMs: z.int().min(0).max(60000).default(500),
+    // Maximum single backoff wait. A required wait above this cap (e.g. a long
+    // rate-limit Retry-After) fails the run instead of blocking.
+    retryMaxDelayMs: z.int().min(0).max(600000).default(30000)
   })
   .superRefine((value, context) => {
     if (value.id === 'openai-compatible' && value.baseUrl === undefined) {

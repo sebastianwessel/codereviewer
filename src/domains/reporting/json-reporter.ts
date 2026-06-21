@@ -9,6 +9,7 @@ import type {
 } from '../../shared/contracts/index.js'
 import { redactText } from '../../shared/redaction/redactor.js'
 import { createReportArtifact, validateReviewReport } from './reporting-utils.js'
+import { renderGithubReviewComments } from './github-review-comments.js'
 import { renderMarkdownReport } from './markdown-reporter.js'
 import { renderSarifReport, type SarifRenderOptions } from './sarif-reporter.js'
 
@@ -96,6 +97,18 @@ export const writeReportingArtifacts = async (
     nonJsonArtifacts.push({
       artifact: createReportArtifact('sarif', 'report.sarif', sarif),
       content: sarif
+    })
+  }
+
+  if (formats.has('github-review-comments')) {
+    const githubReviewComments = renderGithubReviewComments(report)
+    nonJsonArtifacts.push({
+      artifact: createReportArtifact(
+        'github-review-comments',
+        'github-review-comments.json',
+        githubReviewComments
+      ),
+      content: githubReviewComments
     })
   }
 

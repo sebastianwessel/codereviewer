@@ -19,7 +19,9 @@ describe('provider resolution', () => {
         baseUrl: 'https://models.example.test/v1',
         temperature: 0,
         timeoutMs: 10_000,
-        maxRetries: 1
+        maxRetries: 1,
+        retryBackoffMs: 0,
+        retryMaxDelayMs: 0
       },
       environment: {
         OPENAI_API_KEY: 'secret-value'
@@ -48,6 +50,13 @@ describe('provider resolution', () => {
     expect(resolution.providerPackage).toBe('@purista/harness-openai')
     expect(resolution.modelAlias.model).toBe('local-model')
     expect(resolution.modelAlias.capabilities).toEqual(['object', 'tool_use'])
+    // Retry is delegated to the harness model retry policy, mapped from config.
+    expect(resolution.modelAlias.retry).toEqual({
+      maxAttempts: 2,
+      minDelayMs: 0,
+      maxActiveDelayMs: 0,
+      longRetry: 'error'
+    })
     expect(resolution.modelAlias.provider).toMatchObject({
       id: 'fake-provider',
       genAiSystem: 'fake'
@@ -66,7 +75,9 @@ describe('provider resolution', () => {
         model: 'gpt-5-mini',
         temperature: 0,
         timeoutMs: 10_000,
-        maxRetries: 1
+        maxRetries: 1,
+        retryBackoffMs: 0,
+        retryMaxDelayMs: 0
       },
       environment: {
         OPENAI_API_KEY: 'secret-value'
@@ -90,7 +101,9 @@ describe('provider resolution', () => {
           model: 'gpt-5-mini',
           temperature: 0,
           timeoutMs: 10_000,
-          maxRetries: 1
+          maxRetries: 1,
+          retryBackoffMs: 0,
+          retryMaxDelayMs: 0
         },
         environment: {
           OPENAI_API_KEY: 'secret-value'
@@ -118,7 +131,9 @@ describe('provider resolution', () => {
           model: 'gpt-4.1-mini',
           temperature: 0,
           timeoutMs: 10_000,
-          maxRetries: 1
+          maxRetries: 1,
+          retryBackoffMs: 0,
+          retryMaxDelayMs: 0
         },
         environment: {
           AZURE_AI_ENDPOINT: 'https://azure.example.test'
@@ -145,7 +160,9 @@ describe('provider resolution', () => {
           model: 'local-model',
           temperature: 0,
           timeoutMs: 10_000,
-          maxRetries: 1
+          maxRetries: 1,
+          retryBackoffMs: 0,
+          retryMaxDelayMs: 0
         },
         environment: {
           OPENAI_API_KEY: 'secret-value'
@@ -171,7 +188,9 @@ describe('provider resolution', () => {
           model: 'gpt-5-mini',
           temperature: 0,
           timeoutMs: 10_000,
-          maxRetries: 1
+          maxRetries: 1,
+          retryBackoffMs: 0,
+          retryMaxDelayMs: 0
         },
         environment: {
           OPENAI_API_KEY: 'secret-value'

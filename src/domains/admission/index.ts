@@ -3,7 +3,11 @@ export {
   CandidateFindingSchema,
   type AdmissionPolicy,
   type AdmissionResult,
-  type CandidateFinding
+  type CandidateFinding,
+  type ReviewedDiffRange,
+  type ReviewedLineRange,
+  reviewedLineRangeForContent,
+  sourceLineCount
 } from './admission-gate.js'
 export {
   matchBaselineFindings,
@@ -15,4 +19,3 @@ export {
   evaluateQualityGate,
   type QualityGateThresholds
 } from './quality-gate.js'
-

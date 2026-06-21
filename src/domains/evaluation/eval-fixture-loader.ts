@@ -7,6 +7,7 @@ import {
   type EvalCase
 } from './eval-fixture.schema.js'
 
+const defaultFixtureRootPath = path.posix.join('eval', 'fixtures')
 const defaultCaseSetPath = path.posix.join(
   'eval',
   'fixtures',
@@ -30,13 +31,22 @@ const readSampleCases = async (
     )
   )
 
-const readSliceCases = async (
-  repositoryRoot: string
+const repositoryFixtureForSlice = (
+  sliceRoot: string,
+  entryName: string
+): string => path.posix.join(sliceRoot, entryName, 'repo')
+
+export const loadEvalSliceCasesFromRoot = async (
+  repositoryRoot: string,
+  sliceRoot: string
 ): Promise<readonly EvalCase[]> => {
-  let sliceRoot: string
+  let resolvedSliceRoot: string
 
   try {
-    sliceRoot = await resolveExistingPathInsideRoot(repositoryRoot, sliceRootPath)
+    resolvedSliceRoot = await resolveExistingPathInsideRoot(
+      repositoryRoot,
+      sliceRoot
+    )
   } catch (error) {
     if (isMissingPathError(error)) {
       return []
@@ -45,7 +55,7 @@ const readSliceCases = async (
     throw error
   }
 
-  const entries = await readdir(sliceRoot, { withFileTypes: true })
+  const entries = await readdir(resolvedSliceRoot, { withFileTypes: true })
   const cases = await Promise.all(
     entries
       .filter((entry) => entry.isDirectory())
@@ -53,7 +63,7 @@ const readSliceCases = async (
       .map(async (entry): Promise<EvalCase> => {
         const sliceFile = await resolveExistingPathInsideRoot(
           repositoryRoot,
-          path.posix.join(sliceRootPath, entry.name, 'slice.json')
+          path.posix.join(sliceRoot, entry.name, 'slice.json')
         )
         const slice = EvalSliceCaseSchema.parse(
           JSON.parse(await readFile(sliceFile, 'utf8'))
@@ -62,18 +72,15 @@ const readSliceCases = async (
         return {
           id: slice.id,
           language: slice.language,
-          repositoryFixture: path.posix.join(
-            'fixtures',
-            'slices',
-            entry.name,
-            'repo'
-          ),
+          repositoryFixture: repositoryFixtureForSlice(sliceRoot, entry.name),
           ...(slice.baseRef === undefined ? {} : { baseRef: slice.baseRef }),
           ...(slice.headRef === undefined ? {} : { headRef: slice.headRef }),
           changedFiles: [...slice.changedFiles],
           expectedFindings: [...slice.expectedFindings],
           expectedNoFindingZones: [...slice.expectedNoFindingZones],
-          tags: [...new Set(['slice', ...slice.tags])]
+          tags: [...new Set(['slice', ...slice.tags])],
+          sourceProfile: slice.sourceProfile,
+          ...(slice.diff === undefined ? {} : { diff: slice.diff })
         }
       })
   )
@@ -81,13 +88,32 @@ const readSliceCases = async (
   return cases
 }
 
-export const loadEvalCasesFromFixtures = async (
+const readDefaultSliceCases = (
   repositoryRoot: string
+): Promise<readonly EvalCase[]> =>
+  loadEvalSliceCasesFromRoot(repositoryRoot, sliceRootPath)
+
+const normalizeDefaultCaseFixture = (evalCase: EvalCase): EvalCase => ({
+  ...evalCase,
+  repositoryFixture: path.posix.join(
+    path.posix.dirname(defaultFixtureRootPath),
+    evalCase.repositoryFixture
+  )
+})
+
+export const loadEvalCasesFromFixtures = async (
+  repositoryRoot: string,
+  options: {
+    readonly sliceRoot?: string
+  } = {}
 ): Promise<readonly EvalCase[]> => {
-  const cases = [
-    ...(await readSampleCases(repositoryRoot)),
-    ...(await readSliceCases(repositoryRoot))
-  ]
+  const cases =
+    options.sliceRoot === undefined
+      ? [
+          ...(await readSampleCases(repositoryRoot)).map(normalizeDefaultCaseFixture),
+          ...(await readDefaultSliceCases(repositoryRoot))
+        ]
+      : [...(await loadEvalSliceCasesFromRoot(repositoryRoot, options.sliceRoot))]
   const seenIds = new Set<string>()
 
   for (const evalCase of cases) {

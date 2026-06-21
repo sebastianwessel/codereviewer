@@ -22,6 +22,8 @@ import {
   isReviewRunFailedError,
   runReview
 } from './review-runner.js'
+import { renderGithubReviewComments } from '../reporting/github-review-comments.js'
+import { parseGitDiffMaps } from '../repository-intake/index.js'
 
 const configHash =
   '1111111111111111111111111111111111111111111111111111111111111111'
@@ -240,6 +242,39 @@ class SupportedFindingProvider implements ModelProvider {
   }
 }
 
+class InvalidLineFindingProvider implements ModelProvider {
+  readonly id = 'invalid-line'
+  readonly genAiSystem = 'scripted'
+
+  async object<T extends JsonValue = JsonValue>(
+    _req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    return {
+      object: {
+        candidates: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Impossible line finding',
+            description:
+              'The model pointed at a line outside the reviewed source file.',
+            path: 'src/app.ts',
+            startLine: 99,
+            evidenceIds: ['ev_diff1'],
+            fixSummary: 'Use a valid reviewed source line before commenting.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
 class DuplicateSeedFindingProvider implements ModelProvider {
   readonly id = 'duplicate-seed'
   readonly genAiSystem = 'scripted'
@@ -434,7 +469,12 @@ describe('review workflow', () => {
           {
             kind: 'file',
             path: 'src/app.ts',
-            content: 'export const value = 1;',
+            content: [
+              'const input = 1',
+              'const intermediate = input + 1',
+              'const expected = intermediate + 1',
+              'export const value = expected'
+            ].join('\n'),
             ledgerEntryId: 'ctx_111111111111111111111111'
           }
         ],
@@ -465,6 +505,99 @@ describe('review workflow', () => {
     ])
     expect(JSON.stringify(result)).not.toContain('Prefer evidence-backed findings.')
     expect(JSON.stringify(result)).not.toContain('Security review checklist.')
+
+    await harness.shutdown()
+  })
+
+  test('scripted workflow makes outside-hunk findings summary-only', async () => {
+    const harness = createReviewHarness({
+      modelAlias: {
+        provider: new UnusedProvider(),
+        model: 'scripted',
+        capabilities: ['object', 'tool_use']
+      }
+    })
+    const input = {
+      runId: 'test-run',
+      reviewedPaths: ['src/app.ts'],
+      reviewedDiffRanges: [
+        {
+          path: 'src/app.ts',
+          startLine: 1,
+          endLine: 1
+        }
+      ],
+      evidence: [
+        {
+          id: 'ev_diff1',
+          kind: 'diff' as const,
+          summary: 'Changed branch can return an incorrect value.',
+          location: {
+            path: 'src/app.ts',
+            startLine: 6,
+            side: 'new' as const
+          },
+          source: 'typescript-analyzer',
+          contentHash:
+            '2222222222222222222222222222222222222222222222222222222222222222',
+          redactionApplied: true
+        }
+      ],
+      candidates: [
+        {
+          id: 'cand_bug1',
+          taskId: 'task_bug1',
+          category: 'bug' as const,
+          severity: 'high' as const,
+          title: 'Outside hunk finding',
+          description: 'The finding is source-valid but outside the changed hunk.',
+          location: {
+            path: 'src/app.ts',
+            startLine: 6,
+            side: 'new' as const
+          },
+          evidenceIds: ['ev_diff1'],
+          proposedBy: 'review-agent'
+        }
+      ],
+      instructions: [],
+      skills: [],
+      reviewContext: [
+        {
+          kind: 'file' as const,
+          path: 'src/app.ts',
+          content: [
+            'const changed = true',
+            'const line2 = true',
+            'const line3 = true',
+            'const line4 = true',
+            'const line5 = true',
+            'export const value = changed'
+          ].join('\n'),
+          ledgerEntryId: 'ctx_111111111111111111111111'
+        }
+      ],
+      baselineConfigured: false,
+      provenance: {
+        reviewer: 'review-agent',
+        modelProvider: 'openai',
+        modelName: 'scripted',
+        analyzerVersions: {
+          typescript: '6.0.3'
+        },
+        configHash
+      },
+      qualityGate: {}
+    }
+
+    const result = await runScriptedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input
+    })
+
+    expect(result.admittedFindings).toHaveLength(1)
+    expect(result.admittedFindings[0]?.reporterEligibility).toBe('summary-only')
 
     await harness.shutdown()
   })
@@ -1231,7 +1364,12 @@ describe('review workflow', () => {
           {
             kind: 'file',
             path: 'src/app.ts',
-            content: 'export const value = broken;',
+            content: [
+              'const input = 1',
+              'const intermediate = input + 1',
+              'const expected = intermediate + 1',
+              'export const value = broken'
+            ].join('\n'),
             ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
           }
         ],
@@ -1265,6 +1403,116 @@ describe('review workflow', () => {
       'running',
       'completed'
     ])
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow rejects invalid source lines before GitHub comments', async () => {
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider: new InvalidLineFindingProvider(),
+        model: 'invalid-line',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [
+          {
+            id: 'ev_diff1',
+            kind: 'diff',
+            summary: 'Changed branch can return an incorrect value.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 1,
+              side: 'new'
+            },
+            source: 'typescript-analyzer',
+            contentHash:
+              '2222222222222222222222222222222222222222222222222222222222222222',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: 'export const value = broken;\n',
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'invalid-line',
+          analyzerVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        },
+        qualityGate: {}
+      }
+    })
+
+    expect(result.admittedFindings).toEqual([])
+    expect(result.rejectedFindings).toEqual([
+      expect.objectContaining({
+        reason: 'location-invalid',
+        message: 'Candidate location line range is outside reviewed source input.'
+      })
+    ])
+    expect(
+      JSON.parse(
+        renderGithubReviewComments({
+          schemaVersion: '1.0',
+          run: {
+            runId: 'test-run',
+            startedAt: '2026-06-20T00:00:00.000Z',
+            completedAt: '2026-06-20T00:00:00.000Z',
+            mode: 'local',
+            depth: 'fast',
+            repositoryRootHash:
+              '1111111111111111111111111111111111111111111111111111111111111111',
+            configHash,
+            durationMs: 0,
+            warnings: []
+          },
+          coverage: {
+            status: 'complete',
+            reviewableFileCount: 1,
+            coveredFileCount: 1,
+            reviewableBytes: 1,
+            coveredBytes: 1,
+            incompleteReasons: [],
+            files: [
+              {
+                path: 'src/app.ts',
+                contentHash:
+                  '2222222222222222222222222222222222222222222222222222222222222222',
+                status: 'complete',
+                bytes: 1,
+                coveredBytes: 1,
+                taskIds: []
+              }
+            ]
+          },
+          admittedFindings: result.admittedFindings,
+          rejectedFindings: result.rejectedFindings,
+          evidence: result.evidence,
+          skippedFiles: [],
+          artifacts: []
+        })
+      )
+    ).toEqual([])
 
     await harness.shutdown()
   })
@@ -1307,7 +1555,12 @@ describe('review workflow', () => {
           {
             kind: 'file',
             path: 'src/app.ts',
-            content: 'export const value = broken;',
+            content: [
+              'const input = 1',
+              'const intermediate = input + 1',
+              'const expected = intermediate + 1',
+              'export const value = broken'
+            ].join('\n'),
             ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
           }
         ],
@@ -1969,6 +2222,56 @@ describe('review workflow', () => {
     }
   })
 
+  test('language analysis observability records structural engine provenance without content', async () => {
+    const root = join(tmpdir(), `codereviewer-language-observability-${crypto.randomUUID()}`)
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const app = 1;\n')
+      await writeFile(
+        join(root, 'src', 'app.test.ts'),
+        'import { app } from "./app.js";\nexport const observed = app;\n'
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        review: {
+          depth: 'fast',
+          maxConcurrentTasks: 1
+        },
+        drift: {
+          enabled: false
+        }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/app.ts', 'src/app.test.ts'],
+        runId: 'run-language-observability',
+        now: () => new Date('2026-06-20T00:00:00.000Z')
+      })
+      const languageStep = result.observability.events.find(
+        (event) => event.type === 'step-ended' && event.step === 'language_analysis'
+      )
+      const serialized = JSON.stringify(result.observability)
+
+      expect(languageStep).toMatchObject({
+        type: 'step-ended',
+        step: 'language_analysis',
+        attributes: expect.objectContaining({
+          structuralEngine: 'typescript-compiler+ast-grep',
+          astGrepVersion: expect.stringMatching(/^ast-grep@/u),
+          languageCount: 1,
+          testMappingCount: 2
+        })
+      })
+      expect(serialized).not.toContain('export const app')
+      expect(serialized).not.toContain('import { app }')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('provider-backed runner records task observability before workflow completion', async () => {
     const root = join(tmpdir(), `codereviewer-provider-observability-${crypto.randomUUID()}`)
     const provider = new RollingQueueProvider()
@@ -2121,6 +2424,53 @@ describe('review workflow', () => {
       expect(serialized).not.toContain('python-analyzer')
       expect(serialized).not.toContain('rust-analyzer')
       expect(serialized).not.toContain('java-analyzer')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner uses supplied review diff maps for explicit-file inline eligibility', async () => {
+    const root = join(tmpdir(), `codereviewer-explicit-diff-map-${crypto.randomUUID()}`)
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = ;\n')
+
+      const config = CodeReviewerConfigSchema.parse({
+        review: {
+          depth: 'fast'
+        },
+        drift: {
+          enabled: false
+        }
+      })
+      const reviewDiffMaps = parseGitDiffMaps(
+        [
+          'diff --git a/src/app.ts b/src/app.ts',
+          '--- a/src/app.ts',
+          '+++ b/src/app.ts',
+          '@@ -1,0 +1,1 @@',
+          '+export const value = ;'
+        ].join('\n')
+      )
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/app.ts'],
+        runId: 'run-explicit-diff-map',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        ...{ reviewDiffMaps }
+      })
+
+      expect(result.report.admittedFindings[0]).toMatchObject({
+        location: {
+          path: 'src/app.ts',
+          startLine: 1,
+          side: 'new'
+        },
+        reporterEligibility: 'inline'
+      })
     } finally {
       await rm(root, { recursive: true, force: true })
     }

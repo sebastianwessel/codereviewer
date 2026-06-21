@@ -45,6 +45,81 @@ sequenceDiagram
   Reports-->>User: artifactDir and exit code 4
 ```
 
+## Pipeline Steps
+
+```mermaid
+flowchart TD
+  Start["review command"]
+  Drift["Drift and security preflight"]
+  Intake["Repository intake"]
+  Read["Source read"]
+  Analysis["Language analysis"]
+  Facts["Language-neutral facts, evidence, tests"]
+  Plan["Task planning"]
+  Assemble["Context assembly"]
+  Queue["Task queue"]
+  Provider{"Provider configured?"}
+  ModelWorkers["Model-backed worker agents"]
+  DeterministicWorkers["Deterministic analyzer workers"]
+  Shared["Shared context"]
+  Admission["Admission and baseline"]
+  Coverage["Coverage certificate"]
+  Reports["Reports and artifacts"]
+
+  Start --> Drift --> Intake --> Read --> Analysis --> Facts --> Plan --> Assemble --> Queue
+  Queue --> Provider
+  Provider -- "yes" --> ModelWorkers
+  Provider -- "no" --> DeterministicWorkers
+  ModelWorkers --> Shared
+  DeterministicWorkers --> Shared
+  Shared --> Admission --> Coverage --> Reports
+```
+
+The language-analysis step is local and deterministic. TypeScript and
+JavaScript use language-native parsing where it gives better diagnostics;
+Python, Go, Rust, and Java use ast-grep structural parsing through
+`@ast-grep/napi`. The step emits compact facts, diagnostics, and test mappings.
+It does not call a model provider and does not add ast-grep manuals, raw AST
+dumps, or rule-authoring traces to prompts.
+
+`observability.json` records this as `language_analysis` with safe counts and
+structural engine provenance, including the ast-grep version. Those attributes
+are metadata only; source snippets, prompt text, raw AST text, and provider
+responses are filtered out.
+
+## Worker Coordination
+
+```mermaid
+sequenceDiagram
+  participant Planner
+  participant Queue
+  participant WorkerA as Worker A
+  participant WorkerB as Worker B
+  participant Shared as Shared Context
+  participant Admission
+
+  Planner->>Queue: planned bounded tasks
+  Queue->>WorkerA: lease task round 1
+  Queue->>WorkerB: lease task round 1
+  WorkerA->>WorkerA: review task packet
+  WorkerB->>WorkerB: review task packet
+  WorkerA-->>Queue: completed or failed with attempt count
+  WorkerB-->>Queue: completed or failed with attempt count
+  WorkerA->>Admission: candidate findings
+  WorkerB->>Admission: candidate findings
+  Admission->>Shared: admitted entries only
+  Shared-->>Queue: compact digest for later rounds
+  Queue->>WorkerA: lease next-round policy task
+```
+
+Workers cooperate by reviewing separate bounded task packets toward the same
+run goal. A worker receives only its task-scoped source chunks, analyzer output,
+instructions, selected skill references, and a compact digest of already
+admitted shared entries. Raw model candidates do not influence later workers
+until deterministic admission accepts them. If a provider task fails
+transiently, the queue owns bounded retries and records the terminal attempt
+count in task events.
+
 ## Gates
 
 | Gate | Checks |

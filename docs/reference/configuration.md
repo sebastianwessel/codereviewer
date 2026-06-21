@@ -14,6 +14,9 @@
 | `provider` | `id` | `openai`, `openai-compatible`, `bedrock`, `azure` |
 | `provider` | `model` | non-empty string |
 | `provider` | `baseUrl` | URL, required for `openai-compatible` |
+| `provider` | `maxRetries` | `0` to `5`; classified retries, total attempts = `maxRetries + 1` |
+| `provider` | `retryBackoffMs` | `0` to `60000`; base exponential backoff delay |
+| `provider` | `retryMaxDelayMs` | `0` to `600000`; max single wait; longer required waits fail |
 | `instructions` | `files` | repository-relative paths |
 | `instructions` | `inline` | string |
 | `skills` | `enabled` | boolean |
@@ -41,7 +44,7 @@
 | `drift` | `failOn` | drift category array |
 | `drift` | `warnOn` | drift category array |
 | `drift` | `includeDocs`, `includeSpecs`, `includeGenerated` | boolean |
-| `reporting` | `formats` | `json`, `markdown`, `sarif` |
+| `reporting` | `formats` | `json`, `markdown`, `sarif`, `github-review-comments` |
 | `evaluation` | `enabled` | boolean |
 
 Default `paths.exclude` is `[".git/**", "node_modules/**", "dist/**",

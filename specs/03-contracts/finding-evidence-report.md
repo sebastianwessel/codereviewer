@@ -32,7 +32,7 @@ EvidenceKind = "diff" | "file" | "symbol" | "diagnostic" | "command" | "model-ra
 AdmissionStatus = "admitted" | "rejected" | "needs-more-evidence"
 RejectReason = "schema-invalid" | "location-invalid" | "not-in-scope" | "insufficient-evidence" | "duplicate" | "below-threshold" | "unsafe-content" | "provider-error"
 ReporterEligibility = "inline" | "summary-only" | "artifact-only"
-ReportFormat = "json" | "markdown" | "sarif"
+ReportFormat = "json" | "markdown" | "sarif" | "github-review-comments"
 BaselineStatus = "new" | "existing" | "resolved" | "unknown"
 ```
 
@@ -59,6 +59,27 @@ BaselineStatus = "new" | "existing" | "resolved" | "unknown"
 
 Admission must reject candidates whose `CodeLocation` cannot be resolved to a
 reviewed file.
+
+For reviewed head-file content, admission must validate that `startLine` and
+`endLine` resolve to a known source line range before a finding can become
+inline-eligible. Candidates with `side = "new"` or `side = "file"` whose line
+range is outside the reviewed head file must be rejected with
+`location-invalid`. R1 does not create old-side GitHub review comments; old-side
+findings that otherwise pass admission must be `summary-only` or
+`artifact-only`.
+
+When a run has a `DiffMap[]`, `reporterEligibility = inline` additionally
+requires the new-side finding line range to overlap a changed new-side diff
+hunk for the same path. Findings on reviewed source lines outside changed hunks
+may still be admitted, but they must be `summary-only` or `artifact-only` so
+GitHub review-comment drafts cannot target lines the pull request API cannot
+anchor.
+
+Deterministic analyzer candidates that originate from whole-file source
+locations may be promoted from `side = "file"` to `side = "new"` only when the
+run has a diff map and the source line range overlaps a changed new-side hunk
+for the same path. Admission must still treat unpromoted whole-file locations
+as non-inline candidates, and old-side locations must never be promoted.
 
 ## Related Location And Data Flow Contracts
 
@@ -336,6 +357,55 @@ and the artifact is not written.
 
 SARIF upload, code scanning alert management, and PR annotation publication are
 out of scope for R1. R1 only writes the local artifact.
+
+## GitHub PR Review-Comment Artifact
+
+R1 may render a local `github-review-comments.json` artifact from the canonical
+`ReviewReport`. Rendering this artifact is not publication and must not perform
+network IO.
+
+`GitHubReviewCommentDraft` fields:
+
+| Field | Required | Type | Semantics |
+| --- | --- | --- | --- |
+| `path` | yes | repositoryRelativePath | File path for the PR review comment. |
+| `line` | yes | integer >= 1 | New-side line for the comment anchor. |
+| `side` | yes | `"RIGHT"` | R1 emits new-side review comments only. |
+| `startLine` | no | integer >= 1 | Start line for a multi-line comment. Omitted for single-line comments. |
+| `startSide` | conditional | `"RIGHT"` | Required when `startLine` is present. |
+| `body` | yes | string 1..3000 | Redacted Markdown comment body. |
+| `findingId` | yes | findingId | Source admitted finding. |
+| `severity` | yes | Severity | Source severity for downstream filtering. |
+| `category` | yes | FindingCategory | Source category for downstream filtering. |
+
+Comment eligibility rules:
+
+- only admitted findings with `reporterEligibility = inline` are rendered;
+- only `location.side = "new"` is rendered in R1;
+- `line` is `location.endLine` when present, otherwise `location.startLine`;
+- `startLine` is emitted only when `location.endLine` is present and greater
+  than `location.startLine`;
+- the body includes severity, category, title, description, finding ID, and
+  fix summary when present;
+- body text must pass the same redaction policy as Markdown and JSON reports;
+- raw source snippets, prompt text, provider IDs, tokens, absolute paths, and
+  command output are forbidden.
+
+GitHub suggestion block rules:
+
+- emit a suggestion block only when `fixProposal.safety = "manual-review"`;
+- exactly one `FixEdit` is present;
+- edit path equals the finding location path;
+- edit range is contiguous and equals the comment range, or for a single-line
+  finding the edit range is that same single line;
+- replacement length is within `FixEdit.replacement` limits after redaction;
+- no suggestion block is emitted for multi-file edits, multiple edits,
+  old-side findings, summary-only findings, artifact-only findings, or edit
+  ranges that do not map to the rendered comment range.
+
+The artifact writer records `github-review-comments` in
+`ReviewReport.artifacts` using the same artifact metadata contract as other
+non-JSON formats.
 
 ## Compatibility
 

@@ -25,16 +25,18 @@ defaults.
   model adapters through optional packages;
 - harness-based review workflow with scripted/fake providers in tests;
 - JSON and Markdown local reports;
+- local GitHub PR review-comment artifact rendering for admitted inline
+  findings;
 - evaluation runner with golden fixtures and quality metrics;
-- no PR comment publishing, no automatic code modification, and no GitHub Action
-  implementation in `R1`.
+- no network PR comment publishing, no automatic code modification, and no
+  GitHub Action implementation in `R1`.
 
 ## Later Scope
 
 The following capabilities are specified as future extension points and must not
 be implemented in `R1` unless a later spec changes scope:
 
-- pull request comment publishing;
+- network pull request comment publishing;
 - CI-native check annotations;
 - full-codebase trend dashboards;
 - automatic fix application;
@@ -90,7 +92,7 @@ be implemented in `R1` unless a later spec changes scope:
 - No database.
 - No long-lived daemon.
 - No automatic code modification.
-- No PR comment publishing.
+- No network PR comment publishing.
 - No GitHub Action implementation.
 - No model output published without admission.
 - No provider SDKs in base dependencies.
