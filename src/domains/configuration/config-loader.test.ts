@@ -133,8 +133,7 @@ describe('configuration loader', () => {
       expect(result.config.costs).toEqual(
         expect.objectContaining({
           inputPerMillion: 0.25,
-          outputPerMillion: 1.25,
-          currency: 'USD'
+          outputPerMillion: 1.25
         })
       )
     } finally {

@@ -54,7 +54,6 @@ export const builtInPricesFor = (input: {
 
   return {
     inputPerMillion: price.inputPerMillion,
-    outputPerMillion: price.outputPerMillion,
-    currency: 'USD'
+    outputPerMillion: price.outputPerMillion
   }
 }

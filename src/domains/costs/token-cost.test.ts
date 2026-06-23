@@ -9,8 +9,7 @@ describe('token cost tracking', () => {
         outputTokens: 250,
         prices: {
           inputPerMillion: 0.5,
-          outputPerMillion: 2,
-          currency: 'USD'
+          outputPerMillion: 2
         }
       })
     ).toEqual({
@@ -66,7 +65,7 @@ describe('run cost summary', () => {
     expect(
       summarizeRunCost({
         providerConfigured: true,
-        prices: { inputPerMillion: 1, outputPerMillion: 2, currency: 'USD' },
+        prices: { inputPerMillion: 1, outputPerMillion: 2 },
         usage: { inputTokens: 1_000_000, outputTokens: 500_000 }
       })
     ).toEqual({ warnings: [], costUsd: 2, inputTokens: 1_000_000, outputTokens: 500_000 })

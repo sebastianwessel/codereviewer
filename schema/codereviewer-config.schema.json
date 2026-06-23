@@ -62,11 +62,6 @@
           "minimum": 1,
           "maximum": 5000000
         },
-        "contextMaxFiles": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 2000
-        },
         "contextMaxBytes": {
           "type": "integer",
           "minimum": 10000,
@@ -416,7 +411,6 @@
         "requireRefutation": true,
         "intentPlanning": "auto",
         "judgeFindings": false,
-        "externalStaticAnalysisAssumed": true,
         "deterministicSignalMode": "support",
         "actionableSeverityThreshold": "medium"
       },
@@ -468,10 +462,6 @@
           "default": false,
           "type": "boolean"
         },
-        "externalStaticAnalysisAssumed": {
-          "default": true,
-          "type": "boolean"
-        },
         "deterministicSignalMode": {
           "default": "support",
           "type": "string",
@@ -496,7 +486,6 @@
         "requireRefutation",
         "intentPlanning",
         "judgeFindings",
-        "externalStaticAnalysisAssumed",
         "deterministicSignalMode",
         "actionableSeverityThreshold"
       ],
@@ -505,9 +494,7 @@
     "promotionPolicy": {
       "default": {
         "modelProof": "actionable",
-        "modelSuspicion": "artifact-only",
         "modelWeakOrRefuted": "artifact-only",
-        "deterministicSignalOnly": "artifact-only",
         "staticAnalysisDuplicate": "artifact-only",
         "deterministicContradiction": "rejected"
       },
@@ -521,23 +508,7 @@
             "artifact-only"
           ]
         },
-        "modelSuspicion": {
-          "default": "artifact-only",
-          "type": "string",
-          "enum": [
-            "artifact-only",
-            "rejected"
-          ]
-        },
         "modelWeakOrRefuted": {
-          "default": "artifact-only",
-          "type": "string",
-          "enum": [
-            "artifact-only",
-            "rejected"
-          ]
-        },
-        "deterministicSignalOnly": {
           "default": "artifact-only",
           "type": "string",
           "enum": [
@@ -564,9 +535,7 @@
       },
       "required": [
         "modelProof",
-        "modelSuspicion",
         "modelWeakOrRefuted",
-        "deterministicSignalOnly",
         "staticAnalysisDuplicate",
         "deterministicContradiction"
       ],
@@ -621,7 +590,6 @@
           "target": "generic",
           "category": "codereviewer",
           "maxResults": 5000,
-          "includeSuppressed": false,
           "redact": true
         }
       },
@@ -649,7 +617,6 @@
             "target": "generic",
             "category": "codereviewer",
             "maxResults": 5000,
-            "includeSuppressed": false,
             "redact": true
           },
           "type": "object",
@@ -673,10 +640,6 @@
               "minimum": 1,
               "maximum": 25000
             },
-            "includeSuppressed": {
-              "default": false,
-              "type": "boolean"
-            },
             "redact": {
               "default": true,
               "type": "boolean"
@@ -686,7 +649,6 @@
             "target",
             "category",
             "maxResults",
-            "includeSuppressed",
             "redact"
           ],
           "additionalProperties": false
@@ -721,12 +683,6 @@
           "generated-artifact-drift",
           "security-drift"
         ],
-        "warnOn": [
-          "documentation-drift",
-          "spec-drift",
-          "implementation-drift",
-          "ambiguity"
-        ],
         "includeDocs": true,
         "includeSpecs": true,
         "includeGenerated": true
@@ -741,26 +697,6 @@
           "default": [
             "generated-artifact-drift",
             "security-drift"
-          ],
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "documentation-drift",
-              "spec-drift",
-              "implementation-drift",
-              "generated-artifact-drift",
-              "ambiguity",
-              "security-drift"
-            ]
-          }
-        },
-        "warnOn": {
-          "default": [
-            "documentation-drift",
-            "spec-drift",
-            "implementation-drift",
-            "ambiguity"
           ],
           "type": "array",
           "items": {
@@ -791,7 +727,6 @@
       "required": [
         "enabled",
         "failOn",
-        "warnOn",
         "includeDocs",
         "includeSpecs",
         "includeGenerated"
@@ -883,9 +818,7 @@
       "additionalProperties": false
     },
     "costs": {
-      "default": {
-        "currency": "USD"
-      },
+      "default": {},
       "type": "object",
       "properties": {
         "inputPerMillion": {
@@ -895,16 +828,8 @@
         "outputPerMillion": {
           "type": "number",
           "minimum": 0
-        },
-        "currency": {
-          "default": "USD",
-          "type": "string",
-          "const": "USD"
         }
       },
-      "required": [
-        "currency"
-      ],
       "additionalProperties": false
     }
   },

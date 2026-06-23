@@ -22,15 +22,12 @@ describe('CodeReviewerConfigSchema', () => {
       requireRefutation: true,
       intentPlanning: 'auto',
       judgeFindings: false,
-      externalStaticAnalysisAssumed: true,
       deterministicSignalMode: 'support',
       actionableSeverityThreshold: 'medium'
     })
     expect(parsed.promotionPolicy).toEqual({
       modelProof: 'actionable',
-      modelSuspicion: 'artifact-only',
       modelWeakOrRefuted: 'artifact-only',
-      deterministicSignalOnly: 'artifact-only',
       staticAnalysisDuplicate: 'artifact-only',
       deterministicContradiction: 'rejected'
     })
@@ -54,12 +51,6 @@ describe('CodeReviewerConfigSchema', () => {
     expect(parsed.drift).toEqual({
       enabled: true,
       failOn: ['generated-artifact-drift', 'security-drift'],
-      warnOn: [
-        'documentation-drift',
-        'spec-drift',
-        'implementation-drift',
-        'ambiguity'
-      ],
       includeDocs: true,
       includeSpecs: true,
       includeGenerated: true
@@ -145,13 +136,11 @@ describe('CodeReviewerConfigSchema', () => {
   test('accepts configurable drift gates', () => {
     const parsed = CodeReviewerConfigSchema.parse({
       drift: {
-        failOn: ['security-drift', 'ambiguity'],
-        warnOn: ['documentation-drift']
+        failOn: ['security-drift', 'ambiguity']
       }
     })
 
     expect(parsed.drift.failOn).toEqual(['security-drift', 'ambiguity'])
-    expect(parsed.drift.warnOn).toEqual(['documentation-drift'])
   })
 
   test('rejects git refs that start with a dash', () => {

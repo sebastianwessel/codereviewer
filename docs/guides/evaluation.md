@@ -6,7 +6,7 @@ fixtures stored under root `eval/fixtures/`.
 Run evaluation:
 
 ```bash
-npm run eval
+npm run eval:benchmark
 ```
 
 Artifacts are written under:
@@ -174,32 +174,13 @@ findings with detection rates and run marks.
 The committed fixture pack covers TypeScript, JavaScript, Python, Go, Rust, Java,
 and Ruby with positive diagnostic cases and negative no-finding zones.
 
-`npm run eval` is deterministic and does not load `.env`, so local provider
-settings cannot accidentally change the baseline fixture result. Provider-backed
-eval scripts load `.env` with Node's native `--env-file-if-exists=.env` flag:
-
-```bash
-npm run eval:with-env
-npm run eval:cheap
-npm run eval:semantic
-npm run eval:benchmark
-npm run eval:benchmark:debug
-npm run eval:benchmark:baseline
-```
-
-The default benchmark scripts run the intended agentic PR-review posture:
-PR mode, thorough depth, model intent planning, optional finding judging,
-provider-backed semantic scoring, and `--max-concurrent-tasks 1` so large
-captured slices do not first fail under parallel provider-call timeout pressure.
+`npm run eval:benchmark` hydrates the slice pack and then runs the intended
+agentic PR-review posture: PR mode, thorough depth, model intent planning,
+optional finding judging, provider-backed semantic scoring, and
+`--max-concurrent-tasks 1` so large captured slices do not first fail under
+parallel provider-call timeout pressure.
 For ad hoc eval runs, pass the same flags explicitly when you want this posture
 without changing `.codereviewer/config.json`.
-
-For benchmark packs that use semantic golden comments without reliable line
-anchors, enable provider-backed semantic matching explicitly:
-
-```bash
-npm run eval:semantic
-```
 
 `--semantic-judge` requires provider configuration and credentials from the
 process environment, `.env`, or config file. The judge receives only the
@@ -239,8 +220,7 @@ recall. Run hydration first:
 npm run eval:hydrate
 ```
 
-This is also aliased as `npm run eval:benchmark:prepare`. Negative slices (no
-expected findings) are allowed to remain unhydrated and are never flagged.
+Negative slices (no expected findings) are allowed to remain unhydrated and are never flagged.
 
 Slice layout:
 
@@ -255,60 +235,30 @@ Run an untracked local benchmark slice pack by pointing the CLI at the slice
 root:
 
 ```bash
-npm run eval -- --slice-root eval/benchmarks/crb --case crb-sentry-1
+npm run cli -- eval run --slice-root eval/benchmarks/crb --case crb-sentry-1
 ```
 
-Run the committed benchmark-style pack:
+Run the committed benchmark-style pack (hydrates then reviews):
 
 ```bash
 npm run eval:benchmark
 ```
 
-`npm run eval:with-env` intentionally keeps the default smoke fixture set.
-`npm run eval:cheap` is the lowest-cost provider-backed proof-quality smoke:
-it first runs a zero-token refutation gate precheck, then runs the authz
-positive/control pair plus small scheduling and Go cache concurrency
-regressions, and a branch-asymmetric billing calculation regression derived
-from benchmark miss classes through the same PR/thorough/model-intent and judge
-posture used by the expensive benchmark path. The generated eval artifacts come
-from the provider-backed half, which can be run directly with
-`npm run eval:cheap:provider`; `npm run eval:cheap:refutation` runs only the
-zero-token active refutation/admission gate precheck. Use `eval:benchmark`
-when you want the committed 59-case Code Review Bench-style pack hydrated from
-public diffs and reviewed through the stable agentic comparison path. It forces
-PR mode, thorough review depth, model intent planning, optional finding
-judging, semantic eval judging, and serial provider calls.
+`eval:benchmark` forces PR mode, thorough review depth, model intent planning,
+optional finding judging, semantic eval judging, and serial provider calls.
 `eval:benchmark:debug` runs the same agentic benchmark with sanitized
 live debug logs written as newline-delimited JSON to
 `.codereviewer/eval/log.log`; the Markdown summary remains in
 `eval-summary.md` and stdout instead of being mixed into the log file.
-`eval:benchmark:baseline` keeps the older provider-backed benchmark posture:
-semantic eval judging and serial provider calls while preserving the repository
-review mode, depth, intent-planning mode, and judge setting. Use it only for
-baseline comparisons against prior local runs. `eval:benchmark:prepare` hydrates
-the executable local slice pack without running provider-backed review.
-`eval:benchmark:deterministic` does not load `.env`; it exists only for
-debugging fixture loading and deterministic matcher behavior without provider
-review or semantic judging. You can also pass `--debug` or
-`--log-level debug` to `eval run` directly. Add `--log-file <path>` to write
-the structured logs to a repository-relative file.
+You can also pass `--debug` or `--log-level debug` to `eval run` directly.
+Add `--log-file <path>` to write the structured logs to a repository-relative file.
 
 `--slice-root` expects a repository-relative directory containing
 `<case-id>/slice.json` and `<case-id>/repo/`. `--case` may be repeated to run a
 small subset while tuning prompts or provider settings. These values are
 persisted in `eval-report.json` for reproducible same-dataset comparison.
 
-Fingerprint a local slice pack before or after a run:
-
-```bash
-npm run eval:slice-manifest
-npm run eval:benchmark-manifest
-```
-
-The default manifest script fingerprints the committed slice fixtures under
-`eval/fixtures/slices`. The benchmark manifest script hydrates and fingerprints
-`.codereviewer/eval/benchmark-slices/code-review-bench-style/`, not the
-metadata-only source pack. For another local pack, pass the target slice root:
+Fingerprint a local slice pack:
 
 ```bash
 npm run cli -- eval slice-manifest --slice-root eval/benchmarks/crb

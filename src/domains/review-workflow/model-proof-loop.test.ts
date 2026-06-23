@@ -66,9 +66,7 @@ const uncitedCandidate: CandidateFinding = {
 
 const promotionPolicy: PromotionPolicyConfig = {
   modelProof: 'actionable',
-  modelSuspicion: 'artifact-only',
   modelWeakOrRefuted: 'artifact-only',
-  deterministicSignalOnly: 'artifact-only',
   staticAnalysisDuplicate: 'artifact-only',
   deterministicContradiction: 'rejected'
 }

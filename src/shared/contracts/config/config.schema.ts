@@ -30,7 +30,6 @@ export const ReviewConfigSchema = z.strictObject({
   maxConcurrentTasks: z.int().min(1).max(32).default(4),
   maxFiles: z.int().min(1).max(10000).default(500),
   maxFileBytes: z.int().min(1).max(5000000).default(500000),
-  contextMaxFiles: z.int().min(1).max(2000).optional(),
   contextMaxBytes: z.int().min(10000).max(10000000).optional(),
   inlineSeverityThreshold: SeveritySchema.default('high'),
   maxCostUsd: z.number().min(0).optional(),
@@ -150,7 +149,6 @@ export const AiReviewConfigSchema = z.strictObject({
   requireRefutation: z.literal(true).default(true),
   intentPlanning: z.enum(['auto', 'deterministic', 'model']).default('auto'),
   judgeFindings: z.boolean().default(false),
-  externalStaticAnalysisAssumed: z.boolean().default(true),
   deterministicSignalMode: z.enum(['support', 'disabled']).default('support'),
   // Minimum severity for a MODEL-origin finding to be admitted as actionable.
   // Below this, model findings are rejected as below-threshold (still recorded as
@@ -163,11 +161,7 @@ export const AiReviewConfigSchema = z.strictObject({
 
 export const PromotionPolicyConfigSchema = z.strictObject({
   modelProof: z.enum(['actionable', 'artifact-only']).default('actionable'),
-  modelSuspicion: z.enum(['artifact-only', 'rejected']).default('artifact-only'),
   modelWeakOrRefuted: z.enum(['artifact-only', 'rejected']).default('artifact-only'),
-  deterministicSignalOnly: z
-    .enum(['artifact-only', 'rejected'])
-    .default('artifact-only'),
   staticAnalysisDuplicate: z.enum(['artifact-only', 'rejected']).default('artifact-only'),
   deterministicContradiction: z.enum(['artifact-only', 'rejected']).default('rejected')
 })
@@ -187,12 +181,6 @@ export const DriftConfigSchema = z.strictObject({
     'generated-artifact-drift',
     'security-drift'
   ]),
-  warnOn: z.array(DriftCategorySchema).default([
-    'documentation-drift',
-    'spec-drift',
-    'implementation-drift',
-    'ambiguity'
-  ]),
   includeDocs: z.boolean().default(true),
   includeSpecs: z.boolean().default(true),
   includeGenerated: z.boolean().default(true)
@@ -202,7 +190,6 @@ export const SarifReportingConfigSchema = z.strictObject({
   target: z.enum(['generic', 'github']).default('generic'),
   category: z.string().min(1).default('codereviewer'),
   maxResults: z.int().min(1).max(25000).default(5000),
-  includeSuppressed: z.boolean().default(false),
   redact: z.boolean().default(true)
 })
 
@@ -212,7 +199,6 @@ export const ReportingConfigSchema = z.strictObject({
     target: 'generic',
     category: 'codereviewer',
     maxResults: 5000,
-    includeSuppressed: false,
     redact: true
   })
 })
@@ -257,8 +243,7 @@ export const ObservabilityConfigSchema = z.strictObject({
 
 export const CostConfigSchema = z.strictObject({
   inputPerMillion: z.number().min(0).optional(),
-  outputPerMillion: z.number().min(0).optional(),
-  currency: z.literal('USD').default('USD')
+  outputPerMillion: z.number().min(0).optional()
 })
 
 export const CodeReviewerConfigSchema = z.strictObject({
@@ -302,15 +287,12 @@ export const CodeReviewerConfigSchema = z.strictObject({
     requireRefutation: true,
     intentPlanning: 'auto',
     judgeFindings: false,
-    externalStaticAnalysisAssumed: true,
     deterministicSignalMode: 'support',
     actionableSeverityThreshold: 'medium'
   }),
   promotionPolicy: PromotionPolicyConfigSchema.default({
     modelProof: 'actionable',
-    modelSuspicion: 'artifact-only',
     modelWeakOrRefuted: 'artifact-only',
-    deterministicSignalOnly: 'artifact-only',
     staticAnalysisDuplicate: 'artifact-only',
     deterministicContradiction: 'rejected'
   }),
@@ -326,7 +308,6 @@ export const CodeReviewerConfigSchema = z.strictObject({
       target: 'generic',
       category: 'codereviewer',
       maxResults: 5000,
-      includeSuppressed: false,
       redact: true
     }
   }),
@@ -336,12 +317,6 @@ export const CodeReviewerConfigSchema = z.strictObject({
   drift: DriftConfigSchema.default({
     enabled: true,
     failOn: ['generated-artifact-drift', 'security-drift'],
-    warnOn: [
-      'documentation-drift',
-      'spec-drift',
-      'implementation-drift',
-      'ambiguity'
-    ],
     includeDocs: true,
     includeSpecs: true,
     includeGenerated: true
@@ -356,9 +331,7 @@ export const CodeReviewerConfigSchema = z.strictObject({
       serviceName: 'codereviewer'
     }
   }),
-  costs: CostConfigSchema.default({
-    currency: 'USD'
-  })
+  costs: CostConfigSchema.default({})
 })
 
 export type Severity = z.infer<typeof SeveritySchema>

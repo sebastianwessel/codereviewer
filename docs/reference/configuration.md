@@ -8,7 +8,6 @@
 | `review` | `maxConcurrentTasks` | `1` to `32` |
 | `review` | `maxFiles` | `1` to `10000` |
 | `review` | `maxFileBytes` | `1` to `5000000` |
-| `review` | `contextMaxFiles` | `1` to `2000`; planning hint, never a coverage cap |
 | `review` | `contextMaxBytes` | `10000` to `10000000`; per-packet budget, never a coverage cap |
 | `review` | `runTimeoutMs` | optional whole-run timeout; unset disables the Harness run timeout |
 | `provider` | `id` | `openai`, `openai-compatible`, `bedrock`, `azure` |
@@ -41,14 +40,11 @@
 | `aiReview` | `maxInvestigationRounds` | `1` to `5` |
 | `aiReview` | `requireRefutation` | always `true` in R1 |
 | `aiReview` | `intentPlanning` | `auto`, `deterministic`, `model` |
-| `aiReview` | `judgeFindings` | boolean, default `false` |
-| `aiReview` | `externalStaticAnalysisAssumed` | boolean |
+| `aiReview` | `judgeFindings` | boolean, default `false` (disabled; opt-in for high-stakes runs) |
 | `aiReview` | `deterministicSignalMode` | `support` (inject facts as model context; better recall) or `disabled` (keep clustering, skip injection; lower cost/recall). Env: `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` |
 | `aiReview` | `actionableSeverityThreshold` | severity, default `medium` (model findings below it are rejected as below-threshold; trusted deterministic rules exempt) |
 | `promotionPolicy` | `modelProof` | `actionable`, `artifact-only` |
-| `promotionPolicy` | `modelSuspicion` | `artifact-only`, `rejected` |
 | `promotionPolicy` | `modelWeakOrRefuted` | `artifact-only`, `rejected` |
-| `promotionPolicy` | `deterministicSignalOnly` | `artifact-only`, `rejected` |
 | `promotionPolicy` | `staticAnalysisDuplicate` | `artifact-only`, `rejected` |
 | `promotionPolicy` | `deterministicContradiction` | `artifact-only`, `rejected` |
 | `costs` | `inputPerMillion`, `outputPerMillion` | number >= 0 |
@@ -59,12 +55,8 @@
 | `security` | `allowFilesystemWrite` | always `false` in R1 |
 | `security` | `captureContentTelemetry` | always `false` |
 
-`promotionPolicy.deterministicSignalOnly` applies to generic support-signal
-output. Trusted allowlisted deterministic rules can seed actionable candidates
-directly when they have local evidence and a concrete fix direction.
 | `drift` | `enabled` | boolean |
 | `drift` | `failOn` | drift category array |
-| `drift` | `warnOn` | drift category array |
 | `drift` | `includeDocs`, `includeSpecs`, `includeGenerated` | boolean |
 | `reporting` | `formats` | `json`, `markdown`, `sarif`, `github-review-comments` |
 | `evaluation` | `enabled` | boolean |

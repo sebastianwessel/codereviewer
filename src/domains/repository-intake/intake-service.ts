@@ -66,6 +66,7 @@ export type CollectRepositoryIntakeOptions = {
   readonly baseRef?: string
   readonly headRef?: string
   readonly explicitFiles?: readonly string[]
+  readonly includePatterns?: readonly string[]
   readonly excludePatterns?: readonly string[]
   readonly maxFiles?: number
   readonly maxFileBytes?: number
@@ -207,7 +208,7 @@ const globToRegExp = (pattern: string): RegExp => {
   return new RegExp(source)
 }
 
-const compileExcludeMatchers = (
+const compileGlobMatchers = (
   patterns: readonly string[]
 ): readonly RegExp[] => patterns.map(globToRegExp)
 
@@ -215,6 +216,15 @@ const isExcluded = (
   portablePath: string,
   matchers: readonly RegExp[]
 ): boolean => matchers.some((matcher) => matcher.test(portablePath))
+
+// A file is in scope when it matches an `include` glob (an empty include set
+// means "include everything", matching the `['**/*']` default). Combined with
+// the exclude check, this lets `paths.include` actually narrow the review set.
+const isIncluded = (
+  portablePath: string,
+  matchers: readonly RegExp[]
+): boolean =>
+  matchers.length === 0 || matchers.some((matcher) => matcher.test(portablePath))
 
 const statusFromGitCode = (statusCode: string): GitChangedPath['status'] => {
   const normalizedStatus = statusCode[0]
@@ -349,6 +359,7 @@ const inspectChangedPathsWithinLimit = async (
   options: {
     readonly repositoryRoot: string
     readonly changedPaths: readonly GitChangedPath[]
+    readonly includeMatchers: readonly RegExp[]
     readonly excludeMatchers: readonly RegExp[]
     readonly maxFiles: number
     readonly maxFileBytes: number
@@ -368,7 +379,10 @@ const inspectChangedPathsWithinLimit = async (
       continue
     }
 
-    if (isExcluded(portablePath, options.excludeMatchers)) {
+    if (
+      !isIncluded(portablePath, options.includeMatchers) ||
+      isExcluded(portablePath, options.excludeMatchers)
+    ) {
       records.push(toSkippedFile(portablePath, 'excluded'))
       continue
     }
@@ -487,13 +501,15 @@ export const collectRepositoryIntake = async (
   // declare a non-native flavor together with an in-memory file system.
   const enforceRealPathContainment =
     options.fileSystem === undefined && pathFlavor === currentFileSystemFlavor
-  const excludeMatchers = compileExcludeMatchers(options.excludePatterns ?? [])
+  const includeMatchers = compileGlobMatchers(options.includePatterns ?? [])
+  const excludeMatchers = compileGlobMatchers(options.excludePatterns ?? [])
 
   try {
     const changedPaths = await collectChangedPaths(options, runGit, pathFlavor)
     const inspectedRecords = await inspectChangedPathsWithinLimit({
       repositoryRoot: options.repositoryRoot,
       changedPaths,
+      includeMatchers,
       excludeMatchers,
       maxFiles: options.maxFiles ?? defaultMaxFiles,
       maxFileBytes: options.maxFileBytes ?? defaultMaxFileBytes,

@@ -53,9 +53,7 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   judgeFindings: z.boolean().default(false),
   promotionPolicy: PromotionPolicyConfigSchema.default({
     modelProof: 'actionable',
-    modelSuspicion: 'artifact-only',
     modelWeakOrRefuted: 'artifact-only',
-    deterministicSignalOnly: 'artifact-only',
     staticAnalysisDuplicate: 'artifact-only',
     deterministicContradiction: 'rejected'
   }),

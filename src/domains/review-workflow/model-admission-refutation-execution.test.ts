@@ -85,9 +85,7 @@ const workflowInput = (
     judgeFindings: input.judgeFindings ?? false,
     promotionPolicy: {
       modelProof: 'actionable',
-      modelSuspicion: 'artifact-only',
       modelWeakOrRefuted: 'rejected',
-      deterministicSignalOnly: 'artifact-only',
       staticAnalysisDuplicate: 'artifact-only',
       deterministicContradiction: 'rejected'
     },

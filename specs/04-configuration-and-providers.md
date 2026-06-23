@@ -107,7 +107,6 @@ provider-specific object as passthrough.
 | `maxConcurrentTasks` | integer 1..32 | `4` | Caps active review tasks and provider model calls. |
 | `maxFiles` | integer 1..10000 | `500` | Intake hard cap. |
 | `maxFileBytes` | integer 1..5000000 | `500000` | Files above cap are skipped. |
-| `contextMaxFiles` | integer 1..2000 | preset-defined | Planning hint for bounded task packetization; must not cap review coverage. |
 | `contextMaxBytes` | integer 10000..10000000 | preset-defined | Per-packet model-bound context budget; explicit values override provider safety defaults. Budget pressure creates more tasks, not skipped source. |
 | `inlineSeverityThreshold` | severity | `"high"` | Only affects reporter eligibility. |
 | `maxCostUsd` | number >= 0 | preset-defined | Hard stop only when token usage and configured/provider pricing are available; otherwise reported as unavailable. |
@@ -129,9 +128,8 @@ provider, filesystem writes, or publishing.
 | `maxInvestigationRounds` | integer 1..5 | depth-defined | Caps mediated investigator follow-up rounds and optional judge follow-up rounds. |
 | `requireRefutation` | boolean | `true` | Must be true in R1. |
 | `intentPlanning` | `"auto" | "deterministic" | "model"` | `"auto"` | `auto` uses deterministic intents for local or single-task runs and a compact model planner for multi-task non-local reviews. `model` forces the planner for multi-task runs. |
-| `judgeFindings` | boolean | `false` | When true, proved model-origin candidates must pass a separate critic judge before admission. |
+| `judgeFindings` | boolean | `false` | Disabled by default; opt-in for high-stakes runs. When true, proved model-origin candidates must pass a separate critic judge before admission (adds provider cost and latency). |
 | `actionableSeverityThreshold` | severity | `medium` | Minimum severity for a MODEL-origin finding to be admitted as actionable. Below this it is rejected as `below-threshold` (still recorded as a rejected finding). Trusted deterministic-rule findings are exempt. Keeps the engine focused on impactful runtime/security defects over low-severity nits. |
-| `externalStaticAnalysisAssumed` | boolean | `true` | De-prioritizes findings that only duplicate CodeQL/linter/formatter/build/test responsibilities. |
 | `deterministicSignalMode` | `"support" | "disabled"` | `"support"` | `support` injects deterministic facts as model context (single-case A/B: materially improves recall). `disabled` keeps facts for free task clustering but does NOT inject support-signal context into model packets — lower token cost, lower recall. Override with `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`. |
 
 Investigation, optional aggregate, and critic judge packets reuse the provider
@@ -233,11 +231,11 @@ selected provider adapters expose reliable usage data at the task boundary.
 
 ## Context Budget Defaults
 
-| Depth | `contextMaxFiles` | `contextMaxBytes` |
-| --- | --- | --- |
-| `fast` | `50` | `100000` |
-| `balanced` | `200` | `200000` |
-| `thorough` | `500` | `500000` |
+| Depth | `contextMaxBytes` |
+| --- | --- |
+| `fast` | `100000` |
+| `balanced` | `200000` |
+| `thorough` | `500000` |
 
 When no explicit `review.contextMaxBytes` is configured and a provider is
 enabled, each provider-backed task uses the lower of the depth default and
@@ -353,9 +351,7 @@ refutation results.
 | Key | Type | Default |
 | --- | --- | --- |
 | `modelProof` | `"actionable" | "artifact-only"` | `"actionable"` |
-| `modelSuspicion` | `"artifact-only" | "rejected"` | `"artifact-only"` |
 | `modelWeakOrRefuted` | `"artifact-only" | "rejected"` | `"artifact-only"` |
-| `deterministicSignalOnly` | `"artifact-only" | "rejected"` | `"artifact-only"` |
 | `staticAnalysisDuplicate` | `"artifact-only" | "rejected"` | `"artifact-only"` |
 | `deterministicContradiction` | `"artifact-only" | "rejected"` | `"rejected"` |
 
@@ -383,7 +379,6 @@ Rules:
 | `sarif.target` | `"generic" | "github"` | `"generic"` |
 | `sarif.category` | string | `"codereviewer"` |
 | `sarif.maxResults` | integer 1..25000 | `5000` |
-| `sarif.includeSuppressed` | boolean | `false` |
 | `sarif.redact` | boolean | `true` |
 
 JSON is always generated even if omitted from `formats`, because it is the
@@ -420,7 +415,6 @@ file config.
 | --- | --- | --- |
 | `inputPerMillion` | number >= 0 | omitted |
 | `outputPerMillion` | number >= 0 | omitted |
-| `currency` | `"USD"` | `"USD"` |
 
 Costs are operational metadata and safe to report after redaction. The bundled
 pricing snapshot is generated from LiteLLM model pricing data and is used only
@@ -447,7 +441,6 @@ broader permissions requires a future spec with privacy and security review.
 | --- | --- | --- |
 | `enabled` | boolean | `true` |
 | `failOn` | drift category[] | `["generated-artifact-drift", "security-drift"]` |
-| `warnOn` | drift category[] | all other categories |
 | `includeDocs` | boolean | `true` |
 | `includeSpecs` | boolean | `true` |
 | `includeGenerated` | boolean | `true` |
@@ -462,8 +455,9 @@ Drift categories:
 - `security-drift`
 
 Configured categories in `failOn` make `drift check`, review preflight, and CI
-mode fail with exit code `1` when findings are present. Categories in `warnOn`
-are reported but non-blocking. `ambiguity` is warning by default.
+mode fail with exit code `1` when findings are present. Categories not in
+`failOn` are implicitly treated as warnings: reported but non-blocking.
+`ambiguity` is a warning by default.
 
 ## Exit Codes
 

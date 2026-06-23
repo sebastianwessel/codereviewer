@@ -108,6 +108,27 @@ describe('repository intake', () => {
     ])
   })
 
+  test('includePatterns narrows the reviewed set', async () => {
+    const repositoryRoot = await createFixtureRepository()
+    const runGit = scriptedGitRunner({
+      'diff --name-status main HEAD': 'M\tsrc/app.ts\n'
+    })
+
+    const intake = await collectRepositoryIntake({
+      repositoryRoot,
+      baseRef: 'main',
+      headRef: 'HEAD',
+      includePatterns: ['lib/**'],
+      runGit
+    })
+
+    // src/app.ts does not match the include glob, so it is skipped as excluded.
+    expect(intake.changedFiles).toEqual([])
+    expect(intake.skippedFiles).toEqual([
+      { path: 'src/app.ts', reason: 'excluded' }
+    ])
+  })
+
   test('rejects git refs that start with a dash before running git', async () => {
     let commandCount = 0
     const runGit: GitCommandRunner = async () => {

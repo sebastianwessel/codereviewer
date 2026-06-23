@@ -94,8 +94,10 @@ Notes:
 - `aiReview.actionableSeverityThreshold` (default `medium`) keeps low-severity
   model nits out of actionable output; `review.inlineSeverityThreshold` (default
   `high`) controls which actionable findings become inline PR comments.
-- `aiReview.judgeFindings` enables the optional strict critic pass (extra cost,
-  off by default). `aiReview.deterministicSignalMode` controls whether
+- `aiReview.judgeFindings` (default `false`, opt-in) enables the optional strict
+  critic pass that re-checks proved model candidates before admission; adds
+  provider cost and latency. Enable it for high-stakes runs where false-positive
+  precision matters more than throughput. `aiReview.deterministicSignalMode` controls whether
   deterministic facts are injected into model context (`support`, recommended) or
   only used for clustering (`disabled`, cheaper).
 - For reasoning models you may add `"reasoningEffort": "medium"` under `provider`

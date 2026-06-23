@@ -52,6 +52,7 @@ export const collectReviewRunnerRepositoryIntake = async (
     repositoryRoot: options.repositoryRoot,
     baseRef: options.baseRef ?? options.config.review.baseRef,
     headRef: options.headRef ?? options.config.review.headRef,
+    includePatterns: options.config.paths.include,
     excludePatterns: options.config.paths.exclude,
     maxFiles: options.config.review.maxFiles,
     maxFileBytes: options.config.review.maxFileBytes,
