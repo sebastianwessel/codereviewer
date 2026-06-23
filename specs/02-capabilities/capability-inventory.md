@@ -1,10 +1,13 @@
 # 02: Capability Inventory
 
 Status: Approved
-Date: 2026-06-19
+Date: 2026-06-22
 
 Each capability is implementation-ready only when its linked spec sections
 define contracts, errors, permissions, observability, acceptance, and tests.
+R1 is intentionally LLM-centric: deterministic code provides safety, context,
+and corroboration signals, while semantic issue discovery is owned by bounded
+model investigation and proof/refutation loops.
 
 ## Inventory
 
@@ -13,12 +16,15 @@ define contracts, errors, permissions, observability, acceptance, and tests.
 | CAP-CLI-001 | Local review run | ACT-DEV, ACT-CI | Yes | `05-review-workflow-and-runtime.md` |
 | CAP-CLI-002 | Config validation | ACT-DEV, ACT-CI | Yes | `04-configuration-and-providers.md` |
 | CAP-REPO-001 | Repository intake | ACT-DEV, ACT-CI | Yes | `05-review-workflow-and-runtime.md` |
-| CAP-LANG-001 | First-class language analyzers | ACT-DEV, ACT-CI | Yes | `05-review-workflow-and-runtime.md` |
+| CAP-SIGNAL-001 | Deterministic support signals | ACT-DEV, ACT-CI, ACT-MODEL | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-PROV-001 | Provider resolution | ACT-DEV, ACT-CI | Yes | `04-configuration-and-providers.md` |
 | CAP-INSTR-001 | Reviewer instructions | ACT-DEV | Yes | `04-configuration-and-providers.md` |
 | CAP-SKILL-001 | Mounted reviewer skills | ACT-DEV | Yes | `04-configuration-and-providers.md`, `07-security-privacy-operations.md` |
-| CAP-WF-001 | Harness review workflow | ACT-MODEL, ACT-CI | Yes | `05-review-workflow-and-runtime.md` |
-| CAP-ADM-001 | Admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
+| CAP-AI-001 | Suspicion generation | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
+| CAP-AI-002 | Tool-mediated investigation loop | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `07-security-privacy-operations.md` |
+| CAP-AI-003 | Proof packet assembly | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
+| CAP-AI-004 | Refutation gate | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
+| CAP-ADM-001 | Promotion and admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-002 | Markdown report | ACT-DEV, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-003 | SARIF report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md` |
@@ -43,17 +49,17 @@ define contracts, errors, permissions, observability, acceptance, and tests.
 - Trigger: `codereviewer review` CLI command.
 - Preconditions: current working directory is inside a git repository unless
   `--files` provides explicit files; config is valid; selected provider is
-  resolvable when model review is enabled.
+  resolvable for LLM-backed review.
 - Data touched: git metadata, selected files, config, reviewer instructions,
   mounted skill index, run artifact directory.
-- Side effects: creates `.review/runs/<run-id>/` artifacts only.
+- Side effects: creates `.codereviewer/runs/<run-id>/` artifacts only.
 - Permissions: read repository; no writes outside run artifact directory.
 - Errors: invalid config, git failure, selected provider missing, path escapes
   repository, model failure, budget exceeded.
 - Recovery: rerun after fixing error; `--run-id` reuse is forbidden in R1.
 - Final state: JSON and Markdown reports exist, or a structured error exits
   with non-zero code.
-- Verification: CLI integration test with fixture repo and scripted provider.
+- Verification: CLI integration test with fixture repo and hermetic provider fixture.
 
 ### CAP-CLI-002 Config Validation
 
@@ -76,21 +82,21 @@ define contracts, errors, permissions, observability, acceptance, and tests.
   and filesystem paths remain under repository root.
 - Verification: POSIX and Windows path tests; git fixture tests.
 
-### CAP-LANG-001 First-Class Language Analyzers
+### CAP-SIGNAL-001 Deterministic Support Signals
 
-- Trigger: review planner assigns changed files for TypeScript, JavaScript,
-  Python, Go, Rust, or Java.
-- Contracts: emits language-neutral facts, diagnostics, test mappings, and
-  evidence only.
-- Runtime posture: ast-grep-backed structural analysis runs locally inside the
-  analyzer boundary; rule-authoring prompts, MCP transcripts, raw AST dumps, and
-  ast-grep documentation are developer-time aids only and are not normal review
-  prompt inputs.
-- Side effects: none in R1.
-- Final state: analyzer output can be consumed without language-specific fields
-  in core finding, admission, report, or evaluation contracts.
-- Verification: per-language fixture files, parser/AST tests, diagnostics
-  tests where available, and schema tests.
+- Trigger: after repository intake and before model investigation.
+- Contracts: emits language-neutral `DeterministicSignal` and `EvidenceRecord`
+  data for changed-line anchors, symbol spans, imports, test/config hints,
+  scope validity, known contradiction checks, and duplicate keys.
+- Runtime posture: signals are small, local, and bounded. They are not a
+  product-owned replacement for CodeQL, linters, formatters, unit tests, or
+  build checks in production.
+- Side effects: none.
+- Final state: model tasks and admission can use signals as context,
+  corroboration, contradiction, anchoring, and report evidence.
+- Verification: fixture tests proving valid anchors/corroboration and negative
+  tests proving signals alone do not create issue findings unless explicitly
+  classified as safety/gate errors.
 
 ### CAP-PROV-001 Provider Resolution
 
@@ -124,31 +130,82 @@ define contracts, errors, permissions, observability, acceptance, and tests.
   allowed.
 - Verification: traversal denial and allowlist tests.
 
-### CAP-WF-001 Harness Review Workflow
+### CAP-AI-001 Suspicion Generation
 
-- Trigger: local review run after intake and planning.
-- Contracts: uses `defineHarness()`, declares models before agents before
-  workflows, and uses Zod at boundaries.
-- Side effects: provider calls if configured.
-- Final state: candidate findings and evidence records are passed to admission.
-- Verification: scripted provider workflow tests.
+- Trigger: provider-backed review after deterministic support signals and task
+  packets are assembled.
+- Contracts: emits `ModelSuspicion[]`, not findings. A suspicion identifies a
+  changed behavior, risk category, likely path/symbol, requested follow-up
+  context, and initial evidence references.
+- Side effects: provider calls only when model-backed review is configured.
+- Final state: every suspicion is queued for investigation, rejected as weak, or
+  retained as artifact-only diagnostic output.
+- Verification: hermetic provider fixture tests for high-value suspicion creation,
+  weak-suspicion rejection, schema invalid output, and budget limits.
 
-### CAP-ADM-001 Admission Gate
+### CAP-AI-002 Runtime-Mediated Investigation Loop
 
-- Trigger: candidate finding generated.
-- Preconditions: candidate conforms to schema.
-- Side effects: writes admitted or rejected decision to shared context.
-- Final state: every admitted finding has location, evidence, severity,
-  provenance, and reporter eligibility.
-- Verification: admission matrix tests.
+- Trigger: each non-rejected model suspicion.
+- Contracts: suspicion output may include bounded `requestedContext` strings.
+  Runtime-owned context retrieval maps only conservative read/list/grep-style
+  requests into evidence records after containment, scope, budget, redaction,
+  and ledger checks.
+- Side effects: provider calls and repository reads/searches only. No shell,
+  network, write, publish, provider-configuration, direct model repository
+  tool, or git mutation capability is available to model output.
+- Final state: mediated evidence supports a proof packet, a refuted suspicion,
+  or `needs-more-evidence` artifact-only output.
+- Verification: tests for requested-context mediation, per-suspicion
+  read/search budgets, prompt-injection resistance, redacted traces, and
+  context ledger entries.
+
+### CAP-AI-003 Proof Packet Assembly
+
+- Trigger: investigation concludes a suspicion is likely actionable.
+- Contracts: proof packet must identify changed behavior, execution/data path,
+  violated invariant or contract, concrete impact, why the reviewed change
+  introduced or exposed the issue, exact evidence IDs, contradiction checks, and
+  manual fix direction.
+- Side effects: none beyond redacted artifacts and model calls already counted
+  in the investigation.
+- Final state: complete proof packets proceed to refutation; incomplete proof
+  packets become artifact-only or rejected.
+- Verification: schema tests, proof-completeness matrix tests, and eval cases
+  for missing reachability, missing impact, and missing fix direction.
+
+### CAP-AI-004 Refutation Gate
+
+- Trigger: every complete proof packet before promotion/admission.
+- Contracts: model-assisted or hermetic-test refutation must attempt to disprove the
+  proof by checking reachability, guards, framework semantics, contradictory
+  deterministic signals, outside-scope status, and evidence sufficiency.
+- Side effects: provider calls and mediated repository reads only when
+  configured; no publication or write authority.
+- Final state: `proved`, `refuted`, `needs-more-evidence`, or
+  `provider-error` result. Only `proved` may be promoted to actionable.
+- Verification: tests with intentionally false suspicions, guard-protected code,
+  out-of-scope references, provider failures, and deterministic contradictions.
+
+### CAP-ADM-001 Promotion And Admission Gate
+
+- Trigger: refutation result generated.
+- Preconditions: proof packet and refutation result conform to schema.
+- Side effects: writes admitted, rejected, or artifact-only decision to shared
+  context.
+- Final state: every actionable admitted finding has location, evidence,
+  severity, provenance, proof packet, refutation result, and reporter
+  eligibility. Weak or refuted model output remains visible only as configured
+  artifact-only diagnostic output or rejected records.
+- Verification: promotion policy and admission matrix tests.
 
 ### CAP-REP-001 JSON Report
 
 - Trigger: run completion.
 - Contract: `ReviewReport` JSON schema.
 - Side effects: writes `report.json`.
-- Final state: machine-readable artifact contains admitted and rejected
-  candidates with redacted evidence summaries.
+- Final state: machine-readable artifact contains admitted findings, rejected
+  findings, artifact-only suspicions/proofs, provider issues, and redacted
+  evidence summaries.
 - Verification: schema validation and snapshot tests.
 
 ### CAP-REP-002 Markdown Report
@@ -156,8 +213,9 @@ define contracts, errors, permissions, observability, acceptance, and tests.
 - Trigger: run completion.
 - Contract: deterministic Markdown generated from `ReviewReport`.
 - Side effects: writes `report.md`.
-- Final state: human report contains summary, admitted findings, skipped files,
-  run metadata, and setup warnings.
+- Final state: human report contains summary, admitted findings, artifact-only
+  unresolved output, provider issues, skipped files, run metadata, and setup
+  warnings.
 - Verification: snapshot tests.
 
 ### CAP-REP-003 SARIF Report
@@ -165,8 +223,10 @@ define contracts, errors, permissions, observability, acceptance, and tests.
 - Trigger: run completion when SARIF reporting is enabled.
 - Contract: SARIF 2.1.0 generated from canonical `ReviewReport`.
 - Side effects: writes `report.sarif` in the run artifact directory.
-- Final state: machine-readable artifact contains redacted results with stable
-  fingerprints and repository-relative locations.
+- Final state: machine-readable artifact contains redacted actionable results
+  with stable fingerprints and repository-relative locations. Artifact-only
+  suspicions are not SARIF results unless a future spec defines suppressed
+  diagnostics.
 - Verification: SARIF schema validation, GitHub-target subset validation when
   configured, and redaction snapshot tests.
 
@@ -175,23 +235,17 @@ define contracts, errors, permissions, observability, acceptance, and tests.
 - Trigger: review completion when `reporting.formats` includes
   `github-review-comments`.
 - Contract: renders a deterministic local JSON array of GitHub review-comment
-  drafts from the canonical `ReviewReport`.
+  drafts from actionable admitted findings only.
 - Preconditions: admitted finding has `reporterEligibility = inline`, a
-  resolvable new-side diff location, and severity at or above the configured
-  inline threshold.
-- Line placement: inline eligibility requires a source-derived reviewed
-  head-file line range and, when diff maps are available, overlap with a
-  changed new-side diff hunk. Invalid new-side or whole-file line ranges are
-  rejected before report rendering, and old-side or outside-hunk findings are
-  never inline comment candidates in R1.
+  resolvable new-side diff location, a complete proof packet, a passed
+  refutation result, and severity at or above the configured inline threshold.
 - Side effects: writes `github-review-comments.json` in the run artifact
   directory only. It performs no network IO and does not publish comments.
 - Final state: each comment draft carries repository-relative path, line or
-  start-line range, side, redacted body, source finding ID, and an optional
-  GitHub suggestion block only when a single safe structured fix edit maps to
-  the same path and contiguous line range.
-- Verification: renderer tests for single-line, multi-line, ineligible,
-  summary-only, old-side, and unsafe multi-edit fix cases.
+  start-line range, side, redacted body, source finding ID, proof summary, and
+  optional manual suggestion block when safe.
+- Verification: renderer tests for actionable, artifact-only, refuted,
+  ineligible, old-side, and unsafe multi-edit fix cases.
 
 ### CAP-BASE-001 Baseline Matching
 
@@ -206,12 +260,12 @@ define contracts, errors, permissions, observability, acceptance, and tests.
 
 ### CAP-CTX-001 Context Ledger
 
-- Trigger: review planning and model context assembly.
-- Contracts: records every included source chunk and other considered context
-  decisions without raw content.
+- Trigger: planning, model context assembly, and investigation tool mediation.
+- Contracts: records every included source chunk, tool-mediated context read,
+  search, and other considered context decisions without raw content.
 - Side effects: writes redacted context ledger into run artifacts.
-- Final state: source chunk records can prove which tasks covered each
-  reviewable file.
+- Final state: source chunk and tool-read records can prove what context
+  informed each suspicion/proof/refutation.
 - Verification: ledger unit tests and snapshot tests proving no raw source is
   stored.
 
@@ -221,86 +275,70 @@ define contracts, errors, permissions, observability, acceptance, and tests.
 - Contracts: emits `ReviewReport.coverage` with per-file byte totals, covered
   byte totals, content hashes, task IDs, status, and incomplete reasons.
 - Side effects: writes coverage data inside `report.json` and `report.md`.
-- Final state: successful completed reports have `coverage.status = complete`;
-  incomplete source coverage exits with `coverage_incomplete` and partial
-  artifacts instead of claiming success.
-- Verification: report schema tests, runner large-file tests, packet-overflow
-  tests, and eval metric tests.
+- Final state: completed reports have `coverage.status = complete` for the
+  declared source universe, or fail closed with `coverage_incomplete`.
+- Verification: report schema tests, runner large-file tests,
+  packet-overflow tests, and eval metric tests.
 
 ### CAP-EVAL-001 Evaluation Runner
 
 - Trigger: `codereviewer eval run` CLI command.
 - Side effects: writes eval report artifacts.
-- Final state: metrics include recall, precision, F1, severity-weighted
-  precision/recall/F1, line accuracy, severity accuracy, false-positive count,
-  actionable rate, comments per KLOC, comments per diff hunk, degraded-review
-  rate, context-truncation rate, latency, cost, and parse validity. The report
-  records `scoring.semanticMatcher` and per-case match-mode counts.
-- Verification: golden fixture tests; metric calculator tests.
+- Final state: metrics include actionable proof recall/precision, suspicion
+  recall, proof promotion precision, artifact-only noise, provider issue rate,
+  latency, token use, cost, and parse validity.
+- Verification: eval runner integration test.
 
 ### CAP-EVAL-002 Evaluation Analysis Commands
 
-- Trigger: `codereviewer eval compare`, `eval recall-report`, and
-  `eval slice-manifest` CLI commands.
-- Side effects: print deterministic artifacts (comparison/recall reports,
-  benchmark slice manifest) to stdout; no repository writes.
-- Final state: outputs are deterministic and source-free; slice collection
-  rejects symlink escapes and uses portable POSIX paths.
-- Verification: command tests for comparison, recall report, and slice manifest
-  determinism and redaction.
+- Trigger: eval compare, recall-report, and slice-manifest commands.
+- Side effects: reads eval artifacts and writes local summaries only.
+- Final state: humans can compare case selection, scoring mode, proof quality,
+  missed expectations, false positives, artifact-only suspicions, and provider
+  issues.
+- Verification: focused CLI tests.
 
 ### CAP-EVAL-003 Semantic Judge Matching
 
 - Trigger: `codereviewer eval run --semantic-judge`.
-- Preconditions: explicit provider configuration and credentials; opt-in only.
-- Side effects: provider calls receive only expected summary and admitted
-  title/description (no source, diff, prompts, or secrets).
-- Final state: deterministic matching runs first; the judge only resolves
-  unmatched `semantic-only`/`path-semantic` expectations; the report sets
-  `scoring.semanticMatcher = "semantic-judge"`. Without provider config the
-  command exits `2`.
-- Verification: matcher tests proving deterministic-first ordering and that
-  `path-line` expectations are never judged.
+- Side effects: provider calls for eval matching only.
+- Final state: benchmark-parity matching metadata is recorded separately from
+  production admission decisions.
+- Verification: hermetic provider fixture semantic-judge tests.
+
+### CAP-EVAL-004 Agentic Benchmark Posture
+
+- Trigger: `codereviewer eval run --review-mode pr --review-depth thorough
+  --intent-planning model --judge-findings`.
+- Side effects: provider calls for review, optional critic judging, and optional
+  semantic eval matching when `--semantic-judge` is also supplied.
+- Final state: benchmark runs can force the intended PR-review agentic path
+  without changing repository config. The default costly benchmark script uses
+  this posture; a separately named baseline script preserves current-config
+  provider benchmark comparisons.
+- Verification: focused eval CLI override tests and package-script tests.
 
 ### CAP-GATE-001 Quality Gate Result
 
-- Trigger: review run or eval run with thresholds.
-- Side effects: exit code is `1` when the configured quality gate fails.
-- Final state: gate result records threshold inputs and deterministic reasons.
-- Verification: threshold matrix tests.
+- Trigger: review or eval completion.
+- Side effects: process exit code only.
+- Final state: deterministic pass/fail result based on actionable admitted
+  findings, provider issue policy, coverage, and configured thresholds.
+- Verification: quality-gate matrix tests.
 
 ### CAP-OPS-001 Run Observability
 
-- Trigger: every run.
-- Side effects: logs redacted events and optional no-content traces.
-- Final state: run summary includes timings, model calls, token/cost estimates,
-  skipped work, and error taxonomy.
-- Verification: log redaction and summary tests.
+- Trigger: every command.
+- Side effects: sanitized logs and run artifacts only.
+- Final state: provider issues, retries, recovered/unrecovered status, token
+  counts, costs, task timings, investigation budgets, and redacted failure
+  codes are visible to humans without exposing source or prompts.
+- Verification: log/redaction snapshot tests.
 
 ### CAP-DRIFT-001 Drift, Gap, And Ambiguity Checks
 
-- Trigger: review preflight, `codereviewer drift check`, CI quality gate, and
-  release verification.
-- Data touched: `specs/`, `docs/`, `README.md`, generated schemas, package
-  scripts, CLI command inventory, and selected source contracts.
-- Side effects: writes only report artifacts under configured artifact
-  directory when invoked as part of a run.
-- Final state: deterministic findings identify documentation drift, spec drift,
-  implementation drift, generated artifact drift, ambiguity, and security
-  drift. Findings are warnings or hard errors based on drift config.
-- Security: no provider calls, no shell commands, no repository writes, and no
-  network IO.
-- Verification: drift checker tests for stale links, stale specs references,
-  generated schema mismatch, security permission mismatch, and ambiguity
-  classification.
-
-## Explicit N/A Capabilities
-
-| Category | R1 Status | Reason |
-| --- | --- | --- |
-| Admin/support UI | N/A | No remote service or user accounts in R1. |
-| Payments/entitlements | N/A | No commercial flow in R1. |
-| Notifications | N/A | No outbound notifications in R1. |
-| Search index | N/A | Reports are local files; no query service in R1. |
-| Import/export sync | N/A | R1 reads repositories and writes local artifacts only. |
-| Files/media uploads | N/A | R1 does not accept user-uploaded files outside repository checkout. |
+- Trigger: review preflight or explicit drift command.
+- Side effects: none unless report artifacts are written by the caller.
+- Final state: deterministic drift findings identify stale docs/specs/schemas,
+  security drift, ambiguity, and retired references.
+- Verification: drift checker tests.

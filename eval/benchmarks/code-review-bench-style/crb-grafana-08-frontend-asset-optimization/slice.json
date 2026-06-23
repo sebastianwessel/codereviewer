@@ -1,0 +1,61 @@
+{
+  "id": "crb-grafana-08-frontend-asset-optimization",
+  "title": "Frontend Asset Optimization",
+  "description": "Curated PR review case adapted from grafana golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/grafana/grafana/pull/90939",
+  "prTitle": "Frontend Asset Optimization",
+  "sourceRepo": "grafana",
+  "upstreamOwner": "grafana",
+  "upstreamRepo": "grafana",
+  "baseSha": "40ff0651158dbe1569cc776a9f3df81fea619267",
+  "headSha": "319ad03405991458a7e3a31740213f9ee70f9f63",
+  "diff": "diff --git a/pkg/services/authz/authz.go b/pkg/services/authz/authz.go\nindex 0000000..1111111 100644\n--- a/pkg/services/authz/authz.go\n+++ b/pkg/services/authz/authz.go\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Frontend Asset Optimization\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "go",
+  "changedFiles": [
+    "pkg/services/authz/authz.go"
+  ],
+  "expectedFindings": [
+    {
+      "category": "performance",
+      "severity": "medium",
+      "semanticSummary": "The GetWebAssets function implements an incomplete double-checked locking pattern for caching web assets. The function first checks if the cache is populated using a read lock (RLock), and if the cache is empty, it acquires a write lock to populate it. However, it fails to re-check whether the cache was populated by another goroutine while waiting to acquire the write lock.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "performance",
+      "severity": "high",
+      "semanticSummary": "In addition to the missing double-check, the function has a critical flaw in its error handling: it unconditionally assigns the fetch result to the cache (line 69: entryPointAssetsCache = result) regardless of whether the fetch succeeded or failed. When an error occurs during asset fetching, result is nil, and this nil value overwrites any previously valid cache entry.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "pkg/services/authz/authz.go",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "concurrency",
+    "cross-file",
+    "curated-pr",
+    "go",
+    "grafana",
+    "local-logic",
+    "null-reference",
+    "observability",
+    "performance",
+    "semantic"
+  ]
+}

@@ -1,0 +1,58 @@
+{
+  "id": "crb-grafana-09-advanced-sql-analytics-framework",
+  "title": "Advanced SQL Analytics Framework",
+  "description": "Curated PR review case adapted from grafana golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/grafana/grafana/pull/94942",
+  "prTitle": "Advanced SQL Analytics Framework",
+  "sourceRepo": "grafana",
+  "upstreamOwner": "grafana",
+  "upstreamRepo": "grafana",
+  "baseSha": "14b2519c2bdb2eeb58d6ea181ec916fbbceb2be3",
+  "headSha": "d7acc036c0e20153f6fd35a0aa2fd721e775e02d",
+  "diff": "diff --git a/pkg/services/authz/authz.go b/pkg/services/authz/authz.go\nindex 0000000..1111111 100644\n--- a/pkg/services/authz/authz.go\n+++ b/pkg/services/authz/authz.go\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Advanced SQL Analytics Framework\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "go",
+  "changedFiles": [
+    "pkg/services/authz/authz.go"
+  ],
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "critical",
+      "semanticSummary": "The enableSqlExpressions function has flawed logic that always returns false, effectively disabling SQL expressions unconditionally:",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "performance",
+      "severity": "high",
+      "semanticSummary": "Several methods such as NewInMemoryDB().RunCommands and db.QueryFramesInto return 'not implemented'.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "pkg/services/authz/authz.go",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "curated-pr",
+    "go",
+    "grafana",
+    "local-logic",
+    "observability",
+    "performance",
+    "semantic"
+  ]
+}

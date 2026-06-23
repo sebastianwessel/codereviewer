@@ -1,0 +1,56 @@
+{
+  "id": "crb-grafana-05-notification-rule-processing-engine",
+  "title": "Notification Rule Processing Engine",
+  "description": "Curated PR review case adapted from grafana golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/grafana/grafana/pull/106778",
+  "prTitle": "Notification Rule Processing Engine",
+  "sourceRepo": "grafana",
+  "upstreamOwner": "grafana",
+  "upstreamRepo": "grafana",
+  "baseSha": "e2c3a0fb70e2bbb600c18944e790c2c0f15f0947",
+  "headSha": "cc9428fcda15655d2f67e1f722cde772e933c97b",
+  "diff": "diff --git a/pkg/services/authz/authz.go b/pkg/services/authz/authz.go\nindex 0000000..1111111 100644\n--- a/pkg/services/authz/authz.go\n+++ b/pkg/services/authz/authz.go\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Notification Rule Processing Engine\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "go",
+  "changedFiles": [
+    "pkg/services/authz/authz.go"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "The rendered GrafanaRuleListItem is missing the required key prop for React list items. This can cause rendering issues when the list order changes.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "bug",
+      "severity": "high",
+      "semanticSummary": "RuleActionsButtons is invoked with only promRule, but SilenceGrafanaRuleDrawer inside RuleActionsButtons still depends on a Grafana Ruler rule being present, so for Grafana rules coming from list views the 'Silence notifications' menu entry (now driven by Grafana Prom abilities) will toggle showSilenceDrawer without ever rendering the drawer. This means clicking 'Silence notifications' for these rules has no visible effect, even when abilities indicate silencing is allowed.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "pkg/services/authz/authz.go",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "go",
+    "grafana",
+    "local-logic",
+    "observability",
+    "semantic"
+  ]
+}

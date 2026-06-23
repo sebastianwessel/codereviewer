@@ -9,10 +9,10 @@ Default repository root: current working directory at CLI entry unless an
 explicit CLI root option is provided. Config files must not redefine repository
 root in R1.
 
-Default config path: `.review/config.json`, resolved under repository root.
+Default config path: `.codereviewer/config.json`, resolved under repository root.
 
 User-owned configuration, reviewer instructions, and skills live under
-`.review/`. Generated run artifacts live under `.review/runs/`.
+`.codereviewer/`. Generated run artifacts live under `.codereviewer/runs/`.
 
 Merge order, lowest to highest precedence:
 
@@ -26,10 +26,12 @@ Merge order, lowest to highest precedence:
 systems usually provide environment variables directly. Invalid `.env` syntax
 is a config error because it can hide a broken local setup.
 
-`codereviewer eval run` does not load the repository root `.env` file. Eval is
-a regression and quality-gate command and must remain hermetic by default.
-Provider-backed eval requires explicit process environment or config input, not
-ambient local `.env` state.
+`codereviewer eval run` does not load the repository root `.env` file inside
+the CLI implementation. Eval programmatic calls remain hermetic by default.
+Repository npm scripts for provider-backed eval may use Node's native
+`--env-file-if-exists=.env` flag so local provider-backed eval can use
+project-local secrets without manual shell exports. The plain deterministic
+eval script must not load `.env`.
 
 The normalized config object must be emitted to the run summary as a hash and a
 redacted summary. Raw config values that can contain secrets must not be logged.
@@ -47,6 +49,8 @@ R1 supports only these configuration environment variables:
 | `CODEREVIEWER_PROVIDER_ID` | `provider.id` | provider ID enum |
 | `CODEREVIEWER_PROVIDER_MODEL` | `provider.model` | string |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `provider.baseUrl` | URL |
+| `CODEREVIEWER_AI_INTENT_PLANNING` | `aiReview.intentPlanning` | intent planning enum |
+| `CODEREVIEWER_AI_JUDGE_FINDINGS` | `aiReview.judgeFindings` | boolean |
 | `CODEREVIEWER_ARTIFACT_DIR` | `paths.artifactDir` | repository-relative path |
 | `CODEREVIEWER_CONFIG_PATH` | CLI/config loader default path override | repository-relative path |
 | `CODEREVIEWER_SKILLS_DIR` | `skills.directories[0]` | repository-relative path |
@@ -87,6 +91,8 @@ provider-specific object as passthrough.
 | `drift` | no | object | drift checks enabled as warnings |
 | `observability` | no | object | OpenTelemetry disabled |
 | `costs` | no | object | detailed token/cost tracking enabled with no prices |
+| `aiReview` | no | object | agentic proof-loop defaults |
+| `promotionPolicy` | no | object | proof/actionability defaults |
 
 ## Review Config
 
@@ -104,6 +110,47 @@ provider-specific object as passthrough.
 | `inlineSeverityThreshold` | severity | `"high"` | Only affects reporter eligibility. |
 | `maxCostUsd` | number >= 0 | preset-defined | Hard stop only when token usage and configured/provider pricing are available; otherwise reported as unavailable. |
 | `runTimeoutMs` | integer 10000..7200000 | unset | Optional whole-run timeout. When unset, no hidden Harness run timeout is applied; provider calls still use `provider.timeoutMs`. |
+
+## AI Review Config
+
+The AI review block controls model-driven suspicion, investigation, proof, and
+refutation loops. It does not enable shell, network beyond the selected
+provider, filesystem writes, or publishing.
+
+| Key | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `true` when provider is configured | When false, no provider-backed review runs. |
+| `maxSuspicionsPerTask` | integer 0..20 | depth-defined | Caps hypotheses before investigation. |
+| `maxInvestigationsPerRun` | integer 0..200 | depth-defined | Caps total investigated suspicions. |
+| `maxToolReadsPerInvestigation` | integer 0..50 | depth-defined | Mediated repository reads only. |
+| `maxToolSearchesPerInvestigation` | integer 0..25 | depth-defined | Mediated grep/symbol/test/config lookups only. |
+| `maxInvestigationRounds` | integer 1..5 | depth-defined | Caps mediated investigator follow-up rounds and optional judge follow-up rounds. |
+| `requireRefutation` | boolean | `true` | Must be true in R1. |
+| `intentPlanning` | `"auto" | "deterministic" | "model"` | `"auto"` | `auto` uses deterministic intents for local or single-task runs and a compact model planner for multi-task non-local reviews. `model` forces the planner for multi-task runs. |
+| `judgeFindings` | boolean | `false` | When true, proved model-origin candidates must pass a separate critic judge before admission. |
+| `actionableSeverityThreshold` | severity | `medium` | Minimum severity for a MODEL-origin finding to be admitted as actionable. Below this it is rejected as `below-threshold` (still recorded as a rejected finding). Trusted deterministic-rule findings are exempt. Keeps the engine focused on impactful runtime/security defects over low-severity nits. |
+| `policyReviewPass` | boolean | `false` | When true (and depth is `thorough`), adds a second-round `policy` review pass over each cluster. Off by default because the extra pass roughly doubles model calls (tokens/cost) for little added recall; opt in for the rare run that wants a second look. CLI: `--policy-review-pass` on `eval run`. |
+| `externalStaticAnalysisAssumed` | boolean | `true` | De-prioritizes findings that only duplicate CodeQL/linter/formatter/build/test responsibilities. |
+| `deterministicSignalMode` | `"support" | "disabled"` | `"support"` | `support` provides context/gates; `disabled` skips non-security signal extraction. |
+
+Investigation, optional aggregate, and critic judge packets reuse the provider
+task-input budget instead of introducing stage-specific public settings. Under
+tight budgets the workflow removes optional review-intent, trace, digest, and
+ambient review context before recording a recovered provider issue.
+
+Depth defaults:
+
+| Depth | `maxSuspicionsPerTask` | `maxInvestigationsPerRun` | `maxToolReadsPerInvestigation` | `maxToolSearchesPerInvestigation` | `maxInvestigationRounds` |
+| --- | --- | --- | --- | --- | --- |
+| `fast` | `3` | `20` | `10` | `5` | `2` |
+| `balanced` | `6` | `60` | `20` | `10` | `3` |
+| `thorough` | `10` | `120` | `40` | `20` | `4` |
+
+When a provider is configured and `contextMaxBytes` is not set explicitly, the
+per-packet model-bound context budget scales with depth so deeper reviews see
+more source per task: `fast` 60,000 bytes, `balanced` 120,000 bytes, `thorough`
+240,000 bytes (the provider task-input packet cap is 360,000 bytes). An explicit
+`contextMaxBytes` overrides these depth-scaled safety defaults.
 
 ## Provider Config
 
@@ -157,9 +204,11 @@ file and by `CODEREVIEWER_PROVIDER_BASE_URL`.
 
 R1 cost reporting is intentionally conservative. If provider usage metadata is
 unavailable, cost enforcement can use configured `costs.inputPerMillion` and
-`costs.outputPerMillion` values only when token counts are available. If token
-counts or prices are unavailable, cost is omitted and `maxCostUsd` is not
-enforceable; the run summary must include warning code `cost-unavailable`.
+`costs.outputPerMillion` values, or the bundled OpenAI model pricing snapshot,
+only when token counts are available. Explicit `costs` values override bundled
+pricing. If token counts or prices are unavailable, cost is omitted and
+`maxCostUsd` is not enforceable; the run summary must include warning code
+`cost-unavailable`.
 
 Provider-backed tasks should record detailed token/cost metadata when the
 adapter exposes it:
@@ -192,7 +241,8 @@ implemented.
 
 Provider-backed task input also has a final serialized packet guard. The guard
 must fail before provider invocation when a packet exceeds budget. It must not
-truncate source, instructions, skills, evidence, analyzer output, or metadata.
+truncate source, instructions, skills, evidence, deterministic signal output, or
+metadata.
 The recovery is deterministic task splitting, increasing configured budget, or
 removing non-required scope before rerun.
 
@@ -234,7 +284,7 @@ root. Run summaries record path and SHA-256 hash only.
 | `directories` | string[] | `[]` |
 | `allowTools` | `read | list | grep`[] | `["read", "list", "grep"]` |
 
-Default skills directory is `.review/skills` when it exists and
+Default skills directory is `.codereviewer/skills` when it exists and
 `skills.enabled` is true. Skill directories may contain nested skill folders;
 each skill folder must contain a harness-compatible `SKILL.md` with `name` and
 `description` frontmatter. The frontmatter `name` is the canonical mounted skill
@@ -254,8 +304,8 @@ hashes and repository-relative paths are recorded for provenance.
 | Key | Type | Default |
 | --- | --- | --- |
 | `include` | glob[] | `["**/*"]` |
-| `exclude` | glob[] | `[".git/**", "node_modules/**", "dist/**", "coverage/**", ".review/**"]` |
-| `artifactDir` | repository-relative path | `.review/runs` |
+| `exclude` | glob[] | `[".git/**", "node_modules/**", "dist/**", "coverage/**", ".codereviewer/**"]` |
+| `artifactDir` | repository-relative path | `.codereviewer/runs` |
 
 All path config is validated through `path-service` and must support Linux and
 Windows separators.
@@ -265,7 +315,7 @@ Windows separators.
 | Key | Type | Default |
 | --- | --- | --- |
 | `enabled` | boolean | `true` |
-| `path` | repository-relative path | `.review/baseline.json` |
+| `path` | repository-relative path | `.codereviewer/baseline.json` |
 | `failOnNewOnly` | boolean | `true` |
 | `includeResolvedInReport` | boolean | `true` |
 
@@ -285,9 +335,39 @@ configuration block:
 | `maxCritical` | integer >= 0 | `0` |
 | `maxHigh` | integer >= 0 | `0` |
 | `maxMedium` | integer >= 0 | unset (no fail) |
-| `minEvidenceLevel` | `"non-model" | "model-ok"` | `"non-model"` |
 | `failOnProviderError` | boolean | `true` |
 | `failOnNewOnly` | boolean | value from `baseline.failOnNewOnly` |
+
+`qualityGate.minEvidenceLevel` is removed by the agentic proof refactor.
+Actionability is now determined by `promotionPolicy`, proof completeness, and
+refutation results.
+
+## Promotion Policy
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `modelProof` | `"actionable" | "artifact-only"` | `"actionable"` |
+| `modelSuspicion` | `"artifact-only" | "rejected"` | `"artifact-only"` |
+| `modelWeakOrRefuted` | `"artifact-only" | "rejected"` | `"artifact-only"` |
+| `deterministicSignalOnly` | `"artifact-only" | "rejected"` | `"artifact-only"` |
+| `staticAnalysisDuplicate` | `"artifact-only" | "rejected"` | `"artifact-only"` |
+| `deterministicContradiction` | `"artifact-only" | "rejected"` | `"rejected"` |
+
+Rules:
+
+- `modelProof = "actionable"` requires a complete proof packet and
+  `RefutationResult.verdict = "proved"`;
+- model suspicions, weak proofs, and refuted proofs never become inline or
+  quality-gate findings;
+- deterministic signal-only output is not actionable by default because
+  production relies on adjacent CodeQL/linter/formatter/test/build pipelines.
+  Trusted allowlisted deterministic rules are separate from generic
+  signal-only output and may seed actionable evidence-backed candidates
+  directly;
+- static-analysis duplicates are de-prioritized unless the proof packet adds
+  semantic context not normally available from those tools;
+- deterministic contradictions reject or demote model-origin claims according
+  to policy.
 
 ## Reporting
 
@@ -336,7 +416,9 @@ file config.
 | `outputPerMillion` | number >= 0 | omitted |
 | `currency` | `"USD"` | `"USD"` |
 
-Costs are operational metadata and safe to report after redaction.
+Costs are operational metadata and safe to report after redaction. The bundled
+pricing snapshot is generated from LiteLLM model pricing data and is used only
+for configured `provider.id="openai"` models.
 
 ## Security Config
 

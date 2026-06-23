@@ -8,7 +8,6 @@ export type QualityGateThresholds = {
   readonly maxCritical?: number
   readonly maxHigh?: number
   readonly maxMedium?: number
-  readonly minEvidenceLevel?: 'non-model' | 'model-ok'
   readonly failOnProviderError?: boolean
   readonly failOnNewOnly?: boolean
 }
@@ -30,13 +29,16 @@ export const evaluateQualityGate = (
   const baselineFilteringApplied = input.thresholds.failOnNewOnly === true
   // `unknown` (baseline configured but missing) is treated as new so a missing
   // baseline never silently suppresses a gate failure.
+  const gateEligibleFindings = input.admittedFindings.filter(
+    (finding) => finding.reporterEligibility !== 'artifact-only'
+  )
   const relevantFindings = baselineFilteringApplied
-    ? input.admittedFindings.filter(
+    ? gateEligibleFindings.filter(
         (finding) =>
           finding.baselineStatus === 'new' ||
           finding.baselineStatus === 'unknown'
       )
-    : [...input.admittedFindings]
+    : gateEligibleFindings
   const failingFindingIds: string[] = []
 
   for (const severity of ['critical', 'high', 'medium'] satisfies readonly Severity[]) {
@@ -64,11 +66,9 @@ export const evaluateQualityGate = (
       maxCritical: input.thresholds.maxCritical ?? null,
       maxHigh: input.thresholds.maxHigh ?? null,
       maxMedium: input.thresholds.maxMedium ?? null,
-      minEvidenceLevel: input.thresholds.minEvidenceLevel ?? 'non-model',
       failOnProviderError: input.thresholds.failOnProviderError ?? true,
       failOnNewOnly: input.thresholds.failOnNewOnly ?? false
     },
     baselineFilteringApplied
   }
 }
-

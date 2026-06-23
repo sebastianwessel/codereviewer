@@ -1,0 +1,41 @@
+{
+  "id": "crb-noise-ruby-copy-only",
+  "title": "Clarify topic copy",
+  "description": "Curated PR-style negative case for precision and no-finding-zone evaluation.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prTitle": "Clarify topic copy",
+  "sourceRepo": "discourse",
+  "upstreamOwner": "discourse",
+  "upstreamRepo": "discourse",
+  "baseSha": "85d855bb511a8fd0439a4abbfc7af6957acd5c82",
+  "headSha": "d3e22839a45d4dfc38d3fa57e984a07d23c4c155",
+  "diff": "diff --git a/app/models/copy.rb b/app/models/copy.rb\nindex 0000000..1111111 100644\n--- a/app/models/copy.rb\n+++ b/app/models/copy.rb\n@@ -1,2 +1,5 @@\n+// Safe PR-style fixture: Clarify topic copy\n+// Expected behavior: no actionable review finding.\n+\n unchanged\n",
+  "language": "ruby",
+  "changedFiles": [
+    "app/models/copy.rb"
+  ],
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "app/models/copy.rb",
+      "lineRange": [
+        1,
+        20
+      ],
+      "reason": "Safe PR-style change should not produce an actionable finding."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "discourse",
+    "forum",
+    "negative",
+    "no-finding-zone",
+    "precision",
+    "ruby"
+  ]
+}

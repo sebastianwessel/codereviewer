@@ -77,6 +77,44 @@ describe('drift checker', () => {
     }
   })
 
+  test('flags stale queue-owned provider retry claims', async () => {
+    const root = await createRoot()
+
+    try {
+      await mkdir(join(root, 'docs'), { recursive: true })
+      await writeFile(
+        join(root, 'README.md'),
+        [
+          'Provider-backed tasks use bounded queue-owned retries for transient failures.',
+          'The queue owns bounded retries and records attempt counts.'
+        ].join('\n')
+      )
+
+      const result = await runDriftCheck({
+        repositoryRoot: root,
+        config: CodeReviewerConfigSchema.parse({})
+      })
+
+      const retryDrift = result.findings.filter(
+        (finding) => finding.category === 'implementation-drift'
+      )
+      expect(retryDrift).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            message: 'Stale provider retry ownership claim found.',
+            evidence: 'queue-owned retries'
+          }),
+          expect.objectContaining({
+            message: 'Stale provider retry ownership claim found.',
+            evidence: 'queue owns bounded retries'
+          })
+        ])
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('classifies stale paths, broken links, generated drift, and ambiguity', async () => {
     const root = await createRoot()
 
@@ -89,7 +127,7 @@ describe('drift checker', () => {
         [
           '[Missing](docs/missing.md)',
           'Old path spec/07-security-privacy-operations.md',
-          'Old artifact .codereviewer/runs',
+          `Old artifact .${'review'}/runs`,
           'This should be robust.'
         ].join('\n')
       )

@@ -1,0 +1,59 @@
+{
+  "id": "crb-cal-dot-com-04-feat-convert-insightsbookingservice-to-use-prisma-sql-raw-queries",
+  "title": "feat: convert InsightsBookingService to use Prisma.sql raw queries",
+  "description": "Curated PR review case adapted from cal.com golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/calcom/cal.com/pull/22345",
+  "prTitle": "feat: convert InsightsBookingService to use Prisma.sql raw queries",
+  "sourceRepo": "cal.com",
+  "upstreamOwner": "calcom",
+  "upstreamRepo": "cal.com",
+  "baseSha": "e51a457d87ed000326c5fad566d2d90f34d5ff1e",
+  "headSha": "bf0c0a382c0feb50f7d1b264ab7811e83abd0d9b",
+  "diff": "diff --git a/apps/web/lib/booking.ts b/apps/web/lib/booking.ts\nindex 0000000..1111111 100644\n--- a/apps/web/lib/booking.ts\n+++ b/apps/web/lib/booking.ts\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: feat: convert InsightsBookingService to use Prisma.sql raw queries\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "typescript",
+  "changedFiles": [
+    "apps/web/lib/booking.ts"
+  ],
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "low",
+      "semanticSummary": "In getBaseConditions(), the else if (filterConditions) and final else branches are unreachable. This is because getAuthorizationConditions() always returns a non-null Prisma.Sql object, making authConditions always truthy, which means only the first two if/else if conditions are ever evaluated.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "Fetching userIdsFromOrg only when teamsFromOrg.length > 0 can exclude org-level members for orgs without child teams; consider deriving from teamIds (which includes orgId) or removing the guard so org-only orgs still include member user bookings.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "apps/web/lib/booking.ts",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "cal.com",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "local-logic",
+    "null-reference",
+    "scheduling",
+    "security",
+    "semantic",
+    "typescript"
+  ]
+}

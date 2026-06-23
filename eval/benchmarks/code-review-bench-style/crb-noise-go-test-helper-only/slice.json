@@ -1,0 +1,41 @@
+{
+  "id": "crb-noise-go-test-helper-only",
+  "title": "Add test helper with no production behavior",
+  "description": "Curated PR-style negative case for precision and no-finding-zone evaluation.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prTitle": "Add test helper with no production behavior",
+  "sourceRepo": "grafana",
+  "upstreamOwner": "grafana",
+  "upstreamRepo": "grafana",
+  "baseSha": "e7a1cb26a272a6497f6d0f89a527e1957cf12e05",
+  "headSha": "4905ad1053c3dee114f852f7ccf18b83efd7e79e",
+  "diff": "diff --git a/pkg/services/helper.go b/pkg/services/helper.go\nindex 0000000..1111111 100644\n--- a/pkg/services/helper.go\n+++ b/pkg/services/helper.go\n@@ -1,2 +1,5 @@\n+// Safe PR-style fixture: Add test helper with no production behavior\n+// Expected behavior: no actionable review finding.\n+\n unchanged\n",
+  "language": "go",
+  "changedFiles": [
+    "pkg/services/helper.go"
+  ],
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "pkg/services/helper.go",
+      "lineRange": [
+        1,
+        20
+      ],
+      "reason": "Safe PR-style change should not produce an actionable finding."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "go",
+    "grafana",
+    "negative",
+    "no-finding-zone",
+    "observability",
+    "precision"
+  ]
+}

@@ -1,30 +1,29 @@
 # 08: Dependencies And Release
 
 Status: Approved
-Date: 2026-06-19
+Date: 2026-06-22
 
 ## Dependency Evidence
 
-Retrieved on 2026-06-19 with `npm view`.
+Retrieved on 2026-06-22 with `npm view`.
 
 | Package | Role | Current Version | License | Engine |
 | --- | --- | --- | --- | --- |
-| `@purista/harness` | Workflow/agent runtime | `1.5.1` | Apache-2.0 | `>=24.15.0` |
-| `@purista/harness-openai` | Optional OpenAI adapter | `1.5.1` | Apache-2.0 | `>=24.15.0` |
-| `@purista/harness-bedrock` | Optional Bedrock adapter | `1.5.1` | Apache-2.0 | `>=24.15.0` |
-| `@purista/harness-azure-foundry` | Optional Azure adapter | `1.5.1` | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness` | Workflow/agent runtime | `1.5.2` | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness-openai` | Optional OpenAI adapter; dev-installed for this repository's local OpenAI eval/review setup | `1.5.2` | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness-bedrock` | Optional Bedrock adapter | `1.5.2` | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness-azure-foundry` | Optional Azure adapter | `1.5.2` | Apache-2.0 | `>=24.15.0` |
 | `zod` | Runtime schemas | `4.4.3` | MIT | not declared |
 | `typescript` | Compiler | `6.0.3` | Apache-2.0 | not declared |
 | `vitest` | Test runner | `4.1.9` | MIT | `^20.0.0 || ^22.0.0 || >=24.0.0` |
+| `@vitest/coverage-v8` | Test coverage provider | `4.1.9` | MIT | not declared |
 | `tsx` | Dev runner | `4.22.4` | MIT | `>=18.0.0` |
 | `@types/node` | Node types | `26.0.0` | MIT | not declared |
-| `@ast-grep/napi` | Preferred generic multi-language AST analysis layer | `0.43.0` | MIT | `>= 10` |
+| `@ast-grep/napi` | Optional local structural parsing layer for deterministic support signals | `0.44.0` | MIT | `>= 10` |
 | `@ast-grep/lang-python` | Python dynamic AST grammar | `0.0.6` | ISC | not declared |
 | `@ast-grep/lang-go` | Go dynamic AST grammar | `0.0.6` | ISC | not declared |
 | `@ast-grep/lang-rust` | Rust dynamic AST grammar | `0.0.7` | ISC | not declared |
 | `@ast-grep/lang-java` | Java dynamic AST grammar | `0.0.7` | ISC | not declared |
-| `tree-sitter` | Underlying parser family / fallback parser binding | `0.25.0` | MIT | not declared |
-| `web-tree-sitter` | WASM fallback parser binding when native parser loading is unsuitable | `0.26.9` | MIT | not declared |
 
 ## Version Policy
 
@@ -34,8 +33,8 @@ Retrieved on 2026-06-19 with `npm view`.
 - Provider adapter packages remain outside base dependencies. They may be
   declared only as optional peers so consumers can install exactly the adapter
   required by their configured provider.
-- Generic language analyzer dependencies may be base dependencies only when
-  they are required for first-class offline analysis and pass Linux/Windows
+- Generic structural parsing dependencies may be base dependencies only when
+  they are required for deterministic support signals and pass Linux/Windows
   install verification. Language-native tool integrations that invoke external
   toolchains remain optional and must degrade gracefully when unavailable.
 - Dependency updates require typecheck, tests, build, and dependency evidence
@@ -43,7 +42,7 @@ Retrieved on 2026-06-19 with `npm view`.
 
 ## Runtime Version
 
-Node.js `24.15.0` is the minimum because `@purista/harness@1.5.1` declares
+Node.js `24.15.0` is the minimum because `@purista/harness@1.5.2` declares
 `>=24.15.0`. `.nvmrc` must contain `24.15.0`.
 
 ## Supply Chain Requirements
@@ -90,14 +89,17 @@ R1 rollback is package-version rollback:
 
 - revert to previous git tag or npm version;
 - no database rollback;
-- no migrations;
+- no data transfer steps;
 - no long-lived state cleanup beyond deleting local run artifacts.
 
 ## Compatibility
 
 - Report schema starts at `1.0`.
 - Config schema starts at `1.0`.
-- Breaking contract changes require schema version increment and migration note.
+- Breaking contract changes require schema version increment, a
+  breaking-change record, and explicit fail-fast tests for obsolete inputs.
+- Runtime support for obsolete contracts is not part of R1; removed inputs fail
+  fast instead of being translated.
 - Since no public release exists yet, pre-`1.0` internal changes can rewrite
   contracts only by updating these specs first.
 
@@ -112,7 +114,8 @@ R1 rollback is package-version rollback:
 
 ## Research Sources
 
-Research inputs retrieved on 2026-06-20:
+Research inputs retrieved on 2026-06-20 and package metadata refreshed on
+2026-06-22:
 
 - PURISTA harness package metadata from npm for runtime and adapter versions.
 - OASIS SARIF 2.1.0 specification for report export semantics.
@@ -131,8 +134,8 @@ Research inputs retrieved on 2026-06-20:
   controls.
 - SLSA v1.2 and OpenSSF Scorecard documentation for supply-chain controls.
 - OpenTelemetry sensitive-data guidance for telemetry constraints.
-- Tree-sitter and ast-grep documentation for AST-backed multi-language
-  structural analysis.
+- Tree-sitter and ast-grep documentation for optional AST-backed deterministic
+  support signals.
 - Semgrep supported-language documentation for optional external SAST evidence
   ingestion.
 - SCIP documentation for future language-agnostic code intelligence indexing.

@@ -1,0 +1,41 @@
+{
+  "id": "crb-noise-ruby-spec-helper-only",
+  "title": "Add spec helper for topic labels",
+  "description": "Curated PR-style negative case for precision and no-finding-zone evaluation.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prTitle": "Add spec helper for topic labels",
+  "sourceRepo": "discourse",
+  "upstreamOwner": "discourse",
+  "upstreamRepo": "discourse",
+  "baseSha": "043869a814df71f4927308f1b43f4277e418bec7",
+  "headSha": "af02b014637b24fab1efc9137be89551dae8e725",
+  "diff": "diff --git a/spec/support/topic_helper.rb b/spec/support/topic_helper.rb\nindex 0000000..1111111 100644\n--- a/spec/support/topic_helper.rb\n+++ b/spec/support/topic_helper.rb\n@@ -1,2 +1,5 @@\n+// Safe PR-style fixture: Add spec helper for topic labels\n+// Expected behavior: no actionable review finding.\n+\n unchanged\n",
+  "language": "ruby",
+  "changedFiles": [
+    "spec/support/topic_helper.rb"
+  ],
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "spec/support/topic_helper.rb",
+      "lineRange": [
+        1,
+        20
+      ],
+      "reason": "Safe PR-style change should not produce an actionable finding."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "discourse",
+    "forum",
+    "negative",
+    "no-finding-zone",
+    "precision",
+    "ruby"
+  ]
+}

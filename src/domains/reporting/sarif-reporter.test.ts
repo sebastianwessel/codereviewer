@@ -141,6 +141,81 @@ describe('SARIF reporter', () => {
     ).toBeGreaterThan(0)
   })
 
+  test('renders provider issues as redacted run metadata', () => {
+    const report = createReportFixture()
+    const sarif = JSON.parse(
+      renderSarifReport(
+        {
+          ...report,
+          providerIssues: [
+            {
+              code: 'provider_timeout',
+              stage: 'investigation',
+              recovered: true,
+              message:
+                'Timed out while using sk-proj-abcdefghijklmnopqrstuvwxyz.'
+            }
+          ]
+        },
+        { category: 'codereviewer', maxResults: 25, target: 'github' }
+      )
+    )
+
+    expect(sarif.runs[0].properties.providerIssues).toEqual([
+      {
+        code: 'provider_timeout',
+        stage: 'investigation',
+        recovered: true,
+        message: 'Timed out while using [REDACTED].'
+      }
+    ])
+    expect(sarif.runs[0].results).toHaveLength(report.admittedFindings.length)
+    expect(JSON.stringify(sarif)).not.toContain(
+      'sk-proj-abcdefghijklmnopqrstuvwxyz'
+    )
+  })
+
+  test('excludes artifact-only admitted findings from SARIF results', () => {
+    const report = createReportFixture()
+    const actionable = {
+      ...report.admittedFindings[0]!,
+      id: 'find_actionable',
+      title: 'Actionable finding',
+      ruleId: 'bug/actionable'
+    }
+    const artifactOnly = {
+      ...report.admittedFindings[0]!,
+      id: 'find_artifact',
+      title: 'Artifact-only diagnostic',
+      ruleId: 'bug/artifact-only',
+      reporterEligibility: 'artifact-only' as const,
+      fingerprints: [
+        {
+          algorithm: 'v1',
+          value: 'artifactonly'
+        }
+      ]
+    }
+
+    const sarif = JSON.parse(
+      renderSarifReport(
+        {
+          ...report,
+          admittedFindings: [actionable, artifactOnly]
+        },
+        { category: 'codereviewer', maxResults: 25, target: 'github' }
+      )
+    )
+
+    expect(sarif.runs[0].results).toHaveLength(1)
+    expect(sarif.runs[0].results[0].ruleId).toBe('bug/actionable')
+    expect(sarif.runs[0].tool.driver.rules).toEqual([
+      expect.objectContaining({ id: 'bug/actionable' })
+    ])
+    expect(JSON.stringify(sarif)).not.toContain('Artifact-only diagnostic')
+    expect(JSON.stringify(sarif)).not.toContain('bug/artifact-only')
+  })
+
   test('rejects malformed SARIF documents', () => {
     const validBase = {
       version: '2.1.0',

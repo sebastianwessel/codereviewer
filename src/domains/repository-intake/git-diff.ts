@@ -9,11 +9,13 @@ export type DiffHunk = {
 
 export type DiffMap = {
   readonly path: string
+  readonly changeKind: 'new' | 'modified' | 'deleted'
   readonly hunks: readonly DiffHunk[]
 }
 
 type MutableDiffMap = {
   path: string
+  changeKind: 'new' | 'modified' | 'deleted'
   hunks: DiffHunk[]
 }
 
@@ -79,8 +81,18 @@ export const parseGitDiffMaps = (diffOutput: string): readonly DiffMap[] => {
     const path = parseDiffPath(line)
 
     if (path !== undefined) {
-      currentMap = { path, hunks: [] }
+      currentMap = { path, changeKind: 'modified', hunks: [] }
       maps.push(currentMap)
+      continue
+    }
+
+    if (currentMap !== undefined && line === '--- /dev/null') {
+      currentMap.changeKind = 'new'
+      continue
+    }
+
+    if (currentMap !== undefined && line === '+++ /dev/null') {
+      currentMap.changeKind = 'deleted'
       continue
     }
 
@@ -101,7 +113,7 @@ export const parseGitDiffMaps = (diffOutput: string): readonly DiffMap[] => {
 
   return maps.map((map) => ({
     path: map.path,
+    changeKind: map.changeKind,
     hunks: map.hunks
   }))
 }
-

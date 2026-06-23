@@ -35,4 +35,5 @@ logic receives a value. Open JSON leaves require an explicit schema field with
 
 Before public release, contract changes require spec updates and regenerated
 schemas. After public release, incompatible changes require schema version
-increments, migration notes, and compatibility tests.
+increments, breaking-change records, and explicit fail-fast tests for obsolete
+inputs. Runtime translation layers for removed inputs are not part of R1.

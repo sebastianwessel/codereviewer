@@ -1,0 +1,62 @@
+{
+  "id": "crb-grafana-03-plugins-chore-renamed-instrumentation-middleware-to-metrics-middleware",
+  "title": "Plugins: Chore: Renamed instrumentation middleware to metrics middleware",
+  "description": "Curated PR review case adapted from grafana golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/grafana/grafana/pull/76186",
+  "prTitle": "Plugins: Chore: Renamed instrumentation middleware to metrics middleware",
+  "sourceRepo": "grafana",
+  "upstreamOwner": "grafana",
+  "upstreamRepo": "grafana",
+  "baseSha": "fecd25e0b305e4f22745aa741a759f81ad741bff",
+  "headSha": "79e408a351a8043f53f5a5bea505e91dccb26ffd",
+  "diff": "diff --git a/pkg/services/authz/authz.go b/pkg/services/authz/authz.go\nindex 0000000..1111111 100644\n--- a/pkg/services/authz/authz.go\n+++ b/pkg/services/authz/authz.go\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Plugins: Chore: Renamed instrumentation middleware to metrics middleware\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "go",
+  "changedFiles": [
+    "pkg/services/authz/authz.go"
+  ],
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "The ContextualLoggerMiddleware methods (QueryData, CallResource, CheckHealth, CollectMetrics) panic when a nil request is received. This occurs because they directly access req.PluginContext (via the instrumentContext function) without first checking if req is nil. This is a regression, as previous middleware layers gracefully handled nil requests.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "performance",
+      "severity": "low",
+      "semanticSummary": "The traceID is no longer logged for plugin requests. During a refactoring, the tracing import and the logic to extract and add traceID from the context to log parameters were removed from the LoggerMiddleware. The newly introduced ContextualLoggerMiddleware does not add this information, resulting in missing traceID in plugin request logs and impacting debugging and request tracing capabilities.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "pkg/services/authz/authz.go",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "concurrency",
+    "cross-file",
+    "curated-pr",
+    "go",
+    "grafana",
+    "local-logic",
+    "null-reference",
+    "observability",
+    "performance",
+    "security",
+    "semantic"
+  ]
+}

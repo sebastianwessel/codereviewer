@@ -4,7 +4,7 @@ import type {
   RejectedFinding
 } from '../../shared/contracts/index.js'
 import { sha256 } from '../../shared/hash/hash.js'
-import type { LanguageFact } from '../language-analyzers/index.js'
+import type { SupportSignalFact } from '../deterministic-signals/index.js'
 import type { ContextLedgerEntry } from '../review-planning/index.js'
 import type { CandidateFinding } from '../admission/index.js'
 
@@ -21,7 +21,7 @@ export type ReviewTaskRecord = {
 }
 
 export type SharedContextEntryKind =
-  | 'repository-fact'
+  | 'support-signal-fact'
   | 'task-state'
   | 'candidate-finding'
   | 'admitted-finding'
@@ -48,11 +48,9 @@ export type AdmissionDecisionRecord = {
 
 export type ReviewSharedContextSnapshot = {
   readonly sharedEntries: SharedContextEntry[]
-  readonly repositoryFacts: LanguageFact[]
+  readonly supportSignalFacts: SupportSignalFact[]
   readonly taskEvents: ReviewTaskRecord[]
   readonly currentTasks: ReviewTaskRecord[]
-  /** @deprecated Use taskEvents for append-only history or currentTasks for latest state. */
-  readonly tasks: ReviewTaskRecord[]
   readonly contextLedgerEntries: ContextLedgerEntry[]
   readonly evidenceRecords: EvidenceRecord[]
   readonly candidateFindings: CandidateFinding[]
@@ -62,7 +60,7 @@ export type ReviewSharedContextSnapshot = {
 }
 
 export type ReviewSharedContext = {
-  readonly appendRepositoryFact: (fact: LanguageFact) => void
+  readonly appendSupportSignalFact: (fact: SupportSignalFact) => void
   readonly appendTask: (task: ReviewTaskRecord) => void
   readonly transitionTask: (
     taskId: string,
@@ -109,7 +107,7 @@ const appendSharedEntry = (
 
 export const createReviewSharedContext = (): ReviewSharedContext => {
   const sharedEntries: SharedContextEntry[] = []
-  const repositoryFacts: LanguageFact[] = []
+  const supportSignalFacts: SupportSignalFact[] = []
   const tasks: ReviewTaskRecord[] = []
   const contextLedgerEntries: ContextLedgerEntry[] = []
   const evidenceRecords: EvidenceRecord[] = []
@@ -119,12 +117,12 @@ export const createReviewSharedContext = (): ReviewSharedContext => {
   const rejectedFindings: RejectedFinding[] = []
 
   return {
-    appendRepositoryFact: (fact) => {
-      repositoryFacts.push(fact)
+    appendSupportSignalFact: (fact) => {
+      supportSignalFacts.push(fact)
       appendSharedEntry(sharedEntries, {
-        kind: 'repository-fact',
+        kind: 'support-signal-fact',
         summary: fact.summary,
-        source: `${fact.language}-analyzer`,
+        source: `${fact.language}-support-signal`,
         evidenceIds: [],
         refIds: [fact.id]
       })
@@ -179,9 +177,17 @@ export const createReviewSharedContext = (): ReviewSharedContext => {
       contextLedgerEntries.push(entry)
     },
     appendEvidenceRecord: (record) => {
-      evidenceRecords.push(record)
+      if (!evidenceRecords.some((existing) => existing.id === record.id)) {
+        evidenceRecords.push(record)
+      }
     },
     appendCandidateFinding: (candidate) => {
+      if (
+        candidateFindings.some((existing) => existing.id === candidate.id)
+      ) {
+        return
+      }
+
       candidateFindings.push(candidate)
       appendSharedEntry(sharedEntries, {
         kind: 'candidate-finding',
@@ -245,10 +251,9 @@ export const createReviewSharedContext = (): ReviewSharedContext => {
 
       return {
         sharedEntries: clone(sharedEntries),
-        repositoryFacts: clone(repositoryFacts),
+        supportSignalFacts: clone(supportSignalFacts),
         taskEvents,
         currentTasks: currentTasksFromEvents(taskEvents),
-        tasks: taskEvents,
         contextLedgerEntries: clone(contextLedgerEntries),
         evidenceRecords: clone(evidenceRecords),
         candidateFindings: clone(candidateFindings),

@@ -1,0 +1,65 @@
+{
+  "id": "crb-discourse-01-feature-automatically-downsize-large-images",
+  "title": "FEATURE: automatically downsize large images",
+  "description": "Curated PR review case adapted from discourse golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/discourse/discourse/commit/ffbaf8c54269df2ce510de91245760fddce09896",
+  "prTitle": "FEATURE: automatically downsize large images",
+  "sourceRepo": "discourse",
+  "upstreamOwner": "discourse",
+  "upstreamRepo": "discourse",
+  "baseSha": "ac624d927ed9127e6d7212fdf56ba1dc26e31ba3",
+  "headSha": "e97063cc79ce08698922968f28c52d88280dda13",
+  "diff": "diff --git a/app/models/topic.rb b/app/models/topic.rb\nindex 0000000..1111111 100644\n--- a/app/models/topic.rb\n+++ b/app/models/topic.rb\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: FEATURE: automatically downsize large images\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "ruby",
+  "changedFiles": [
+    "app/models/topic.rb"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "The downsize method is defined twice. The second definition, which expects a single dimensions string parameter, overrides the first, which expected separate max_width and max_height parameters. This makes the original method unreachable and breaks existing code that calls it with separate width and height arguments.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "Hardcoding maxSizeKB = 10 * 1024 ignores Discourse.SiteSettings['max_' + type + '_size_kb'], so the client-side limit can diverge from server-side and per-type settings (also applies to the 413 handler below).",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "Passing 80% as the dimensions can fail for animated GIFs when allow_animated_thumbnails is true, since the animated path uses gifsicle --resize-fit which expects WxH geometry, not a percentage; downsizing would then silently fail.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "app/models/topic.rb",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "discourse",
+    "forum",
+    "local-logic",
+    "ruby",
+    "semantic"
+  ]
+}

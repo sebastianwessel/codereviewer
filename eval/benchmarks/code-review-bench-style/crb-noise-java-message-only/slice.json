@@ -1,0 +1,41 @@
+{
+  "id": "crb-noise-java-message-only",
+  "title": "Clarify validation error message",
+  "description": "Curated PR-style negative case for precision and no-finding-zone evaluation.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prTitle": "Clarify validation error message",
+  "sourceRepo": "keycloak",
+  "upstreamOwner": "keycloak",
+  "upstreamRepo": "keycloak",
+  "baseSha": "be3010873c6ba06de0b1827bec1dedd62d977adf",
+  "headSha": "ad4c6e4f00f66679cbfe094d0e4cd83af6b2018e",
+  "diff": "diff --git a/services/src/main/java/org/keycloak/messages/Messages.java b/services/src/main/java/org/keycloak/messages/Messages.java\nindex 0000000..1111111 100644\n--- a/services/src/main/java/org/keycloak/messages/Messages.java\n+++ b/services/src/main/java/org/keycloak/messages/Messages.java\n@@ -1,2 +1,5 @@\n+// Safe PR-style fixture: Clarify validation error message\n+// Expected behavior: no actionable review finding.\n+\n unchanged\n",
+  "language": "java",
+  "changedFiles": [
+    "services/src/main/java/org/keycloak/messages/Messages.java"
+  ],
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "services/src/main/java/org/keycloak/messages/Messages.java",
+      "lineRange": [
+        1,
+        20
+      ],
+      "reason": "Safe PR-style change should not produce an actionable finding."
+    }
+  ],
+  "tags": [
+    "authentication",
+    "code-review-bench-style",
+    "curated-pr",
+    "java",
+    "keycloak",
+    "negative",
+    "no-finding-zone",
+    "precision"
+  ]
+}

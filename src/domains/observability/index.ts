@@ -16,6 +16,7 @@ export {
   createNoopReviewLogger,
   createReviewLogger,
   ReviewLogLevelSchema,
+  type Logger,
   type ReviewLogLevel,
   type ReviewLogSink
 } from './review-logger.js'

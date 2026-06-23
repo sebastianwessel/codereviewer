@@ -47,13 +47,13 @@ const builtInSecretPatterns: readonly SecretPattern[] = [
   },
   // OpenAI-style keys (sk-, sk-proj-, ...).
   { pattern: /sk-[A-Za-z0-9_-]{16,}/gu, replace: replaceWhole },
-  // GitHub legacy PATs (ghp_, gho_, ghu_, ghs_, ghr_) and OAuth tokens.
+  // GitHub PAT prefixes (ghp_, gho_, ghu_, ghs_, ghr_) and OAuth tokens.
   { pattern: /gh[opusr]_[A-Za-z0-9_]{20,}/gu, replace: replaceWhole },
   // GitHub fine-grained PATs.
   { pattern: /github_pat_[A-Za-z0-9_]{20,}/gu, replace: replaceWhole },
   // GitLab personal access tokens.
   { pattern: /glpat-[A-Za-z0-9_-]{16,}/gu, replace: replaceWhole },
-  // Slack tokens (bot/user/app/legacy).
+  // Slack token prefixes.
   { pattern: /xox[abprs]-[A-Za-z0-9-]{10,}/gu, replace: replaceWhole },
   // Google API keys.
   { pattern: /\bAIza[0-9A-Za-z_-]{35}\b/gu, replace: replaceWhole },

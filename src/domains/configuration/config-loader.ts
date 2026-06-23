@@ -30,7 +30,7 @@ export type LoadedConfig = {
   readonly baselineExplicitlyConfigured: boolean
 }
 
-const defaultReviewConfigPath = '.review/config.json'
+const defaultReviewConfigPath = '.codereviewer/config.json'
 const defaultEnvPath = '.env'
 
 const configPathEnvKey = 'CODEREVIEWER_CONFIG_PATH'
@@ -239,6 +239,7 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
     ['CODEREVIEWER_PROVIDER_MODEL', ['provider', 'model']],
     ['CODEREVIEWER_PROVIDER_BASE_URL', ['provider', 'baseUrl']],
     ['CODEREVIEWER_ARTIFACT_DIR', ['paths', 'artifactDir']],
+    ['CODEREVIEWER_AI_INTENT_PLANNING', ['aiReview', 'intentPlanning']],
     ['CODEREVIEWER_LOG_LEVEL', ['observability', 'logging', 'level']],
     ['CODEREVIEWER_OPENTELEMETRY_ENDPOINT', ['observability', 'openTelemetry', 'endpoint']]
   ]
@@ -256,6 +257,15 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
       config,
       ['observability', 'openTelemetry', 'enabled'],
       parseBooleanEnv('CODEREVIEWER_OPENTELEMETRY_ENABLED', openTelemetryEnabled)
+    )
+  }
+
+  const judgeFindings = envValue(environment, 'CODEREVIEWER_AI_JUDGE_FINDINGS')
+  if (judgeFindings !== undefined) {
+    setNestedValue(
+      config,
+      ['aiReview', 'judgeFindings'],
+      parseBooleanEnv('CODEREVIEWER_AI_JUDGE_FINDINGS', judgeFindings)
     )
   }
 

@@ -1,0 +1,49 @@
+{
+  "id": "crb-grafana-07-database-performance-optimizations",
+  "title": "Database Performance Optimizations",
+  "description": "Curated PR review case adapted from grafana golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/grafana/grafana/pull/80329",
+  "prTitle": "Database Performance Optimizations",
+  "sourceRepo": "grafana",
+  "upstreamOwner": "grafana",
+  "upstreamRepo": "grafana",
+  "baseSha": "7a3df3afdd1ee279b457997c967b8df22f164860",
+  "headSha": "a4914375da76a4c978fd0979f172a2db8a426c5c",
+  "diff": "diff --git a/pkg/services/authz/authz.go b/pkg/services/authz/authz.go\nindex 0000000..1111111 100644\n--- a/pkg/services/authz/authz.go\n+++ b/pkg/services/authz/authz.go\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Database Performance Optimizations\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "go",
+  "changedFiles": [
+    "pkg/services/authz/authz.go"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "The code uses Error log level for what appears to be debugging information. This will pollute error logs in production. Consider using Debug or Info level instead.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "pkg/services/authz/authz.go",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "go",
+    "grafana",
+    "local-logic",
+    "observability",
+    "semantic"
+  ]
+}

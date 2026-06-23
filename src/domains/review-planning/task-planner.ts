@@ -2,12 +2,15 @@ import path from 'node:path'
 import { z } from 'zod'
 import {
   RepositoryRelativePathSchema,
+  ContractIdSchema,
+  ContextLedgerIdSchema,
+  TaskIdSchema,
   type CodeReviewerConfig,
   type EvidenceRecord
 } from '../../shared/contracts/index.js'
 import { sha256 } from '../../shared/hash/hash.js'
 import type { CandidateFinding } from '../admission/index.js'
-import type { LanguageFact } from '../language-analyzers/index.js'
+import type { SupportSignalFact } from '../deterministic-signals/index.js'
 
 export const ReviewTaskKindSchema = z.enum([
   'file',
@@ -16,14 +19,19 @@ export const ReviewTaskKindSchema = z.enum([
 ])
 
 export const ReviewTaskSchema = z.strictObject({
-  id: z.string().regex(/^task_[A-Za-z0-9_-]+$/),
+  id: TaskIdSchema,
   round: z.int().min(1),
   kind: ReviewTaskKindSchema,
   paths: z.array(RepositoryRelativePathSchema).min(1),
   factIds: z.array(z.string()).default([]),
   evidenceIds: z.array(z.string()).default([]),
   candidateIds: z.array(z.string()).default([]),
-  contextEntryIds: z.array(z.string().regex(/^ctx_[a-f0-9]+$/)).default([]),
+  contextEntryIds: z.array(ContextLedgerIdSchema).default([]),
+  intentId: ContractIdSchema.optional(),
+  objective: z.string().min(1).max(1200).optional(),
+  focusAreas: z.array(z.string().min(1).max(160)).max(8).optional(),
+  riskAreas: z.array(z.string().min(1).max(160)).max(8).optional(),
+  verificationQuestions: z.array(z.string().min(1).max(240)).max(8).optional(),
   priority: z.int().min(0)
 })
 
@@ -32,9 +40,13 @@ export type ReviewTask = z.infer<typeof ReviewTaskSchema>
 export type PlanReviewTasksOptions = {
   readonly depth: CodeReviewerConfig['review']['depth']
   readonly files: readonly { readonly path: string }[]
-  readonly facts: readonly LanguageFact[]
+  readonly facts: readonly SupportSignalFact[]
   readonly evidence: readonly EvidenceRecord[]
   readonly candidates: readonly CandidateFinding[]
+  // When true (and depth is thorough), add a second-round `policy` review pass
+  // over each cluster. Off by default: the extra pass roughly doubles model
+  // calls for little added recall, so it is opt-in for the rare run that wants it.
+  readonly policyReviewPass?: boolean
 }
 
 const taskIdFor = (
@@ -75,6 +87,7 @@ const extensionCandidates = (target: string): readonly string[] => {
     `${target}.cts`,
     `${target}.cjs`,
     `${target}.py`,
+    `${target}.rb`,
     `${target}.go`,
     `${target}.rs`,
     `${target}.java`
@@ -100,9 +113,52 @@ const resolveRelativeImport = (
   )
 }
 
+// Convert a non-relative import specifier into a repo-relative path suffix so
+// Python dotted (`a.b.c`), Java package (`com.foo.Bar`), and Ruby/Go slashed
+// (`foo/bar`) imports can cluster related changed files the way relative TS/JS
+// imports already do. Only multi-segment specifiers are resolved; bare
+// single-segment modules (e.g. `os`, `json`) are skipped to avoid false matches.
+const moduleSpecifierPathSuffix = (
+  moduleSpecifier: string
+): string | undefined => {
+  const trimmed = moduleSpecifier.trim()
+
+  if (trimmed === '' || trimmed.startsWith('.')) {
+    return undefined
+  }
+
+  const slashed = (trimmed.includes('/') ? trimmed : trimmed.replace(/\./gu, '/'))
+    .replace(/^\/+|\/+$/gu, '')
+
+  return slashed.includes('/') ? slashed : undefined
+}
+
+const resolveModuleImportBySuffix = (
+  moduleSpecifier: string,
+  knownPaths: ReadonlySet<string>
+): string | undefined => {
+  const suffix = moduleSpecifierPathSuffix(moduleSpecifier)
+
+  if (suffix === undefined) {
+    return undefined
+  }
+
+  for (const candidate of extensionCandidates(suffix)) {
+    const match = [...knownPaths].find(
+      (known) => known === candidate || known.endsWith(`/${candidate}`)
+    )
+
+    if (match !== undefined) {
+      return match
+    }
+  }
+
+  return undefined
+}
+
 const connectedPathGroups = (
   paths: readonly string[],
-  facts: readonly LanguageFact[]
+  facts: readonly SupportSignalFact[]
 ): readonly (readonly string[])[] => {
   const knownPaths = new Set(paths)
   const edges = new Map<string, Set<string>>()
@@ -116,13 +172,11 @@ const connectedPathGroups = (
       continue
     }
 
-    const target = resolveRelativeImport(
-      fact.path,
-      fact.moduleSpecifier,
-      knownPaths
-    )
+    const target =
+      resolveRelativeImport(fact.path, fact.moduleSpecifier, knownPaths) ??
+      resolveModuleImportBySuffix(fact.moduleSpecifier, knownPaths)
 
-    if (target === undefined || !knownPaths.has(fact.path)) {
+    if (target === undefined || target === fact.path || !knownPaths.has(fact.path)) {
       continue
     }
 
@@ -211,7 +265,7 @@ const createTask = (
     readonly paths: readonly string[]
     readonly round: number
     readonly priority: number
-    readonly facts: readonly LanguageFact[]
+    readonly facts: readonly SupportSignalFact[]
     readonly evidence: readonly EvidenceRecord[]
     readonly candidates: readonly CandidateFinding[]
   }
@@ -275,7 +329,7 @@ export const planReviewTasks = (
       })
   )
 
-  if (options.depth !== 'thorough') {
+  if (options.depth !== 'thorough' || options.policyReviewPass !== true) {
     return clusterTasks
   }
 

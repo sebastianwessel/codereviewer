@@ -1,0 +1,59 @@
+{
+  "id": "crb-keycloak-10-fix-concurrent-group-access-to-prevent-nullpointerexception",
+  "title": "Fix concurrent group access to prevent NullPointerException",
+  "description": "Curated PR review case adapted from keycloak golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/keycloak/keycloak/pull/40940",
+  "prTitle": "Fix concurrent group access to prevent NullPointerException",
+  "sourceRepo": "keycloak",
+  "upstreamOwner": "keycloak",
+  "upstreamRepo": "keycloak",
+  "baseSha": "afbc64e7a0c753c7237808d35bd979887f3f3a48",
+  "headSha": "03a9d78519ffcdc941bc819c21e19be350b17ee2",
+  "diff": "diff --git a/services/src/main/java/org/keycloak/authentication/Authenticator.java b/services/src/main/java/org/keycloak/authentication/Authenticator.java\nindex 0000000..1111111 100644\n--- a/services/src/main/java/org/keycloak/authentication/Authenticator.java\n+++ b/services/src/main/java/org/keycloak/authentication/Authenticator.java\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Fix concurrent group access to prevent NullPointerException\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "java",
+  "changedFiles": [
+    "services/src/main/java/org/keycloak/authentication/Authenticator.java"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "critical",
+      "semanticSummary": "Returning null from getSubGroupsCount() violates the GroupModel contract (Javadoc says it never returns null) and may lead to NPEs in callers that expect a non-null count.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "performance",
+      "severity": "medium",
+      "semanticSummary": "The reader thread isn’t waited for; flipping deletedAll to true and asserting immediately can race and miss exceptions added just after the flag change, making this test flaky.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "services/src/main/java/org/keycloak/authentication/Authenticator.java",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "authentication",
+    "code-review-bench-style",
+    "concurrency",
+    "cross-file",
+    "curated-pr",
+    "java",
+    "keycloak",
+    "null-reference",
+    "semantic"
+  ]
+}

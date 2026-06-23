@@ -1,0 +1,59 @@
+{
+  "id": "crb-grafana-10-unified-storage-performance-optimizations",
+  "title": "Unified Storage Performance Optimizations",
+  "description": "Curated PR review case adapted from grafana golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/grafana/grafana/pull/97529",
+  "prTitle": "Unified Storage Performance Optimizations",
+  "sourceRepo": "grafana",
+  "upstreamOwner": "grafana",
+  "upstreamRepo": "grafana",
+  "baseSha": "2fbd5527ddb304b0d2a9a379e1917faeb245c287",
+  "headSha": "ef28bc543f66579d8dea75ebce113c3d5d95883b",
+  "diff": "diff --git a/pkg/services/authz/authz.go b/pkg/services/authz/authz.go\nindex 0000000..1111111 100644\n--- a/pkg/services/authz/authz.go\n+++ b/pkg/services/authz/authz.go\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Unified Storage Performance Optimizations\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "go",
+  "changedFiles": [
+    "pkg/services/authz/authz.go"
+  ],
+  "expectedFindings": [
+    {
+      "category": "performance",
+      "severity": "high",
+      "semanticSummary": "A race condition in BuildIndex allows multiple goroutines to concurrently build the same expensive index for the same key. This is caused by moving the b.cacheMu lock from protecting the entire function to only protecting the final cache assignment. ",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "performance",
+      "severity": "high",
+      "semanticSummary": "Calling s.search.TotalDocs() here may race with concurrent index creation: TotalDocs iterates b.cache without synchronization, and the event watcher goroutine started just above could trigger BuildIndex writes concurrently, potentially causing a concurrent map read/write panic.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "pkg/services/authz/authz.go",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "concurrency",
+    "cross-file",
+    "curated-pr",
+    "go",
+    "grafana",
+    "observability",
+    "performance",
+    "semantic"
+  ]
+}

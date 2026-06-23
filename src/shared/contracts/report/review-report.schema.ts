@@ -4,9 +4,19 @@ import {
   AdmittedFindingSchema,
   ContractIdSchema,
   EvidenceRecordSchema,
+  FindingAggregateResultSchema,
+  FindingJudgeResultSchema,
   FindingFingerprintSchema,
+  InvestigationTraceSchema,
+  ModelTaskDiagnosticSchema,
+  ModelSuspicionSchema,
+  ProofPacketSchema,
+  PromotionDecisionSchema,
   RejectedFindingSchema,
-  Sha256Schema
+  RefutationResultSchema,
+  ReviewIntentSchema,
+  Sha256Schema,
+  TaskIdSchema
 } from '../findings/finding.schema.js'
 
 export const ReviewModeSchema = z.enum(['local', 'ci', 'pr', 'full'])
@@ -68,7 +78,7 @@ export const CoverageFileSchema = z
     status: z.enum(['complete', 'incomplete']),
     bytes: z.int().min(0),
     coveredBytes: z.int().min(0),
-    taskIds: z.array(ContractIdSchema),
+    taskIds: z.array(TaskIdSchema),
     incompleteReason: z.string().min(1).max(500).optional()
   })
   .refine((value) => value.coveredBytes <= value.bytes, {
@@ -95,6 +105,23 @@ export const ReviewReportSchema = z.strictObject({
   evidence: z.array(EvidenceRecordSchema),
   skippedFiles: z.array(SkippedFileSchema),
   qualityGate: QualityGateResultSchema.optional(),
+  reviewIntents: z.array(ReviewIntentSchema),
+  modelSuspicions: z.array(ModelSuspicionSchema),
+  modelTaskDiagnostics: z.array(ModelTaskDiagnosticSchema).default([]),
+  investigationTraces: z.array(InvestigationTraceSchema),
+  proofPackets: z.array(ProofPacketSchema),
+  refutationResults: z.array(RefutationResultSchema),
+  aggregateResults: z.array(FindingAggregateResultSchema),
+  judgeResults: z.array(FindingJudgeResultSchema),
+  promotionDecisions: z.array(PromotionDecisionSchema),
+  providerIssues: z.array(
+    z.strictObject({
+      code: z.string().min(1),
+      stage: z.string().min(1).optional(),
+      recovered: z.boolean().optional(),
+      message: z.string().min(1).max(500).optional()
+    })
+  ),
   // Baseline entries resolved since the baseline was recorded. Present when
   // `baseline.includeResolvedInReport` is enabled.
   resolvedBaselineEntries: z.array(FindingFingerprintSchema).optional(),

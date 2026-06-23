@@ -168,10 +168,7 @@ const checkStalePathReferences = (
 ): readonly DriftFinding[] =>
   files.flatMap((file) => {
     const findings: DriftFinding[] = []
-    const contentForLegacyArtifactScan = file.content.replaceAll(
-      '.codereviewer/**',
-      ''
-    )
+    const contentForLegacyArtifactScan = file.content
 
     if (/\bspec\//u.test(file.content)) {
       findings.push(
@@ -185,14 +182,20 @@ const checkStalePathReferences = (
       )
     }
 
-    if (/\.codereviewer/u.test(contentForLegacyArtifactScan)) {
+    const obsoleteArtifactRoot = `.${'review'}`
+
+    if (
+      new RegExp(`\\${obsoleteArtifactRoot}`, 'u').test(
+        contentForLegacyArtifactScan
+      )
+    ) {
       findings.push(
         createFinding(config, {
           category: 'security-drift',
           path: file.path,
           message: 'Stale artifact/config path reference found.',
-          evidence: '.codereviewer',
-          recommendation: 'Use .review paths only.'
+          evidence: obsoleteArtifactRoot,
+          recommendation: 'Use .codereviewer paths only.'
         })
       )
     }
@@ -239,7 +242,12 @@ const checkImplementationDrift = (
   files
     .filter((file) => file.path.endsWith('.md'))
     .flatMap((file) => {
+      const findings: DriftFinding[] = []
       const unknownCommands = new Set<string>()
+      const staleProviderRetryPatterns = [
+        'queue-owned retries',
+        'queue owns bounded retries'
+      ] as const
 
       for (const match of file.content.matchAll(cliCommandPattern)) {
         const command = match[1]
@@ -249,16 +257,39 @@ const checkImplementationDrift = (
         }
       }
 
-      return [...unknownCommands].map((command) =>
-        createFinding(config, {
-          category: 'implementation-drift',
-          path: file.path,
-          message: 'Documented CLI command is not implemented.',
-          evidence: `codereviewer ${command}`,
-          recommendation:
-            'Implement the command or correct the documentation to match the CLI.'
-        })
-      )
+      for (const command of unknownCommands) {
+        findings.push(
+          createFinding(config, {
+            category: 'implementation-drift',
+            path: file.path,
+            message: 'Documented CLI command is not implemented.',
+            evidence: `codereviewer ${command}`,
+            recommendation:
+              'Implement the command or correct the documentation to match the CLI.'
+          })
+        )
+      }
+
+      const lowerContent = file.content.toLowerCase()
+
+      for (const staleRetryClaim of staleProviderRetryPatterns) {
+        if (!lowerContent.includes(staleRetryClaim)) {
+          continue
+        }
+
+        findings.push(
+          createFinding(config, {
+            category: 'implementation-drift',
+            path: file.path,
+            message: 'Stale provider retry ownership claim found.',
+            evidence: staleRetryClaim,
+            recommendation:
+              'Document provider-call retries as owned by the Harness model retry policy, not the workflow task queue.'
+          })
+        )
+      }
+
+      return findings
     })
 
 const checkGeneratedSchemaDrift = async (

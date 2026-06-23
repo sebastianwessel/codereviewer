@@ -1,0 +1,41 @@
+{
+  "id": "crb-noise-typescript-format-only",
+  "title": "Format booking labels without behavior changes",
+  "description": "Curated PR-style negative case for precision and no-finding-zone evaluation.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prTitle": "Format booking labels without behavior changes",
+  "sourceRepo": "cal.com",
+  "upstreamOwner": "calcom",
+  "upstreamRepo": "cal.com",
+  "baseSha": "fea87f0074cd82b15419cb2e73f515105b16016a",
+  "headSha": "60d3ea95a10898590647400175dfd38b0206f6bf",
+  "diff": "diff --git a/apps/web/lib/format.ts b/apps/web/lib/format.ts\nindex 0000000..1111111 100644\n--- a/apps/web/lib/format.ts\n+++ b/apps/web/lib/format.ts\n@@ -1,2 +1,5 @@\n+// Safe PR-style fixture: Format booking labels without behavior changes\n+// Expected behavior: no actionable review finding.\n+\n unchanged\n",
+  "language": "typescript",
+  "changedFiles": [
+    "apps/web/lib/format.ts"
+  ],
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "apps/web/lib/format.ts",
+      "lineRange": [
+        1,
+        20
+      ],
+      "reason": "Safe PR-style change should not produce an actionable finding."
+    }
+  ],
+  "tags": [
+    "cal.com",
+    "code-review-bench-style",
+    "curated-pr",
+    "negative",
+    "no-finding-zone",
+    "precision",
+    "scheduling",
+    "typescript"
+  ]
+}

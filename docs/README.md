@@ -16,7 +16,7 @@ reference material for the workflow you are running.
 | --- | --- |
 | [Architecture](concepts/architecture.md) | Main domains, data flow, and isolation boundaries. |
 | [Review Modes And Flows](concepts/review-modes-and-flows.md) | Local, CI, PR, full review, gates, and execution steps. |
-| [Language Analyzers](concepts/language-analyzers.md) | First-class languages, AST parsing, facts, and test mapping. |
+| [Deterministic Support Signals](concepts/deterministic-support-signals.md) | Local anchors, context hints, contradictions, and false-positive gates. |
 
 ## Guides
 

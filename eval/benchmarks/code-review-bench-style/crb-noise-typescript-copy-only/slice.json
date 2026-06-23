@@ -1,0 +1,41 @@
+{
+  "id": "crb-noise-typescript-copy-only",
+  "title": "Clarify empty-state copy",
+  "description": "Curated PR-style negative case for precision and no-finding-zone evaluation.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prTitle": "Clarify empty-state copy",
+  "sourceRepo": "cal.com",
+  "upstreamOwner": "calcom",
+  "upstreamRepo": "cal.com",
+  "baseSha": "3ba708e04f1ec4afe228b192859a986e6b86f903",
+  "headSha": "bdc8d396718e4771e76592e5974f5ba58e2c5c8b",
+  "diff": "diff --git a/apps/web/lib/copy.ts b/apps/web/lib/copy.ts\nindex 0000000..1111111 100644\n--- a/apps/web/lib/copy.ts\n+++ b/apps/web/lib/copy.ts\n@@ -1,2 +1,5 @@\n+// Safe PR-style fixture: Clarify empty-state copy\n+// Expected behavior: no actionable review finding.\n+\n unchanged\n",
+  "language": "typescript",
+  "changedFiles": [
+    "apps/web/lib/copy.ts"
+  ],
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "apps/web/lib/copy.ts",
+      "lineRange": [
+        1,
+        20
+      ],
+      "reason": "Safe PR-style change should not produce an actionable finding."
+    }
+  ],
+  "tags": [
+    "cal.com",
+    "code-review-bench-style",
+    "curated-pr",
+    "negative",
+    "no-finding-zone",
+    "precision",
+    "scheduling",
+    "typescript"
+  ]
+}

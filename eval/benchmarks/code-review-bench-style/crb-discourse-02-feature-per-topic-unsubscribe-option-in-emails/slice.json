@@ -1,0 +1,59 @@
+{
+  "id": "crb-discourse-02-feature-per-topic-unsubscribe-option-in-emails",
+  "title": "FEATURE: per-topic unsubscribe option in emails",
+  "description": "Curated PR review case adapted from discourse golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/discourse/discourse/commit/6669a2d94d76eea3b99b8c476d12b1eb66726b07",
+  "prTitle": "FEATURE: per-topic unsubscribe option in emails",
+  "sourceRepo": "discourse",
+  "upstreamOwner": "discourse",
+  "upstreamRepo": "discourse",
+  "baseSha": "735ca0c96e10fcfd6190e4c319c7c450b5633687",
+  "headSha": "58641c2e7867f6cf61e1efae03eed74494f7a592",
+  "diff": "diff --git a/app/models/topic.rb b/app/models/topic.rb\nindex 0000000..1111111 100644\n--- a/app/models/topic.rb\n+++ b/app/models/topic.rb\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: FEATURE: per-topic unsubscribe option in emails\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "ruby",
+  "changedFiles": [
+    "app/models/topic.rb"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "high",
+      "semanticSummary": "logic: Potential nil pointer exception - if no TopicUser record exists, tu will be nil and calling methods on it will crash",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "Typo in property name: 'stopNotificiationsText' should be 'stopNotificationsText' (missing 'n' in 'Notifications')",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "app/models/topic.rb",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "discourse",
+    "forum",
+    "local-logic",
+    "null-reference",
+    "ruby",
+    "semantic"
+  ]
+}

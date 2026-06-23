@@ -1,0 +1,59 @@
+{
+  "id": "crb-cal-dot-com-10-feat-add-calendar-cache-status-and-actions-22532",
+  "title": "feat: add calendar cache status and actions (#22532)",
+  "description": "Curated PR review case adapted from cal.com golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/calcom/cal.com/pull/22532",
+  "prTitle": "feat: add calendar cache status and actions (#22532)",
+  "sourceRepo": "cal.com",
+  "upstreamOwner": "calcom",
+  "upstreamRepo": "cal.com",
+  "baseSha": "4a5a44b0dff62ab65b628baae2bd7596f55e13ec",
+  "headSha": "c976b98d57f95c2650f850c9d04862578bf310d2",
+  "diff": "diff --git a/apps/web/lib/booking.ts b/apps/web/lib/booking.ts\nindex 0000000..1111111 100644\n--- a/apps/web/lib/booking.ts\n+++ b/apps/web/lib/booking.ts\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: feat: add calendar cache status and actions (#22532)\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "typescript",
+  "changedFiles": [
+    "apps/web/lib/booking.ts"
+  ],
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "medium",
+      "semanticSummary": "The updateManyByCredentialId call uses an empty data object, which prevents Prisma's @updatedAt decorator from updating the updatedAt timestamp. This results in inaccurate cache status tracking, as the timestamp isn't updated when the cache is refreshed. To fix this, explicitly set the updatedAt field.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "logic: macOS-specific sed syntax with empty string after -i flag will fail on Linux systems",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "apps/web/lib/booking.ts",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "cal.com",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "local-logic",
+    "performance",
+    "scheduling",
+    "security",
+    "semantic",
+    "typescript"
+  ]
+}

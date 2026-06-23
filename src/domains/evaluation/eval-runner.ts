@@ -1,12 +1,12 @@
 import { z } from 'zod'
-import {
-  ReviewReportSchema,
-  type AdmittedFinding,
-  type ReviewReport
+import type {
+  AdmittedFinding,
+  ReviewReport
 } from '../../shared/contracts/index.js'
 import {
   EvalCaseSchema,
   parseEvalCases,
+  resolveExpectedFindingTier,
   type EvalCase
 } from './eval-fixture.schema.js'
 import {
@@ -17,189 +17,74 @@ import {
 } from './eval-matcher.js'
 import {
   calculateEvalMetrics,
+  emptyTierCounts,
   EvalMetricsSchema,
   severityWeight,
   type EvalMetricCaseResult
 } from './metrics.js'
+import {
+  EvalCaseOutputSchema,
+  EvalCaseReportSchema,
+  EvalAgenticStageReportSchema,
+  EvalExpectedFindingReportSchema,
+  EvalFalsePositiveFindingReportSchema,
+  EvalMetricGroupSchema,
+  EvalProofPacketReportSchema,
+  EvalPromotionDecisionReportSchema,
+  EvalProviderIssueReportSchema,
+  EvalRegressionThresholdsSchema,
+  EvalRefutationResultReportSchema,
+  EvalReportSchema,
+  EvalReportSelectionSchema,
+  type EvalCaseOutput,
+  type EvalContextLedgerEntry,
+  type EvalRegressionThresholds,
+  type EvalReport,
+  type EvalReportScoring,
+  type EvalReportSelection
+} from './eval-report-contracts.js'
+import {
+  EVAL_REPORT_ARTIFACT_NAME,
+  EVAL_RECALL_REPORT_ARTIFACT_NAME,
+  EVAL_SUMMARY_ARTIFACT_NAME,
+  renderEvalComparison,
+  renderEvalRecallReport,
+  renderEvalSummary
+} from './eval-report-rendering.js'
 
-export const EVAL_REPORT_ARTIFACT_NAME = 'eval-report.json'
-export const EVAL_SUMMARY_ARTIFACT_NAME = 'eval-summary.md'
-export const EVAL_RECALL_REPORT_ARTIFACT_NAME = 'eval-recall-report.md'
-
-const EvalContextLedgerEntrySchema = z.strictObject({
-  consideredForModelContext: z.boolean(),
-  truncated: z.boolean()
-})
-
-const ProviderErrorSchema = z.strictObject({
-  status: z.literal('provider-error'),
-  code: z.string().min(1),
-  message: z.string().min(1).max(500)
-})
-
-const SuccessfulEvalOutputSchema = z.strictObject({
-  status: z.literal('ok'),
-  reviewReport: ReviewReportSchema
-})
-
-const EvalCaseOutputSchema = z.strictObject({
-  caseId: z.string().min(1),
-  changedLineCount: z.int().min(0),
-  diffHunkCount: z.int().min(0),
-  contextLedger: z.array(EvalContextLedgerEntrySchema).default([]),
-  result: z.discriminatedUnion('status', [
-    SuccessfulEvalOutputSchema,
-    ProviderErrorSchema
-  ])
-})
-
-export const EvalRegressionThresholdsSchema = z.strictObject({
-  minParseValidity: z.number().min(0).max(1).optional(),
-  minRecall: z.number().min(0).max(1).optional(),
-  minPrecision: z.number().min(0).max(1).optional(),
-  minSeverityWeightedF1: z.number().min(0).max(1).optional(),
-  maxFalsePositiveCount: z.int().min(0).optional(),
-  maxCommentsPerKloc: z.number().min(0).optional(),
-  maxCommentsPerDiffHunk: z.number().min(0).optional(),
-  maxIncompleteCoverageRate: z.number().min(0).max(1).optional(),
-  maxContextMutationRate: z.number().min(0).max(1).optional(),
-  maxCostUsd: z.number().min(0).optional(),
-  maxDurationMs: z.int().min(0).optional(),
-  failOnProviderError: z.boolean().default(true)
-})
-
-const EvalFindingMatchReportSchema = z.strictObject({
-  expectedIndex: z.int().min(0),
-  findingId: z.string().min(1),
-  semanticScore: z.number().min(0).max(1),
-  lineOverlaps: z.boolean(),
-  severityMatches: z.boolean()
-})
-
-const EvalFalsePositiveFindingReportSchema = z.strictObject({
-  findingId: z.string().min(1),
-  severity: z.string().min(1),
-  category: z.string().min(1),
-  path: z.string().min(1),
-  line: z.int().min(1),
-  title: z.string().min(1)
-})
-
-const EvalExpectedFindingReportSchema = z.strictObject({
-  expectedIndex: z.int().min(0),
-  category: z.string().min(1),
-  severity: z.string().min(1),
-  path: z.string().min(1).optional(),
-  lineRange: z.tuple([z.int().min(1), z.int().min(1)]).optional(),
-  matchMode: z.enum(['path-line', 'path-semantic', 'semantic-only']),
-  semanticSummary: z.string().min(1)
-})
-
-const EvalCaseReportSchema = z.strictObject({
-  caseId: z.string().min(1),
-  parseValid: z.boolean(),
-  providerErrored: z.boolean(),
-  expectedFindings: z.array(EvalExpectedFindingReportSchema),
-  matchedFindings: z.array(EvalFindingMatchReportSchema),
-  unmatchedExpectedIndexes: z.array(z.int().min(0)),
-  falsePositiveFindingIds: z.array(z.string().min(1)),
-  falsePositiveFindings: z.array(EvalFalsePositiveFindingReportSchema),
-  noFindingZoneFalsePositiveIds: z.array(z.string().min(1)),
-  inlineFindingCount: z.int().min(0).default(0),
-  warnings: z.array(z.string()),
-  durationMs: z.int().min(0),
-  costUsd: z.number().min(0)
-})
-
-const EvalRegressionGateSchema = z.strictObject({
-  passed: z.boolean(),
-  reasons: z.array(z.string()),
-  thresholds: EvalRegressionThresholdsSchema,
-  failingCaseIds: z.array(z.string().min(1))
-})
-
-const EvalReportSelectionSchema = z.strictObject({
-  fixtureSource: z.enum(['default', 'slice-root']),
-  sliceRoot: z.string().min(1).optional(),
-  caseFilters: z.array(z.string().min(1)),
-  selectedCaseIds: z.array(z.string().min(1))
-})
-
-const EvalReportScoringSchema = z.strictObject({
-  semanticMatcher: z.enum(['deterministic', 'semantic-judge'])
-})
-
-const EvalMetricGroupSchema = z.strictObject({
-  groupBy: z.enum(['sourceProfile', 'language', 'tag']),
-  key: z.string().min(1),
-  fixtureCount: z.int().min(0),
-  caseIds: z.array(z.string().min(1)),
-  metrics: EvalMetricsSchema
-})
-
-export const EvalReportSchema = z.strictObject({
-  schemaVersion: z.literal('1.0'),
-  generatedAt: z.iso.datetime(),
-  fixtureCount: z.int().min(0),
-  selection: EvalReportSelectionSchema,
-  scoring: EvalReportScoringSchema.default({
-    semanticMatcher: 'deterministic'
-  }),
-  caseResults: z.array(EvalCaseReportSchema),
-  metrics: EvalMetricsSchema,
-  metricGroups: z.array(EvalMetricGroupSchema),
-  regressionGate: EvalRegressionGateSchema
-})
-
-export type EvalContextLedgerEntry = z.infer<typeof EvalContextLedgerEntrySchema>
-export type EvalCaseOutput = z.infer<typeof EvalCaseOutputSchema>
-export type EvalRegressionThresholds = z.infer<
-  typeof EvalRegressionThresholdsSchema
->
-export type EvalReportSelection = z.infer<typeof EvalReportSelectionSchema>
-export type EvalReportScoring = z.infer<typeof EvalReportScoringSchema>
-export type EvalReport = z.infer<typeof EvalReportSchema>
+export {
+  EvalRegressionThresholdsSchema,
+  EvalReportSchema,
+  type EvalCaseOutput,
+  type EvalContextLedgerEntry,
+  type EvalRegressionThresholds,
+  type EvalReport,
+  type EvalReportScoring,
+  type EvalReportSelection
+} from './eval-report-contracts.js'
+export {
+  EVAL_REPORT_ARTIFACT_NAME,
+  EVAL_RECALL_REPORT_ARTIFACT_NAME,
+  EVAL_SUMMARY_ARTIFACT_NAME,
+  renderEvalComparison,
+  renderEvalRecallReport,
+  renderEvalSummary
+} from './eval-report-rendering.js'
 
 type EvalCaseComputation = {
   readonly reportCase: z.infer<typeof EvalCaseReportSchema>
   readonly metricCase: EvalMetricCaseResult
 }
 
-type LabeledEvalReport = {
-  readonly label: string
-  readonly report: EvalReport
-}
+type EvalMetrics = z.infer<typeof EvalMetricsSchema>
+
+// Threshold helpers only compare scalar metrics; per-tier record metrics are
+// excluded so a Record value never reaches a numeric comparison.
+type NumericMetricKey = {
+  [Key in keyof EvalMetrics]: EvalMetrics[Key] extends number ? Key : never
+}[keyof EvalMetrics]
 
 const formatMetricValue = (value: number): string => value.toString()
-
-const formatPercent = (value: number): string => `${(value * 100).toFixed(1)}%`
-
-const formatDuration = (durationMs: number): string =>
-  durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`
-
-const formatCurrency = (value: number): string =>
-  value === 0 ? '$0.00' : `$${value.toFixed(4)}`
-
-const escapeMarkdownCell = (value: string): string =>
-  value.replace(/\|/gu, '\\|').replace(/\r?\n/gu, ' ')
-
-const formatLineRange = (
-  lineRange: readonly [number, number] | undefined
-): string => {
-  if (lineRange === undefined) {
-    return ''
-  }
-
-  const [startLine, endLine] = lineRange
-  return startLine === endLine ? `:${startLine}` : `:${startLine}-${endLine}`
-}
-
-const expectedLocationLabel = (
-  expected: EvalCase['expectedFindings'][number]
-): string =>
-  expected.path === undefined
-    ? '(semantic-only)'
-    : `${expected.path}${formatLineRange(expected.lineRange)}`
 
 const expectedMatchModeLabel = (
   expected: EvalCase['expectedFindings'][number]
@@ -211,649 +96,30 @@ const expectedMatchModeLabel = (
       ? 'path-semantic'
       : 'path-line')
 
-const caseStatus = (
-  caseResult: z.infer<typeof EvalCaseReportSchema>
-): 'PASS' | 'FAIL' | 'ERROR' => {
-  if (caseResult.providerErrored || !caseResult.parseValid) {
-    return 'ERROR'
-  }
-
-  return caseResult.unmatchedExpectedIndexes.length === 0 &&
-    caseResult.falsePositiveFindingIds.length === 0 &&
-    caseResult.noFindingZoneFalsePositiveIds.length === 0
-    ? 'PASS'
-    : 'FAIL'
-}
-
-const humanActionableWarnings = (
+const providerIssuesFromWarnings = (
   warnings: readonly string[]
-): readonly string[] =>
-  warnings.filter((warning) => warning !== 'config-file-missing')
-
-const noteForCase = (
-  caseResult: z.infer<typeof EvalCaseReportSchema>
-): string => {
-  const notes: string[] = []
-  const warnings = humanActionableWarnings(caseResult.warnings)
-
-  if (caseResult.providerErrored) {
-    notes.push('provider error')
-  }
-
-  if (caseResult.unmatchedExpectedIndexes.length > 0) {
-    notes.push(`missing ${caseResult.unmatchedExpectedIndexes.length}`)
-  }
-
-  if (caseResult.falsePositiveFindingIds.length > 0) {
-    notes.push(`false positives ${caseResult.falsePositiveFindingIds.length}`)
-  }
-
-  if (caseResult.noFindingZoneFalsePositiveIds.length > 0) {
-    notes.push(
-      `no-finding-zone hits ${caseResult.noFindingZoneFalsePositiveIds.length}`
-    )
-  }
-
-  if (warnings.length > 0) {
-    notes.push(`warnings ${warnings.length}`)
-  }
-
-  return notes.length === 0 ? '-' : notes.join('; ')
-}
-
-const findCase = (
-  cases: readonly EvalCase[],
-  caseId: string
-): EvalCase | undefined => cases.find((evalCase) => evalCase.id === caseId)
-
-const formatListValue = (values: readonly string[]): string =>
-  values.length === 0 ? '-' : values.map(escapeMarkdownCell).join(', ')
-
-export const renderEvalSummary = (
-  input: {
-    readonly cases: readonly EvalCase[]
-    readonly report: EvalReport
-    readonly artifactRoot?: string
-  }
-): string => {
-  const artifactRoot = input.artifactRoot ?? '.review/eval'
-  const lines: string[] = []
-  const failedCases = input.report.caseResults.filter(
-    (caseResult) => caseStatus(caseResult) !== 'PASS'
-  )
-
-  lines.push('# Evaluation Summary')
-  lines.push('')
-  lines.push(`Gate: ${input.report.regressionGate.passed ? 'PASS' : 'FAIL'}`)
-  lines.push(`Generated: ${input.report.generatedAt}`)
-  lines.push(`Fixtures: ${input.report.fixtureCount}`)
-  lines.push('')
-  lines.push('## Selection')
-  lines.push('')
-  lines.push('| Field | Value |')
-  lines.push('| --- | --- |')
-  lines.push(`| Fixture source | ${input.report.selection.fixtureSource} |`)
-  lines.push(`| Slice root | ${escapeMarkdownCell(input.report.selection.sliceRoot ?? '-')} |`)
-  lines.push(`| Case filters | ${formatListValue(input.report.selection.caseFilters)} |`)
-  lines.push(`| Selected cases | ${formatListValue(input.report.selection.selectedCaseIds)} |`)
-  lines.push(`| Semantic matcher | ${input.report.scoring.semanticMatcher} |`)
-  lines.push('')
-  lines.push('## Metrics')
-  lines.push('')
-  lines.push('| Metric | Value |')
-  lines.push('| --- | --- |')
-  lines.push(`| Recall | ${formatPercent(input.report.metrics.recall)} |`)
-  lines.push(`| Precision | ${formatPercent(input.report.metrics.precision)} |`)
-  lines.push(`| F1 | ${formatPercent(input.report.metrics.f1)} |`)
-  lines.push(
-    `| Severity weighted F1 | ${formatPercent(input.report.metrics.severityWeightedF1)} |`
-  )
-  lines.push(`| Line accuracy | ${formatPercent(input.report.metrics.lineAccuracy)} |`)
-  lines.push(
-    `| Severity accuracy | ${formatPercent(input.report.metrics.severityAccuracy)} |`
-  )
-  lines.push(`| Parse validity | ${formatPercent(input.report.metrics.parseValidity)} |`)
-  lines.push(
-    `| Provider error rate | ${formatPercent(input.report.metrics.providerErrorRate)} |`
-  )
-  lines.push(`| False positives | ${input.report.metrics.falsePositiveCount} |`)
-  lines.push(
-    `| No-finding-zone hits | ${input.report.metrics.noFindingZoneFalsePositiveCount} |`
-  )
-  lines.push(`| Actionable rate | ${formatPercent(input.report.metrics.actionableRate)} |`)
-  lines.push(
-    `| Incomplete coverage rate | ${formatPercent(input.report.metrics.incompleteCoverageRate)} |`
-  )
-  lines.push(
-    `| Context mutation rate | ${formatPercent(input.report.metrics.contextMutationRate)} |`
-  )
-  lines.push(`| Duration | ${formatDuration(input.report.metrics.durationMs)} |`)
-  lines.push(`| Cost | ${formatCurrency(input.report.metrics.costUsd)} |`)
-  lines.push('')
-  const summaryMetricGroups = input.report.metricGroups.filter(
-    (group) => group.groupBy === 'sourceProfile' || group.groupBy === 'language'
-  )
-  if (summaryMetricGroups.length > 0) {
-    lines.push('## Metric Groups')
-    lines.push('')
-    lines.push(
-      '| Group | Key | Fixtures | Recall | Precision | F1 | Line accuracy | False positives |'
-    )
-    lines.push('| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |')
-    for (const group of summaryMetricGroups) {
-      lines.push(
-        `| ${group.groupBy} | ${escapeMarkdownCell(group.key)} | ${group.fixtureCount} | ${formatPercent(group.metrics.recall)} | ${formatPercent(group.metrics.precision)} | ${formatPercent(group.metrics.f1)} | ${formatPercent(group.metrics.lineAccuracy)} | ${group.metrics.falsePositiveCount} |`
-      )
-    }
-    lines.push('')
-  }
-  lines.push('## Cases')
-  lines.push('')
-  lines.push(
-    '| Case | Profile | Status | Expected | Matched | Inline | False positives | Notes |'
-  )
-  lines.push('| --- | --- | --- | ---: | ---: | ---: | ---: | --- |')
-
-  for (const caseResult of input.report.caseResults) {
-    const evalCase = findCase(input.cases, caseResult.caseId)
-    const expectedCount = evalCase?.expectedFindings.length ?? 0
-    lines.push(
-      [
-        '|',
-        escapeMarkdownCell(caseResult.caseId),
-        '|',
-        escapeMarkdownCell(evalCase?.sourceProfile ?? 'project'),
-        '|',
-        caseStatus(caseResult),
-        '|',
-        String(expectedCount),
-        '|',
-        String(caseResult.matchedFindings.length),
-        '|',
-        String(caseResult.inlineFindingCount),
-        '|',
-        String(caseResult.falsePositiveFindingIds.length),
-        '|',
-        escapeMarkdownCell(noteForCase(caseResult)),
-        '|'
-      ].join(' ')
-    )
-  }
-
-  lines.push('')
-
-  if (input.report.regressionGate.reasons.length > 0) {
-    lines.push('## Gate Reasons')
-    lines.push('')
-    for (const reason of input.report.regressionGate.reasons) {
-      lines.push(`- ${reason}`)
-    }
-    lines.push('')
-  }
-
-  if (failedCases.length > 0) {
-    lines.push('## Attention Needed')
-    lines.push('')
-    for (const caseResult of failedCases) {
-      const evalCase = findCase(input.cases, caseResult.caseId)
-      lines.push(`### ${caseResult.caseId}`)
-      lines.push('')
-
-      if (caseResult.unmatchedExpectedIndexes.length > 0 && evalCase !== undefined) {
-        lines.push('Missed expected findings:')
-        for (const expectedIndex of caseResult.unmatchedExpectedIndexes) {
-          const expected = evalCase.expectedFindings[expectedIndex]
-          if (expected === undefined) {
-            continue
-          }
-
-          lines.push(
-            `- #${expectedIndex} ${expected.severity} ${expected.category} ${expectedLocationLabel(expected)} [${expectedMatchModeLabel(expected)}] - ${expected.semanticSummary}`
-          )
-        }
-      }
-
-      if (caseResult.falsePositiveFindings.length > 0) {
-        lines.push('False positive findings:')
-        for (const finding of caseResult.falsePositiveFindings) {
-          lines.push(
-            `- ${finding.findingId} ${finding.severity} ${finding.category} ${finding.path}:${finding.line} - ${finding.title}`
-          )
-        }
-      }
-
-      if (caseResult.noFindingZoneFalsePositiveIds.length > 0) {
-        lines.push(
-          `No-finding-zone hit IDs: ${caseResult.noFindingZoneFalsePositiveIds.join(', ')}`
-        )
-      }
-
-      const warnings = humanActionableWarnings(caseResult.warnings)
-      if (warnings.length > 0) {
-        lines.push(`Warnings: ${warnings.join(', ')}`)
-      }
-
-      lines.push('')
-    }
-  }
-
-  lines.push('## Artifacts')
-  lines.push('')
-  lines.push(`- ${artifactRoot}/${EVAL_REPORT_ARTIFACT_NAME}`)
-  lines.push(`- ${artifactRoot}/${EVAL_SUMMARY_ARTIFACT_NAME}`)
-  lines.push(`- ${artifactRoot}/${EVAL_RECALL_REPORT_ARTIFACT_NAME}`)
-  lines.push('')
-
-  return `${lines.join('\n')}`
-}
-
-const expectedReportLocationLabel = (
-  expected: z.infer<typeof EvalExpectedFindingReportSchema>
-): string =>
-  expected.path === undefined
-    ? '(semantic-only)'
-    : `${expected.path}${formatLineRange(expected.lineRange)}`
-
-type RecallRunState = {
-  readonly matched: boolean | null
-}
-
-type RecallEntry = {
-  readonly caseId: string
-  readonly expected: z.infer<typeof EvalExpectedFindingReportSchema>
-  readonly runs: RecallRunState[]
-}
-
-const selectedCaseKey = (report: EvalReport): string =>
-  report.selection.selectedCaseIds.join('\u0000')
-
-const caseSetsMatch = (reports: readonly LabeledEvalReport[]): boolean => {
-  if (reports.length <= 1) {
-    return true
-  }
-
-  const firstKey = selectedCaseKey(reports[0]!.report)
-  return reports.every(({ report }) => selectedCaseKey(report) === firstKey)
-}
-
-const collectRecallEntries = (
-  reports: readonly LabeledEvalReport[]
-): readonly RecallEntry[] => {
-  const entries = new Map<string, RecallEntry>()
-
-  for (let reportIndex = 0; reportIndex < reports.length; reportIndex += 1) {
-    const { report } = reports[reportIndex]!
-    for (const caseResult of report.caseResults) {
-      const matchedExpectedIndexes = new Set(
-        caseResult.matchedFindings.map((match) => match.expectedIndex)
-      )
-
-      for (const expected of caseResult.expectedFindings) {
-        const key = `${caseResult.caseId}:${expected.expectedIndex}`
-        const existing =
-          entries.get(key) ??
-          {
-            caseId: caseResult.caseId,
-            expected,
-            runs: Array.from({ length: reports.length }, () => ({
-              matched: null
-            }))
-          }
-
-        const runs = [...existing.runs]
-        runs[reportIndex] = {
-          matched: matchedExpectedIndexes.has(expected.expectedIndex)
-        }
-        entries.set(key, {
-          ...existing,
-          runs
+): readonly z.infer<typeof EvalProviderIssueReportSchema>[] =>
+  warnings.flatMap((warning) => {
+    if (warning.startsWith('provider-error:')) {
+      return [
+        EvalProviderIssueReportSchema.parse({
+          code: warning.slice('provider-error:'.length),
+          recovered: false
         })
-      }
-    }
-  }
-
-  return [...entries.values()].sort(
-    (left, right) =>
-      left.caseId.localeCompare(right.caseId) ||
-      left.expected.expectedIndex - right.expected.expectedIndex
-  )
-}
-
-const recallRate = (entry: RecallEntry): string => {
-  const knownRuns = entry.runs.filter((run) => run.matched !== null)
-  if (knownRuns.length === 0) {
-    return '-'
-  }
-
-  return `${knownRuns.filter((run) => run.matched).length}/${knownRuns.length}`
-}
-
-const recallRunMarks = (entry: RecallEntry): string =>
-  entry.runs
-    .map((run) => {
-      if (run.matched === null) {
-        return '-'
-      }
-
-      return run.matched ? 'Y' : 'N'
-    })
-    .join(' ')
-
-const recallSummary = (
-  entries: readonly RecallEntry[]
-): {
-  readonly alwaysDetected: number
-  readonly neverDetected: number
-  readonly flaky: number
-} => {
-  let alwaysDetected = 0
-  let neverDetected = 0
-  let flaky = 0
-
-  for (const entry of entries) {
-    const knownRuns = entry.runs.filter((run) => run.matched !== null)
-    if (knownRuns.length === 0) {
-      continue
+      ]
     }
 
-    const matchedCount = knownRuns.filter((run) => run.matched).length
-    if (matchedCount === knownRuns.length) {
-      alwaysDetected += 1
-    } else if (matchedCount === 0) {
-      neverDetected += 1
-    } else {
-      flaky += 1
+    if (warning.startsWith('eval-provider-retry:')) {
+      return [
+        EvalProviderIssueReportSchema.parse({
+          code: warning.slice('eval-provider-retry:'.length),
+          recovered: true
+        })
+      ]
     }
-  }
 
-  return {
-    alwaysDetected,
-    neverDetected,
-    flaky
-  }
-}
-
-export const renderEvalRecallReport = (
-  input: {
-    readonly reports: readonly LabeledEvalReport[]
-  }
-): string => {
-  const reports = input.reports.map(({ label, report }) => ({
-    label,
-    report: EvalReportSchema.parse(report)
-  }))
-  const entries = collectRecallEntries(reports)
-  const summary = recallSummary(entries)
-  const lines: string[] = []
-
-  lines.push('# Evaluation Recall Report')
-  lines.push('')
-  lines.push(`Reports: ${reports.length}`)
-  lines.push(`Case set: ${caseSetsMatch(reports) ? 'same' : 'different'}`)
-  lines.push('')
-  lines.push('## Runs')
-  lines.push('')
-  lines.push('| # | Label | Generated | Fixtures |')
-  lines.push('| ---: | --- | --- | ---: |')
-  reports.forEach(({ label, report }, index) => {
-    lines.push(
-      `| ${index + 1} | ${escapeMarkdownCell(label)} | ${report.generatedAt} | ${report.fixtureCount} |`
-    )
+    return []
   })
-  lines.push('')
-  lines.push('## Summary')
-  lines.push('')
-  lines.push('| Expected findings | Always detected | Never detected | Flaky |')
-  lines.push('| ---: | ---: | ---: | ---: |')
-  lines.push(
-    `| ${entries.length} | ${summary.alwaysDetected} | ${summary.neverDetected} | ${summary.flaky} |`
-  )
-  lines.push('')
-  lines.push('## Expected Findings')
-  lines.push('')
-  lines.push('| Case | # | Sev | Location | Mode | Summary | Rate | Runs |')
-  lines.push('| --- | ---: | --- | --- | --- | --- | ---: | --- |')
-  for (const entry of entries) {
-    lines.push(
-      `| ${escapeMarkdownCell(entry.caseId)} | ${entry.expected.expectedIndex} | ${entry.expected.severity} | ${escapeMarkdownCell(expectedReportLocationLabel(entry.expected))} | ${entry.expected.matchMode} | ${escapeMarkdownCell(entry.expected.semanticSummary)} | ${recallRate(entry)} | ${recallRunMarks(entry)} |`
-    )
-  }
-  lines.push('')
-
-  return lines.join('\n')
-}
-
-const formatPercentagePointDelta = (base: number, head: number): string => {
-  const delta = (head - base) * 100
-  const sign = delta > 0 ? '+' : ''
-
-  return `${sign}${delta.toFixed(1)}pp`
-}
-
-const formatNumberDelta = (base: number, head: number): string => {
-  const delta = head - base
-  const sign = delta > 0 ? '+' : ''
-
-  return `${sign}${delta}`
-}
-
-const caseStatusById = (
-  report: EvalReport
-): ReadonlyMap<string, ReturnType<typeof caseStatus>> =>
-  new Map(
-    report.caseResults.map((caseResult) => [
-      caseResult.caseId,
-      caseStatus(caseResult)
-    ])
-  )
-
-const transitionLabel = (
-  baseStatus: ReturnType<typeof caseStatus> | undefined,
-  headStatus: ReturnType<typeof caseStatus> | undefined
-): string => {
-  if (baseStatus === undefined) {
-    return 'new'
-  }
-
-  if (headStatus === undefined) {
-    return 'removed'
-  }
-
-  if (baseStatus !== 'PASS' && headStatus === 'PASS') {
-    return 'fixed'
-  }
-
-  if (baseStatus === 'PASS' && headStatus !== 'PASS') {
-    return 'regressed'
-  }
-
-  return baseStatus === headStatus ? 'unchanged' : 'changed'
-}
-
-const arraysEqual = (
-  left: readonly string[],
-  right: readonly string[]
-): boolean =>
-  left.length === right.length &&
-  left.every((value, index) => value === right[index])
-
-const scalarSelectionStatus = (
-  left: string | undefined,
-  right: string | undefined
-): 'same' | 'different' => (left ?? '') === (right ?? '') ? 'same' : 'different'
-
-const selectionStatus = (
-  input: {
-    readonly base: EvalReport
-    readonly head: EvalReport
-  }
-): {
-  readonly fixtureSource: 'same' | 'different'
-  readonly sliceRoot: 'same' | 'different'
-  readonly caseFilters: 'same' | 'different'
-  readonly caseSet: 'same' | 'different'
-  readonly semanticMatcher: 'same' | 'different'
-  readonly baseOnlyCaseIds: readonly string[]
-  readonly headOnlyCaseIds: readonly string[]
-} => {
-  const baseCaseIds = input.base.selection.selectedCaseIds
-  const headCaseIds = input.head.selection.selectedCaseIds
-  const headCaseIdSet = new Set(headCaseIds)
-  const baseCaseIdSet = new Set(baseCaseIds)
-
-  return {
-    fixtureSource: scalarSelectionStatus(
-      input.base.selection.fixtureSource,
-      input.head.selection.fixtureSource
-    ),
-    sliceRoot: scalarSelectionStatus(
-      input.base.selection.sliceRoot,
-      input.head.selection.sliceRoot
-    ),
-    caseFilters: arraysEqual(
-      input.base.selection.caseFilters,
-      input.head.selection.caseFilters
-    )
-      ? 'same'
-      : 'different',
-    caseSet: arraysEqual(baseCaseIds, headCaseIds) ? 'same' : 'different',
-    semanticMatcher: scalarSelectionStatus(
-      input.base.scoring.semanticMatcher,
-      input.head.scoring.semanticMatcher
-    ),
-    baseOnlyCaseIds: baseCaseIds.filter((caseId) => !headCaseIdSet.has(caseId)),
-    headOnlyCaseIds: headCaseIds.filter((caseId) => !baseCaseIdSet.has(caseId))
-  }
-}
-
-export const renderEvalComparison = (
-  input: {
-    readonly base: EvalReport
-    readonly head: EvalReport
-    readonly baseLabel?: string
-    readonly headLabel?: string
-  }
-): string => {
-  const baseLabel = input.baseLabel ?? 'base'
-  const headLabel = input.headLabel ?? 'head'
-  const baseStatus = caseStatusById(input.base)
-  const headStatus = caseStatusById(input.head)
-  const selection = selectionStatus({
-    base: input.base,
-    head: input.head
-  })
-  const caseIds = [...new Set([...baseStatus.keys(), ...headStatus.keys()])].sort(
-    (left, right) => left.localeCompare(right)
-  )
-  const lines: string[] = []
-
-  lines.push('# Evaluation Comparison')
-  lines.push('')
-  lines.push(`Base: ${baseLabel}`)
-  lines.push(`Head: ${headLabel}`)
-  lines.push('')
-  lines.push('## Gate')
-  lines.push('')
-  lines.push('| Report | Gate | Fixtures | Generated |')
-  lines.push('| --- | --- | ---: | --- |')
-  lines.push(
-    `| Base | ${input.base.regressionGate.passed ? 'PASS' : 'FAIL'} | ${input.base.fixtureCount} | ${input.base.generatedAt} |`
-  )
-  lines.push(
-    `| Head | ${input.head.regressionGate.passed ? 'PASS' : 'FAIL'} | ${input.head.fixtureCount} | ${input.head.generatedAt} |`
-  )
-  lines.push('')
-  lines.push('## Selection')
-  lines.push('')
-  if (selection.caseSet === 'different') {
-    lines.push(
-      'Warning: selected case sets differ; aggregate metric deltas are not same-dataset comparable.'
-    )
-    lines.push('')
-  }
-  if (selection.semanticMatcher === 'different') {
-    lines.push(
-      'Warning: semantic matcher modes differ; aggregate metric deltas are not scoring-mode comparable.'
-    )
-    lines.push('')
-  }
-  lines.push('| Field | Status |')
-  lines.push('| --- | --- |')
-  lines.push(`| Fixture source | ${selection.fixtureSource} |`)
-  lines.push(`| Slice root | ${selection.sliceRoot} |`)
-  lines.push(`| Case filters | ${selection.caseFilters} |`)
-  lines.push(`| Case set | ${selection.caseSet} |`)
-  lines.push(`| Semantic matcher | ${selection.semanticMatcher} |`)
-  lines.push(`| Base-only cases | ${formatListValue(selection.baseOnlyCaseIds)} |`)
-  lines.push(`| Head-only cases | ${formatListValue(selection.headOnlyCaseIds)} |`)
-  lines.push('')
-  lines.push('## Metric Deltas')
-  lines.push('')
-  lines.push('| Metric | Base | Head | Delta |')
-  lines.push('| --- | ---: | ---: | ---: |')
-  lines.push(
-    `| Recall | ${formatPercent(input.base.metrics.recall)} | ${formatPercent(input.head.metrics.recall)} | ${formatPercentagePointDelta(
-      input.base.metrics.recall,
-      input.head.metrics.recall
-    )} |`
-  )
-  lines.push(
-    `| Precision | ${formatPercent(input.base.metrics.precision)} | ${formatPercent(input.head.metrics.precision)} | ${formatPercentagePointDelta(
-      input.base.metrics.precision,
-      input.head.metrics.precision
-    )} |`
-  )
-  lines.push(
-    `| F1 | ${formatPercent(input.base.metrics.f1)} | ${formatPercent(input.head.metrics.f1)} | ${formatPercentagePointDelta(
-      input.base.metrics.f1,
-      input.head.metrics.f1
-    )} |`
-  )
-  lines.push(
-    `| Severity weighted F1 | ${formatPercent(input.base.metrics.severityWeightedF1)} | ${formatPercent(input.head.metrics.severityWeightedF1)} | ${formatPercentagePointDelta(
-      input.base.metrics.severityWeightedF1,
-      input.head.metrics.severityWeightedF1
-    )} |`
-  )
-  lines.push(
-    `| False positives | ${input.base.metrics.falsePositiveCount} | ${input.head.metrics.falsePositiveCount} | ${formatNumberDelta(
-      input.base.metrics.falsePositiveCount,
-      input.head.metrics.falsePositiveCount
-    )} |`
-  )
-  lines.push(
-    `| Duration | ${formatDuration(input.base.metrics.durationMs)} | ${formatDuration(input.head.metrics.durationMs)} | ${formatNumberDelta(
-      input.base.metrics.durationMs,
-      input.head.metrics.durationMs
-    )}ms |`
-  )
-  lines.push(
-    `| Cost | ${formatCurrency(input.base.metrics.costUsd)} | ${formatCurrency(input.head.metrics.costUsd)} | ${formatNumberDelta(
-      input.base.metrics.costUsd,
-      input.head.metrics.costUsd
-    )} |`
-  )
-  lines.push('')
-  lines.push('## Case Transitions')
-  lines.push('')
-  lines.push('| Case | Base | Head | Change |')
-  lines.push('| --- | --- | --- | --- |')
-
-  for (const caseId of caseIds) {
-    const baseCaseStatus = baseStatus.get(caseId)
-    const headCaseStatus = headStatus.get(caseId)
-    lines.push(
-      `| ${escapeMarkdownCell(caseId)} | ${baseCaseStatus ?? '-'} | ${headCaseStatus ?? '-'} | ${transitionLabel(
-        baseCaseStatus,
-        headCaseStatus
-      )} |`
-    )
-  }
-
-  lines.push('')
-
-  return lines.join('\n')
-}
 
 const isActionableFinding = (
   finding: AdmittedFinding,
@@ -913,6 +179,206 @@ const falsePositiveFindingSummaries = (
     )
 }
 
+const providerIssuesFromReport = (
+  report: ReviewReport
+): readonly z.infer<typeof EvalProviderIssueReportSchema>[] => [
+  ...providerIssuesFromWarnings(report.run.warnings),
+  ...report.providerIssues.map((issue) =>
+    EvalProviderIssueReportSchema.parse({
+      code: issue.code,
+      ...(issue.stage === undefined ? {} : { stage: issue.stage }),
+      recovered: issue.recovered ?? false,
+      ...(issue.message === undefined ? {} : { message: issue.message })
+    })
+  )
+]
+
+const judgeProviderIssuesFromMatchResults = (
+  results: readonly EvalMatcherResult[]
+): readonly z.infer<typeof EvalProviderIssueReportSchema>[] =>
+  results.flatMap((result) =>
+    (result.judgeProviderIssues ?? []).map((issue) =>
+      EvalProviderIssueReportSchema.parse({
+        code: issue.code,
+        stage: issue.stage,
+        recovered: issue.recovered,
+        ...(issue.message === undefined ? {} : { message: issue.message })
+      })
+    )
+  )
+
+const stageStatusForCount = (
+  count: number
+): z.infer<typeof EvalAgenticStageReportSchema>['status'] =>
+  count > 0 ? 'active' : 'skipped'
+
+const agenticStagesForReport = (
+  report: ReviewReport
+): readonly z.infer<typeof EvalAgenticStageReportSchema>[] => {
+  const recoveredProviderIssues = providerIssuesFromReport(report).filter(
+    (issue) => issue.recovered
+  ).length
+  const modelDiscoveryAttemptCount =
+    report.run.provider === undefined && report.run.model === undefined
+      ? report.modelSuspicions.length
+      : Math.max(
+          report.modelSuspicions.length,
+          report.reviewIntents.filter((intent) => intent.source === 'model').length
+        )
+  const stageCounts = [
+    ['intent-planning', report.reviewIntents.length],
+    ['suspicion-generation', modelDiscoveryAttemptCount],
+    ['suspicion-investigation', report.investigationTraces.length],
+    ['proof-packet', report.proofPackets.length],
+    ['refutation', report.refutationResults.length],
+    ['aggregate-critic', report.aggregateResults.length],
+    ['judge', report.judgeResults.length]
+  ] as const
+
+  return [
+    ...stageCounts.map(([stage, count]) =>
+      EvalAgenticStageReportSchema.parse({
+        stage,
+        status: stageStatusForCount(count),
+        count
+      })
+    ),
+    EvalAgenticStageReportSchema.parse({
+      stage: 'provider-recovery',
+      status: recoveredProviderIssues > 0 ? 'recovered' : 'skipped',
+      count: recoveredProviderIssues
+    })
+  ]
+}
+
+const providerErrorStageNames = [
+  'intent-planning',
+  'suspicion-generation',
+  'suspicion-investigation',
+  'proof-packet',
+  'refutation',
+  'aggregate-critic',
+  'judge'
+] as const
+
+type ProviderErrorStageName = (typeof providerErrorStageNames)[number]
+
+const isKnownProviderErrorStage = (
+  stage: string | undefined
+): stage is ProviderErrorStageName =>
+  stage !== undefined &&
+  (providerErrorStageNames as readonly string[]).includes(stage)
+
+// When the failing stage is known, mark it as `error` instead of `skipped` so
+// the hard provider error stays attributable to where it happened.
+const agenticStagesForProviderError = (
+  failingStage?: string
+): readonly z.infer<typeof EvalAgenticStageReportSchema>[] =>
+  providerErrorStageNames
+    .map((stage) =>
+      EvalAgenticStageReportSchema.parse({
+        stage,
+        status: stage === failingStage ? 'error' : 'skipped',
+        count: 0
+      })
+    )
+    .concat(
+      EvalAgenticStageReportSchema.parse({
+        stage: 'provider-recovery',
+        status: 'error',
+        count: 1
+      })
+    )
+
+const promotionDecisionByCandidateId = (
+  report: ReviewReport
+): ReadonlyMap<string, ReviewReport['promotionDecisions'][number]> =>
+  new Map(
+    report.promotionDecisions.map((decision) => [decision.candidateId, decision])
+  )
+
+const proofPacketSummaries = (
+  report: ReviewReport
+): readonly z.infer<typeof EvalProofPacketReportSchema>[] => {
+  const promotionByCandidateId = promotionDecisionByCandidateId(report)
+
+  return report.proofPackets.map((proofPacket) =>
+    EvalProofPacketReportSchema.parse({
+      id: proofPacket.id,
+      suspicionId: proofPacket.suspicionId,
+      candidateId: proofPacket.candidateId,
+      evidenceCount: proofPacket.evidenceIds.length,
+      ...(promotionByCandidateId.get(proofPacket.candidateId)?.status === undefined
+        ? {}
+        : {
+            promotionStatus:
+              promotionByCandidateId.get(proofPacket.candidateId)?.status
+          })
+    })
+  )
+}
+
+const refutationResultSummaries = (
+  report: ReviewReport
+): readonly z.infer<typeof EvalRefutationResultReportSchema>[] =>
+  report.refutationResults.map((refutation) =>
+    EvalRefutationResultReportSchema.parse({
+      id: refutation.id,
+      proofPacketId: refutation.proofPacketId,
+      verdict: refutation.verdict
+    })
+  )
+
+const promotionDecisionSummaries = (
+  report: ReviewReport
+): readonly z.infer<typeof EvalPromotionDecisionReportSchema>[] =>
+  report.promotionDecisions.map((decision) =>
+    EvalPromotionDecisionReportSchema.parse({
+      candidateId: decision.candidateId,
+      ...(decision.proofPacketId === undefined
+        ? {}
+        : { proofPacketId: decision.proofPacketId }),
+      ...(decision.refutationId === undefined
+        ? {}
+        : { refutationId: decision.refutationId }),
+      status: decision.status,
+      reason: decision.reason
+    })
+  )
+
+const staticDuplicateDemotionCount = (report: ReviewReport): number =>
+  report.promotionDecisions.filter(
+    (decision) =>
+      decision.status !== 'actionable' &&
+      decision.reason.toLowerCase().includes('static-analysis')
+  ).length
+
+const investigationToolReadCount = (report: ReviewReport): number =>
+  report.evidence.filter(
+    (record) => record.kind === 'tool-read' || record.kind === 'tool-search'
+  ).length
+
+const actionableFindingsForEval = (
+  admittedFindings: readonly AdmittedFinding[]
+): readonly AdmittedFinding[] =>
+  admittedFindings.filter(
+    (finding) => finding.reporterEligibility !== 'artifact-only'
+  )
+
+const artifactOnlyFindingsForEval = (
+  admittedFindings: readonly AdmittedFinding[]
+): readonly AdmittedFinding[] =>
+  admittedFindings.filter(
+    (finding) => finding.reporterEligibility === 'artifact-only'
+  )
+
+const trustedDeterministicFindingsForEval = (
+  admittedFindings: readonly AdmittedFinding[]
+): readonly AdmittedFinding[] =>
+  actionableFindingsForEval(admittedFindings).filter(
+    (finding) => finding.proposedBy === 'deterministic-trusted-rule'
+  )
+
 const expectedFindingSummaries = (
   evalCase: EvalCase
 ): readonly z.infer<typeof EvalExpectedFindingReportSchema>[] =>
@@ -930,15 +396,44 @@ const expectedFindingSummaries = (
     })
   )
 
+const tierCountsForCase = (
+  evalCase: EvalCase,
+  matchResult: EvalMatcherResult
+): EvalMetricCaseResult['tierCounts'] => {
+  const counts = emptyTierCounts()
+  const matchedExpectedIndexes = new Set(
+    matchResult.matches.map((match) => match.expectedIndex)
+  )
+
+  evalCase.expectedFindings.forEach((expected, expectedIndex) => {
+    const tier = resolveExpectedFindingTier(expected)
+    counts[tier] = {
+      expected: counts[tier].expected + 1,
+      matched:
+        counts[tier].matched + (matchedExpectedIndexes.has(expectedIndex) ? 1 : 0)
+    }
+  })
+
+  return counts
+}
+
 const buildMetricCase = (
   input: {
     readonly evalCase: EvalCase
     readonly output: EvalCaseOutput
     readonly matchResult: EvalMatcherResult
+    readonly artifactOnlyMatchResult: EvalMatcherResult
     readonly reviewReport?: ReviewReport
   }
 ): EvalMetricCaseResult => {
+  const judgeProviderIssueCount =
+    (input.matchResult.judgeProviderIssues?.length ?? 0) +
+    (input.artifactOnlyMatchResult.judgeProviderIssues?.length ?? 0)
   const admittedFindings = input.reviewReport?.admittedFindings ?? []
+  const actionableFindings = actionableFindingsForEval(admittedFindings)
+  const artifactOnlyFindings = artifactOnlyFindingsForEval(admittedFindings)
+  const trustedDeterministicFindings =
+    trustedDeterministicFindingsForEval(admittedFindings)
   const matchedExpectedSeverityWeights = input.matchResult.matches.map((match) =>
     severityWeight(input.evalCase.expectedFindings[match.expectedIndex]!.severity)
   )
@@ -946,32 +441,49 @@ const buildMetricCase = (
     (match) =>
       input.evalCase.expectedFindings[match.expectedIndex]?.lineRange !== undefined
   ).length
-  const falsePositiveIndexes = admittedFindings
-    .map((_finding, index) => index)
-    .filter(
-      (index) =>
-        !input.matchResult.matches.some(
-          (match) => admittedFindings[index]?.id === match.findingId
-        )
-    )
+  const falsePositiveFindingIdSet = new Set(
+    input.matchResult.falsePositiveFindingIds
+  )
+  const falsePositiveFindings = admittedFindings.filter((finding) =>
+    falsePositiveFindingIdSet.has(finding.id)
+  )
   const warnings = input.reviewReport?.run.warnings ?? []
+  const providerIssues =
+    input.reviewReport === undefined ? [] : providerIssuesFromReport(input.reviewReport)
   const contextLedgerEntries = input.output.contextLedger.filter(
     (entry) => entry.consideredForModelContext
   )
+  const proofPackets = input.reviewReport?.proofPackets ?? []
+  const promotionDecisions = input.reviewReport?.promotionDecisions ?? []
+  const refutationResults = input.reviewReport?.refutationResults ?? []
+  const actionablePromotedProofCount = promotionDecisions.filter(
+    (decision) => decision.status === 'actionable' && decision.proofPacketId !== undefined
+  ).length
+  const weakOrDemotedProofCount = promotionDecisions.filter(
+    (decision) =>
+      decision.proofPacketId !== undefined &&
+      decision.status !== 'actionable' &&
+      !decision.reason.toLowerCase().includes('static-analysis') &&
+      !decision.reason.toLowerCase().includes('deterministic contradiction')
+  ).length
 
   return {
     caseId: input.evalCase.id,
     parseValid: input.reviewReport !== undefined,
     providerErrored: input.output.result.status === 'provider-error',
+    providerIssueCount:
+      input.output.result.status === 'provider-error'
+        ? 1
+        : providerIssues.length + judgeProviderIssueCount,
     expectedFindingCount: input.evalCase.expectedFindings.length,
-    admittedFindingCount: admittedFindings.length,
+    admittedFindingCount: actionableFindings.length,
     matchedFindingCount: input.matchResult.matches.length,
     expectedSeverityWeights: input.evalCase.expectedFindings.map((expected) =>
       severityWeight(expected.severity)
     ),
     matchedExpectedSeverityWeights,
-    falsePositiveSeverityWeights: falsePositiveIndexes.map((index) =>
-      severityWeight(admittedFindings[index]!.severity)
+    falsePositiveSeverityWeights: falsePositiveFindings.map((finding) =>
+      severityWeight(finding.severity)
     ),
     matchedLineCheckCount,
     accurateLineMatchCount: input.matchResult.matches.filter(
@@ -986,10 +498,37 @@ const buildMetricCase = (
     actionableFindingCount:
       input.reviewReport === undefined
         ? 0
-        : admittedFindings.filter((finding) =>
+        : actionableFindings.filter((finding) =>
             isActionableFinding(finding, input.reviewReport!)
           ).length,
     falsePositiveCount: input.matchResult.falsePositiveFindingIds.length,
+    duplicateFindingCount: input.matchResult.duplicateFindingIds.length,
+    artifactOnlyFindingCount: artifactOnlyFindings.length,
+    artifactOnlyMatchedFindingCount:
+      input.artifactOnlyMatchResult.matches.length,
+    artifactOnlyFalsePositiveCount:
+      input.artifactOnlyMatchResult.falsePositiveFindingIds.length,
+    trustedDeterministicFindingCount: trustedDeterministicFindings.length,
+    modelSuspicionCount: input.reviewReport?.modelSuspicions.length ?? 0,
+    proofPacketCount: proofPackets.length,
+    promotedProofCount: promotionDecisions.filter(
+      (decision) => decision.proofPacketId !== undefined
+    ).length,
+    actionablePromotedProofCount,
+    refutedProofCount: refutationResults.filter(
+      (refutation) => refutation.verdict === 'refuted'
+    ).length,
+    weakOrDemotedProofCount,
+    staticDuplicateDemotionCount:
+      input.reviewReport === undefined
+        ? 0
+        : staticDuplicateDemotionCount(input.reviewReport),
+    investigationToolReadCount:
+      input.reviewReport === undefined
+        ? 0
+        : investigationToolReadCount(input.reviewReport),
+    tierCounts: tierCountsForCase(input.evalCase, input.matchResult),
+    judgedFindingCount: input.reviewReport?.judgeResults.length ?? 0,
     noFindingZoneFalsePositiveCount:
       input.matchResult.noFindingZoneFalsePositiveIds.length,
     changedLineCount: input.output.changedLineCount,
@@ -1000,6 +539,9 @@ const buildMetricCase = (
       (entry) => entry.truncated
     ).length,
     costUsd: input.reviewReport?.run.costUsd ?? 0,
+    inputTokens: input.reviewReport?.run.inputTokens ?? 0,
+    outputTokens: input.reviewReport?.run.outputTokens ?? 0,
+    costUnavailable: warnings.includes('cost-unavailable'),
     durationMs: input.reviewReport?.run.durationMs ?? 0,
     warnings,
     failingFindingIds: input.matchResult.falsePositiveFindingIds
@@ -1016,6 +558,7 @@ const computeCaseResult = (
       unmatchedExpectedIndexes: evalCase.expectedFindings.map(
         (_finding, index) => index
       ),
+      duplicateFindingIds: [],
       falsePositiveFindingIds: [],
       noFindingZoneFalsePositiveIds: []
     }
@@ -1025,32 +568,71 @@ const computeCaseResult = (
         caseId: evalCase.id,
         parseValid: false,
         providerErrored: true,
+        providerIssues: [
+          {
+            code: output.result.code,
+            ...(isKnownProviderErrorStage(output.result.stage)
+              ? { stage: output.result.stage }
+              : {}),
+            recovered: false,
+            message: output.result.message
+          }
+        ],
+        agenticStages: [
+          ...agenticStagesForProviderError(output.result.stage)
+        ],
+        contextLedger: [...output.contextLedger],
         expectedFindings: [...expectedFindingSummaries(evalCase)],
         matchedFindings: [],
         unmatchedExpectedIndexes: [...matchResult.unmatchedExpectedIndexes],
+        duplicateFindingIds: [],
+        duplicateFindings: [],
         falsePositiveFindingIds: [],
         falsePositiveFindings: [],
         noFindingZoneFalsePositiveIds: [],
+        artifactOnlyFindingIds: [],
+        artifactOnlyMatchedFindings: [],
+        artifactOnlyFalsePositiveFindingIds: [],
+        artifactOnlyFalsePositiveFindings: [],
+        modelSuspicionIds: [],
+        modelTaskDiagnostics: [],
+        proofPackets: [],
+        refutationResults: [],
+        promotionDecisions: [],
         inlineFindingCount: 0,
         warnings: [`provider-error:${output.result.code}`],
         durationMs: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        costUnavailable: false,
         costUsd: 0
       },
       metricCase: buildMetricCase({
         evalCase,
         output,
-        matchResult
+        matchResult,
+        artifactOnlyMatchResult: matchResult
       })
     }
   }
 
   const reviewReport = output.result.reviewReport
+  const actionableFindings = actionableFindingsForEval(
+    reviewReport.admittedFindings
+  )
+  const artifactOnlyFindings = artifactOnlyFindingsForEval(
+    reviewReport.admittedFindings
+  )
   const inlineFindingCount = reviewReport.admittedFindings.filter(
     (finding) => finding.reporterEligibility === 'inline'
   ).length
   const matchResult = matchEvalFindings({
     evalCase,
-    admittedFindings: reviewReport.admittedFindings
+    admittedFindings: actionableFindings
+  })
+  const artifactOnlyMatchResult = matchEvalFindings({
+    evalCase,
+    admittedFindings: artifactOnlyFindings
   })
 
   return {
@@ -1058,28 +640,60 @@ const computeCaseResult = (
       caseId: evalCase.id,
       parseValid: true,
       providerErrored: false,
+      contextLedger: [...output.contextLedger],
+      agenticStages: [...agenticStagesForReport(reviewReport)],
       expectedFindings: [...expectedFindingSummaries(evalCase)],
       matchedFindings: [...matchResult.matches],
       unmatchedExpectedIndexes: [...matchResult.unmatchedExpectedIndexes],
+      duplicateFindingIds: [...matchResult.duplicateFindingIds],
+      duplicateFindings: [
+        ...falsePositiveFindingSummaries(
+          actionableFindings,
+          matchResult.duplicateFindingIds
+        )
+      ],
       falsePositiveFindingIds: [...matchResult.falsePositiveFindingIds],
       falsePositiveFindings: [
         ...falsePositiveFindingSummaries(
-          reviewReport.admittedFindings,
+          actionableFindings,
           matchResult.falsePositiveFindingIds
         )
       ],
       noFindingZoneFalsePositiveIds: [
         ...matchResult.noFindingZoneFalsePositiveIds
       ],
+      artifactOnlyFindingIds: artifactOnlyFindings.map((finding) => finding.id),
+      artifactOnlyMatchedFindings: [...artifactOnlyMatchResult.matches],
+      artifactOnlyFalsePositiveFindingIds: [
+        ...artifactOnlyMatchResult.falsePositiveFindingIds
+      ],
+      artifactOnlyFalsePositiveFindings: [
+        ...falsePositiveFindingSummaries(
+          artifactOnlyFindings,
+          artifactOnlyMatchResult.falsePositiveFindingIds
+        )
+      ],
+      modelSuspicionIds: reviewReport.modelSuspicions.map(
+        (suspicion) => suspicion.id
+      ),
+      modelTaskDiagnostics: [...reviewReport.modelTaskDiagnostics],
+      proofPackets: [...proofPacketSummaries(reviewReport)],
+      refutationResults: [...refutationResultSummaries(reviewReport)],
+      promotionDecisions: [...promotionDecisionSummaries(reviewReport)],
       inlineFindingCount,
+      providerIssues: [...providerIssuesFromReport(reviewReport)],
       warnings: [...reviewReport.run.warnings],
       durationMs: reviewReport.run.durationMs,
+      inputTokens: reviewReport.run.inputTokens ?? 0,
+      outputTokens: reviewReport.run.outputTokens ?? 0,
+      costUnavailable: reviewReport.run.warnings.includes('cost-unavailable'),
       costUsd: reviewReport.run.costUsd ?? 0
     },
     metricCase: buildMetricCase({
       evalCase,
       output,
       matchResult,
+      artifactOnlyMatchResult,
       reviewReport
     })
   }
@@ -1095,12 +709,23 @@ const computeCaseResultWithSemanticJudge = async (
   }
 
   const reviewReport = output.result.reviewReport
+  const actionableFindings = actionableFindingsForEval(
+    reviewReport.admittedFindings
+  )
+  const artifactOnlyFindings = artifactOnlyFindingsForEval(
+    reviewReport.admittedFindings
+  )
   const inlineFindingCount = reviewReport.admittedFindings.filter(
     (finding) => finding.reporterEligibility === 'inline'
   ).length
   const matchResult = await matchEvalFindingsWithSemanticJudge({
     evalCase,
-    admittedFindings: reviewReport.admittedFindings,
+    admittedFindings: actionableFindings,
+    judge
+  })
+  const artifactOnlyMatchResult = await matchEvalFindingsWithSemanticJudge({
+    evalCase,
+    admittedFindings: artifactOnlyFindings,
     judge
   })
 
@@ -1109,28 +734,66 @@ const computeCaseResultWithSemanticJudge = async (
       caseId: evalCase.id,
       parseValid: true,
       providerErrored: false,
+      contextLedger: [...output.contextLedger],
+      agenticStages: [...agenticStagesForReport(reviewReport)],
       expectedFindings: [...expectedFindingSummaries(evalCase)],
       matchedFindings: [...matchResult.matches],
       unmatchedExpectedIndexes: [...matchResult.unmatchedExpectedIndexes],
+      duplicateFindingIds: [...matchResult.duplicateFindingIds],
+      duplicateFindings: [
+        ...falsePositiveFindingSummaries(
+          actionableFindings,
+          matchResult.duplicateFindingIds
+        )
+      ],
       falsePositiveFindingIds: [...matchResult.falsePositiveFindingIds],
       falsePositiveFindings: [
         ...falsePositiveFindingSummaries(
-          reviewReport.admittedFindings,
+          actionableFindings,
           matchResult.falsePositiveFindingIds
         )
       ],
       noFindingZoneFalsePositiveIds: [
         ...matchResult.noFindingZoneFalsePositiveIds
       ],
+      artifactOnlyFindingIds: artifactOnlyFindings.map((finding) => finding.id),
+      artifactOnlyMatchedFindings: [...artifactOnlyMatchResult.matches],
+      artifactOnlyFalsePositiveFindingIds: [
+        ...artifactOnlyMatchResult.falsePositiveFindingIds
+      ],
+      artifactOnlyFalsePositiveFindings: [
+        ...falsePositiveFindingSummaries(
+          artifactOnlyFindings,
+          artifactOnlyMatchResult.falsePositiveFindingIds
+        )
+      ],
+      modelSuspicionIds: reviewReport.modelSuspicions.map(
+        (suspicion) => suspicion.id
+      ),
+      modelTaskDiagnostics: [...reviewReport.modelTaskDiagnostics],
+      proofPackets: [...proofPacketSummaries(reviewReport)],
+      refutationResults: [...refutationResultSummaries(reviewReport)],
+      promotionDecisions: [...promotionDecisionSummaries(reviewReport)],
       inlineFindingCount,
+      providerIssues: [
+        ...providerIssuesFromReport(reviewReport),
+        ...judgeProviderIssuesFromMatchResults([
+          matchResult,
+          artifactOnlyMatchResult
+        ])
+      ],
       warnings: [...reviewReport.run.warnings],
       durationMs: reviewReport.run.durationMs,
+      inputTokens: reviewReport.run.inputTokens ?? 0,
+      outputTokens: reviewReport.run.outputTokens ?? 0,
+      costUnavailable: reviewReport.run.warnings.includes('cost-unavailable'),
       costUsd: reviewReport.run.costUsd ?? 0
     },
     metricCase: buildMetricCase({
       evalCase,
       output,
       matchResult,
+      artifactOnlyMatchResult,
       reviewReport
     })
   }
@@ -1249,6 +912,7 @@ const thresholdReasons = (
     readonly thresholds: EvalRegressionThresholds
     readonly metrics: z.infer<typeof EvalMetricsSchema>
     readonly caseResults: readonly EvalMetricCaseResult[]
+    readonly judgeFindingsEnabled: boolean
   }
 ): {
   readonly reasons: readonly string[]
@@ -1257,7 +921,7 @@ const thresholdReasons = (
   const reasons: string[] = []
   const failingCaseIds: string[] = []
   const addBelowReason = (
-    metricName: keyof z.infer<typeof EvalMetricsSchema>,
+    metricName: NumericMetricKey,
     threshold: number | undefined
   ): void => {
     if (threshold === undefined) {
@@ -1273,7 +937,7 @@ const thresholdReasons = (
     }
   }
   const addAboveReason = (
-    metricName: keyof z.infer<typeof EvalMetricsSchema>,
+    metricName: NumericMetricKey,
     threshold: number | undefined,
     casesForMetric: readonly EvalMetricCaseResult[]
   ): void => {
@@ -1309,6 +973,17 @@ const thresholdReasons = (
     'severityWeightedF1',
     input.thresholds.minSeverityWeightedF1
   )
+  addBelowReason('productRecall', input.thresholds.minProductRecall)
+  addBelowReason(
+    'suspicionStageCoverage',
+    input.thresholds.minSuspicionStageCoverage
+  )
+  // judgeCoverage is only meaningful when finding judging runs; otherwise no
+  // candidates are judged and the metric carries no signal, so the gate is
+  // skipped rather than failing a run that never enabled the judge.
+  if (input.judgeFindingsEnabled) {
+    addBelowReason('judgeCoverage', input.thresholds.minJudgeCoverage)
+  }
   addAboveReason(
     'falsePositiveCount',
     input.thresholds.maxFalsePositiveCount,
@@ -1356,6 +1031,9 @@ type RunEvaluationInput = {
     readonly selectedCaseIds?: readonly string[]
   }
   readonly generatedAt?: string
+  // Enables the judgeCoverage quality gate. When false the gate is skipped
+  // because no candidates are judged.
+  readonly judgeFindingsEnabled?: boolean
 }
 
 const buildEvaluationResult = (
@@ -1366,6 +1044,7 @@ const buildEvaluationResult = (
     readonly scoring: EvalReportScoring
     readonly generatedAt?: string
     readonly caseComputations: readonly EvalCaseComputation[]
+    readonly judgeFindingsEnabled: boolean
   }
 ): {
   readonly artifactName: typeof EVAL_REPORT_ARTIFACT_NAME
@@ -1387,7 +1066,8 @@ const buildEvaluationResult = (
   const gate = thresholdReasons({
     thresholds: input.thresholds,
     metrics,
-    caseResults: metricCases
+    caseResults: metricCases,
+    judgeFindingsEnabled: input.judgeFindingsEnabled
   })
   const report = EvalReportSchema.parse({
     schemaVersion: '1.0',
@@ -1458,7 +1138,8 @@ export const runEvaluation = (
       semanticMatcher: 'deterministic'
     },
     ...(input.generatedAt === undefined ? {} : { generatedAt: input.generatedAt }),
-    caseComputations
+    caseComputations,
+    judgeFindingsEnabled: input.judgeFindingsEnabled ?? false
   })
 }
 
@@ -1498,6 +1179,7 @@ export const runEvaluationWithSemanticJudge = async (
       semanticMatcher: 'semantic-judge'
     },
     ...(input.generatedAt === undefined ? {} : { generatedAt: input.generatedAt }),
-    caseComputations
+    caseComputations,
+    judgeFindingsEnabled: input.judgeFindingsEnabled ?? false
   })
 }

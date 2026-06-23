@@ -1,4 +1,6 @@
+import { z } from 'zod'
 import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
+import { ContextLedgerIdSchema } from '../../shared/contracts/index.js'
 import { sha256 } from '../../shared/hash/hash.js'
 
 export type ContextLedgerKind =
@@ -7,7 +9,8 @@ export type ContextLedgerKind =
   | 'symbol'
   | 'instruction'
   | 'skill'
-  | 'analyzer-output'
+  | 'support-signal-output'
+  | 'tool-result'
   | 'prior-artifact'
 
 export type ContextLedgerDecision =
@@ -19,15 +22,37 @@ export type ContextLedgerDecision =
 export type ContextLedgerEntry = {
   readonly id: string
   readonly kind: ContextLedgerKind
-  readonly path?: string
-  readonly taskId?: string
-  readonly sourceLedgerEntryId?: string
-  readonly contentHash?: string
+  readonly path?: string | undefined
+  readonly taskId?: string | undefined
+  readonly sourceLedgerEntryId?: string | undefined
+  readonly contentHash?: string | undefined
   readonly decision: ContextLedgerDecision
   readonly reason: string
   readonly bytesConsidered: number
   readonly bytesIncluded: number
 }
+
+export const ContextLedgerEntrySchema = z.strictObject({
+  id: ContextLedgerIdSchema,
+  kind: z.enum([
+    'file',
+    'diff',
+    'symbol',
+    'instruction',
+    'skill',
+    'support-signal-output',
+    'tool-result',
+    'prior-artifact'
+  ]),
+  path: z.string().min(1).optional(),
+  taskId: z.string().min(1).optional(),
+  sourceLedgerEntryId: z.string().min(1).optional(),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  decision: z.enum(['included', 'skipped', 'truncated', 'summarized']),
+  reason: z.string().min(1),
+  bytesConsidered: z.int().min(0),
+  bytesIncluded: z.int().min(0)
+})
 
 export type CreateContextLedgerEntryOptions = {
   readonly kind: ContextLedgerKind

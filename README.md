@@ -1,8 +1,9 @@
 # CodeReviewer
 
-CodeReviewer is an evidence-first code review engine with typed workflow
-orchestration, language-neutral analyzers, provider-optional model integration,
-local artifacts, and CI-friendly quality gates.
+CodeReviewer is an LLM-centric code review engine with typed workflow
+orchestration, language-neutral deterministic support signals,
+provider-optional model integration, local artifacts, and CI-friendly quality
+gates.
 
 ## Table Of Contents
 
@@ -36,19 +37,19 @@ Run a local review for explicit files and execute the evaluation fixtures:
 ```bash
 npx tsx src/cli/main.ts review --file src/app.ts
 npx tsx src/cli/main.ts review --debug --file src/app.ts
-npx tsx src/cli/main.ts eval run
+npm run eval
 ```
 
-Evaluation prints a readable summary and writes `.review/eval/eval-summary.md`
-plus `.review/eval/eval-report.json`.
+Evaluation prints a readable summary and writes `.codereviewer/eval/eval-summary.md`
+plus `.codereviewer/eval/eval-report.json`.
 
 Provider adapters are optional peer packages. Install only the adapter used by
 the configured provider:
 
 ```bash
-npm install @purista/harness-openai
-npm install @purista/harness-bedrock
-npm install @purista/harness-azure-foundry
+npm run provider:install:openai
+npm run provider:install:bedrock
+npm run provider:install:azure
 ```
 
 Start with [Quick Setup](docs/getting-started/quick-setup.md) for the full

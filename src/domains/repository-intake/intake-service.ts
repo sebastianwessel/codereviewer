@@ -156,6 +156,7 @@ const textSourceExtensions = new Set([
   '.mjs',
   '.mts',
   '.py',
+  '.rb',
   '.rs',
   '.ts',
   '.tsx'

@@ -26,22 +26,22 @@ const writeBenchmarkSlice = async (root: string): Promise<void> => {
       {
         id: 'case-a',
         source: 'benchmark-pack',
+        sourceProfile: 'benchmark-semantic',
         language: 'typescript',
         changedFiles: ['src/app.ts'],
-        expected: [
+        expectedFindings: [
           {
-            line: null,
-            lineEnd: null,
-            type: 'bug',
+            category: 'bug',
             severity: 'high',
-            description: 'semantic issue from benchmark golden comment'
+            semanticSummary: 'semantic issue from benchmark golden comment',
+            matchMode: 'semantic-only'
           },
           {
-            file: 'src/app.ts',
-            line: 1,
-            type: 'bug',
+            path: 'src/app.ts',
+            lineRange: [1, 1],
+            category: 'bug',
             severity: 'medium',
-            description: 'line-bearing issue from benchmark golden comment'
+            semanticSummary: 'line-bearing issue from benchmark golden comment'
           }
         ],
         expectedNoFindingZones: [

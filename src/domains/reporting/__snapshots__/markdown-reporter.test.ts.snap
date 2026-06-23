@@ -19,15 +19,15 @@ Status: complete
 Files: 1/1
 Bytes: 160/160
 
-## Severity Counts
+## Actionable Severity Counts
 
 - high: 1
 
-## Category Counts
+## Actionable Category Counts
 
 - bug: 1
 
-## Admitted Findings
+## Actionable Findings
 
 ### HIGH: Bad \\\\| title &lt;script&gt;alert\\(1\\)&lt;/script&gt; \\#\\# Forged
 
@@ -42,9 +42,73 @@ Bytes: 160/160
 
 Leaked token \\[REDACTED\\] should not appear. \\!\\[secret\\]\\(https://example.invalid/x.png\\)
 
+## Artifact-only Findings
+
+- find_artifact1: Support signal diagnostic (typescript-support-signal)
+
 ## Rejected Candidates
 
 - cand_weak1: insufficient-evidence (needs-more-evidence)
+
+## Review Intents
+
+- intent_abc123: Verify changed return behavior (model, tasks: task_abc123)
+  - Question: Does the changed branch still return the expected value?
+
+## Model Suspicions
+
+- susp_abc123: proved Suspicious branch
+  - Context request read: path: src/app.ts - Inspect the changed branch.
+
+## Investigation Traces
+
+- susp_abc123: proof (1 tool calls, 1 context entries)
+  - Trace budget: reads 1/1, searches 0/0, rounds 1/1
+  - Tool call tool-read: completed ledger: ctx_abc123 - Read changed branch context.
+
+## Proof Packets
+
+- proof_abc123 for cand_weak1: Branch returns expected value
+  - Proof evidence: ev_diff1
+  - Changed behavior: The changed branch can return the wrong value.
+  - Execution/data path: src/app.ts branch execution
+  - Impact: Incorrect result reaches callers.
+  - Introduced by change: The changed branch was introduced in the reviewed range.
+  - Fix direction: Return the computed value.
+  - Contradiction check: No contradiction found.
+
+## Refutation Results
+
+- refute_abc123: proved for proof_abc123 - No contradiction found.
+  - Refutation evidence: ev_diff1
+  - Refutation check task-evidence: passed - Evidence exists. evidence: ev_diff1
+
+## Aggregate Results
+
+- agg_abc123: mixed (2 candidates) - The aggregate critic accepted one finding and rejected one sibling.
+  - Aggregate evidence: ev_diff1
+  - cand_weak1: valid - The proof remains valid after comparing sibling changes.
+    - Decision evidence: ev_diff1
+  - cand_weak2: false-positive - The sibling finding duplicates the stronger proof.
+    - Decision evidence: ev_diff1
+  - Similar issue check sibling-pattern: passed - Sibling changes were compared. evidence: ev_diff1
+
+## Judge Results
+
+- judge_abc123: valid for cand_weak1 - The proof is supported by the cited evidence.
+  - Judge evidence: ev_diff1
+  - Challenge: Does the changed branch reach the incorrect return value?
+  - Check changed-branch: passed - The cited evidence proves the changed branch is reachable. evidence: ev_diff1
+  - Context request read: path: src/app.ts - Inspect the changed branch source.
+  - Requested context: Inspect src/app.ts near the changed branch.
+
+## Promotion Decisions
+
+- cand_weak1: artifact-only proof: proof_abc123 refutation: refute_abc123 (Policy kept this proof out of comments.)
+
+## Provider Issues
+
+- provider_error at refutation-check recovered: yes - Provider failed once and the run continued.
 
 ## Skipped Files
 

@@ -62,8 +62,8 @@ const validReport = {
         reviewer: 'scripted-reviewer',
         instructionHashes: [sha256],
         skillHashes: [],
-        analyzerVersions: {
-          typescript: 'test'
+        signalVersions: {
+          structural: 'test'
         },
         configHash: sha256
       },
@@ -113,6 +113,16 @@ const validReport = {
     },
     baselineFilteringApplied: true
   },
+  reviewIntents: [],
+  modelSuspicions: [],
+  investigationTraces: [],
+  proofPackets: [],
+  refutationResults: [],
+  aggregateResults: [],
+  judgeResults: [],
+  promotionDecisions: [],
+  providerIssues: [],
+  modelTaskDiagnostics: [],
   artifacts: [
     {
       format: 'json',
@@ -126,6 +136,47 @@ const validReport = {
 describe('ReviewReportSchema', () => {
   test('accepts a valid review report fixture', () => {
     expect(ReviewReportSchema.parse(validReport).schemaVersion).toBe('1.0')
+  })
+
+  test('accepts model task diagnostics without source or prompt content', () => {
+    const parsed = ReviewReportSchema.parse({
+      ...validReport,
+      modelTaskDiagnostics: [
+        {
+          taskId: 'task_abc123',
+          round: 1,
+          paths: ['src/example.ts'],
+          suggestionCount: 2,
+          selectedCandidateCount: 1,
+          modelSuspicionCount: 1,
+          proofPacketCount: 1,
+          droppedSuspicionReasons: {
+            'schema-invalid': 0,
+            'missing-required-field': 1,
+            'path-outside-task': 0,
+            'missing-task-evidence': 0,
+            'duplicate-input-candidate': 0,
+            'unsupported-truncation-claim': 0
+          },
+          schemaInvalidSuggestionIssueCounts: {
+            'category:invalid_value': 1,
+            'path:custom': 1
+          }
+        }
+      ]
+    })
+
+    expect(parsed.modelTaskDiagnostics).toEqual([
+      expect.objectContaining({
+        taskId: 'task_abc123',
+        suggestionCount: 2,
+        selectedCandidateCount: 1,
+        schemaInvalidSuggestionIssueCounts: {
+          'category:invalid_value': 1,
+          'path:custom': 1
+        }
+      })
+    ])
   })
 
   test('rejects missing required fields', () => {

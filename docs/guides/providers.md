@@ -17,9 +17,9 @@ deployment.
 ## Optional Provider Packages
 
 ```bash
-npm install @purista/harness-openai
-npm install @purista/harness-bedrock
-npm install @purista/harness-azure-foundry
+npm run provider:install:openai
+npm run provider:install:bedrock
+npm run provider:install:azure
 ```
 
 ## Config Example
@@ -63,3 +63,20 @@ rate-limit window longer than that cap fails the run instead of waiting.
 OpenAI `gpt-5*` models because those models reject the parameter. Compatible
 providers keep the configured value because their model behavior is
 provider-specific.
+
+## Provider Error Codes
+
+When a provider call fails, the structured error carries one of the following
+codes in `stderr` and in partial run artifacts:
+
+| Code | Meaning |
+| --- | --- |
+| `provider_rate_limited` | HTTP 429 or overloaded/rate-limit/too-many-requests message. |
+| `provider_auth` | HTTP 401/403 or API-key/unauthorized/forbidden message. |
+| `provider_context_length` | Context-length/context-window/too-many-tokens message. |
+| `provider_server_error` | HTTP 5xx response. |
+| `provider_error` | Any other provider-side failure not matched above. |
+| `provider_timeout` | Request timed out. |
+| `provider_cancelled` | Request was aborted or cancelled. |
+
+See the Retry Behavior section above for which of these codes are retried.

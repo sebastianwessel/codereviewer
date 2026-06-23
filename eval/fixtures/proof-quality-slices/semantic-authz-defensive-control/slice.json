@@ -1,0 +1,19 @@
+{
+  "id": "semantic-authz-defensive-control",
+  "title": "Authorization fallback denies missing sessions",
+  "description": "A negative control for the authorization fallback pattern: the helper looks similar to the bug case but denies access when lookup fails.",
+  "source": "project-owned",
+  "capturedAt": "2026-06-22",
+  "language": "typescript",
+  "changedFiles": ["src/authorization.ts"],
+  "diff": "diff --git a/src/authorization.ts b/src/authorization.ts\n--- a/src/authorization.ts\n+++ b/src/authorization.ts\n@@ -7,7 +7,7 @@ export const canViewAccount = (\n ): boolean => {\n   const session = sessionStore.get(userId)\n   if (session === undefined) {\n-    return true\n+    return false\n   }\n \n   return session.accountIds.includes(accountId)\n",
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "src/authorization.ts",
+      "lineRange": [1, 14],
+      "reason": "The missing-session branch returns false, so the authorization fallback is defensive and should be refuted rather than reported."
+    }
+  ],
+  "tags": ["slice", "project-owned", "semantic", "proof-quality", "refutation-control", "negative"]
+}

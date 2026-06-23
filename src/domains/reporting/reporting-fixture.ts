@@ -79,7 +79,7 @@ export const createReportFixture = (): ReviewReport =>
           modelName: 'gpt-5-mini',
           instructionHashes: [],
           skillHashes: [],
-          analyzerVersions: {
+          signalVersions: {
             typescript: '6.0.3'
           },
           configHash: hash
@@ -98,7 +98,7 @@ export const createReportFixture = (): ReviewReport =>
         candidateId: 'cand_weak1',
         status: 'needs-more-evidence',
         reason: 'insufficient-evidence',
-        message: 'Candidate requires non-model evidence.',
+        message: 'Candidate requires evidence.',
         evidenceIds: ['ev_model1']
       }
     ],
@@ -112,11 +112,20 @@ export const createReportFixture = (): ReviewReport =>
           startLine: 4,
           side: 'new'
         },
-        source: 'typescript-analyzer',
+        source: 'typescript-support-signal',
         contentHash,
         redactionApplied: true
       }
     ],
+    reviewIntents: [],
+    modelSuspicions: [],
+    investigationTraces: [],
+    proofPackets: [],
+    refutationResults: [],
+    aggregateResults: [],
+    judgeResults: [],
+    promotionDecisions: [],
+    providerIssues: [],
     skippedFiles: [
       {
         path: 'dist/generated.js',

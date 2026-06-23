@@ -1,21 +1,21 @@
 schema_version: "1.0"
 status: approved
-updated_at: "2026-06-20"
+updated_at: "2026-06-22"
 authors:
   - role: product_architecture_agent
     scope: spec_authoring_and_readiness_repair
 human_approval:
   status: approved
   recorded_from: user_requested_ticket_creation_and_implementation
-  recorded_at: "2026-06-20"
+  recorded_at: "2026-06-22"
 research_evidence:
-  npm_metadata_checked_at: "2026-06-20"
+  npm_metadata_checked_at: "2026-06-22"
   web_research_verified_at: "2026-06-20"
   source_index: specs/10-state-of-the-art-research-synthesis.md
 approved_updates:
-  - renamed the old language integration concept to language-analyzers
-  - expanded first-class language targets to TypeScript, JavaScript, Python, Go, Rust, and Java
-  - selected ast-grep as preferred generic AST analysis layer with Tree-sitter fallback evidence
+  - superseded deterministic extractor promotion with deterministic support signals
+  - selected agentic suspicion, investigation, proof packet, refutation, and promotion policy as the review-quality architecture
+  - selected ast-grep as an optional generic structural parsing layer for support signals with Tree-sitter fallback evidence
 deterministic_checks:
   readiness_checker: /Users/sebastianwessel/.agents/skills/spec-readiness-review/scripts/check_specs.mjs
   typecheck: npm run typecheck

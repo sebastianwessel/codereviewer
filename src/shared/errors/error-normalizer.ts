@@ -183,13 +183,97 @@ const classifyErrorKind = (message: string): 'error' | 'timeout' | 'cancelled' =
   return 'error'
 }
 
-const codeFor = (kind: 'error' | 'timeout' | 'cancelled', source: ErrorSource): string => {
+// Extract an HTTP-like status code from common provider error shapes
+// (`status`, `statusCode`, `response.status`) without relying on a specific SDK.
+const httpStatusFrom = (error: unknown): number | undefined => {
+  if (typeof error !== 'object' || error === null) {
+    return undefined
+  }
+
+  const candidate = error as {
+    readonly status?: unknown
+    readonly statusCode?: unknown
+    readonly response?: { readonly status?: unknown }
+  }
+  const status = candidate.status ?? candidate.statusCode ?? candidate.response?.status
+
+  return typeof status === 'number' ? status : undefined
+}
+
+// Finer provider sub-classification from HTTP status and message patterns.
+// Returns undefined when nothing specific matches so the generic
+// `provider_error` fallback applies. Patterns are matched against an
+// already-lowercased message; the raw message is redacted separately.
+const providerErrorSubcode = (
+  input: {
+    readonly status: number | undefined
+    readonly lowerCaseMessage: string
+  }
+): string | undefined => {
+  const { status, lowerCaseMessage } = input
+
+  if (
+    status === 429 ||
+    lowerCaseMessage.includes('rate limit') ||
+    lowerCaseMessage.includes('rate-limit') ||
+    lowerCaseMessage.includes('overloaded') ||
+    lowerCaseMessage.includes('too many requests')
+  ) {
+    return 'provider_rate_limited'
+  }
+
+  if (
+    status === 401 ||
+    status === 403 ||
+    lowerCaseMessage.includes('api key') ||
+    lowerCaseMessage.includes('api-key') ||
+    lowerCaseMessage.includes('unauthorized') ||
+    lowerCaseMessage.includes('forbidden')
+  ) {
+    return 'provider_auth'
+  }
+
+  if (
+    lowerCaseMessage.includes('context length') ||
+    lowerCaseMessage.includes('maximum context') ||
+    lowerCaseMessage.includes('too many tokens') ||
+    lowerCaseMessage.includes('context window')
+  ) {
+    return 'provider_context_length'
+  }
+
+  if (status !== undefined && status >= 500 && status <= 599) {
+    return 'provider_server_error'
+  }
+
+  return undefined
+}
+
+const codeFor = (
+  input: {
+    readonly kind: 'error' | 'timeout' | 'cancelled'
+    readonly source: ErrorSource
+    readonly status: number | undefined
+    readonly lowerCaseMessage: string
+  }
+): string => {
+  const { kind, source } = input
+
   if (kind === 'timeout') {
     return `${source}_timeout`
   }
 
   if (kind === 'cancelled') {
     return `${source}_cancelled`
+  }
+
+  if (source === 'provider') {
+    return (
+      providerErrorSubcode({
+        status: input.status,
+        lowerCaseMessage: input.lowerCaseMessage
+      }) ?? 'provider_error'
+    )
   }
 
   if (source === 'internal') {
@@ -266,7 +350,12 @@ export const normalizeError = (
   }
 
   return {
-    code: codeFor(kind, source),
+    code: codeFor({
+      kind,
+      source,
+      status: httpStatusFrom(error),
+      lowerCaseMessage: rawMessage.toLowerCase()
+    }),
     message: redact(rawMessage),
     category,
     recoverable: recoverableByCategory[category],

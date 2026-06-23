@@ -1,0 +1,59 @@
+{
+  "id": "crb-keycloak-01-fixing-re-authentication-with-passkeys",
+  "title": "Fixing Re-authentication with passkeys",
+  "description": "Curated PR review case adapted from keycloak golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/keycloak/keycloak/pull/41249",
+  "prTitle": "Fixing Re-authentication with passkeys",
+  "sourceRepo": "keycloak",
+  "upstreamOwner": "keycloak",
+  "upstreamRepo": "keycloak",
+  "baseSha": "7bb939a15db32e0ac6b74af3f34fdfb48ae32401",
+  "headSha": "c274c725791e696cf9bb3ad01ac7281f877b14e4",
+  "diff": "diff --git a/services/src/main/java/org/keycloak/authentication/Authenticator.java b/services/src/main/java/org/keycloak/authentication/Authenticator.java\nindex 0000000..1111111 100644\n--- a/services/src/main/java/org/keycloak/authentication/Authenticator.java\n+++ b/services/src/main/java/org/keycloak/authentication/Authenticator.java\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Fixing Re-authentication with passkeys\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "java",
+  "changedFiles": [
+    "services/src/main/java/org/keycloak/authentication/Authenticator.java"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "ConditionalPasskeysEnabled() called without UserModel parameter",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "security",
+      "severity": "medium",
+      "semanticSummary": "With isConditionalPasskeysEnabled(UserModel user) requiring user != null, authenticate(...) will not call webauthnAuth.fillContextForm(context) on the initial login page where context.getUser() is still null, so conditional passkey UI will not be set up for first-time passkey login. Consider whether this should also be enabled when no user has been selected yet so ID-less passkey authentication on the initial login form continues to work.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "services/src/main/java/org/keycloak/authentication/Authenticator.java",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "authentication",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "java",
+    "keycloak",
+    "null-reference",
+    "security",
+    "semantic"
+  ]
+}

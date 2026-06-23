@@ -1,4 +1,5 @@
 import type { CostConfig } from '../../shared/contracts/index.js'
+import { builtInPricesFor } from './model-pricing.js'
 
 export type TokenCostSource = 'provider' | 'configured' | 'unavailable'
 
@@ -87,6 +88,8 @@ export type RunCostSummary = {
 // rather than silently reported as zero.
 export const summarizeRunCost = (input: {
   readonly providerConfigured: boolean
+  readonly providerId?: string
+  readonly modelName?: string
   readonly prices: Partial<CostConfig>
   readonly usage?: RunTokenUsage
 }): RunCostSummary => {
@@ -101,7 +104,10 @@ export const summarizeRunCost = (input: {
   const cost = calculateTokenCost({
     inputTokens: input.usage.inputTokens,
     outputTokens: input.usage.outputTokens,
-    prices: input.prices,
+    prices: {
+      ...builtInPricesFor(input),
+      ...input.prices
+    },
     ...(input.usage.providerCostUsd === undefined
       ? {}
       : { providerCostUsd: input.usage.providerCostUsd })
@@ -122,4 +128,3 @@ export const summarizeRunCost = (input: {
     outputTokens: cost.outputTokens
   }
 }
-

@@ -1,0 +1,59 @@
+{
+  "id": "crb-keycloak-06-add-groups-resource-type-and-scopes-to-authorization-schema",
+  "title": "Add Groups resource type and scopes to authorization schema",
+  "description": "Curated PR review case adapted from keycloak golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/keycloak/keycloak/pull/37038",
+  "prTitle": "Add Groups resource type and scopes to authorization schema",
+  "sourceRepo": "keycloak",
+  "upstreamOwner": "keycloak",
+  "upstreamRepo": "keycloak",
+  "baseSha": "068ed9dadadd9a437474e80b8aac598b4c90c172",
+  "headSha": "5aa9466dd05005fa8fb9dfb28020e083c3d59919",
+  "diff": "diff --git a/services/src/main/java/org/keycloak/authentication/Authenticator.java b/services/src/main/java/org/keycloak/authentication/Authenticator.java\nindex 0000000..1111111 100644\n--- a/services/src/main/java/org/keycloak/authentication/Authenticator.java\n+++ b/services/src/main/java/org/keycloak/authentication/Authenticator.java\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Add Groups resource type and scopes to authorization schema\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "java",
+  "changedFiles": [
+    "services/src/main/java/org/keycloak/authentication/Authenticator.java"
+  ],
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "Incorrect permission check in canManage() method",
+      "matchMode": "semantic-only",
+      "tier": "security"
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "In getGroupIdsWithViewPermission, hasPermission is called with groupResource.getId() and the same groupResource.getId() is added to granted, but hasPermission resolves resources by name (treating the argument as a group id) and the GroupPermissionEvaluator contract says this method returns group IDs that are later used as UserModel.GROUPS and in getUsersCount group filters. This mismatch means per-group VIEW_MEMBERS/MANAGE_MEMBERS permissions may not yield the expected group IDs for filtering an",
+      "matchMode": "semantic-only",
+      "tier": "security"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "services/src/main/java/org/keycloak/authentication/Authenticator.java",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "authentication",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "java",
+    "keycloak",
+    "local-logic",
+    "security",
+    "semantic"
+  ]
+}

@@ -1,58 +1,54 @@
 [
   {
-    "id": "typescript-positive",
-    "language": "typescript",
-    "repositoryFixture": "fixtures/typescript/positive",
-    "baseRef": "main",
-    "headRef": "HEAD",
-    "changedFiles": ["src/app.ts"],
-    "expectedFindings": [
-      {
-        "category": "bug",
-        "severity": "high",
-        "path": "src/app.ts",
-        "lineRange": [1, 1],
-        "semanticSummary": "parse diagnostic blocks reliable review syntax reported typescript analyzer"
-      }
-    ],
-    "expectedNoFindingZones": [],
-    "tags": ["positive", "typescript"]
-  },
-  {
     "id": "typescript-negative",
     "language": "typescript",
     "repositoryFixture": "fixtures/typescript/negative",
     "baseRef": "main",
     "headRef": "HEAD",
-    "changedFiles": ["src/format.ts"],
+    "changedFiles": [
+      "src/format.ts"
+    ],
     "expectedFindings": [],
     "expectedNoFindingZones": [
       {
         "path": "src/format.ts",
-        "lineRange": [1, 20],
+        "lineRange": [
+          1,
+          20
+        ],
         "reason": "Formatting-only changes must not produce review findings."
       }
     ],
-    "tags": ["negative", "typescript"]
+    "tags": [
+      "negative",
+      "typescript"
+    ]
   },
   {
-    "id": "javascript-positive",
-    "language": "javascript",
-    "repositoryFixture": "fixtures/javascript/positive",
+    "id": "model-refutation-control",
+    "language": "typescript",
+    "repositoryFixture": "fixtures/typescript/model-refutation-control",
     "baseRef": "main",
     "headRef": "HEAD",
-    "changedFiles": ["src/app.js"],
-    "expectedFindings": [
+    "changedFiles": [
+      "src/app.ts"
+    ],
+    "expectedFindings": [],
+    "expectedNoFindingZones": [
       {
-        "category": "bug",
-        "severity": "high",
-        "path": "src/app.js",
-        "lineRange": [1, 1],
-        "semanticSummary": "parse diagnostic blocks reliable review syntax reported javascript analyzer"
+        "path": "src/app.ts",
+        "lineRange": [
+          1,
+          5
+        ],
+        "reason": "Model-only concerns in valid fallback logic must be refuted or kept non-actionable unless a complete proof packet passes refutation."
       }
     ],
-    "expectedNoFindingZones": [],
-    "tags": ["positive", "javascript"]
+    "tags": [
+      "negative",
+      "typescript",
+      "model-refutation-control"
+    ]
   },
   {
     "id": "javascript-negative",
@@ -60,35 +56,24 @@
     "repositoryFixture": "fixtures/javascript/negative",
     "baseRef": "main",
     "headRef": "HEAD",
-    "changedFiles": ["src/app.js"],
+    "changedFiles": [
+      "src/app.js"
+    ],
     "expectedFindings": [],
     "expectedNoFindingZones": [
       {
         "path": "src/app.js",
-        "lineRange": [1, 20],
+        "lineRange": [
+          1,
+          20
+        ],
         "reason": "Valid JavaScript must not produce syntax findings."
       }
     ],
-    "tags": ["negative", "javascript"]
-  },
-  {
-    "id": "python-positive",
-    "language": "python",
-    "repositoryFixture": "fixtures/python/positive",
-    "baseRef": "main",
-    "headRef": "HEAD",
-    "changedFiles": ["src/app.py"],
-    "expectedFindings": [
-      {
-        "category": "bug",
-        "severity": "high",
-        "path": "src/app.py",
-        "lineRange": [1, 1],
-        "semanticSummary": "parse diagnostic blocks reliable review syntax reported python analyzer"
-      }
-    ],
-    "expectedNoFindingZones": [],
-    "tags": ["positive", "python"]
+    "tags": [
+      "negative",
+      "javascript"
+    ]
   },
   {
     "id": "python-negative",
@@ -96,35 +81,24 @@
     "repositoryFixture": "fixtures/python/negative",
     "baseRef": "main",
     "headRef": "HEAD",
-    "changedFiles": ["src/app.py"],
+    "changedFiles": [
+      "src/app.py"
+    ],
     "expectedFindings": [],
     "expectedNoFindingZones": [
       {
         "path": "src/app.py",
-        "lineRange": [1, 20],
+        "lineRange": [
+          1,
+          20
+        ],
         "reason": "Valid Python must not produce syntax findings."
       }
     ],
-    "tags": ["negative", "python"]
-  },
-  {
-    "id": "go-positive",
-    "language": "go",
-    "repositoryFixture": "fixtures/go/positive",
-    "baseRef": "main",
-    "headRef": "HEAD",
-    "changedFiles": ["src/app.go"],
-    "expectedFindings": [
-      {
-        "category": "bug",
-        "severity": "high",
-        "path": "src/app.go",
-        "lineRange": [1, 1],
-        "semanticSummary": "parse diagnostic blocks reliable review syntax reported go analyzer"
-      }
-    ],
-    "expectedNoFindingZones": [],
-    "tags": ["positive", "go"]
+    "tags": [
+      "negative",
+      "python"
+    ]
   },
   {
     "id": "go-negative",
@@ -132,35 +106,24 @@
     "repositoryFixture": "fixtures/go/negative",
     "baseRef": "main",
     "headRef": "HEAD",
-    "changedFiles": ["src/app.go"],
+    "changedFiles": [
+      "src/app.go"
+    ],
     "expectedFindings": [],
     "expectedNoFindingZones": [
       {
         "path": "src/app.go",
-        "lineRange": [1, 20],
+        "lineRange": [
+          1,
+          20
+        ],
         "reason": "Valid Go must not produce syntax findings."
       }
     ],
-    "tags": ["negative", "go"]
-  },
-  {
-    "id": "rust-positive",
-    "language": "rust",
-    "repositoryFixture": "fixtures/rust/positive",
-    "baseRef": "main",
-    "headRef": "HEAD",
-    "changedFiles": ["src/app.rs"],
-    "expectedFindings": [
-      {
-        "category": "bug",
-        "severity": "high",
-        "path": "src/app.rs",
-        "lineRange": [1, 1],
-        "semanticSummary": "parse diagnostic blocks reliable review syntax reported rust analyzer"
-      }
-    ],
-    "expectedNoFindingZones": [],
-    "tags": ["positive", "rust"]
+    "tags": [
+      "negative",
+      "go"
+    ]
   },
   {
     "id": "rust-negative",
@@ -168,35 +131,24 @@
     "repositoryFixture": "fixtures/rust/negative",
     "baseRef": "main",
     "headRef": "HEAD",
-    "changedFiles": ["src/app.rs"],
+    "changedFiles": [
+      "src/app.rs"
+    ],
     "expectedFindings": [],
     "expectedNoFindingZones": [
       {
         "path": "src/app.rs",
-        "lineRange": [1, 20],
+        "lineRange": [
+          1,
+          20
+        ],
         "reason": "Valid Rust must not produce syntax findings."
       }
     ],
-    "tags": ["negative", "rust"]
-  },
-  {
-    "id": "java-positive",
-    "language": "java",
-    "repositoryFixture": "fixtures/java/positive",
-    "baseRef": "main",
-    "headRef": "HEAD",
-    "changedFiles": ["src/App.java"],
-    "expectedFindings": [
-      {
-        "category": "bug",
-        "severity": "high",
-        "path": "src/App.java",
-        "lineRange": [1, 1],
-        "semanticSummary": "parse diagnostic blocks reliable review syntax reported java analyzer"
-      }
-    ],
-    "expectedNoFindingZones": [],
-    "tags": ["positive", "java"]
+    "tags": [
+      "negative",
+      "rust"
+    ]
   },
   {
     "id": "java-negative",
@@ -204,15 +156,23 @@
     "repositoryFixture": "fixtures/java/negative",
     "baseRef": "main",
     "headRef": "HEAD",
-    "changedFiles": ["src/App.java"],
+    "changedFiles": [
+      "src/App.java"
+    ],
     "expectedFindings": [],
     "expectedNoFindingZones": [
       {
         "path": "src/App.java",
-        "lineRange": [1, 20],
+        "lineRange": [
+          1,
+          20
+        ],
         "reason": "Valid Java must not produce syntax findings."
       }
     ],
-    "tags": ["negative", "java"]
+    "tags": [
+      "negative",
+      "java"
+    ]
   }
 ]

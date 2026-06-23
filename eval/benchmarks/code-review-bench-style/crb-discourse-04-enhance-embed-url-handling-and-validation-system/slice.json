@@ -1,0 +1,88 @@
+{
+  "id": "crb-discourse-04-enhance-embed-url-handling-and-validation-system",
+  "title": "Enhance embed URL handling and validation system",
+  "description": "Curated PR review case adapted from discourse golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/discourse/discourse/commit/4f8aed295a29954023b2849c060ef4fb299d1b5d",
+  "prTitle": "Enhance embed URL handling and validation system",
+  "sourceRepo": "discourse",
+  "upstreamOwner": "discourse",
+  "upstreamRepo": "discourse",
+  "baseSha": "ef2eb9f10c44f6dd8d1281d09dc3412dbbd913ea",
+  "headSha": "a67ac5ce11dd4ff42f580e374e642f570675adcb",
+  "diff": "diff --git a/app/models/topic.rb b/app/models/topic.rb\nindex 0000000..1111111 100644\n--- a/app/models/topic.rb\n+++ b/app/models/topic.rb\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Enhance embed URL handling and validation system\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "ruby",
+  "changedFiles": [
+    "app/models/topic.rb"
+  ],
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "critical",
+      "semanticSummary": "SSRF vulnerability using open(url) without validation",
+      "matchMode": "semantic-only",
+      "tier": "security"
+    },
+    {
+      "category": "security",
+      "severity": "medium",
+      "semanticSummary": "The current origin validation using indexOf is insufficient and can be bypassed. An attacker could use a malicious domain like evil-discourseUrl.com to pass this check.",
+      "matchMode": "semantic-only",
+      "tier": "security"
+    },
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "postMessage targetOrigin should be the origin (scheme+host+port), not the full referrer URL; using the full URL will cause the message to be dropped and prevent resizing.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "security",
+      "severity": "medium",
+      "semanticSummary": "The code sets X-Frame-Options: ALLOWALL which completely disables clickjacking protection. The referer validation can be bypassed (referer headers are easily spoofed), and the fallback to empty string for nil referer masks validation failures.",
+      "matchMode": "semantic-only",
+      "tier": "security"
+    },
+    {
+      "category": "security",
+      "severity": "medium",
+      "semanticSummary": "The TopicEmbed.import method is susceptible to a NoMethodError if the contents parameter is nil when attempting to append a string, and an XSS vulnerability due to unescaped url interpolation in the generated HTML.",
+      "matchMode": "semantic-only",
+      "tier": "security"
+    },
+    {
+      "category": "performance",
+      "severity": "medium",
+      "semanticSummary": "The ERB block closes with end if, which is invalid Ruby/ERB and will raise at render; it should just be end to close the if block.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "app/models/topic.rb",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "concurrency",
+    "cross-file",
+    "curated-pr",
+    "discourse",
+    "forum",
+    "null-reference",
+    "ruby",
+    "security",
+    "semantic"
+  ]
+}

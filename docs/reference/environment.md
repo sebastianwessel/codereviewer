@@ -1,8 +1,10 @@
 # Environment Reference
 
 Root `.env` values override exported process environment values for review
-commands. CLI flags still win where a command exposes a flag. Evaluation runs
-do not load root `.env` by default.
+commands. CLI flags still win where a command exposes a flag. Plain
+`npm run eval` does not load `.env`. Provider-backed eval helpers such as
+`npm run eval:with-env`, `npm run eval:semantic`, and `npm run cli -- ...` load
+`.env` with Node's native `--env-file-if-exists=.env` flag.
 
 ## Config Overrides
 
@@ -15,9 +17,9 @@ do not load root `.env` by default.
 | `CODEREVIEWER_PROVIDER_ID` | `openai` |
 | `CODEREVIEWER_PROVIDER_MODEL` | `gpt-5-mini` |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `https://example.internal/v1` |
-| `CODEREVIEWER_CONFIG_PATH` | `.review/config.json` |
-| `CODEREVIEWER_ARTIFACT_DIR` | `.review/runs` |
-| `CODEREVIEWER_SKILLS_DIR` | `.review/skills` |
+| `CODEREVIEWER_CONFIG_PATH` | `.codereviewer/config.json` |
+| `CODEREVIEWER_ARTIFACT_DIR` | `.codereviewer/runs` |
+| `CODEREVIEWER_SKILLS_DIR` | `.codereviewer/skills` |
 | `CODEREVIEWER_OPENTELEMETRY_ENABLED` | `false` |
 | `CODEREVIEWER_OPENTELEMETRY_ENDPOINT` | `http://localhost:4318/v1/traces` |
 | `CODEREVIEWER_OPENTELEMETRY_HEADERS` | `{"Authorization":"Bearer ..."}` |

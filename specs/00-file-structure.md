@@ -29,7 +29,7 @@ exists as the readiness gate anchor for folder ownership and generated outputs.
 | --- | --- | --- |
 | ESM build | `dist/` | ignored |
 | Coverage | `coverage/` | ignored |
-| Run artifacts | `.review/runs/<run-id>/` | ignored |
+| Run artifacts | `.codereviewer/runs/<run-id>/` | ignored |
 | Config JSON Schema | `schema/codereviewer-config.schema.json` | committed |
 
 ## Placement Rules

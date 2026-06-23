@@ -3,7 +3,7 @@
 Configuration is merged in this order:
 
 1. Built-in defaults.
-2. `.review/config.json` if present.
+2. `.codereviewer/config.json` if present.
 3. Process environment overrides.
 4. Root `.env` if present.
 5. CLI flags where a command supports them.
@@ -32,8 +32,8 @@ npx tsx src/cli/main.ts config validate
   },
   "paths": {
     "include": ["src/**"],
-    "exclude": [".git/**", "node_modules/**", "dist/**", "coverage/**", ".review/**"],
-    "artifactDir": ".review/runs"
+    "exclude": [".git/**", "node_modules/**", "dist/**", "coverage/**", ".codereviewer/**"],
+    "artifactDir": ".codereviewer/runs"
   },
   "instructions": {
     "files": ["docs/reviewer-instructions.md"],
@@ -57,8 +57,8 @@ npx tsx src/cli/main.ts config validate
 | Base/head refs | `main` / `HEAD` |
 | Max files | `500` |
 | Max file bytes | `500000` |
-| Provider task context bytes | `60000` unless `review.contextMaxBytes` is set |
-| Artifact directory | `.review/runs` |
+| Provider task context bytes | `60000` / `120000` / `240000` (fast / balanced / thorough) unless `review.contextMaxBytes` is set |
+| Artifact directory | `.codereviewer/runs` |
 | Baseline | enabled |
 | Report formats | JSON, Markdown, SARIF |
 | Shell access | disabled |

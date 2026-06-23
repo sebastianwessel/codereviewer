@@ -95,6 +95,7 @@ describe('repository intake', () => {
     expect(intake.diffMaps).toEqual([
       {
         path: 'src/app.ts',
+        changeKind: 'modified',
         hunks: [
           {
             oldStartLine: 1,
@@ -293,6 +294,7 @@ describe('git diff map parser', () => {
     ).toEqual([
       {
         path: 'src/app.ts',
+        changeKind: 'modified',
         hunks: [
           {
             oldStartLine: 2,
@@ -304,12 +306,57 @@ describe('git diff map parser', () => {
       },
       {
         path: 'src/win.ts',
+        changeKind: 'modified',
         hunks: [
           {
             oldStartLine: 1,
             oldLineCount: 1,
             newStartLine: 1,
             newLineCount: 2
+          }
+        ]
+      }
+    ])
+  })
+
+  test('records new and deleted file change kinds from git diff headers', () => {
+    expect(
+      parseGitDiffMaps(
+        [
+          'diff --git a/src/new.ts b/src/new.ts',
+          'new file mode 100644',
+          '--- /dev/null',
+          '+++ b/src/new.ts',
+          '@@ -0,0 +1,2 @@',
+          'diff --git a/src/old.ts b/src/old.ts',
+          'deleted file mode 100644',
+          '--- a/src/old.ts',
+          '+++ /dev/null',
+          '@@ -1,2 +0,0 @@'
+        ].join('\n')
+      )
+    ).toEqual([
+      {
+        path: 'src/new.ts',
+        changeKind: 'new',
+        hunks: [
+          {
+            oldStartLine: 0,
+            oldLineCount: 0,
+            newStartLine: 1,
+            newLineCount: 2
+          }
+        ]
+      },
+      {
+        path: 'src/old.ts',
+        changeKind: 'deleted',
+        hunks: [
+          {
+            oldStartLine: 1,
+            oldLineCount: 2,
+            newStartLine: 0,
+            newLineCount: 0
           }
         ]
       }

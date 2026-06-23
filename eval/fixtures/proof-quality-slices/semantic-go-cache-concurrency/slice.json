@@ -1,0 +1,28 @@
+{
+  "id": "semantic-go-cache-concurrency",
+  "title": "Go cache concurrency regression",
+  "description": "A project-owned semantic review case for benchmark-style cache locking and unguarded iteration bugs.",
+  "source": "project-owned",
+  "capturedAt": "2026-06-23",
+  "language": "go",
+  "changedFiles": ["pkg/storage/unified/search/bleve.go"],
+  "diff": "diff --git a/pkg/storage/unified/search/bleve.go b/pkg/storage/unified/search/bleve.go\n--- a/pkg/storage/unified/search/bleve.go\n+++ b/pkg/storage/unified/search/bleve.go\n@@ -16,16 +16,18 @@ func (b *bleveBackend) BuildIndex(key string) *Index {\n-  b.cacheMu.Lock()\n-  defer b.cacheMu.Unlock()\n-\n   if idx, ok := b.cache[key]; ok {\n     return idx\n   }\n \n   idx := &Index{docs: len(key)}\n+  idx.Flush()\n+\n+  b.cacheMu.Lock()\n+  defer b.cacheMu.Unlock()\n   b.cache[key] = idx\n   return idx\n }\n \n func (b *bleveBackend) TotalDocs() int {\n   total := 0\n   for _, idx := range b.cache {\n     total += idx.docs\n   }\n",
+  "expectedFindings": [
+    {
+      "category": "performance",
+      "severity": "high",
+      "path": "pkg/storage/unified/search/bleve.go",
+      "lineRange": [17, 27],
+      "semanticSummary": "BuildIndex reads the shared cache and performs expensive cache construction before taking the cache lock, so concurrent callers can race on the map and duplicate work for the same cache entry"
+    },
+    {
+      "category": "performance",
+      "severity": "high",
+      "path": "pkg/storage/unified/search/bleve.go",
+      "lineRange": [32, 34],
+      "semanticSummary": "TotalDocs iterates the shared cache map without a read lock while BuildIndex can write to it, risking concurrent map read/write panics"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": ["slice", "project-owned", "semantic", "proof-quality", "concurrency", "positive"]
+}

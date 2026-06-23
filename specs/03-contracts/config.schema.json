@@ -202,7 +202,7 @@
       "default": {
         "enabled": false,
         "directories": [
-          ".review/skills"
+          ".codereviewer/skills"
         ],
         "allowTools": [
           "read",
@@ -218,7 +218,7 @@
         },
         "directories": {
           "default": [
-            ".review/skills"
+            ".codereviewer/skills"
           ],
           "type": "array",
           "items": {
@@ -260,10 +260,9 @@
           "node_modules/**",
           "dist/**",
           "coverage/**",
-          ".review/**",
           ".codereviewer/**"
         ],
-        "artifactDir": ".review/runs"
+        "artifactDir": ".codereviewer/runs"
       },
       "type": "object",
       "properties": {
@@ -282,7 +281,6 @@
             "node_modules/**",
             "dist/**",
             "coverage/**",
-            ".review/**",
             ".codereviewer/**"
           ],
           "type": "array",
@@ -291,7 +289,7 @@
           }
         },
         "artifactDir": {
-          "default": ".review/runs",
+          "default": ".codereviewer/runs",
           "type": "string",
           "minLength": 1
         }
@@ -306,7 +304,7 @@
     "baseline": {
       "default": {
         "enabled": true,
-        "path": ".review/baseline.json",
+        "path": ".codereviewer/baseline.json",
         "failOnNewOnly": true,
         "includeResolvedInReport": true
       },
@@ -317,7 +315,7 @@
           "type": "boolean"
         },
         "path": {
-          "default": ".review/baseline.json",
+          "default": ".codereviewer/baseline.json",
           "type": "string",
           "minLength": 1
         },
@@ -342,7 +340,6 @@
       "default": {
         "maxCritical": 0,
         "maxHigh": 0,
-        "minEvidenceLevel": "non-model",
         "failOnProviderError": true
       },
       "type": "object",
@@ -364,14 +361,6 @@
           "minimum": 0,
           "maximum": 9007199254740991
         },
-        "minEvidenceLevel": {
-          "default": "non-model",
-          "type": "string",
-          "enum": [
-            "non-model",
-            "model-ok"
-          ]
-        },
         "failOnProviderError": {
           "default": true,
           "type": "boolean"
@@ -383,8 +372,155 @@
       "required": [
         "maxCritical",
         "maxHigh",
-        "minEvidenceLevel",
         "failOnProviderError"
+      ],
+      "additionalProperties": false
+    },
+    "aiReview": {
+      "default": {
+        "requireRefutation": true,
+        "intentPlanning": "auto",
+        "judgeFindings": false,
+        "externalStaticAnalysisAssumed": true,
+        "deterministicSignalMode": "support"
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "maxSuspicionsPerTask": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        },
+        "maxInvestigationsPerRun": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200
+        },
+        "maxToolReadsPerInvestigation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50
+        },
+        "maxToolSearchesPerInvestigation": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 25
+        },
+        "maxInvestigationRounds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "requireRefutation": {
+          "default": true,
+          "type": "boolean",
+          "const": true
+        },
+        "intentPlanning": {
+          "default": "auto",
+          "type": "string",
+          "enum": [
+            "auto",
+            "deterministic",
+            "model"
+          ]
+        },
+        "judgeFindings": {
+          "default": false,
+          "type": "boolean"
+        },
+        "externalStaticAnalysisAssumed": {
+          "default": true,
+          "type": "boolean"
+        },
+        "deterministicSignalMode": {
+          "default": "support",
+          "type": "string",
+          "enum": [
+            "support",
+            "disabled"
+          ]
+        }
+      },
+      "required": [
+        "requireRefutation",
+        "intentPlanning",
+        "judgeFindings",
+        "externalStaticAnalysisAssumed",
+        "deterministicSignalMode"
+      ],
+      "additionalProperties": false
+    },
+    "promotionPolicy": {
+      "default": {
+        "modelProof": "actionable",
+        "modelSuspicion": "artifact-only",
+        "modelWeakOrRefuted": "artifact-only",
+        "deterministicSignalOnly": "artifact-only",
+        "staticAnalysisDuplicate": "artifact-only",
+        "deterministicContradiction": "rejected"
+      },
+      "type": "object",
+      "properties": {
+        "modelProof": {
+          "default": "actionable",
+          "type": "string",
+          "enum": [
+            "actionable",
+            "artifact-only"
+          ]
+        },
+        "modelSuspicion": {
+          "default": "artifact-only",
+          "type": "string",
+          "enum": [
+            "artifact-only",
+            "rejected"
+          ]
+        },
+        "modelWeakOrRefuted": {
+          "default": "artifact-only",
+          "type": "string",
+          "enum": [
+            "artifact-only",
+            "rejected"
+          ]
+        },
+        "deterministicSignalOnly": {
+          "default": "artifact-only",
+          "type": "string",
+          "enum": [
+            "artifact-only",
+            "rejected"
+          ]
+        },
+        "staticAnalysisDuplicate": {
+          "default": "artifact-only",
+          "type": "string",
+          "enum": [
+            "artifact-only",
+            "rejected"
+          ]
+        },
+        "deterministicContradiction": {
+          "default": "rejected",
+          "type": "string",
+          "enum": [
+            "artifact-only",
+            "rejected"
+          ]
+        }
+      },
+      "required": [
+        "modelProof",
+        "modelSuspicion",
+        "modelWeakOrRefuted",
+        "deterministicSignalOnly",
+        "staticAnalysisDuplicate",
+        "deterministicContradiction"
       ],
       "additionalProperties": false
     },
@@ -731,6 +867,8 @@
     "paths",
     "baseline",
     "qualityGate",
+    "aiReview",
+    "promotionPolicy",
     "security",
     "reporting",
     "evaluation",

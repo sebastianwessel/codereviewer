@@ -155,6 +155,26 @@ type SarifRule = {
   }
 }
 
+type SarifProviderIssue = {
+  readonly code: string
+  readonly stage?: string
+  readonly recovered?: boolean
+  readonly message?: string
+}
+
+const renderProviderIssue = (
+  issue: ReviewReport['providerIssues'][number]
+): SarifProviderIssue => ({
+  code: safeRedactedText(issue.code),
+  ...(issue.stage === undefined
+    ? {}
+    : { stage: safeRedactedText(issue.stage) }),
+  ...(issue.recovered === undefined ? {} : { recovered: issue.recovered }),
+  ...(issue.message === undefined
+    ? {}
+    : { message: safeRedactedText(issue.message) })
+})
+
 // Every result references a rule by `ruleId`; SARIF consumers expect those rules
 // to be defined in the driver. Build a stable, de-duplicated rule catalog from
 // the admitted findings.
@@ -298,12 +318,21 @@ export const renderSarifReport = (
   options: SarifRenderOptions
 ): string => {
   const report: ReviewReport = validateReviewReport(input)
-  const includedFindings = sortAdmittedFindings(report.admittedFindings).slice(
-    0,
-    options.maxResults
-  )
+  const includedFindings = sortAdmittedFindings(
+    report.admittedFindings.filter(
+      (finding) => finding.reporterEligibility !== 'artifact-only'
+    )
+  ).slice(0, options.maxResults)
   const results = includedFindings.map(renderResult)
   const rules = buildRules(includedFindings)
+  const properties =
+    report.providerIssues.length === 0
+      ? {}
+      : {
+          properties: {
+            providerIssues: report.providerIssues.map(renderProviderIssue)
+          }
+        }
   const sarif = {
     version: '2.1.0',
     $schema:
@@ -320,6 +349,7 @@ export const renderSarifReport = (
         automationDetails: {
           id: options.category
         },
+        ...properties,
         results
       }
     ]

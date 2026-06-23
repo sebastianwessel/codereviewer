@@ -1,7 +1,7 @@
 # 09: Readiness Self-Audit
 
 Status: Approved
-Date: 2026-06-19
+Date: 2026-06-22
 
 This is an author self-audit only. It is not readiness approval.
 
@@ -153,7 +153,7 @@ self-audit is not approval.
 - PR publishing, automatic fixes, hosted service, browser UI, and database
   persistence are future specs.
 - Provider adapter package names and versions are based on npm metadata
-  retrieved on 2026-06-19.
+  retrieved on 2026-06-22.
 - State-of-practice review, reporting, evaluation, security, and supply-chain
   sources were retrieved or verified on 2026-06-20.
 

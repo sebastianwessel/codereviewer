@@ -1,0 +1,56 @@
+{
+  "id": "crb-discourse-05-optimize-header-layout-performance-with-flexbox-mixins",
+  "title": "Optimize header layout performance with flexbox mixins",
+  "description": "Curated PR review case adapted from discourse golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/discourse/discourse/commit/5b229316ee4c661836ed1161139692a3e8527444",
+  "prTitle": "Optimize header layout performance with flexbox mixins",
+  "sourceRepo": "discourse",
+  "upstreamOwner": "discourse",
+  "upstreamRepo": "discourse",
+  "baseSha": "66252dfee6fd30f169ba54b283f30c5a82fda6ef",
+  "headSha": "d5c45d066f0802dddee3ff74fcf49333a1ef304a",
+  "diff": "diff --git a/app/models/topic.rb b/app/models/topic.rb\nindex 0000000..1111111 100644\n--- a/app/models/topic.rb\n+++ b/app/models/topic.rb\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Optimize header layout performance with flexbox mixins\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "ruby",
+  "changedFiles": [
+    "app/models/topic.rb"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "Mixing float: left with flexbox causes layout issues. Further this PR removes the float-based right alignment for .d-header .panel, which may cause the login panel in the non-Ember/noscript header (where .panel is nested inside .row and not a flex item) to stack under the title instead of remaining right-aligned.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "-ms-align-items never existed in any version of IE/Edge; the correct legacy property is -ms-flex-align.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "app/models/topic.rb",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "discourse",
+    "forum",
+    "local-logic",
+    "ruby",
+    "semantic"
+  ]
+}

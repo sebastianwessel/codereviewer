@@ -15,9 +15,9 @@ describe('skill index', () => {
     const root = await createTempDir()
 
     try {
-      await mkdir(join(root, '.review/skills/react/hooks'), { recursive: true })
+      await mkdir(join(root, '.codereviewer/skills/react/hooks'), { recursive: true })
       await writeFile(
-        join(root, '.review/skills/react/SKILL.md'),
+        join(root, '.codereviewer/skills/react/SKILL.md'),
         [
           '---',
           'name: react',
@@ -29,7 +29,7 @@ describe('skill index', () => {
         ].join('\n')
       )
       await writeFile(
-        join(root, '.review/skills/react/hooks/SKILL.md'),
+        join(root, '.codereviewer/skills/react/hooks/SKILL.md'),
         [
           '---',
           'name: react-hooks',
@@ -43,23 +43,23 @@ describe('skill index', () => {
 
       const index = await createSkillIndex({
         repositoryRoot: root,
-        directories: ['.review/skills']
+        directories: ['.codereviewer/skills']
       })
 
       expect(index.skills).toEqual([
         expect.objectContaining({
           id: 'react',
-          path: '.review/skills/react/SKILL.md',
-          directory: '.review/skills/react',
-          absoluteDirectory: join(root, '.review/skills/react'),
+          path: '.codereviewer/skills/react/SKILL.md',
+          directory: '.codereviewer/skills/react',
+          absoluteDirectory: join(root, '.codereviewer/skills/react'),
           description: 'Use project React conventions.',
           contentHash: expect.stringMatching(/^[a-f0-9]{64}$/)
         }),
         expect.objectContaining({
           id: 'react-hooks',
-          path: '.review/skills/react/hooks/SKILL.md',
-          directory: '.review/skills/react/hooks',
-          absoluteDirectory: join(root, '.review/skills/react/hooks'),
+          path: '.codereviewer/skills/react/hooks/SKILL.md',
+          directory: '.codereviewer/skills/react/hooks',
+          absoluteDirectory: join(root, '.codereviewer/skills/react/hooks'),
           description: 'Review React hooks.',
           contentHash: expect.stringMatching(/^[a-f0-9]{64}$/)
         })
@@ -89,13 +89,13 @@ describe('skill index', () => {
     const root = await createTempDir()
 
     try {
-      await mkdir(join(root, '.review/skills/react'), { recursive: true })
-      await writeFile(join(root, '.review/skills/react/SKILL.md'), '# React')
+      await mkdir(join(root, '.codereviewer/skills/react'), { recursive: true })
+      await writeFile(join(root, '.codereviewer/skills/react/SKILL.md'), '# React')
 
       await expect(
         createSkillIndex({
           repositoryRoot: root,
-          directories: ['.review/skills']
+          directories: ['.codereviewer/skills']
         })
       ).rejects.toThrow(/frontmatter/u)
     } finally {

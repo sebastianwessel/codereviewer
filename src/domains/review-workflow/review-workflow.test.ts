@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
 import type {
   JsonValue,
+  Logger,
   ModelProvider,
   ObjectRequest,
   ObjectResponse
@@ -13,7 +14,7 @@ import {
   createReviewHarness,
   isReviewTaskExecutionError,
   runModelBackedReviewWorkflow,
-  runScriptedReviewWorkflow
+  runProvidedCandidateReviewWorkflow
 } from './harness-workflow.js'
 import {
   CodeReviewerConfigSchema
@@ -27,6 +28,36 @@ import { parseGitDiffMaps } from '../repository-intake/index.js'
 
 const configHash =
   '1111111111111111111111111111111111111111111111111111111111111111'
+
+type CapturedLogRecord = {
+  readonly level: string
+  readonly message: string
+  readonly fields?: Record<string, unknown>
+}
+
+const createCapturingLogger = (): {
+  readonly logger: Logger
+  readonly records: CapturedLogRecord[]
+} => {
+  const records: CapturedLogRecord[] = []
+  const capture =
+    (level: string) =>
+    (message: string, fields?: Record<string, unknown>): void => {
+      records.push({ level, message, ...(fields === undefined ? {} : { fields }) })
+    }
+
+  const logger: Logger = {
+    trace: capture('trace'),
+    debug: capture('debug'),
+    info: capture('info'),
+    warn: capture('warn'),
+    error: capture('error'),
+    fatal: capture('fatal'),
+    child: () => logger
+  }
+
+  return { logger, records }
+}
 
 const createMountedSkill = async (): Promise<{
   readonly root: string
@@ -73,7 +104,7 @@ class EmptyFindingProvider implements ModelProvider {
   ): Promise<ObjectResponse<T>> {
     this.requests.push(req)
     return {
-      object: { candidates: [] } as unknown as T,
+      object: { suspicions: [] } as unknown as T,
       finishReason: 'stop',
       usage: {
         inputTokens: 1,
@@ -99,7 +130,7 @@ class FailingSecondTaskProvider implements ModelProvider {
     }
 
     return {
-      object: { candidates: [] } as unknown as T,
+      object: { suspicions: [] } as unknown as T,
       finishReason: 'stop',
       usage: {
         inputTokens: 1,
@@ -153,7 +184,7 @@ class ObservedConcurrencyProvider implements ModelProvider {
       await new Promise((resolve) => setTimeout(resolve, 20))
 
       return {
-        object: { candidates: [] } as unknown as T,
+        object: { suspicions: [] } as unknown as T,
         finishReason: 'stop',
         usage: {
           inputTokens: 1,
@@ -167,11 +198,123 @@ class ObservedConcurrencyProvider implements ModelProvider {
   }
 }
 
+const isFindingRefutationRequest = (req: ObjectRequest): boolean => {
+  const schema = req.schema
+
+  return (
+    typeof schema === 'object' &&
+    schema !== null &&
+    'properties' in schema &&
+    typeof schema.properties === 'object' &&
+    schema.properties !== null &&
+    'verdict' in schema.properties &&
+    'rationaleSummary' in schema.properties
+  )
+}
+
+const isFindingInvestigationRequest = (req: ObjectRequest): boolean => {
+  const schema = req.schema
+
+  return (
+    typeof schema === 'object' &&
+    schema !== null &&
+    'properties' in schema &&
+    typeof schema.properties === 'object' &&
+    schema.properties !== null &&
+    'verdict' in schema.properties &&
+    'rationaleSummary' in schema.properties &&
+    'evidenceIds' in schema.properties
+  )
+}
+
+const isFindingRefutationCheckRequest = (req: ObjectRequest): boolean =>
+  isFindingRefutationRequest(req) && !isFindingInvestigationRequest(req)
+
+const isFindingAggregateRequest = (req: ObjectRequest): boolean => {
+  const schema = req.schema
+
+  return (
+    typeof schema === 'object' &&
+    schema !== null &&
+    'properties' in schema &&
+    typeof schema.properties === 'object' &&
+    schema.properties !== null &&
+    'verdict' in schema.properties &&
+    'summary' in schema.properties &&
+    'decisions' in schema.properties
+  )
+}
+
+const isSiblingSweepRequest = (req: ObjectRequest): boolean => {
+  const systemText = req.messages
+    .filter((message) => message.role === 'system')
+    .map((message) => String(message.content))
+    .join('\n')
+
+  return systemText.includes('Look only for sibling instances of already proved findings')
+}
+
+const isFindingJudgeRequest = (req: ObjectRequest): boolean => {
+  const schema = req.schema
+
+  return (
+    typeof schema === 'object' &&
+    schema !== null &&
+    'properties' in schema &&
+    typeof schema.properties === 'object' &&
+    schema.properties !== null &&
+    'verdict' in schema.properties &&
+    'summary' in schema.properties &&
+    !('decisions' in schema.properties) &&
+    !('rationaleSummary' in schema.properties)
+  )
+}
+
+const isIntentPlanningRequest = (req: ObjectRequest): boolean => {
+  const schema = req.schema
+
+  return (
+    typeof schema === 'object' &&
+    schema !== null &&
+    'properties' in schema &&
+    typeof schema.properties === 'object' &&
+    schema.properties !== null &&
+    'intents' in schema.properties
+  )
+}
+
+const provedFindingEvidence = (): Record<string, JsonValue> => ({
+  changedBehavior: 'The changed branch returns the wrong value.',
+  executionOrDataPath: 'The reviewed code path reaches the changed branch.',
+  violatedInvariant: 'The branch must preserve the expected return contract.',
+  impact: 'Callers can receive an incorrect result.',
+  introducedByChange: 'The defect is located in the reviewed diff.',
+  contradictionChecks: ['No contradiction was found in the reviewed context.'],
+  fixDirection: 'Restore the expected return value on the changed branch.'
+})
+
+const provedFindingResponse = <T extends JsonValue>(
+  rationaleSummary = 'Refutation proved the model finding with the provided task evidence.'
+): ObjectResponse<T> => ({
+  object: {
+    verdict: 'proved',
+    rationaleSummary,
+    ...provedFindingEvidence()
+  } as unknown as T,
+  finishReason: 'stop',
+  usage: {
+    inputTokens: 1,
+    outputTokens: 1,
+    totalTokens: 2
+  }
+})
+
 class RollingQueueProvider implements ModelProvider {
   readonly id = 'rolling-queue'
   readonly genAiSystem = 'scripted'
   activeRequests = 0
   maxActiveRequests = 0
+  eventSequence = 0
   readonly starts: number[] = []
   readonly completions: number[] = []
   readonly requests: ObjectRequest[] = []
@@ -181,7 +324,8 @@ class RollingQueueProvider implements ModelProvider {
   ): Promise<ObjectResponse<T>> {
     const index = this.requests.length
     this.requests.push(req)
-    this.starts[index] = Date.now()
+    this.starts[index] = this.eventSequence
+    this.eventSequence += 1
     this.activeRequests += 1
     this.maxActiveRequests = Math.max(
       this.maxActiveRequests,
@@ -192,10 +336,11 @@ class RollingQueueProvider implements ModelProvider {
       await new Promise((resolve) =>
         setTimeout(resolve, index === 0 ? 80 : 10)
       )
-      this.completions[index] = Date.now()
+      this.completions[index] = this.eventSequence
+      this.eventSequence += 1
 
       return {
-        object: { candidates: [] } as unknown as T,
+        object: { suspicions: [] } as unknown as T,
         finishReason: 'stop',
         usage: {
           inputTokens: 1,
@@ -214,11 +359,15 @@ class SupportedFindingProvider implements ModelProvider {
   readonly genAiSystem = 'scripted'
 
   async object<T extends JsonValue = JsonValue>(
-    _req: ObjectRequest<T>
+    req: ObjectRequest<T>
   ): Promise<ObjectResponse<T>> {
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
     return {
       object: {
-        candidates: [
+        suspicions: [
           {
             category: 'bug',
             severity: 'high',
@@ -247,11 +396,15 @@ class InvalidLineFindingProvider implements ModelProvider {
   readonly genAiSystem = 'scripted'
 
   async object<T extends JsonValue = JsonValue>(
-    _req: ObjectRequest<T>
+    req: ObjectRequest<T>
   ): Promise<ObjectResponse<T>> {
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
     return {
       object: {
-        candidates: [
+        suspicions: [
           {
             category: 'bug',
             severity: 'high',
@@ -284,17 +437,1413 @@ class DuplicateSeedFindingProvider implements ModelProvider {
   ): Promise<ObjectResponse<T>> {
     return {
       object: {
-        candidates: [
+        suspicions: [
           {
             category: 'bug',
             severity: 'high',
             title: 'Parse diagnostic blocks reliable review',
             description:
-              'Syntax parse diagnostic reported by typescript-analyzer.',
+              'Syntax parse diagnostic reported by typescript-support-signal.',
             path: 'src/app.ts',
             startLine: 1,
             evidenceIds: ['ev_diag1'],
             fixSummary: 'Fix the syntax issue and rerun review.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class DroppedSuggestionProvider implements ModelProvider {
+  readonly id = 'dropped-suggestion'
+  readonly genAiSystem = 'scripted'
+
+  async object<T extends JsonValue = JsonValue>(
+    _req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug'
+          },
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Wrong path finding',
+            description: 'The model pointed outside the task path list.',
+            path: 'src/other.ts',
+            startLine: 1,
+            evidenceIds: ['ev_diag1']
+          },
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Missing evidence finding',
+            description: 'The model cited evidence that is not in the task.',
+            path: 'src/app.ts',
+            startLine: 1,
+            evidenceIds: ['ev_missing']
+          },
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Parse diagnostic blocks reliable review',
+            description:
+              'Syntax parse diagnostic reported by typescript-support-signal.',
+            path: 'src/app.ts',
+            startLine: 1,
+            evidenceIds: ['ev_diag1']
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class ContextOnlyFindingProvider implements ModelProvider {
+  readonly id = 'context-only-finding'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Context-only branch returns wrong value',
+            description:
+              'The reviewed source context shows the changed branch returns the wrong value.',
+            path: 'src/app.ts',
+            startLine: 4,
+            fixSummary: 'Return the expected value from the changed branch.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class MultipleContextOnlyFindingProvider implements ModelProvider {
+  readonly id = 'multiple-context-only-findings'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+  taskRequestCount = 0
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    this.taskRequestCount += 1
+    if (this.taskRequestCount > 1) {
+      return {
+        object: { suspicions: [] } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'First changed branch returns wrong value',
+            description:
+              'The reviewed source context shows the first changed branch returns the wrong value.',
+            path: 'src/app.ts',
+            startLine: 4,
+            fixSummary: 'Return the expected value from the first changed branch.'
+          },
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Second changed branch returns wrong value',
+            description:
+              'The reviewed source context shows the second changed branch returns the wrong value.',
+            path: 'src/app.ts',
+            startLine: 5,
+            fixSummary: 'Return the expected value from the second changed branch.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class AggregateRejectingFindingProvider implements ModelProvider {
+  readonly id = 'aggregate-rejecting-findings'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingAggregateRequest(req)) {
+      const userMessage = req.messages.find((message) => message.role === 'user')
+      const input = JSON.parse(String(userMessage?.content)) as {
+        readonly candidates: readonly { readonly id: string }[]
+        readonly evidence: readonly { readonly id: string }[]
+      }
+      const firstCandidate = input.candidates[0]?.id ?? 'cand_missing1'
+      const secondCandidate = input.candidates[1]?.id ?? 'cand_missing2'
+      const evidenceId = input.evidence[0]?.id ?? 'ev_missing'
+
+      return {
+        object: {
+          verdict: 'mixed',
+          summary:
+            'Aggregate review kept the primary issue and rejected the duplicate sibling.',
+          evidenceIds: [evidenceId],
+          decisions: [
+            {
+              candidateId: firstCandidate,
+              verdict: 'valid',
+              summary: 'Primary proof remains concrete after sibling comparison.',
+              evidenceIds: [evidenceId],
+              relatedCandidateIds: [secondCandidate]
+            },
+            {
+              candidateId: secondCandidate,
+              verdict: 'false-positive',
+              summary:
+                'Sibling proof duplicates the primary finding without unique impact.',
+              evidenceIds: [evidenceId],
+              relatedCandidateIds: [firstCandidate]
+            }
+          ],
+          similarIssueChecks: [
+            {
+              kind: 'duplicate-sibling',
+              result: 'passed',
+              summary: 'The two findings describe the same changed behavior.',
+              evidenceIds: [evidenceId]
+            }
+          ]
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    if (isFindingJudgeRequest(req)) {
+      const userMessage = req.messages.find((message) => message.role === 'user')
+      const input = JSON.parse(String(userMessage?.content)) as {
+        readonly evidence: readonly { readonly id: string }[]
+      }
+
+      return {
+        object: {
+          verdict: 'valid',
+          summary: 'Per-candidate judge accepted the primary proof kept by the aggregate critic.',
+          challengeQuestions: [
+            'Does the primary proof remain concrete after the aggregate kept it?'
+          ],
+          verificationChecks: [
+            {
+              kind: 'primary-proof',
+              result: 'passed',
+              summary: 'The primary proof packet stays within budget and scope.',
+              evidenceIds: input.evidence.map((record) => record.id)
+            }
+          ],
+          evidenceIds: input.evidence.map((record) => record.id),
+          contextRequests: [],
+          requestedContext: []
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Primary changed branch returns wrong value',
+            description:
+              'The reviewed source context shows the primary changed branch returns the wrong value.',
+            path: 'src/app.ts',
+            startLine: 4,
+            evidenceIds: ['ev_diff1'],
+            fixSummary: 'Return the expected value from the primary branch.'
+          },
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Duplicate sibling branch returns wrong value',
+            description:
+              'The reviewed source context repeats the same wrong-value claim for a sibling branch.',
+            path: 'src/app.ts',
+            startLine: 5,
+            evidenceIds: ['ev_diff1'],
+            fixSummary: 'Return the expected value from the sibling branch.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class AggregatePacketBudgetProvider implements ModelProvider {
+  readonly id = 'aggregate-packet-budget'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingJudgeRequest(req)) {
+      const userMessage = req.messages.find((message) => message.role === 'user')
+      const input = JSON.parse(String(userMessage?.content)) as {
+        readonly evidence: readonly { readonly id: string }[]
+      }
+
+      return {
+        object: {
+          verdict: 'valid',
+          summary: 'Per-candidate judge accepted the proof after aggregate fallback.',
+          challengeQuestions: [
+            'Does the single proof remain concrete after aggregate fallback?'
+          ],
+          verificationChecks: [
+            {
+              kind: 'single-proof',
+              result: 'passed',
+              summary: 'The single proof packet remains within the packet budget.',
+              evidenceIds: input.evidence.map((record) => record.id)
+            }
+          ],
+          evidenceIds: input.evidence.map((record) => record.id),
+          contextRequests: [],
+          requestedContext: []
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    if (isFindingInvestigationRequest(req)) {
+      const filler = 'x'.repeat(900)
+
+      return {
+        object: {
+          verdict: 'proved',
+          rationaleSummary:
+            'Investigation proved the issue with bounded task evidence.',
+          evidenceIds: [],
+          contextRequests: [],
+          requestedContext: [],
+          changedBehavior: `Changed behavior ${filler}`,
+          executionOrDataPath: `Execution path ${filler}`,
+          violatedInvariant: `Violated invariant ${filler}`,
+          impact: `Impact ${filler}`,
+          introducedByChange: `Introduced by change ${filler}`,
+          contradictionChecks: ['No contradiction was found.'],
+          fixDirection: `Fix direction ${filler}`
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    return {
+      object: {
+        suspicions: Array.from({ length: 5 }, (_value, index) => ({
+          category: 'bug',
+          severity: 'high',
+          title: `Changed branch ${index + 1} returns wrong value`,
+          description:
+            'The reviewed source context shows a changed branch returns the wrong value.',
+          path: 'src/app.ts',
+          startLine: index + 4,
+          evidenceIds: ['ev_diff1'],
+          fixSummary: 'Return the expected value from the changed branch.'
+        }))
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class InvestigationPacketBudgetProvider implements ModelProvider {
+  readonly id = 'investigation-packet-budget'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingInvestigationRequest(req)) {
+      const userMessage = req.messages.find((message) => message.role === 'user')
+      const input = JSON.parse(String(userMessage?.content)) as {
+        readonly evidence: readonly { readonly id: string }[]
+      }
+
+      return {
+        object: {
+          verdict: 'proved',
+          rationaleSummary:
+            'Investigation packet retained the retrieved context and exact evidence.',
+          evidenceIds: input.evidence.map((record) => record.id),
+          contextRequests: [],
+          requestedContext: [],
+          changedBehavior: 'The changed branch returns the wrong value.',
+          executionOrDataPath: 'The retrieved context proves the changed path.',
+          violatedInvariant: 'The branch must return the expected value.',
+          impact: 'Callers can receive the wrong value.',
+          introducedByChange: 'The reviewed branch changed in this diff.',
+          contradictionChecks: ['No contradiction was found.'],
+          fixDirection: 'Return the expected value.'
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Changed branch returns wrong value',
+            description:
+              'The reviewed source context shows the changed branch can return the wrong value.',
+            path: 'src/app.ts',
+            startLine: 4,
+            contextRequests: [
+              {
+                tool: 'read',
+                path: 'src/app.ts',
+                reason: 'Read the related implementation for proof.'
+              }
+            ],
+            fixSummary: 'Return the expected value.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class SiblingSweepFindingProvider implements ModelProvider {
+  readonly id = 'sibling-sweep-findings'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingAggregateRequest(req)) {
+      const userMessage = req.messages.find((message) => message.role === 'user')
+      const input = JSON.parse(String(userMessage?.content)) as {
+        readonly candidates: readonly { readonly id: string }[]
+        readonly evidence: readonly { readonly id: string }[]
+      }
+
+      return {
+        object: {
+          verdict: 'valid',
+          summary: 'Aggregate review accepted both sibling proofs.',
+          evidenceIds: input.evidence.map((record) => record.id),
+          decisions: input.candidates.map((candidate) => ({
+            candidateId: candidate.id,
+            verdict: 'valid',
+            summary: 'Sibling proof remains concrete after batch review.',
+            evidenceIds: input.evidence.map((record) => record.id),
+            relatedCandidateIds: input.candidates
+              .map((related) => related.id)
+              .filter((candidateId) => candidateId !== candidate.id)
+          })),
+          similarIssueChecks: [
+            {
+              kind: 'sibling-sweep',
+              result: 'passed',
+              summary: 'Sibling sweep found the repeated changed-range pattern.',
+              evidenceIds: input.evidence.map((record) => record.id)
+            }
+          ]
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    if (isFindingJudgeRequest(req)) {
+      const userMessage = req.messages.find((message) => message.role === 'user')
+      const input = JSON.parse(String(userMessage?.content)) as {
+        readonly evidence: readonly { readonly id: string }[]
+      }
+
+      return {
+        object: {
+          verdict: 'valid',
+          summary: 'Per-candidate judge accepted each sibling proof.',
+          challengeQuestions: [
+            'Does each sibling proof remain concrete after batch review?'
+          ],
+          verificationChecks: [
+            {
+              kind: 'sibling-proof',
+              result: 'passed',
+              summary: 'The sibling proof packet stays within budget and scope.',
+              evidenceIds: input.evidence.map((record) => record.id)
+            }
+          ],
+          evidenceIds: input.evidence.map((record) => record.id),
+          contextRequests: [],
+          requestedContext: []
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    if (isSiblingSweepRequest(req)) {
+      return {
+        object: {
+          suspicions: [
+            {
+              category: 'bug',
+              severity: 'high',
+              title: 'Sibling changed branch returns wrong value',
+              description:
+                'The same wrong-value branch pattern appears in another changed range.',
+              path: 'src/app.ts',
+              startLine: 8,
+              evidenceIds: ['ev_diff2'],
+              fixSummary: 'Return the expected value from the sibling branch.'
+            }
+          ]
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Primary changed branch returns wrong value',
+            description:
+              'The reviewed source context shows the primary changed branch returns the wrong value.',
+            path: 'src/app.ts',
+            startLine: 4,
+            evidenceIds: ['ev_diff1'],
+            fixSummary: 'Return the expected value from the primary branch.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class RequestedContextFindingProvider implements ModelProvider {
+  readonly id = 'requested-context-finding'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Requested context proves wrong helper value',
+            description:
+              'The reviewed source context needs helper references before promotion.',
+            path: 'src/app.ts',
+            startLine: 4,
+            contextRequests: [
+              {
+                tool: 'grep',
+                path: 'src/helper.ts',
+                query: 'expectedValue',
+                reason: 'Find helper expected value references.'
+              },
+              {
+                tool: 'list',
+                path: 'src',
+                reason: 'Inspect nearby source files.'
+              }
+            ],
+            requestedContext: [
+              'Search "expectedValue" in src/helper.ts',
+              'List directory src'
+            ],
+            fixSummary: 'Use the helper expected value in the changed branch.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class InvestigationFollowUpFindingProvider implements ModelProvider {
+  readonly id = 'investigation-follow-up-finding'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+  private investigationCount = 0
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingInvestigationRequest(req)) {
+      this.investigationCount += 1
+
+      if (this.investigationCount === 1) {
+        return {
+          object: {
+            verdict: 'needs-more-evidence',
+            rationaleSummary:
+              'The app branch is suspicious, but helper references are needed before proving reachability.',
+            evidenceIds: [],
+            contextRequests: [
+              {
+                tool: 'grep',
+                path: 'src/helper.ts',
+                query: 'expectedValue',
+                reason: 'Find the helper value used by the changed branch.'
+              }
+            ],
+            requestedContext: ['Search "expectedValue" in src/helper.ts']
+          } as unknown as T,
+          finishReason: 'stop',
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2
+          }
+        }
+      }
+
+      const userMessage = req.messages.find((message) => message.role === 'user')
+      const input = JSON.parse(String(userMessage?.content)) as {
+        readonly evidence: readonly {
+          readonly id: string
+          readonly kind: string
+          readonly source: string
+        }[]
+      }
+      const toolEvidenceId =
+        input.evidence.find(
+          (record) =>
+            record.source === 'context-retrieval' &&
+            record.kind === 'tool-search'
+        )?.id ?? input.evidence[0]?.id
+
+      return {
+        object: {
+          verdict: 'proved',
+          rationaleSummary:
+            'The follow-up helper search proves the changed branch can return the intermediate value instead of the expected helper value.',
+          evidenceIds: toolEvidenceId === undefined ? [] : [toolEvidenceId],
+          changedBehavior:
+            'The changed branch returns intermediate when callers expect expectedValue.',
+          executionOrDataPath:
+            'The reviewed app path imports expectedValue and the follow-up search found the helper export.',
+          violatedInvariant:
+            'The exported value should use the helper expectedValue on the reviewed branch.',
+          impact: 'Callers can receive a stale intermediate value.',
+          introducedByChange:
+            'The defect is located in the reviewed branch of src/app.ts.',
+          contradictionChecks: [
+            'No provided context shows a guard preventing the reviewed branch.'
+          ],
+          fixDirection: 'Return expectedValue from the reviewed branch.'
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Investigation needs helper context',
+            description:
+              'The reviewed app branch may return the intermediate value instead of the expected helper value.',
+            path: 'src/app.ts',
+            startLine: 4,
+            fixSummary: 'Return the helper expected value from the branch.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class EvidenceOptionalFindingProvider implements ModelProvider {
+  readonly id = 'evidence-optional-finding'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return {
+        object: {
+          verdict: 'proved',
+          rationaleSummary:
+            'Refutation proved the finding from reviewed context even without task evidence.'
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Context proves a wrong return value',
+            description:
+              'The reviewed context proves the changed branch returns the wrong value.',
+            path: 'src/app.ts',
+            startLine: 4,
+            fixSummary: 'Return the expected value from the changed branch.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class EvidenceCitingFindingProvider implements ModelProvider {
+  readonly id = 'evidence-citing-finding'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  constructor(
+    private readonly input: {
+      readonly evidenceId: string
+      readonly title: string
+      readonly description: string
+      readonly category?: 'bug' | 'security' | 'performance' | 'maintainability'
+    }
+  ) {}
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>(
+        'Refutation check confirmed the model finding from cited deterministic evidence.'
+      )
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: this.input.category ?? 'bug',
+            severity: 'high',
+            title: this.input.title,
+            description: this.input.description,
+            path: 'src/app.ts',
+            startLine: 4,
+            evidenceIds: [this.input.evidenceId],
+            fixSummary: 'Apply the deterministic tool recommendation.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class UncertainRefutationProvider implements ModelProvider {
+  readonly id = 'uncertain-refutation'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return {
+        object: {
+          verdict: 'needs-more-evidence',
+          rationaleSummary:
+            'Refutation could not fully prove the finding but did not identify it as refuted.'
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'security',
+            severity: 'high',
+            title: 'Backup code reuse may bypass one-time semantics',
+            description:
+              'The reviewed context suggests concurrent backup code use could reuse the same code.',
+            path: 'src/app.ts',
+            startLine: 4,
+            fixSummary: 'Make backup code consumption atomic.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class BackupCodeRaceRefutationProvider implements ModelProvider {
+  readonly id = 'backup-code-race-refutation'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingInvestigationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    if (isFindingRefutationCheckRequest(req)) {
+      const instructionText = req.messages
+        .map((message) => String(message.content))
+        .join('\n')
+      const validatesReadModifyWriteRace = instructionText.includes(
+        'Do not require proof of actual concurrent requests when reviewContext shows a non-atomic read-modify-write flow on shared mutable state.'
+      )
+
+      return {
+        object: {
+          verdict: validatesReadModifyWriteRace
+            ? 'proved'
+            : 'needs-more-evidence',
+          rationaleSummary: validatesReadModifyWriteRace
+            ? 'The provided context shows backup codes are decrypted, searched, mutated in memory, and written back with prisma.user.update without an atomic conditional update.'
+            : 'The refutation check required runtime evidence of concurrent requests before proving the race.'
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'security',
+            severity: 'high',
+            title: 'Backup code can be consumed twice by concurrent logins',
+            description:
+              'The handler decrypts backupCodes, finds the submitted code, mutates the array in memory, then writes the encrypted array back; concurrent requests can both pass before either update lands.',
+            path: 'src/auth.ts',
+            startLine: 6,
+            fixSummary:
+              'Consume backup codes with an atomic conditional update or transaction.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class TruncatedExcerptSuggestionProvider implements ModelProvider {
+  readonly id = 'truncated-excerpt-suggestion'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>(
+        'Refutation incorrectly accepted the malformed file claim.'
+      )
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Locale JSON truncated at end of excerpt',
+            description:
+              'The reviewed context ends without a closing brace, so the file appears malformed.',
+            path: 'src/common.json',
+            startLine: 10,
+            fixSummary: 'Restore the missing JSON content.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class RefutedFindingProvider implements ModelProvider {
+  readonly id = 'refuted-finding'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingInvestigationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    if (isFindingRefutationCheckRequest(req)) {
+      return {
+        object: {
+          verdict: 'refuted',
+          rationaleSummary:
+            'Refutation judged the model finding unsupported by the provided context.'
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'security',
+            severity: 'medium',
+            title: 'Speculative backup-code storage concern',
+            description:
+              'The model raised a concrete-looking concern without enough context.',
+            path: 'src/app.ts',
+            startLine: 2,
+            fixSummary: 'Inspect the storage format before making a schema change.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class MultiPathRefutationContextProvider implements ModelProvider {
+  readonly id = 'multi-path-refutation-context'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>(
+        'Refutation proved the model finding using the full originating task context.'
+      )
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Cross-file state update can go stale',
+            description:
+              'The reviewed multi-file task context shows the changed caller can use stale helper state.',
+            path: 'src/app.ts',
+            startLine: 3,
+            fixSummary: 'Read the latest helper state before updating.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class RefutationFailureProvider implements ModelProvider {
+  readonly id = 'refutation-failure'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingInvestigationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    if (isFindingRefutationCheckRequest(req)) {
+      throw new Error('Agent output refutation failed.')
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'maintainability',
+            severity: 'low',
+            title: 'Speculative low-value concern',
+            description:
+              'The model raised a concern that still needs refutation-check confirmation.',
+            path: 'src/app.ts',
+            startLine: 1
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class OutOfDiffScopeProvider implements ModelProvider {
+  readonly id = 'out-of-diff-scope'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'compatibility',
+            severity: 'medium',
+            title: 'Unrelated path helper concern',
+            description:
+              'The model raised a concern outside the reviewed diff range.',
+            path: 'src/app.ts',
+            startLine: 10
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class MalformedSuggestionProvider implements ModelProvider {
+  readonly id = 'malformed-suggestion'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: { label: 'style' },
+            severity: 'medium',
+            title: 'Invalid category should be dropped',
+            description: 'This malformed suggestion must not fail the task.',
+            path: 'src/app.ts',
+            startLine: 1
+          },
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Valid finding survives malformed sibling',
+            description:
+              'The valid suggestion should still be converted and proved.',
+            path: 'src/app.ts',
+            startLine: 1
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class AliasedSuggestionProvider implements ModelProvider {
+  readonly id = 'aliased-suggestion'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'Bug',
+            severity: 'HIGH',
+            title: 'Aliased suggestion should survive parsing',
+            description:
+              'The provider returned common field and enum variants for a valid finding.',
+            path: 'src/app.ts',
+            lineNumber: '1',
+            fix_summary: 'Normalize model suggestion aliases before admission.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class NamingAliasSuggestionProvider implements ModelProvider {
+  readonly id = 'naming-alias-suggestion'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'naming',
+            severity: 'low',
+            title: 'Default export name does not match the file name',
+            description:
+              'The provider returned a common naming category alias for a concrete component/file mismatch.',
+            path: 'src/BackupCode.tsx',
+            startLine: 7
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class StaticContractSpeculationProvider implements ModelProvider {
+  readonly id = 'static-contract-speculation'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      const instructionText = req.messages
+        .map((message) => String(message.content))
+        .join('\n')
+      const rejectsStaticContractSpeculation = instructionText.includes(
+        'violating declared static types, function signatures, schemas, or documented contracts'
+      )
+
+      return {
+        object: {
+          verdict: rejectsStaticContractSpeculation
+            ? 'refuted'
+            : 'proved',
+          rationaleSummary: rejectsStaticContractSpeculation
+            ? 'The candidate depends on an untyped caller passing null or undefined to a TypeScript function whose declared input type is string.'
+            : 'Refutation treated the hypothetical untyped caller as enough impact evidence.'
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'maintainability',
+            severity: 'low',
+            title:
+              'formatLabel can throw if called from untyped JavaScript with null or undefined',
+            description:
+              'The function assumes callers pass a string, so an untyped JS caller could throw at runtime.',
+            path: 'src/format.ts',
+            startLine: 1,
+            fixSummary: 'Guard the input before calling string methods.'
           }
         ]
       } as unknown as T,
@@ -313,11 +1862,15 @@ class StructuredFixProvider implements ModelProvider {
   readonly genAiSystem = 'scripted'
 
   async object<T extends JsonValue = JsonValue>(
-    _req: ObjectRequest<T>
+    req: ObjectRequest<T>
   ): Promise<ObjectResponse<T>> {
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
     return {
       object: {
-        candidates: [
+        suspicions: [
           {
             category: 'bug',
             severity: 'high',
@@ -360,10 +1913,14 @@ class SharedDigestProvider implements ModelProvider {
   ): Promise<ObjectResponse<T>> {
     this.requests.push(req)
 
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
     if (this.requests.length === 1) {
       return {
         object: {
-          candidates: [
+          suspicions: [
             {
               category: 'bug',
               severity: 'high',
@@ -387,7 +1944,500 @@ class SharedDigestProvider implements ModelProvider {
     }
 
     return {
-      object: { candidates: [] } as unknown as T,
+      object: { suspicions: [] } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class ProofPendingModelFindingProvider implements ModelProvider {
+  readonly id = 'proof-pending-model-finding'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (this.requests.length === 1) {
+      return {
+        object: {
+          suspicions: [
+            {
+              category: 'bug',
+              severity: 'high',
+              title: 'Changed branch returns wrong value',
+              description:
+                'The reviewed task evidence suggests the changed branch can return the wrong value.',
+              path: 'src/app.ts',
+              startLine: 4,
+              evidenceIds: ['ev_diff1'],
+              fixSummary: 'Return the expected value from the changed branch.'
+            }
+          ]
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        verdict: 'needs-more-evidence',
+        rationaleSummary:
+          'The available context does not prove the changed branch is reachable.'
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class ProvedModelFindingProvider implements ModelProvider {
+  readonly id = 'proved-model-finding'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (this.requests.length === 1) {
+      return {
+        object: {
+          suspicions: [
+            {
+              category: 'bug',
+              severity: 'high',
+              title: 'Changed branch returns wrong value',
+              description:
+                'The reviewed task evidence suggests the changed branch can return the wrong value.',
+              path: 'src/app.ts',
+              startLine: 4,
+              evidenceIds: ['ev_diff1'],
+              fixSummary: 'Return the expected value from the changed branch.'
+            }
+          ]
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        verdict: 'proved',
+        rationaleSummary:
+          'Refutation proved the changed branch returns the wrong value when the caller passes the reviewed input.',
+        changedBehavior:
+          'The changed branch returns actualValue instead of expectedValue.',
+        executionOrDataPath:
+          'The reviewed caller path reaches the changed return statement with the reviewed input.',
+        violatedInvariant:
+          'The branch must return expectedValue for callers of the reviewed path.',
+        impact: 'Callers receive actualValue where expectedValue is required.',
+        introducedByChange:
+          'The incorrect return statement is in the reviewed src/app.ts diff.',
+        contradictionChecks: [
+          'The reviewed context defines expectedValue before the changed return.'
+        ],
+        fixDirection: 'Return expectedValue from the changed branch.',
+        fixSummary:
+          'Return the expected value from the changed branch after validating callers.',
+        fixEdits: [
+          {
+            path: 'src/app.ts',
+            startLine: 4,
+            endLine: 4,
+            replacement: 'return expectedValue',
+            description: 'Use the value expected by callers.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class IntentPlanningProvider implements ModelProvider {
+  readonly id = 'intent-planning'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isIntentPlanningRequest(req)) {
+      return {
+        object: {
+          intents: [
+            {
+              title: 'Verify changed app behavior',
+              objective:
+                'Verify the changed app behavior end to end across the reviewed task.',
+              taskIds: ['task_app', 'task_helper'],
+              paths: ['src/app.ts', 'src/helper.ts'],
+              focusAreas: ['changed return branch'],
+              riskAreas: ['incorrect runtime result'],
+              verificationQuestions: [
+                'Does the changed branch still return the expected value through the helper path?'
+              ]
+            }
+          ]
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    return {
+      object: { suspicions: [] } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class JudgeFalsePositiveProvider implements ModelProvider {
+  readonly id = 'judge-false-positive'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    if (isFindingJudgeRequest(req)) {
+      return {
+        object: {
+            verdict: 'false-positive',
+            summary:
+              'The provided evidence does not prove the claimed runtime failure.',
+            challengeQuestions: [
+              'Does the provided context prove a runtime failure on the changed path?'
+            ],
+            verificationChecks: [
+              {
+                kind: 'runtime-proof',
+                result: 'failed',
+                summary: 'The provided context does not prove the runtime failure.',
+                evidenceIds: ['ev_diff1']
+              }
+            ],
+            evidenceIds: ['ev_diff1']
+          } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Changed branch returns wrong value',
+            description:
+              'The reviewed task evidence suggests the changed branch can return the wrong value.',
+            path: 'src/app.ts',
+            startLine: 4,
+            evidenceIds: ['ev_diff1']
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class JudgeRequestedContextProvider implements ModelProvider {
+  readonly id = 'judge-requested-context'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+  judgeCalls = 0
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    if (isFindingJudgeRequest(req)) {
+      this.judgeCalls += 1
+
+      if (this.judgeCalls === 1) {
+        return {
+          object: {
+            verdict: 'needs-more-evidence',
+            summary:
+              'The candidate is plausible, but the current packet needs the changed source context.',
+            challengeQuestions: [
+              'Does the changed branch return intermediate instead of expectedValue?'
+            ],
+            verificationChecks: [
+              {
+                kind: 'changed-source-context',
+                result: 'unknown',
+                summary: 'The source excerpt needed to decide the branch value is missing.',
+                evidenceIds: ['ev_diff1']
+              }
+            ],
+            evidenceIds: ['ev_diff1'],
+            contextRequests: [
+              {
+                tool: 'read',
+                path: 'src/app.ts',
+                reason: 'Inspect the changed branch source near line 4.'
+              }
+            ],
+            requestedContext: ['Inspect src/app.ts near line 4.']
+          } as unknown as T,
+          finishReason: 'stop',
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2
+          }
+        }
+      }
+
+      return {
+        object: {
+            verdict: 'valid',
+            summary:
+              'The retrieved source context proves the changed branch returns the wrong value.',
+            challengeQuestions: [
+              'Does the retrieved source prove the changed branch returns intermediate?'
+            ],
+            verificationChecks: [
+              {
+                kind: 'changed-source-context',
+                result: 'passed',
+                summary: 'The retrieved source proves the changed branch returns intermediate.',
+                evidenceIds: ['ev_diff1']
+              }
+            ],
+            evidenceIds: ['ev_diff1']
+          } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Changed branch returns wrong value',
+            description:
+              'The reviewed task evidence suggests the changed branch can return the wrong value.',
+            path: 'src/app.ts',
+            startLine: 4,
+            evidenceIds: ['ev_diff1']
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
+  }
+}
+
+class MultiRoundJudgeRequestedContextProvider implements ModelProvider {
+  readonly id = 'multi-round-judge-requested-context'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+  judgeCalls = 0
+
+  async object<T extends JsonValue = JsonValue>(
+    req: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(req)
+
+    if (isFindingRefutationRequest(req)) {
+      return provedFindingResponse<T>()
+    }
+
+    if (isFindingJudgeRequest(req)) {
+      this.judgeCalls += 1
+
+      if (this.judgeCalls === 1) {
+        return {
+          object: {
+            verdict: 'needs-more-evidence',
+            summary:
+              'The candidate is plausible, but the changed source is needed first.',
+            challengeQuestions: ['Does the changed source call expectedValue?'],
+            verificationChecks: [
+              {
+                kind: 'changed-source-context',
+                result: 'unknown',
+                summary: 'The changed source has not been retrieved yet.',
+                evidenceIds: ['ev_diff1']
+              }
+            ],
+            evidenceIds: ['ev_diff1'],
+            contextRequests: [
+              {
+                tool: 'read',
+                path: 'src/app.ts',
+                reason: 'Inspect the changed app branch.'
+              }
+            ],
+            requestedContext: ['Inspect src/app.ts near line 4.']
+          } as unknown as T,
+          finishReason: 'stop',
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2
+          }
+        }
+      }
+
+      if (this.judgeCalls === 2) {
+        return {
+          object: {
+            verdict: 'needs-more-evidence',
+            summary:
+              'The changed source is present, but the helper value reference is needed.',
+            challengeQuestions: ['Does helper expectedValue prove the invariant?'],
+            verificationChecks: [
+              {
+                kind: 'helper-reference',
+                result: 'unknown',
+                summary: 'The helper reference has not been retrieved yet.',
+                evidenceIds: ['ev_diff1']
+              }
+            ],
+            evidenceIds: ['ev_diff1'],
+            contextRequests: [
+              {
+                tool: 'read',
+                path: 'src/helper.ts',
+                reason: 'Inspect the helper expected value definition.'
+              }
+            ],
+            requestedContext: ['Inspect src/helper.ts for expectedValue.']
+          } as unknown as T,
+          finishReason: 'stop',
+          usage: {
+            inputTokens: 1,
+            outputTokens: 1,
+            totalTokens: 2
+          }
+        }
+      }
+
+      return {
+        object: {
+          verdict: 'valid',
+          summary:
+            'The retrieved source and helper reference prove the changed branch can return the wrong value.',
+          challengeQuestions: [
+            'Do the retrieved source and helper reference prove the invariant violation?'
+          ],
+          verificationChecks: [
+            {
+              kind: 'multi-context-proof',
+              result: 'passed',
+              summary:
+                'The retrieved app source and helper reference prove the branch returns intermediate instead of expectedValue.',
+              evidenceIds: ['ev_diff1']
+            }
+          ],
+          evidenceIds: ['ev_diff1']
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
+    return {
+      object: {
+        suspicions: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Changed branch returns wrong helper value',
+            description:
+              'The reviewed task evidence suggests the changed branch can return the helper-independent value.',
+            path: 'src/app.ts',
+            startLine: 4,
+            evidenceIds: ['ev_diff1']
+          }
+        ]
+      } as unknown as T,
       finishReason: 'stop',
       usage: {
         inputTokens: 1,
@@ -399,7 +2449,7 @@ class SharedDigestProvider implements ModelProvider {
 }
 
 describe('review workflow', () => {
-  test('runs a scripted harness workflow and admits supported findings', async () => {
+  test('runs a provided-candidate harness workflow and admits supported findings', async () => {
     const harness = createReviewHarness({
       modelAlias: {
         provider: new UnusedProvider(),
@@ -408,12 +2458,12 @@ describe('review workflow', () => {
       }
     })
 
-    const result = await runScriptedReviewWorkflow({
+    const result = await runProvidedCandidateReviewWorkflow({
       harness,
       sessionId: 'test-session',
       input: {
         runId: 'test-run',
-        reviewedPaths: ['src/app.ts'],
+        reviewedPaths: ['src/app.ts', 'src/helper.ts'],
         evidence: [
           {
             id: 'ev_diff1',
@@ -424,7 +2474,7 @@ describe('review workflow', () => {
               startLine: 4,
               side: 'new'
             },
-            source: 'typescript-analyzer',
+            source: 'typescript-support-signal',
             contentHash:
               '2222222222222222222222222222222222222222222222222222222222222222',
             redactionApplied: true
@@ -450,7 +2500,7 @@ describe('review workflow', () => {
         ],
         instructions: [
           {
-            path: '.review/instructions.md',
+            path: '.codereviewer/instructions.md',
             content: 'Prefer evidence-backed findings.',
             allowed: true
           }
@@ -458,8 +2508,8 @@ describe('review workflow', () => {
         skills: [
           {
             name: 'secure-review',
-            path: '.review/skills/secure-review/SKILL.md',
-            directory: '.review/skills/secure-review',
+            path: '.codereviewer/skills/secure-review/SKILL.md',
+            directory: '.codereviewer/skills/secure-review',
             contentHash:
               '3333333333333333333333333333333333333333333333333333333333333333',
             allowed: true
@@ -483,7 +2533,7 @@ describe('review workflow', () => {
           reviewer: 'review-agent',
           modelProvider: 'openai',
           modelName: 'gpt-5-mini',
-          analyzerVersions: {
+          signalVersions: {
             typescript: '6.0.3'
           },
           configHash
@@ -509,7 +2559,1040 @@ describe('review workflow', () => {
     await harness.shutdown()
   })
 
-  test('scripted workflow makes outside-hunk findings summary-only', async () => {
+  test('model-backed workflow can plan review intents before task execution', async () => {
+    const provider = new IntentPlanningProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'scripted',
+        capabilities: ['object', 'tool_use']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-intent-planning',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [
+          {
+            id: 'ev_diff1',
+            kind: 'diff',
+            summary: 'Changed branch can return an incorrect value.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 4,
+              side: 'new'
+            },
+            source: 'diff',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        tasks: [
+          {
+            id: 'task_app',
+            round: 1,
+            kind: 'file',
+            paths: ['src/app.ts'],
+            factIds: [],
+            evidenceIds: ['ev_diff1'],
+            candidateIds: [],
+            contextEntryIds: [],
+            reviewContext: [],
+            priority: 0
+          },
+          {
+            id: 'task_helper',
+            round: 1,
+            kind: 'file',
+            paths: ['src/helper.ts'],
+            factIds: [],
+            evidenceIds: [],
+            candidateIds: [],
+            contextEntryIds: [],
+            reviewContext: [],
+            priority: 1
+          }
+        ],
+        intentPlanning: 'model',
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'gpt-5-mini',
+          signalVersions: {},
+          configHash
+        }
+      }
+    })
+
+    const taskRequest = provider.requests.find(
+      (request) =>
+        !isIntentPlanningRequest(request) &&
+        !isFindingRefutationRequest(request) &&
+        !isFindingJudgeRequest(request)
+    )
+    const taskInput = JSON.parse(
+      String(taskRequest?.messages.find((message) => message.role === 'user')?.content)
+    ) as {
+      readonly reviewIntents: readonly [
+        {
+          readonly id: string
+          readonly title: string
+          readonly objective: string
+          readonly taskIds: readonly string[]
+          readonly paths: readonly string[]
+          readonly focusAreas: readonly string[]
+          readonly riskAreas: readonly string[]
+          readonly verificationQuestions: readonly string[]
+          readonly source: string
+        }
+      ]
+      readonly task: {
+        readonly id: string
+        readonly kind: string
+        readonly paths: readonly string[]
+        readonly intentId?: string
+        readonly objective?: string
+        readonly focusAreas?: readonly string[]
+        readonly riskAreas?: readonly string[]
+        readonly verificationQuestions?: readonly string[]
+      }
+    }
+
+    expect(provider.requests.filter(isIntentPlanningRequest)).toHaveLength(1)
+    expect(result.reviewIntents).toEqual([
+      expect.objectContaining({
+        id: expect.stringMatching(/^intent_[a-f0-9]+$/),
+        title: 'Verify changed app behavior',
+        taskIds: ['task_app', 'task_helper'],
+        source: 'model'
+      })
+    ])
+    expect(taskInput.reviewIntents).toEqual([
+      expect.objectContaining({
+        id: result.reviewIntents[0]?.id,
+        title: 'Verify changed app behavior',
+        taskIds: ['task_app', 'task_helper'],
+        paths: ['src/app.ts', 'src/helper.ts'],
+        source: 'model'
+      })
+    ])
+    expect(
+      provider.requests.filter(
+        (request) =>
+          !isIntentPlanningRequest(request) &&
+          !isFindingRefutationRequest(request) &&
+          !isFindingJudgeRequest(request)
+      )
+    ).toHaveLength(1)
+    expect(taskInput.task.id).toMatch(/^task_intent_[a-f0-9]+$/)
+    expect(taskInput.task.kind).toBe('dependency-cluster')
+    expect(taskInput.task.paths).toEqual(['src/app.ts', 'src/helper.ts'])
+    expect(taskInput.task.intentId).toBe(result.reviewIntents[0]?.id)
+    expect(taskInput.task.objective).toBe(
+      'Verify the changed app behavior end to end across the reviewed task.'
+    )
+    expect(taskInput.task.focusAreas).toEqual(['changed return branch'])
+    expect(taskInput.task.riskAreas).toEqual(['incorrect runtime result'])
+    expect(taskInput.task.verificationQuestions).toEqual([
+      'Does the changed branch still return the expected value through the helper path?'
+    ])
+
+    await harness.shutdown()
+  })
+
+  test('model-backed workflow falls back to individual intent tasks when cluster packet exceeds budget', async () => {
+    const provider = new IntentPlanningProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'scripted',
+        capabilities: ['object', 'tool_use']
+      }
+    })
+
+    await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-intent-cluster-budget-fallback',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts', 'src/helper.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        maxTaskInputBytes: 10000,
+        tasks: [
+          {
+            id: 'task_app',
+            round: 1,
+            kind: 'file',
+            paths: ['src/app.ts'],
+            factIds: [],
+            evidenceIds: [],
+            candidateIds: [],
+            contextEntryIds: ['ctx_aaaaaaaaaaaaaaaa'],
+            reviewContext: [
+              {
+                kind: 'file',
+                path: 'src/app.ts',
+                content: 'app-context '.repeat(550),
+                ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaa'
+              }
+            ],
+            priority: 0
+          },
+          {
+            id: 'task_helper',
+            round: 1,
+            kind: 'file',
+            paths: ['src/helper.ts'],
+            factIds: [],
+            evidenceIds: [],
+            candidateIds: [],
+            contextEntryIds: ['ctx_bbbbbbbbbbbbbbbb'],
+            reviewContext: [
+              {
+                kind: 'file',
+                path: 'src/helper.ts',
+                content: 'helper-context '.repeat(450),
+                ledgerEntryId: 'ctx_bbbbbbbbbbbbbbbb'
+              }
+            ],
+            priority: 1
+          }
+        ],
+        intentPlanning: 'model',
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'gpt-5-mini',
+          signalVersions: {},
+          configHash
+        }
+      }
+    })
+
+    const taskInputs = provider.requests
+      .filter(
+        (request) =>
+          !isIntentPlanningRequest(request) &&
+          !isFindingRefutationRequest(request) &&
+          !isFindingJudgeRequest(request)
+      )
+      .map((request) =>
+        JSON.parse(
+          String(request.messages.find((message) => message.role === 'user')?.content)
+        )
+      ) as readonly {
+      readonly task: {
+        readonly id: string
+        readonly kind: string
+        readonly paths: readonly string[]
+      }
+    }[]
+
+    expect(provider.requests.filter(isIntentPlanningRequest)).toHaveLength(1)
+    expect(taskInputs.map((input) => input.task.id).sort()).toEqual([
+      'task_app',
+      'task_helper'
+    ])
+    expect(taskInputs.map((input) => input.task.kind)).toEqual(['file', 'file'])
+    expect(taskInputs.flatMap((input) => input.task.paths).sort()).toEqual([
+      'src/app.ts',
+      'src/helper.ts'
+    ])
+
+    await harness.shutdown()
+  })
+
+  test('model-backed workflow records optional judge false-positive rejections', async () => {
+    const provider = new JudgeFalsePositiveProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'scripted',
+        capabilities: ['object', 'tool_use']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-judge-false-positive',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        reviewedDiffRanges: [
+          {
+            path: 'src/app.ts',
+            startLine: 4,
+            endLine: 4
+          }
+        ],
+        evidence: [
+          {
+            id: 'ev_diff1',
+            kind: 'diff',
+            summary: 'Changed branch can return an incorrect value.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 4,
+              side: 'new'
+            },
+            source: 'diff',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        tasks: [
+          {
+            id: 'task_app',
+            round: 1,
+            kind: 'file',
+            paths: ['src/app.ts'],
+            factIds: [],
+            evidenceIds: ['ev_diff1'],
+            candidateIds: [],
+            contextEntryIds: [],
+            reviewContext: [],
+            priority: 0
+          }
+        ],
+        judgeFindings: true,
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'gpt-5-mini',
+          signalVersions: {},
+          configHash
+        }
+      }
+    })
+
+    expect(provider.requests.filter(isFindingRefutationCheckRequest)).toHaveLength(1)
+    expect(provider.requests.filter(isFindingJudgeRequest)).toHaveLength(1)
+    expect(result.admittedFindings).toHaveLength(0)
+    expect(result.judgeResults).toEqual([
+        expect.objectContaining({
+          verdict: 'false-positive',
+          candidateId: result.candidateFindings[0]?.id,
+          challengeQuestions: [
+            'Does the provided context prove a runtime failure on the changed path?'
+          ],
+          verificationChecks: [
+            {
+              kind: 'runtime-proof',
+              result: 'failed',
+              summary: 'The provided context does not prove the runtime failure.',
+              evidenceIds: ['ev_diff1']
+            }
+          ]
+        })
+    ])
+    expect(result.rejectedFindings).toEqual([
+      expect.objectContaining({
+        candidateId: result.candidateFindings[0]?.id,
+        reason: 'refuted'
+      })
+    ])
+    expect(result.providerIssues).toEqual([])
+
+    await harness.shutdown()
+  })
+
+  test('model-backed workflow batches optional aggregate review for related proofs', async () => {
+    const provider = new AggregateRejectingFindingProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'scripted',
+        capabilities: ['object', 'tool_use']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-aggregate-review',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        reviewedDiffRanges: [
+          {
+            path: 'src/app.ts',
+            startLine: 4,
+            endLine: 5
+          }
+        ],
+        evidence: [
+          {
+            id: 'ev_diff1',
+            kind: 'diff',
+            summary: 'Changed sibling branches can return incorrect values.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 4,
+              side: 'new'
+            },
+            source: 'diff',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        tasks: [
+          {
+            id: 'task_app',
+            round: 1,
+            kind: 'file',
+            paths: ['src/app.ts'],
+            factIds: [],
+            evidenceIds: ['ev_diff1'],
+            candidateIds: [],
+            contextEntryIds: [],
+            reviewContext: [],
+            priority: 0
+          }
+        ],
+        judgeFindings: true,
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'gpt-5-mini',
+          signalVersions: {},
+          configHash
+        }
+      }
+    })
+
+    expect(provider.requests.filter(isFindingAggregateRequest)).toHaveLength(1)
+    // The aggregate critic's `valid` verdict no longer suppresses the strict
+    // per-candidate judge, so the surviving valid candidate is judged once.
+    expect(provider.requests.filter(isFindingJudgeRequest)).toHaveLength(1)
+    expect(provider.requests.filter(isFindingRefutationCheckRequest)).toHaveLength(1)
+    expect(result.candidateFindings).toHaveLength(2)
+    expect(result.aggregateResults).toEqual([
+      expect.objectContaining({
+        verdict: 'mixed',
+        decisions: expect.arrayContaining([
+          expect.objectContaining({ verdict: 'valid' }),
+          expect.objectContaining({ verdict: 'false-positive' })
+        ])
+      })
+    ])
+    expect(result.admittedFindings).toHaveLength(1)
+    expect(result.rejectedFindings).toEqual([
+      expect.objectContaining({
+        reason: 'refuted',
+        message: expect.stringContaining('duplicates the primary finding')
+      })
+    ])
+    expect(result.promotionDecisions).toHaveLength(1)
+
+    await harness.shutdown()
+  })
+
+  test('model-backed workflow recovers when aggregate packet exceeds budget', async () => {
+    const provider = new AggregatePacketBudgetProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'scripted',
+        capabilities: ['object', 'tool_use']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-aggregate-packet-budget',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        reviewedDiffRanges: [
+          {
+            path: 'src/app.ts',
+            startLine: 4,
+            endLine: 8
+          }
+        ],
+        evidence: [
+          {
+            id: 'ev_diff1',
+            kind: 'diff',
+            summary: 'Changed sibling branches can return incorrect values.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 4,
+              side: 'new'
+            },
+            source: 'diff',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        tasks: [
+          {
+            id: 'task_app',
+            round: 1,
+            kind: 'file',
+            paths: ['src/app.ts'],
+            factIds: [],
+            evidenceIds: ['ev_diff1'],
+            candidateIds: [],
+            contextEntryIds: [],
+            reviewContext: [],
+            priority: 0
+          }
+        ],
+        maxTaskInputBytes: 10000,
+        judgeFindings: true,
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'gpt-5-mini',
+          signalVersions: {},
+          configHash
+        }
+      }
+    })
+
+    expect(provider.requests.filter(isFindingAggregateRequest)).toHaveLength(0)
+    expect(provider.requests.filter(isFindingJudgeRequest)).toHaveLength(5)
+    expect(result.aggregateResults).toEqual([])
+    expect(result.providerIssues).toContainEqual(
+      expect.objectContaining({
+        code: 'task_packet_budget_exceeded',
+        stage: 'aggregate-packet',
+        recovered: true
+      })
+    )
+    expect(result.admittedFindings).toHaveLength(5)
+
+    await harness.shutdown()
+  })
+
+  test('model-backed workflow compacts investigation packet retrieved context', async () => {
+    const root = join(
+      tmpdir(),
+      `codereviewer-investigation-packet-${crypto.randomUUID()}`
+    )
+    const provider = new InvestigationPacketBudgetProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'scripted',
+        capabilities: ['object', 'tool_use']
+      }
+    })
+
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(
+      join(root, 'src', 'app.ts'),
+      `export const related = "retrieved-context-marker";\n${'x'.repeat(500)}`
+    )
+
+    try {
+      const result = await runModelBackedReviewWorkflow({
+        harness,
+        sessionId: 'test-investigation-packet-budget',
+        input: {
+          runId: 'test-run',
+          repositoryRoot: root,
+          reviewedPaths: ['src/app.ts'],
+          reviewedDiffRanges: [
+            {
+              path: 'src/app.ts',
+              startLine: 4,
+              endLine: 4
+            }
+          ],
+          evidence: [
+            {
+              id: 'ev_diff1',
+              kind: 'diff',
+              summary: 'Changed branch can return an incorrect value.',
+              location: {
+                path: 'src/app.ts',
+                startLine: 4,
+                side: 'new'
+              },
+              source: 'diff',
+              redactionApplied: true
+            }
+          ],
+          candidates: [],
+          instructions: [],
+          skills: [],
+          tasks: [
+            {
+              id: 'task_app',
+              round: 1,
+              kind: 'file',
+              paths: ['src/app.ts'],
+              factIds: [],
+              evidenceIds: ['ev_diff1'],
+              candidateIds: [],
+              contextEntryIds: ['ctx_aaaaaaaa'],
+              reviewContext: [
+                {
+                  kind: 'file',
+                  path: 'src/app.ts',
+                  content: `ambient-task-context-marker ${'a'.repeat(14000)}`,
+                  ledgerEntryId: 'ctx_aaaaaaaa'
+                }
+              ],
+              priority: 0
+            }
+          ],
+          contextRetrievalBudget: {
+            maxReads: 1,
+            maxSearches: 0,
+            maxBytesPerRead: 1000
+          },
+          maxTaskInputBytes: 25000,
+          baselineConfigured: false,
+          provenance: {
+            reviewer: 'review-agent',
+            modelProvider: 'openai',
+            modelName: 'gpt-5-mini',
+            signalVersions: {},
+            configHash
+          }
+        }
+      })
+      const investigationRequest = provider.requests.find(
+        isFindingInvestigationRequest
+      )
+      const userMessage = investigationRequest?.messages.find(
+        (message) => message.role === 'user'
+      )
+      const investigationInput = JSON.parse(String(userMessage?.content)) as {
+        readonly task: { readonly reviewContext: readonly unknown[] }
+        readonly reviewContext: readonly { readonly content: string }[]
+      }
+      const joinedContext = investigationInput.reviewContext
+        .map((context) => context.content)
+        .join('\n')
+
+      expect(investigationRequest).toBeDefined()
+      expect(investigationInput.task.reviewContext).toEqual([])
+      expect(joinedContext).toContain('retrieved-context-marker')
+      expect(joinedContext).not.toContain('ambient-task-context-marker')
+      expect(result.providerIssues).toEqual([])
+      expect(result.proofPackets).toHaveLength(1)
+    } finally {
+      await harness.shutdown()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('model-backed workflow sweeps sibling changed ranges after a proved finding', async () => {
+    const provider = new SiblingSweepFindingProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'scripted',
+        capabilities: ['object', 'tool_use']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-sibling-sweep',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        reviewedDiffRanges: [
+          {
+            path: 'src/app.ts',
+            startLine: 4,
+            endLine: 4
+          },
+          {
+            path: 'src/app.ts',
+            startLine: 8,
+            endLine: 8
+          }
+        ],
+        evidence: [
+          {
+            id: 'ev_diff1',
+            kind: 'diff',
+            summary: 'Primary changed branch can return an incorrect value.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 4,
+              side: 'new'
+            },
+            source: 'diff',
+            redactionApplied: true
+          },
+          {
+            id: 'ev_diff2',
+            kind: 'diff',
+            summary: 'Sibling changed branch has the same shape.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 8,
+              side: 'new'
+            },
+            source: 'diff',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        tasks: [
+          {
+            id: 'task_app',
+            round: 1,
+            kind: 'file',
+            paths: ['src/app.ts'],
+            factIds: [],
+            evidenceIds: ['ev_diff1', 'ev_diff2'],
+            candidateIds: [],
+            contextEntryIds: [],
+            reviewContext: [],
+            priority: 0
+          }
+        ],
+        judgeFindings: true,
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'gpt-5-mini',
+          signalVersions: {},
+          configHash
+        }
+      }
+    })
+
+    expect(provider.requests.filter(isSiblingSweepRequest)).toHaveLength(1)
+    expect(provider.requests.filter(isFindingAggregateRequest)).toHaveLength(1)
+    expect(result.candidateFindings).toHaveLength(2)
+    expect(result.modelSuspicions).toHaveLength(2)
+    expect(result.proofPackets).toHaveLength(2)
+    expect(result.aggregateResults).toEqual([
+      expect.objectContaining({
+        verdict: 'valid',
+        similarIssueChecks: [
+          expect.objectContaining({
+            kind: 'sibling-sweep'
+          })
+        ]
+      })
+    ])
+    expect(result.admittedFindings).toHaveLength(2)
+    expect(result.rejectedFindings).toEqual([])
+
+    await harness.shutdown()
+  })
+
+  test('model-backed judge can request one mediated context follow-up', async () => {
+    const root = join(tmpdir(), `codereviewer-judge-context-${crypto.randomUUID()}`)
+    const provider = new JudgeRequestedContextProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'scripted',
+        capabilities: ['object', 'tool_use']
+      }
+    })
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'app.ts'),
+        [
+          'const input = 1',
+          'const intermediate = input + 1',
+          'const expectedValue = intermediate + 1',
+          'export const value = input > 0 ? intermediate : expectedValue'
+        ].join('\n')
+      )
+
+      const result = await runModelBackedReviewWorkflow({
+        harness,
+        sessionId: 'test-judge-requested-context',
+        input: {
+          runId: 'test-run',
+          repositoryRoot: root,
+          reviewedPaths: ['src/app.ts'],
+          reviewedDiffRanges: [
+            {
+              path: 'src/app.ts',
+              startLine: 4,
+              endLine: 4
+            }
+          ],
+          evidence: [
+            {
+              id: 'ev_diff1',
+              kind: 'diff',
+              summary: 'Changed branch can return an incorrect value.',
+              location: {
+                path: 'src/app.ts',
+                startLine: 4,
+                side: 'new'
+              },
+              source: 'diff',
+              redactionApplied: true
+            }
+          ],
+          candidates: [],
+          instructions: [],
+          skills: [],
+          tasks: [
+            {
+              id: 'task_app',
+              round: 1,
+              kind: 'file',
+              paths: ['src/app.ts'],
+              factIds: [],
+              evidenceIds: ['ev_diff1'],
+              candidateIds: [],
+              contextEntryIds: [],
+              reviewContext: [],
+              priority: 0
+            }
+          ],
+          contextRetrievalBudget: {
+            maxReads: 3,
+            maxSearches: 1,
+            maxBytesPerRead: 1000,
+            maxMatches: 10
+          },
+          judgeFindings: true,
+          baselineConfigured: false,
+          provenance: {
+            reviewer: 'review-agent',
+            modelProvider: 'openai',
+            modelName: 'gpt-5-mini',
+            signalVersions: {},
+            configHash
+          }
+        }
+      })
+
+      const judgeRequests = provider.requests.filter(isFindingJudgeRequest)
+      const secondJudgeInput = JSON.parse(
+        String(
+          judgeRequests[1]?.messages.find((message) => message.role === 'user')
+            ?.content
+        )
+      ) as {
+        readonly reviewContext: readonly { readonly content: string }[]
+      }
+
+      expect(judgeRequests).toHaveLength(2)
+      expect(secondJudgeInput.reviewContext.map((context) => context.content).join('\n')).toContain(
+        'export const value = input > 0 ? intermediate : expectedValue'
+      )
+      expect(result.judgeResults).toEqual([
+        expect.objectContaining({
+          verdict: 'valid',
+          candidateId: result.candidateFindings[0]?.id,
+          contextRequests: [
+            {
+              tool: 'read',
+              path: 'src/app.ts',
+              reason: 'Inspect the changed branch source near line 4.'
+            }
+          ],
+          requestedContext: ['Inspect src/app.ts near line 4.']
+        })
+      ])
+      expect(result.admittedFindings).toHaveLength(1)
+      expect(result.evidence).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool-read',
+            source: 'context-retrieval'
+          })
+        ])
+      )
+      expect(result.contextLedgerEntries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            reason: 'context-retrieval-read',
+            path: 'src/app.ts'
+          })
+        ])
+      )
+    } finally {
+      await harness.shutdown()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('model-backed judge can use bounded multi-round context follow-up', async () => {
+    const root = join(
+      tmpdir(),
+      `codereviewer-judge-context-rounds-${crypto.randomUUID()}`
+    )
+    const provider = new MultiRoundJudgeRequestedContextProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'scripted',
+        capabilities: ['object', 'tool_use']
+      }
+    })
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'app.ts'),
+        [
+          "import { expectedValue } from './helper'",
+          'const input = 1',
+          'const intermediate = input + 1',
+          'export const value = input > 0 ? intermediate : expectedValue'
+        ].join('\n')
+      )
+      await writeFile(
+        join(root, 'src', 'helper.ts'),
+        ['export const expectedValue = 3'].join('\n')
+      )
+
+      const result = await runModelBackedReviewWorkflow({
+        harness,
+        sessionId: 'test-judge-requested-context-rounds',
+        input: {
+          runId: 'test-run',
+          repositoryRoot: root,
+          reviewedPaths: ['src/app.ts'],
+          reviewedDiffRanges: [
+            {
+              path: 'src/app.ts',
+              startLine: 4,
+              endLine: 4
+            }
+          ],
+          evidence: [
+            {
+              id: 'ev_diff1',
+              kind: 'diff',
+              summary: 'Changed branch can return an incorrect value.',
+              location: {
+                path: 'src/app.ts',
+                startLine: 4,
+                side: 'new'
+              },
+              source: 'diff',
+              redactionApplied: true
+            }
+          ],
+          candidates: [],
+          instructions: [],
+          skills: [],
+          tasks: [
+            {
+              id: 'task_app',
+              round: 1,
+              kind: 'file',
+              paths: ['src/app.ts'],
+              factIds: [],
+              evidenceIds: ['ev_diff1'],
+              candidateIds: [],
+              contextEntryIds: [],
+              reviewContext: [],
+              priority: 0
+            }
+          ],
+          contextRetrievalBudget: {
+            maxReads: 3,
+            maxSearches: 1,
+            maxBytesPerRead: 1000,
+            maxMatches: 10
+          },
+          maxInvestigationRounds: 2,
+          judgeFindings: true,
+          baselineConfigured: false,
+          provenance: {
+            reviewer: 'review-agent',
+            modelProvider: 'openai',
+            modelName: 'gpt-5-mini',
+            signalVersions: {},
+            configHash
+          }
+        }
+      })
+
+      const judgeRequests = provider.requests.filter(isFindingJudgeRequest)
+      const thirdJudgeInput = JSON.parse(
+        String(
+          judgeRequests[2]?.messages.find((message) => message.role === 'user')
+            ?.content
+        )
+      ) as {
+        readonly reviewContext: readonly { readonly content: string }[]
+      }
+      const joinedContext = thirdJudgeInput.reviewContext
+        .map((context) => context.content)
+        .join('\n')
+
+      expect(judgeRequests).toHaveLength(3)
+      expect(joinedContext).toContain(
+        'export const value = input > 0 ? intermediate : expectedValue'
+      )
+      expect(joinedContext).toContain('export const expectedValue = 3')
+      expect(result.judgeResults).toEqual([
+        expect.objectContaining({
+          verdict: 'valid',
+          contextRequests: [
+            {
+              tool: 'read',
+              path: 'src/app.ts',
+              reason: 'Inspect the changed app branch.'
+            },
+            {
+              tool: 'read',
+              path: 'src/helper.ts',
+              reason: 'Inspect the helper expected value definition.'
+            }
+          ],
+          requestedContext: [
+            'Inspect src/app.ts near line 4.',
+            'Inspect src/helper.ts for expectedValue.'
+          ]
+        })
+      ])
+      expect(result.admittedFindings).toHaveLength(1)
+      expect(result.evidence).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool-read',
+            source: 'context-retrieval'
+          }),
+          expect.objectContaining({
+            kind: 'tool-read',
+            source: 'context-retrieval'
+          })
+        ])
+      )
+    } finally {
+      await harness.shutdown()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('provided-candidate workflow makes outside-hunk findings summary-only', async () => {
     const harness = createReviewHarness({
       modelAlias: {
         provider: new UnusedProvider(),
@@ -537,7 +3620,7 @@ describe('review workflow', () => {
             startLine: 6,
             side: 'new' as const
           },
-          source: 'typescript-analyzer',
+          source: 'typescript-support-signal',
           contentHash:
             '2222222222222222222222222222222222222222222222222222222222222222',
           redactionApplied: true
@@ -582,7 +3665,7 @@ describe('review workflow', () => {
         reviewer: 'review-agent',
         modelProvider: 'openai',
         modelName: 'scripted',
-        analyzerVersions: {
+        signalVersions: {
           typescript: '6.0.3'
         },
         configHash
@@ -590,7 +3673,7 @@ describe('review workflow', () => {
       qualityGate: {}
     }
 
-    const result = await runScriptedReviewWorkflow({
+    const result = await runProvidedCandidateReviewWorkflow({
       harness,
       sessionId: 'test-session',
       input
@@ -602,7 +3685,7 @@ describe('review workflow', () => {
     await harness.shutdown()
   })
 
-  test('provider-backed workflow keeps deterministic input candidates even when the model returns none', async () => {
+  test('provider-backed workflow keeps support-signal seed candidates artifact-only when the model returns none', async () => {
     const provider = new EmptyFindingProvider()
     const harness = createModelBackedReviewHarness({
       modelAlias: {
@@ -628,7 +3711,7 @@ describe('review workflow', () => {
               startLine: 1,
               side: 'file'
             },
-            source: 'typescript-analyzer',
+            source: 'typescript-support-signal',
             contentHash:
               '2222222222222222222222222222222222222222222222222222222222222222',
             redactionApplied: true
@@ -642,14 +3725,14 @@ describe('review workflow', () => {
             severity: 'high',
             title: 'Parse diagnostic blocks reliable review',
             description:
-              'Syntax parse diagnostic reported by typescript-analyzer.',
+              'Syntax parse diagnostic reported by typescript-support-signal.',
             location: {
               path: 'src/app.ts',
               startLine: 1,
               side: 'file'
             },
             evidenceIds: ['ev_diag1'],
-            proposedBy: 'typescript-analyzer',
+            proposedBy: 'typescript-support-signal',
             fixProposal: {
               summary: 'Fix the syntax issue and rerun review.',
               evidenceIds: ['ev_diag1'],
@@ -661,7 +3744,7 @@ describe('review workflow', () => {
         skills: [],
         reviewContext: [
           {
-            kind: 'analyzer-output',
+            kind: 'support-signal-output',
             content: '{"diagnostics":1}',
             ledgerEntryId: 'ctx_222222222222222222222222'
           }
@@ -671,7 +3754,7 @@ describe('review workflow', () => {
           reviewer: 'review-agent',
           modelProvider: 'openai',
           modelName: 'empty',
-          analyzerVersions: {
+          signalVersions: {
             typescript: '6.0.3'
           },
           configHash
@@ -684,12 +3767,14 @@ describe('review workflow', () => {
     })
 
     expect(result.admittedFindings).toHaveLength(1)
-    expect(result.admittedFindings[0]?.proposedBy).toBe('typescript-analyzer')
+    expect(result.admittedFindings[0]?.proposedBy).toBe('typescript-support-signal')
+    expect(result.admittedFindings[0]?.reporterEligibility).toBe('artifact-only')
+    expect(result.qualityGate.passed).toBe(true)
     expect(JSON.stringify(result)).not.toContain('{"diagnostics":1}')
     expect(provider.requests[0]?.schema).toMatchObject({
       type: 'object',
       properties: {
-        candidates: {
+        suspicions: {
           type: 'array'
         }
       }
@@ -698,7 +3783,7 @@ describe('review workflow', () => {
     await harness.shutdown()
   })
 
-  test('provider-backed workflow suppresses model echoes of deterministic candidates', async () => {
+  test('provider-backed workflow suppresses model echoes of support-signal seed candidates', async () => {
     const provider = new DuplicateSeedFindingProvider()
     const harness = createModelBackedReviewHarness({
       modelAlias: {
@@ -724,7 +3809,7 @@ describe('review workflow', () => {
               startLine: 1,
               side: 'file'
             },
-            source: 'typescript-analyzer',
+            source: 'typescript-support-signal',
             contentHash:
               '2222222222222222222222222222222222222222222222222222222222222222',
             redactionApplied: true
@@ -738,21 +3823,21 @@ describe('review workflow', () => {
             severity: 'high',
             title: 'Parse diagnostic blocks reliable review',
             description:
-              'Syntax parse diagnostic reported by typescript-analyzer.',
+              'Syntax parse diagnostic reported by typescript-support-signal.',
             location: {
               path: 'src/app.ts',
               startLine: 1,
               side: 'file'
             },
             evidenceIds: ['ev_diag1'],
-            proposedBy: 'typescript-analyzer'
+            proposedBy: 'typescript-support-signal'
           }
         ],
         instructions: [],
         skills: [],
         reviewContext: [
           {
-            kind: 'analyzer-output',
+            kind: 'support-signal-output',
             content: '{"diagnostics":1}',
             ledgerEntryId: 'ctx_222222222222222222222222'
           }
@@ -762,7 +3847,7 @@ describe('review workflow', () => {
           reviewer: 'review-agent',
           modelProvider: 'openai',
           modelName: 'duplicate-seed',
-          analyzerVersions: {
+          signalVersions: {
             typescript: '6.0.3'
           },
           configHash
@@ -773,8 +3858,107 @@ describe('review workflow', () => {
 
     expect(result.candidateFindings).toHaveLength(1)
     expect(result.admittedFindings).toHaveLength(1)
-    expect(result.admittedFindings[0]?.proposedBy).toBe('typescript-analyzer')
+    expect(result.admittedFindings[0]?.proposedBy).toBe('typescript-support-signal')
     expect(result.rejectedFindings).toHaveLength(0)
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow logs model suggestion drop reasons without content', async () => {
+    const captured = createCapturingLogger()
+    const harness = createModelBackedReviewHarness({
+      logger: captured.logger,
+      modelAlias: {
+        provider: new DroppedSuggestionProvider(),
+        model: 'dropped-suggestion',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [
+          {
+            id: 'ev_diag1',
+            kind: 'diagnostic',
+            summary: 'Syntax parse diagnostic.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 1,
+              side: 'file'
+            },
+            source: 'typescript-support-signal',
+            contentHash:
+              '2222222222222222222222222222222222222222222222222222222222222222',
+            redactionApplied: true
+          }
+        ],
+        candidates: [
+          {
+            id: 'cand_diag1',
+            taskId: 'task_diag1',
+            category: 'bug',
+            severity: 'high',
+            title: 'Parse diagnostic blocks reliable review',
+            description:
+              'Syntax parse diagnostic reported by typescript-support-signal.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 1,
+              side: 'file'
+            },
+            evidenceIds: ['ev_diag1'],
+            proposedBy: 'typescript-support-signal'
+          }
+        ],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: 'export const value = broken',
+            ledgerEntryId: 'ctx_222222222222222222222222'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'dropped-suggestion',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        },
+        qualityGate: {}
+      }
+    })
+
+    const completedTaskLog = captured.records.find(
+      (record) =>
+        record.level === 'debug' &&
+        record.message === 'Review task provider call completed.'
+    )
+
+    expect(result.candidateFindings).toHaveLength(1)
+    expect(completedTaskLog?.fields).toMatchObject({
+      suspicion_suggestion_count: 4,
+      candidate_count: 0,
+      dropped_suspicion_reasons: {
+        'missing-required-field': 1,
+        'path-outside-task': 1,
+        'missing-task-evidence': 0,
+        'duplicate-input-candidate': 2,
+        'unsupported-truncation-claim': 0
+      }
+    })
+    expect(JSON.stringify(completedTaskLog)).not.toContain('Syntax parse')
+    expect(JSON.stringify(completedTaskLog)).not.toContain('src/app.ts')
 
     await harness.shutdown()
   })
@@ -818,7 +4002,7 @@ describe('review workflow', () => {
           reviewer: 'review-agent',
           modelProvider: 'openai',
           modelName: 'empty',
-          analyzerVersions: {
+          signalVersions: {
             typescript: '6.0.3'
           },
           configHash
@@ -861,7 +4045,7 @@ describe('review workflow', () => {
         reviewer: 'review-agent',
         modelProvider: 'openai',
         modelName: 'empty',
-        analyzerVersions: {
+        signalVersions: {
           typescript: '6.0.3'
         },
         configHash
@@ -948,7 +4132,7 @@ describe('review workflow', () => {
             reviewer: 'review-agent',
             modelProvider: 'openai',
             modelName: 'observed-concurrency',
-            analyzerVersions: {
+            signalVersions: {
               typescript: '6.0.3'
             },
             configHash
@@ -994,7 +4178,7 @@ describe('review workflow', () => {
             reviewer: 'review-agent',
             modelProvider: 'openai',
             modelName: 'rolling-queue',
-            analyzerVersions: {
+            signalVersions: {
               typescript: '6.0.3'
             },
             configHash
@@ -1012,7 +4196,7 @@ describe('review workflow', () => {
     }
   })
 
-  test('provider-backed workflow shares admitted digest across sequential task workers', async () => {
+  test('provider-backed workflow withholds proof-pending model candidates from sequential task workers', async () => {
     const provider = new SharedDigestProvider()
     const harness = createModelBackedReviewHarness({
       modelAlias: {
@@ -1039,7 +4223,7 @@ describe('review workflow', () => {
                 startLine: 1,
                 side: 'new'
               },
-              source: 'typescript-analyzer',
+              source: 'typescript-support-signal',
               contentHash:
                 '2222222222222222222222222222222222222222222222222222222222222222',
               redactionApplied: true
@@ -1053,7 +4237,7 @@ describe('review workflow', () => {
                 startLine: 1,
                 side: 'new'
               },
-              source: 'typescript-analyzer',
+              source: 'typescript-support-signal',
               contentHash:
                 '4444444444444444444444444444444444444444444444444444444444444444',
               redactionApplied: true
@@ -1074,8 +4258,7 @@ describe('review workflow', () => {
                 side: 'new'
               },
               evidenceIds: ['ev_b'],
-              proposedBy: 'review-agent',
-              confidence: 0.8
+              proposedBy: 'review-agent'
             }
           ],
           instructions: [],
@@ -1086,7 +4269,7 @@ describe('review workflow', () => {
             reviewer: 'review-agent',
             modelProvider: 'openai',
             modelName: 'shared-digest',
-            analyzerVersions: {
+            signalVersions: {
               typescript: '6.0.3'
             },
             configHash
@@ -1102,13 +4285,11 @@ describe('review workflow', () => {
           })
         ])
       )
-      expect(JSON.stringify(provider.requests[1]?.messages)).toContain(
-        'First task issue'
-      )
       const secondTaskUserMessage = provider.requests[1]?.messages.find(
         (message) => message.role === 'user'
       )
       const secondTaskInput = JSON.parse(String(secondTaskUserMessage?.content))
+      expect(secondTaskInput.sharedDigest).not.toContain('First task issue')
       expect(secondTaskInput.sharedDigest).not.toContain(
         'Initial unadmitted seed candidate'
       )
@@ -1154,7 +4335,7 @@ describe('review workflow', () => {
               reviewer: 'review-agent',
               modelProvider: 'openai',
               modelName: 'empty',
-              analyzerVersions: {
+              signalVersions: {
                 typescript: '6.0.3'
               },
               configHash
@@ -1196,7 +4377,7 @@ describe('review workflow', () => {
           startLine: index + 1,
           side: 'new' as const
         },
-        source: 'typescript-analyzer',
+        source: 'typescript-support-signal',
         contentHash:
           '2222222222222222222222222222222222222222222222222222222222222222',
         redactionApplied: true
@@ -1219,7 +4400,7 @@ describe('review workflow', () => {
               reviewer: 'review-agent',
               modelProvider: 'openai',
               modelName: 'empty',
-              analyzerVersions: {
+              signalVersions: {
                 typescript: '6.0.3'
               },
               configHash
@@ -1276,8 +4457,8 @@ describe('review workflow', () => {
           skills: [
             {
               name: 'secure-review',
-              path: '.review/skills/secure-review/SKILL.md',
-              directory: '.review/skills/secure-review',
+              path: '.codereviewer/skills/secure-review/SKILL.md',
+              directory: '.codereviewer/skills/secure-review',
               contentHash:
                 '3333333333333333333333333333333333333333333333333333333333333333',
               allowed: true
@@ -1296,7 +4477,7 @@ describe('review workflow', () => {
             reviewer: 'review-agent',
             modelProvider: 'openai',
             modelName: 'empty',
-            analyzerVersions: {
+            signalVersions: {
               typescript: '6.0.3'
             },
             configHash
@@ -1351,7 +4532,7 @@ describe('review workflow', () => {
               startLine: 4,
               side: 'new'
             },
-            source: 'typescript-analyzer',
+            source: 'typescript-support-signal',
             contentHash:
               '2222222222222222222222222222222222222222222222222222222222222222',
             redactionApplied: true
@@ -1378,7 +4559,7 @@ describe('review workflow', () => {
           reviewer: 'review-agent',
           modelProvider: 'openai',
           modelName: 'supported',
-          analyzerVersions: {
+          signalVersions: {
             typescript: '6.0.3'
           },
           configHash
@@ -1403,6 +4584,1255 @@ describe('review workflow', () => {
       'running',
       'completed'
     ])
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow validates model findings without task evidence when model evidence is allowed', async () => {
+    const provider = new EvidenceOptionalFindingProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'evidence-optional-finding',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: [
+              'const input = 1',
+              'const intermediate = input + 1',
+              'const expectedValue = intermediate + 1',
+              'export const value = input > 0 ? intermediate : expectedValue'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'evidence-optional-finding',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        }
+      }
+    })
+
+    const refutationEvidence = result.evidence.find(
+      (record) => record.kind === 'model-rationale'
+    )
+
+    expect(provider.requests).toHaveLength(3)
+    expect(result.candidateFindings).toHaveLength(1)
+    expect(result.admittedFindings).toHaveLength(1)
+    expect(result.rejectedFindings).toHaveLength(0)
+    expect(result.admittedFindings[0]?.evidenceIds).toEqual([
+      refutationEvidence?.id
+    ])
+    expect(result.admittedFindings[0]?.admissionEvidenceIds).toEqual([
+      refutationEvidence?.id
+    ])
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow keeps model-only findings without proof artifact-only by default', async () => {
+    const provider = new EvidenceOptionalFindingProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'evidence-optional-finding',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: [
+              'const input = 1',
+              'const intermediate = input + 1',
+              'const expectedValue = intermediate + 1',
+              'export const value = input > 0 ? intermediate : expectedValue'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'evidence-optional-finding',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        },
+        qualityGate: {}
+      }
+    })
+
+    const refutationEvidence = result.evidence.find(
+      (record) => record.kind === 'model-rationale'
+    )
+
+    expect(provider.requests).toHaveLength(3)
+    expect(result.rejectedFindings).toHaveLength(0)
+    expect(result.admittedFindings).toEqual([
+      expect.objectContaining({
+        title: 'Context proves a wrong return value',
+        evidenceIds: [refutationEvidence?.id],
+        admissionEvidenceIds: [refutationEvidence?.id],
+        reporterEligibility: 'artifact-only'
+      })
+    ])
+    expect(result.qualityGate.passed).toBe(true)
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow demotes static-analysis duplicate proofs by default', async () => {
+    const provider = new EvidenceCitingFindingProvider({
+      evidenceId: 'ev_staticdup1',
+      title: 'Static-analysis tool already reports this parse failure',
+      description:
+        'The model proof duplicates an external static-analysis finding.'
+    })
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'static-duplicate',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [
+          {
+            id: 'ev_staticdup1',
+            kind: 'deterministic-signal',
+            summary:
+              'CodeQL static-analysis-duplicate already reports this parse failure.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 4,
+              side: 'new'
+            },
+            source: 'codeql',
+            ruleId: 'static-analysis-duplicate',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: [
+              'const input = 1',
+              'const intermediate = input + 1',
+              'const expectedValue = intermediate + 1',
+              'export const value = ;'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'static-duplicate',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        },
+        qualityGate: {}
+      }
+    })
+
+    expect(provider.requests).toHaveLength(3)
+    expect(result.promotionDecisions).toEqual([
+      expect.objectContaining({
+        status: 'artifact-only',
+        reason: expect.stringContaining('static-analysis')
+      })
+    ])
+    expect(result.admittedFindings).toEqual([
+      expect.objectContaining({
+        title: 'Static-analysis tool already reports this parse failure',
+        reporterEligibility: 'artifact-only'
+      })
+    ])
+    expect(result.rejectedFindings).toEqual([])
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow rejects static-analysis duplicate proofs when policy requires rejection', async () => {
+    const provider = new EvidenceCitingFindingProvider({
+      evidenceId: 'ev_staticdup2',
+      title: 'Static-analysis duplicate should be rejected',
+      description:
+        'The model proof duplicates an external static-analysis finding.'
+    })
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'static-duplicate-rejected',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [
+          {
+            id: 'ev_staticdup2',
+            kind: 'deterministic-signal',
+            summary:
+              'Linter static-analysis-duplicate already reports this issue.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 4,
+              side: 'new'
+            },
+            source: 'eslint',
+            ruleId: 'static-analysis-duplicate',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: 'export const value = ;',
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        promotionPolicy: {
+          staticAnalysisDuplicate: 'rejected'
+        },
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'static-duplicate-rejected',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        },
+        qualityGate: {}
+      }
+    })
+
+    expect(provider.requests).toHaveLength(2)
+    expect(result.promotionDecisions).toEqual([
+      expect.objectContaining({
+        status: 'rejected',
+        reason: expect.stringContaining('static-analysis')
+      })
+    ])
+    expect(result.admittedFindings).toEqual([])
+    expect(result.rejectedFindings).toEqual([
+      expect.objectContaining({
+        reason: 'static-analysis-duplicate'
+      })
+    ])
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow rejects deterministic contradiction proofs by default', async () => {
+    const provider = new EvidenceCitingFindingProvider({
+      evidenceId: 'ev_contradiction1',
+      title: 'Contradicted model proof',
+      description:
+        'The model proof is contradicted by deterministic support evidence.'
+    })
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'deterministic-contradiction',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [
+          {
+            id: 'ev_contradiction1',
+            kind: 'deterministic-signal',
+            summary:
+              'deterministic-contradiction: candidate line is outside the reviewed diff.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 4,
+              side: 'new'
+            },
+            source: 'deterministic-support-signal',
+            ruleId: 'deterministic-contradiction',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: 'export const value = 1;',
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'deterministic-contradiction',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        },
+        qualityGate: {}
+      }
+    })
+
+    expect(provider.requests).toHaveLength(2)
+    expect(result.refutationResults).toEqual([
+      expect.objectContaining({
+        verdict: 'refuted'
+      })
+    ])
+    expect(result.promotionDecisions).toEqual([
+      expect.objectContaining({
+        status: 'rejected',
+        reason: expect.stringContaining('Deterministic contradiction')
+      })
+    ])
+    expect(result.admittedFindings).toEqual([])
+    expect(result.rejectedFindings).toEqual([
+      expect.objectContaining({
+        reason: 'deterministic-contradiction'
+      })
+    ])
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow preserves uncertain proved model findings as artifact-only', async () => {
+    const provider = new UncertainRefutationProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'uncertain-refutation',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: [
+              'const backupCodes = ["abc"]',
+              'const index = backupCodes.indexOf(input)',
+              'if (index === -1) throw new Error("bad code")',
+              'export const accepted = backupCodes[index]'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'uncertain-refutation',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        }
+      }
+    })
+
+    const refutationEvidence = result.evidence.find(
+      (record) => record.kind === 'model-rationale'
+    )
+
+    expect(provider.requests).toHaveLength(3)
+    expect(result.candidateFindings).toHaveLength(1)
+    expect(result.rejectedFindings).toHaveLength(0)
+    expect(result.admittedFindings).toEqual([
+      expect.objectContaining({
+        title: 'Backup code reuse may bypass one-time semantics',
+        evidenceIds: [refutationEvidence?.id],
+        admissionEvidenceIds: [refutationEvidence?.id],
+        reporterEligibility: 'artifact-only'
+      })
+    ])
+    expect(refutationEvidence?.summary).toContain(
+      'could not fully prove the finding'
+    )
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow validates concrete backup-code read-modify-write races', async () => {
+    const provider = new BackupCodeRaceRefutationProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'backup-code-race-refutation',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/auth.ts'],
+        reviewedDiffRanges: [
+          {
+            path: 'src/auth.ts',
+            startLine: 1,
+            endLine: 10,
+            changeKind: 'modified'
+          }
+        ],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/auth.ts',
+            content: [
+              'const backupCodes = JSON.parse(symmetricDecrypt(user.backupCodes, key))',
+              'const index = backupCodes.indexOf(credentials.backupCode.replaceAll("-", ""))',
+              'if (index === -1) throw new Error(ErrorCode.IncorrectBackupCode)',
+              'backupCodes[index] = null',
+              'await prisma.user.update({',
+              '  where: { id: user.id },',
+              '  data: { backupCodes: symmetricEncrypt(JSON.stringify(backupCodes), key) }',
+              '})'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'backup-code-race-refutation',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        }
+      }
+    })
+
+    const refutationRequest = provider.requests.find(
+      isFindingRefutationCheckRequest
+    )
+    const refutationSystemMessage = refutationRequest?.messages.find(
+      (message) => message.role === 'system'
+    )
+
+    expect(String(refutationSystemMessage?.content)).toContain(
+      'Do not require proof of actual concurrent requests when reviewContext shows a non-atomic read-modify-write flow on shared mutable state.'
+    )
+    expect(provider.requests).toHaveLength(3)
+    expect(result.rejectedFindings).toEqual([])
+    expect(result.admittedFindings).toEqual([
+      expect.objectContaining({
+        title: 'Backup code can be consumed twice by concurrent logins',
+        reporterEligibility: 'artifact-only'
+      })
+    ])
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow rejects refuted model findings', async () => {
+    const provider = new RefutedFindingProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'refuted-finding',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: [
+              'const backupCodes = maybeEncryptedCodes',
+              'export const accepted = backupCodes'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'refuted-finding',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        },
+        qualityGate: {
+          maxMedium: 0,
+          failOnNewOnly: true
+        }
+      }
+    })
+
+    const refutationEvidence = result.evidence.find(
+      (record) => record.kind === 'model-rationale'
+    )
+
+    expect(provider.requests).toHaveLength(3)
+    expect(result.candidateFindings).toHaveLength(1)
+    expect(result.rejectedFindings).toEqual([
+      expect.objectContaining({
+        reason: 'refuted',
+        evidenceIds: [refutationEvidence?.id]
+      })
+    ])
+    expect(result.admittedFindings).toEqual([])
+    expect(refutationEvidence?.summary).toContain(
+      'judged the model finding unsupported'
+    )
+    expect(result.qualityGate.passed).toBe(true)
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow drops model-only truncated excerpt claims without diagnostic evidence', async () => {
+    const provider = new TruncatedExcerptSuggestionProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'truncated-excerpt-suggestion',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/common.json'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/common.json',
+            content: [
+              '{',
+              '  "backup_code": "Backup Code",',
+              '  "lost_access": "Lost access"'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'truncated-excerpt-suggestion',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        }
+      }
+    })
+
+    expect(provider.requests).toHaveLength(1)
+    expect(result.candidateFindings).toEqual([])
+    expect(result.admittedFindings).toEqual([])
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed refutation receives the originating multi-path task context', async () => {
+    const provider = new MultiPathRefutationContextProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'multi-path-refutation-context',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts', 'src/helper.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: [
+              'import { getState } from "./helper"',
+              'export const update = () => {',
+              '  return getState() + 1',
+              '}'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          },
+          {
+            kind: 'file',
+            path: 'src/helper.ts',
+            content: [
+              'let state = 0',
+              'export const getState = () => state',
+              'export const setState = (next: number) => { state = next }'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_bbbbbbbbbbbbbbbbbbbbbbbb'
+          }
+        ],
+        tasks: [
+          {
+            id: 'task_multipath',
+            round: 1,
+            kind: 'file',
+            paths: ['src/app.ts', 'src/helper.ts'],
+            factIds: [],
+            evidenceIds: [],
+            candidateIds: [],
+            reviewContext: [
+              {
+                kind: 'file',
+                path: 'src/app.ts',
+                content: [
+                  'import { getState } from "./helper"',
+                  'export const update = () => {',
+                  '  return getState() + 1',
+                  '}'
+                ].join('\n'),
+                ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+              },
+              {
+                kind: 'file',
+                path: 'src/helper.ts',
+                content: [
+                  'let state = 0',
+                  'export const getState = () => state',
+                  'export const setState = (next: number) => { state = next }'
+                ].join('\n'),
+                ledgerEntryId: 'ctx_bbbbbbbbbbbbbbbbbbbbbbbb'
+              }
+            ],
+            contextEntryIds: [
+              'ctx_aaaaaaaaaaaaaaaaaaaaaaaa',
+              'ctx_bbbbbbbbbbbbbbbbbbbbbbbb'
+            ],
+            priority: 0
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'multi-path-refutation-context',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        }
+      }
+    })
+
+    const refutationRequest = provider.requests.find(
+      isFindingRefutationCheckRequest
+    )
+    const refutationUserMessage = refutationRequest?.messages.find(
+      (message) => message.role === 'user'
+    )
+    const refutationInput = JSON.parse(
+      String(refutationUserMessage?.content)
+    ) as {
+      readonly reviewContext: readonly { readonly path?: string }[]
+    }
+
+    expect(result.admittedFindings).toHaveLength(1)
+    expect(refutationInput.reviewContext.map((context) => context.path)).toEqual(
+      ['src/app.ts', 'src/helper.ts']
+    )
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow rejects candidates when refutation provider output fails', async () => {
+    const provider = new RefutationFailureProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'refutation-failure',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: 'export const value = 1',
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'refutation-failure',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        }
+      }
+    })
+
+    expect(provider.requests).toHaveLength(3)
+    expect(result.candidateFindings).toHaveLength(1)
+    expect(result.admittedFindings).toHaveLength(0)
+    expect(result.rejectedFindings).toEqual([
+      expect.objectContaining({
+        candidateId: result.candidateFindings[0]?.id,
+        status: 'needs-more-evidence',
+        reason: 'provider-error',
+        message: expect.stringContaining('Refutation check failed')
+      })
+    ])
+    expect(result.providerIssues).toEqual([
+      expect.objectContaining({
+        stage: 'refutation-check',
+        recovered: true
+      })
+    ])
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow rejects model proofs outside reviewed diff ranges', async () => {
+    const provider = new OutOfDiffScopeProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'out-of-diff-scope',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        reviewedDiffRanges: [
+          {
+            path: 'src/app.ts',
+            startLine: 1,
+            endLine: 1
+          }
+        ],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: [
+              'export const changed = 1',
+              'const line2 = true',
+              'const line3 = true',
+              'const line4 = true',
+              'const line5 = true',
+              'const line6 = true',
+              'const line7 = true',
+              'const line8 = true',
+              'const line9 = true',
+              'export const unrelated = true'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'out-of-diff-scope',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        }
+      }
+    })
+
+    expect(provider.requests).toHaveLength(2)
+    expect(result.candidateFindings).toHaveLength(1)
+    expect(result.admittedFindings).toHaveLength(0)
+    expect(result.rejectedFindings).toEqual([
+      expect.objectContaining({
+        candidateId: result.candidateFindings[0]?.id,
+        status: 'needs-more-evidence',
+        reason: 'not-in-scope'
+      })
+    ])
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow drops malformed model suggestions without failing the task', async () => {
+    const provider = new MalformedSuggestionProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'malformed-suggestion',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: 'export const value = 1',
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'malformed-suggestion',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        }
+      }
+    })
+
+    expect(provider.requests).toHaveLength(3)
+    expect(result.candidateFindings).toHaveLength(1)
+    expect(result.admittedFindings).toHaveLength(1)
+    expect(result.admittedFindings[0]?.title).toBe(
+      'Valid finding survives malformed sibling'
+    )
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow normalizes common model suggestion aliases', async () => {
+    const provider = new AliasedSuggestionProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'aliased-suggestion',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: 'export const value = 1',
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'aliased-suggestion',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        }
+      }
+    })
+
+    expect(provider.requests).toHaveLength(3)
+    expect(result.candidateFindings).toEqual([
+      expect.objectContaining({
+        category: 'bug',
+        severity: 'high',
+        title: 'Aliased suggestion should survive parsing',
+        suggestedFix: 'Normalize model suggestion aliases before admission.',
+        location: expect.objectContaining({
+          path: 'src/app.ts',
+          startLine: 1
+        })
+      })
+    ])
+    expect(result.admittedFindings).toHaveLength(1)
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow normalizes model naming category aliases', async () => {
+    const provider = new NamingAliasSuggestionProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'naming-alias-suggestion',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/BackupCode.tsx'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/BackupCode.tsx',
+            content: [
+              'import React from "react"',
+              '',
+              'type Props = {',
+              '  center?: boolean',
+              '}',
+              '',
+              'export default function TwoFactor(_props: Props) { return null }'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'naming-alias-suggestion',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        }
+      }
+    })
+
+    expect(provider.requests).toHaveLength(3)
+    // The model naming-alias category is still normalized to `maintainability`
+    // during discovery.
+    expect(result.candidateFindings).toEqual([
+      expect.objectContaining({
+        category: 'maintainability',
+        severity: 'low',
+        title: 'Default export name does not match the file name'
+      })
+    ])
+    // ...but a low-severity nit is below the default actionable severity floor
+    // (`medium`), so it is not admitted as actionable — it is recorded as a
+    // below-threshold rejection instead (low-noise product posture).
+    expect(result.admittedFindings).toHaveLength(0)
+    expect(result.rejectedFindings).toContainEqual(
+      expect.objectContaining({ reason: 'below-threshold' })
+    )
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow preserves proof-pending model findings as artifact-only', async () => {
+    const provider = new ProofPendingModelFindingProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'proof-pending-model-finding',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [
+          {
+            id: 'ev_diff1',
+            kind: 'diff',
+            summary: 'Changed branch can return an incorrect value.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 4,
+              side: 'new'
+            },
+            source: 'typescript-support-signal',
+            contentHash:
+              '2222222222222222222222222222222222222222222222222222222222222222',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: [
+              'const input = 1',
+              'const intermediate = input + 1',
+              'const expectedValue = intermediate + 1',
+              'return actualValue'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_111111111111111111111111'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'proof-pending-model-finding',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        },
+        qualityGate: {
+          maxHigh: 0,
+          failOnNewOnly: true
+        }
+      }
+    })
+
+    expect(provider.requests).toHaveLength(3)
+    expect(result.admittedFindings).toEqual([
+      expect.objectContaining({
+        title: 'Changed branch returns wrong value',
+        reporterEligibility: 'artifact-only'
+      })
+    ])
+    expect(result.rejectedFindings).toEqual([])
+    expect(result.qualityGate.passed).toBe(true)
+
+    await harness.shutdown()
+  })
+
+  test('provider-backed workflow promotes refutation-proved model findings with task evidence by default', async () => {
+    const provider = new ProvedModelFindingProvider()
+    const harness = createModelBackedReviewHarness({
+      modelAlias: {
+        provider,
+        model: 'proved-model-finding',
+        capabilities: ['object']
+      }
+    })
+
+    const result = await runModelBackedReviewWorkflow({
+      harness,
+      sessionId: 'test-session',
+      input: {
+        runId: 'test-run',
+        reviewedPaths: ['src/app.ts'],
+        evidence: [
+          {
+            id: 'ev_diff1',
+            kind: 'diff',
+            summary: 'Changed branch can return an incorrect value.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 4,
+              side: 'new'
+            },
+            source: 'typescript-support-signal',
+            contentHash:
+              '2222222222222222222222222222222222222222222222222222222222222222',
+            redactionApplied: true
+          }
+        ],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/app.ts',
+            content: [
+              'const input = 1',
+              'const intermediate = input + 1',
+              'const expectedValue = intermediate + 1',
+              'return actualValue'
+            ].join('\n'),
+            ledgerEntryId: 'ctx_111111111111111111111111'
+          }
+        ],
+        baselineConfigured: false,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'proved-model-finding',
+          signalVersions: {
+            typescript: '6.0.3'
+          },
+          configHash
+        },
+        qualityGate: {}
+      }
+    })
+
+    const refutationEvidence = result.evidence.find(
+      (record) =>
+        record.kind === 'model-rationale' &&
+        record.source === 'refutation-check'
+    )
+
+    expect(provider.requests).toHaveLength(3)
+    expect(result.admittedFindings).toHaveLength(1)
+    expect(refutationEvidence).toBeDefined()
+    expect(result.admittedFindings[0]?.reporterEligibility).toBe('summary-only')
+    expect(result.admittedFindings[0]?.admissionEvidenceIds).toContain(
+      refutationEvidence?.id
+    )
+    expect(result.admittedFindings[0]?.fixProposal).toMatchObject({
+      summary:
+        'Return the expected value from the changed branch after validating callers.',
+      safety: 'manual-review',
+      edits: [
+        expect.objectContaining({
+          path: 'src/app.ts',
+          startLine: 4,
+          endLine: 4
+        })
+      ]
+    })
 
     await harness.shutdown()
   })
@@ -1432,7 +5862,7 @@ describe('review workflow', () => {
               startLine: 1,
               side: 'new'
             },
-            source: 'typescript-analyzer',
+            source: 'typescript-support-signal',
             contentHash:
               '2222222222222222222222222222222222222222222222222222222222222222',
             redactionApplied: true
@@ -1454,7 +5884,7 @@ describe('review workflow', () => {
           reviewer: 'review-agent',
           modelProvider: 'openai',
           modelName: 'invalid-line',
-          analyzerVersions: {
+          signalVersions: {
             typescript: '6.0.3'
           },
           configHash
@@ -1508,6 +5938,15 @@ describe('review workflow', () => {
           admittedFindings: result.admittedFindings,
           rejectedFindings: result.rejectedFindings,
           evidence: result.evidence,
+          reviewIntents: result.reviewIntents,
+          modelSuspicions: [],
+          investigationTraces: [],
+          proofPackets: [],
+          refutationResults: [],
+          aggregateResults: [],
+          judgeResults: result.judgeResults,
+          promotionDecisions: [],
+          providerIssues: [],
           skippedFiles: [],
           artifacts: []
         })
@@ -1542,7 +5981,7 @@ describe('review workflow', () => {
               startLine: 4,
               side: 'new'
             },
-            source: 'typescript-analyzer',
+            source: 'typescript-support-signal',
             contentHash:
               '2222222222222222222222222222222222222222222222222222222222222222',
             redactionApplied: true
@@ -1569,7 +6008,7 @@ describe('review workflow', () => {
           reviewer: 'review-agent',
           modelProvider: 'openai',
           modelName: 'structured-fix',
-          analyzerVersions: {
+          signalVersions: {
             typescript: '6.0.3'
           },
           configHash
@@ -1580,7 +6019,7 @@ describe('review workflow', () => {
 
     expect(result.admittedFindings[0]?.fixProposal).toMatchObject({
       summary: 'Return the expected value from the changed branch.',
-      evidenceIds: ['ev_diff1'],
+      evidenceIds: expect.arrayContaining(['ev_diff1']),
       safety: 'manual-review',
       edits: [
         {
@@ -1654,12 +6093,12 @@ describe('review workflow', () => {
         'sk-proj-secret-value'
       )
       expect(capturedError.partialState.artifactRoot).toBe(
-        '.review/runs/run-partial'
+        '.codereviewer/runs/run-partial'
       )
       expect(capturedError.partialState.runSummary.warnings).toContain(
         'partial-run'
       )
-      expect(capturedError.partialState.sharedContext.tasks).toEqual(
+      expect(capturedError.partialState.sharedContext.taskEvents).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             paths: ['src/a.ts'],
@@ -1752,7 +6191,7 @@ describe('review workflow', () => {
         category: 'provider',
         exitCode: 4
       })
-      expect(capturedError.partialState.sharedContext.tasks).toEqual(
+      expect(capturedError.partialState.sharedContext.taskEvents).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             paths: ['src/a.ts'],
@@ -1898,7 +6337,7 @@ describe('review workflow', () => {
         stat(
           join(
             root,
-            '.review',
+            '.codereviewer',
             'runs',
             'run-provider-batch',
             'durable'
@@ -2028,6 +6467,689 @@ describe('review workflow', () => {
     }
   })
 
+  test('runner records provider token usage and built-in OpenAI model cost', async () => {
+    const root = join(tmpdir(), `codereviewer-openai-cost-${crypto.randomUUID()}`)
+    const provider = new EmptyFindingProvider()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(join(root, 'src', 'a.ts'), 'export const a = 1;\n')
+      await writeFile(join(root, 'src', 'b.ts'), 'export const b = 2;\n')
+
+      const config = CodeReviewerConfigSchema.parse({
+        provider: {
+          id: 'openai',
+          model: 'gpt-5-mini',
+          maxRetries: 0
+        },
+        review: {
+          depth: 'fast'
+        },
+        drift: {
+          enabled: false
+        }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/a.ts', 'src/b.ts'],
+        environment: {
+          OPENAI_API_KEY: 'sk-proj-secret-value'
+        },
+        runId: 'run-openai-cost',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        providerImport: async () => ({
+          openai: () => provider
+        })
+      })
+
+      expect(provider.requests).toHaveLength(2)
+      expect(result.report.run).toMatchObject({
+        inputTokens: 2,
+        outputTokens: 2,
+        costUsd: 0.000005
+      })
+      expect(result.report.run.warnings).not.toContain('cost-unavailable')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner validates context-only model suggestions without auto-attaching task evidence', async () => {
+    const root = join(tmpdir(), `codereviewer-context-evidence-${crypto.randomUUID()}`)
+    const provider = new ContextOnlyFindingProvider()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'app.ts'),
+        [
+          'const input = 1',
+          'const intermediate = input + 1',
+          'const expectedValue = intermediate + 1',
+          'export const value = input > 0 ? intermediate : expectedValue'
+        ].join('\n')
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        provider: {
+          id: 'openai',
+          model: 'gpt-5-mini',
+          maxRetries: 0
+        },
+        review: {
+          depth: 'fast'
+        },
+        drift: {
+          enabled: false
+        }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/app.ts'],
+        environment: {
+          OPENAI_API_KEY: 'sk-proj-secret-value'
+        },
+        runId: 'run-context-evidence',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        providerImport: async () => ({
+          openai: () => provider
+        })
+      })
+
+      const taskRequest = provider.requests.find(
+        (request) => !isFindingRefutationRequest(request)
+      )
+      const taskUserMessage = taskRequest?.messages.find(
+        (message) => message.role === 'user'
+      )
+      const taskSystemMessage = taskRequest?.messages.find(
+        (message) => message.role === 'system'
+      )
+      const taskInput = JSON.parse(String(taskUserMessage?.content)) as {
+        readonly evidence: readonly { readonly id: string; readonly kind: string }[]
+      }
+      const refutationRequest = provider.requests.find(
+        isFindingRefutationCheckRequest
+      )
+      const refutationSystemMessage = refutationRequest?.messages.find(
+        (message) => message.role === 'system'
+      )
+      const refutationUserMessage = refutationRequest?.messages.find(
+        (message) => message.role === 'user'
+      )
+      const refutationInput = JSON.parse(
+        String(refutationUserMessage?.content)
+      ) as {
+        readonly reviewContext: readonly { readonly path?: string }[]
+      }
+
+      expect(taskInput.evidence).toEqual([
+        expect.objectContaining({
+          id: expect.stringMatching(/^evctx_[a-f0-9]+$/),
+          kind: 'file'
+        })
+      ])
+      expect(String(taskSystemMessage?.content)).toContain(
+        'Do not suppress a suspicion only because no exact evidenceId is available.'
+      )
+      expect(String(taskSystemMessage?.content)).toContain(
+        'Review context content can be a partial excerpt selected for budget.'
+      )
+      expect(String(taskSystemMessage?.content)).toContain(
+        'case or Unicode normalization mismatches at comparison, lookup, or dedup-key construction'
+      )
+      expect(String(taskSystemMessage?.content)).toContain(
+        'cache, concurrency, and non-atomic read-modify-write races on shared mutable state'
+      )
+      expect(String(refutationSystemMessage?.content)).toContain(
+        'Return "refuted" for vague clarity, strictness, or cleanup suggestions unless the candidate identifies a concrete runtime, security, or data-integrity failure.'
+      )
+      expect(String(refutationSystemMessage?.content)).toContain(
+        'Return "needs-more-evidence" for spelling, import consistency, storage type preference, frontend-only formatting, or helper-refactor concerns unless context proves a concrete runtime, security, or data-integrity failure.'
+      )
+      expect(String(refutationSystemMessage?.content)).toContain(
+        'Return "needs-more-evidence" for frontend API response-shape refutation concerns unless reviewContext proves malformed or untrusted response data can reach a concrete runtime failure.'
+      )
+      expect(String(refutationSystemMessage?.content)).toContain(
+        'Return "refuted" for schema syntax claims when deterministic diagnostic evidence did not report a parse error for that file.'
+      )
+      expect(String(refutationSystemMessage?.content)).toContain(
+        'Return "needs-more-evidence" for storage-format or encryption-preference claims unless context proves plaintext exposure, non-atomic consumption, or another concrete integrity failure.'
+      )
+      expect(refutationInput.reviewContext).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: 'src/app.ts'
+          })
+        ])
+      )
+      expect(provider.requests).toHaveLength(3)
+      expect(result.sharedContext.candidateFindings).toHaveLength(1)
+      expect(result.sharedContext.candidateFindings[0]?.evidenceIds).toEqual(
+        []
+      )
+      expect(result.report.evidence.map((record) => record.kind)).toEqual(
+        expect.arrayContaining(['file', 'model-rationale'])
+      )
+      expect(result.report.admittedFindings).toHaveLength(1)
+      expect(result.report.admittedFindings[0]?.evidenceIds).toEqual(
+        [expect.stringMatching(/^ev_[a-f0-9]+$/)]
+      )
+      expect(result.report.admittedFindings[0]?.admissionEvidenceIds).toEqual(
+        [expect.stringMatching(/^ev_[a-f0-9]+$/)]
+      )
+      expect(result.report.modelSuspicions).toEqual([
+        expect.objectContaining({
+          id: expect.stringMatching(/^susp_[a-f0-9]+$/),
+          taskId: result.sharedContext.candidateFindings[0]?.taskId,
+          status: 'proved',
+          proposedBy: 'review-agent'
+        })
+      ])
+      expect(result.report.proofPackets).toEqual([
+        expect.objectContaining({
+          id: expect.stringMatching(/^proof_[a-f0-9]+$/),
+          suspicionId: result.report.modelSuspicions[0]?.id,
+          candidateId: result.sharedContext.candidateFindings[0]?.id,
+          evidenceIds: expect.arrayContaining([
+            expect.stringMatching(/^ev_[a-f0-9]+$/)
+          ])
+        })
+      ])
+      expect(result.report.proofPackets[0]?.evidenceIds).not.toEqual(
+        expect.arrayContaining([expect.stringMatching(/^evctx_[a-f0-9]+$/)])
+      )
+      expect(result.report.refutationResults).toEqual([
+        expect.objectContaining({
+          id: expect.stringMatching(/^refute_[a-f0-9]+$/),
+          proofPacketId: result.report.proofPackets[0]?.id,
+          verdict: 'proved'
+        })
+      ])
+      expect(result.report.promotionDecisions).toEqual([
+        expect.objectContaining({
+          candidateId: result.sharedContext.candidateFindings[0]?.id,
+          proofPacketId: result.report.proofPackets[0]?.id,
+          status: 'actionable'
+        })
+      ])
+      expect(result.contextLedger).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool-result',
+            path: 'src/app.ts',
+            reason: 'context-retrieval-read'
+          })
+        ])
+      )
+      expect(result.report.evidence).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool-read',
+            source: 'context-retrieval',
+            rawContentRef: expect.stringMatching(/^ctx_[a-f0-9]+$/)
+          })
+        ])
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner applies ai review suspicion caps before proof work', async () => {
+    const root = join(tmpdir(), `codereviewer-ai-cap-${crypto.randomUUID()}`)
+    const provider = new MultipleContextOnlyFindingProvider()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'app.ts'),
+        [
+          'const input = 1',
+          'const intermediate = input + 1',
+          'const expectedValue = intermediate + 1',
+          'export const first = input > 0 ? intermediate : expectedValue',
+          'export const second = input > 1 ? intermediate : expectedValue'
+        ].join('\n')
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        provider: {
+          id: 'openai',
+          model: 'gpt-5-mini',
+          maxRetries: 0
+        },
+        review: {
+          depth: 'thorough'
+        },
+        aiReview: {
+          maxSuspicionsPerTask: 1
+        },
+        drift: {
+          enabled: false
+        }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/app.ts'],
+        environment: {
+          OPENAI_API_KEY: 'sk-proj-secret-value'
+        },
+        runId: 'run-ai-cap',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        providerImport: async () => ({
+          openai: () => provider
+        })
+      })
+
+      expect(provider.requests.filter(isFindingRefutationCheckRequest)).toHaveLength(1)
+      expect(result.sharedContext.candidateFindings).toHaveLength(1)
+      expect(result.sharedContext.candidateFindings[0]?.title).toBe(
+        'First changed branch returns wrong value'
+      )
+      expect(result.report.modelSuspicions).toHaveLength(1)
+      expect(result.report.proofPackets).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner uses requested context for mediated investigation evidence', async () => {
+    const root = join(tmpdir(), `codereviewer-requested-context-${crypto.randomUUID()}`)
+    const provider = new RequestedContextFindingProvider()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'app.ts'),
+        [
+          'import { expectedValue } from "./helper"',
+          'const input = 1',
+          'const intermediate = input + 1',
+          'export const value = input > 0 ? intermediate : expectedValue'
+        ].join('\n')
+      )
+      await writeFile(
+        join(root, 'src', 'helper.ts'),
+        'export const expectedValue = 3\n'
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        provider: {
+          id: 'openai',
+          model: 'gpt-5-mini',
+          maxRetries: 0
+        },
+        review: {
+          depth: 'balanced'
+        },
+        drift: {
+          enabled: false
+        }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/app.ts', 'src/helper.ts'],
+        environment: {
+          OPENAI_API_KEY: 'sk-proj-secret-value'
+        },
+        runId: 'run-requested-context',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        providerImport: async () => ({
+          openai: () => provider
+        })
+      })
+
+      expect(provider.requests.filter(isFindingRefutationCheckRequest)).toHaveLength(1)
+      expect(result.report.modelSuspicions[0]?.contextRequests).toEqual([
+        {
+          tool: 'grep',
+          path: 'src/helper.ts',
+          query: 'expectedValue',
+          reason: 'Find helper expected value references.'
+        },
+        {
+          tool: 'list',
+          path: 'src',
+          reason: 'Inspect nearby source files.'
+        }
+      ])
+      expect(result.report.modelSuspicions[0]?.requestedContext).toEqual([
+        'Search "expectedValue" in src/helper.ts',
+        'List directory src'
+      ])
+      expect(result.contextLedger).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool-result',
+            reason: 'context-retrieval-grep'
+          }),
+          expect.objectContaining({
+            kind: 'tool-result',
+            path: 'src',
+            reason: 'context-retrieval-list'
+          })
+        ])
+      )
+      expect(result.report.evidence).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool-search',
+            source: 'context-retrieval'
+          }),
+          expect.objectContaining({
+            kind: 'tool-read',
+            source: 'context-retrieval'
+          })
+        ])
+      )
+      expect(result.report.proofPackets[0]?.evidenceIds).toEqual(
+        expect.arrayContaining(
+          result.report.evidence
+            .filter(
+              (record) =>
+                record.source === 'context-retrieval' &&
+                (record.kind === 'tool-search' || record.kind === 'tool-read')
+            )
+            .map((record) => record.id)
+        )
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner reruns investigation with bounded follow-up context requests', async () => {
+    const root = join(tmpdir(), `codereviewer-investigation-follow-up-${crypto.randomUUID()}`)
+    const provider = new InvestigationFollowUpFindingProvider()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'app.ts'),
+        [
+          'import { expectedValue } from "./helper"',
+          'const input = 1',
+          'const intermediate = input + 1',
+          'export const value = input > 0 ? intermediate : expectedValue'
+        ].join('\n')
+      )
+      await writeFile(
+        join(root, 'src', 'helper.ts'),
+        'export const expectedValue = 3\n'
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        provider: {
+          id: 'openai',
+          model: 'gpt-5-mini',
+          maxRetries: 0
+        },
+        review: {
+          depth: 'balanced'
+        },
+        aiReview: {
+          maxInvestigationRounds: 2
+        },
+        drift: {
+          enabled: false
+        }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/app.ts', 'src/helper.ts'],
+        environment: {
+          OPENAI_API_KEY: 'sk-proj-secret-value'
+        },
+        runId: 'run-investigation-follow-up',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        providerImport: async () => ({
+          openai: () => provider
+        })
+      })
+
+      expect(provider.requests.filter(isFindingInvestigationRequest)).toHaveLength(2)
+      expect(provider.requests.filter(isFindingRefutationCheckRequest)).toHaveLength(1)
+      expect(result.report.modelSuspicions[0]?.status).toBe('proved')
+      expect(result.report.modelSuspicions[0]?.contextRequests).toEqual([
+        {
+          tool: 'grep',
+          path: 'src/helper.ts',
+          query: 'expectedValue',
+          reason: 'Find the helper value used by the changed branch.'
+        }
+      ])
+      expect(result.report.investigationTraces).toEqual([
+        expect.objectContaining({
+          result: 'proof',
+          budget: expect.objectContaining({
+            maxRounds: 2,
+            usedRounds: 2
+          }),
+          toolCalls: expect.arrayContaining([
+            expect.objectContaining({
+              tool: 'tool-search',
+              status: 'completed',
+              ledgerEntryId: expect.stringMatching(/^ctx_[a-f0-9]+$/)
+            })
+          ])
+        })
+      ])
+      const followUpEvidenceIds = result.report.evidence
+        .filter(
+          (record) =>
+            record.source === 'context-retrieval' &&
+            record.kind === 'tool-search'
+        )
+        .map((record) => record.id)
+      expect(followUpEvidenceIds).toHaveLength(1)
+      expect(result.report.proofPackets[0]?.evidenceIds).toEqual(
+        expect.arrayContaining(followUpEvidenceIds)
+      )
+      expect(result.contextLedger).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool-result',
+            reason: 'context-retrieval-grep'
+          })
+        ])
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner applies ai review read budget to mediated proof context', async () => {
+    const root = join(tmpdir(), `codereviewer-ai-read-budget-${crypto.randomUUID()}`)
+    const provider = new ContextOnlyFindingProvider()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'app.ts'),
+        [
+          'const input = 1',
+          'const intermediate = input + 1',
+          'const expectedValue = intermediate + 1',
+          'export const value = input > 0 ? intermediate : expectedValue'
+        ].join('\n')
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        provider: {
+          id: 'openai',
+          model: 'gpt-5-mini',
+          maxRetries: 0
+        },
+        review: {
+          depth: 'balanced'
+        },
+        aiReview: {
+          maxToolReadsPerInvestigation: 0
+        },
+        drift: {
+          enabled: false
+        }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/app.ts'],
+        environment: {
+          OPENAI_API_KEY: 'sk-proj-secret-value'
+        },
+        runId: 'run-ai-read-budget',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        providerImport: async () => ({
+          openai: () => provider
+        })
+      })
+
+      expect(provider.requests).toHaveLength(3)
+      expect(result.report.modelSuspicions).toHaveLength(1)
+      expect(result.report.evidence).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'tool-read',
+            source: 'context-retrieval'
+          })
+        ])
+      )
+      expect(result.contextLedger).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            reason: 'context-retrieval-read'
+          })
+        ])
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner applies ai review run investigation cap before refutation', async () => {
+    const root = join(tmpdir(), `codereviewer-ai-investigation-cap-${crypto.randomUUID()}`)
+    const provider = new ContextOnlyFindingProvider()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'app.ts'),
+        [
+          'const input = 1',
+          'const intermediate = input + 1',
+          'const expectedValue = intermediate + 1',
+          'export const value = input > 0 ? intermediate : expectedValue'
+        ].join('\n')
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        provider: {
+          id: 'openai',
+          model: 'gpt-5-mini',
+          maxRetries: 0
+        },
+        review: {
+          depth: 'balanced'
+        },
+        aiReview: {
+          maxInvestigationsPerRun: 0
+        },
+        drift: {
+          enabled: false
+        }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/app.ts'],
+        environment: {
+          OPENAI_API_KEY: 'sk-proj-secret-value'
+        },
+        runId: 'run-ai-investigation-cap',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        providerImport: async () => ({
+          openai: () => provider
+        })
+      })
+
+      expect(provider.requests.filter(isFindingRefutationCheckRequest)).toHaveLength(0)
+      expect(result.sharedContext.candidateFindings).toEqual([])
+      expect(result.report.modelSuspicions).toEqual([])
+      expect(result.report.proofPackets).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('refutation check rejects model findings that depend on violating static contracts', async () => {
+    const root = join(tmpdir(), `codereviewer-static-contract-${crypto.randomUUID()}`)
+    const provider = new StaticContractSpeculationProvider()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'format.ts'),
+        [
+          'export const formatLabel = (value: string): string =>',
+          "  value.trim().toUpperCase()"
+        ].join('\n')
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        provider: {
+          id: 'openai',
+          model: 'gpt-5-mini',
+          maxRetries: 0
+        },
+        review: {
+          depth: 'fast'
+        },
+        drift: {
+          enabled: false
+        }
+      })
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/format.ts'],
+        environment: {
+          OPENAI_API_KEY: 'sk-proj-secret-value'
+        },
+        runId: 'run-static-contract',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        providerImport: async () => ({
+          openai: () => provider
+        })
+      })
+
+      expect(provider.requests).toHaveLength(3)
+      expect(result.sharedContext.candidateFindings).toHaveLength(1)
+      expect(result.report.admittedFindings).toEqual([])
+      expect(result.report.rejectedFindings).toEqual([
+        expect.objectContaining({
+          reason: 'refuted'
+        })
+      ])
+      expect(result.report.qualityGate?.passed).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('runner fails provider review when configured maxCostUsd is exceeded', async () => {
     const root = join(tmpdir(), `codereviewer-provider-cost-gate-${crypto.randomUUID()}`)
     const provider = new EmptyFindingProvider()
@@ -2140,7 +7262,7 @@ describe('review workflow', () => {
           message: 'Skipped because review.maxFiles is 1.'
         }
       ])
-      expect(result.sharedContext.tasks).toEqual(
+      expect(result.sharedContext.taskEvents).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             paths: ['src/a.ts'],
@@ -2148,7 +7270,7 @@ describe('review workflow', () => {
           })
         ])
       )
-      expect(result.sharedContext.tasks).not.toEqual(
+      expect(result.sharedContext.taskEvents).not.toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             paths: ['src/b.ts']
@@ -2160,8 +7282,8 @@ describe('review workflow', () => {
     }
   })
 
-  test('analyzer-only runner records task events from the queue', async () => {
-    const root = join(tmpdir(), `codereviewer-analyzer-queue-${crypto.randomUUID()}`)
+  test('support-signal-only runner records task events from the queue', async () => {
+    const root = join(tmpdir(), `codereviewer-support-signal-queue-${crypto.randomUUID()}`)
 
     try {
       await mkdir(join(root, 'src'), { recursive: true })
@@ -2181,15 +7303,10 @@ describe('review workflow', () => {
         repositoryRoot: root,
         config,
         explicitFiles: ['src/a.ts'],
-        runId: 'run-analyzer-queue',
+        runId: 'run-support-signal-queue',
         now: () => new Date('2026-06-20T00:00:00.000Z')
       })
 
-      expect(result.sharedContext.tasks.map((event) => event.state)).toEqual([
-        'planned',
-        'running',
-        'completed'
-      ])
       expect(result.sharedContext.taskEvents.map((event) => event.state)).toEqual([
         'planned',
         'running',
@@ -2197,15 +7314,15 @@ describe('review workflow', () => {
       ])
       expect(result.sharedContext.currentTasks).toEqual([
         expect.objectContaining({
-          id: result.sharedContext.tasks[0]?.id,
+          id: result.sharedContext.taskEvents[0]?.id,
           state: 'completed'
         })
       ])
-      expect(result.sharedContext.tasks).toEqual(
+      expect(result.sharedContext.taskEvents).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             workerId: 'deterministic-worker-1',
-            message: 'deterministic analyzer task completed'
+            message: 'deterministic support signal task completed'
           })
         ])
       )
@@ -2213,7 +7330,7 @@ describe('review workflow', () => {
         expect.arrayContaining([
           expect.objectContaining({
             source: 'deterministic-worker-1',
-            summary: expect.stringContaining('deterministic analyzer task completed')
+            summary: expect.stringContaining('deterministic support signal task completed')
           })
         ])
       )
@@ -2222,8 +7339,8 @@ describe('review workflow', () => {
     }
   })
 
-  test('language analysis observability records structural engine provenance without content', async () => {
-    const root = join(tmpdir(), `codereviewer-language-observability-${crypto.randomUUID()}`)
+  test('deterministic support signal extraction observability records structural engine provenance without content', async () => {
+    const root = join(tmpdir(), `codereviewer-support-signal-observability-${crypto.randomUUID()}`)
 
     try {
       await mkdir(join(root, 'src'), { recursive: true })
@@ -2247,17 +7364,17 @@ describe('review workflow', () => {
         repositoryRoot: root,
         config,
         explicitFiles: ['src/app.ts', 'src/app.test.ts'],
-        runId: 'run-language-observability',
+        runId: 'run-support-signal-observability',
         now: () => new Date('2026-06-20T00:00:00.000Z')
       })
-      const languageStep = result.observability.events.find(
-        (event) => event.type === 'step-ended' && event.step === 'language_analysis'
+      const deterministicSignalStep = result.observability.events.find(
+        (event) => event.type === 'step-ended' && event.step === 'deterministic_signals'
       )
       const serialized = JSON.stringify(result.observability)
 
-      expect(languageStep).toMatchObject({
+      expect(deterministicSignalStep).toMatchObject({
         type: 'step-ended',
-        step: 'language_analysis',
+        step: 'deterministic_signals',
         attributes: expect.objectContaining({
           structuralEngine: 'typescript-compiler+ast-grep',
           astGrepVersion: expect.stringMatching(/^ast-grep@/u),
@@ -2385,7 +7502,7 @@ describe('review workflow', () => {
     }
   })
 
-  test('runner does not emit non-owned analyzer findings for TypeScript files', async () => {
+  test('runner does not emit non-owned support signal evidence for TypeScript files', async () => {
     const root = join(tmpdir(), `codereviewer-ts-routing-${crypto.randomUUID()}`)
 
     try {
@@ -2413,23 +7530,23 @@ describe('review workflow', () => {
       expect(result.report.evidence).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            source: 'typescript-analyzer',
+            source: 'typescript-support-signal',
             location: expect.objectContaining({
               path: 'src/app.ts'
             })
           })
         ])
       )
-      expect(serialized).not.toContain('go-analyzer')
-      expect(serialized).not.toContain('python-analyzer')
-      expect(serialized).not.toContain('rust-analyzer')
-      expect(serialized).not.toContain('java-analyzer')
+      expect(serialized).not.toContain('go-support-signal')
+      expect(serialized).not.toContain('python-support-signal')
+      expect(serialized).not.toContain('rust-support-signal')
+      expect(serialized).not.toContain('java-support-signal')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   })
 
-  test('runner uses supplied review diff maps for explicit-file inline eligibility', async () => {
+  test('runner keeps explicit-file parse diagnostics as support evidence', async () => {
     const root = join(tmpdir(), `codereviewer-explicit-diff-map-${crypto.randomUUID()}`)
 
     try {
@@ -2463,14 +7580,349 @@ describe('review workflow', () => {
         ...{ reviewDiffMaps }
       })
 
-      expect(result.report.admittedFindings[0]).toMatchObject({
-        location: {
+      expect(result.report.evidence).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'diagnostic',
+            source: 'typescript-support-signal',
+            location: expect.objectContaining({
+              path: 'src/app.ts',
+              startLine: 1,
+              side: 'file'
+            })
+          })
+        ])
+      )
+      expect(result.report.admittedFindings).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner includes reviewed diff ranges in model task packets', async () => {
+    const root = join(tmpdir(), `codereviewer-task-diff-ranges-${crypto.randomUUID()}`)
+    const provider = new EmptyFindingProvider()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'app.ts'),
+        [
+          'export function run() {',
+          '  logger.Error("debug state", "count", count)',
+          '}'
+        ].join('\n')
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        provider: {
+          id: 'openai',
+          model: 'gpt-5-mini',
+          maxRetries: 0
+        },
+        review: {
+          depth: 'fast'
+        },
+        drift: {
+          enabled: false
+        }
+      })
+      const reviewDiffMaps = parseGitDiffMaps(
+        [
+          'diff --git a/src/app.ts b/src/app.ts',
+          'new file mode 100644',
+          '--- /dev/null',
+          '+++ b/src/app.ts',
+          '@@ -1,0 +1,3 @@',
+          '+export function run() {',
+          '+  logger.Error("debug state", "count", count)',
+          '+}'
+        ].join('\n')
+      )
+
+      await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/app.ts'],
+        environment: {
+          OPENAI_API_KEY: 'sk-proj-secret-value'
+        },
+        runId: 'run-task-diff-ranges',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        providerImport: async () => ({
+          openai: () => provider
+        }),
+        reviewDiffMaps
+      })
+
+      const taskRequest = provider.requests.find(
+        (request) => !isFindingRefutationRequest(request)
+      )
+      const taskUserMessage = taskRequest?.messages.find(
+        (message) => message.role === 'user'
+      )
+      const taskInput = JSON.parse(String(taskUserMessage?.content)) as {
+        readonly reviewedDiffRanges?: readonly {
+          readonly path: string
+          readonly startLine: number
+          readonly endLine: number
+          readonly changeKind?: string
+        }[]
+      }
+
+      expect(taskInput.reviewedDiffRanges).toEqual([
+        {
           path: 'src/app.ts',
           startLine: 1,
-          side: 'new'
+          endLine: 3,
+          changeKind: 'new'
+        }
+      ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner admits Go Error logs that only record nil-checked debug state', async () => {
+    const root = join(tmpdir(), `codereviewer-go-log-level-${crypto.randomUUID()}`)
+
+    try {
+      await mkdir(join(root, 'pkg'), { recursive: true })
+      await writeFile(
+        join(root, 'pkg', 'cleanup.go'),
+        [
+          'package cleanup',
+          'func run() {',
+          '  ids, err := fetchIDs()',
+          '  if err != nil {',
+          '    return',
+          '  }',
+          '  r.log.Error("Annotations to clean by time", "count", len(ids), "err", err)',
+          '}'
+        ].join('\n')
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        review: {
+          depth: 'fast'
         },
-        reporterEligibility: 'inline'
+        drift: {
+          enabled: false
+        }
       })
+      const reviewDiffMaps = parseGitDiffMaps(
+        [
+          'diff --git a/pkg/cleanup.go b/pkg/cleanup.go',
+          '--- a/pkg/cleanup.go',
+          '+++ b/pkg/cleanup.go',
+          '@@ -1,0 +1,8 @@',
+          '+package cleanup',
+          '+func run() {',
+          '+  ids, err := fetchIDs()',
+          '+  if err != nil {',
+          '+    return',
+          '+  }',
+          '+  r.log.Error("Annotations to clean by time", "count", len(ids), "err", err)',
+          '+}'
+        ].join('\n')
+      )
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['pkg/cleanup.go'],
+        runId: 'run-go-log-level',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        reviewDiffMaps
+      })
+
+      expect(result.report.evidence).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'rule',
+            ruleId: 'go-error-log-after-nil-check',
+            source: 'go-support-signal',
+            location: expect.objectContaining({
+              path: 'pkg/cleanup.go',
+              startLine: 7,
+              side: 'file'
+            })
+          })
+        ])
+      )
+      expect(result.report.admittedFindings).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner groups repeated Go nil-checked Error logs into one finding per file', async () => {
+    const root = join(tmpdir(), `codereviewer-go-log-level-group-${crypto.randomUUID()}`)
+
+    try {
+      await mkdir(join(root, 'pkg'), { recursive: true })
+      await writeFile(
+        join(root, 'pkg', 'cleanup.go'),
+        [
+          'package cleanup',
+          'func run() {',
+          '  ids, err := fetchIDs()',
+          '  if err != nil {',
+          '    return',
+          '  }',
+          '  r.log.Error("Annotations to clean by time", "count", len(ids), "err", err)',
+          '  r.log.Error("Annotations to clean by count", "count", len(ids), "err", err)',
+          '}'
+        ].join('\n')
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        review: {
+          depth: 'fast'
+        },
+        drift: {
+          enabled: false
+        }
+      })
+      const reviewDiffMaps = parseGitDiffMaps(
+        [
+          'diff --git a/pkg/cleanup.go b/pkg/cleanup.go',
+          '--- a/pkg/cleanup.go',
+          '+++ b/pkg/cleanup.go',
+          '@@ -1,0 +1,9 @@',
+          '+package cleanup',
+          '+func run() {',
+          '+  ids, err := fetchIDs()',
+          '+  if err != nil {',
+          '+    return',
+          '+  }',
+          '+  r.log.Error("Annotations to clean by time", "count", len(ids), "err", err)',
+          '+  r.log.Error("Annotations to clean by count", "count", len(ids), "err", err)',
+          '+}'
+        ].join('\n')
+      )
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['pkg/cleanup.go'],
+        runId: 'run-go-log-level-group',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        reviewDiffMaps
+      })
+
+      expect(
+        result.report.evidence.filter(
+          (record) => record.ruleId === 'go-error-log-after-nil-check'
+        )
+      ).toEqual([
+        expect.objectContaining({
+          source: 'go-support-signal',
+          location: expect.objectContaining({
+            path: 'pkg/cleanup.go',
+            startLine: 7,
+            side: 'file'
+          })
+        }),
+        expect.objectContaining({
+          source: 'go-support-signal',
+          location: expect.objectContaining({
+            path: 'pkg/cleanup.go',
+            startLine: 8,
+            side: 'file'
+          })
+        })
+      ])
+      expect(result.report.admittedFindings).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('runner keeps TypeScript backup-code rules as support evidence without admitting findings', async () => {
+    const root = join(tmpdir(), `codereviewer-ts-backup-code-rules-${crypto.randomUUID()}`)
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(
+        join(root, 'src', 'auth.ts'),
+        [
+          'const backupCodes = JSON.parse(symmetricDecrypt(user.backupCodes, key))',
+          'const index = backupCodes.indexOf(credentials.backupCode.replaceAll("-", ""))',
+          'if (index === -1) throw new Error(ErrorCode.IncorrectBackupCode)',
+          'backupCodes[index] = null',
+          'await prisma.user.update({',
+          '  where: { id: user.id },',
+          '  data: { backupCodes: symmetricEncrypt(JSON.stringify(backupCodes), key) }',
+          '})'
+        ].join('\n')
+      )
+      await writeFile(
+        join(root, 'src', 'disable.ts'),
+        [
+          'const backupCodes = JSON.parse(symmetricDecrypt(user.backupCodes, key))',
+          'const index = backupCodes.indexOf(req.body.backupCode.replaceAll("-", ""))',
+          'if (index === -1) return res.status(400).json({ error: ErrorCode.IncorrectBackupCode })'
+        ].join('\n')
+      )
+
+      const config = CodeReviewerConfigSchema.parse({
+        review: {
+          depth: 'fast'
+        },
+        drift: {
+          enabled: false
+        }
+      })
+      const reviewDiffMaps = parseGitDiffMaps(
+        [
+          'diff --git a/src/auth.ts b/src/auth.ts',
+          '--- a/src/auth.ts',
+          '+++ b/src/auth.ts',
+          '@@ -1,0 +1,8 @@',
+          '+const backupCodes = JSON.parse(symmetricDecrypt(user.backupCodes, key))',
+          '+const index = backupCodes.indexOf(credentials.backupCode.replaceAll("-", ""))',
+          '+if (index === -1) throw new Error(ErrorCode.IncorrectBackupCode)',
+          '+backupCodes[index] = null',
+          '+await prisma.user.update({',
+          '+  where: { id: user.id },',
+          '+  data: { backupCodes: symmetricEncrypt(JSON.stringify(backupCodes), key) }',
+          '+})',
+          'diff --git a/src/disable.ts b/src/disable.ts',
+          '--- a/src/disable.ts',
+          '+++ b/src/disable.ts',
+          '@@ -1,0 +1,3 @@',
+          '+const backupCodes = JSON.parse(symmetricDecrypt(user.backupCodes, key))',
+          '+const index = backupCodes.indexOf(req.body.backupCode.replaceAll("-", ""))',
+          '+if (index === -1) return res.status(400).json({ error: ErrorCode.IncorrectBackupCode })'
+        ].join('\n')
+      )
+
+      const result = await runReview({
+        repositoryRoot: root,
+        config,
+        explicitFiles: ['src/auth.ts', 'src/disable.ts'],
+        runId: 'run-ts-backup-code-rules',
+        now: () => new Date('2026-06-20T00:00:00.000Z'),
+        reviewDiffMaps
+      })
+
+      expect(result.report.evidence).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'rule',
+            ruleId: 'typescript-backup-code-case-sensitive-compare',
+            source: 'typescript-support-signal'
+          }),
+          expect.objectContaining({
+            kind: 'rule',
+            ruleId: 'typescript-backup-code-non-atomic-consumption',
+            source: 'typescript-support-signal'
+          })
+        ])
+      )
+      expect(result.sharedContext.candidateFindings).toEqual([])
+      expect(result.report.admittedFindings).toEqual([])
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -2478,7 +7930,7 @@ describe('review workflow', () => {
 
   test('normalizes provider timeout, cancellation, and controlled context denial', async () => {
     await expect(
-      runScriptedReviewWorkflow({
+      runProvidedCandidateReviewWorkflow({
         harness: createReviewHarness({
           modelAlias: {
             provider: new UnusedProvider(),
@@ -2499,7 +7951,7 @@ describe('review workflow', () => {
           baselineConfigured: false,
           provenance: {
             reviewer: 'review-agent',
-            analyzerVersions: {},
+            signalVersions: {},
             configHash
           },
           qualityGate: {}
@@ -2520,7 +7972,7 @@ describe('review workflow', () => {
     })
 
     await expect(
-      runScriptedReviewWorkflow({
+      runProvidedCandidateReviewWorkflow({
         harness: createReviewHarness({
           modelAlias: {
             provider: new UnusedProvider(),
@@ -2536,7 +7988,7 @@ describe('review workflow', () => {
           candidates: [],
           instructions: [
             {
-              path: '.review/instructions.md',
+              path: '.codereviewer/instructions.md',
               content: 'secret instruction',
               allowed: false
             }
@@ -2546,7 +7998,7 @@ describe('review workflow', () => {
           baselineConfigured: false,
           provenance: {
             reviewer: 'review-agent',
-            analyzerVersions: {},
+            signalVersions: {},
             configHash
           },
           qualityGate: {}

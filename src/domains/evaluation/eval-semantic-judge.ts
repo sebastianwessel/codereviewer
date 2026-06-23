@@ -11,27 +11,21 @@ import type {
 
 const EvalSemanticJudgeResponseSchema = z.strictObject({
   match: z.boolean(),
-  confidence: z.number().min(0).max(1),
-  reasoning: z.string().min(1).max(300).optional()
+  reason: z.string().min(1).max(1000)
 })
 
 const evalSemanticJudgeJsonSchema: JsonValue = {
   type: 'object',
   additionalProperties: false,
-  required: ['match', 'confidence'],
+  required: ['match', 'reason'],
   properties: {
     match: {
       type: 'boolean'
     },
-    confidence: {
-      type: 'number',
-      minimum: 0,
-      maximum: 1
-    },
-    reasoning: {
+    reason: {
       type: 'string',
       minLength: 1,
-      maxLength: 300
+      maxLength: 1000
     }
   }
 } as const
@@ -41,6 +35,7 @@ const semanticJudgeInstructions = [
   'Different wording is acceptable when the issue, risk, or bug is the same.',
   'Do not require matching file paths or line numbers; those are handled by deterministic eval policy.',
   'Use only the provided summaries. Do not infer from missing source code.',
+  'Return a boolean match decision and a concise reason. Do not return numeric confidence.',
   'Return JSON only.'
 ].join(' ')
 
@@ -96,7 +91,7 @@ export const createModelSemanticJudge = (
 
     return {
       match: parsed.match,
-      confidence: parsed.confidence
+      reason: parsed.reason
     }
   } catch (error) {
     throw normalizeError(error, {

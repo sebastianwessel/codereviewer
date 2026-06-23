@@ -67,6 +67,58 @@ describe('review task planner', () => {
     ])
   })
 
+  test('balanced depth clusters non-relative Python dotted and Java package imports', () => {
+    const tasks = planReviewTasks({
+      depth: 'balanced',
+      files: [
+        { path: 'app/services/booking.py' },
+        { path: 'app/services/calendar.py' },
+        { path: 'src/main/java/com/foo/Service.java' },
+        { path: 'src/main/java/com/foo/Repository.java' }
+      ],
+      facts: [
+        {
+          id: 'fact_py_import',
+          language: 'python',
+          kind: 'import',
+          path: 'app/services/booking.py',
+          name: 'calendar',
+          moduleSpecifier: 'app.services.calendar',
+          line: 1,
+          summary: 'Imports calendar.',
+          contentHash
+        },
+        {
+          id: 'fact_java_import',
+          language: 'java',
+          kind: 'import',
+          path: 'src/main/java/com/foo/Service.java',
+          name: 'Repository',
+          moduleSpecifier: 'com.foo.Repository',
+          line: 3,
+          summary: 'Imports Repository.',
+          contentHash
+        }
+      ],
+      evidence: [],
+      candidates: []
+    })
+
+    expect(tasks).toEqual([
+      expect.objectContaining({
+        kind: 'dependency-cluster',
+        paths: ['app/services/booking.py', 'app/services/calendar.py']
+      }),
+      expect.objectContaining({
+        kind: 'dependency-cluster',
+        paths: [
+          'src/main/java/com/foo/Repository.java',
+          'src/main/java/com/foo/Service.java'
+        ]
+      })
+    ])
+  })
+
   test('balanced depth packs disconnected singleton files into bounded clusters', () => {
     const tasks = planReviewTasks({
       depth: 'balanced',
@@ -107,13 +159,33 @@ describe('review task planner', () => {
     expect(tasks.map((task) => task.paths.length)).toEqual([8, 2])
   })
 
-  test('thorough depth adds a policy task after dependency clusters', () => {
+  test('thorough depth without the policy pass does not add a round-2 task', () => {
     const tasks = planReviewTasks({
       depth: 'thorough',
       files: [{ path: 'src/app.ts' }],
       facts: [],
       evidence: [],
       candidates: []
+    })
+
+    // Policy pass is opt-in; by default thorough depth only plans round-1 clusters.
+    expect(tasks).toEqual([
+      expect.objectContaining({
+        kind: 'dependency-cluster',
+        paths: ['src/app.ts'],
+        round: 1
+      })
+    ])
+  })
+
+  test('thorough depth adds a policy task when policyReviewPass is enabled', () => {
+    const tasks = planReviewTasks({
+      depth: 'thorough',
+      files: [{ path: 'src/app.ts' }],
+      facts: [],
+      evidence: [],
+      candidates: [],
+      policyReviewPass: true
     })
 
     expect(tasks).toEqual([
@@ -138,7 +210,8 @@ describe('review task planner', () => {
       })),
       facts: [],
       evidence: [],
-      candidates: []
+      candidates: [],
+      policyReviewPass: true
     })
 
     const policyTasks = tasks.filter((task) => task.kind === 'policy')

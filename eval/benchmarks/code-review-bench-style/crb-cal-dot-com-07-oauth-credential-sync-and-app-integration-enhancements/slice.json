@@ -1,0 +1,81 @@
+{
+  "id": "crb-cal-dot-com-07-oauth-credential-sync-and-app-integration-enhancements",
+  "title": "OAuth credential sync and app integration enhancements",
+  "description": "Curated PR review case adapted from cal.com golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/calcom/cal.com/pull/11059",
+  "prTitle": "OAuth credential sync and app integration enhancements",
+  "sourceRepo": "cal.com",
+  "upstreamOwner": "calcom",
+  "upstreamRepo": "cal.com",
+  "baseSha": "4d94913ecf5f9f515a19a8b2757f720500f82378",
+  "headSha": "b4bc303a16e4babefbde4c01f7253ad30ebed6ea",
+  "diff": "diff --git a/apps/web/lib/booking.ts b/apps/web/lib/booking.ts\nindex 0000000..1111111 100644\n--- a/apps/web/lib/booking.ts\n+++ b/apps/web/lib/booking.ts\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: OAuth credential sync and app integration enhancements\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "typescript",
+  "changedFiles": [
+    "apps/web/lib/booking.ts"
+  ],
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "The parseRefreshTokenResponse function incorrectly sets refresh_token to the hardcoded string 'refresh_token' when it's missing from the OAuth refresh token response. This invalidates the token, breaking subsequent token refreshes and causing authentication failures.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "bug",
+      "severity": "high",
+      "semanticSummary": "Invalid Zod schema syntax. Computed property keys like [z.string().toString()] are not valid in Zod object schemas and will cause runtime errors. ",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "parseRefreshTokenResponse returns a Zod safeParse result ({ success, data, error }), not the credential key object. Persisting that as key stores the wrapper instead of the token payload; we should store the parsed data or use schema parse.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "When APP_CREDENTIAL_SHARING_ENABLED and CALCOM_CREDENTIAL_SYNC_ENDPOINT are set, the refreshFunction helper returns the fetch Response, but several callers (for example GoogleCalendarService.refreshAccessToken expecting res.data, and HubspotCalendarService.refreshAccessToken expecting a HubspotToken) assume it returns the integration-specific token object. That mismatch will cause runtime errors in the sync-enabled path unless the return type or those call sites are adjusted.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "When the sync endpoint path is used, res is a fetch Response and has no .data; res?.data will be undefined and token.access_token will throw at runtime. This relies on a consistent return shape from refreshOAuthTokens, which isn’t guaranteed currently.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "apps/web/lib/booking.ts",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "cal.com",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "local-logic",
+    "null-reference",
+    "scheduling",
+    "security",
+    "semantic",
+    "typescript"
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "id": "crb-grafana-01-anonymous-add-configurable-device-limit",
+  "title": "Anonymous: Add configurable device limit",
+  "description": "Curated PR review case adapted from grafana golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/grafana/grafana/pull/79265",
+  "prTitle": "Anonymous: Add configurable device limit",
+  "sourceRepo": "grafana",
+  "upstreamOwner": "grafana",
+  "upstreamRepo": "grafana",
+  "baseSha": "3fb97422d7694bed779c220cdcd8d5b93a26f89f",
+  "headSha": "0708280507087ee046788adfba2a54e04c34b107",
+  "diff": "diff --git a/pkg/services/authz/authz.go b/pkg/services/authz/authz.go\nindex 0000000..1111111 100644\n--- a/pkg/services/authz/authz.go\n+++ b/pkg/services/authz/authz.go\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Anonymous: Add configurable device limit\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "go",
+  "changedFiles": [
+    "pkg/services/authz/authz.go"
+  ],
+  "expectedFindings": [
+    {
+      "category": "performance",
+      "severity": "high",
+      "semanticSummary": "Race condition: Multiple concurrent requests could pass the device count check simultaneously and create devices beyond the limit. Consider using a database transaction or lock.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "security",
+      "severity": "medium",
+      "semanticSummary": "Anonymous authentication now fails entirely if anonDeviceService.TagDevice returns ErrDeviceLimitReached. Previously, device tagging was asynchronous and non-blocking. This change prevents anonymous users from authenticating when the device limit is reached.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "performance",
+      "severity": "medium",
+      "semanticSummary": "This call won’t compile: dbSession.Exec(args...) is given a []interface{} where the first element is the query, but Exec’s signature requires a first parameter of type string (not an interface{} splat).",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "Returning ErrDeviceLimitReached when no rows were updated is misleading; the device might not exist.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "Time window calculation inconsistency: Using device.UpdatedAt.UTC().Add(-anonymousDeviceExpiration) as the lower bound but device.UpdatedAt as the current time may not match the intended logic. Consider using time.Now().UTC() consistently.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "pkg/services/authz/authz.go",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "concurrency",
+    "cross-file",
+    "curated-pr",
+    "go",
+    "grafana",
+    "local-logic",
+    "observability",
+    "performance",
+    "security",
+    "semantic"
+  ]
+}

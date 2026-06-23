@@ -1,0 +1,74 @@
+{
+  "id": "crb-keycloak-08-implement-access-token-context-encoding-framework",
+  "title": "Implement access token context encoding framework",
+  "description": "Curated PR review case adapted from keycloak golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/keycloak/keycloak/pull/37634",
+  "prTitle": "Implement access token context encoding framework",
+  "sourceRepo": "keycloak",
+  "upstreamOwner": "keycloak",
+  "upstreamRepo": "keycloak",
+  "baseSha": "55cb25161d8e847caf472f2f7eab089e418513b8",
+  "headSha": "98fd9022839a6968f44970643c0428804d019aed",
+  "diff": "diff --git a/services/src/main/java/org/keycloak/authentication/Authenticator.java b/services/src/main/java/org/keycloak/authentication/Authenticator.java\nindex 0000000..1111111 100644\n--- a/services/src/main/java/org/keycloak/authentication/Authenticator.java\n+++ b/services/src/main/java/org/keycloak/authentication/Authenticator.java\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Implement access token context encoding framework\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "java",
+  "changedFiles": [
+    "services/src/main/java/org/keycloak/authentication/Authenticator.java"
+  ],
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "critical",
+      "semanticSummary": "Wrong parameter in null check (grantType vs. rawTokenId)",
+      "matchMode": "semantic-only",
+      "tier": "security"
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "In isAccessTokenId, the substring for the grant shortcut and the equality check look inverted: the grant shortcut occupies indices 4–5 (substring(4,6)), and a match should return true (combined with UUID check), not false.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "Javadoc mentions \"usually like 3-letters shortcut\" but some implementations use 2-letter shortcuts (\"ac\", \"cc\", \"rt\", \"te\", \"pc\", \"ci\", \"ro\"). Consider updating documentation to reflect actual usage pattern.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": " Catching generic RuntimeException is too broad. The implementation throws IllegalArgumentException specifically - catch that instead for more precise testing.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "services/src/main/java/org/keycloak/authentication/Authenticator.java",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "authentication",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "java",
+    "keycloak",
+    "local-logic",
+    "null-reference",
+    "security",
+    "semantic"
+  ]
+}

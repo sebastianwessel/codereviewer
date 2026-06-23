@@ -1,0 +1,77 @@
+{
+  "id": "crb-sentry-06-span-buffer-multiprocess-enhancement-with-health-monitoring",
+  "title": "Span Buffer Multiprocess Enhancement with Health Monitoring",
+  "description": "Curated PR review case adapted from sentry golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/getsentry/sentry/pull/93824",
+  "prTitle": "Span Buffer Multiprocess Enhancement with Health Monitoring",
+  "sourceRepo": "sentry",
+  "upstreamOwner": "getsentry",
+  "upstreamRepo": "sentry",
+  "baseSha": "926959ce84773825ac09a5e4b76b1e87965e01c9",
+  "headSha": "1490d39a990885d745a3d004b0a9a76f803180e1",
+  "diff": "diff --git a/src/audit_log.py b/src/audit_log.py\nindex 0000000..1111111 100644\n--- a/src/audit_log.py\n+++ b/src/audit_log.py\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Span Buffer Multiprocess Enhancement with Health Monitoring\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "python",
+  "changedFiles": [
+    "src/audit_log.py"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "Inconsistent metric tagging with 'shard' and 'shards'",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "Fixed sleep in tests can be flaky; wait on condition instead",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "bug",
+      "severity": "high",
+      "semanticSummary": "Because flusher processes are created via multiprocessing.get_context('spawn').Process, they are instances of multiprocessing.context.SpawnProcess, which on POSIX is not a subclass of multiprocessing.Process, so this isinstance check will always be false and hung processes won't be killed here.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "Sleep in test_consumer.py won’t actually wait because time.sleep was monkeypatched above; consider restoring sleep or using a different sync to ensure the flusher has time to process.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "Breaking out of the loop when the deadline has elapsed can skip terminating remaining flusher processes, potentially leaving them running after shutdown; consider ensuring termination is attempted even if the deadline is exceeded.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "src/audit_log.py",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "error-tracking",
+    "python",
+    "semantic",
+    "sentry"
+  ]
+}

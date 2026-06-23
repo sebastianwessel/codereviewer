@@ -1,0 +1,65 @@
+{
+  "id": "crb-grafana-06-dual-storage-architecture",
+  "title": "Dual Storage Architecture",
+  "description": "Curated PR review case adapted from grafana golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/grafana/grafana/pull/90045",
+  "prTitle": "Dual Storage Architecture",
+  "sourceRepo": "grafana",
+  "upstreamOwner": "grafana",
+  "upstreamRepo": "grafana",
+  "baseSha": "81d02464e9e1932caa30bf959566e1da56851dee",
+  "headSha": "5888d511b681310c9a78e4964494cbd5baee4f14",
+  "diff": "diff --git a/pkg/services/authz/authz.go b/pkg/services/authz/authz.go\nindex 0000000..1111111 100644\n--- a/pkg/services/authz/authz.go\n+++ b/pkg/services/authz/authz.go\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Dual Storage Architecture\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "go",
+  "changedFiles": [
+    "pkg/services/authz/authz.go"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "The context is being created with d.Log instead of the log variable that was initialized with additional context values (name, kind, method). This means those values won't be propagated to the logging context.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "bug",
+      "severity": "high",
+      "semanticSummary": "Bug: calling recordLegacyDuration when storage operation fails should be recordStorageDuration.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "Inconsistency: using name instead of options.Kind for metrics recording differs from other methods.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "pkg/services/authz/authz.go",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "go",
+    "grafana",
+    "local-logic",
+    "observability",
+    "semantic"
+  ]
+}

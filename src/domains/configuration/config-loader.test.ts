@@ -19,14 +19,14 @@ describe('configuration loader', () => {
       const result = await loadCodeReviewerConfig({ repositoryRoot: root })
 
       expect(result.config.review.mode).toBe('local')
-      expect(result.config.paths.artifactDir).toBe('.review/runs')
+      expect(result.config.paths.artifactDir).toBe('.codereviewer/runs')
       expect(result.config.paths.exclude).toEqual(
         expect.arrayContaining([
           '.git/**',
           'node_modules/**',
           'dist/**',
           'coverage/**',
-          '.review/**'
+          '.codereviewer/**'
         ])
       )
       expect(result.warnings).toEqual(['config-file-missing'])
@@ -39,16 +39,16 @@ describe('configuration loader', () => {
     const root = await createTempDir()
 
     try {
-      await mkdir(join(root, '.review'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
       await writeFile(
-        join(root, '.review/config.json'),
+        join(root, '.codereviewer/config.json'),
         JSON.stringify({
           review: {
             mode: 'local',
             depth: 'fast'
           },
           paths: {
-            artifactDir: '.review/from-file'
+            artifactDir: '.codereviewer/from-file'
           }
         })
       )
@@ -56,7 +56,7 @@ describe('configuration loader', () => {
         join(root, '.env'),
         [
           'CODEREVIEWER_REVIEW_MODE=pr',
-          'CODEREVIEWER_ARTIFACT_DIR=.review/from-dotenv',
+          'CODEREVIEWER_ARTIFACT_DIR=.codereviewer/from-dotenv',
           'OPENAI_API_KEY=dotenv-key'
         ].join('\n')
       )
@@ -65,7 +65,7 @@ describe('configuration loader', () => {
         repositoryRoot: root,
         environment: {
           CODEREVIEWER_REVIEW_MODE: 'ci',
-          CODEREVIEWER_ARTIFACT_DIR: '.review/from-env',
+          CODEREVIEWER_ARTIFACT_DIR: '.codereviewer/from-env',
           OPENAI_API_KEY: 'process-key'
         },
         cliConfig: {
@@ -77,7 +77,7 @@ describe('configuration loader', () => {
 
       expect(result.config.review.mode).toBe('pr')
       expect(result.config.review.depth).toBe('thorough')
-      expect(result.config.paths.artifactDir).toBe('.review/from-dotenv')
+      expect(result.config.paths.artifactDir).toBe('.codereviewer/from-dotenv')
       expect(result.environment.OPENAI_API_KEY).toBe('dotenv-key')
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -142,6 +142,26 @@ describe('configuration loader', () => {
     }
   })
 
+  test('maps AI review environment overrides into typed config', async () => {
+    const root = await createTempDir()
+
+    try {
+      const result = await loadCodeReviewerConfig({
+        repositoryRoot: root,
+        environment: {
+          CODEREVIEWER_AI_INTENT_PLANNING: 'model',
+          CODEREVIEWER_AI_JUDGE_FINDINGS: 'true'
+        },
+        loadDotEnv: false
+      })
+
+      expect(result.config.aiReview.intentPlanning).toBe('model')
+      expect(result.config.aiReview.judgeFindings).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('can skip root env file loading for hermetic commands', async () => {
     const root = await createTempDir()
 
@@ -180,11 +200,11 @@ describe('configuration loader', () => {
 
       await writeFile(
         join(root, '.env'),
-        'CODEREVIEWER_CONFIG_PATH=.review/custom.json\n'
+        'CODEREVIEWER_CONFIG_PATH=.codereviewer/custom.json\n'
       )
-      await mkdir(join(root, '.review'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
       await writeFile(
-        join(root, '.review/custom.json'),
+        join(root, '.codereviewer/custom.json'),
         JSON.stringify({
           skills: {
             enabled: true
@@ -194,7 +214,7 @@ describe('configuration loader', () => {
 
       const result = await loadCodeReviewerConfig({ repositoryRoot: root })
 
-      expect(result.config.skills.directories).toEqual(['.review/skills'])
+      expect(result.config.skills.directories).toEqual(['.codereviewer/skills'])
     } finally {
       await rm(root, { recursive: true, force: true })
     }

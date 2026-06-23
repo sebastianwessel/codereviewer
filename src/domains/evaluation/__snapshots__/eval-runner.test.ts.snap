@@ -4,8 +4,64 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
 {
   "caseResults": [
     {
+      "agenticStages": [
+        {
+          "count": 0,
+          "stage": "intent-planning",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "suspicion-generation",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "suspicion-investigation",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "proof-packet",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "refutation",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "aggregate-critic",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "judge",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "provider-recovery",
+          "status": "skipped",
+        },
+      ],
+      "artifactOnlyFalsePositiveFindingIds": [],
+      "artifactOnlyFalsePositiveFindings": [],
+      "artifactOnlyFindingIds": [],
+      "artifactOnlyMatchedFindings": [],
       "caseId": "typescript-positive",
+      "contextLedger": [
+        {
+          "consideredForModelContext": true,
+          "kind": "tool-result",
+          "truncated": false,
+        },
+      ],
+      "costUnavailable": false,
       "costUsd": 0.1,
+      "duplicateFindingIds": [],
+      "duplicateFindings": [],
       "durationMs": 1000,
       "expectedFindings": [
         {
@@ -24,6 +80,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "falsePositiveFindingIds": [],
       "falsePositiveFindings": [],
       "inlineFindingCount": 1,
+      "inputTokens": 0,
       "matchedFindings": [
         {
           "expectedIndex": 0,
@@ -33,15 +90,72 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "severityMatches": true,
         },
       ],
+      "modelSuspicionIds": [],
+      "modelTaskDiagnostics": [],
       "noFindingZoneFalsePositiveIds": [],
+      "outputTokens": 0,
       "parseValid": true,
+      "promotionDecisions": [],
+      "proofPackets": [],
       "providerErrored": false,
+      "providerIssues": [],
+      "refutationResults": [],
       "unmatchedExpectedIndexes": [],
       "warnings": [],
     },
     {
+      "agenticStages": [
+        {
+          "count": 0,
+          "stage": "intent-planning",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "suspicion-generation",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "suspicion-investigation",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "proof-packet",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "refutation",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "aggregate-critic",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "judge",
+          "status": "skipped",
+        },
+        {
+          "count": 0,
+          "stage": "provider-recovery",
+          "status": "skipped",
+        },
+      ],
+      "artifactOnlyFalsePositiveFindingIds": [],
+      "artifactOnlyFalsePositiveFindings": [],
+      "artifactOnlyFindingIds": [],
+      "artifactOnlyMatchedFindings": [],
       "caseId": "typescript-negative",
+      "contextLedger": [],
+      "costUnavailable": false,
       "costUsd": 0.1,
+      "duplicateFindingIds": [],
+      "duplicateFindings": [],
       "durationMs": 1000,
       "expectedFindings": [],
       "falsePositiveFindingIds": [
@@ -58,12 +172,20 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
       ],
       "inlineFindingCount": 1,
+      "inputTokens": 0,
       "matchedFindings": [],
+      "modelSuspicionIds": [],
+      "modelTaskDiagnostics": [],
       "noFindingZoneFalsePositiveIds": [
         "find_noise1",
       ],
+      "outputTokens": 0,
       "parseValid": true,
+      "promotionDecisions": [],
+      "proofPackets": [],
       "providerErrored": false,
+      "providerIssues": [],
+      "refutationResults": [],
       "unmatchedExpectedIndexes": [],
       "warnings": [],
     },
@@ -81,24 +203,59 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "key": "project",
       "metrics": {
         "actionableRate": 1,
+        "artifactOnlyFalsePositiveCount": 0,
+        "artifactOnlyFindingCount": 0,
+        "artifactOnlyMatchedFindingCount": 0,
+        "artifactOnlyPrecision": 1,
+        "artifactOnlyRecall": 0,
         "commentsPerDiffHunk": 0.666667,
         "commentsPerKloc": 33.333333,
         "contextMutationRate": 0,
+        "costUnavailableCount": 0,
         "costUsd": 0.2,
+        "duplicateFindingCount": 0,
         "durationMs": 2000,
         "f1": 0.666667,
         "falsePositiveCount": 1,
         "incompleteCoverageRate": 0,
+        "inputTokens": 0,
+        "investigationToolReadCount": 0,
+        "judgeCoverage": 1,
         "lineAccuracy": 1,
+        "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
+        "outputTokens": 0,
         "parseValidity": 1,
         "precision": 0.5,
+        "precisionByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "productRecall": 1,
+        "proofPromotionPrecision": 1,
+        "proofRecall": 0,
         "providerErrorRate": 0,
+        "providerIssueCount": 0,
+        "providerIssueRate": 0,
         "recall": 1,
+        "recallByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "refutationFalseNegativeCount": 0,
+        "refutationFalsePositiveCount": 0,
         "severityAccuracy": 1,
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
+        "staticDuplicateDemotionCount": 0,
+        "suspicionRecall": 1,
+        "suspicionStageCoverage": 0,
+        "trustedDeterministicFindingCount": 0,
       },
     },
     {
@@ -111,24 +268,59 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "key": "typescript",
       "metrics": {
         "actionableRate": 1,
+        "artifactOnlyFalsePositiveCount": 0,
+        "artifactOnlyFindingCount": 0,
+        "artifactOnlyMatchedFindingCount": 0,
+        "artifactOnlyPrecision": 1,
+        "artifactOnlyRecall": 0,
         "commentsPerDiffHunk": 0.666667,
         "commentsPerKloc": 33.333333,
         "contextMutationRate": 0,
+        "costUnavailableCount": 0,
         "costUsd": 0.2,
+        "duplicateFindingCount": 0,
         "durationMs": 2000,
         "f1": 0.666667,
         "falsePositiveCount": 1,
         "incompleteCoverageRate": 0,
+        "inputTokens": 0,
+        "investigationToolReadCount": 0,
+        "judgeCoverage": 1,
         "lineAccuracy": 1,
+        "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
+        "outputTokens": 0,
         "parseValidity": 1,
         "precision": 0.5,
+        "precisionByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "productRecall": 1,
+        "proofPromotionPrecision": 1,
+        "proofRecall": 0,
         "providerErrorRate": 0,
+        "providerIssueCount": 0,
+        "providerIssueRate": 0,
         "recall": 1,
+        "recallByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "refutationFalseNegativeCount": 0,
+        "refutationFalsePositiveCount": 0,
         "severityAccuracy": 1,
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
+        "staticDuplicateDemotionCount": 0,
+        "suspicionRecall": 1,
+        "suspicionStageCoverage": 0,
+        "trustedDeterministicFindingCount": 0,
       },
     },
     {
@@ -140,24 +332,59 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "key": "negative",
       "metrics": {
         "actionableRate": 1,
+        "artifactOnlyFalsePositiveCount": 0,
+        "artifactOnlyFindingCount": 0,
+        "artifactOnlyMatchedFindingCount": 0,
+        "artifactOnlyPrecision": 1,
+        "artifactOnlyRecall": 1,
         "commentsPerDiffHunk": 1,
         "commentsPerKloc": 100,
         "contextMutationRate": 0,
+        "costUnavailableCount": 0,
         "costUsd": 0.1,
+        "duplicateFindingCount": 0,
         "durationMs": 1000,
         "f1": 0,
         "falsePositiveCount": 1,
         "incompleteCoverageRate": 0,
+        "inputTokens": 0,
+        "investigationToolReadCount": 0,
+        "judgeCoverage": 1,
         "lineAccuracy": 1,
+        "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
+        "outputTokens": 0,
         "parseValidity": 1,
         "precision": 0,
+        "precisionByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "productRecall": 1,
+        "proofPromotionPrecision": 1,
+        "proofRecall": 1,
         "providerErrorRate": 0,
+        "providerIssueCount": 0,
+        "providerIssueRate": 0,
         "recall": 1,
+        "recallByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "refutationFalseNegativeCount": 0,
+        "refutationFalsePositiveCount": 0,
         "severityAccuracy": 1,
         "severityWeightedF1": 0,
         "severityWeightedPrecision": 0,
         "severityWeightedRecall": 1,
+        "staticDuplicateDemotionCount": 0,
+        "suspicionRecall": 1,
+        "suspicionStageCoverage": 0,
+        "trustedDeterministicFindingCount": 0,
       },
     },
     {
@@ -169,24 +396,59 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "key": "positive",
       "metrics": {
         "actionableRate": 1,
+        "artifactOnlyFalsePositiveCount": 0,
+        "artifactOnlyFindingCount": 0,
+        "artifactOnlyMatchedFindingCount": 0,
+        "artifactOnlyPrecision": 1,
+        "artifactOnlyRecall": 0,
         "commentsPerDiffHunk": 0.5,
         "commentsPerKloc": 20,
         "contextMutationRate": 0,
+        "costUnavailableCount": 0,
         "costUsd": 0.1,
+        "duplicateFindingCount": 0,
         "durationMs": 1000,
         "f1": 1,
         "falsePositiveCount": 0,
         "incompleteCoverageRate": 0,
+        "inputTokens": 0,
+        "investigationToolReadCount": 0,
+        "judgeCoverage": 1,
         "lineAccuracy": 1,
+        "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 0,
+        "outputTokens": 0,
         "parseValidity": 1,
         "precision": 1,
+        "precisionByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "productRecall": 1,
+        "proofPromotionPrecision": 1,
+        "proofRecall": 0,
         "providerErrorRate": 0,
+        "providerIssueCount": 0,
+        "providerIssueRate": 0,
         "recall": 1,
+        "recallByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "refutationFalseNegativeCount": 0,
+        "refutationFalsePositiveCount": 0,
         "severityAccuracy": 1,
         "severityWeightedF1": 1,
         "severityWeightedPrecision": 1,
         "severityWeightedRecall": 1,
+        "staticDuplicateDemotionCount": 0,
+        "suspicionRecall": 1,
+        "suspicionStageCoverage": 0,
+        "trustedDeterministicFindingCount": 0,
       },
     },
     {
@@ -199,47 +461,117 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "key": "typescript",
       "metrics": {
         "actionableRate": 1,
+        "artifactOnlyFalsePositiveCount": 0,
+        "artifactOnlyFindingCount": 0,
+        "artifactOnlyMatchedFindingCount": 0,
+        "artifactOnlyPrecision": 1,
+        "artifactOnlyRecall": 0,
         "commentsPerDiffHunk": 0.666667,
         "commentsPerKloc": 33.333333,
         "contextMutationRate": 0,
+        "costUnavailableCount": 0,
         "costUsd": 0.2,
+        "duplicateFindingCount": 0,
         "durationMs": 2000,
         "f1": 0.666667,
         "falsePositiveCount": 1,
         "incompleteCoverageRate": 0,
+        "inputTokens": 0,
+        "investigationToolReadCount": 0,
+        "judgeCoverage": 1,
         "lineAccuracy": 1,
+        "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
+        "outputTokens": 0,
         "parseValidity": 1,
         "precision": 0.5,
+        "precisionByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "productRecall": 1,
+        "proofPromotionPrecision": 1,
+        "proofRecall": 0,
         "providerErrorRate": 0,
+        "providerIssueCount": 0,
+        "providerIssueRate": 0,
         "recall": 1,
+        "recallByTier": {
+          "logic": 1,
+          "nit": 1,
+          "runtime-critical": 1,
+          "security": 1,
+        },
+        "refutationFalseNegativeCount": 0,
+        "refutationFalsePositiveCount": 0,
         "severityAccuracy": 1,
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
+        "staticDuplicateDemotionCount": 0,
+        "suspicionRecall": 1,
+        "suspicionStageCoverage": 0,
+        "trustedDeterministicFindingCount": 0,
       },
     },
   ],
   "metrics": {
     "actionableRate": 1,
+    "artifactOnlyFalsePositiveCount": 0,
+    "artifactOnlyFindingCount": 0,
+    "artifactOnlyMatchedFindingCount": 0,
+    "artifactOnlyPrecision": 1,
+    "artifactOnlyRecall": 0,
     "commentsPerDiffHunk": 0.666667,
     "commentsPerKloc": 33.333333,
     "contextMutationRate": 0,
+    "costUnavailableCount": 0,
     "costUsd": 0.2,
+    "duplicateFindingCount": 0,
     "durationMs": 2000,
     "f1": 0.666667,
     "falsePositiveCount": 1,
     "incompleteCoverageRate": 0,
+    "inputTokens": 0,
+    "investigationToolReadCount": 0,
+    "judgeCoverage": 1,
     "lineAccuracy": 1,
+    "nitRecall": 1,
     "noFindingZoneFalsePositiveCount": 1,
+    "outputTokens": 0,
     "parseValidity": 1,
     "precision": 0.5,
+    "precisionByTier": {
+      "logic": 1,
+      "nit": 1,
+      "runtime-critical": 1,
+      "security": 1,
+    },
+    "productRecall": 1,
+    "proofPromotionPrecision": 1,
+    "proofRecall": 0,
     "providerErrorRate": 0,
+    "providerIssueCount": 0,
+    "providerIssueRate": 0,
     "recall": 1,
+    "recallByTier": {
+      "logic": 1,
+      "nit": 1,
+      "runtime-critical": 1,
+      "security": 1,
+    },
+    "refutationFalseNegativeCount": 0,
+    "refutationFalsePositiveCount": 0,
     "severityAccuracy": 1,
     "severityWeightedF1": 0.666667,
     "severityWeightedPrecision": 0.5,
     "severityWeightedRecall": 1,
+    "staticDuplicateDemotionCount": 0,
+    "suspicionRecall": 1,
+    "suspicionStageCoverage": 0,
+    "trustedDeterministicFindingCount": 0,
   },
   "regressionGate": {
     "failingCaseIds": [
@@ -293,6 +625,10 @@ Fixtures: 2
 | Metric | Value |
 | --- | --- |
 | Recall | 100.0% |
+| Product recall | 100.0% |
+| Nit recall | 100.0% |
+| Suspicion stage coverage | 0.0% |
+| Judge coverage | 100.0% |
 | Precision | 50.0% |
 | F1 | 66.7% |
 | Severity weighted F1 | 66.7% |
@@ -300,13 +636,39 @@ Fixtures: 2
 | Severity accuracy | 100.0% |
 | Parse validity | 100.0% |
 | Provider error rate | 0.0% |
+| Provider issue rate | 0.0% (0 cases) |
 | False positives | 1 |
+| Artifact-only recall | 0.0% |
+| Artifact-only precision | 100.0% |
+| Artifact-only findings | 0 |
+| Artifact-only matched | 0 |
+| Artifact-only false positives | 0 |
+| Trusted deterministic findings | 0 |
+| Suspicion recall | 100.0% |
+| Proof recall | 0.0% |
+| Proof promotion precision | 100.0% |
+| Refutation false negatives | 0 |
+| Refutation false positives | 0 |
+| Static duplicate demotions | 0 |
+| Investigation tool reads | 0 |
+| Duplicate findings | 0 |
 | No-finding-zone hits | 1 |
 | Actionable rate | 100.0% |
 | Incomplete coverage rate | 0.0% |
 | Context mutation rate | 0.0% |
 | Duration | 2.0s |
+| Input tokens | 0 |
+| Output tokens | 0 |
 | Cost | $0.2000 |
+
+## Recall by Tier
+
+| Tier | Recall | Precision |
+| --- | ---: | ---: |
+| runtime-critical | 100.0% | 100.0% |
+| security | 100.0% | 100.0% |
+| logic | 100.0% | 100.0% |
+| nit | 100.0% | 100.0% |
 
 ## Metric Groups
 
@@ -317,10 +679,23 @@ Fixtures: 2
 
 ## Cases
 
-| Case | Profile | Status | Expected | Matched | Inline | False positives | Notes |
-| --- | --- | --- | ---: | ---: | ---: | ---: | --- |
-| typescript-positive | project | PASS | 1 | 1 | 1 | 0 | - |
-| typescript-negative | project | FAIL | 0 | 0 | 1 | 1 | false positives 1; no-finding-zone hits 1 |
+| Case | Profile | Status | Provider | Expected | Matched | Inline | Artifact-only | False positives | Duplicates | Notes |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| typescript-positive | project | PASS | - | 1 | 1 | 1 | 0 | 0 | 0 | - |
+| typescript-negative | project | FAIL | - | 0 | 0 | 1 | 0 | 1 | 0 | false positives 1; no-finding-zone hits 1 |
+
+## Agentic Stage Coverage
+
+| Case | Intent | Suspicion | Investigation | Proof | Refutation | Aggregate | Judge | Provider recovery |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| typescript-positive | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 |
+| typescript-negative | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 |
+
+## Context Ledger Kinds
+
+| Case | Kinds | Considered | Truncated |
+| --- | --- | ---: | ---: |
+| typescript-positive | tool-result: 1 | 1 | 0 |
 
 ## Gate Reasons
 
@@ -336,8 +711,8 @@ No-finding-zone hit IDs: find_noise1
 
 ## Artifacts
 
-- .review/eval/eval-report.json
-- .review/eval/eval-summary.md
-- .review/eval/eval-recall-report.md
+- .codereviewer/eval/eval-report.json
+- .codereviewer/eval/eval-summary.md
+- .codereviewer/eval/eval-recall-report.md
 "
 `;

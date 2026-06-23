@@ -72,7 +72,7 @@ export const InstructionsConfigSchema = z.strictObject({
 
 export const SkillsConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
-  directories: z.array(RepositoryRelativePathSchema).default(['.review/skills']),
+  directories: z.array(RepositoryRelativePathSchema).default(['.codereviewer/skills']),
   allowTools: z.array(z.enum(['read', 'list', 'grep'])).default([
     'read',
     'list',
@@ -87,15 +87,14 @@ export const PathsConfigSchema = z.strictObject({
     'node_modules/**',
     'dist/**',
     'coverage/**',
-    '.review/**',
     '.codereviewer/**'
   ]),
-  artifactDir: RepositoryRelativePathSchema.default('.review/runs')
+  artifactDir: RepositoryRelativePathSchema.default('.codereviewer/runs')
 })
 
 export const BaselineConfigSchema = z.strictObject({
   enabled: z.boolean().default(true),
-  path: RepositoryRelativePathSchema.default('.review/baseline.json'),
+  path: RepositoryRelativePathSchema.default('.codereviewer/baseline.json'),
   failOnNewOnly: z.boolean().default(true),
   includeResolvedInReport: z.boolean().default(true)
 })
@@ -112,10 +111,45 @@ export const QualityGateConfigSchema = z.strictObject({
   maxHigh: z.int().min(0).default(0),
   // Omitted by default ("no fail" per spec 06).
   maxMedium: z.int().min(0).optional(),
-  minEvidenceLevel: z.enum(['non-model', 'model-ok']).default('non-model'),
   failOnProviderError: z.boolean().default(true),
   // Defaults to the baseline `failOnNewOnly` value at runtime when unset.
   failOnNewOnly: z.boolean().optional()
+})
+
+export const AiReviewConfigSchema = z.strictObject({
+  enabled: z.boolean().optional(),
+  maxSuspicionsPerTask: z.int().min(0).max(20).optional(),
+  maxInvestigationsPerRun: z.int().min(0).max(200).optional(),
+  maxToolReadsPerInvestigation: z.int().min(0).max(50).optional(),
+  maxToolSearchesPerInvestigation: z.int().min(0).max(25).optional(),
+  maxInvestigationRounds: z.int().min(1).max(5).optional(),
+  requireRefutation: z.literal(true).default(true),
+  intentPlanning: z.enum(['auto', 'deterministic', 'model']).default('auto'),
+  judgeFindings: z.boolean().default(false),
+  externalStaticAnalysisAssumed: z.boolean().default(true),
+  deterministicSignalMode: z.enum(['support', 'disabled']).default('support'),
+  // Add a second-round `policy` review pass at thorough depth. Off by default:
+  // the extra pass roughly doubles model calls (tokens/cost) for little added
+  // recall in practice, so it is opt-in.
+  policyReviewPass: z.boolean().default(false),
+  // Minimum severity for a MODEL-origin finding to be admitted as actionable.
+  // Below this, model findings are rejected as below-threshold (still recorded as
+  // rejected findings, so they remain auditable). Default `medium` keeps the
+  // engine focused on impactful runtime/security defects and out of low-severity
+  // nit noise (aligned with the low-noise product vision). Trusted
+  // deterministic-rule findings are exempt. Lower to `low`/`info` to surface more.
+  actionableSeverityThreshold: SeveritySchema.default('medium')
+})
+
+export const PromotionPolicyConfigSchema = z.strictObject({
+  modelProof: z.enum(['actionable', 'artifact-only']).default('actionable'),
+  modelSuspicion: z.enum(['artifact-only', 'rejected']).default('artifact-only'),
+  modelWeakOrRefuted: z.enum(['artifact-only', 'rejected']).default('artifact-only'),
+  deterministicSignalOnly: z
+    .enum(['artifact-only', 'rejected'])
+    .default('artifact-only'),
+  staticAnalysisDuplicate: z.enum(['artifact-only', 'rejected']).default('artifact-only'),
+  deterministicContradiction: z.enum(['artifact-only', 'rejected']).default('rejected')
 })
 
 export const DriftCategorySchema = z.enum([
@@ -214,10 +248,10 @@ export const CodeReviewerConfigSchema = z.strictObject({
     baseRef: 'main',
     headRef: 'HEAD',
     maxConcurrentTasks: 4,
-      maxFiles: 500,
-      maxFileBytes: 500000,
-      inlineSeverityThreshold: 'high'
-    }),
+    maxFiles: 500,
+    maxFileBytes: 500000,
+    inlineSeverityThreshold: 'high'
+  }),
   provider: ProviderConfigSchema.optional(),
   instructions: InstructionsConfigSchema.default({
     files: [],
@@ -225,7 +259,7 @@ export const CodeReviewerConfigSchema = z.strictObject({
   }),
   skills: SkillsConfigSchema.default({
     enabled: false,
-    directories: ['.review/skills'],
+    directories: ['.codereviewer/skills'],
     allowTools: ['read', 'list', 'grep']
   }),
   paths: PathsConfigSchema.default({
@@ -235,22 +269,37 @@ export const CodeReviewerConfigSchema = z.strictObject({
       'node_modules/**',
       'dist/**',
       'coverage/**',
-      '.review/**',
       '.codereviewer/**'
     ],
-    artifactDir: '.review/runs'
+    artifactDir: '.codereviewer/runs'
   }),
   baseline: BaselineConfigSchema.default({
     enabled: true,
-    path: '.review/baseline.json',
+    path: '.codereviewer/baseline.json',
     failOnNewOnly: true,
     includeResolvedInReport: true
   }),
   qualityGate: QualityGateConfigSchema.default({
     maxCritical: 0,
     maxHigh: 0,
-    minEvidenceLevel: 'non-model',
     failOnProviderError: true
+  }),
+  aiReview: AiReviewConfigSchema.default({
+    requireRefutation: true,
+    intentPlanning: 'auto',
+    judgeFindings: false,
+    externalStaticAnalysisAssumed: true,
+    deterministicSignalMode: 'support',
+    policyReviewPass: false,
+    actionableSeverityThreshold: 'medium'
+  }),
+  promotionPolicy: PromotionPolicyConfigSchema.default({
+    modelProof: 'actionable',
+    modelSuspicion: 'artifact-only',
+    modelWeakOrRefuted: 'artifact-only',
+    deterministicSignalOnly: 'artifact-only',
+    staticAnalysisDuplicate: 'artifact-only',
+    deterministicContradiction: 'rejected'
   }),
   security: SecurityConfigSchema.default({
     allowShell: false,
@@ -309,6 +358,8 @@ export type SkillsConfig = z.infer<typeof SkillsConfigSchema>
 export type PathsConfig = z.infer<typeof PathsConfigSchema>
 export type BaselineConfig = z.infer<typeof BaselineConfigSchema>
 export type QualityGateConfig = z.infer<typeof QualityGateConfigSchema>
+export type AiReviewConfig = z.infer<typeof AiReviewConfigSchema>
+export type PromotionPolicyConfig = z.infer<typeof PromotionPolicyConfigSchema>
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>
 export type DriftCategory = z.infer<typeof DriftCategorySchema>
 export type DriftConfig = z.infer<typeof DriftConfigSchema>

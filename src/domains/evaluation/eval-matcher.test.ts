@@ -17,7 +17,7 @@ const provenance: FindingProvenance = {
   reviewer: 'scripted-reviewer',
   instructionHashes: [],
   skillHashes: [],
-  analyzerVersions: {},
+  signalVersions: {},
   configHash
 }
 
@@ -116,6 +116,88 @@ describe('eval matcher', () => {
     expect(result.unmatchedExpectedIndexes).toEqual([])
     expect(result.falsePositiveFindingIds).toEqual(['find_noise1'])
     expect(result.noFindingZoneFalsePositiveIds).toEqual(['find_noise1'])
+  })
+
+  test('matches benchmark semantic-only Error log-level findings deterministically', () => {
+    const result = matchEvalFindings({
+      evalCase: {
+        ...evalCase,
+        expectedFindings: [
+          {
+            category: 'bug',
+            severity: 'low',
+            semanticSummary:
+              'The code uses Error log level for what appears to be debugging information. This will pollute error logs in production. Consider using Debug or Info level instead.',
+            matchMode: 'semantic-only'
+          }
+        ],
+        expectedNoFindingZones: []
+      },
+      admittedFindings: [
+        admittedFinding({
+          id: 'find_go_log_level',
+          severity: 'low',
+          title: 'Error-level log records debug state after nil error check',
+          description:
+            'The code uses Error log level for debugging information after err was already checked for nil. This can pollute error logs in production; use Debug or Info unless the log represents an actual error.',
+          location: {
+            path: 'pkg/services/annotations/annotationsimpl/xorm_store.go',
+            startLine: 534,
+            side: 'new'
+          }
+        })
+      ]
+    })
+
+    expect(result.matches).toEqual([
+      expect.objectContaining({
+        expectedIndex: 0,
+        findingId: 'find_go_log_level',
+        severityMatches: true
+      })
+    ])
+    expect(result.unmatchedExpectedIndexes).toEqual([])
+    expect(result.falsePositiveFindingIds).toEqual([])
+  })
+
+  test('classifies extra same-location findings as duplicates instead of false positives', () => {
+    const result = matchEvalFindings({
+      evalCase,
+      admittedFindings: [
+        admittedFinding(),
+        admittedFinding({
+          id: 'find_duplicate1',
+          title: 'Return branch repeats wrong value',
+          description:
+            'The same changed branch is reported again at the same source line.',
+          location: {
+            path: 'src/app.ts',
+            startLine: 11,
+            side: 'new'
+          },
+          fingerprints: [
+            {
+              algorithm: 'test',
+              value: 'duplicate1'
+            }
+          ]
+        })
+      ]
+    })
+
+    expect(result.matches).toEqual([
+      {
+        expectedIndex: 0,
+        findingId: 'find_match1',
+        semanticScore: 0.833333,
+        lineOverlaps: true,
+        severityMatches: true
+      }
+    ])
+    expect(result.unmatchedExpectedIndexes).toEqual([])
+    expect(result.duplicateFindingIds).toEqual(['find_duplicate1'])
+    expect(result.falsePositiveFindingIds).toEqual([])
+    expect(result.noFindingZoneFalsePositiveIds).toEqual([])
   })
 
   test('keeps line mismatches unmatched and reports the admitted finding as noise', () => {
@@ -234,7 +316,7 @@ describe('eval matcher', () => {
       admittedFindings: [finding],
       judge: async () => ({
         match: true,
-        confidence: 0.91
+        reason: 'Both summaries describe a resource left open after reading.'
       })
     })
 
@@ -242,7 +324,8 @@ describe('eval matcher', () => {
       {
         expectedIndex: 0,
         findingId: 'find_paraphrase1',
-        semanticScore: 0.91,
+        semanticScore: 1,
+        semanticReason: 'Both summaries describe a resource left open after reading.',
         lineOverlaps: false,
         severityMatches: true
       }
@@ -251,7 +334,7 @@ describe('eval matcher', () => {
     expect(judged.falsePositiveFindingIds).toEqual([])
   })
 
-  test('never invokes the judge for path-line expectations', async () => {
+  test('uses the judge for unmatched path-line paraphrases after path and line pass', async () => {
     const lineCase = {
       ...evalCase,
       expectedFindings: [
@@ -260,7 +343,7 @@ describe('eval matcher', () => {
           severity: 'high',
           path: 'src/app.ts',
           lineRange: [10, 10],
-          semanticSummary: 'null check missing on order',
+          semanticSummary: 'descriptor resource leaked after read path exits',
           matchMode: 'path-line'
         },
         {
@@ -284,16 +367,68 @@ describe('eval matcher', () => {
     const judged = await matchEvalFindingsWithSemanticJudge({
       evalCase: lineCase,
       admittedFindings: [finding],
-      judge: async () => {
+      judge: async ({ expected }) => {
         judgeCalls += 1
-        return { match: true, confidence: 0.99 }
+        return expected.lineRange?.[0] === 10
+          ? { match: true, reason: 'The line-anchored paraphrase is equivalent.' }
+          : { match: true, reason: 'Wrong-line expectations are filtered earlier.' }
       }
     })
 
-    // expected[0] matches deterministically; expected[1] is path-line and must
-    // stay unmatched rather than be rescued by the judge.
-    expect(judgeCalls).toBe(0)
+    // expected[0] is path/line-compatible but semantically paraphrased, so the
+    // judge may rescue it. expected[1] fails the line gate before judging.
+    expect(judgeCalls).toBe(1)
     expect(judged.matches.map((match) => match.expectedIndex)).toEqual([0])
     expect(judged.unmatchedExpectedIndexes).toEqual([1])
+    expect(judged.matches[0]).toEqual(
+      expect.objectContaining({
+        semanticReason: 'The line-anchored paraphrase is equivalent.',
+        lineOverlaps: true
+      })
+    )
+  })
+
+  test('records a judge provider error and leaves the pair unmatched', async () => {
+    const semanticOnlyCase = {
+      ...evalCase,
+      expectedFindings: [
+        {
+          category: 'bug',
+          severity: 'high',
+          semanticSummary:
+            'descriptor resource is leaked after the read path exits',
+          matchMode: 'semantic-only'
+        }
+      ]
+    } as unknown as EvalCase
+    const finding = admittedFinding({
+      id: 'find_paraphrase1',
+      title: 'File handle stays open',
+      description: 'The code never closes the opened stream after reading.',
+      location: {
+        path: 'src/other.ts',
+        startLine: 99,
+        side: 'new'
+      }
+    })
+
+    const judged = await matchEvalFindingsWithSemanticJudge({
+      evalCase: semanticOnlyCase,
+      admittedFindings: [finding],
+      judge: async () => {
+        throw new Error('judge provider exploded')
+      }
+    })
+
+    // The whole report does not reject; the pair is simply unmatched.
+    expect(judged.matches).toEqual([])
+    expect(judged.unmatchedExpectedIndexes).toEqual([0])
+    expect(judged.judgeProviderIssues).toEqual([
+      expect.objectContaining({
+        code: 'provider_error',
+        stage: 'eval_semantic_judge',
+        recovered: false
+      })
+    ])
   })
 })

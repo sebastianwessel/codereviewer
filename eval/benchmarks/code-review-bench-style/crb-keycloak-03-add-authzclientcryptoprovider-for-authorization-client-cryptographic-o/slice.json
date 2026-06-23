@@ -1,0 +1,57 @@
+{
+  "id": "crb-keycloak-03-add-authzclientcryptoprovider-for-authorization-client-cryptographic-o",
+  "title": "Add AuthzClientCryptoProvider for authorization client cryptographic operations",
+  "description": "Curated PR review case adapted from keycloak golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/keycloak/keycloak/pull/33832",
+  "prTitle": "Add AuthzClientCryptoProvider for authorization client cryptographic operations",
+  "sourceRepo": "keycloak",
+  "upstreamOwner": "keycloak",
+  "upstreamRepo": "keycloak",
+  "baseSha": "b64d625fa448ca8351b589c170f9b2131bc426e4",
+  "headSha": "19407a124022f3d0f0a5ec06e2b36d6235c3ce56",
+  "diff": "diff --git a/services/src/main/java/org/keycloak/authentication/Authenticator.java b/services/src/main/java/org/keycloak/authentication/Authenticator.java\nindex 0000000..1111111 100644\n--- a/services/src/main/java/org/keycloak/authentication/Authenticator.java\n+++ b/services/src/main/java/org/keycloak/authentication/Authenticator.java\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Add AuthzClientCryptoProvider for authorization client cryptographic operations\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "java",
+  "changedFiles": [
+    "services/src/main/java/org/keycloak/authentication/Authenticator.java"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "high",
+      "semanticSummary": "Returns wrong provider (default keystore instead of BouncyCastle)",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "Dead code exists where ASN1Encoder instances are created and written to, but their results are immediately discarded. The actual encoding is performed by new ASN1Encoder instances created in the subsequent return statement, rendering the earlier operations useless.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "services/src/main/java/org/keycloak/authentication/Authenticator.java",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "authentication",
+    "code-review-bench-style",
+    "curated-pr",
+    "java",
+    "keycloak",
+    "local-logic",
+    "semantic"
+  ]
+}

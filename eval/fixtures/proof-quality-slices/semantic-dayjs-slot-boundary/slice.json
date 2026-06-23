@@ -1,0 +1,28 @@
+{
+  "id": "semantic-dayjs-slot-boundary",
+  "title": "Dayjs slot boundary regression",
+  "description": "A project-owned semantic review case for scheduling boundary bugs seen in benchmark-style TypeScript diffs.",
+  "source": "project-owned",
+  "capturedAt": "2026-06-23",
+  "language": "typescript",
+  "changedFiles": ["src/slots.ts"],
+  "diff": "diff --git a/src/slots.ts b/src/slots.ts\n--- a/src/slots.ts\n+++ b/src/slots.ts\n@@ -10,8 +10,14 @@ export const slotWindow = (\n   const slotEndTime = time.add(eventLength, \"minutes\").utc()\n   const slotStartTime = time.utc()\n \n-  if (slotStartTime.isSame(slotEndTime)) {\n+  if (dayjs(slotStartTime).add(utcOffset, \"minutes\") === dayjs(slotEndTime).add(utcOffset, \"minutes\")) {\n     return undefined\n   }\n \n-  return { start: minuteOfDay(slotStartTime), end: minuteOfDay(slotEndTime) }\n+  const start = minuteOfDay(slotStartTime)\n+  const end = minuteOfDay(slotStartTime)\n+\n+  return { start, end }\n }\n",
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "path": "src/slots.ts",
+      "lineRange": [14, 15],
+      "semanticSummary": "Strict equality compares distinct Dayjs object references, so equal instants are not detected; use a value comparison such as isSame"
+    },
+    {
+      "category": "bug",
+      "severity": "medium",
+      "path": "src/slots.ts",
+      "lineRange": [21, 21],
+      "semanticSummary": "Slot end is derived from slotStartTime instead of slotEndTime, collapsing the window end to the start minute"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": ["slice", "project-owned", "semantic", "proof-quality", "scheduling", "positive"]
+}

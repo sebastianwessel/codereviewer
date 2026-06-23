@@ -76,13 +76,13 @@ describe('path service', () => {
     const outside = path.join(tmpdir(), `codereviewer-outside-${crypto.randomUUID()}`)
 
     try {
-      await mkdir(path.join(root, '.review'), { recursive: true })
+      await mkdir(path.join(root, '.codereviewer'), { recursive: true })
       await mkdir(outside, { recursive: true })
       await writeFile(path.join(outside, 'keep.txt'), 'outside')
-      await symlink(outside, path.join(root, '.review', 'runs'))
+      await symlink(outside, path.join(root, '.codereviewer', 'runs'))
 
       await expect(
-        resolveWritePathInsideRoot(root, '.review/runs/report.json')
+        resolveWritePathInsideRoot(root, '.codereviewer/runs/report.json')
       ).rejects.toThrow(TypeError)
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -114,16 +114,16 @@ describe('path service', () => {
     const outside = path.join(tmpdir(), `codereviewer-outside-${crypto.randomUUID()}`)
 
     try {
-      await mkdir(path.join(root, '.review', 'runs'), { recursive: true })
+      await mkdir(path.join(root, '.codereviewer', 'runs'), { recursive: true })
       await mkdir(outside, { recursive: true })
       await writeFile(path.join(outside, 'report.json'), 'outside')
       await symlink(
         path.join(outside, 'report.json'),
-        path.join(root, '.review', 'runs', 'report.json')
+        path.join(root, '.codereviewer', 'runs', 'report.json')
       )
 
       await expect(
-        resolveWritePathInsideRoot(root, '.review/runs/report.json')
+        resolveWritePathInsideRoot(root, '.codereviewer/runs/report.json')
       ).rejects.toThrow(TypeError)
     } finally {
       await rm(root, { recursive: true, force: true })

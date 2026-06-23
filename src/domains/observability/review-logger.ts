@@ -1,6 +1,8 @@
 import { JsonLogger, type Logger, type LogLevel } from '@purista/harness'
 import { z } from 'zod'
 
+export type { Logger } from '@purista/harness'
+
 export const ReviewLogLevelSchema = z.enum([
   'trace',
   'debug',

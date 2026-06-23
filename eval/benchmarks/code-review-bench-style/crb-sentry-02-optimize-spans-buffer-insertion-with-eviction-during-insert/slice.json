@@ -1,0 +1,65 @@
+{
+  "id": "crb-sentry-02-optimize-spans-buffer-insertion-with-eviction-during-insert",
+  "title": "Optimize spans buffer insertion with eviction during insert",
+  "description": "Curated PR review case adapted from sentry golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/getsentry/sentry/pull/92393",
+  "prTitle": "Optimize spans buffer insertion with eviction during insert",
+  "sourceRepo": "sentry",
+  "upstreamOwner": "getsentry",
+  "upstreamRepo": "sentry",
+  "baseSha": "90ec585c26c7259fe364ccab3a71e6f8affc0b04",
+  "headSha": "0e6320edddee0bd0d85278bc1796cea506427983",
+  "diff": "diff --git a/src/audit_log.py b/src/audit_log.py\nindex 0000000..1111111 100644\n--- a/src/audit_log.py\n+++ b/src/audit_log.py\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Optimize spans buffer insertion with eviction during insert\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "python",
+  "changedFiles": [
+    "src/audit_log.py"
+  ],
+  "expectedFindings": [
+    {
+      "category": "performance",
+      "severity": "critical",
+      "semanticSummary": "OptimizedCursorPaginator negative-offset branch slices QuerySet with a negative start index",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "performance",
+      "severity": "high",
+      "semanticSummary": "BasePaginator negative-offset branch slices QuerySet with a negative start index",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "bug",
+      "severity": "high",
+      "semanticSummary": "OptimizedCursorPaginator.get_item_key uses floor/ceil on a datetime key (order_by='-datetime'), causing TypeError.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "src/audit_log.py",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "error-tracking",
+    "performance",
+    "python",
+    "semantic",
+    "sentry"
+  ]
+}

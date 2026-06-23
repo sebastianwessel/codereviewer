@@ -1,0 +1,41 @@
+{
+  "id": "crb-noise-python-constant-only",
+  "title": "Rename local pagination constant",
+  "description": "Curated PR-style negative case for precision and no-finding-zone evaluation.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prTitle": "Rename local pagination constant",
+  "sourceRepo": "sentry",
+  "upstreamOwner": "sentry",
+  "upstreamRepo": "sentry",
+  "baseSha": "e0d16d88bf23d75d57c9505aa842aa0b4f2150bf",
+  "headSha": "71a1ecbb9c2055598f74dd62d5ea37c770aa491b",
+  "diff": "diff --git a/src/constants.py b/src/constants.py\nindex 0000000..1111111 100644\n--- a/src/constants.py\n+++ b/src/constants.py\n@@ -1,2 +1,5 @@\n+// Safe PR-style fixture: Rename local pagination constant\n+// Expected behavior: no actionable review finding.\n+\n unchanged\n",
+  "language": "python",
+  "changedFiles": [
+    "src/constants.py"
+  ],
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "src/constants.py",
+      "lineRange": [
+        1,
+        20
+      ],
+      "reason": "Safe PR-style change should not produce an actionable finding."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "error-tracking",
+    "negative",
+    "no-finding-zone",
+    "precision",
+    "python",
+    "sentry"
+  ]
+}

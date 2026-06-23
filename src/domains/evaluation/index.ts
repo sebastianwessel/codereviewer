@@ -3,14 +3,26 @@ export {
   EvalCaseSetSchema,
   EvalLineRangeSchema,
   ExpectedFindingSchema,
+  ExpectedFindingTierSchema,
   ExpectedNoFindingZoneSchema,
   parseEvalCases,
   parseEvalCasesJson,
+  productRecallTiers,
+  resolveExpectedFindingTier,
   type EvalCase,
   type EvalLineRange,
   type ExpectedFinding,
+  type ExpectedFindingTier,
   type ExpectedNoFindingZone
 } from './eval-fixture.schema.js'
+export {
+  assertBenchmarkSlicesHydrated,
+  hydrateCodeReviewBenchmarkPack,
+  isPlaceholderPositiveSlice,
+  placeholderSliceMarker,
+  type HydrateBenchmarkPackOptions,
+  type HydrateBenchmarkPackResult
+} from './benchmark-hydration.js'
 export {
   matchEvalFindings,
   matchEvalFindingsWithSemanticJudge,
@@ -31,21 +43,25 @@ export {
   type EvalMetrics
 } from './metrics.js'
 export {
+  runEvaluation,
+  runEvaluationWithSemanticJudge
+} from './eval-runner.js'
+export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
-  EvalRegressionThresholdsSchema,
-  EvalReportSchema,
   renderEvalComparison,
   renderEvalRecallReport,
-  renderEvalSummary,
-  runEvaluation,
-  runEvaluationWithSemanticJudge,
+  renderEvalSummary
+} from './eval-report-rendering.js'
+export {
+  EvalRegressionThresholdsSchema,
+  EvalReportSchema,
   type EvalCaseOutput,
   type EvalContextLedgerEntry,
   type EvalRegressionThresholds,
   type EvalReport
-} from './eval-runner.js'
+} from './eval-report-contracts.js'
 export {
   loadEvalCasesFromFixtures
 } from './eval-fixture-loader.js'

@@ -1,13 +1,16 @@
 import { z } from 'zod'
 import {
   AdmittedFindingSchema,
+  CandidateIdSchema,
   CodeLocationSchema,
   ContractIdSchema,
   EvidenceRecordSchema,
   FindingCategorySchema,
+  FixEditSchema,
   FixProposalSchema,
   RejectedFindingSchema,
   SeveritySchema,
+  TaskIdSchema,
   type AdmittedFinding,
   type EvidenceRecord,
   type FindingFingerprint,
@@ -18,18 +21,22 @@ import {
 } from '../../shared/contracts/index.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
 import { sha256 } from '../../shared/hash/hash.js'
+import { truncateForContract } from '../../shared/text/truncate.js'
 
 export const CandidateFindingSchema = z.strictObject({
-  id: z.string().regex(/^cand_[a-z0-9]+$/),
-  taskId: z.string().regex(/^task_[a-z0-9]+$/),
+  id: CandidateIdSchema,
+  // Shared id primitives keep candidate/task id validation identical across the
+  // generation, planning, admission, and report stages. The previous inline
+  // `^task_[a-z0-9]+$` rejected intent-grouped ids (`task_intent_<hex>`) and
+  // surfaced as a spurious provider configuration error during model-intent runs.
+  taskId: TaskIdSchema,
   category: FindingCategorySchema,
   severity: SeveritySchema,
   title: z.string().min(1).max(120),
   description: z.string().min(1).max(1200),
   location: CodeLocationSchema,
-  evidenceIds: z.array(ContractIdSchema).min(1),
+  evidenceIds: z.array(ContractIdSchema),
   proposedBy: z.string().min(1),
-  confidence: z.number().min(0).max(1).optional(),
   suggestedFix: z.string().max(1200).optional(),
   fixProposal: FixProposalSchema.optional()
 })
@@ -46,6 +53,7 @@ export type ReviewedDiffRange = {
   readonly path: string
   readonly startLine: number
   readonly endLine: number
+  readonly changeKind?: 'new' | 'modified' | 'deleted' | undefined
 }
 
 export type AdmissionPolicy = {
@@ -53,6 +61,10 @@ export type AdmissionPolicy = {
   readonly reviewedLineRanges?: readonly ReviewedLineRange[]
   readonly reviewedDiffRanges?: readonly ReviewedDiffRange[]
   readonly minimumSeverity?: Severity
+  // Minimum severity for a model-origin candidate to be admitted as actionable.
+  // Trusted deterministic-rule candidates are exempt. Below this, the candidate
+  // is rejected as below-threshold (recorded as a rejected finding).
+  readonly actionableSeverityThreshold?: Severity
   readonly inlineSeverityThreshold: Severity
   readonly provenance: Omit<FindingProvenance, 'instructionHashes' | 'skillHashes'> & {
     readonly instructionHashes: readonly string[]
@@ -201,9 +213,6 @@ const selectedEvidence = (
     .map((evidenceId) => evidence.find((record) => record.id === evidenceId))
     .filter((record): record is EvidenceRecord => record !== undefined)
 
-const hasNonModelEvidence = (evidence: readonly EvidenceRecord[]): boolean =>
-  evidence.some((record) => record.kind !== 'model-rationale')
-
 const hasUnknownFixProposalEvidence = (candidate: CandidateFinding): boolean => {
   if (candidate.fixProposal === undefined) {
     return false
@@ -281,31 +290,75 @@ const reporterEligibilityFor = (
     ? 'inline'
     : 'summary-only'
 
-const redactCandidateText = (value: string): string =>
-  createRedactor().redact(value)
+// Read the `max(n)` length from a (possibly optional) Zod string field. Used so
+// redaction caps are derived from the destination schema rather than hard-coded,
+// keeping them from drifting away from the contract they must satisfy.
+const stringFieldMax = (schema: {
+  readonly maxLength?: number | null
+  readonly unwrap?: () => { readonly maxLength?: number | null }
+}): number => {
+  if (typeof schema.maxLength === 'number') {
+    return schema.maxLength
+  }
+
+  const unwrapped = schema.unwrap?.()
+
+  return typeof unwrapped?.maxLength === 'number'
+    ? unwrapped.maxLength
+    : Number.POSITIVE_INFINITY
+}
+
+// Redaction can lengthen text (a short configured secret becomes `[REDACTED]`),
+// so the result is truncated back to its contract cap. Without this, a redacted
+// title/description could exceed AdmittedFindingSchema's limit and fail
+// validation at admission time.
+const redactCandidateField = (
+  value: string,
+  schema: Parameters<typeof stringFieldMax>[0]
+): string =>
+  truncateForContract(createRedactor().redact(value), stringFieldMax(schema))
 
 const redactedCandidate = (candidate: CandidateFinding): CandidateFinding => ({
   ...candidate,
-  title: redactCandidateText(candidate.title),
-  description: redactCandidateText(candidate.description),
+  title: redactCandidateField(candidate.title, CandidateFindingSchema.shape.title),
+  description: redactCandidateField(
+    candidate.description,
+    CandidateFindingSchema.shape.description
+  ),
   ...(candidate.suggestedFix === undefined
     ? {}
-    : { suggestedFix: redactCandidateText(candidate.suggestedFix) }),
+    : {
+        suggestedFix: redactCandidateField(
+          candidate.suggestedFix,
+          CandidateFindingSchema.shape.suggestedFix
+        )
+      }),
   ...(candidate.fixProposal === undefined
     ? {}
     : {
         fixProposal: {
           ...candidate.fixProposal,
-          summary: redactCandidateText(candidate.fixProposal.summary),
+          summary: redactCandidateField(
+            candidate.fixProposal.summary,
+            FixProposalSchema.shape.summary
+          ),
           ...(candidate.fixProposal.edits === undefined
             ? {}
             : {
                 edits: candidate.fixProposal.edits.map((edit) => ({
                   ...edit,
-                  replacement: redactCandidateText(edit.replacement),
+                  replacement: redactCandidateField(
+                    edit.replacement,
+                    FixEditSchema.shape.replacement
+                  ),
                   ...(edit.description === undefined
                     ? {}
-                    : { description: redactCandidateText(edit.description) })
+                    : {
+                        description: redactCandidateField(
+                          edit.description,
+                          FixEditSchema.shape.description
+                        )
+                      })
                 }))
               })
         }
@@ -389,14 +442,14 @@ export const admitCandidate = (
     EvidenceRecordSchema.parse(record)
   )
 
-  if (!hasNonModelEvidence(evidence)) {
+  if (evidence.length === 0) {
     return {
       status: 'needs-more-evidence',
       rejectedFinding: makeRejectedFinding({
         candidateId: candidate.id,
         status: 'needs-more-evidence',
         reason: 'insufficient-evidence',
-        message: 'Candidate requires at least one non-model evidence record.',
+        message: 'Candidate requires at least one evidence record.',
         evidenceIds: candidate.evidenceIds
       })
     }
@@ -414,9 +467,18 @@ export const admitCandidate = (
     }
   }
 
+  // Trusted deterministic-rule findings bypass the model severity floor; every
+  // other (model-origin) candidate must meet `actionableSeverityThreshold` when
+  // set, otherwise the base `minimumSeverity`.
+  const severityFloor =
+    candidate.proposedBy !== 'deterministic-trusted-rule' &&
+    input.policy.actionableSeverityThreshold !== undefined
+      ? input.policy.actionableSeverityThreshold
+      : input.policy.minimumSeverity
+
   if (
-    input.policy.minimumSeverity !== undefined &&
-    severityRank[candidate.severity] < severityRank[input.policy.minimumSeverity]
+    severityFloor !== undefined &&
+    severityRank[candidate.severity] < severityRank[severityFloor]
   ) {
     return {
       status: 'rejected',

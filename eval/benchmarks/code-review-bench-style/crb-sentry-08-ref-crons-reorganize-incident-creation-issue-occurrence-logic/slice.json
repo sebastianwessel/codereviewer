@@ -1,0 +1,58 @@
+{
+  "id": "crb-sentry-08-ref-crons-reorganize-incident-creation-issue-occurrence-logic",
+  "title": "ref(crons): Reorganize incident creation / issue occurrence logic",
+  "description": "Curated PR review case adapted from sentry golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/getsentry/sentry/pull/80528",
+  "prTitle": "ref(crons): Reorganize incident creation / issue occurrence logic",
+  "sourceRepo": "sentry",
+  "upstreamOwner": "getsentry",
+  "upstreamRepo": "sentry",
+  "baseSha": "f0e3edfd2f88555d1fba3fedfc3a80869edc07b0",
+  "headSha": "dd050e92d919a028887058d14738efaf2cf47b8c",
+  "diff": "diff --git a/src/audit_log.py b/src/audit_log.py\nindex 0000000..1111111 100644\n--- a/src/audit_log.py\n+++ b/src/audit_log.py\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: ref(crons): Reorganize incident creation / issue occurrence logic\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "python",
+  "changedFiles": [
+    "src/audit_log.py"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "high",
+      "semanticSummary": "The function modifies the config variable to include display values but then returns the original monitor.config instead of the modified version.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "performance",
+      "severity": "low",
+      "semanticSummary": "The code fetches MonitorCheckIn objects by ID when the required data already exists in previous_checkins. This creates an unnecessary database query.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "src/audit_log.py",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "error-tracking",
+    "performance",
+    "python",
+    "semantic",
+    "sentry"
+  ]
+}

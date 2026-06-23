@@ -1,0 +1,73 @@
+{
+  "id": "crb-discourse-10-feature-can-edit-category-host-relationships-for-embedding",
+  "title": "FEATURE: Can edit category/host relationships for embedding",
+  "description": "Curated PR review case adapted from discourse golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/discourse/discourse/commit/d1c69189f3c90ecf56013a8da904da9bff9a8e19",
+  "prTitle": "FEATURE: Can edit category/host relationships for embedding",
+  "sourceRepo": "discourse",
+  "upstreamOwner": "discourse",
+  "upstreamRepo": "discourse",
+  "baseSha": "a23e57f36f800d51e77ddc063f83d8d2ec4ca97e",
+  "headSha": "bee5ca4ae2af8c8312b7ef78f2544b17803164d2",
+  "diff": "diff --git a/app/models/topic.rb b/app/models/topic.rb\nindex 0000000..1111111 100644\n--- a/app/models/topic.rb\n+++ b/app/models/topic.rb\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: FEATURE: Can edit category/host relationships for embedding\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "ruby",
+  "changedFiles": [
+    "app/models/topic.rb"
+  ],
+  "expectedFindings": [
+    {
+      "category": "security",
+      "severity": "critical",
+      "semanticSummary": "NoMethodError before_validation in EmbeddableHost",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "The update and destroy methods in Admin::EmbeddableHostsController do not validate the existence of the EmbeddableHost record retrieved by ID. If EmbeddableHost.where(id: params[:id]).first returns nil (i.e., the host does not exist), attempting to call methods on the nil object (e.g., save_host or destroy) will result in a NoMethodError.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "record_for_host compares lower(host) = ? but does not normalize the parameter’s case, so mixed‑case referer hosts may fail to match even though comparison intends to be case‑insensitive.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "Because this migration inserts embeddable_hosts rows with raw SQL, any existing embeddable_hosts values that include http:// or /https:// or path segments won’t go through the EmbeddableHost model’s normalization, so the new host lookup (which compares only the bare host) may fail for migrated data. Consider ensuring that migrated hosts are normalized to the same format as newly created EmbeddableHost records so existing embedding configurations keep working.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "app/models/topic.rb",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "discourse",
+    "forum",
+    "null-reference",
+    "ruby",
+    "security",
+    "semantic"
+  ]
+}

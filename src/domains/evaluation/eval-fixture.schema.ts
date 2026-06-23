@@ -23,6 +23,22 @@ export const EvalLineRangeSchema = z
     message: 'Line range end must be greater than or equal to start.'
   })
 
+export const ExpectedFindingTierSchema = z.enum([
+  'runtime-critical',
+  'security',
+  'logic',
+  'nit'
+])
+
+// Headline product tiers that the >80% recall goal is measured against. The
+// `nit` tier (docs, naming, typo, UI, i18n, style, maintainability, tests,
+// policy) is reported separately and intentionally excluded.
+export const productRecallTiers = [
+  'runtime-critical',
+  'security',
+  'logic'
+] as const
+
 export const ExpectedFindingSchema = z
   .strictObject({
     category: FindingCategorySchema,
@@ -30,7 +46,8 @@ export const ExpectedFindingSchema = z
     path: RepositoryRelativePathSchema.optional(),
     lineRange: EvalLineRangeSchema.optional(),
     semanticSummary: z.string().min(1).max(500),
-    matchMode: EvalMatchModeSchema.optional()
+    matchMode: EvalMatchModeSchema.optional(),
+    tier: ExpectedFindingTierSchema.optional()
   })
   .superRefine((value, context) => {
     const matchMode =
@@ -80,52 +97,6 @@ export const EvalCaseSchema = z.strictObject({
 
 export const EvalCaseSetSchema = z.array(EvalCaseSchema)
 
-const BenchmarkExpectedFindingSchema = z.strictObject({
-  file: RepositoryRelativePathSchema.optional(),
-  path: RepositoryRelativePathSchema.optional(),
-  line: z.int().min(1).nullable().optional(),
-  lineEnd: z.int().min(1).nullable().optional(),
-  type: z.string().min(1).optional(),
-  category: FindingCategorySchema.optional(),
-  severity: SeveritySchema,
-  description: z.string().min(1).max(500)
-})
-
-const categoryFromBenchmark = (
-  expected: z.infer<typeof BenchmarkExpectedFindingSchema>
-): z.infer<typeof FindingCategorySchema> => {
-  if (expected.category !== undefined) {
-    return expected.category
-  }
-
-  const parsed = FindingCategorySchema.safeParse(expected.type)
-
-  return parsed.success ? parsed.data : 'bug'
-}
-
-const normalizeBenchmarkExpected = (
-  expected: z.infer<typeof BenchmarkExpectedFindingSchema>
-): z.infer<typeof ExpectedFindingSchema> => {
-  const path = expected.path ?? expected.file
-  const lineStart = expected.line ?? undefined
-  const lineEnd = expected.lineEnd ?? lineStart
-  const hasLineRange = path !== undefined && lineStart !== undefined
-
-  return ExpectedFindingSchema.parse({
-    category: categoryFromBenchmark(expected),
-    severity: expected.severity,
-    ...(path === undefined ? {} : { path }),
-    ...(hasLineRange ? { lineRange: [lineStart, lineEnd] } : {}),
-    semanticSummary: expected.description,
-    matchMode:
-      path === undefined
-        ? 'semantic-only'
-        : hasLineRange
-          ? 'path-line'
-          : 'path-semantic'
-  })
-}
-
 const EvalSliceCaseRawSchema = z.strictObject({
   id: z.string().min(1),
   title: z.string().min(1).max(200).optional(),
@@ -141,34 +112,23 @@ const EvalSliceCaseRawSchema = z.strictObject({
   headSha: z.string().min(1).optional(),
   upstreamOwner: z.string().min(1).max(200).optional(),
   upstreamRepo: z.string().min(1).max(200).optional(),
+  hydratedSource: z.string().min(1).max(100).optional(),
+  hydratedHeadRepository: z.string().min(1).max(200).optional(),
+  hydratedHeadRef: z.string().min(1).optional(),
   diff: z.string().optional(),
   language: z.string().min(1),
   baseRef: z.string().min(1).optional(),
   headRef: z.string().min(1).optional(),
   changedFiles: z.array(RepositoryRelativePathSchema),
-  expectedFindings: z.array(ExpectedFindingSchema).optional(),
-  expected: z.array(BenchmarkExpectedFindingSchema).optional(),
+  expectedFindings: z.array(ExpectedFindingSchema),
   expectedNoFindingZones: z.array(ExpectedNoFindingZoneSchema).default([]),
   tags: z.array(z.string().min(1)).default([])
 })
-  .superRefine((value, context) => {
-    if (value.expectedFindings === undefined && value.expected === undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['expectedFindings'],
-        message: 'expectedFindings or expected is required'
-      })
-    }
-  })
+
+export type ExpectedFindingTier = z.infer<typeof ExpectedFindingTierSchema>
 
 export const EvalSliceCaseSchema = EvalSliceCaseRawSchema.transform((value) => {
-  const sourceProfile =
-    value.sourceProfile ??
-    (value.expectedFindings === undefined ? 'benchmark-semantic' : 'project')
-  const expectedFindings =
-    value.expectedFindings ??
-    value.expected?.map(normalizeBenchmarkExpected) ??
-    []
+  const sourceProfile = value.sourceProfile ?? 'project'
   const tags = new Set([
     ...(value.source === undefined ? [] : [value.source]),
     sourceProfile,
@@ -178,7 +138,7 @@ export const EvalSliceCaseSchema = EvalSliceCaseRawSchema.transform((value) => {
   return {
     ...value,
     sourceProfile,
-    expectedFindings,
+    expectedFindings: value.expectedFindings,
     expectedNoFindingZones: value.expectedNoFindingZones,
     tags: [...tags]
   }
@@ -191,6 +151,34 @@ export type ExpectedFinding = z.infer<typeof ExpectedFindingSchema>
 export type ExpectedNoFindingZone = z.infer<typeof ExpectedNoFindingZoneSchema>
 export type EvalCase = z.infer<typeof EvalCaseSchema>
 export type EvalSliceCase = z.infer<typeof EvalSliceCaseSchema>
+
+// Resolve the measurement tier for an expected finding. An explicit `tier`
+// always wins; otherwise it is derived from category and severity so untiered
+// fixtures still classify deterministically. Categories without a runtime,
+// security, or logic risk (maintainability, test, policy) collapse to `nit`.
+export const resolveExpectedFindingTier = (
+  finding: Pick<ExpectedFinding, 'category' | 'severity' | 'tier'>
+): ExpectedFindingTier => {
+  if (finding.tier !== undefined) {
+    return finding.tier
+  }
+
+  switch (finding.category) {
+    case 'security':
+      return 'security'
+    case 'bug':
+      return finding.severity === 'critical' || finding.severity === 'high'
+        ? 'runtime-critical'
+        : 'logic'
+    case 'performance':
+    case 'compatibility':
+      return 'logic'
+    case 'maintainability':
+    case 'test':
+    case 'policy':
+      return 'nit'
+  }
+}
 
 export const parseEvalCases = (input: unknown): readonly EvalCase[] => {
   const cases = EvalCaseSetSchema.parse(input)

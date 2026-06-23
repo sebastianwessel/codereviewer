@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
@@ -9,6 +10,7 @@ import {
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
   EvalReportSchema,
+  assertBenchmarkSlicesHydrated,
   calculateEvalDiffStats,
   createModelSemanticJudge,
   createEvalSliceManifest,
@@ -33,6 +35,7 @@ import {
 } from '../domains/provider-resolution/index.js'
 import {
   createReviewLogger,
+  type Logger,
   ReviewLogLevelSchema,
   type ReviewLogSink
 } from '../domains/observability/index.js'
@@ -129,6 +132,22 @@ const resolveArtifactWritePath = (
   artifactPath: string
 ): Promise<string> => resolveWritePathInsideRoot(repositoryRoot, artifactPath)
 
+const createEvalRunArchiveId = (): string => {
+  const now = new Date()
+  const padded = (value: number): string => String(value).padStart(2, '0')
+  const timestamp = [
+    now.getUTCFullYear(),
+    padded(now.getUTCMonth() + 1),
+    padded(now.getUTCDate()),
+    'T',
+    padded(now.getUTCHours()),
+    padded(now.getUTCMinutes()),
+    padded(now.getUTCSeconds())
+  ].join('')
+
+  return `${timestamp}-${crypto.randomUUID()}`
+}
+
 // Classify errors that reach a command boundary so they map to the documented
 // exit codes: configuration/usage/path errors exit 2, filesystem/repository
 // errors exit 3. Already-structured errors keep their own category regardless of
@@ -212,6 +231,54 @@ const parseOptionValues = (
   return values
 }
 
+const parseIntegerOption = (
+  args: readonly string[],
+  optionName: string,
+  input: {
+    readonly min: number
+    readonly max: number
+  }
+): number | undefined => {
+  const value = parseOptionValue(args, optionName)
+
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value.startsWith('-')) {
+    throw new TypeError(`${optionName} requires a value`)
+  }
+
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < input.min || parsed > input.max) {
+    throw new TypeError(
+      `${optionName} must be an integer from ${input.min} to ${input.max}`
+    )
+  }
+
+  return parsed
+}
+
+const parseEnumOption = <T extends string>(
+  args: readonly string[],
+  optionName: string,
+  allowedValues: readonly T[]
+): T | undefined => {
+  const value = parseOptionValue(args, optionName)
+
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value.startsWith('-') || !allowedValues.includes(value as T)) {
+    throw new TypeError(
+      `${optionName} must be one of ${allowedValues.join(', ')}`
+    )
+  }
+
+  return value as T
+}
+
 const parseLogLevelOverride = (
   args: readonly string[]
 ): { readonly level?: string; readonly args: readonly string[] } => {
@@ -239,6 +306,55 @@ const parseLogLevelOverride = (
     args: args.filter(
       (_arg, index) => index !== logLevelIndex && index !== logLevelIndex + 1
     )
+  }
+}
+
+const parseLogFileOverride = (
+  args: readonly string[]
+): { readonly logFile?: string; readonly args: readonly string[] } => {
+  const logFileIndex = args.indexOf('--log-file')
+  if (logFileIndex === -1) {
+    return {
+      args
+    }
+  }
+
+  const value = args[logFileIndex + 1]
+  if (value === undefined || value.length === 0 || value.startsWith('-')) {
+    throw new TypeError('--log-file requires a path')
+  }
+
+  return {
+    logFile: value,
+    args: args.filter(
+      (_arg, index) => index !== logFileIndex && index !== logFileIndex + 1
+    )
+  }
+}
+
+const resolveLogSink = async (
+  options: CliRunOptions,
+  logFile: string | undefined
+): Promise<ReviewLogSink | undefined> => {
+  if (logFile === undefined) {
+    return options.logSink
+  }
+
+  const logPath = await resolveArtifactWritePath(options.cwd, logFile)
+  await ensureDirectory(path.dirname(logPath))
+  // Append a per-run header instead of truncating so earlier runs survive and a
+  // failed run's log is not destroyed by the next invocation. The header is a
+  // JSON line so the file stays valid JSONL.
+  appendFileSync(
+    logPath,
+    `${JSON.stringify({ event: 'log-run-start', at: new Date().toISOString() })}\n`,
+    'utf8'
+  )
+
+  return {
+    write: (chunk) => {
+      appendFileSync(logPath, chunk, 'utf8')
+    }
   }
 }
 
@@ -392,7 +508,8 @@ const runReview = async (
 ): Promise<CliResult> => {
   try {
     const logLevelOverride = parseLogLevelOverride(args)
-    const reviewArgs = logLevelOverride.args
+    const logFileOverride = parseLogFileOverride(logLevelOverride.args)
+    const reviewArgs = logFileOverride.args
     const configPath = parseConfigPath(reviewArgs)
     const loadedConfig = await loadCodeReviewerConfig({
       repositoryRoot: options.cwd,
@@ -413,9 +530,10 @@ const runReview = async (
     const explicitFiles = parseExplicitFiles(reviewArgs)
     const baseRef = parseOptionValue(reviewArgs, '--base-ref')
     const headRef = parseOptionValue(reviewArgs, '--head-ref')
+    const logSink = await resolveLogSink(options, logFileOverride.logFile)
     const logger = createReviewLogger({
       level: loadedConfig.config.observability.logging.level,
-      ...(options.logSink === undefined ? {} : { out: options.logSink }),
+      ...(logSink === undefined ? {} : { out: logSink }),
       bindings: {
         component: 'cli',
         command: 'review'
@@ -519,6 +637,18 @@ const calculateEvalCaseSize = async (
   }
 }
 
+// Carry the failing stage (normalized as `details.operation`) onto a hard
+// provider-error output so it is not dropped before scoring.
+const stageFromNormalizedError = (
+  normalized: ReturnType<typeof normalizeError>
+): string | undefined => {
+  const operation = normalized.details.operation
+
+  return typeof operation === 'string' && operation.length > 0
+    ? operation
+    : undefined
+}
+
 const runEvalCase = async (
   input: {
     readonly root: string
@@ -527,6 +657,7 @@ const runEvalCase = async (
     readonly baselineExplicitlyConfigured: boolean
     readonly environment: Readonly<Record<string, string | undefined>>
     readonly evalCase: Awaited<ReturnType<typeof loadEvalCasesFromFixtures>>[number]
+    readonly logger?: Logger
     readonly providerImport?: ProviderImport
   }
 ): Promise<EvalCaseOutput> => {
@@ -539,10 +670,12 @@ const runEvalCase = async (
     evalCase: input.evalCase
   })
 
-  try {
-    const result = await runReviewPipeline({
+  const runReviewForCase = async (
+    config: CodeReviewerConfig
+  ): Promise<Awaited<ReturnType<typeof runReviewPipeline>>> =>
+    runReviewPipeline({
       repositoryRoot: fixtureRoot,
-      config: input.config,
+      config,
       configWarnings: input.configWarnings,
       baselineExplicitlyConfigured: input.baselineExplicitlyConfigured,
       explicitFiles: input.evalCase.changedFiles,
@@ -556,29 +689,103 @@ const runEvalCase = async (
         ? {}
         : { headRef: input.evalCase.headRef }),
       environment: input.environment,
+      ...(input.logger === undefined ? {} : { logger: input.logger }),
       ...(input.providerImport === undefined
         ? {}
         : { providerImport: input.providerImport })
     })
 
-    return {
-      caseId: input.evalCase.id,
-      changedLineCount: evalCaseSize.changedLineCount,
-      diffHunkCount: evalCaseSize.diffHunkCount,
-      contextLedger: result.contextLedger.map((entry) => ({
-        consideredForModelContext: entry.decision === 'included' || entry.decision === 'truncated',
-        truncated: entry.decision === 'truncated'
-      })),
-      result: {
-        status: 'ok',
-        reviewReport: result.report
-      }
+  const retryConfigForTransientProviderError = (): CodeReviewerConfig => ({
+    ...input.config,
+    review: {
+      ...input.config.review,
+      maxConcurrentTasks: 1
     }
+  })
+
+  const retryableEvalProviderCodes = new Set([
+    'provider_error',
+    'provider_timeout'
+  ])
+
+  const resultForReviewReport = (
+    reviewResult: Awaited<ReturnType<typeof runReviewPipeline>>
+  ): EvalCaseOutput => ({
+    caseId: input.evalCase.id,
+    changedLineCount: evalCaseSize.changedLineCount,
+    diffHunkCount: evalCaseSize.diffHunkCount,
+    contextLedger: reviewResult.contextLedger.map((entry) => ({
+      kind: entry.kind,
+      consideredForModelContext: entry.decision === 'included' || entry.decision === 'truncated',
+      truncated: entry.decision === 'truncated'
+    })),
+    result: {
+      status: 'ok',
+      reviewReport: reviewResult.report
+    }
+  })
+
+  try {
+    return resultForReviewReport(await runReviewForCase(input.config))
   } catch (error) {
     const normalized = normalizeError(error, { source: 'provider' })
 
     if (normalized.category !== 'provider') {
       throw error
+    }
+
+    if (
+      retryableEvalProviderCodes.has(normalized.code) &&
+      input.config.review.maxConcurrentTasks > 1
+    ) {
+      input.logger?.info('Retrying eval case after transient provider error.', {
+        eval_case_id: input.evalCase.id,
+        code: normalized.code,
+        retry_max_concurrent_tasks: 1
+      })
+
+      try {
+        const retryResult = await runReviewForCase(
+          retryConfigForTransientProviderError()
+        )
+
+        return resultForReviewReport({
+          ...retryResult,
+          report: {
+            ...retryResult.report,
+            run: {
+              ...retryResult.report.run,
+              warnings: [
+                ...retryResult.report.run.warnings,
+                `eval-provider-retry:${normalized.code}`
+              ]
+            }
+          }
+        })
+      } catch (retryError) {
+        const retryNormalized = normalizeError(retryError, {
+          source: 'provider'
+        })
+
+        if (retryNormalized.category !== 'provider') {
+          throw retryError
+        }
+
+        return {
+          caseId: input.evalCase.id,
+          changedLineCount: evalCaseSize.changedLineCount,
+          diffHunkCount: evalCaseSize.diffHunkCount,
+          contextLedger: [],
+          result: {
+            status: 'provider-error',
+            code: retryNormalized.code,
+            ...(stageFromNormalizedError(retryNormalized) === undefined
+              ? {}
+              : { stage: stageFromNormalizedError(retryNormalized)! }),
+            message: retryNormalized.message
+          }
+        }
+      }
     }
 
     return {
@@ -589,6 +796,9 @@ const runEvalCase = async (
       result: {
         status: 'provider-error',
         code: normalized.code,
+        ...(stageFromNormalizedError(normalized) === undefined
+          ? {}
+          : { stage: stageFromNormalizedError(normalized)! }),
         message: normalized.message
       }
     }
@@ -600,15 +810,91 @@ const runEval = async (
   options: CliRunOptions
 ): Promise<CliResult> => {
   try {
-    const configPath = parseConfigPath(args)
-    const sliceRoot = parseOptionValue(args, '--slice-root')
-    const caseFilters = parseOptionValues(args, '--case')
-    const semanticJudgeEnabled = args.includes('--semantic-judge')
+    const logLevelOverride = parseLogLevelOverride(args)
+    const logFileOverride = parseLogFileOverride(logLevelOverride.args)
+    const evalArgs = logFileOverride.args
+    const configPath = parseConfigPath(evalArgs)
+    const sliceRoot = parseOptionValue(evalArgs, '--slice-root')
+    const caseFilters = parseOptionValues(evalArgs, '--case')
+    const reviewMode = parseEnumOption(evalArgs, '--review-mode', [
+      'local',
+      'ci',
+      'pr',
+      'full'
+    ] as const)
+    const reviewDepth = parseEnumOption(evalArgs, '--review-depth', [
+      'fast',
+      'balanced',
+      'thorough'
+    ] as const)
+    const intentPlanning = parseEnumOption(evalArgs, '--intent-planning', [
+      'auto',
+      'deterministic',
+      'model'
+    ] as const)
+    const maxConcurrentTasks = parseIntegerOption(
+      evalArgs,
+      '--max-concurrent-tasks',
+      {
+        min: 1,
+        max: 32
+      }
+    )
+    const semanticJudgeEnabled = evalArgs.includes('--semantic-judge')
+    const judgeFindingsEnabled = evalArgs.includes('--judge-findings')
+    const policyReviewPassEnabled = evalArgs.includes('--policy-review-pass')
+    const cliConfig = {
+      ...(logLevelOverride.level === undefined
+        ? {}
+        : {
+            observability: {
+              logging: {
+                level: logLevelOverride.level
+              }
+            }
+          }),
+      ...(reviewMode === undefined &&
+      reviewDepth === undefined &&
+      maxConcurrentTasks === undefined
+        ? {}
+        : {
+            review: {
+              ...(reviewMode === undefined ? {} : { mode: reviewMode }),
+              ...(reviewDepth === undefined ? {} : { depth: reviewDepth }),
+              ...(maxConcurrentTasks === undefined
+                ? {}
+                : { maxConcurrentTasks })
+            }
+          }),
+      ...(intentPlanning === undefined &&
+      !judgeFindingsEnabled &&
+      !policyReviewPassEnabled
+        ? {}
+        : {
+            aiReview: {
+              ...(intentPlanning === undefined
+                ? {}
+                : { intentPlanning }),
+              ...(judgeFindingsEnabled ? { judgeFindings: true } : {}),
+              ...(policyReviewPassEnabled ? { policyReviewPass: true } : {})
+            }
+          })
+    }
     const loadedConfig = await loadCodeReviewerConfig({
       repositoryRoot: options.cwd,
       environment: options.environment ?? {},
       loadDotEnv: false,
-      ...(configPath === undefined ? {} : { configPath })
+      ...(configPath === undefined ? {} : { configPath }),
+      ...(Object.keys(cliConfig).length === 0 ? {} : { cliConfig })
+    })
+    const logSink = await resolveLogSink(options, logFileOverride.logFile)
+    const logger = createReviewLogger({
+      level: loadedConfig.config.observability.logging.level,
+      ...(logSink === undefined ? {} : { out: logSink }),
+      bindings: {
+        component: 'cli',
+        command: 'eval'
+      }
     })
     const loadedEvalCases = await loadEvalCasesFromFixtures(options.cwd, {
       ...(sliceRoot === undefined ? {} : { sliceRoot })
@@ -622,10 +908,25 @@ const runEval = async (
       return usageError('eval run selected no cases')
     }
 
+    // Fail before scoring if any positive slice is still an un-hydrated
+    // placeholder; otherwise it would be silently scored as 0 recall.
+    assertBenchmarkSlicesHydrated(
+      evalCases.map((evalCase) => ({
+        id: evalCase.id,
+        expectedFindings: evalCase.expectedFindings,
+        ...(evalCase.diff === undefined ? {} : { diff: evalCase.diff })
+      }))
+    )
+
     if (semanticJudgeEnabled && loadedConfig.config.provider === undefined) {
       return usageError('eval run --semantic-judge requires provider configuration')
     }
 
+    logger.info('Eval run started.', {
+      fixture_source: sliceRoot === undefined ? 'default' : 'slice-root',
+      selected_case_count: evalCases.length,
+      semantic_judge_enabled: semanticJudgeEnabled
+    })
     const semanticJudge =
       semanticJudgeEnabled && loadedConfig.config.provider !== undefined
         ? createModelSemanticJudge({
@@ -633,6 +934,7 @@ const runEval = async (
               await resolveProviderModelAlias({
                 provider: loadedConfig.config.provider,
                 environment: loadedConfig.environment,
+                logger,
                 ...(options.providerImport === undefined
                   ? {}
                   : { importProvider: options.providerImport })
@@ -641,7 +943,7 @@ const runEval = async (
           })
         : undefined
 
-    const evalArtifactRoot = path.posix.join('.review', 'eval')
+    const evalArtifactRoot = path.posix.join('.codereviewer', 'eval')
     const evalDirectory = await resolveArtifactWritePath(options.cwd, evalArtifactRoot)
     const outputs = await Promise.all(
       evalCases.map((evalCase) =>
@@ -652,6 +954,9 @@ const runEval = async (
           baselineExplicitlyConfigured: loadedConfig.baselineExplicitlyConfigured,
           environment: loadedConfig.environment,
           evalCase,
+          logger: logger.child({
+            eval_case_id: evalCase.id
+          }),
           ...(options.providerImport === undefined
             ? {}
             : { providerImport: options.providerImport })
@@ -676,7 +981,8 @@ const runEval = async (
         maxFalsePositiveCount: 0,
         failOnProviderError: true
       },
-      generatedAt: '2026-06-20T00:00:02.000Z'
+      generatedAt: '2026-06-20T00:00:02.000Z',
+      judgeFindingsEnabled
     }
     const result =
       semanticJudge === undefined
@@ -686,13 +992,29 @@ const runEval = async (
             judge: semanticJudge
           })
 
+    const evalRunArchiveRoot = path.posix.join(
+      evalArtifactRoot,
+      'runs',
+      createEvalRunArchiveId()
+    )
     await ensureDirectory(evalDirectory)
+    await ensureDirectory(
+      await resolveArtifactWritePath(options.cwd, evalRunArchiveRoot)
+    )
+    const reportJson = jsonResult(result.report)
     await writeFile(
       await resolveArtifactWritePath(
         options.cwd,
         path.posix.join(evalArtifactRoot, result.artifactName)
       ),
-      jsonResult(result.report)
+      reportJson
+    )
+    await writeFile(
+      await resolveArtifactWritePath(
+        options.cwd,
+        path.posix.join(evalRunArchiveRoot, result.artifactName)
+      ),
+      reportJson
     )
     const summary = renderEvalSummary({
       cases: evalCases,
@@ -706,6 +1028,17 @@ const runEval = async (
         path.posix.join(evalArtifactRoot, EVAL_SUMMARY_ARTIFACT_NAME)
       ),
       summary
+    )
+    await writeFile(
+      await resolveArtifactWritePath(
+        options.cwd,
+        path.posix.join(evalRunArchiveRoot, EVAL_SUMMARY_ARTIFACT_NAME)
+      ),
+      renderEvalSummary({
+        cases: evalCases,
+        report: result.report,
+        artifactRoot: evalRunArchiveRoot
+      })
     )
     const recallReport = renderEvalRecallReport({
       reports: [
@@ -723,6 +1056,22 @@ const runEval = async (
       ),
       recallReport
     )
+    await writeFile(
+      await resolveArtifactWritePath(
+        options.cwd,
+        path.posix.join(evalRunArchiveRoot, EVAL_RECALL_REPORT_ARTIFACT_NAME)
+      ),
+      recallReport
+    )
+
+    logger.info('Eval run completed.', {
+      fixture_count: result.report.fixtureCount,
+      recall: result.report.metrics.recall,
+      precision: result.report.metrics.precision,
+      provider_error_rate: result.report.metrics.providerErrorRate,
+      eval_run_archive_root: evalRunArchiveRoot,
+      gate_passed: result.report.regressionGate.passed
+    })
 
     return {
       exitCode: result.report.regressionGate.passed ? 0 : 1,
@@ -741,7 +1090,7 @@ const runEvalRecallReport = async (
   const reportPaths = parseOptionValues(args, '--report')
   const selectedReportPaths =
     reportPaths.length === 0
-      ? [path.posix.join('.review', 'eval', 'eval-report.json')]
+      ? [path.posix.join('.codereviewer', 'eval', 'eval-report.json')]
       : reportPaths
 
   try {

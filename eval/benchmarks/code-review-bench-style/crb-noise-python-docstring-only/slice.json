@@ -1,0 +1,41 @@
+{
+  "id": "crb-noise-python-docstring-only",
+  "title": "Clarify audit log helper docstring",
+  "description": "Curated PR-style negative case for precision and no-finding-zone evaluation.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prTitle": "Clarify audit log helper docstring",
+  "sourceRepo": "sentry",
+  "upstreamOwner": "sentry",
+  "upstreamRepo": "sentry",
+  "baseSha": "9cd2b6da7454081e8a9bf91bfafe477406726f36",
+  "headSha": "b7294d4416b9c06e18bf421803ea80de8e963b56",
+  "diff": "diff --git a/src/docs.py b/src/docs.py\nindex 0000000..1111111 100644\n--- a/src/docs.py\n+++ b/src/docs.py\n@@ -1,2 +1,5 @@\n+// Safe PR-style fixture: Clarify audit log helper docstring\n+// Expected behavior: no actionable review finding.\n+\n unchanged\n",
+  "language": "python",
+  "changedFiles": [
+    "src/docs.py"
+  ],
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "src/docs.py",
+      "lineRange": [
+        1,
+        20
+      ],
+      "reason": "Safe PR-style change should not produce an actionable finding."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "error-tracking",
+    "negative",
+    "no-finding-zone",
+    "precision",
+    "python",
+    "sentry"
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "id": "crb-discourse-07-scale-color-lightness-must-use-secondary-for-dark-themes",
+  "title": "scale-color $lightness must use $secondary for dark themes",
+  "description": "Curated PR review case adapted from discourse golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/discourse/discourse/commit/d38c4d5f7443223c81529c22470293771baf9f38",
+  "prTitle": "scale-color $lightness must use $secondary for dark themes",
+  "sourceRepo": "discourse",
+  "upstreamOwner": "discourse",
+  "upstreamRepo": "discourse",
+  "baseSha": "26a8b0b3b538a06e38072e22d712d9ff7c82b91a",
+  "headSha": "6a9c2768b42d069a3980178c5d9fc86cb5cefb7e",
+  "diff": "diff --git a/app/models/topic.rb b/app/models/topic.rb\nindex 0000000..1111111 100644\n--- a/app/models/topic.rb\n+++ b/app/models/topic.rb\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: scale-color $lightness must use $secondary for dark themes\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "ruby",
+  "changedFiles": [
+    "app/models/topic.rb"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "In .topic-meta-data h5 a, the original code had color: scale-color($primary, $lightness: 30%) but was changed to dark-light-choose(scale-color($primary, $lightness: 70%), scale-color($secondary, $lightness: 30%)). The lightness for the light theme changed from 30% to 70%, which is a dramatic inversion",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "This change for desktop/user.css changes $primary from 30% to 50% for the light theme; most other changes preserve the original $primary value and move the complement to $secondary for dark. Consider reviewing this (also applies to a similar .name change in the mobile variant).",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "In topic-post.css the original code used $lightness: 70% but the replacement uses $lightness: 30% for the light theme. This makes the text significantly darker than intended.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "app/models/topic.rb",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "discourse",
+    "forum",
+    "local-logic",
+    "ruby",
+    "semantic"
+  ]
+}

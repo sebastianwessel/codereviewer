@@ -1,0 +1,41 @@
+{
+  "id": "crb-noise-go-comment-only",
+  "title": "Document auth cache behavior",
+  "description": "Curated PR-style negative case for precision and no-finding-zone evaluation.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prTitle": "Document auth cache behavior",
+  "sourceRepo": "grafana",
+  "upstreamOwner": "grafana",
+  "upstreamRepo": "grafana",
+  "baseSha": "a391235bef5725aa3e21a6ef945fb44351f1c9b5",
+  "headSha": "c2372ff755b9c61abc545caab90c21525724650f",
+  "diff": "diff --git a/pkg/services/comment.go b/pkg/services/comment.go\nindex 0000000..1111111 100644\n--- a/pkg/services/comment.go\n+++ b/pkg/services/comment.go\n@@ -1,2 +1,5 @@\n+// Safe PR-style fixture: Document auth cache behavior\n+// Expected behavior: no actionable review finding.\n+\n unchanged\n",
+  "language": "go",
+  "changedFiles": [
+    "pkg/services/comment.go"
+  ],
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "pkg/services/comment.go",
+      "lineRange": [
+        1,
+        20
+      ],
+      "reason": "Safe PR-style change should not produce an actionable finding."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "go",
+    "grafana",
+    "negative",
+    "no-finding-zone",
+    "observability",
+    "precision"
+  ]
+}

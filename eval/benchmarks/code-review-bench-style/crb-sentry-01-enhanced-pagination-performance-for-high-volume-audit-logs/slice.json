@@ -1,0 +1,67 @@
+{
+  "id": "crb-sentry-01-enhanced-pagination-performance-for-high-volume-audit-logs",
+  "title": "Enhanced Pagination Performance for High-Volume Audit Logs",
+  "description": "Curated PR review case adapted from sentry golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/ai-code-review-evaluation/sentry-greptile/pull/1",
+  "prTitle": "Enhanced Pagination Performance for High-Volume Audit Logs",
+  "sourceRepo": "sentry",
+  "upstreamOwner": "getsentry",
+  "upstreamRepo": "sentry",
+  "baseSha": "a939738173087030d8fc604ba1abd6564b47f159",
+  "headSha": "ce6b18e6fdddb6b3e722e3b3ddcf73ce83a266d0",
+  "diff": "diff --git a/src/audit_log.py b/src/audit_log.py\nindex 0000000..1111111 100644\n--- a/src/audit_log.py\n+++ b/src/audit_log.py\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Enhanced Pagination Performance for High-Volume Audit Logs\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "python",
+  "changedFiles": [
+    "src/audit_log.py"
+  ],
+  "expectedFindings": [
+    {
+      "category": "performance",
+      "severity": "high",
+      "semanticSummary": "Django querysets do not support negative slicing",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "When requests are authenticated with API keys or org auth tokens (which have user_id=None), organization_context.member is None. Line 71 attempts to access organization_context.member.has_global_access without checking if member is None, causing an AttributeError crash when optimized_pagination=true is used, even though the request passed all permission checks with valid org:write scope.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    },
+    {
+      "category": "bug",
+      "severity": "high",
+      "semanticSummary": "get_item_key assumes a numeric key, but the paginator is used with order_by=-datetime in the audit logs endpoint; calling math.floor/ceil on a datetime will raise a TypeError.",
+      "matchMode": "semantic-only",
+      "tier": "runtime-critical"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "src/audit_log.py",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "error-tracking",
+    "null-reference",
+    "performance",
+    "python",
+    "security",
+    "semantic",
+    "sentry"
+  ]
+}

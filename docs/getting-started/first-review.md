@@ -9,7 +9,7 @@ npx tsx src/cli/main.ts review --file src/app.ts
 The command writes artifacts under:
 
 ```text
-.review/runs/<run-id>/
+.codereviewer/runs/<run-id>/
 ```
 
 | File | Purpose |

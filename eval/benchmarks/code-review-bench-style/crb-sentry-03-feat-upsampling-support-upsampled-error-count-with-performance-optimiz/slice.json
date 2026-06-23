@@ -1,0 +1,65 @@
+{
+  "id": "crb-sentry-03-feat-upsampling-support-upsampled-error-count-with-performance-optimiz",
+  "title": "feat(upsampling) - Support upsampled error count with performance optimizations",
+  "description": "Curated PR review case adapted from sentry golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/getsentry/sentry/pull/94376",
+  "prTitle": "feat(upsampling) - Support upsampled error count with performance optimizations",
+  "sourceRepo": "sentry",
+  "upstreamOwner": "getsentry",
+  "upstreamRepo": "sentry",
+  "baseSha": "faeec64b419d76836b42e6f17ff4ca88685f7691",
+  "headSha": "ddb190c7f083d5d9e2f53ad015652bfa2e222584",
+  "diff": "diff --git a/src/audit_log.py b/src/audit_log.py\nindex 0000000..1111111 100644\n--- a/src/audit_log.py\n+++ b/src/audit_log.py\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: feat(upsampling) - Support upsampled error count with performance optimizations\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "python",
+  "changedFiles": [
+    "src/audit_log.py"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "sample_rate = 0.0 is falsy and skipped",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "performance",
+      "severity": "low",
+      "semanticSummary": "Using Python’s built-in hash() to build cache keys is non-deterministic across processes (hash randomization), so keys won’t match across workers and invalidate_upsampling_cache may fail to delete them. Use a deterministic serialization of project_ids for the cache key.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "security",
+      "severity": "medium",
+      "semanticSummary": "The upsampling eligibility check passes the outer dataset instead of the actual dataset used by scoped_dataset. In paths where the query ultimately runs against discover (e.g., dashboard split) while the original dataset is metrics, upsampling may be skipped even when all projects are allowlisted.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "src/audit_log.py",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "code-review-bench-style",
+    "curated-pr",
+    "error-tracking",
+    "local-logic",
+    "performance",
+    "python",
+    "security",
+    "semantic",
+    "sentry"
+  ]
+}

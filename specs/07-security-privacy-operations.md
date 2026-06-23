@@ -45,12 +45,12 @@ code, not by model behavior:
 | --- | --- |
 | Repository containment | Every read and write path must resolve under the configured repository root. Default root is the current working directory when no CLI or config root is supplied. |
 | No root escape | Absolute paths, `..`, symlink escapes, Windows drive paths, UNC paths, NUL bytes, and mixed-separator traversal are rejected before IO. |
-| Read-only source | Repository source files are never modified by review, eval, analyzers, admission, reporting, drift checks, or docs checks. |
+| Read-only source | Repository source files are never modified by review, eval, deterministic support signals, admission, reporting, drift checks, or docs checks. |
 | Artifact write boundary | Writes are allowed only below the configured artifact directory after it resolves under repository root. |
 | Non-destructive git | The only allowed git commands are read-only discovery commands explicitly allowlisted in code. Mutating git commands are impossible through the product API. |
 | No shell expansion | Git and tool invocations use argument-array process APIs. Shell strings are forbidden. |
 | No implicit network | Network is denied by default. The only R1 network path is the explicitly selected model provider endpoint after provider config validation. |
-| No repository exfiltration by default | Local/scripted and analyzer-only paths must not send repository content to any network destination. Provider-backed review sends only bounded, redacted, ledger-recorded context to the selected provider. |
+| No repository exfiltration by default | Local providerless and signal-only paths must not send repository content to any network destination. Provider-backed review sends only bounded, redacted, ledger-recorded context to the selected provider. |
 | No prompt/tool authority | Prompts, repository content, skills, and model output cannot grant filesystem, git, shell, network, publishing, or gate authority. |
 | Auditable decisions | Security-relevant allow/deny decisions produce stable, redacted events and testable error codes. |
 
@@ -59,8 +59,8 @@ code, not by model behavior:
 | Vector | Example | Required Control |
 | --- | --- | --- |
 | Config path escape | `--config ../../secret.json`, `CODEREVIEWER_CONFIG_PATH=C:\Users\...` | Resolve through root-bound path service and reject escape. |
-| Artifact path escape | `paths.artifactDir=../outside` or symlinked `.review/runs` | Resolve real parent paths under root before write; reject symlink escape. |
-| Instruction/skill escape | `.review/skills/../../private/SKILL.md` | Normalize and resolve each requested file under root; reject traversal and symlink escape. |
+| Artifact path escape | `paths.artifactDir=../outside` or symlinked `.codereviewer/runs` | Resolve real parent paths under root before write; reject symlink escape. |
+| Instruction/skill escape | `.codereviewer/skills/../../private/SKILL.md` | Normalize and resolve each requested file under root; reject traversal and symlink escape. |
 | Git ref injection | `--base-ref=-c core.sshCommand=...` | Reject refs starting with `-`; execute only allowlisted `git diff` argument arrays. |
 | Destructive git | hidden path to `git reset`, `clean`, `checkout`, `push`, `commit` | Do not expose a generic git runner to config/model/plugin paths; enforce read-only command allowlist. |
 | Shell injection | file path containing `; rm -rf` | Never use shell command strings; pass paths as args after `--`. |
@@ -111,9 +111,10 @@ content. R1 controls the blast radius:
 
 - repository content, instructions, skills, prior artifacts, and provider
   responses are untrusted input;
-- model output can propose candidates only; it cannot publish, fail gates,
-  write outside the artifact directory, execute commands, or read additional
-  files without deterministic tool mediation;
+- model output can propose suspicions, proof packets, and refutation summaries
+  only; it cannot publish, fail gates, write outside the artifact directory,
+  execute commands, or read additional files without deterministic
+  context-retrieval mediation;
 - admission, reporting, quality gates, path handling, and permission decisions
   are deterministic code paths;
 - instruction files and skills are loaded from the checked-out repository only
@@ -188,14 +189,18 @@ Provider-backed review requirements:
 - every context item considered for provider transfer must have a context
   ledger entry recording include/skip/truncate decision, bytes, hash, and
   reason;
-- deterministic analyzer candidates must remain eligible without requiring the
-  model to echo them back;
+- deterministic support signals may be used without requiring the model to echo
+  them back, but they are context/gate inputs rather than the primary semantic
+  review product;
 - raw env vars, local absolute paths, git remotes, shell output, secrets, and
   ignored files are never provider context;
+- investigation and refutation tools must be mediated by deterministic code
+  that enforces path containment, read/search budgets, redaction, and context
+  ledger entries before any result reaches the model;
 - provider raw responses are parsed through schemas, redacted on error, and not
   stored by default.
 
-Local analyzer-only, scripted, config validation, drift checking, report
+Local signal-only, hermetic provider fixture, config validation, drift checking, report
 rendering, and eval metric operations must not perform network IO.
 
 ## Drift, Gap, And Ambiguity Control
@@ -300,9 +305,9 @@ Operational artifacts:
 - `error.json` for partial failed runs;
 - optional `eval-report.json`.
 
-Default artifact root is `.review/`. Generated artifacts are ignored by git.
-User-authored `.review/config.json`, `.review/instructions/`, and
-`.review/skills/` may be committed when they do not contain secrets.
+Default artifact root is `.codereviewer/`. Generated artifacts are ignored by git.
+User-authored `.codereviewer/config.json`, `.codereviewer/instructions/`, and
+`.codereviewer/skills/` may be committed when they do not contain secrets.
 
 ## CI/CD Hardening
 

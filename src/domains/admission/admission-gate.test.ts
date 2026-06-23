@@ -23,7 +23,7 @@ const diffEvidence: EvidenceRecord = {
     startLine: 4,
     side: 'new'
   },
-  source: 'typescript-analyzer',
+  source: 'typescript-support-signal',
   contentHash:
     '2222222222222222222222222222222222222222222222222222222222222222',
   redactionApplied: true
@@ -51,7 +51,6 @@ const candidate: CandidateFinding = {
   },
   evidenceIds: ['ev_diff1'],
   proposedBy: 'review-agent',
-  confidence: 0.8,
   fixProposal: {
     summary: 'Return the computed value from the changed branch.',
     evidenceIds: ['ev_diff1'],
@@ -76,7 +75,7 @@ const policy: AdmissionPolicy = {
     modelName: 'gpt-5-mini',
     instructionHashes: [],
     skillHashes: [],
-    analyzerVersions: {
+    signalVersions: {
       typescript: '6.0.3'
     },
     configHash
@@ -96,7 +95,7 @@ const diffBackedPolicy = {
 }
 
 describe('admission gate', () => {
-  test('admits candidates with reviewed locations and non-model evidence', () => {
+  test('admits candidates with reviewed locations and evidence', () => {
     const result = admitCandidate({
       candidate,
       evidence: [diffEvidence],
@@ -221,13 +220,31 @@ describe('admission gate', () => {
     })
   })
 
-  test('marks model-only candidates as needs-more-evidence', () => {
+  test('accepts intent-grouped task ids (task_intent_<hex>)', () => {
+    // Regression: model-intent runs assign candidates an intent task id whose
+    // underscore previously failed the candidate schema and surfaced as a
+    // spurious provider configuration error.
+    const result = admitCandidate({
+      candidate: {
+        ...candidate,
+        taskId: 'task_intent_0a1b2c3d4e5f6071'
+      },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy: diffBackedPolicy
+    })
+
+    expect(result.status).toBe('admitted')
+    expect(result.rejectedFinding).toBeUndefined()
+  })
+
+  test('admits model-rationale candidates when evidence is present', () => {
     const result = admitCandidate({
       candidate: {
         ...candidate,
         evidenceIds: ['ev_model1'],
         fixProposal: {
-          summary: 'Investigate the model-only concern.',
+          summary: 'Apply the proof-backed fix.',
           evidenceIds: ['ev_model1'],
           safety: 'manual-review'
         }
@@ -237,11 +254,9 @@ describe('admission gate', () => {
       policy
     })
 
-    expect(result.rejectedFinding).toMatchObject({
-      candidateId: 'cand_bug1',
-      status: 'needs-more-evidence',
-      reason: 'insufficient-evidence'
-    })
+    expect(result.status).toBe('admitted')
+    expect(result.admittedFinding?.evidenceIds).toEqual(['ev_model1'])
+    expect(result.admittedFinding?.admissionEvidenceIds).toEqual(['ev_model1'])
   })
 
   test('rejects invalid locations, duplicate fingerprints, and below-threshold severity', () => {
@@ -299,7 +314,7 @@ describe('admission gate', () => {
     const admitted = admitCandidate({
       candidate: {
         ...candidate,
-        proposedBy: 'typescript-analyzer',
+        proposedBy: 'typescript-support-signal',
         title: 'Parse diagnostic blocks reliable review'
       },
       evidence: [diffEvidence],
@@ -316,7 +331,7 @@ describe('admission gate', () => {
         proposedBy: 'review-agent',
         title: 'TypeScript parse error: Expression expected',
         description:
-          'The TypeScript analyzer reported the same parse diagnostic at the same location.'
+          'The TypeScript support signal extractor reported the same parse diagnostic at the same location.'
       },
       evidence: [diffEvidence],
       existingAdmittedFindings: [admitted!],
@@ -349,6 +364,43 @@ describe('admission gate', () => {
     })
   })
 
+  test('applies the model actionable severity floor (exempting trusted rules)', () => {
+    const floorPolicy = { ...diffBackedPolicy, actionableSeverityThreshold: 'medium' as const }
+
+    // Low-severity model finding -> rejected below-threshold.
+    const lowModel = admitCandidate({
+      candidate: { ...candidate, severity: 'low' },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy: floorPolicy
+    })
+    expect(lowModel.status).toBe('rejected')
+    expect(lowModel.rejectedFinding?.reason).toBe('below-threshold')
+
+    // Medium-severity model finding -> admitted (meets the floor).
+    const mediumModel = admitCandidate({
+      candidate: { ...candidate, severity: 'medium' },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy: floorPolicy
+    })
+    expect(mediumModel.status).toBe('admitted')
+
+    // Low-severity TRUSTED deterministic-rule finding -> exempt from the model
+    // floor, still admitted.
+    const lowTrusted = admitCandidate({
+      candidate: {
+        ...candidate,
+        severity: 'low',
+        proposedBy: 'deterministic-trusted-rule'
+      },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy: floorPolicy
+    })
+    expect(lowTrusted.status).toBe('admitted')
+  })
+
   test('redacts model-controlled finding text before admission', () => {
     const result = admitCandidate({
       candidate: {
@@ -373,6 +425,30 @@ describe('admission gate', () => {
     )
     expect(result.admittedFinding?.fixProposal?.summary).not.toContain('sk-proj')
     expect(JSON.stringify(result.admittedFinding)).toContain('[REDACTED]')
+  })
+
+  test('truncates redaction-expanded text back to the contract cap', () => {
+    // Redaction can lengthen text: the URL-credential pattern rewrites the
+    // 8-char `a://b:c@` to the 15-char `a://[REDACTED]@`. A title that is valid
+    // (<=120) before redaction can exceed the cap after, which previously failed
+    // AdmittedFindingSchema validation at admission time.
+    const title = `${'x'.repeat(107)}a://b:c@`
+    expect(title.length).toBeLessThanOrEqual(120)
+
+    const result = admitCandidate({
+      candidate: { ...candidate, title },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy
+    })
+
+    // Before the fix this failed schema validation (title > 120) instead of
+    // being admitted. The credential must be gone and the cap must hold (the
+    // marker may itself be truncated at the boundary, which is acceptable).
+    expect(result.status).toBe('admitted')
+    expect(result.admittedFinding?.title.length).toBeLessThanOrEqual(120)
+    expect(result.admittedFinding?.title).not.toContain('b:c@')
+    expect(result.admittedFinding?.title).toContain('REDACTED')
   })
 })
 
@@ -454,6 +530,32 @@ describe('baseline and quality gate', () => {
       passed: false,
       failingFindingIds: [admitted.id],
       baselineFilteringApplied: true
+    })
+  })
+
+  test('quality gate ignores artifact-only findings', () => {
+    const admitted = admitCandidate({
+      candidate,
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy
+    }).admittedFinding!
+    const artifactOnly = {
+      ...admitted,
+      reporterEligibility: 'artifact-only' as const
+    }
+
+    expect(
+      evaluateQualityGate({
+        admittedFindings: [artifactOnly],
+        thresholds: {
+          maxHigh: 0,
+          failOnNewOnly: true
+        }
+      })
+    ).toMatchObject({
+      passed: true,
+      failingFindingIds: []
     })
   })
 })

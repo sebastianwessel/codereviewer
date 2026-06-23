@@ -10,8 +10,10 @@ cp .env.example .env
 
 For review commands, root `.env` values override exported process environment
 values. This lets a project-local `.env` define the intended local provider
-without requiring shell exports. Evaluation runs do not load root `.env` by
-default.
+without requiring shell exports. Plain `npm run eval` does not load `.env`.
+Provider-backed eval helpers such as `npm run eval:with-env`,
+`npm run eval:semantic`, and `npm run cli -- ...` load `.env` with Node's native
+`--env-file-if-exists=.env` flag.
 
 ## Config Overrides
 
@@ -43,4 +45,4 @@ default.
 | `AZURE_AI_ENDPOINT` | Azure endpoint. |
 | `AZURE_AI_API_KEY` | Azure API key when not using managed identity. |
 
-Do not store provider keys in `.review/config.json`.
+Do not store provider keys in `.codereviewer/config.json`.

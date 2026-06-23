@@ -1,0 +1,73 @@
+{
+  "id": "crb-cal-dot-com-02-feat-2fa-backup-codes",
+  "title": "feat: 2fa backup codes",
+  "description": "Curated PR review case adapted from cal.com golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/calcom/cal.com/pull/10600",
+  "prTitle": "feat: 2fa backup codes",
+  "sourceRepo": "cal.com",
+  "upstreamOwner": "calcom",
+  "upstreamRepo": "cal.com",
+  "baseSha": "6778a8496e9dee13173d99f9204c998c2ca9fd04",
+  "headSha": "40f507cf03e6613fe1bee83baa4c93841218dca6",
+  "diff": "diff --git a/apps/web/lib/booking.ts b/apps/web/lib/booking.ts\nindex 0000000..1111111 100644\n--- a/apps/web/lib/booking.ts\n+++ b/apps/web/lib/booking.ts\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: feat: 2fa backup codes\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "typescript",
+  "changedFiles": [
+    "apps/web/lib/booking.ts"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "The exported function TwoFactor handles backup codes and is in BackupCode.tsx. Inconsistent naming.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "bug",
+      "severity": "low",
+      "semanticSummary": "Error message mentions 'backup code login' but this is a disable endpoint, not login",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "security",
+      "severity": "medium",
+      "semanticSummary": "Backup code validation is case-sensitive due to the use of indexOf(). This causes validation to fail if a user enters uppercase hex characters, as backup codes should be case-insensitive for a better user experience.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "semanticSummary": "Because backupCodes are decrypted and mutated in memory before being written back, two concurrent login requests using the same backupCode could both pass this check and update, so a single backup code may effectively be accepted more than once if used concurrently, weakening the intended one-time-use semantics.",
+      "matchMode": "semantic-only",
+      "tier": "security"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "apps/web/lib/booking.ts",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "cal.com",
+    "code-review-bench-style",
+    "concurrency",
+    "cross-file",
+    "curated-pr",
+    "scheduling",
+    "security",
+    "semantic",
+    "typescript"
+  ]
+}

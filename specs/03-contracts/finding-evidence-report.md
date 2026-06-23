@@ -20,6 +20,11 @@ must validate every fixture against schemas.
 | `findingId` | string | `find_` plus lowercase base32/hex content hash. |
 | `evidenceId` | string | `ev_` plus lowercase base32/hex content hash. |
 | `candidateId` | string | `cand_` plus lowercase base32/hex content hash. |
+| `suspicionId` | string | `susp_` plus lowercase base32/hex content hash. |
+| `proofPacketId` | string | `proof_` plus lowercase base32/hex content hash. |
+| `refutationId` | string | `refute_` plus lowercase base32/hex content hash. |
+| `intentId` | string | `intent_` plus lowercase base32/hex content hash. |
+| `judgeId` | string | `judge_` plus lowercase base32/hex content hash. |
 
 ### Enums
 
@@ -28,12 +33,16 @@ ReviewMode = "local" | "ci" | "pr" | "full"
 ReviewDepth = "fast" | "balanced" | "thorough"
 Severity = "critical" | "high" | "medium" | "low" | "info"
 FindingCategory = "bug" | "security" | "performance" | "maintainability" | "compatibility" | "policy" | "test"
-EvidenceKind = "diff" | "file" | "symbol" | "diagnostic" | "command" | "model-rationale" | "config" | "policy" | "data-flow" | "related-location" | "rule" | "baseline"
+EvidenceKind = "diff" | "file" | "symbol" | "diagnostic" | "command" | "model-rationale" | "config" | "policy" | "data-flow" | "related-location" | "rule" | "baseline" | "deterministic-signal" | "tool-read" | "tool-search" | "proof" | "refutation" | "judge"
 AdmissionStatus = "admitted" | "rejected" | "needs-more-evidence"
-RejectReason = "schema-invalid" | "location-invalid" | "not-in-scope" | "insufficient-evidence" | "duplicate" | "below-threshold" | "unsafe-content" | "provider-error"
+RejectReason = "schema-invalid" | "location-invalid" | "not-in-scope" | "insufficient-evidence" | "duplicate" | "below-threshold" | "unsafe-content" | "provider-error" | "refuted" | "deterministic-contradiction" | "weak-suspicion" | "static-analysis-duplicate"
 ReporterEligibility = "inline" | "summary-only" | "artifact-only"
 ReportFormat = "json" | "markdown" | "sarif" | "github-review-comments"
 BaselineStatus = "new" | "existing" | "resolved" | "unknown"
+SuspicionStatus = "queued" | "investigating" | "proved" | "refuted" | "needs-more-evidence" | "rejected"
+RefutationVerdict = "proved" | "refuted" | "needs-more-evidence" | "provider-error"
+FindingJudgeVerdict = "valid" | "false-positive" | "needs-more-evidence"
+PromotionDecisionStatus = "actionable" | "artifact-only" | "rejected"
 ```
 
 ## Path Contract
@@ -75,7 +84,13 @@ may still be admitted, but they must be `summary-only` or `artifact-only` so
 GitHub review-comment drafts cannot target lines the pull request API cannot
 anchor.
 
-Deterministic analyzer candidates that originate from whole-file source
+Provider task and validation packets may include diff-range `changeKind`
+metadata. `changeKind = "new"` means the matching new-side hunk is introduced
+by the reviewed change; `modified` means the range belongs to an existing file
+change; `deleted` ranges are retained in diff maps but do not create new-side
+inline targets.
+
+Deterministic signal or proof locations that originate from whole-file source
 locations may be promoted from `side = "file"` to `side = "new"` only when the
 run has a diff map and the source line range overlaps a changed new-side hunk
 for the same path. Admission must still treat unpromoted whole-file locations
@@ -123,12 +138,12 @@ timestamps.
 | `kind` | yes | `EvidenceKind` | Closed enum. |
 | `summary` | yes | string 1..500 | Redacted, safe for logs/reports. |
 | `location` | conditional | `CodeLocation` | Required for `diff`, `file`, `symbol`, and `diagnostic`; forbidden for `config` and `policy`; optional for `command` and `model-rationale`. |
-| `source` | yes | string | Analyzer, agent, tool, or config source name. |
+| `source` | yes | string | Support signal extractor, agent, tool, or config source name. |
 | `sourceVersion` | no | string | Version/hash when known. |
 | `contentHash` | no | string | SHA-256 hash of raw content when raw content is withheld. |
 | `rawContentRef` | no | string | Local artifact ref only; never external URL in R1. |
 | `redactionApplied` | yes | boolean | True if redactor changed content. |
-| `ruleId` | no | string | Analyzer or policy rule identifier when known. |
+| `ruleId` | no | string | Support signal extractor or policy rule identifier when known. |
 | `helpUri` | no | URL | Rule help URL after allowlist validation; omitted from default Markdown unless safe. |
 | `cwe` | no | string[] | CWE IDs for security findings when known. |
 | `relatedLocations` | no | `RelatedLocation[]` | Supporting locations. |
@@ -137,6 +152,105 @@ timestamps.
 Raw source snippets must not be stored in `summary`. If raw content is needed
 for debugging, `rawContentRef` points to an artifact excluded from default
 publishing and marked sensitive.
+
+## DeterministicSignal
+
+Deterministic signals are support data for model context, proof/refutation, and
+admission safety. They are not the primary production issue-discovery product.
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `id` | yes | string | Stable within run. |
+| `kind` | yes | `"line-anchor" | "symbol-span" | "import-edge" | "test-hint" | "config-hint" | "scope-check" | "duplicate-key" | "contradiction" | "external-tool-summary"` | Closed enum. |
+| `path` | conditional | repositoryRelativePath | Required for file-backed signals. |
+| `location` | no | `CodeLocation` | Must resolve when present. |
+| `summary` | yes | string 1..500 | Redacted and report-safe. |
+| `evidenceIds` | yes | evidence ID array | May be empty for scope-only signals. |
+
+Signals may corroborate or contradict a model proof packet, but signals from
+CodeQL/linter/build/test-equivalent categories should be de-prioritized unless
+the model adds semantic context not normally reported by those tools.
+Support-signal overlap is never sufficient to make a model-origin candidate
+actionable without a complete proof packet and proved refutation result.
+
+## ModelSuspicion
+
+Model suspicions are hypotheses and must not be rendered as actionable findings.
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `id` | yes | `suspicionId` | Stable within run. |
+| `taskId` | yes | `taskId` | Origin task. |
+| `category` | yes | `FindingCategory` | Closed enum. |
+| `severityHint` | yes | `Severity` | Initial severity hint, not final severity. |
+| `title` | yes | string 1..120 | No markdown tables or raw code block. |
+| `hypothesis` | yes | string 1..1200 | Must describe suspected changed behavior and impact. |
+| `primaryLocation` | no | `CodeLocation` | Optional before investigation; must resolve when present. |
+| `contextRequests` | yes | `ContextRequest[]` max 10 | Structured bounded read/list/grep requests for runtime-mediated investigation. Preferred over prose requests. |
+| `requestedContext` | yes | string[] max 10 | Human-readable bounded repository context requests for audit/fallback compatibility. |
+| `evidenceIds` | yes | evidence ID array | Initial diff/signal evidence references. |
+| `status` | yes | `SuspicionStatus` | Current state. |
+| `proposedBy` | yes | string | Agent ID. |
+
+## InvestigationTrace
+
+Investigation traces summarize tool-mediated context access without raw source.
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `suspicionId` | yes | `suspicionId` | Source suspicion. |
+| `toolCalls` | yes | object[] | Redacted summaries with tool name, path/query hash, status, and ledger entry ID. |
+| `contextLedgerEntryIds` | yes | string[] | Every read/search/list considered by the investigation. |
+| `budget` | yes | object | Max and consumed reads/searches/model calls/tokens when available. |
+| `result` | yes | `"proof" | "refuted" | "needs-more-evidence" | "provider-error"` | Loop outcome. |
+
+## ProofPacket
+
+Proof packets are the only model-origin path to actionable admission.
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `id` | yes | `proofPacketId` | Stable within run. |
+| `suspicionId` | yes | `suspicionId` | Source suspicion. |
+| `candidateId` | yes | `candidateId` | Candidate assembled from the proof. |
+| `changedBehavior` | yes | string 1..1200 | What behavior changed in this review. |
+| `executionOrDataPath` | yes | string 1..1200 | How the behavior is reached or how data flows. |
+| `violatedInvariant` | yes | string 1..1200 | Contract, invariant, or expectation violated. |
+| `impact` | yes | string 1..1200 | User/security/reliability/performance impact. |
+| `introducedByChange` | yes | string 1..1200 | Why this PR/change introduced or exposed the issue. |
+| `evidenceIds` | yes | non-empty evidence ID array | Must include exact repository evidence and any relevant deterministic signals. |
+| `contradictionChecks` | yes | string[] | Checks performed to look for guards, alternate paths, config exemptions, or static-signal contradictions. |
+| `fixDirection` | yes | string 1..1200 | Concrete manual remediation direction. |
+
+A proof packet is incomplete when any required proof obligation is generic,
+missing, only restates the diff, or cannot be tied to evidence IDs. Incomplete
+packets must not become actionable.
+
+## RefutationResult
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `id` | yes | `refutationId` | Stable within run. |
+| `proofPacketId` | yes | `proofPacketId` | Source proof packet. |
+| `verdict` | yes | `RefutationVerdict` | Closed enum. |
+| `summary` | yes | string 1..1000 | Redacted report-safe conclusion. |
+| `evidenceIds` | yes | evidence ID array | Evidence considered by the refutation. |
+| `checks` | yes | object[] | Redacted checks for reachability, guards, framework semantics, outside-scope status, and deterministic contradictions. |
+
+Only `verdict = "proved"` can continue to actionable promotion. `refuted`,
+`needs-more-evidence`, and `provider-error` are visible to humans as rejected or
+artifact-only output according to promotion policy.
+
+## PromotionDecision
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `candidateId` | yes | `candidateId` | Source candidate. |
+| `proofPacketId` | no | `proofPacketId` | Required for model-origin actionable decisions. |
+| `refutationId` | no | `refutationId` | Required for model-origin actionable decisions. |
+| `status` | yes | `PromotionDecisionStatus` | Closed enum. |
+| `reason` | yes | string 1..500 | Redacted and deterministic. |
+| `policy` | yes | string | Promotion policy version/hash. |
 
 ## CandidateFinding
 
@@ -149,11 +263,16 @@ publishing and marked sensitive.
 | `title` | yes | string 1..120 | No markdown tables or raw code block. |
 | `description` | yes | string 1..1200 | Must describe impact. |
 | `location` | yes | `CodeLocation` | Candidate location. |
-| `evidenceIds` | yes | non-empty string[] | References existing evidence. |
-| `proposedBy` | yes | string | Agent/analyzer ID. |
-| `confidence` | no | number 0..1 | Informational only; not admission proof. |
+| `evidenceIds` | yes | string[] | References existing evidence when the candidate cites exact task evidence; may be empty before validation. |
+| `proposedBy` | yes | string | Agent or deterministic signal source ID. |
 | `suggestedFix` | no | string <= 1200 | Text only in R1; no patch application. |
 | `fixProposal` | no | `FixProposal` | Evidence-linked manual fix proposal. Preferred over `suggestedFix` for structured output. |
+
+Model-origin candidates must be assembled from a `ProofPacket`, not directly
+from raw model suspicion output. Task evidence and deterministic signals are
+optional corroborating inputs and must be cited explicitly; they are not
+inferred from same-path source context. Model-generated confidence scores are
+not part of the review contract.
 
 ## FixProposal
 
@@ -188,11 +307,13 @@ All `CandidateFinding` fields plus:
 | `admittedAt` | yes | ISO datetime | UTC. |
 | `admissionEvidenceIds` | yes | non-empty string[] | Evidence used by gate. |
 | `reporterEligibility` | yes | `ReporterEligibility` | Inline only when diff line is valid and severity is at least configured inline threshold. |
-| `provenance` | yes | `FindingProvenance` | Model/analyzer/config versions. |
+| `provenance` | yes | `FindingProvenance` | Model/signal/config versions. |
+| `proofPacketId` | conditional | `proofPacketId` | Required for model-origin admitted findings. |
+| `refutationId` | conditional | `refutationId` | Required for model-origin admitted findings. |
 | `baselineStatus` | yes | `BaselineStatus` | `existing` when matched against the configured baseline, `unknown` when a baseline is explicitly configured but its file is missing/indeterminate, otherwise `new`. |
 | `fingerprints` | yes | non-empty `FindingFingerprint[]` | Used for de-duplication and baseline matching. |
 | `securitySeverity` | no | number 0..10 | CVSS-like numeric severity for security findings when available. |
-| `ruleId` | no | string | Stable analyzer or policy rule identifier when known. |
+| `ruleId` | no | string | Stable signal or policy rule identifier when known. |
 | `helpUri` | no | URL | Rule help URL after allowlist validation. |
 | `cwe` | no | string[] | CWE IDs when known. |
 | `relatedLocations` | no | `RelatedLocation[]` | Supporting locations. |
@@ -218,8 +339,54 @@ All `CandidateFinding` fields plus:
 | `promptHash` | no | SHA-256 |
 | `instructionHashes` | yes | string[] |
 | `skillHashes` | yes | string[] |
-| `analyzerVersions` | yes | record string->string |
+| `signalVersions` | yes | record string->string |
 | `configHash` | yes | SHA-256 |
+
+## ReviewIntent
+
+Review intents describe the workflow's end-to-end verification plan. They are
+report artifacts, not findings.
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `id` | yes | `intentId` | Stable within run. |
+| `title` | yes | string 1..120 | Human-readable intent name. |
+| `objective` | yes | string 1..1200 | What the worker should verify end to end. |
+| `paths` | yes | repository-relative path[] | Must be covered by referenced tasks. |
+| `taskIds` | yes | `taskId[]` | Referenced review tasks. |
+| `focusAreas` | yes | string[] max 8 | Concrete behaviors to verify. |
+| `riskAreas` | yes | string[] max 8 | Risk categories or failure modes. |
+| `verificationQuestions` | yes | string[] max 8 | Compact proof questions the worker, investigator, aggregate critic, or optional judge should answer before accepting the intent. |
+| `source` | yes | `"deterministic" | "model"` | Planner source. |
+
+## FindingJudgeResult
+
+Judge results summarize the optional critic pass for model-origin candidates
+that already passed refutation.
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `id` | yes | `judgeId` | Stable within run. |
+| `candidateId` | yes | `candidateId` | Judged candidate. |
+| `verdict` | yes | `FindingJudgeVerdict` | Closed enum. |
+| `summary` | yes | string 1..1000 | Report-safe explanation of the verdict. |
+| `challengeQuestions` | yes | string[] max 8 | Report-safe assumptions and proof questions the critic checked before accepting or rejecting. |
+| `verificationChecks` | yes | `VerificationCheck[]` max 8 | Report-safe structured checks with `kind`, `passed | failed | unknown`, summary, and evidence IDs. |
+| `contextRequests` | yes | `ContextRequest[]` max 6 | Structured bounded read/list/grep requests with tool, optional path/query, and reason. Preferred over prose requests. |
+| `requestedContext` | yes | string[] max 6 | Report-safe bounded read/list/grep context requests made by the critic before final verdict. Empty when no follow-up was requested. |
+| `evidenceIds` | yes | evidence ID array | Evidence explicitly cited by the judge after unknown IDs are discarded. Empty means the critic did not cite decisive evidence; the workflow must not backfill proof or refutation evidence, and decisive `valid` or `false-positive` output without cited evidence is recorded as `needs-more-evidence`. |
+| `proofPacketId` | no | `proofPacketId` | Related proof packet when present. |
+| `refutationId` | no | `refutationId` | Related refutation when present. |
+
+## FindingAggregateResult
+
+Aggregate results summarize the optional batch critic pass for related proved
+model-origin candidates. Result and decision evidence IDs contain only evidence
+explicitly cited by the aggregate critic after unknown IDs are discarded.
+Decisive result verdict `valid` without cited evidence, and decisive
+per-candidate `valid` or `false-positive` decision output without cited
+evidence, is recorded as `needs-more-evidence`; the workflow must not backfill
+proof or refutation evidence into aggregate results or decisions.
 
 ## ReviewReport
 
@@ -233,6 +400,15 @@ All `CandidateFinding` fields plus:
 | `evidence` | yes | `EvidenceRecord[]` |
 | `skippedFiles` | yes | `SkippedFile[]` |
 | `qualityGate` | no | `QualityGateResult` |
+| `reviewIntents` | yes | `ReviewIntent[]` |
+| `modelSuspicions` | yes | `ModelSuspicion[]` |
+| `investigationTraces` | yes | `InvestigationTrace[]` |
+| `proofPackets` | yes | `ProofPacket[]` |
+| `refutationResults` | yes | `RefutationResult[]` |
+| `aggregateResults` | yes | `FindingAggregateResult[]` |
+| `judgeResults` | yes | `FindingJudgeResult[]` |
+| `promotionDecisions` | yes | `PromotionDecision[]` |
+| `providerIssues` | yes | object[] |
 | `resolvedBaselineEntries` | no | `FindingFingerprint[]` |
 | `artifacts` | yes | `ReportArtifact[]` |
 
@@ -273,7 +449,9 @@ findings (resolved since the baseline was recorded).
 | `sha256` | yes | SHA-256 | Hash of rendered artifact. |
 | `containsSensitiveContent` | yes | boolean | Must be false for default R1 artifacts. |
 
-`report.json` is the canonical machine-readable artifact and is always written.
+`report.json` is the canonical machine-readable artifact for completed review
+runs. Partial failed runs write partial operational artifacts instead of a
+completed report.
 To avoid a self-referential hash cycle, the `artifacts` array inside
 `report.json` records non-JSON report artifacts written for the run, such as
 Markdown and SARIF. The artifact writer may separately return metadata for the
@@ -325,13 +503,18 @@ Rules:
 - use repository-relative URIs with `/` separators;
 - never embed raw source text, command lines, environment variables, local
   absolute paths, user names, or machine names;
-- map one internal finding to one SARIF result unless a future spec defines
-  aggregation;
+- map one admitted non-`artifact-only` finding to one SARIF result unless a
+  future spec defines aggregation; `artifact-only` findings remain JSON/Markdown
+  diagnostics and must not create SARIF results or driver rules;
 - map related locations and data flow into SARIF locations/code flows only
   after each path validates through `path-service`;
 - include stable partial fingerprints derived from `FindingFingerprint`;
 - set a deterministic `runAutomationDetails.id` when a configured SARIF
   category exists;
+- include provider issues in run-level `properties.providerIssues` with
+  report-safe `code`, optional `stage`, optional `recovered`, and redacted
+  optional `message` fields; provider issues are not rendered as SARIF
+  diagnostic results;
 - cap rendered results through `reporting.sarif.maxResults`;
 - define every referenced `ruleId` in `tool.driver.rules`;
 - validate the rendered file before writing it.
@@ -411,6 +594,8 @@ non-JSON formats.
 
 `schemaVersion` changes:
 
-- patch-compatible additions must be optional;
-- removing or changing required fields requires `schemaVersion` increment;
+- the agentic proof/refutation refactor is a breaking contract change and must
+  increment the report schema before implementation lands;
+- pre-refactor reports, config, and internal candidate artifacts are rejected
+  rather than translated;
 - report readers must reject unknown major versions.

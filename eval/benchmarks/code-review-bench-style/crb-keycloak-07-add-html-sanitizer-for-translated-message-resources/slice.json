@@ -1,0 +1,73 @@
+{
+  "id": "crb-keycloak-07-add-html-sanitizer-for-translated-message-resources",
+  "title": "Add HTML sanitizer for translated message resources",
+  "description": "Curated PR review case adapted from keycloak golden review comments.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prUrl": "https://github.com/keycloak/keycloak/pull/37429",
+  "prTitle": "Add HTML sanitizer for translated message resources",
+  "sourceRepo": "keycloak",
+  "upstreamOwner": "keycloak",
+  "upstreamRepo": "keycloak",
+  "baseSha": "4110b20b767b9bc3dc4a472fdda09c19c216eb4c",
+  "headSha": "50a490b304f6d043d21973230670a25a6db4665f",
+  "diff": "diff --git a/services/src/main/java/org/keycloak/authentication/Authenticator.java b/services/src/main/java/org/keycloak/authentication/Authenticator.java\nindex 0000000..1111111 100644\n--- a/services/src/main/java/org/keycloak/authentication/Authenticator.java\n+++ b/services/src/main/java/org/keycloak/authentication/Authenticator.java\n@@ -1,3 +1,7 @@\n+// Benchmark-style PR fixture: Add HTML sanitizer for translated message resources\n+// The expected findings are semantic golden review comments.\n+// Minimal source exists so the review runner can load changed files.\n+\n placeholder\n",
+  "language": "java",
+  "changedFiles": [
+    "services/src/main/java/org/keycloak/authentication/Authenticator.java"
+  ],
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "The translation is in Italian instead of Lithuanian. This should be translated to Lithuanian to match the file's locale (messages_lt.properties).",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "bug",
+      "severity": "medium",
+      "semanticSummary": "The totpStep1 value uses Traditional Chinese terms in the Simplified Chinese file (zh_CN), which is likely incorrect for this locale. Please verify the locale‑appropriate translation.",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    },
+    {
+      "category": "security",
+      "severity": "low",
+      "semanticSummary": "The anchor sanitization logic has a potential issue where it consumes English matcher groups without proper validation. If the translated text has more anchor tags than the English text, this could lead to incorrect validation results.",
+      "matchMode": "semantic-only",
+      "tier": "logic"
+    },
+    {
+      "category": "security",
+      "severity": "low",
+      "semanticSummary": "The method name 'santizeAnchors' should be 'sanitizeAnchors' (missing 'i').",
+      "matchMode": "semantic-only",
+      "tier": "nit"
+    }
+  ],
+  "expectedNoFindingZones": [
+    {
+      "path": "services/src/main/java/org/keycloak/authentication/Authenticator.java",
+      "lineRange": [
+        1,
+        6
+      ],
+      "reason": "Fixture preamble and unchanged scaffolding should not produce review findings."
+    }
+  ],
+  "tags": [
+    "api-contract",
+    "authentication",
+    "code-review-bench-style",
+    "cross-file",
+    "curated-pr",
+    "java",
+    "keycloak",
+    "local-logic",
+    "security",
+    "semantic"
+  ]
+}

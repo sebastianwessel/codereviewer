@@ -43,7 +43,7 @@ describe('drift CLI', () => {
     const root = await createRoot()
 
     try {
-      await writeFile(join(root, 'README.md'), 'Old .codereviewer path\n')
+      await writeFile(join(root, 'README.md'), `Old .${'review'} path\n`)
       await writeFile(join(root, 'schema', 'codereviewer-config.schema.json'), '{"a":1}\n')
       await writeFile(join(root, 'specs', '03-contracts', 'config.schema.json'), '{"a":2}\n')
 

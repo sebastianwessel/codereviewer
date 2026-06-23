@@ -1,0 +1,41 @@
+{
+  "id": "crb-noise-java-private-rename",
+  "title": "Rename private local variable",
+  "description": "Curated PR-style negative case for precision and no-finding-zone evaluation.",
+  "source": "code-review-bench-style",
+  "sourceUrl": "https://github.com/withmartian/code-review-benchmark",
+  "sourceProfile": "captured-pr",
+  "capturedAt": "2026-06-21",
+  "prTitle": "Rename private local variable",
+  "sourceRepo": "keycloak",
+  "upstreamOwner": "keycloak",
+  "upstreamRepo": "keycloak",
+  "baseSha": "a8e992750e93e85fed15bba2d1cc488facdd9e59",
+  "headSha": "0fb2b77e1f3db5682e110b5fb47fa79d2fb37fe3",
+  "diff": "diff --git a/services/src/main/java/org/keycloak/util/Names.java b/services/src/main/java/org/keycloak/util/Names.java\nindex 0000000..1111111 100644\n--- a/services/src/main/java/org/keycloak/util/Names.java\n+++ b/services/src/main/java/org/keycloak/util/Names.java\n@@ -1,2 +1,5 @@\n+// Safe PR-style fixture: Rename private local variable\n+// Expected behavior: no actionable review finding.\n+\n unchanged\n",
+  "language": "java",
+  "changedFiles": [
+    "services/src/main/java/org/keycloak/util/Names.java"
+  ],
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "services/src/main/java/org/keycloak/util/Names.java",
+      "lineRange": [
+        1,
+        20
+      ],
+      "reason": "Safe PR-style change should not produce an actionable finding."
+    }
+  ],
+  "tags": [
+    "authentication",
+    "code-review-bench-style",
+    "curated-pr",
+    "java",
+    "keycloak",
+    "negative",
+    "no-finding-zone",
+    "precision"
+  ]
+}

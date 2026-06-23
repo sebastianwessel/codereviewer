@@ -10,8 +10,8 @@ flowchart LR
   Typecheck --> Drift["Drift Check"]
   Drift --> Test["Tests"]
   Test --> Review["Review"]
-  Review --> Analysis["Local structural analysis"]
-  Analysis --> Workers["Bounded review workers"]
+  Review --> Signals["Deterministic support signals"]
+  Signals --> Workers["Bounded review workers"]
   Workers --> Reports["Report gates"]
   Reports --> Artifacts["Upload Artifacts"]
 ```
@@ -42,10 +42,11 @@ npm ci --ignore-scripts
 npm rebuild @ast-grep/napi esbuild
 ```
 
-The review command runs ast-grep-backed structural analysis locally through
-`@ast-grep/napi`. It does not require a separate ast-grep CLI step. If the CI
-runner installs with `--ignore-scripts`, rebuild `@ast-grep/napi` before
-typecheck, tests, or review so the analyzer stage can load its native binding.
+The review command can use ast-grep-backed structural parsing locally through
+`@ast-grep/napi` as part of deterministic support-signal extraction. It does
+not require a separate ast-grep CLI step. If the CI runner installs with
+`--ignore-scripts`, rebuild `@ast-grep/napi` before typecheck, tests, or review
+so the support-signal stage can load its native binding.
 
 | Mode | Use When | Tradeoff |
 | --- | --- | --- |
@@ -59,7 +60,7 @@ typecheck, tests, or review so the analyzer stage can load its native binding.
 | --- | --- |
 | Secrets | Use CI secret storage; do not print provider keys. |
 | Dependencies | Use `npm ci` for reproducible installs. |
-| Artifacts | Upload `.review/runs/**` and `.review/eval/**`. |
+| Artifacts | Upload `.codereviewer/runs/**` and `.codereviewer/eval/**`. |
 | Caches | Cache npm packages, not `.env` or generated reports. |
 | Permissions | Start with read-only repository permissions. |
 

@@ -23,9 +23,9 @@ describe('review CLI', () => {
         environment: {}
       })
 
-      expect(result.exitCode).toBe(1)
+      expect(result.exitCode).toBe(0)
       expect(result.stderr).toBe('')
-      expect(result.stdout).toContain('"qualityGatePassed": false')
+      expect(result.stdout).toContain('"qualityGatePassed": true')
       expect(result.stdout).not.toContain('test-run')
 
       const artifactDir = JSON.parse(result.stdout).artifactDir as string
@@ -47,19 +47,23 @@ describe('review CLI', () => {
         await readFile(join(root, artifactDir, 'observability.json'), 'utf8')
       )
       expect(report.run.provider).toBeUndefined()
-      expect(report.admittedFindings).toHaveLength(1)
-      expect(sharedContext.tasks.length).toBeGreaterThan(0)
+      expect(report.admittedFindings).toHaveLength(0)
+      expect(report.evidence).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'diagnostic',
+            source: 'typescript-support-signal'
+          })
+        ])
+      )
+      expect(sharedContext.taskEvents.length).toBeGreaterThan(0)
       expect(observability.events).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ type: 'run-started' }),
           expect.objectContaining({ type: 'task-event' })
         ])
       )
-      expect(sharedContext.admittedFindings).toHaveLength(1)
-      expect(report.admittedFindings[0].title).toContain('Parse diagnostic')
-      expect(report.admittedFindings[0].fixProposal).toMatchObject({
-        safety: 'manual-review'
-      })
+      expect(sharedContext.admittedFindings).toHaveLength(0)
       expect(report.artifacts).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ format: 'markdown', path: 'report.md' }),
@@ -72,7 +76,7 @@ describe('review CLI', () => {
         'utf8'
       )
       expect(markdown).toContain('# Review Report')
-      expect(markdown).toContain('Suggested fix:')
+      expect(markdown).not.toContain('Suggested fix:')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -115,15 +119,15 @@ describe('review CLI', () => {
 
     try {
       await mkdir(join(root, 'src'), { recursive: true })
-      await mkdir(join(root, '.review', 'instructions'), { recursive: true })
-      await mkdir(join(root, '.review', 'skills', 'security'), { recursive: true })
+      await mkdir(join(root, '.codereviewer', 'instructions'), { recursive: true })
+      await mkdir(join(root, '.codereviewer', 'skills', 'security'), { recursive: true })
       await writeFile(join(root, 'src', 'app.ts'), 'export const value = ;\n')
       await writeFile(
-        join(root, '.review', 'instructions', 'review.md'),
+        join(root, '.codereviewer', 'instructions', 'review.md'),
         `Prefer minimal, evidence-backed findings. sk-proj-secret\n${'x'.repeat(12000)}`
       )
       await writeFile(
-        join(root, '.review', 'skills', 'security', 'SKILL.md'),
+        join(root, '.codereviewer', 'skills', 'security', 'SKILL.md'),
         [
           '---',
           'name: security',
@@ -133,19 +137,19 @@ describe('review CLI', () => {
           'Check auth-sensitive code paths. sk-proj-skill-secret'
         ].join('\n')
       )
-      await mkdir(join(root, '.review'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
       await writeFile(
-        join(root, '.review', 'config.json'),
+        join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
           review: {
             contextMaxBytes: 10000
           },
           instructions: {
-            files: ['.review/instructions/review.md']
+            files: ['.codereviewer/instructions/review.md']
           },
           skills: {
             enabled: true,
-            directories: ['.review/skills']
+            directories: ['.codereviewer/skills']
           }
         })
       )
@@ -155,7 +159,7 @@ describe('review CLI', () => {
         environment: {}
       })
 
-      expect(result.exitCode).toBe(1)
+      expect(result.exitCode).toBe(0)
       const artifactDir = JSON.parse(result.stdout).artifactDir as string
       const ledger = JSON.parse(
         await readFile(join(root, artifactDir, 'context-ledger.json'), 'utf8')
@@ -165,12 +169,12 @@ describe('review CLI', () => {
         expect.arrayContaining([
           expect.objectContaining({
             kind: 'instruction',
-            path: '.review/instructions/review.md',
+            path: '.codereviewer/instructions/review.md',
             decision: 'included'
           }),
           expect.objectContaining({
             kind: 'skill',
-            path: '.review/skills/security/SKILL.md'
+            path: '.codereviewer/skills/security/SKILL.md'
           })
         ])
       )
@@ -181,18 +185,8 @@ describe('review CLI', () => {
       )
       expect(reportContent).not.toContain('sk-proj')
 
-      // Provenance must record the instruction and skill source hashes that
-      // shaped the finding (audit trail), even on the deterministic path.
       const report = JSON.parse(reportContent)
-      const provenance = report.admittedFindings[0].provenance
-      expect(provenance.instructionHashes.length).toBeGreaterThan(0)
-      expect(provenance.skillHashes.length).toBeGreaterThan(0)
-      for (const hash of [
-        ...provenance.instructionHashes,
-        ...provenance.skillHashes
-      ]) {
-        expect(hash).toMatch(/^[a-f0-9]{64}$/u)
-      }
+      expect(report.admittedFindings).toEqual([])
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -203,13 +197,13 @@ describe('review CLI', () => {
 
     try {
       await mkdir(join(root, 'src'), { recursive: true })
-      await mkdir(join(root, '.review'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
       await writeFile(
         join(root, 'src', 'large.ts'),
         `export const value = 1;\n${'// filler\n'.repeat(1200)}`
       )
       await writeFile(
-        join(root, '.review', 'config.json'),
+        join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
           review: {
             contextMaxBytes: 10000
@@ -258,13 +252,13 @@ describe('review CLI', () => {
 
     try {
       await mkdir(join(root, 'src'), { recursive: true })
-      await mkdir(join(root, '.review'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
       await writeFile(
         join(root, 'src', 'large.ts'),
         `export const value = 1;\n${'// filler\n'.repeat(120000)}`
       )
       await writeFile(
-        join(root, '.review', 'config.json'),
+        join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
           review: {
             maxFileBytes: 2000000
@@ -322,10 +316,10 @@ describe('review CLI', () => {
 
     try {
       await mkdir(join(root, 'src'), { recursive: true })
-      await mkdir(join(root, '.review'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
       await writeFile(join(root, 'src', 'app.ts'), 'export const value = ;\n')
       await writeFile(
-        join(root, '.review', 'config.json'),
+        join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
           provider: {
             id: 'openai',

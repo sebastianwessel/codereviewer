@@ -9,16 +9,42 @@ describe('CodeReviewerConfigSchema', () => {
     expect(parsed.review.depth).toBe('balanced')
     expect(parsed.instructions.files).toEqual([])
     expect(parsed.skills.enabled).toBe(false)
+    expect(parsed.skills.directories).toEqual(['.codereviewer/skills'])
     expect(parsed.skills.allowTools).toEqual(['read', 'list', 'grep'])
+    expect(parsed.paths.artifactDir).toBe('.codereviewer/runs')
+    expect(parsed.baseline.path).toBe('.codereviewer/baseline.json')
+    expect(parsed.qualityGate).toEqual({
+      maxCritical: 0,
+      maxHigh: 0,
+      failOnProviderError: true
+    })
+    expect(parsed.aiReview).toEqual({
+      requireRefutation: true,
+      intentPlanning: 'auto',
+      judgeFindings: false,
+      externalStaticAnalysisAssumed: true,
+      deterministicSignalMode: 'support',
+      policyReviewPass: false,
+      actionableSeverityThreshold: 'medium'
+    })
+    expect(parsed.promotionPolicy).toEqual({
+      modelProof: 'actionable',
+      modelSuspicion: 'artifact-only',
+      modelWeakOrRefuted: 'artifact-only',
+      deterministicSignalOnly: 'artifact-only',
+      staticAnalysisDuplicate: 'artifact-only',
+      deterministicContradiction: 'rejected'
+    })
     expect(parsed.paths.exclude).toEqual(
       expect.arrayContaining([
         '.git/**',
         'node_modules/**',
         'dist/**',
         'coverage/**',
-        '.review/**'
+        '.codereviewer/**'
       ])
     )
+    expect(parsed.paths.exclude).not.toContain(`.${'review'}/**`)
     expect(parsed.security.captureContentTelemetry).toBe(false)
     expect(parsed.drift).toEqual({
       enabled: true,
@@ -51,6 +77,16 @@ describe('CodeReviewerConfigSchema', () => {
   test('rejects unknown top-level and nested keys', () => {
     expect(() => CodeReviewerConfigSchema.parse({ unknown: true })).toThrow()
     expect(() => CodeReviewerConfigSchema.parse({ review: { unknown: true } })).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        qualityGate: { minEvidenceLevel: 'model-ok' }
+      })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        promotionPolicy: { deterministicSignalOnly: 'actionable' }
+      })
+    ).toThrow()
   })
 
   test('rejects unsafe repository-relative paths', () => {

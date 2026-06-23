@@ -12,7 +12,8 @@ const allKinds: readonly ContextLedgerKind[] = [
   'symbol',
   'instruction',
   'skill',
-  'analyzer-output',
+  'support-signal-output',
+  'tool-result',
   'prior-artifact'
 ]
 
@@ -28,7 +29,7 @@ describe('context ledger', () => {
     const entries = allKinds.flatMap((kind) =>
       allDecisions.map((decision) => {
         const entryPath =
-          kind === 'analyzer-output' ? undefined : `context/${kind}.txt`
+          kind === 'support-signal-output' ? undefined : `context/${kind}.txt`
 
         return createContextLedgerEntry({
           kind,
@@ -96,14 +97,14 @@ describe('context ledger', () => {
   test('makes instruction and skill truncation explicit', () => {
     const instructionEntry = createTextContextLedgerEntry({
       kind: 'instruction',
-      path: '.review/instructions.md',
+      path: '.codereviewer/instructions.md',
       reason: 'context-budget',
       text: 'abcdef',
       maxBytes: 4
     })
     const skillEntry = createTextContextLedgerEntry({
       kind: 'skill',
-      path: '.review/skills/review.md',
+      path: '.codereviewer/skills/review.md',
       reason: 'context-budget',
       text: '0123456789',
       maxBytes: 5

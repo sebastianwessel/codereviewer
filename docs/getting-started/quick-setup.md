@@ -41,16 +41,18 @@ CI secret store.
 npx tsx src/cli/main.ts config validate
 ```
 
-Missing `.review/config.json` is valid. Built-in defaults are applied and
+Missing `.codereviewer/config.json` is valid. Built-in defaults are applied and
 environment overrides are merged on top.
 
 ## Current Usable Review Commands
 
 ```bash
 npx tsx src/cli/main.ts review --file src/app.ts
-npx tsx src/cli/main.ts eval run
+npm run eval
 ```
 
-The review command writes run artifacts under `.review/runs/`. Evaluation uses
-development fixtures under `eval/fixtures/`, writes `.review/eval/`, prints a
-human-readable summary, and does not load the root `.env` file.
+The review command writes run artifacts under `.codereviewer/runs/`. Evaluation uses
+development fixtures under `eval/fixtures/`, writes `.codereviewer/eval/`, prints a
+human-readable summary, and does not load `.env` for the deterministic default.
+Use `npm run eval:with-env` or `npm run eval:semantic` when provider-backed
+eval should use `.env`.

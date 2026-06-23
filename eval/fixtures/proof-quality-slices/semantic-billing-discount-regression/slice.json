@@ -1,0 +1,21 @@
+{
+  "id": "semantic-billing-discount-regression",
+  "title": "Prorated billing path ignores discounts",
+  "description": "A project-owned semantic review case where one branch of a business-rule calculation omits the discount applied elsewhere.",
+  "source": "project-owned",
+  "capturedAt": "2026-06-22",
+  "language": "typescript",
+  "changedFiles": ["src/billing.ts"],
+  "diff": "diff --git a/src/billing.ts b/src/billing.ts\n--- a/src/billing.ts\n+++ b/src/billing.ts\n@@ -10,7 +10,7 @@ export const totalDueCents = (items: readonly InvoiceItem[]): number =>\n     const subtotal = item.quantity * item.unitCents\n \n     if (item.prorated) {\n-      return total + subtotal - item.discountCents\n+      return total + subtotal\n     }\n \n     return total + subtotal - item.discountCents\n",
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "path": "src/billing.ts",
+      "lineRange": [13, 13],
+      "semanticSummary": "prorated invoice items skip discountCents while non-prorated items subtract it, so discounted prorated items are overcharged"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": ["slice", "project-owned", "semantic", "proof-quality", "business-logic", "positive"]
+}
