@@ -260,32 +260,6 @@ See [Artifacts Reference](artifacts.md) for a description of each output file.
 | --- | --- | --- |
 | `evaluation.enabled` | boolean | Enable the evaluation harness. |
 
-### Eval regression gate thresholds
-
-The saved `eval-report.json` records the thresholds used when the regression
-gate was evaluated. Each field is optional; when unset the corresponding gate
-check is skipped.
-
-| Threshold | Description |
-| --- | --- |
-| `minParseValidity` | Minimum fraction of cases with a valid parse. |
-| `minRecall` | Minimum overall recall. |
-| `minPrecision` | Minimum overall precision. |
-| `minSeverityWeightedF1` | Minimum severity-weighted F1. |
-| `maxFalsePositiveCount` | Maximum total false positives. |
-| `maxCommentsPerKloc` | Maximum comments per thousand changed lines. |
-| `maxCommentsPerDiffHunk` | Maximum comments per diff hunk. |
-| `maxIncompleteCoverageRate` | Maximum fraction of cases with incomplete coverage. |
-| `maxContextMutationRate` | Maximum fraction of context entries that were mutated. |
-| `maxCostUsd` | Maximum total cost in USD. |
-| `maxDurationMs` | Maximum total duration in milliseconds. |
-| `minProductRecall` | Minimum recall over `runtime-critical`, `security`, and `logic` tiers (excluding `nit`). This is the primary accuracy target gate. |
-| `minSuspicionStageCoverage` | Minimum fraction of non-provider-error cases that produced at least one model suspicion. |
-| `minJudgeCoverage` | Minimum judged candidates divided by actionable-promoted proofs. Only enforced when `judgeFindings` is enabled. |
-| `failOnProviderError` | Whether any provider-errored case fails the gate. Default `true`. |
-
-`eval run` also accepts `--review-mode`, `--review-depth`, `--intent-planning`,
-and `--judge-findings` to force a review posture for one eval run without
-editing `.codereviewer/config.json`. The committed `eval:benchmark` helper uses
-the forced agentic PR-review posture by default; `eval:benchmark:baseline`
-preserves the older current-config benchmark posture for comparison.
+> **Note:** Evaluation is a from-source dev/benchmark workflow. Regression gate
+> thresholds are set via `eval run` CLI flags (not this config schema). See
+> [Evaluation](../evaluation/README.md) for the thresholds and full workflow.

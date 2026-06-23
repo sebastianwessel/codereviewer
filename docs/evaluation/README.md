@@ -7,6 +7,11 @@ expected findings and reporting recall, precision, and pipeline coverage metrics
 Fixtures live under `eval/fixtures/`. Artifacts are written under
 `.codereviewer/eval/`.
 
+> **Note:** Evaluation is a from-source dev and benchmarking workflow. It runs
+> from a cloned repository using `npm run …` (and `npm run cli -- eval …`), not
+> the published `@sebastianwessel/codereviewer` package or the `codereviewer`
+> binary.
+
 ---
 
 ## Quick start
@@ -58,13 +63,74 @@ convenience copies):
 
 | File | Purpose |
 | --- | --- |
-| `eval-report.json` | Regression metrics, selected fixture metadata, grouped metrics, and fixture results. |
-| `eval-summary.md` | Human-readable selection, gate result, metric tables, case table, and failure details. |
+| `eval-report.json` | Evaluation selection metadata, aggregate metrics, grouped metrics, case results, context ledger kind summaries, provider issues, and artifact-derived agentic stage coverage. |
+| `eval-summary.md` | Human-readable selection, grouped metrics, gate result, metric tables, case table, context ledger kind coverage, agentic stage coverage, and failure details. |
 | `eval-recall-report.md` | Per-expected-finding recall report for the current run. |
 
 Each run is also archived under `.codereviewer/eval/runs/<run-id>/` with the
-same three artifacts, so a cheap smoke run does not overwrite the report from
-an earlier benchmark run.
+same three artifacts, so a smoke run does not overwrite the report from an
+earlier benchmark run.
+
+### `eval-report.json`
+
+Records:
+
+- `selection.fixtureSource`
+- `selection.sliceRoot` (when `--slice-root` was used)
+- `selection.caseFilters`
+- `selection.selectedCaseIds`
+- `metricGroups` for source profile, language, and tag — grouped metrics use
+  the same deterministic metric contract as top-level report metrics
+
+Each case result contains sanitized `expectedFindings` metadata (expected
+index, category, severity, optional path/line range, match mode, and semantic
+summary — no source snippets) so saved reports can be analyzed later without
+the original fixture files.
+
+Case results also record `duplicateFindingIds`, sanitized duplicate summaries,
+token totals, `costUsd`, and `costUnavailable`. Duplicate findings are
+same-location repeats of matched expected findings; they are visible as review
+noise but are not counted as false positives.
+
+### Aggregate metrics
+
+| Metric | Description |
+| --- | --- |
+| `recallByTier` | Recall per intent tier: `runtime-critical`, `security`, `logic`, `nit`. |
+| `precisionByTier` | Precision mirrored per tier (same computation as `recallByTier`; admitted findings carry no expected-tier label so precise per-tier precision is not derivable). |
+| `productRecall` | Headline recall over `runtime-critical`, `security`, and `logic` tiers, excluding `nit`. This is the primary accuracy target. |
+| `nitRecall` | Recall over `nit`-tier findings. Reported for visibility but not gated. |
+| `suspicionStageCoverage` | Fraction of non-provider-error cases that produced at least one model suspicion. |
+| `judgeCoverage` | When `judgeFindings` is enabled, judged candidates divided by actionable-promoted proofs. |
+| `duplicateFindingCount` | Total duplicate findings across all cases. |
+| `inputTokens` | Aggregate input token total. |
+| `outputTokens` | Aggregate output token total. |
+| `costUnavailableCount` | Cases where cost could not be computed. |
+
+### Regression gate thresholds
+
+The saved `eval-report.json` records the thresholds used when the regression
+gate was evaluated. Each threshold is set via an `eval run` CLI flag (not the
+`.codereviewer/config.json` schema) and is optional; when unset the
+corresponding gate check is skipped.
+
+| Threshold | Description |
+| --- | --- |
+| `minParseValidity` | Minimum fraction of cases with a valid parse. |
+| `minRecall` | Minimum overall recall. |
+| `minPrecision` | Minimum overall precision. |
+| `minSeverityWeightedF1` | Minimum severity-weighted F1. |
+| `maxFalsePositiveCount` | Maximum total false positives. |
+| `maxCommentsPerKloc` | Maximum comments per thousand changed lines. |
+| `maxCommentsPerDiffHunk` | Maximum comments per diff hunk. |
+| `maxIncompleteCoverageRate` | Maximum fraction of cases with incomplete coverage. |
+| `maxContextMutationRate` | Maximum fraction of context entries that were mutated. |
+| `maxCostUsd` | Maximum total cost in USD. |
+| `maxDurationMs` | Maximum total duration in milliseconds. |
+| `minProductRecall` | Minimum recall over `runtime-critical`, `security`, and `logic` tiers (excluding `nit`). This is the primary accuracy target gate. Fails if `productRecall` is below the configured value. |
+| `minSuspicionStageCoverage` | Minimum fraction of non-provider-error cases that produced at least one model suspicion. Fails if `suspicionStageCoverage` is below the configured value. |
+| `minJudgeCoverage` | Minimum judged candidates divided by actionable-promoted proofs. Only enforced when `judgeFindings` is enabled. |
+| `failOnProviderError` | Whether any provider-errored case fails the gate. Default `true`. |
 
 ---
 
@@ -199,6 +265,31 @@ npm run cli -- eval run --slice-root eval/benchmarks/crb --case crb-sentry-1
 subset while tuning prompts or provider settings. These values are persisted in
 `eval-report.json` for reproducible same-dataset comparison.
 
+### Flags — `eval run`
+
+| Flag | Description |
+| --- | --- |
+| `--slice-root <path>` | Run only self-contained slice cases from a repository-relative local benchmark directory. |
+| `--case <id>` | Filter loaded cases by exact case ID. Repeat for multiple IDs. |
+| `--max-concurrent-tasks <1-32>` | Override review task/provider-call concurrency for this eval run without changing repository config. |
+| `--review-mode <local\|ci\|pr\|full>` | Force the review mode for this run without editing config. |
+| `--review-depth <fast\|balanced\|thorough>` | Force the review depth for this run without editing config. |
+| `--intent-planning <auto\|deterministic\|model>` | Force intent-planning mode for this run. |
+| `--judge-findings` | Enable the optional judge critic for this run. |
+| `--semantic-judge` | Use provider-backed semantic matching (for explicit benchmark scoring only; the default matcher is deterministic and offline). |
+| `--debug` | Emit no-content stage logs. |
+| `--log-file <path>` | Write newline-delimited JSON logs to a repository-relative file. |
+
+The generated report records the fixture source, slice root, filters, selected
+case IDs, scoring mode, and grouped metrics so reports can be compared only
+after confirming they used the same case set and semantic matcher.
+
+`--max-concurrent-tasks` is useful for focused provider-backed benchmark runs
+where serial execution avoids transient provider timeout noise. The
+`--review-mode`, `--review-depth`, `--intent-planning`, and `--judge-findings`
+flags are intended for apples-to-apples benchmark experiments, especially when
+comparing the agentic PR-review path against the default local/balanced path.
+
 ### Compare two saved reports
 
 ```bash
@@ -241,6 +332,14 @@ npm run cli -- eval recall-report \
 Without `--report`, reads `.codereviewer/eval/eval-report.json`. Output shows
 whether selected case sets are identical, then lists expected findings with
 detection rates and run marks.
+
+### Flags — `eval compare` / `eval recall-report`
+
+| Flag | Description |
+| --- | --- |
+| `--base <path>` | Base evaluation report JSON for comparison. |
+| `--head <path>` | Head evaluation report JSON for comparison. |
+| `--report <path>` | Report file(s) for `recall-report`. Without `--report`, reads `.codereviewer/eval/eval-report.json`. Repeat for multiple reports. |
 
 ### Fingerprint a local slice pack
 
@@ -347,9 +446,9 @@ keeps cases reviewable by humans while still exercising the normal review runner
 
 ## Related docs
 
-- [Reports and artifacts](reports-and-artifacts.md) — full artifact schema for
-  review run outputs.
+- [Reports and artifacts](../guides/reports-and-artifacts.md) — full artifact
+  schema for review run outputs.
 - [Architecture](../concepts/architecture.md) — the evaluation harness section
   at the end of the architecture doc.
-- [Configuration guide](configuration.md) — `aiReview.judgeFindings` and depth
-  settings used by the benchmark posture.
+- [Configuration guide](../guides/configuration.md) — `aiReview.judgeFindings`
+  and depth settings used by the benchmark posture.

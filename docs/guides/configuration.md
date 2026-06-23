@@ -25,7 +25,7 @@ for local review runs.
 No config file is required. To confirm the built-in defaults are valid:
 
 ```bash
-npx tsx src/cli/main.ts config validate
+codereviewer config validate
 ```
 
 ---

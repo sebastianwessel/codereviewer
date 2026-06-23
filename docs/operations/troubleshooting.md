@@ -38,12 +38,10 @@ condition and a recommended response:
 
 ## Useful Checks
 
-Run these to confirm the toolchain and config before retrying a review:
+Run this to confirm the effective config before retrying a review:
 
 ```bash
-npm run typecheck
-npm test
-npx tsx src/cli/main.ts config validate
+codereviewer config validate
 ```
 
 > **Tip:** If provider credentials are involved, verify `.env` or CI secrets

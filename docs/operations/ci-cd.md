@@ -11,11 +11,10 @@ This page covers the recommended pipeline shape, the commands and exit codes, a 
 ```mermaid
 flowchart LR
   Checkout["Checkout"] --> Setup["Setup Node"]
-  Setup --> Install["npm ci"]
-  Install --> Typecheck["Typecheck"]
-  Typecheck --> Drift["Drift Check"]
-  Drift --> Test["Tests"]
-  Test --> Review["Review"]
+  Setup --> Install["Install CLI"]
+  Install --> Drift["Drift Check"]
+  Drift --> Validate["Config Validate"]
+  Validate --> Review["Review"]
   Review --> Signals["Deterministic support signals"]
   Signals --> Workers["Bounded review workers"]
   Workers --> Reports["Report gates"]
@@ -26,15 +25,13 @@ flowchart LR
 
 ## Commands
 
-Run these steps in order in your pipeline:
+Install the published CLI, then run these steps in order in your pipeline:
 
 ```bash
-npm ci
-npm run typecheck
-npx tsx src/cli/main.ts drift check
-npm test
-npx tsx src/cli/main.ts config validate
-npx tsx src/cli/main.ts review --base-ref origin/main --head-ref HEAD
+npm install -g @sebastianwessel/codereviewer
+codereviewer drift check
+codereviewer config validate
+codereviewer review --base-ref origin/main --head-ref HEAD
 ```
 
 ### Exit codes
@@ -62,12 +59,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24.15.0
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npx tsx src/cli/main.ts drift check
-      - run: npm test
-      - run: npx tsx src/cli/main.ts config validate
-      - run: npx tsx src/cli/main.ts review --base-ref origin/main --head-ref HEAD
+      - run: npm install -g @sebastianwessel/codereviewer
+      - run: codereviewer drift check
+      - run: codereviewer config validate
+      - run: codereviewer review --base-ref origin/main --head-ref HEAD
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       - uses: actions/upload-artifact@v4
@@ -81,12 +76,12 @@ jobs:
 
 ## Hardened Install Policy
 
-`npm ci` can execute dependency lifecycle scripts. In highly controlled CI,
-prefer the hardened path below and allow scripts only for reviewed packages that
-need native post-install setup:
+Installing the package can execute dependency lifecycle scripts. In highly
+controlled CI, prefer the hardened path below and allow scripts only for
+reviewed packages that need native post-install setup:
 
 ```bash
-npm ci --ignore-scripts
+npm install -g @sebastianwessel/codereviewer --ignore-scripts
 npm rebuild @ast-grep/napi esbuild
 ```
 
@@ -95,14 +90,14 @@ The review command can use ast-grep-backed structural parsing locally through
 not require a separate ast-grep CLI step.
 
 > **Warning:** If the CI runner installs with `--ignore-scripts`, rebuild
-> `@ast-grep/napi` before typecheck, tests, or review so the support-signal
-> stage can load its native binding.
+> `@ast-grep/napi` before running a review so the support-signal stage can load
+> its native binding.
 
 | Mode | Use When | Tradeoff |
 | --- | --- | --- |
-| `npm ci --ignore-scripts` | Untrusted pull requests and locked-down runners. | Some native packages may need an explicit reviewed rebuild. |
+| `npm install -g … --ignore-scripts` | Untrusted pull requests and locked-down runners. | Some native packages may need an explicit reviewed rebuild. |
 | Reviewed `npm rebuild <package>` | A dependency requires a native install step. | Keep the allowlist short and review lockfile changes. |
-| Plain `npm ci` | Trusted release branches with protected dependency updates. | Faster setup, larger supply-chain execution surface. |
+| Plain `npm install -g …` | Trusted release branches with protected dependency updates. | Faster setup, larger supply-chain execution surface. |
 
 ---
 
@@ -124,8 +119,8 @@ diff hunk.
 | Area | Recommendation |
 | --- | --- |
 | Secrets | Use CI secret storage; do not print provider keys. |
-| Dependencies | Use `npm ci` for reproducible installs. |
-| Artifacts | Upload `.codereviewer/runs/**` and `.codereviewer/eval/**`. |
+| Dependencies | Pin the CLI version for reproducible installs. |
+| Artifacts | Upload `.codereviewer/runs/**`. |
 | Caches | Cache npm packages, not `.env` or generated reports. |
 | Permissions | Start with read-only repository permissions. |
 

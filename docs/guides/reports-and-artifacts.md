@@ -156,21 +156,15 @@ provider calls.
 
 ## Evaluation artifacts
 
-Evaluation runs write a separate set of artifacts under `.codereviewer/eval/`:
-
-| File | Purpose |
-| --- | --- |
-| `eval-report.json` | Fixture source, optional slice root, exact case filters, selected case IDs, aggregate metrics, grouped metrics (source profile / language / tag), and sanitized expected-finding metadata. |
-| `eval-summary.md` | Human-readable selection, source-profile and language groups, gate result, metric tables, case table, and failure details. |
-| `eval-recall-report.md` | Per-expected-finding recall report: detection rate and run marks for each expected finding. |
-
-See the [Evaluation guide](evaluation.md) for the full evaluation workflow.
+Evaluation runs write a separate set of artifacts under `.codereviewer/eval/`.
+See [Evaluation](../evaluation/README.md) for the full evaluation workflow and
+artifact schema.
 
 ---
 
 ## Related docs
 
-- [Evaluation guide](evaluation.md) — evaluation artifacts and comparison
+- [Evaluation](../evaluation/README.md) — evaluation artifacts and comparison
   commands.
 - [Configuration guide](configuration.md) — `reporting.formats`,
   `paths.artifactDir`, and `review.inlineSeverityThreshold`.

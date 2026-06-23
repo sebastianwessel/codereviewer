@@ -10,13 +10,13 @@ contains.
 ### Review a specific file
 
 ```bash
-npx tsx src/cli/main.ts review --file src/app.ts
+codereviewer review --file src/app.ts
 ```
 
 ### Review changes relative to a base branch
 
 ```bash
-npx tsx src/cli/main.ts review --base-ref origin/main --head-ref HEAD
+codereviewer review --base-ref origin/main --head-ref HEAD
 ```
 
 ---

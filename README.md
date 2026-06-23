@@ -34,14 +34,17 @@ artifacts, and CI-friendly quality gates.
 
 > **Note:** Requires Node.js `>=24.15.0`.
 
-1. Use the repository Node version and install dependencies:
+1. Install the CLI, then run a review:
 
 ```bash
-nvm install && nvm use
-npm install
+# Global install
+npm install -g @sebastianwessel/codereviewer
+codereviewer review --base-ref origin/main --head-ref HEAD
+# Or run without installing
+npx @sebastianwessel/codereviewer review --base-ref origin/main --head-ref HEAD
 ```
 
-2. Copy the environment template and add your provider credentials:
+2. Configure provider credentials in your environment or a local `.env`:
 
 ```bash
 cp .env.example .env
@@ -49,22 +52,20 @@ cp .env.example .env
 
 See [Secrets and Env](docs/security/secrets-and-env.md) for what to fill in.
 
-3. Validate the config and run checks:
+3. Validate the config:
 
 ```bash
-npm run typecheck
-npm test
-npx tsx src/cli/main.ts config validate
+codereviewer config validate
 ```
 
 4. Run a local review:
 
 ```bash
 # Review a specific file
-npx tsx src/cli/main.ts review --file src/app.ts
+codereviewer review --file src/app.ts
 
 # Review changes relative to a base branch
-npx tsx src/cli/main.ts review --base-ref origin/main --head-ref HEAD
+codereviewer review --base-ref origin/main --head-ref HEAD
 ```
 
 ### Minimal configuration
@@ -110,7 +111,8 @@ See [Providers](docs/guides/providers.md) for full setup instructions.
 | --- | --- |
 | **Getting started** | [Quick Setup](docs/getting-started/quick-setup.md) · [First Review](docs/getting-started/first-review.md) |
 | **Concepts** | [Architecture](docs/concepts/architecture.md) · [Review Modes and Flows](docs/concepts/review-modes-and-flows.md) · [Deterministic Support Signals](docs/concepts/deterministic-support-signals.md) |
-| **Guides** | [Configuration](docs/guides/configuration.md) · [Providers](docs/guides/providers.md) · [Instructions and Skills](docs/guides/instructions-and-skills.md) · [Reports and Artifacts](docs/guides/reports-and-artifacts.md) · [Evaluation](docs/guides/evaluation.md) |
+| **Guides** | [Configuration](docs/guides/configuration.md) · [Providers](docs/guides/providers.md) · [Instructions and Skills](docs/guides/instructions-and-skills.md) · [Reports and Artifacts](docs/guides/reports-and-artifacts.md) |
+| **Evaluation** | [Evaluation & Benchmarking](docs/evaluation/README.md) |
 | **Operations** | [CI/CD](docs/operations/ci-cd.md) · [Troubleshooting](docs/operations/troubleshooting.md) · [Secrets and Env](docs/security/secrets-and-env.md) · [Data Handling](docs/security/data-handling.md) |
 | **Reference** | [CLI](docs/reference/cli.md) · [Configuration Reference](docs/reference/configuration.md) · [Environment](docs/reference/environment.md) · [Exit Codes](docs/reference/exit-codes.md) · [Artifacts](docs/reference/artifacts.md) |
 

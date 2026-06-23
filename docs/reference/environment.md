@@ -4,10 +4,9 @@ Reference for all environment variables recognized by CodeReviewer. Variables
 set in a root `.env` file override exported process environment values for
 review commands; CLI flags still win where a flag exists for the same setting.
 
-> **Note:** Plain `npm run eval` does **not** load `.env`. Provider-backed eval
-> helpers (`npm run eval:with-env`, `npm run eval:semantic`,
-> `npm run cli -- …`) load `.env` via Node's native
-> `--env-file-if-exists=.env` flag.
+> **Note:** Provider-backed CLI commands run through `npm run cli -- …` (from a
+> cloned repository) load `.env` via Node's native `--env-file-if-exists=.env`
+> flag. See [Evaluation](../evaluation/README.md) for the from-source workflow.
 
 See [Configuration Reference](configuration.md) for the full description of
 each setting and its allowed values.

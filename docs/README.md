@@ -33,7 +33,14 @@ for your specific workflow.
 | [Providers](guides/providers.md) | OpenAI, OpenAI-compatible, Bedrock, and Azure setup. |
 | [Instructions and Skills](guides/instructions-and-skills.md) | Reviewer instructions and skill directories. |
 | [Reports and Artifacts](guides/reports-and-artifacts.md) | JSON, Markdown, SARIF, and run summaries. |
-| [Evaluation](guides/evaluation.md) | Product review-runner evaluation and regression gates. |
+
+---
+
+## Evaluation
+
+| Page | Covers |
+| --- | --- |
+| [Evaluation & Benchmarking](evaluation/README.md) | From-source evaluation and benchmarking harness — fixtures, metrics, regression gates, and comparison commands. |
 
 ---
 
