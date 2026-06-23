@@ -238,6 +238,7 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
     ['CODEREVIEWER_PROVIDER_ID', ['provider', 'id']],
     ['CODEREVIEWER_PROVIDER_MODEL', ['provider', 'model']],
     ['CODEREVIEWER_PROVIDER_BASE_URL', ['provider', 'baseUrl']],
+    ['CODEREVIEWER_PROVIDER_REASONING_EFFORT', ['provider', 'reasoningEffort']],
     ['CODEREVIEWER_ARTIFACT_DIR', ['paths', 'artifactDir']],
     ['CODEREVIEWER_AI_INTENT_PLANNING', ['aiReview', 'intentPlanning']],
     [

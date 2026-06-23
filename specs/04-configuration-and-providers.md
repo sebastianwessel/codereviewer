@@ -48,6 +48,7 @@ R1 supports only these configuration environment variables:
 | `CODEREVIEWER_HEAD_REF` | `review.headRef` | string |
 | `CODEREVIEWER_PROVIDER_ID` | `provider.id` | provider ID enum |
 | `CODEREVIEWER_PROVIDER_MODEL` | `provider.model` | string |
+| `CODEREVIEWER_PROVIDER_REASONING_EFFORT` | `provider.reasoningEffort` | reasoning effort enum |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `provider.baseUrl` | URL |
 | `CODEREVIEWER_AI_INTENT_PLANNING` | `aiReview.intentPlanning` | intent planning enum |
 | `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `aiReview.deterministicSignalMode` | signal mode enum |
@@ -172,6 +173,7 @@ Provider schema:
 | `baseUrl` | conditional | URL | Required for `openai-compatible`; optional otherwise. |
 | `temperature` | no | number 0..2 | Default `0`. |
 | `maxOutputTokens` | no | integer >= 1 | Default provider adapter setting. |
+| `reasoningEffort` | no | `"minimal" \| "low" \| "medium" \| "high"` | Unset uses the provider default. Maps to the OpenAI Responses API `reasoning.effort`; raises proof/investigation quality on smaller reasoning models at higher token cost. |
 | `timeoutMs` | no | integer 1000..600000 | Default `120000`. |
 | `maxRetries` | no | integer 0..5 | Default `2`. Classified retries of provider task calls; total attempts are `maxRetries + 1`. |
 | `retryBackoffMs` | no | integer 0..60000 | Default `500`. Base delay for exponential backoff between retries. |
@@ -185,10 +187,14 @@ Provider resolver rules:
 
 - Unsupported provider parameters must be omitted before the adapter call rather
   than retried after a provider error.
-- For OpenAI `gpt-5*` models, omit `temperature` even when the normalized config
-  contains its default value.
+- For OpenAI `gpt-5*` models (including dotted minor versions such as
+  `gpt-5.4-mini`), omit `temperature` even when the normalized config contains
+  its default value — these reasoning models reject `temperature` (HTTP 400).
 - OpenAI-compatible providers keep the configured `temperature` because their
   model compatibility is provider-specific.
+- The OpenAI/OpenAI-compatible adapter uses the Responses API (`api: 'responses'`),
+  required for reasoning models with function tools. `provider.reasoningEffort`
+  is forwarded as `reasoning.effort`; chat-completions would drop it.
 
 Local development tests use `openai-compatible` by default when provider-backed
 tests are explicitly enabled. `provider.baseUrl` must be configurable by config

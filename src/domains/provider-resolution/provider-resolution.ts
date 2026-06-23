@@ -172,8 +172,11 @@ const createProviderOptions = (
   }
 }
 
+// gpt-5.x are reasoning models that reject `temperature`. The version separator
+// may be a dot (`gpt-5.4-mini`) or dash (`gpt-5-mini`), so match either; sending
+// temperature to them is an HTTP 400 (it surfaced once reasoning effort was set).
 const modelSupportsTemperatureDefault = (provider: ProviderConfig): boolean =>
-  provider.id !== 'openai' || !/^gpt-5(?:-|$)/iu.test(provider.model)
+  provider.id !== 'openai' || !/^gpt-5(?:[.-]|$)/iu.test(provider.model)
 
 const createModelAlias = (
   provider: ProviderConfig,
@@ -198,7 +201,12 @@ const createModelAlias = (
       : {}),
     ...(provider.maxOutputTokens === undefined
       ? {}
-      : { maxTokens: provider.maxOutputTokens })
+      : { maxTokens: provider.maxOutputTokens }),
+    // The OpenAI Responses adapter maps `providerOptions.reasoning_effort` to the
+    // request's `reasoning: { effort }`. Only emitted when configured.
+    ...(provider.reasoningEffort === undefined
+      ? {}
+      : { providerOptions: { reasoning_effort: provider.reasoningEffort } })
   }
 })
 

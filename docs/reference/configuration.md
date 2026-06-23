@@ -14,6 +14,7 @@
 | `provider` | `id` | `openai`, `openai-compatible`, `bedrock`, `azure` |
 | `provider` | `model` | non-empty string |
 | `provider` | `baseUrl` | URL, required for `openai-compatible` |
+| `provider` | `reasoningEffort` | `minimal`, `low`, `medium`, `high` (OpenAI Responses `reasoning.effort`; env `CODEREVIEWER_PROVIDER_REASONING_EFFORT`) |
 | `provider` | `maxRetries` | `0` to `5`; classified retries, total attempts = `maxRetries + 1` |
 | `provider` | `retryBackoffMs` | `0` to `60000`; base exponential backoff delay |
 | `provider` | `retryMaxDelayMs` | `0` to `600000`; max single wait; longer required waits fail |

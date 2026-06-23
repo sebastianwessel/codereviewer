@@ -136,6 +136,15 @@
           "minimum": 1,
           "maximum": 9007199254740991
         },
+        "reasoningEffort": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ]
+        },
         "timeoutMs": {
           "default": 120000,
           "type": "integer",

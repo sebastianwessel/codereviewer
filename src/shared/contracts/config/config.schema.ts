@@ -44,6 +44,10 @@ export const ProviderConfigSchema = z
     baseUrl: z.url().optional(),
     temperature: z.number().min(0).max(2).default(0),
     maxOutputTokens: z.int().min(1).optional(),
+    // Reasoning effort for reasoning models (OpenAI Responses API). Higher effort
+    // improves the proof/investigation stages on smaller models at higher token
+    // cost. Unset uses the provider default.
+    reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']).optional(),
     timeoutMs: z.int().min(1000).max(600000).default(120000),
     // Classified retry of provider task calls: total attempts = maxRetries + 1.
     // Transient failures (network/5xx/timeout) and rate limits are retried;

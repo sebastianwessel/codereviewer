@@ -93,6 +93,43 @@ describe('provider resolution', () => {
     expect(resolution.modelAlias.defaults).not.toHaveProperty('temperature')
   })
 
+  test('omits temperature for dotted GPT-5 versions and passes reasoning effort', async () => {
+    // Regression: `gpt-5.4-mini` (dot separator) previously slipped past the
+    // temperature exclusion and triggered an HTTP 400, especially with reasoning.
+    const resolution = await resolveProviderModelAlias({
+      provider: {
+        id: 'openai',
+        model: 'gpt-5.4-mini',
+        temperature: 0,
+        reasoningEffort: 'high',
+        timeoutMs: 10_000,
+        maxRetries: 1,
+        retryBackoffMs: 0,
+        retryMaxDelayMs: 0
+      },
+      environment: {
+        OPENAI_API_KEY: 'secret-value'
+      },
+      importProvider: async () => ({
+        openai: (options: unknown) => ({
+          ...fakeProvider,
+          options
+        })
+      })
+    })
+
+    expect(resolution.modelAlias.defaults).not.toHaveProperty('temperature')
+    expect(resolution.modelAlias.defaults?.providerOptions).toEqual({
+      reasoning_effort: 'high'
+    })
+    // The OpenAI adapter must use the Responses API: it is required for reasoning
+    // models with function tools, and chat-completions drops reasoning effort.
+    expect(
+      (resolution.modelAlias.provider as { readonly options?: { readonly api?: string } })
+        .options?.api
+    ).toBe('responses')
+  })
+
   test('reports an actionable error when the selected adapter package is missing', async () => {
     await expect(
       resolveProviderModelAlias({
