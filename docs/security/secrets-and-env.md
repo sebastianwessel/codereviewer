@@ -1,5 +1,13 @@
 # Secrets And Env
 
+How CodeReviewer loads secrets and environment variables, and which variables map to which config fields.
+
+This page covers the `.env` workflow, the config-override variables, and the provider secrets the engine reads.
+
+---
+
+## Local `.env` workflow
+
 Use `.env.example` as the template and `.env` for local secrets:
 
 ```bash
@@ -10,12 +18,18 @@ cp .env.example .env
 
 For review commands, root `.env` values override exported process environment
 values. This lets a project-local `.env` define the intended local provider
-without requiring shell exports. Plain `npm run eval` does not load `.env`.
-Provider-backed eval helpers such as `npm run eval:with-env`,
-`npm run eval:semantic`, and `npm run cli -- ...` load `.env` with Node's native
-`--env-file-if-exists=.env` flag.
+without requiring shell exports.
+
+> **Note:** Plain `npm run eval` does not load `.env`. Provider-backed eval
+> helpers such as `npm run eval:with-env`, `npm run eval:semantic`, and
+> `npm run cli -- ...` load `.env` with Node's native
+> `--env-file-if-exists=.env` flag.
+
+---
 
 ## Config Overrides
+
+Each variable maps to a single config field:
 
 | Variable | Maps To |
 | --- | --- |
@@ -39,6 +53,8 @@ Provider-backed eval helpers such as `npm run eval:with-env`,
 | `CODEREVIEWER_COST_INPUT_PER_MILLION` | `costs.inputPerMillion` |
 | `CODEREVIEWER_COST_OUTPUT_PER_MILLION` | `costs.outputPerMillion` |
 
+---
+
 ## Provider Secrets
 
 | Variable | Use |
@@ -49,4 +65,12 @@ Provider-backed eval helpers such as `npm run eval:with-env`,
 | `AZURE_AI_ENDPOINT` | Azure endpoint. |
 | `AZURE_AI_API_KEY` | Azure API key when not using managed identity. |
 
-Do not store provider keys in `.codereviewer/config.json`.
+> **Warning:** Do not store provider keys in `.codereviewer/config.json`.
+
+---
+
+## See also
+
+- [Environment reference](../reference/environment.md)
+- [Data handling](./data-handling.md)
+- [Providers](../guides/providers.md)

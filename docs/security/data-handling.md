@@ -1,6 +1,14 @@
 # Data Handling
 
+How CodeReviewer treats source, secrets, network, and artifacts during a run.
+
+This page documents the secure defaults, the security boundaries the engine enforces, how source is handled, what gets written to disk, and the drift checks that guard public docs and specs.
+
+---
+
 ## Defaults
+
+Secure-by-default settings for a review run:
 
 | Area | Default |
 | --- | --- |
@@ -9,6 +17,8 @@
 | Filesystem writes from review config | disabled |
 | Content telemetry | disabled |
 | Report redaction | enabled |
+
+---
 
 ## Security Boundaries
 
@@ -21,17 +31,21 @@
 | Network | Disabled unless an explicit model provider is configured for a provider-backed review path. Local checks do not use network IO. |
 | Telemetry | OpenTelemetry is disabled unless configured and never captures raw source, prompts, provider output, env vars, or secrets. |
 
+---
+
 ## Source Handling
 
-Deterministic support-signal extractors parse source files locally and produce facts, diagnostics,
-and test mappings. They do not execute project code.
+Deterministic support-signal extractors parse source files locally and produce
+facts, diagnostics, and test mappings. They do not execute project code.
 
 Reports are designed around evidence IDs, locations, hashes, and summaries. Raw
 source snippets are not required for the default artifacts.
 
-Partial provider-failure artifacts store normalized error metadata and sanitized
-task messages. They must not include raw provider responses, tool output,
-prompts, source snippets, environment values, or secrets.
+> **Note:** Partial provider-failure artifacts store normalized error metadata
+> and sanitized task messages. They must not include raw provider responses,
+> tool output, prompts, source snippets, environment values, or secrets.
+
+---
 
 ## Filesystem Writes
 
@@ -42,6 +56,8 @@ Implemented CLI commands write only documented artifacts:
 | `review` | `.codereviewer/runs/<run-id>/` |
 | `eval run` | `.codereviewer/eval/eval-report.json` |
 | `drift check` | stdout only |
+
+---
 
 ## Drift And Ambiguity Checks
 
@@ -56,4 +72,12 @@ Implemented CLI commands write only documented artifacts:
 | Implementation drift | warning |
 | Ambiguity | warning |
 
-Use this check before CI rollout and before changing public docs or specs.
+> **Tip:** Use this check before CI rollout and before changing public docs or specs.
+
+---
+
+## See also
+
+- [Secrets and env](./secrets-and-env.md)
+- [Deterministic support signals](../concepts/deterministic-support-signals.md)
+- [Reports and artifacts](../guides/reports-and-artifacts.md)

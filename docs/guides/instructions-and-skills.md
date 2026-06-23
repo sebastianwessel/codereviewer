@@ -1,36 +1,62 @@
-# Instructions And Skills
+# Instructions and Skills
 
 Reviewer behavior can be shaped with prompt instructions and optional skills.
-Defaults should work without either, but advanced teams can add domain-specific
-guidance.
+Defaults work without either, but advanced teams can add domain-specific
+guidance to focus the reviewer on the policies and risk areas that matter most.
+
+---
 
 ## Instructions
 
-| Config Key | Purpose |
+Instructions let you add review policy, coding standards, risk priorities, and
+project-specific terminology directly into the review context.
+
+| Config key | Purpose |
 | --- | --- |
-| `instructions.inline` | Short instruction text embedded in the run config. |
+| `instructions.inline` | Short instruction text embedded directly in the run config. |
 | `instructions.files` | Repository-relative files containing longer instructions. |
 
-Use instructions for review policy, coding standards, risk priorities, and
-project-specific terminology.
+### Security handling
 
 Instruction files are read only from inside the repository root. Their content
-is redacted before model-bound context and is represented in
-`context-ledger.json` by path, byte counts, decision, and hash only.
+is **redacted before model-bound context** — `context-ledger.json` records only
+the path, byte counts, decision, and hash, not the raw text.
+
+### Example
+
+```jsonc
+{
+  "instructions": {
+    // Short inline guidance:
+    "inline": "Prioritize correctness, security, and evidence quality.",
+    // Longer policy documents loaded from the repo:
+    "files": ["docs/reviewer-instructions.md"]
+  }
+}
+```
+
+---
 
 ## Skills
 
-| Config Key | Purpose |
+Skills mount a folder of harness-compatible files into the model context so
+the reviewer can consult domain knowledge, checklists, or coding standards
+during a run.
+
+| Config key | Purpose |
 | --- | --- |
 | `skills.enabled` | Enables skill loading. |
 | `skills.directories` | Repository-relative directories containing skills. |
-| `skills.allowTools` | Read-only mounted-skill tools: `read`, `list`, `grep`. |
+| `skills.allowTools` | Read-only mounted-skill tools the model may use: `read`, `list`, `grep`. |
 
-Keep skills deterministic and reviewable. A skill should describe how to inspect
-or reason about code. R1 skills do not get shell, write, edit, or network tools.
+> **Note:** Skills do not get shell, write, edit, or network tools. Keep skills
+> deterministic and reviewable — a skill should describe how to inspect or
+> reason about code, not how to execute it.
 
-When `skills.enabled` is true, each configured skill folder must contain a
-harness-compatible `SKILL.md`:
+### Skill file format
+
+When `skills.enabled` is `true`, each configured skill folder must contain a
+harness-compatible `SKILL.md` with a YAML front-matter header:
 
 ```md
 ---
@@ -42,7 +68,22 @@ description: Review security-sensitive changes.
 Focus on evidence-backed security findings.
 ```
 
+### How skills are mounted
+
 Skills are mounted into the harness at `/skills/<name>/`. The model receives a
-compact skill index and may read mounted files with `read`, `list`, and `grep`.
-Raw skill text is not inlined into workflow input, logs, reports, or artifacts;
-artifacts record skill paths and hashes for provenance.
+compact skill index and may read mounted files using the `read`, `list`, and
+`grep` tools.
+
+Raw skill text is **not** inlined into workflow input, logs, reports, or
+artifacts. Artifacts record skill paths and hashes for provenance only.
+
+---
+
+## Related docs
+
+- [Configuration guide](configuration.md) — `instructions` and `skills` config
+  keys in context.
+- [Configuration reference](../reference/configuration.md) — full key/value
+  reference.
+- [Architecture](../concepts/architecture.md) — how instructions and skills are
+  assembled into model context (step 6: Context assembly).
