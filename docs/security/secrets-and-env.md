@@ -26,9 +26,13 @@ Provider-backed eval helpers such as `npm run eval:with-env`,
 | `CODEREVIEWER_PROVIDER_ID` | `provider.id` |
 | `CODEREVIEWER_PROVIDER_MODEL` | `provider.model` |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `provider.baseUrl` |
+| `CODEREVIEWER_PROVIDER_REASONING_EFFORT` | `provider.reasoningEffort` |
 | `CODEREVIEWER_ARTIFACT_DIR` | `paths.artifactDir` |
 | `CODEREVIEWER_CONFIG_PATH` | config path override |
 | `CODEREVIEWER_SKILLS_DIR` | first configured skills directory |
+| `CODEREVIEWER_AI_INTENT_PLANNING` | `aiReview.intentPlanning` |
+| `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `aiReview.deterministicSignalMode` |
+| `CODEREVIEWER_AI_JUDGE_FINDINGS` | `aiReview.judgeFindings` |
 | `CODEREVIEWER_LOG_LEVEL` | `observability.logging.level` |
 | `CODEREVIEWER_OPENTELEMETRY_ENABLED` | `observability.openTelemetry.enabled` |
 | `CODEREVIEWER_OPENTELEMETRY_ENDPOINT` | `observability.openTelemetry.endpoint` |

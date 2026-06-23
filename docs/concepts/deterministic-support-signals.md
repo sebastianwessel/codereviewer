@@ -31,6 +31,17 @@ Provider prompts receive compact, normalized signal summaries only. Raw AST
 dumps, parser traces, rule-authoring notes, command output, source snippets, and
 provider responses are not written to default logs or artifacts.
 
+## Signal Injection Mode
+
+`aiReview.deterministicSignalMode` controls how signals reach the model:
+
+| Value | Behavior |
+| --- | --- |
+| `support` (default) | Serialized signal facts are injected into the model packet as context, improving recall. |
+| `disabled` | Signals are still used for file clustering and admission (contradiction checks), but serialized facts are not injected into the model packet. Lower token cost. |
+
+Env: `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`.
+
 The no-content observability step is `deterministic_signals`. It records safe
 metadata such as signal counts, evidence counts, supported extension counts, and
 structural engine version when available.

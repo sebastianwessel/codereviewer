@@ -153,6 +153,18 @@ Aggregate metrics also include the following tier-based and coverage metrics:
 | `suspicionStageCoverage` | Fraction of non-provider-error cases that produced at least one model suspicion. |
 | `judgeCoverage` | When `judgeFindings` is enabled, judged candidates divided by actionable-promoted proofs. |
 
+The eval run gate checks optional threshold fields in `eval-report.json`:
+
+| Threshold Field | Gate Behavior |
+| --- | --- |
+| `minProductRecall` | Fails if `productRecall` is below the configured value. |
+| `minSuspicionStageCoverage` | Fails if `suspicionStageCoverage` is below the configured value. |
+| `minJudgeCoverage` | Fails if `judgeCoverage` is below the configured value (only enforced when `judgeFindings` is enabled). |
+
+These optional thresholds are configured via CLI flags on the eval run command (see
+[Configuration Reference](configuration.md) for details). When not set, the corresponding
+gate check is skipped.
+
 The `eval-summary.md` renders a `Recall by Tier` section showing per-tier recall
 alongside the overall product recall headline.
 When eval runs with `--semantic-judge`, accepted judge-backed matches include a

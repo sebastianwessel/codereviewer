@@ -22,22 +22,61 @@ npx tsx src/cli/main.ts config validate
 
 ## Example Config
 
+A minimal config only needs what you want to override. Below is a fuller
+`.codereviewer/config.json` showing every major block (unknown keys are
+rejected, so use only documented keys — see the
+[configuration reference](../reference/configuration.md)):
+
 ```json
 {
   "review": {
     "mode": "ci",
     "depth": "balanced",
     "baseRef": "main",
-    "headRef": "HEAD"
+    "headRef": "HEAD",
+    "maxConcurrentTasks": 4,
+    "inlineSeverityThreshold": "high"
+  },
+  "provider": {
+    "id": "openai",
+    "model": "gpt-5.3-codex",
+    "maxRetries": 2
+  },
+  "aiReview": {
+    "intentPlanning": "auto",
+    "deterministicSignalMode": "support",
+    "judgeFindings": false,
+    "actionableSeverityThreshold": "medium"
+  },
+  "promotionPolicy": {
+    "modelProof": "actionable",
+    "modelWeakOrRefuted": "artifact-only"
   },
   "paths": {
     "include": ["src/**"],
-    "exclude": [".git/**", "node_modules/**", "dist/**", "coverage/**", ".codereviewer/**"],
+    "exclude": [
+      ".git/**", "node_modules/**", "dist/**", "coverage/**", ".codereviewer/**",
+      "**/package-lock.json", "**/yarn.lock", "**/pnpm-lock.yaml", "**/npm-shrinkwrap.json",
+      "**/composer.lock", "**/Gemfile.lock", "**/poetry.lock", "**/Cargo.lock", "**/go.sum",
+      "**/*.min.js", "**/*.min.css", "**/*.map", "**/*.snap"
+    ],
     "artifactDir": ".codereviewer/runs"
   },
   "instructions": {
     "files": ["docs/reviewer-instructions.md"],
     "inline": "Prioritize correctness, security, and evidence quality."
+  },
+  "baseline": {
+    "enabled": true,
+    "failOnNewOnly": true
+  },
+  "qualityGate": {
+    "maxCritical": 0,
+    "maxHigh": 0,
+    "failOnProviderError": true
+  },
+  "reporting": {
+    "formats": ["json", "markdown", "sarif", "github-review-comments"]
   },
   "security": {
     "allowShell": false,
@@ -47,6 +86,20 @@ npx tsx src/cli/main.ts config validate
   }
 }
 ```
+
+Notes:
+
+- `provider` is required only for model-backed review; omit it for providerless
+  deterministic-signal review. Secrets come from the environment, never this file.
+- `aiReview.actionableSeverityThreshold` (default `medium`) keeps low-severity
+  model nits out of actionable output; `review.inlineSeverityThreshold` (default
+  `high`) controls which actionable findings become inline PR comments.
+- `aiReview.judgeFindings` enables the optional strict critic pass (extra cost,
+  off by default). `aiReview.deterministicSignalMode` controls whether
+  deterministic facts are injected into model context (`support`, recommended) or
+  only used for clustering (`disabled`, cheaper).
+- For reasoning models you may add `"reasoningEffort": "medium"` under `provider`
+  (high is not recommended — higher cost/latency without better recall).
 
 ## Defaults That Matter
 

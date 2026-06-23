@@ -56,3 +56,13 @@ development fixtures under `eval/fixtures/`, writes `.codereviewer/eval/`, print
 human-readable summary, and does not load `.env` for the deterministic default.
 Use `npm run eval:with-env` or `npm run eval:semantic` when provider-backed
 eval should use `.env`.
+
+Benchmark slices must be hydrated before running `npm run eval:benchmark`:
+
+```bash
+npm run eval:hydrate
+npm run eval:benchmark
+```
+
+Running `eval:benchmark` against un-hydrated positive slices causes the eval to abort
+with an error rather than silently recording zero recall.

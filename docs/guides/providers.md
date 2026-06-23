@@ -50,6 +50,29 @@ For OpenAI-compatible providers:
 
 Provider secrets belong in `.env` or the CI secret store, not in config files.
 
+## Reasoning Effort
+
+For OpenAI reasoning models, add `reasoningEffort` under `provider`:
+
+```json
+{
+  "provider": {
+    "id": "openai",
+    "model": "gpt-5-mini",
+    "reasoningEffort": "medium"
+  }
+}
+```
+
+Allowed values: `minimal`, `low`, `medium`, `high`. Env: `CODEREVIEWER_PROVIDER_REASONING_EFFORT`.
+
+The OpenAI adapter maps this to the Responses API `reasoning: { effort }` field. High effort is
+not recommended — it increases cost and latency without improving product recall.
+Unset uses the provider default.
+
+`temperature` is omitted for all `gpt-5.x` models (including dotted versions such
+as `gpt-5.4-mini`) because those models reject the parameter.
+
 ## Retry Behavior
 
 Provider task calls are retried under a single classified policy. Transient

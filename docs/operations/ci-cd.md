@@ -54,6 +54,14 @@ so the support-signal stage can load its native binding.
 | Reviewed `npm rebuild <package>` | A dependency requires a native install step. | Keep the allowlist short and review lockfile changes. |
 | Plain `npm ci` | Trusted release branches with protected dependency updates. | Faster setup, larger supply-chain execution surface. |
 
+## Report Formats In CI
+
+Add `"github-review-comments"` to `reporting.formats` to generate inline PR comment
+drafts (`github-review-comments.json`) alongside JSON, Markdown, and SARIF. The file
+contains path, line, body, severity, category, and an optional `suggestion` block for
+findings whose line range was validated during admission and overlaps a changed new-side
+diff hunk. The CLI does not publish comments; upload the artifact for downstream tooling.
+
 ## CI Guidance
 
 | Area | Recommendation |

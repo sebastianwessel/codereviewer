@@ -17,9 +17,14 @@ commands. CLI flags still win where a command exposes a flag. Plain
 | `CODEREVIEWER_PROVIDER_ID` | `openai` |
 | `CODEREVIEWER_PROVIDER_MODEL` | `gpt-5-mini` |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `https://example.internal/v1` |
+| `CODEREVIEWER_PROVIDER_REASONING_EFFORT` | `medium` |
 | `CODEREVIEWER_CONFIG_PATH` | `.codereviewer/config.json` |
 | `CODEREVIEWER_ARTIFACT_DIR` | `.codereviewer/runs` |
 | `CODEREVIEWER_SKILLS_DIR` | `.codereviewer/skills` |
+| `CODEREVIEWER_AI_INTENT_PLANNING` | `auto` |
+| `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `support` |
+| `CODEREVIEWER_AI_JUDGE_FINDINGS` | `false` |
+| `CODEREVIEWER_LOG_LEVEL` | `info` |
 | `CODEREVIEWER_OPENTELEMETRY_ENABLED` | `false` |
 | `CODEREVIEWER_OPENTELEMETRY_ENDPOINT` | `http://localhost:4318/v1/traces` |
 | `CODEREVIEWER_OPENTELEMETRY_HEADERS` | `{"Authorization":"Bearer ..."}` |

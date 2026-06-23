@@ -90,11 +90,13 @@ as SARIF results or rules.
 `github-review-comments.json` is rendered only when
 `reporting.formats` includes `github-review-comments`. It contains local
 GitHub review-comment drafts for admitted inline findings on new-side lines.
-Admission validates those line ranges against reviewed source content before
-the renderer can create drafts. For diff-backed runs, inline eligibility also
-requires the finding line to overlap a changed new-side diff hunk.
-The artifact can include a GitHub suggestion block when a single structured fix
-edit maps exactly to the rendered comment range. The CLI does not publish these
+Only findings with severity at or above `review.inlineSeverityThreshold` (default
+`high`) are eligible. Admission validates those line ranges against reviewed source
+content before the renderer can create drafts. For diff-backed runs, inline eligibility
+also requires the finding line to overlap a changed new-side diff hunk.
+Each entry includes path, new-side line anchor, redacted body, finding ID, severity,
+and category. The artifact can include a `suggestion` block when a single structured
+fix edit maps exactly to the rendered comment range. The CLI does not publish these
 comments or perform network requests.
 
 ## Report Principles

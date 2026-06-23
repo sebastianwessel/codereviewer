@@ -10,6 +10,9 @@
 | `provider_auth` in error | Provider returned HTTP 401/403 or an API-key/unauthorized message. | Verify credentials in `.env` or CI secrets. |
 | `provider_context_length` in error | Request exceeded the model context window. | Reduce `review.maxFiles`, `review.maxFileBytes`, or context budget settings. |
 | `provider_server_error` in error | Provider returned HTTP 5xx. | Retry; if persistent, check provider status page. |
+| `provider_error` in error | Provider-side failure not matched by the codes above. | Check provider status page and review model/config settings. |
+| `provider_timeout` in error | Request timed out. | Increase `provider.timeoutMs` or reduce task scope. |
+| `provider_cancelled` in error | Request was aborted or cancelled. | Check for run timeout (`review.runTimeoutMs`) or explicit cancellation. |
 | Missing artifacts | Command failed before reporting or artifact dir changed. | Check stderr and `paths.artifactDir`. |
 | Windows path rejected | Absolute or traversal path used in repository config. | Use repository-relative paths with no drive letter. |
 
