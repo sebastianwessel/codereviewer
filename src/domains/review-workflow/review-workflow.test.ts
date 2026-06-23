@@ -1634,7 +1634,7 @@ class RefutationFailureProvider implements ModelProvider {
   }
 }
 
-class OutOfDiffScopeProvider implements ModelProvider {
+class OutsideChangedLinesProvider implements ModelProvider {
   readonly id = 'out-of-diff-scope'
   readonly genAiSystem = 'scripted'
   readonly requests: ObjectRequest[] = []
@@ -1652,11 +1652,11 @@ class OutOfDiffScopeProvider implements ModelProvider {
       object: {
         suspicions: [
           {
-            category: 'compatibility',
+            category: 'bug',
             severity: 'medium',
-            title: 'Unrelated path helper concern',
+            title: 'Defect exposed elsewhere in the changed file',
             description:
-              'The model raised a concern outside the reviewed diff range.',
+              'The model raised a concern in the changed file but outside the exact changed lines.',
             path: 'src/app.ts',
             startLine: 10
           }
@@ -5415,8 +5415,8 @@ describe('review workflow', () => {
     await harness.shutdown()
   })
 
-  test('provider-backed workflow rejects model proofs outside reviewed diff ranges', async () => {
-    const provider = new OutOfDiffScopeProvider()
+  test('provider-backed workflow admits proved model findings in a changed file outside the exact changed lines (blast radius)', async () => {
+    const provider = new OutsideChangedLinesProvider()
     const harness = createModelBackedReviewHarness({
       modelAlias: {
         provider,
@@ -5474,16 +5474,17 @@ describe('review workflow', () => {
       }
     })
 
-    expect(provider.requests).toHaveLength(2)
+    // Blast-radius admission: the finding sits at line 10, outside the changed
+    // line (1), but in the changed file src/app.ts. The scope gate now passes
+    // (so refutation runs — a 3rd request — instead of an early not-in-scope
+    // reject), and the proved finding is admitted. (Inline-comment eligibility,
+    // decided separately, still keys on hunk overlap.)
+    expect(provider.requests).toHaveLength(3)
     expect(result.candidateFindings).toHaveLength(1)
-    expect(result.admittedFindings).toHaveLength(0)
-    expect(result.rejectedFindings).toEqual([
-      expect.objectContaining({
-        candidateId: result.candidateFindings[0]?.id,
-        status: 'needs-more-evidence',
-        reason: 'not-in-scope'
-      })
-    ])
+    expect(result.admittedFindings).toHaveLength(1)
+    expect(
+      result.rejectedFindings.some((finding) => finding.reason === 'not-in-scope')
+    ).toBe(false)
 
     await harness.shutdown()
   })

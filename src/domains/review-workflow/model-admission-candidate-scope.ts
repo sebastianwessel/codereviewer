@@ -11,7 +11,16 @@ export const isModelProposedCandidate = (
   candidate: CandidateFinding
 ): boolean => candidate.proposedBy === 'review-agent'
 
-export const candidateOverlapsReviewedDiffRanges = (
+// Blast-radius admission scope. A change can introduce a defect on the exact
+// changed lines OR expose a pre-existing defect elsewhere in the same changed
+// file (e.g. a modified caller now reaches inverted logic a few lines away).
+// The spec admission contract is "introduced OR exposed by the change", so a
+// candidate anywhere in a CHANGED FILE is in scope; only candidates in files
+// with no reviewed change are out of scope. Literal hunk-line overlap is still
+// used for INLINE-COMMENT eligibility (a separate path in the admission gate),
+// so relaxing this admission scope keeps out-of-hunk findings in the report
+// without turning them into inline comment noise.
+export const candidateWithinReviewedScope = (
   candidate: CandidateFinding,
   ranges: readonly ReviewedDiffRange[] | undefined
 ): boolean => {
@@ -19,18 +28,7 @@ export const candidateOverlapsReviewedDiffRanges = (
     return true
   }
 
-  const candidateRange = {
-    startLine: candidate.location.startLine,
-    endLine: candidate.location.endLine ?? candidate.location.startLine
-  }
-
-  return ranges
-    .filter((range) => range.path === candidate.location.path)
-    .some(
-      (range) =>
-        candidateRange.startLine <= range.endLine &&
-        range.startLine <= candidateRange.endLine
-    )
+  return ranges.some((range) => range.path === candidate.location.path)
 }
 
 export const rejectedFindingForOutOfDiffScope = (
@@ -41,6 +39,6 @@ export const rejectedFindingForOutOfDiffScope = (
     status: 'needs-more-evidence',
     reason: 'not-in-scope',
     message:
-      'Model candidate is outside the reviewed diff ranges and lacks deterministic corroboration.',
+      'Model candidate is in a file with no reviewed changes and lacks deterministic corroboration.',
     evidenceIds: candidate.evidenceIds
   })

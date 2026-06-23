@@ -14,7 +14,7 @@ import {
   type WorkflowReviewTask
 } from './model-agent-contracts.js'
 import {
-  candidateOverlapsReviewedDiffRanges,
+  candidateWithinReviewedScope,
   isModelProposedCandidate
 } from './model-admission-candidate-scope.js'
 import { createRefutationEvidence } from './model-admission-refutation-evidence.js'
@@ -66,7 +66,7 @@ export const reviewCandidateForAdmission = async (
   }
 
   if (
-    !candidateOverlapsReviewedDiffRanges(
+    !candidateWithinReviewedScope(
       input.candidate,
       input.workflowInput.reviewedDiffRanges
     )

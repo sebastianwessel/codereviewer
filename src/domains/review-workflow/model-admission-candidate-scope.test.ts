@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { type CandidateFinding } from '../admission/index.js'
 import {
-  candidateOverlapsReviewedDiffRanges,
+  candidateWithinReviewedScope,
   isModelProposedCandidate,
   rejectedFindingForOutOfDiffScope
 } from './model-admission-candidate-scope.js'
@@ -42,32 +42,28 @@ describe('model admission candidate scope', () => {
     ).toBe(false)
   })
 
-  test('allows absent reviewed ranges and inclusive same-path overlaps', () => {
-    expect(candidateOverlapsReviewedDiffRanges(candidate(), undefined)).toBe(true)
-    expect(candidateOverlapsReviewedDiffRanges(candidate(), [])).toBe(true)
+  test('allows absent reviewed ranges and any candidate in a changed file', () => {
+    expect(candidateWithinReviewedScope(candidate(), undefined)).toBe(true)
+    expect(candidateWithinReviewedScope(candidate(), [])).toBe(true)
+    // In a changed file but outside the changed lines: still in scope, because
+    // the change can expose a pre-existing defect a few lines away.
     expect(
-      candidateOverlapsReviewedDiffRanges(candidate({ startLine: 10 }), [
+      candidateWithinReviewedScope(candidate({ startLine: 12 }), [
         { path: 'src/admission.ts', startLine: 10, endLine: 12 }
       ])
     ).toBe(true)
     expect(
-      candidateOverlapsReviewedDiffRanges(candidate({ startLine: 12 }), [
-        { path: 'src/admission.ts', startLine: 10, endLine: 12 }
+      candidateWithinReviewedScope(candidate({ startLine: 31, endLine: 34 }), [
+        { path: 'src/admission.ts', startLine: 1, endLine: 30 }
       ])
     ).toBe(true)
   })
 
-  test('rejects path mismatches and non-overlapping line ranges', () => {
+  test('rejects candidates in files with no reviewed change', () => {
     expect(
-      candidateOverlapsReviewedDiffRanges(candidate({ path: 'src/other.ts' }), [
+      candidateWithinReviewedScope(candidate({ path: 'src/other.ts' }), [
         { path: 'src/admission.ts', startLine: 1, endLine: 30 }
       ])
-    ).toBe(false)
-    expect(
-      candidateOverlapsReviewedDiffRanges(
-        candidate({ startLine: 31, endLine: 34 }),
-        [{ path: 'src/admission.ts', startLine: 1, endLine: 30 }]
-      )
     ).toBe(false)
   })
 
@@ -77,7 +73,7 @@ describe('model admission candidate scope', () => {
       status: 'needs-more-evidence',
       reason: 'not-in-scope',
       message:
-        'Model candidate is outside the reviewed diff ranges and lacks deterministic corroboration.',
+        'Model candidate is in a file with no reviewed changes and lacks deterministic corroboration.',
       evidenceIds: ['ev_support1']
     })
   })

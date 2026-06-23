@@ -115,7 +115,7 @@ describe('model admission preflight outcome', () => {
           status: 'needs-more-evidence',
           reason: 'not-in-scope',
           message:
-            'Model candidate is outside the reviewed diff ranges and lacks deterministic corroboration.',
+            'Model candidate is in a file with no reviewed changes and lacks deterministic corroboration.',
           evidenceIds: ['ev_support1']
         }
       ],
