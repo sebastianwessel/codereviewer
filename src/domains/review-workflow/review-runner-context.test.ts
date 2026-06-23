@@ -165,6 +165,51 @@ describe('review runner context assembly', () => {
     }
   })
 
+  test('deterministicSignalMode "disabled" keeps clustering but omits support-signal context', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      const sourceContent = 'export const alpha = 1\n'
+      const config = CodeReviewerConfigSchema.parse({
+        review: { contextMaxBytes: 10000 },
+        aiReview: { deterministicSignalMode: 'disabled' }
+      })
+
+      const result = await assembleContext({
+        repositoryRoot: root,
+        config,
+        sourceFiles: [{ path: 'src/a.ts', content: sourceContent }],
+        analysis: {
+          facts: [
+            {
+              id: 'fact_alpha',
+              language: 'typescript',
+              kind: 'declaration',
+              path: 'src/a.ts',
+              name: 'alpha',
+              line: 1,
+              summary: 'alpha declaration',
+              contentHash: sha256(sourceContent)
+            }
+          ],
+          evidence: []
+        },
+        tasks: [taskFor('src/a.ts')]
+      })
+
+      // Source is still reviewed and clustering facts are still attached to the
+      // task, but the serialized support-signal facts are NOT injected as model
+      // context.
+      expect(result.tasks[0]?.reviewContext.map((context) => context.kind)).toEqual([
+        'file'
+      ])
+      expect(result.tasks[0]?.factIds).toEqual(['fact_alpha'])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('prepares context state with safe metrics and provenance hashes', async () => {
     const root = await createTempDir()
 

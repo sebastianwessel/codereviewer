@@ -274,6 +274,14 @@ export const assembleContext = async (
     task: ReviewTask,
     pathSet: ReadonlySet<string>
   ): readonly ContextInput[] => {
+    // `deterministicSignalMode: 'disabled'` keeps deterministic facts for free
+    // task clustering (already applied by the planner) but does not inject the
+    // serialized support-signal facts into the model packet, since that structural
+    // summary is largely redundant with the source the model already reads.
+    if (input.config.aiReview.deterministicSignalMode === 'disabled') {
+      return []
+    }
+
     const supportSignalFacts = input.analysis.facts.filter(
       (fact) => task.factIds.includes(fact.id) && pathSet.has(fact.path)
     )

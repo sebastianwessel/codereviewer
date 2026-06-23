@@ -240,6 +240,10 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
     ['CODEREVIEWER_PROVIDER_BASE_URL', ['provider', 'baseUrl']],
     ['CODEREVIEWER_ARTIFACT_DIR', ['paths', 'artifactDir']],
     ['CODEREVIEWER_AI_INTENT_PLANNING', ['aiReview', 'intentPlanning']],
+    [
+      'CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE',
+      ['aiReview', 'deterministicSignalMode']
+    ],
     ['CODEREVIEWER_LOG_LEVEL', ['observability', 'logging', 'level']],
     ['CODEREVIEWER_OPENTELEMETRY_ENDPOINT', ['observability', 'openTelemetry', 'endpoint']]
   ]

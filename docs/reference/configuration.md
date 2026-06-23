@@ -42,7 +42,7 @@
 | `aiReview` | `intentPlanning` | `auto`, `deterministic`, `model` |
 | `aiReview` | `judgeFindings` | boolean, default `false` |
 | `aiReview` | `externalStaticAnalysisAssumed` | boolean |
-| `aiReview` | `deterministicSignalMode` | `support`, `disabled` |
+| `aiReview` | `deterministicSignalMode` | `support` (inject facts as model context; better recall) or `disabled` (keep clustering, skip injection; lower cost/recall). Env: `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` |
 | `aiReview` | `actionableSeverityThreshold` | severity, default `medium` (model findings below it are rejected as below-threshold; trusted deterministic rules exempt) |
 | `promotionPolicy` | `modelProof` | `actionable`, `artifact-only` |
 | `promotionPolicy` | `modelSuspicion` | `artifact-only`, `rejected` |
