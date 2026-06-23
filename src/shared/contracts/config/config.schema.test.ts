@@ -24,7 +24,6 @@ describe('CodeReviewerConfigSchema', () => {
       judgeFindings: false,
       externalStaticAnalysisAssumed: true,
       deterministicSignalMode: 'support',
-      policyReviewPass: false,
       actionableSeverityThreshold: 'medium'
     })
     expect(parsed.promotionPolicy).toEqual({
@@ -41,7 +40,13 @@ describe('CodeReviewerConfigSchema', () => {
         'node_modules/**',
         'dist/**',
         'coverage/**',
-        '.codereviewer/**'
+        '.codereviewer/**',
+        // Generated / non-reviewable data files are excluded from model review.
+        '**/package-lock.json',
+        '**/yarn.lock',
+        '**/*.min.js',
+        '**/*.map',
+        '**/*.snap'
       ])
     )
     expect(parsed.paths.exclude).not.toContain(`.${'review'}/**`)

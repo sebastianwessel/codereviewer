@@ -283,9 +283,7 @@ export const executionTasksForReviewIntents = (
     const clusterTask = WorkflowReviewTaskSchema.parse({
       id: intentClusterTaskIdFor(intent),
       round: selectedTasks[0]!.round,
-      kind: selectedTasks.some((task) => task.kind === 'policy')
-        ? 'policy'
-        : 'dependency-cluster',
+      kind: 'dependency-cluster',
       paths: sortedUniqueValues(selectedTasks.flatMap((task) => task.paths)),
       factIds: sortedUniqueValues(selectedTasks.flatMap((task) => task.factIds)),
       evidenceIds: sortedUniqueValues(

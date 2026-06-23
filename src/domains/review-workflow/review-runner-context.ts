@@ -330,12 +330,9 @@ export const assembleContext = async (
 
   for (const task of input.tasks) {
     const taskPathSet = new Set(task.paths)
-    const taskSourceFiles =
-      task.kind === 'policy'
-        ? []
-        : input.sourceFiles.filter((sourceFile) =>
-            taskPathSet.has(sourceFile.path)
-          )
+    const taskSourceFiles = input.sourceFiles.filter((sourceFile) =>
+      taskPathSet.has(sourceFile.path)
+    )
     const sourceContexts = taskSourceFiles.flatMap((file) =>
       splitTextByUtf8Bytes(file.content, chunkBudget).map((chunk) => ({
         kind: 'file' as const,

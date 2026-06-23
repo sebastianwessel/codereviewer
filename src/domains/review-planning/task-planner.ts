@@ -14,8 +14,7 @@ import type { SupportSignalFact } from '../deterministic-signals/index.js'
 
 export const ReviewTaskKindSchema = z.enum([
   'file',
-  'dependency-cluster',
-  'policy'
+  'dependency-cluster'
 ])
 
 export const ReviewTaskSchema = z.strictObject({
@@ -43,10 +42,6 @@ export type PlanReviewTasksOptions = {
   readonly facts: readonly SupportSignalFact[]
   readonly evidence: readonly EvidenceRecord[]
   readonly candidates: readonly CandidateFinding[]
-  // When true (and depth is thorough), add a second-round `policy` review pass
-  // over each cluster. Off by default: the extra pass roughly doubles model
-  // calls for little added recall, so it is opt-in for the rare run that wants it.
-  readonly policyReviewPass?: boolean
 }
 
 const taskIdFor = (
@@ -329,21 +324,5 @@ export const planReviewTasks = (
       })
   )
 
-  if (options.depth !== 'thorough' || options.policyReviewPass !== true) {
-    return clusterTasks
-  }
-
-  const policyTasks = clusterTasks.map((clusterTask, index) =>
-    createTask({
-      kind: 'policy',
-      paths: clusterTask.paths,
-      round: 2,
-      priority: clusterTasks.length + index,
-      facts: options.facts,
-      evidence: options.evidence,
-      candidates: options.candidates
-    })
-  )
-
-  return [...clusterTasks, ...policyTasks]
+  return clusterTasks
 }

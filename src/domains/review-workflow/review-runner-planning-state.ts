@@ -71,8 +71,7 @@ export const prepareReviewRunnerPlanningState = (input: {
     depth: input.config.review.depth,
     files: input.files,
     facts: analysis.facts,
-    evidence,
-    policyReviewPass: input.config.aiReview.policyReviewPass
+    evidence
   }
   const taskPlanning = prepareTaskPlanning(planningInput)
   planningStep.end({ taskCount: taskPlanning.metrics.taskCount })

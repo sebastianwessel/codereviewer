@@ -145,8 +145,7 @@ describe('review runner planning state', () => {
       depth: 'thorough',
       files,
       facts: [fact],
-      evidence: [evidence],
-      policyReviewPass: false
+      evidence: [evidence]
     })
     expect(
       observability

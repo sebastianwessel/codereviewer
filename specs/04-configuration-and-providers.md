@@ -129,7 +129,6 @@ provider, filesystem writes, or publishing.
 | `intentPlanning` | `"auto" | "deterministic" | "model"` | `"auto"` | `auto` uses deterministic intents for local or single-task runs and a compact model planner for multi-task non-local reviews. `model` forces the planner for multi-task runs. |
 | `judgeFindings` | boolean | `false` | When true, proved model-origin candidates must pass a separate critic judge before admission. |
 | `actionableSeverityThreshold` | severity | `medium` | Minimum severity for a MODEL-origin finding to be admitted as actionable. Below this it is rejected as `below-threshold` (still recorded as a rejected finding). Trusted deterministic-rule findings are exempt. Keeps the engine focused on impactful runtime/security defects over low-severity nits. |
-| `policyReviewPass` | boolean | `false` | When true (and depth is `thorough`), adds a second-round `policy` review pass over each cluster. Off by default because the extra pass roughly doubles model calls (tokens/cost) for little added recall; opt in for the rare run that wants a second look. CLI: `--policy-review-pass` on `eval run`. |
 | `externalStaticAnalysisAssumed` | boolean | `true` | De-prioritizes findings that only duplicate CodeQL/linter/formatter/build/test responsibilities. |
 | `deterministicSignalMode` | `"support" | "disabled"` | `"support"` | `support` provides context/gates; `disabled` skips non-security signal extraction. |
 
@@ -304,7 +303,7 @@ hashes and repository-relative paths are recorded for provenance.
 | Key | Type | Default |
 | --- | --- | --- |
 | `include` | glob[] | `["**/*"]` |
-| `exclude` | glob[] | `[".git/**", "node_modules/**", "dist/**", "coverage/**", ".codereviewer/**"]` |
+| `exclude` | glob[] | VCS/dependency/build/artifact dirs (`.git/**`, `node_modules/**`, `dist/**`, `coverage/**`, `.codereviewer/**`) plus generated/non-reviewable data files: dependency lock files (`**/package-lock.json`, `**/yarn.lock`, `**/pnpm-lock.yaml`, `**/npm-shrinkwrap.json`, `**/composer.lock`, `**/Gemfile.lock`, `**/poetry.lock`, `**/Cargo.lock`, `**/go.sum`), minified bundles (`**/*.min.js`, `**/*.min.css`), source maps (`**/*.map`), and snapshots (`**/*.snap`). |
 | `artifactDir` | repository-relative path | `.codereviewer/runs` |
 
 All path config is validated through `path-service` and must support Linux and

@@ -80,15 +80,35 @@ export const SkillsConfigSchema = z.strictObject({
   ])
 })
 
+// Default review excludes. Beyond VCS/dependency/build/artifact directories, this
+// skips generated and non-reviewable data files (dependency lock files, minified
+// bundles, source maps, test snapshots) from model review: they carry no
+// semantic logic to review, so loading them only wastes tokens and produces
+// noise. App-specific data (e.g. locale bundles) can be added via `paths.exclude`.
+export const defaultReviewExcludePatterns: readonly string[] = [
+  '.git/**',
+  'node_modules/**',
+  'dist/**',
+  'coverage/**',
+  '.codereviewer/**',
+  '**/package-lock.json',
+  '**/yarn.lock',
+  '**/pnpm-lock.yaml',
+  '**/npm-shrinkwrap.json',
+  '**/composer.lock',
+  '**/Gemfile.lock',
+  '**/poetry.lock',
+  '**/Cargo.lock',
+  '**/go.sum',
+  '**/*.min.js',
+  '**/*.min.css',
+  '**/*.map',
+  '**/*.snap'
+]
+
 export const PathsConfigSchema = z.strictObject({
   include: z.array(z.string()).default(['**/*']),
-  exclude: z.array(z.string()).default([
-    '.git/**',
-    'node_modules/**',
-    'dist/**',
-    'coverage/**',
-    '.codereviewer/**'
-  ]),
+  exclude: z.array(z.string()).default([...defaultReviewExcludePatterns]),
   artifactDir: RepositoryRelativePathSchema.default('.codereviewer/runs')
 })
 
@@ -128,10 +148,6 @@ export const AiReviewConfigSchema = z.strictObject({
   judgeFindings: z.boolean().default(false),
   externalStaticAnalysisAssumed: z.boolean().default(true),
   deterministicSignalMode: z.enum(['support', 'disabled']).default('support'),
-  // Add a second-round `policy` review pass at thorough depth. Off by default:
-  // the extra pass roughly doubles model calls (tokens/cost) for little added
-  // recall in practice, so it is opt-in.
-  policyReviewPass: z.boolean().default(false),
   // Minimum severity for a MODEL-origin finding to be admitted as actionable.
   // Below this, model findings are rejected as below-threshold (still recorded as
   // rejected findings, so they remain auditable). Default `medium` keeps the
@@ -264,13 +280,7 @@ export const CodeReviewerConfigSchema = z.strictObject({
   }),
   paths: PathsConfigSchema.default({
     include: ['**/*'],
-    exclude: [
-      '.git/**',
-      'node_modules/**',
-      'dist/**',
-      'coverage/**',
-      '.codereviewer/**'
-    ],
+    exclude: [...defaultReviewExcludePatterns],
     artifactDir: '.codereviewer/runs'
   }),
   baseline: BaselineConfigSchema.default({
@@ -290,7 +300,6 @@ export const CodeReviewerConfigSchema = z.strictObject({
     judgeFindings: false,
     externalStaticAnalysisAssumed: true,
     deterministicSignalMode: 'support',
-    policyReviewPass: false,
     actionableSeverityThreshold: 'medium'
   }),
   promotionPolicy: PromotionPolicyConfigSchema.default({

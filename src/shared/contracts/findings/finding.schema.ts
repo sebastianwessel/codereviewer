@@ -219,7 +219,7 @@ export const ModelSchemaInvalidIssueCountsSchema = z.record(
 
 export const ModelTaskDiagnosticSchema = z.strictObject({
   taskId: TaskIdSchema,
-  taskKind: z.enum(['file', 'dependency-cluster', 'policy']).optional(),
+  taskKind: z.enum(['file', 'dependency-cluster']).optional(),
   round: z.int().min(1),
   paths: z.array(RepositoryRelativePathSchema),
   evidenceCount: z.int().min(0).optional(),
@@ -433,15 +433,20 @@ export const AdmittedFindingSchema = z.strictObject({
   dataFlow: z.array(DataFlowPathSchema).optional()
 })
 
+// Max length for a rejection message. Exported so the construction sites that
+// copy model-authored summaries into `RejectedFinding.message` truncate to the
+// same cap (single source of truth) instead of hard-coding the number.
+export const REJECTED_FINDING_MESSAGE_MAX = 500
+
 export const RejectedFindingSchema = z.strictObject({
   candidateId: CandidateIdSchema,
   status: z.enum(['rejected', 'needs-more-evidence']),
   reason: RejectReasonSchema,
   // Rejection messages are populated from model-authored summaries (aggregate,
-  // refutation, and judge rationales) that can exceed the report cap. Truncate
-  // defensively so an over-long summary cannot fail schema validation and abort
-  // the whole run as a spurious provider error.
-  message: z.string().transform((value) => value.slice(0, 500)),
+  // refutation, and judge rationales) that can exceed this cap. Construction
+  // sites must truncate via `truncateForContract` before parsing; the cap is kept
+  // as a plain max so the field stays representable in the generated JSON Schema.
+  message: z.string().max(REJECTED_FINDING_MESSAGE_MAX),
   evidenceIds: z.array(ContractIdSchema).optional()
 })
 

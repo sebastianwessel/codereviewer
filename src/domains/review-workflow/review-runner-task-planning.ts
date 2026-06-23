@@ -12,7 +12,6 @@ export type ReviewRunnerTaskPlanningInput = {
   readonly files: readonly { readonly path: string }[]
   readonly facts: readonly SupportSignalFact[]
   readonly evidence: readonly EvidenceRecord[]
-  readonly policyReviewPass?: boolean
 }
 
 export type ReviewRunnerTaskPlanningMetrics = {
@@ -164,10 +163,7 @@ export const prepareReviewRunnerTaskPlanning = (
     files: input.files,
     facts: input.facts,
     evidence: input.evidence,
-    candidates: supportSignalCandidates,
-    ...(input.policyReviewPass === undefined
-      ? {}
-      : { policyReviewPass: input.policyReviewPass })
+    candidates: supportSignalCandidates
   })
 
   return {

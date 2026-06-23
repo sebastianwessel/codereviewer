@@ -159,7 +159,7 @@ describe('review task planner', () => {
     expect(tasks.map((task) => task.paths.length)).toEqual([8, 2])
   })
 
-  test('thorough depth without the policy pass does not add a round-2 task', () => {
+  test('thorough depth plans only round-1 dependency clusters', () => {
     const tasks = planReviewTasks({
       depth: 'thorough',
       files: [{ path: 'src/app.ts' }],
@@ -168,7 +168,7 @@ describe('review task planner', () => {
       candidates: []
     })
 
-    // Policy pass is opt-in; by default thorough depth only plans round-1 clusters.
+    // The second-round policy pass was removed; thorough depth plans clusters only.
     expect(tasks).toEqual([
       expect.objectContaining({
         kind: 'dependency-cluster',
@@ -176,33 +176,10 @@ describe('review task planner', () => {
         round: 1
       })
     ])
+    expect(tasks.every((task) => task.round === 1)).toBe(true)
   })
 
-  test('thorough depth adds a policy task when policyReviewPass is enabled', () => {
-    const tasks = planReviewTasks({
-      depth: 'thorough',
-      files: [{ path: 'src/app.ts' }],
-      facts: [],
-      evidence: [],
-      candidates: [],
-      policyReviewPass: true
-    })
-
-    expect(tasks).toEqual([
-      expect.objectContaining({
-        kind: 'dependency-cluster',
-        paths: ['src/app.ts'],
-        round: 1
-      }),
-      expect.objectContaining({
-        kind: 'policy',
-        paths: ['src/app.ts'],
-        round: 2
-      })
-    ])
-  })
-
-  test('thorough depth keeps policy tasks bounded by cluster packets', () => {
+  test('thorough depth keeps clusters bounded by packet size', () => {
     const tasks = planReviewTasks({
       depth: 'thorough',
       files: Array.from({ length: 10 }, (_, index) => ({
@@ -210,13 +187,10 @@ describe('review task planner', () => {
       })),
       facts: [],
       evidence: [],
-      candidates: [],
-      policyReviewPass: true
+      candidates: []
     })
 
-    const policyTasks = tasks.filter((task) => task.kind === 'policy')
-
-    expect(policyTasks.map((task) => task.paths.length)).toEqual([8, 2])
-    expect(policyTasks.every((task) => task.round === 2)).toBe(true)
+    expect(tasks.map((task) => task.paths.length)).toEqual([8, 2])
+    expect(tasks.every((task) => task.round === 1)).toBe(true)
   })
 })

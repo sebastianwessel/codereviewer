@@ -842,7 +842,6 @@ const runEval = async (
     )
     const semanticJudgeEnabled = evalArgs.includes('--semantic-judge')
     const judgeFindingsEnabled = evalArgs.includes('--judge-findings')
-    const policyReviewPassEnabled = evalArgs.includes('--policy-review-pass')
     const cliConfig = {
       ...(logLevelOverride.level === undefined
         ? {}
@@ -866,17 +865,14 @@ const runEval = async (
                 : { maxConcurrentTasks })
             }
           }),
-      ...(intentPlanning === undefined &&
-      !judgeFindingsEnabled &&
-      !policyReviewPassEnabled
+      ...(intentPlanning === undefined && !judgeFindingsEnabled
         ? {}
         : {
             aiReview: {
               ...(intentPlanning === undefined
                 ? {}
                 : { intentPlanning }),
-              ...(judgeFindingsEnabled ? { judgeFindings: true } : {}),
-              ...(policyReviewPassEnabled ? { policyReviewPass: true } : {})
+              ...(judgeFindingsEnabled ? { judgeFindings: true } : {})
             }
           })
     }

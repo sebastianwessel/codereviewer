@@ -260,7 +260,20 @@
           "node_modules/**",
           "dist/**",
           "coverage/**",
-          ".codereviewer/**"
+          ".codereviewer/**",
+          "**/package-lock.json",
+          "**/yarn.lock",
+          "**/pnpm-lock.yaml",
+          "**/npm-shrinkwrap.json",
+          "**/composer.lock",
+          "**/Gemfile.lock",
+          "**/poetry.lock",
+          "**/Cargo.lock",
+          "**/go.sum",
+          "**/*.min.js",
+          "**/*.min.css",
+          "**/*.map",
+          "**/*.snap"
         ],
         "artifactDir": ".codereviewer/runs"
       },
@@ -281,7 +294,20 @@
             "node_modules/**",
             "dist/**",
             "coverage/**",
-            ".codereviewer/**"
+            ".codereviewer/**",
+            "**/package-lock.json",
+            "**/yarn.lock",
+            "**/pnpm-lock.yaml",
+            "**/npm-shrinkwrap.json",
+            "**/composer.lock",
+            "**/Gemfile.lock",
+            "**/poetry.lock",
+            "**/Cargo.lock",
+            "**/go.sum",
+            "**/*.min.js",
+            "**/*.min.css",
+            "**/*.map",
+            "**/*.snap"
           ],
           "type": "array",
           "items": {
@@ -382,7 +408,8 @@
         "intentPlanning": "auto",
         "judgeFindings": false,
         "externalStaticAnalysisAssumed": true,
-        "deterministicSignalMode": "support"
+        "deterministicSignalMode": "support",
+        "actionableSeverityThreshold": "medium"
       },
       "type": "object",
       "properties": {
@@ -443,6 +470,17 @@
             "support",
             "disabled"
           ]
+        },
+        "actionableSeverityThreshold": {
+          "default": "medium",
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "info"
+          ]
         }
       },
       "required": [
@@ -450,7 +488,8 @@
         "intentPlanning",
         "judgeFindings",
         "externalStaticAnalysisAssumed",
-        "deterministicSignalMode"
+        "deterministicSignalMode",
+        "actionableSeverityThreshold"
       ],
       "additionalProperties": false
     },

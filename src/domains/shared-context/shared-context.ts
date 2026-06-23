@@ -12,7 +12,7 @@ export type ReviewTaskState = 'planned' | 'running' | 'completed' | 'failed'
 
 export type ReviewTaskRecord = {
   readonly id: string
-  readonly kind: 'file' | 'dependency-cluster' | 'policy'
+  readonly kind: 'file' | 'dependency-cluster'
   readonly round: number
   readonly paths: readonly string[]
   readonly state: ReviewTaskState

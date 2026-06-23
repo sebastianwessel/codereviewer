@@ -171,7 +171,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+                  "pattern": "^(?:test-[A-Za-z0-9_-]+|task_[a-z0-9]+(?:_[a-z0-9]+)*)$"
                 }
               },
               "incompleteReason": {
@@ -210,11 +210,11 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "taskId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|task_[a-z0-9]+(?:_[a-z0-9]+)*)$"
           },
           "category": {
             "type": "string",
@@ -296,7 +296,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
           },
           "proposedBy": {
@@ -320,7 +320,7 @@
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+                  "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
                 }
               },
               "safety": {
@@ -389,7 +389,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
           },
           "reporterEligibility": {
@@ -456,11 +456,11 @@
           },
           "proofPacketId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "refutationId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "baselineStatus": {
             "type": "string",
@@ -697,7 +697,7 @@
         "properties": {
           "candidateId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|cand_[a-z0-9]+(?:_[a-z0-9]+)*)$"
           },
           "status": {
             "type": "string",
@@ -731,7 +731,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
           }
         },
@@ -751,7 +751,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "kind": {
             "type": "string",
@@ -1065,7 +1065,7 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           }
         },
         "thresholds": {
@@ -1108,7 +1108,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "title": {
             "type": "string",
@@ -1133,7 +1133,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^task_[A-Za-z0-9_-]+$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|task_[a-z0-9]+(?:_[a-z0-9]+)*)$"
             }
           },
           "focusAreas": {
@@ -1192,11 +1192,11 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "taskId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|task_[a-z0-9]+(?:_[a-z0-9]+)*)$"
           },
           "category": {
             "type": "string",
@@ -1323,7 +1323,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
           },
           "status": {
@@ -1366,14 +1366,13 @@
         "properties": {
           "taskId": {
             "type": "string",
-            "pattern": "^task_[A-Za-z0-9_-]+$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|task_[a-z0-9]+(?:_[a-z0-9]+)*)$"
           },
           "taskKind": {
             "type": "string",
             "enum": [
               "file",
-              "dependency-cluster",
-              "policy"
+              "dependency-cluster"
             ]
           },
           "round": {
@@ -1508,7 +1507,7 @@
         "properties": {
           "suspicionId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "toolCalls": {
             "type": "array",
@@ -1533,7 +1532,7 @@
                 },
                 "ledgerEntryId": {
                   "type": "string",
-                  "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+                  "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
                 },
                 "summary": {
                   "type": "string",
@@ -1552,7 +1551,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
           },
           "budget": {
@@ -1626,15 +1625,15 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "suspicionId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "candidateId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|cand_[a-z0-9]+(?:_[a-z0-9]+)*)$"
           },
           "changedBehavior": {
             "type": "string",
@@ -1666,7 +1665,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
           },
           "contradictionChecks": {
@@ -1706,11 +1705,11 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "proofPacketId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "verdict": {
             "type": "string",
@@ -1730,7 +1729,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
           },
           "checks": {
@@ -1760,7 +1759,7 @@
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+                    "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
                   }
                 }
               },
@@ -1792,7 +1791,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "scope": {
             "type": "string",
@@ -1819,14 +1818,14 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
           },
           "evidenceIds": {
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
           },
           "decisions": {
@@ -1837,7 +1836,7 @@
               "properties": {
                 "candidateId": {
                   "type": "string",
-                  "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+                  "pattern": "^(?:test-[A-Za-z0-9_-]+|cand_[a-z0-9]+(?:_[a-z0-9]+)*)$"
                 },
                 "verdict": {
                   "type": "string",
@@ -1856,7 +1855,7 @@
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+                    "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
                   }
                 },
                 "relatedCandidateIds": {
@@ -1864,7 +1863,7 @@
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+                    "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
                   }
                 }
               },
@@ -1907,7 +1906,7 @@
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+                    "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
                   }
                 }
               },
@@ -1941,11 +1940,11 @@
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "candidateId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|cand_[a-z0-9]+(?:_[a-z0-9]+)*)$"
           },
           "verdict": {
             "type": "string",
@@ -1999,7 +1998,7 @@
                   "type": "array",
                   "items": {
                     "type": "string",
-                    "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+                    "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
                   }
                 }
               },
@@ -2063,16 +2062,16 @@
             "type": "array",
             "items": {
               "type": "string",
-              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+              "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
           },
           "proofPacketId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "refutationId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           }
         },
         "required": [
@@ -2096,15 +2095,15 @@
         "properties": {
           "candidateId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|cand_[a-z0-9]+(?:_[a-z0-9]+)*)$"
           },
           "proofPacketId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "refutationId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+_[a-z0-9]+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
           "status": {
             "type": "string",

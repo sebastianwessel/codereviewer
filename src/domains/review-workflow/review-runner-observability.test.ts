@@ -22,7 +22,7 @@ describe('review runner observability helpers', () => {
       },
       {
         id: 'task-b',
-        kind: 'policy',
+        kind: 'dependency-cluster',
         round: 1,
         paths: [],
         state: 'planned'
@@ -44,7 +44,7 @@ describe('review runner observability helpers', () => {
       },
       {
         taskId: 'task-b',
-        kind: 'policy',
+        kind: 'dependency-cluster',
         round: 1,
         state: 'planned',
         pathCount: 0

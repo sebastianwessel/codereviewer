@@ -1,9 +1,11 @@
 import {
+  REJECTED_FINDING_MESSAGE_MAX,
   RejectedFindingSchema,
   type FindingAggregateResult,
   type RejectedFinding
 } from '../../shared/contracts/index.js'
 import { type AdmissionDecisionRecord } from '../shared-context/index.js'
+import { truncateForContract } from '../../shared/text/truncate.js'
 import { type ProviderIssue } from './model-provider-issues.js'
 
 export type AggregateReviewOutcome = {
@@ -39,7 +41,10 @@ const rejectedFindingForAggregateDecision = (
       decision.verdict === 'false-positive'
         ? 'refuted'
         : 'insufficient-evidence',
-    message: decision.summary,
+    message: truncateForContract(
+      decision.summary,
+      REJECTED_FINDING_MESSAGE_MAX
+    ),
     evidenceIds: decision.evidenceIds
   })
 

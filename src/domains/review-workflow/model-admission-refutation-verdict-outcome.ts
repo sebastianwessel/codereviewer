@@ -1,9 +1,11 @@
 import {
+  REJECTED_FINDING_MESSAGE_MAX,
   RejectedFindingSchema,
   type EvidenceRecord,
   type RefutationResult
 } from '../../shared/contracts/index.js'
 import { type CandidateFinding } from '../admission/index.js'
+import { truncateForContract } from '../../shared/text/truncate.js'
 import { type FindingRefutationResult } from './model-agent-contracts.js'
 import {
   emptyAdmissionCandidateOutcome,
@@ -26,7 +28,7 @@ export const refutedCandidateOutcome = (input: {
       candidateId: input.candidate.id,
       status: 'rejected',
       reason: 'refuted',
-      message: input.refutation.rationaleSummary,
+      message: truncateForContract(input.refutation.rationaleSummary, REJECTED_FINDING_MESSAGE_MAX),
       evidenceIds: [input.refutationEvidence.id]
     })
   ],
@@ -54,7 +56,7 @@ export const weakSuspicionRejectedOutcome = (input: {
       candidateId: input.candidate.id,
       status: 'needs-more-evidence',
       reason: 'weak-suspicion',
-      message: input.refutation.rationaleSummary,
+      message: truncateForContract(input.refutation.rationaleSummary, REJECTED_FINDING_MESSAGE_MAX),
       evidenceIds: [input.refutationEvidence.id]
     })
   ],

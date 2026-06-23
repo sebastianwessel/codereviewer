@@ -1,10 +1,12 @@
 import {
+  REJECTED_FINDING_MESSAGE_MAX,
   RejectedFindingSchema,
   type EvidenceRecord,
   type FindingJudgeResult,
   type RejectedFinding
 } from '../../shared/contracts/index.js'
 import { type CandidateFinding } from '../admission/index.js'
+import { truncateForContract } from '../../shared/text/truncate.js'
 import { type AdmissionDecisionRecord } from '../shared-context/index.js'
 import { type ProviderIssue } from './model-provider-issues.js'
 
@@ -34,7 +36,7 @@ export const judgeVerdictOutcome = (
           candidateId: input.candidate.id,
           status: 'rejected',
           reason: 'refuted',
-          message: input.judgeResult.summary,
+          message: truncateForContract(input.judgeResult.summary, REJECTED_FINDING_MESSAGE_MAX),
           evidenceIds: input.judgeResult.evidenceIds
         })
       ],
@@ -59,7 +61,7 @@ export const judgeVerdictOutcome = (
           candidateId: input.candidate.id,
           status: 'needs-more-evidence',
           reason: 'insufficient-evidence',
-          message: input.judgeResult.summary,
+          message: truncateForContract(input.judgeResult.summary, REJECTED_FINDING_MESSAGE_MAX),
           evidenceIds: input.judgeResult.evidenceIds
         })
       ],

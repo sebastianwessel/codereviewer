@@ -1025,13 +1025,23 @@ describe('eval CLI', () => {
         join(root, 'eval', 'benchmarks', 'agentic', 'agentic-local', 'repo', 'src'),
         { recursive: true }
       )
+      // Two connected import pairs -> two dependency clusters -> a multi-task run,
+      // so the model intent planner runs (it is skipped for single-task runs).
       await writeFile(
         join(root, 'eval', 'benchmarks', 'agentic', 'agentic-local', 'repo', 'src', 'a.ts'),
-        'export const a = 1;\n'
+        "import { b } from './b.js';\nexport const a = b + 1;\n"
       )
       await writeFile(
         join(root, 'eval', 'benchmarks', 'agentic', 'agentic-local', 'repo', 'src', 'b.ts'),
         'export const b = 2;\n'
+      )
+      await writeFile(
+        join(root, 'eval', 'benchmarks', 'agentic', 'agentic-local', 'repo', 'src', 'c.ts'),
+        "import { d } from './d.js';\nexport const c = d + 1;\n"
+      )
+      await writeFile(
+        join(root, 'eval', 'benchmarks', 'agentic', 'agentic-local', 'repo', 'src', 'd.ts'),
+        'export const d = 4;\n'
       )
       await writeFile(
         join(root, 'eval', 'benchmarks', 'agentic', 'agentic-local', 'slice.json'),
@@ -1040,7 +1050,7 @@ describe('eval CLI', () => {
             id: 'agentic-local',
             sourceProfile: 'benchmark-semantic',
             language: 'typescript',
-            changedFiles: ['src/a.ts', 'src/b.ts'],
+            changedFiles: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts'],
             expectedFindings: [],
             expectedNoFindingZones: [],
             tags: ['agentic']
@@ -1063,7 +1073,6 @@ describe('eval CLI', () => {
           '--intent-planning',
           'model',
           '--judge-findings',
-          '--policy-review-pass',
           '--max-concurrent-tasks',
           '1'
         ],

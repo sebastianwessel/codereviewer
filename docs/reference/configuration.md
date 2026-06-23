@@ -44,7 +44,6 @@
 | `aiReview` | `externalStaticAnalysisAssumed` | boolean |
 | `aiReview` | `deterministicSignalMode` | `support`, `disabled` |
 | `aiReview` | `actionableSeverityThreshold` | severity, default `medium` (model findings below it are rejected as below-threshold; trusted deterministic rules exempt) |
-| `aiReview` | `policyReviewPass` | boolean, default `false` (when true at thorough depth, adds a second-round policy review pass; CLI: `--policy-review-pass`) |
 | `promotionPolicy` | `modelProof` | `actionable`, `artifact-only` |
 | `promotionPolicy` | `modelSuspicion` | `artifact-only`, `rejected` |
 | `promotionPolicy` | `modelWeakOrRefuted` | `artifact-only`, `rejected` |
@@ -70,7 +69,13 @@ directly when they have local evidence and a concrete fix direction.
 | `evaluation` | `enabled` | boolean |
 
 Default `paths.exclude` is `[".git/**", "node_modules/**", "dist/**",
-"coverage/**", ".codereviewer/**"]`.
+"coverage/**", ".codereviewer/**"]` plus generated/non-reviewable data files
+(dependency lock files such as `**/package-lock.json`, `**/yarn.lock`,
+`**/pnpm-lock.yaml`, `**/Cargo.lock`, `**/go.sum`; minified bundles `**/*.min.js`
+and `**/*.min.css`; source maps `**/*.map`; and test snapshots `**/*.snap`).
+These carry no semantic logic to review, so excluding them lowers token cost and
+noise. Add app-specific data such as locale bundles via `paths.exclude` if
+desired.
 
 When provider token usage is available, explicit `costs` values override the
 bundled OpenAI model pricing snapshot. Unknown model prices are reported with
