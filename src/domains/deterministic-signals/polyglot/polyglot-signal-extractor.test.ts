@@ -155,40 +155,12 @@ describe('polyglot deterministic support signal extractor', () => {
     }
   })
 
-  test('emits Go rule evidence for Error logs that include a nil-checked err value', () => {
-    const result = extractPolyglotSignals('go', [
-      {
-        path: 'cmd/app.go',
-        content: [
-          'package main',
-          'func run() {',
-          '  ids, err := fetchIDs()',
-          '  if err != nil {',
-          '    return',
-          '  }',
-          '  r.log.Error("Annotations to clean by time", "count", len(ids), "err", err)',
-          '  affected, deleteErr := deleteByIDs(ids)',
-          '  r.log.Error("cleaned annotations by time", "affected", affected, "err", deleteErr)',
-          '}'
-        ].join('\n')
-      }
-    ])
-
-    expect(result.evidence).toEqual([
-      expect.objectContaining({
-        kind: 'rule',
-        source: 'go-support-signal',
-        ruleId: 'go-error-log-after-nil-check',
-        location: expect.objectContaining({
-          path: 'cmd/app.go',
-          startLine: 7,
-          side: 'file'
-        })
-      })
-    ])
-  })
-
-  test('emits Go rule evidence when BuildIndex only locks the final cache write', () => {
+  // The benchmark-fitted Go rule-evidence heuristics (nil-checked Error log,
+  // BuildIndex cache lock, cache iteration without read lock) were removed
+  // because they hardcoded benchmark-specific identifiers (eval-gaming). The
+  // polyglot extractor now emits only generic facts and parse diagnostics, so
+  // benchmark-shaped Go source must not produce any rule evidence.
+  test('does not emit Go rule evidence for benchmark-shaped source', () => {
     const result = extractPolyglotSignals('go', [
       {
         path: 'pkg/storage/unified/search/bleve.go',
@@ -207,104 +179,6 @@ describe('polyglot deterministic support signal extractor', () => {
       }
     ])
 
-    expect(result.evidence).toEqual([
-      expect.objectContaining({
-        kind: 'rule',
-        source: 'go-support-signal',
-        ruleId: 'go-build-index-cache-lock-after-build',
-        location: expect.objectContaining({
-          path: 'pkg/storage/unified/search/bleve.go',
-          startLine: 7,
-          side: 'file'
-        })
-      })
-    ])
-  })
-
-  test('does not flag BuildIndex when cache lock covers the build', () => {
-    const result = extractPolyglotSignals('go', [
-      {
-        path: 'pkg/storage/unified/search/bleve.go',
-        content: [
-          'package search',
-          'func (b *bleveBackend) BuildIndex() {',
-          '  b.cacheMu.Lock()',
-          '  defer b.cacheMu.Unlock()',
-          '  index := createIndex()',
-          '  idx := &bleveIndex{index: index}',
-          '  builder(idx)',
-          '  idx.Flush()',
-          '  b.cache[key] = idx',
-          '}'
-        ].join('\n')
-      }
-    ])
-
-    expect(result.evidence).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          ruleId: 'go-build-index-cache-lock-after-build'
-        })
-      ])
-    )
-  })
-
-  test('emits Go rule evidence when TotalDocs iterates cache without a read lock', () => {
-    const result = extractPolyglotSignals('go', [
-      {
-        path: 'pkg/storage/unified/search/bleve.go',
-        content: [
-          'package search',
-          'func (b *bleveBackend) TotalDocs() int64 {',
-          '  var totalDocs int64',
-          '  for _, v := range b.cache {',
-          '    totalDocs += v.Count()',
-          '  }',
-          '  return totalDocs',
-          '}'
-        ].join('\n')
-      }
-    ])
-
-    expect(result.evidence).toEqual([
-      expect.objectContaining({
-        kind: 'rule',
-        source: 'go-support-signal',
-        ruleId: 'go-cache-iteration-without-rlock',
-        location: expect.objectContaining({
-          path: 'pkg/storage/unified/search/bleve.go',
-          startLine: 4,
-          side: 'file'
-        })
-      })
-    ])
-  })
-
-  test('does not flag TotalDocs when cache iteration is read-locked', () => {
-    const result = extractPolyglotSignals('go', [
-      {
-        path: 'pkg/storage/unified/search/bleve.go',
-        content: [
-          'package search',
-          'func (b *bleveBackend) TotalDocs() int64 {',
-          '  b.cacheMu.RLock()',
-          '  defer b.cacheMu.RUnlock()',
-          '  var totalDocs int64',
-          '  for _, v := range b.cache {',
-          '    totalDocs += v.Count()',
-          '  }',
-          '  return totalDocs',
-          '}'
-        ].join('\n')
-      }
-    ])
-
-    expect(result.evidence).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          ruleId: 'go-cache-iteration-without-rlock'
-        })
-      ])
-    )
+    expect(result.evidence).toEqual([])
   })
 })

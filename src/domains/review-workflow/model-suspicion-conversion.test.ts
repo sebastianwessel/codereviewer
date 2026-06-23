@@ -3,6 +3,11 @@ import { candidatesFromModelSuspicions } from './model-suspicion-conversion.js'
 import { TaskReviewInputSchema } from './model-agent-contracts.js'
 
 describe('model suspicion conversion', () => {
+  // This fixture exercises the GENERIC deduplication mechanism: model
+  // suspicions that restate an existing trusted deterministic-rule candidate
+  // (matched by proposedBy, location, and evidence) are dropped. The specific
+  // rule that produced the trusted candidate is irrelevant to this behavior, so
+  // the fixture uses a neutral rule id rather than a removed benchmark rule.
   const trustedCandidateInput = () =>
     TaskReviewInputSchema.parse({
       runId: 'run-conversion',
@@ -10,7 +15,7 @@ describe('model suspicion conversion', () => {
         id: 'task_conversion',
         kind: 'dependency-cluster',
         round: 1,
-        paths: ['pkg/storage/unified/search/bleve.go'],
+        paths: ['src/cache.ts'],
         factIds: [],
         evidenceIds: ['evidence_cachelock'],
         candidateIds: ['cand_trustedcache'],
@@ -20,7 +25,7 @@ describe('model suspicion conversion', () => {
       reviewIntents: [],
       reviewedDiffRanges: [
         {
-          path: 'pkg/storage/unified/search/bleve.go',
+          path: 'src/cache.ts',
           startLine: 1,
           endLine: 40
         }
@@ -30,14 +35,14 @@ describe('model suspicion conversion', () => {
           id: 'evidence_cachelock',
           kind: 'rule',
           summary:
-            'BuildIndex performs expensive index construction before taking the cache lock.',
+            'The cache value is populated outside the lock that protects it.',
           location: {
-            path: 'pkg/storage/unified/search/bleve.go',
+            path: 'src/cache.ts',
             startLine: 24,
             side: 'file'
           },
-          source: 'go-support-signal',
-          ruleId: 'go-build-index-cache-lock-after-build',
+          source: 'typescript-support-signal',
+          ruleId: 'trusted-rule-fixture',
           redactionApplied: true
         }
       ],
@@ -47,18 +52,18 @@ describe('model suspicion conversion', () => {
           taskId: 'task_conversion',
           category: 'performance',
           severity: 'high',
-          title: 'Cache index build happens outside the cache lock',
+          title: 'Cache value is populated outside the lock',
           description:
-            'BuildIndex performs expensive index construction before taking the cache lock.',
+            'The cache value is populated outside the lock that protects it.',
           location: {
-            path: 'pkg/storage/unified/search/bleve.go',
+            path: 'src/cache.ts',
             startLine: 24,
             side: 'new'
           },
           evidenceIds: ['evidence_cachelock'],
           proposedBy: 'deterministic-trusted-rule',
           fixProposal: {
-            summary: 'Move the expensive cache build under the cache lock.',
+            summary: 'Populate the cache value under the protecting lock.',
             evidenceIds: ['evidence_cachelock'],
             safety: 'manual-review'
           }
@@ -83,10 +88,10 @@ describe('model suspicion conversion', () => {
         {
           category: 'bug',
           severity: 'high',
-          title: 'BuildIndex reads and populates cache non-atomically',
+          title: 'Cache is read and populated non-atomically',
           description:
             'The model reports the same cache-lock issue at the function start.',
-          path: 'pkg/storage/unified/search/bleve.go',
+          path: 'src/cache.ts',
           startLine: 16,
           evidenceIds: ['evidence_cachelock'],
           fixSummary: 'Protect the cache read/build/write path with locking.'
@@ -106,10 +111,10 @@ describe('model suspicion conversion', () => {
         {
           category: 'bug',
           severity: 'high',
-          title: 'Unsynchronized map access in BuildIndex can race with writers',
+          title: 'Unsynchronized map access can race with writers',
           description:
-            'BuildIndex checks and populates the shared cache around expensive index construction without holding the cache lock.',
-          path: 'pkg/storage/unified/search/bleve.go',
+            'The cache is checked and populated around work without holding the cache lock.',
+          path: 'src/cache.ts',
           startLine: 17,
           fixSummary: 'Protect the cache read/build/write path with locking.'
         }

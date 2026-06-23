@@ -32,71 +32,16 @@ type TrustedRuleFindingTemplate = {
   readonly fixSummary: string
 }
 
+// The trusted deterministic-rule promotion mechanism is retained: any evidence
+// record whose ruleId matches an entry here is promoted into an admission-exempt
+// support-signal candidate. The previous entries keyed benchmark-specific rule
+// IDs (dayjs, slot-end, prorated, authorization, BuildIndex cache lock, cache
+// iteration); those deterministic rules were removed as eval-gaming, so no
+// evidence carries those rule IDs anymore and the map is intentionally empty.
 const trustedRuleFindingTemplates: ReadonlyMap<
   string,
   TrustedRuleFindingTemplate
-> = new Map([
-  [
-    'typescript-authorization-missing-lookup-allows-access',
-    {
-      category: 'security',
-      severity: 'high',
-      title: 'Authorization lookup miss allows access',
-      fixSummary:
-        'Return deny-by-default when the authorization lookup is missing or expired, then require the positive membership check to grant access.'
-    }
-  ],
-  [
-    'typescript-dayjs-object-strict-equality',
-    {
-      category: 'bug',
-      severity: 'medium',
-      title: 'Dayjs object equality uses reference comparison',
-      fixSummary:
-        'Replace strict equality between Dayjs objects with isSame(...) or compare primitive timestamp values.'
-    }
-  ],
-  [
-    'typescript-slot-end-derived-from-start-time',
-    {
-      category: 'bug',
-      severity: 'medium',
-      title: 'Slot end is derived from slot start time',
-      fixSummary:
-        'Compute the slot end from slotEndTime instead of slotStartTime so the returned window preserves the intended duration.'
-    }
-  ],
-  [
-    'typescript-prorated-branch-omits-discount',
-    {
-      category: 'bug',
-      severity: 'medium',
-      title: 'Prorated billing branch omits discount',
-      fixSummary:
-        'Apply the same discount adjustment in the prorated billing branch, or make the no-discount prorated rule explicit with a separate invariant and tests.'
-    }
-  ],
-  [
-    'go-build-index-cache-lock-after-build',
-    {
-      category: 'performance',
-      severity: 'high',
-      title: 'Cache index build happens outside the cache lock',
-      fixSummary:
-        'Hold the cache lock across the cache lookup and cache population path, or use singleflight/double-checked locking so concurrent callers cannot race or duplicate the build.'
-    }
-  ],
-  [
-    'go-cache-iteration-without-rlock',
-    {
-      category: 'performance',
-      severity: 'high',
-      title: 'Shared cache map iteration lacks a read lock',
-      fixSummary:
-        'Take the cache read lock while iterating the shared map, or copy the entries under lock before computing totals.'
-    }
-  ]
-])
+> = new Map()
 
 const trustedCandidateIdForEvidence = (evidence: EvidenceRecord): string =>
   `cand_${sha256(

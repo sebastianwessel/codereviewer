@@ -35,7 +35,11 @@ describe('review runner task planning', () => {
     })
   })
 
-  test('promotes trusted deterministic signal evidence into support-signal candidates', () => {
+  // The benchmark-fitted deterministic rules (dayjs, slot-end, prorated) were
+  // removed as eval-gaming, so the extractor no longer emits the rule evidence
+  // that previously promoted trusted support-signal candidates. The promotion
+  // mechanism itself remains; it simply receives no benchmark-rule evidence now.
+  test('does not promote support-signal candidates from removed benchmark heuristics', () => {
     const sourceFiles = [
       {
         path: 'src/slots.ts',
@@ -65,82 +69,17 @@ describe('review runner task planning', () => {
       evidence: deterministicSignals.evidence
     })
 
-    expect(result.supportSignalCandidates).toHaveLength(2)
-    expect(result.supportSignalCandidates).toEqual(
+    expect(result.supportSignalCandidates).toEqual([])
+    expect(result.metrics.supportSignalCandidateCount).toBe(0)
+    // Generic structural facts (the dayjs import) are still extracted.
+    expect(deterministicSignals.analysis.facts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          category: 'bug',
-          severity: 'medium',
-          title: 'Dayjs object equality uses reference comparison',
-          location: expect.objectContaining({
-            path: 'src/slots.ts',
-            startLine: 6,
-            side: 'new'
-          }),
-          proposedBy: 'deterministic-trusted-rule'
-        }),
-        expect.objectContaining({
-          category: 'bug',
-          severity: 'medium',
-          title: 'Slot end is derived from slot start time',
-          location: expect.objectContaining({
-            path: 'src/slots.ts',
-            startLine: 7,
-            side: 'new'
-          }),
-          proposedBy: 'deterministic-trusted-rule'
+          kind: 'import',
+          name: 'dayjs',
+          path: 'src/slots.ts'
         })
       ])
     )
-    expect(result.reviewTasks[0]?.candidateIds).toEqual(
-      result.supportSignalCandidates.map((candidate) => candidate.id)
-    )
-    expect(result.metrics.supportSignalCandidateCount).toBe(2)
-  })
-
-  test('promotes prorated discount deterministic evidence into a support-signal candidate', () => {
-    const sourceFiles = [
-      {
-        path: 'src/billing.ts',
-        content: [
-          'export const totalDueCents = (items: readonly InvoiceItem[]): number =>',
-          '  items.reduce((total, item) => {',
-          '    const subtotal = item.quantity * item.unitCents',
-          '',
-          '    if (item.prorated) {',
-          '      return total + subtotal',
-          '    }',
-          '',
-          '    return total + subtotal - item.discountCents',
-          '  }, 0)'
-        ].join('\n')
-      }
-    ]
-    const deterministicSignals =
-      prepareReviewRunnerDeterministicSignals(sourceFiles)
-    const config = CodeReviewerConfigSchema.parse({
-      review: { depth: 'balanced' }
-    })
-
-    const result = prepareReviewRunnerTaskPlanning({
-      depth: config.review.depth,
-      files: sourceFiles,
-      facts: deterministicSignals.analysis.facts,
-      evidence: deterministicSignals.evidence
-    })
-
-    expect(result.supportSignalCandidates).toEqual([
-      expect.objectContaining({
-        category: 'bug',
-        severity: 'medium',
-        title: 'Prorated billing branch omits discount',
-        location: expect.objectContaining({
-          path: 'src/billing.ts',
-          startLine: 6,
-          side: 'new'
-        }),
-        proposedBy: 'deterministic-trusted-rule'
-      })
-    ])
   })
 })
