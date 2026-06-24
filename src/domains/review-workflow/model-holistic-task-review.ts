@@ -15,6 +15,48 @@ import {
   type TaskReviewResult,
   type WorkflowReviewTask
 } from './model-agent-contracts.js'
+
+// Present the changed source to the holistic reviewer as a clean, line-numbered
+// document (plus the diff ranges), rather than the structured task packet. This
+// is the input shape that let whole-file holistic review out-recall the gauntlet
+// in probes; burying the source inside the packet dilutes whole-file reasoning.
+const buildReviewText = (taskInput: TaskReviewInput): string => {
+  const files = taskInput.task.reviewContext
+    .filter(
+      (entry): entry is typeof entry & { readonly path: string } =>
+        typeof entry.content === 'string' &&
+        entry.content.length > 0 &&
+        typeof entry.path === 'string' &&
+        taskInput.task.paths.includes(entry.path)
+    )
+    .map((entry) => {
+      const numbered = entry.content
+        .split('\n')
+        .map((line, index) => `${index + 1}: ${line}`)
+        .join('\n')
+      return `### FILE: ${entry.path}\n${numbered}`
+    })
+    .join('\n\n')
+
+  const diffRanges = taskInput.reviewedDiffRanges
+    .map(
+      (range) =>
+        `${range.path} lines ${range.startLine}-${range.endLine}${
+          range.changeKind === undefined ? '' : ` (${range.changeKind})`
+        }`
+    )
+    .join('\n')
+
+  return [
+    `Review task ${taskInput.task.id}.`,
+    diffRanges.length === 0
+      ? ''
+      : `\n## Reviewed diff ranges (what changed)\n${diffRanges}`,
+    `\n## Changed files (full content, line-numbered)\n${
+      files.length === 0 ? '(no file content provided)' : files
+    }`
+  ].join('\n')
+}
 import { type ReviewWorkflowInput } from './workflow-contracts.js'
 
 type HolisticTaskReviewLogger = {
@@ -101,7 +143,15 @@ export const runModelBackedHolisticTaskReview = async (
   }
 ): Promise<TaskReviewResult> => {
   const result = ModelHolisticReviewResultSchema.parse(
-    await input.runners.holisticReview(input.taskInput, input.signal)
+    await input.runners.holisticReview(
+      {
+        runId: input.taskInput.runId,
+        taskId: input.task.id,
+        paths: [...input.task.paths],
+        reviewText: buildReviewText(input.taskInput)
+      },
+      input.signal
+    )
   )
 
   const candidatesById = new Map<string, CandidateFinding>()

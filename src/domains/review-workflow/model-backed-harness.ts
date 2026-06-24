@@ -15,6 +15,7 @@ import {
   FindingInvestigationInputSchema,
   FindingJudgeInputSchema,
   FindingRefutationInputSchema,
+  HolisticReviewInputSchema,
   IntentPlanningInputSchema,
   ModelFindingAggregateResultSchema,
   ModelFindingInvestigationResultSchema,
@@ -99,7 +100,7 @@ export const createModelBackedReviewHarness = (
       }),
       holistic_review: agent({
         model: 'reviewer',
-        input: TaskReviewInputSchema,
+        input: HolisticReviewInputSchema,
         output: ModelHolisticReviewResultSchema,
         ...agentOptionsForRole('review_task'),
         instructions: modelHolisticReviewerInstructions

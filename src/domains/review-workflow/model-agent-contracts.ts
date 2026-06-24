@@ -416,6 +416,21 @@ export const ModelTaskSuggestionsSchema = z.strictObject({
   suspicions: z.array(z.unknown()).default([])
 })
 
+// Dedicated holistic discovery input. Unlike the suspicion stage (which reuses
+// the full structured task packet), holistic review gets a single clean,
+// line-numbered presentation of the changed files plus the diff ranges - this
+// matches the input shape that made holistic review out-recall the gauntlet in
+// probes (the structured packet buries the source and dilutes whole-file
+// reasoning).
+export const HolisticReviewInputSchema = z.strictObject({
+  runId: z.string().min(1),
+  taskId: z.string().min(1),
+  paths: z.array(RepositoryRelativePathSchema),
+  reviewText: z.string().min(1)
+})
+
+export type HolisticReviewInput = z.infer<typeof HolisticReviewInputSchema>
+
 // Holistic discovery output. Loose like ModelTaskSuggestionsSchema (tolerates
 // model output drift); each raw finding is normalized via
 // ModelSuspicionSuggestionSchema and mapped to a CandidateFinding downstream.
@@ -428,7 +443,7 @@ export type ModelHolisticReviewResult = z.infer<
 >
 
 export type HolisticReviewRunner = (
-  input: TaskReviewInput,
+  input: HolisticReviewInput,
   signal: AbortSignal | undefined
 ) => Promise<ModelHolisticReviewResult>
 
