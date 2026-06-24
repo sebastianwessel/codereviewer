@@ -79,6 +79,7 @@ describe('review runner provider workflow', () => {
 
     const result = await runProviderWorkflow({
       workflowInput: ReviewWorkflowInputSchema.parse({
+        discoveryMode: 'suspicion',
         runId: 'run-provider-boundary',
         reviewedPaths: ['src/app.ts'],
         evidence: [],

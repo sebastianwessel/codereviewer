@@ -21,7 +21,7 @@ describe('CodeReviewerConfigSchema', () => {
     expect(parsed.aiReview).toEqual({
       requireRefutation: true,
       intentPlanning: 'auto',
-      discoveryMode: 'suspicion',
+      discoveryMode: 'holistic',
       judgeFindings: false,
       deterministicSignalMode: 'support',
       actionableSeverityThreshold: 'medium'

@@ -32,7 +32,7 @@ Where both exist, the env variable wins over the file but loses to a CLI flag.
 | `CODEREVIEWER_ARTIFACT_DIR` | `.codereviewer/runs` | `paths.artifactDir` |
 | `CODEREVIEWER_SKILLS_DIR` | `.codereviewer/skills` | `skills.directories` |
 | `CODEREVIEWER_AI_INTENT_PLANNING` | `auto` | `aiReview.intentPlanning` |
-| `CODEREVIEWER_AI_DISCOVERY_MODE` | `suspicion` | `aiReview.discoveryMode` |
+| `CODEREVIEWER_AI_DISCOVERY_MODE` | `holistic` | `aiReview.discoveryMode` |
 | `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `support` | `aiReview.deterministicSignalMode` |
 | `CODEREVIEWER_AI_JUDGE_FINDINGS` | `false` | `aiReview.judgeFindings` |
 | `CODEREVIEWER_LOG_LEVEL` | `info` | `observability.logging.level` |

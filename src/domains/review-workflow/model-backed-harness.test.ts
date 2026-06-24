@@ -48,6 +48,7 @@ describe('model-backed harness', () => {
       harness,
       sessionId: 'model-backed-test',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'model-backed-run',
         reviewedPaths: ['src/model-backed.ts'],
         evidence: [],

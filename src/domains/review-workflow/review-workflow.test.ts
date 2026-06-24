@@ -2462,6 +2462,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts', 'src/helper.ts'],
         evidence: [
@@ -2573,6 +2574,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-intent-planning',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -2720,6 +2722,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-intent-cluster-budget-fallback',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts', 'src/helper.ts'],
         evidence: [],
@@ -2826,6 +2829,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-judge-false-positive',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         reviewedDiffRanges: [
@@ -2923,6 +2927,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-aggregate-review',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         reviewedDiffRanges: [
@@ -3016,6 +3021,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-aggregate-packet-budget',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         reviewedDiffRanges: [
@@ -3109,6 +3115,7 @@ describe('review workflow', () => {
         harness,
         sessionId: 'test-investigation-packet-budget',
         input: {
+          discoveryMode: 'suspicion',
           runId: 'test-run',
           repositoryRoot: root,
           reviewedPaths: ['src/app.ts'],
@@ -3213,6 +3220,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-sibling-sweep',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         reviewedDiffRanges: [
@@ -3330,6 +3338,7 @@ describe('review workflow', () => {
         harness,
         sessionId: 'test-judge-requested-context',
         input: {
+          discoveryMode: 'suspicion',
           runId: 'test-run',
           repositoryRoot: root,
           reviewedPaths: ['src/app.ts'],
@@ -3474,6 +3483,7 @@ describe('review workflow', () => {
         harness,
         sessionId: 'test-judge-requested-context-rounds',
         input: {
+          discoveryMode: 'suspicion',
           runId: 'test-run',
           repositoryRoot: root,
           reviewedPaths: ['src/app.ts'],
@@ -3601,6 +3611,7 @@ describe('review workflow', () => {
       }
     })
     const input = {
+      discoveryMode: 'suspicion' as const,
       runId: 'test-run',
       reviewedPaths: ['src/app.ts'],
       reviewedDiffRanges: [
@@ -3699,6 +3710,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -3797,6 +3809,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -3879,6 +3892,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -3977,6 +3991,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts', 'src/util.ts'],
         evidence: [],
@@ -4019,6 +4034,7 @@ describe('review workflow', () => {
     const firstProvider = new FailingSecondTaskProvider()
     const secondProvider = new EmptyFindingProvider()
     const input = {
+      discoveryMode: 'suspicion' as const,
       runId: 'test-run-resume',
       reviewedPaths: ['src/app.ts', 'src/util.ts'],
       evidence: [],
@@ -4112,6 +4128,7 @@ describe('review workflow', () => {
         harness,
         sessionId: 'test-session-concurrency',
         input: {
+          discoveryMode: 'suspicion',
           runId: 'test-run-concurrency',
           reviewedPaths: [
             'src/a.ts',
@@ -4165,6 +4182,7 @@ describe('review workflow', () => {
         harness,
         sessionId: 'test-session-rolling-queue',
         input: {
+          discoveryMode: 'suspicion',
           runId: 'test-run-rolling-queue',
           reviewedPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts'],
           evidence: [],
@@ -4211,6 +4229,7 @@ describe('review workflow', () => {
         harness,
         sessionId: 'test-session',
         input: {
+          discoveryMode: 'suspicion',
           runId: 'test-run',
           reviewedPaths: ['src/a.ts', 'src/b.ts'],
           evidence: [
@@ -4315,6 +4334,7 @@ describe('review workflow', () => {
           harness,
           sessionId: 'test-session',
           input: {
+            discoveryMode: 'suspicion',
             runId: 'test-run',
             reviewedPaths: ['src/large.ts'],
             evidence: [],
@@ -4388,6 +4408,7 @@ describe('review workflow', () => {
           harness,
           sessionId: 'test-session',
           input: {
+            discoveryMode: 'suspicion',
             runId: 'test-run',
             reviewedPaths: ['src/large.ts'],
             evidence,
@@ -4449,6 +4470,7 @@ describe('review workflow', () => {
         harness,
         sessionId: 'test-session',
         input: {
+          discoveryMode: 'suspicion',
           runId: 'test-run',
           reviewedPaths: ['src/app.ts'],
           evidence: [],
@@ -4520,6 +4542,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -4602,6 +4625,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [],
@@ -4666,6 +4690,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [],
@@ -4737,6 +4762,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -4822,6 +4848,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -4904,6 +4931,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -4983,6 +5011,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [],
@@ -5051,6 +5080,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/auth.ts'],
         reviewedDiffRanges: [
@@ -5131,6 +5161,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [],
@@ -5200,6 +5231,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/common.json'],
         evidence: [],
@@ -5252,6 +5284,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts', 'src/helper.ts'],
         evidence: [],
@@ -5367,6 +5400,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [],
@@ -5429,6 +5463,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         reviewedDiffRanges: [
@@ -5503,6 +5538,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [],
@@ -5554,6 +5590,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [],
@@ -5613,6 +5650,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/BackupCode.tsx'],
         evidence: [],
@@ -5683,6 +5721,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -5761,6 +5800,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -5851,6 +5891,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -5970,6 +6011,7 @@ describe('review workflow', () => {
       harness,
       sessionId: 'test-session',
       input: {
+        discoveryMode: 'suspicion',
         runId: 'test-run',
         reviewedPaths: ['src/app.ts'],
         evidence: [
@@ -6054,6 +6096,9 @@ describe('review workflow', () => {
         review: {
           depth: 'fast',
           maxConcurrentTasks: 1
+        },
+        aiReview: {
+          discoveryMode: 'suspicion'
         },
         drift: {
           enabled: false
@@ -6225,6 +6270,9 @@ describe('review workflow', () => {
         review: {
           depth: 'balanced'
         },
+        aiReview: {
+          discoveryMode: 'suspicion'
+        },
         drift: {
           enabled: false
         }
@@ -6300,6 +6348,9 @@ describe('review workflow', () => {
           depth: 'balanced',
           contextMaxBytes: 10000
         },
+        aiReview: {
+          discoveryMode: 'suspicion'
+        },
         drift: {
           enabled: false
         }
@@ -6371,6 +6422,9 @@ describe('review workflow', () => {
           depth: 'fast',
           contextMaxBytes: 10000
         },
+        aiReview: {
+          discoveryMode: 'suspicion'
+        },
         drift: {
           enabled: false
         }
@@ -6437,6 +6491,9 @@ describe('review workflow', () => {
           inputPerMillion: 1,
           outputPerMillion: 2
         },
+        aiReview: {
+          discoveryMode: 'suspicion'
+        },
         drift: {
           enabled: false
         }
@@ -6485,6 +6542,9 @@ describe('review workflow', () => {
         },
         review: {
           depth: 'fast'
+        },
+        aiReview: {
+          discoveryMode: 'suspicion'
         },
         drift: {
           enabled: false
@@ -6541,6 +6601,9 @@ describe('review workflow', () => {
         },
         review: {
           depth: 'fast'
+        },
+        aiReview: {
+          discoveryMode: 'suspicion'
         },
         drift: {
           enabled: false
@@ -6728,6 +6791,7 @@ describe('review workflow', () => {
           depth: 'thorough'
         },
         aiReview: {
+          discoveryMode: 'suspicion',
           maxSuspicionsPerTask: 1
         },
         drift: {
@@ -6789,6 +6853,9 @@ describe('review workflow', () => {
         },
         review: {
           depth: 'balanced'
+        },
+        aiReview: {
+          discoveryMode: 'suspicion'
         },
         drift: {
           enabled: false
@@ -6898,6 +6965,7 @@ describe('review workflow', () => {
           depth: 'balanced'
         },
         aiReview: {
+          discoveryMode: 'suspicion',
           maxInvestigationRounds: 2
         },
         drift: {
@@ -6996,6 +7064,7 @@ describe('review workflow', () => {
           depth: 'balanced'
         },
         aiReview: {
+          discoveryMode: 'suspicion',
           maxToolReadsPerInvestigation: 0
         },
         drift: {
@@ -7065,6 +7134,7 @@ describe('review workflow', () => {
           depth: 'balanced'
         },
         aiReview: {
+          discoveryMode: 'suspicion',
           maxInvestigationsPerRun: 0
         },
         drift: {
@@ -7117,6 +7187,9 @@ describe('review workflow', () => {
         },
         review: {
           depth: 'fast'
+        },
+        aiReview: {
+          discoveryMode: 'suspicion'
         },
         drift: {
           enabled: false
@@ -7172,6 +7245,9 @@ describe('review workflow', () => {
         costs: {
           inputPerMillion: 1,
           outputPerMillion: 2
+        },
+        aiReview: {
+          discoveryMode: 'suspicion'
         },
         drift: {
           enabled: false
@@ -7235,6 +7311,9 @@ describe('review workflow', () => {
         review: {
           depth: 'fast',
           maxFiles: 1
+        },
+        aiReview: {
+          discoveryMode: 'suspicion'
         },
         drift: {
           enabled: false
@@ -7409,6 +7488,9 @@ describe('review workflow', () => {
         review: {
           depth: 'balanced',
           maxConcurrentTasks: 1
+        },
+        aiReview: {
+          discoveryMode: 'suspicion'
         },
         drift: {
           enabled: false
@@ -7624,6 +7706,9 @@ describe('review workflow', () => {
         review: {
           depth: 'fast'
         },
+        aiReview: {
+          discoveryMode: 'suspicion'
+        },
         drift: {
           enabled: false
         }
@@ -7703,6 +7788,7 @@ describe('review workflow', () => {
         }),
         sessionId: 'test-session',
         input: {
+          discoveryMode: 'suspicion',
           runId: 'test-run',
           reviewedPaths: ['src/app.ts'],
           evidence: [],
@@ -7744,6 +7830,7 @@ describe('review workflow', () => {
         }),
         sessionId: 'test-session',
         input: {
+          discoveryMode: 'suspicion',
           runId: 'test-run',
           reviewedPaths: ['src/app.ts'],
           evidence: [],

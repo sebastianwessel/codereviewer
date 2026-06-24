@@ -764,6 +764,9 @@ describe('eval CLI', () => {
           review: {
             depth: 'fast'
           },
+          aiReview: {
+            discoveryMode: 'suspicion'
+          },
           drift: {
             enabled: false
           }
@@ -829,6 +832,9 @@ describe('eval CLI', () => {
           review: {
             depth: 'fast',
             maxConcurrentTasks: 4
+          },
+          aiReview: {
+            discoveryMode: 'suspicion'
           },
           drift: {
             enabled: false
@@ -925,6 +931,9 @@ describe('eval CLI', () => {
             depth: 'fast',
             maxConcurrentTasks: 4
           },
+          aiReview: {
+            discoveryMode: 'suspicion'
+          },
           drift: {
             enabled: false
           }
@@ -1013,6 +1022,7 @@ describe('eval CLI', () => {
             maxConcurrentTasks: 4
           },
           aiReview: {
+            discoveryMode: 'suspicion',
             intentPlanning: 'auto',
             judgeFindings: false
           },
