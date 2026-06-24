@@ -20,6 +20,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "artifactOnlyFalsePositiveFindings": [],
       "artifactOnlyFindingIds": [],
       "artifactOnlyMatchedFindings": [],
+      "cachedInputTokens": 0,
       "caseId": "typescript-positive",
       "contextLedger": [
         {
@@ -86,6 +87,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "artifactOnlyFalsePositiveFindings": [],
       "artifactOnlyFindingIds": [],
       "artifactOnlyMatchedFindings": [],
+      "cachedInputTokens": 0,
       "caseId": "typescript-negative",
       "contextLedger": [],
       "costUnavailable": false,
@@ -140,6 +142,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "artifactOnlyMatchedFindingCount": 0,
         "artifactOnlyPrecision": 1,
         "artifactOnlyRecall": 0,
+        "cachedInputTokens": 0,
         "commentsPerDiffHunk": 0.666667,
         "commentsPerKloc": 33.333333,
         "contextMutationRate": 0,
@@ -198,6 +201,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "artifactOnlyMatchedFindingCount": 0,
         "artifactOnlyPrecision": 1,
         "artifactOnlyRecall": 0,
+        "cachedInputTokens": 0,
         "commentsPerDiffHunk": 0.666667,
         "commentsPerKloc": 33.333333,
         "contextMutationRate": 0,
@@ -255,6 +259,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "artifactOnlyMatchedFindingCount": 0,
         "artifactOnlyPrecision": 1,
         "artifactOnlyRecall": 1,
+        "cachedInputTokens": 0,
         "commentsPerDiffHunk": 1,
         "commentsPerKloc": 100,
         "contextMutationRate": 0,
@@ -312,6 +317,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "artifactOnlyMatchedFindingCount": 0,
         "artifactOnlyPrecision": 1,
         "artifactOnlyRecall": 0,
+        "cachedInputTokens": 0,
         "commentsPerDiffHunk": 0.5,
         "commentsPerKloc": 20,
         "contextMutationRate": 0,
@@ -370,6 +376,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "artifactOnlyMatchedFindingCount": 0,
         "artifactOnlyPrecision": 1,
         "artifactOnlyRecall": 0,
+        "cachedInputTokens": 0,
         "commentsPerDiffHunk": 0.666667,
         "commentsPerKloc": 33.333333,
         "contextMutationRate": 0,
@@ -421,6 +428,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "artifactOnlyMatchedFindingCount": 0,
     "artifactOnlyPrecision": 1,
     "artifactOnlyRecall": 0,
+    "cachedInputTokens": 0,
     "commentsPerDiffHunk": 0.666667,
     "commentsPerKloc": 33.333333,
     "contextMutationRate": 0,
@@ -541,6 +549,7 @@ Fixtures: 2
 | Context mutation rate | 0.0% |
 | Duration | 2.0s |
 | Input tokens | 0 |
+| Input tokens (cached) | 0 |
 | Output tokens | 0 |
 | Cost | $0.2000 |
 

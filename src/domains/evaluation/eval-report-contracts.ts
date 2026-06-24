@@ -134,6 +134,7 @@ export const EvalCaseReportSchema = z.strictObject({
   warnings: z.array(z.string()),
   durationMs: z.int().min(0),
   inputTokens: z.int().min(0).default(0),
+  cachedInputTokens: z.int().min(0).default(0),
   outputTokens: z.int().min(0).default(0),
   costUnavailable: z.boolean().default(false),
   costUsd: z.number().min(0)

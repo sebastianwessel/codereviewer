@@ -34,6 +34,8 @@ const createProviderUsageRecorder = (
 ): ProviderUsageRecorder => {
   let inputTokens = 0
   let outputTokens = 0
+  let cachedInputTokens = 0
+  let reasoningTokens = 0
   const provider = modelAlias.provider
   const wrappedProvider: ModelProvider = {
     ...provider,
@@ -48,6 +50,8 @@ const createProviderUsageRecorder = (
 
             inputTokens += response.usage.inputTokens
             outputTokens += response.usage.outputTokens
+            cachedInputTokens += response.usage.cachedInputTokens ?? 0
+            reasoningTokens += response.usage.reasoningTokens ?? 0
 
             return response
           }
@@ -62,6 +66,8 @@ const createProviderUsageRecorder = (
 
             inputTokens += response.usage.inputTokens
             outputTokens += response.usage.outputTokens
+            cachedInputTokens += response.usage.cachedInputTokens ?? 0
+            reasoningTokens += response.usage.reasoningTokens ?? 0
 
             return response
           }
@@ -86,7 +92,9 @@ const createProviderUsageRecorder = (
     },
     usage: () => ({
       inputTokens,
-      outputTokens
+      outputTokens,
+      cachedInputTokens,
+      reasoningTokens
     })
   }
 }

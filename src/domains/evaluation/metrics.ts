@@ -96,6 +96,8 @@ export const EvalMetricsSchema = z.strictObject({
   productRecall: RateSchema.default(1),
   nitRecall: RateSchema.default(1),
   inputTokens: z.int().min(0).default(0),
+  // Cached input tokens are a SUBSET of inputTokens (already counted there).
+  cachedInputTokens: z.int().min(0).default(0),
   outputTokens: z.int().min(0).default(0),
   costUnavailableCount: z.int().min(0).default(0),
   costUsd: z.number().min(0),
@@ -141,6 +143,7 @@ export type EvalMetricCaseResult = {
   readonly mutatedContextLedgerEntryCount: number
   readonly costUsd: number
   readonly inputTokens: number
+  readonly cachedInputTokens: number
   readonly outputTokens: number
   readonly costUnavailable: boolean
   readonly durationMs: number
@@ -368,6 +371,7 @@ const calculate = (
     productRecall,
     nitRecall,
     inputTokens: sum(caseResults.map((result) => result.inputTokens)),
+    cachedInputTokens: sum(caseResults.map((result) => result.cachedInputTokens)),
     outputTokens: sum(caseResults.map((result) => result.outputTokens)),
     costUnavailableCount: caseResults.filter((result) => result.costUnavailable)
       .length,

@@ -170,6 +170,7 @@ Overrides the bundled pricing snapshot for cost estimation.
 | Key | Values / Type | Description |
 | --- | --- | --- |
 | `costs.inputPerMillion` | number ≥ 0 | Cost per million input tokens in USD. |
+| `costs.cachedInputPerMillion` | number ≥ 0 | Cost per million cached (prompt-cache read) input tokens in USD. Re-prices the cached subset of input tokens; falls back to the input price when unset. |
 | `costs.outputPerMillion` | number ≥ 0 | Cost per million output tokens in USD. |
 
 ---

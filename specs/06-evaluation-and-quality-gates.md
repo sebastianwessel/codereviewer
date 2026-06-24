@@ -379,14 +379,15 @@ availability from the review report:
 | `providerIssues` | object[] | Provider instability observed for the case, including unrecovered provider errors, recovered eval retries, refutation provider issues, and budget/timeouts. Each entry includes `code`, `stage`, and `recovered`. |
 | `refutationResults` | object[] | Sanitized refutation summaries with ID, refuted candidate ID, verdict, and reason code. |
 | `inputTokens` | integer >= 0 | Total input tokens surfaced by the review report for this case, or `0` when unavailable. |
+| `cachedInputTokens` | integer >= 0 | Cached (prompt-cache read) input tokens surfaced by the review report for this case (a subset of `inputTokens`), or `0` when unavailable. |
 | `outputTokens` | integer >= 0 | Total output tokens surfaced by the review report for this case, or `0` when unavailable. |
 | `costUsd` | number >= 0 | Known cost for this case, or `0` when unavailable. |
 | `costUnavailable` | boolean | `true` when cost/token metadata was incomplete and the case warnings include `cost-unavailable`. |
 
 `metrics` and every `metricGroups[].metrics` entry must aggregate
 `duplicateFindingCount`, artifact-only diagnostic metrics,
-`trustedDeterministicFindingCount`, `inputTokens`, `outputTokens`, and
-`costUnavailableCount`. They must also aggregate
+`trustedDeterministicFindingCount`, `inputTokens`, `cachedInputTokens`,
+`outputTokens`, and `costUnavailableCount`. They must also aggregate
 `providerIssueCount` and `providerIssueRate` separately from
 `providerErrorRate`, because recovered provider retries must remain visible
 without being treated as unrecovered case errors. Markdown summaries must render

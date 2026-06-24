@@ -64,7 +64,8 @@ describe('review runner finalization', () => {
       warnings: [],
       costUsd: 1.25,
       inputTokens: 1_000_000,
-      outputTokens: 500_000
+      outputTokens: 500_000,
+      cachedInputTokens: 0
     })
     expect(finalization.warnings).toEqual([
       'config-warning',

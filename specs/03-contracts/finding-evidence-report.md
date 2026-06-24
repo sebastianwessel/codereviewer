@@ -349,6 +349,7 @@ JSON file to callers, but that JSON self-entry is not embedded in `report.json`.
 | `durationMs` | yes | integer >= 0 |
 | `costUsd` | no | number >= 0 |
 | `inputTokens` | no | integer >= 0 |
+| `cachedInputTokens` | no | integer >= 0 |
 | `outputTokens` | no | integer >= 0 |
 | `warnings` | yes | string[] |
 

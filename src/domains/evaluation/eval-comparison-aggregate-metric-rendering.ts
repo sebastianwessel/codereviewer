@@ -193,6 +193,11 @@ export const appendEvalComparisonMetricDeltas = (
         head: input.head.metrics.inputTokens
       }),
       formatEvalComparisonIntegerMetricDeltaRow({
+        metric: 'Input tokens (cached)',
+        base: input.base.metrics.cachedInputTokens,
+        head: input.head.metrics.cachedInputTokens
+      }),
+      formatEvalComparisonIntegerMetricDeltaRow({
         metric: 'Output tokens',
         base: input.base.metrics.outputTokens,
         head: input.head.metrics.outputTokens

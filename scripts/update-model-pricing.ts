@@ -24,6 +24,7 @@ type PricingEntry = {
   readonly provider: string
   readonly inputPerMillion: number
   readonly outputPerMillion: number
+  readonly cachedInputPerMillion?: number
 }
 
 type Snapshot = {
@@ -37,6 +38,7 @@ type UpstreamEntry = {
   readonly litellm_provider?: unknown
   readonly input_cost_per_token?: unknown
   readonly output_cost_per_token?: unknown
+  readonly cache_read_input_token_cost?: unknown
 }
 
 const checkMode = !process.argv.includes('--write')
@@ -70,7 +72,15 @@ const fetchUpstream = async (): Promise<Record<string, PricingEntry>> => {
     models[modelName] = {
       provider: 'openai',
       inputPerMillion: perMillion(entry.input_cost_per_token),
-      outputPerMillion: perMillion(entry.output_cost_per_token)
+      outputPerMillion: perMillion(entry.output_cost_per_token),
+      // Capture the cached (prompt-cache read) input rate only when the upstream
+      // catalog exposes one. Models without it stay conservative (cached input
+      // falls back to the full input price at cost time).
+      ...(isFiniteNumber(entry.cache_read_input_token_cost)
+        ? {
+            cachedInputPerMillion: perMillion(entry.cache_read_input_token_cost)
+          }
+        : {})
     }
   }
 
@@ -113,7 +123,8 @@ const diffModels = (
       return (
         currentEntry?.provider !== incomingEntry?.provider ||
         currentEntry?.inputPerMillion !== incomingEntry?.inputPerMillion ||
-        currentEntry?.outputPerMillion !== incomingEntry?.outputPerMillion
+        currentEntry?.outputPerMillion !== incomingEntry?.outputPerMillion ||
+        currentEntry?.cachedInputPerMillion !== incomingEntry?.cachedInputPerMillion
       )
     })
 

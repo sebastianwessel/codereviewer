@@ -103,6 +103,7 @@ describe('eval report rendering', () => {
             warnings: [],
             durationMs: 1,
             inputTokens: 0,
+            cachedInputTokens: 0,
             outputTokens: 0,
             costUnavailable: false,
             costUsd: 0
@@ -152,6 +153,7 @@ describe('eval report rendering', () => {
           productRecall: 1,
           nitRecall: 1,
           inputTokens: 0,
+          cachedInputTokens: 0,
           outputTokens: 0,
           costUnavailableCount: 0,
           costUsd: 0,

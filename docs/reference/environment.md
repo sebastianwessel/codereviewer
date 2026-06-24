@@ -37,6 +37,7 @@ Where both exist, the env variable wins over the file but loses to a CLI flag.
 | `CODEREVIEWER_OPENTELEMETRY_ENDPOINT` | `http://localhost:4318/v1/traces` | OpenTelemetry trace endpoint |
 | `CODEREVIEWER_OPENTELEMETRY_HEADERS` | `{"Authorization":"Bearer ..."}` | OpenTelemetry request headers (JSON object) |
 | `CODEREVIEWER_COST_INPUT_PER_MILLION` | `0.25` | `costs.inputPerMillion` |
+| `CODEREVIEWER_COST_CACHED_INPUT_PER_MILLION` | `0.05` | `costs.cachedInputPerMillion` |
 | `CODEREVIEWER_COST_OUTPUT_PER_MILLION` | `1.25` | `costs.outputPerMillion` |
 
 ---

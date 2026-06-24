@@ -1,10 +1,16 @@
-import type { CostConfig } from '../../shared/contracts/index.js'
 import { modelPricingSnapshot } from './model-pricing-snapshot.js'
 
 type ModelPricingEntry = {
   readonly provider: string
   readonly inputPerMillion: number
   readonly outputPerMillion: number
+  readonly cachedInputPerMillion?: number
+}
+
+export type BuiltInPrice = {
+  readonly inputPerMillion: number
+  readonly outputPerMillion: number
+  readonly cachedInputPerMillion?: number
 }
 
 const supplementalOpenAiPrices: Readonly<Record<string, ModelPricingEntry>> = {
@@ -31,7 +37,7 @@ const snapshotEntries = Object.entries(
 export const builtInPricesFor = (input: {
   readonly providerId?: string
   readonly modelName?: string
-}): Partial<CostConfig> => {
+}): Partial<BuiltInPrice> => {
   const pricingProvider = providerToPricingProvider(input.providerId)
   if (pricingProvider === undefined || input.modelName === undefined) {
     return {}
@@ -54,6 +60,9 @@ export const builtInPricesFor = (input: {
 
   return {
     inputPerMillion: price.inputPerMillion,
-    outputPerMillion: price.outputPerMillion
+    outputPerMillion: price.outputPerMillion,
+    ...(price.cachedInputPerMillion === undefined
+      ? {}
+      : { cachedInputPerMillion: price.cachedInputPerMillion })
   }
 }

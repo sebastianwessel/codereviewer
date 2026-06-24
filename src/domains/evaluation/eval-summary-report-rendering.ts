@@ -32,6 +32,18 @@ export const EVAL_RECALL_REPORT_ARTIFACT_NAME = 'eval-recall-report.md'
 
 type EvalMetrics = EvalReport['metrics']
 
+// Cached input tokens are a subset of input tokens. Render the absolute count
+// alongside the share of input it represents so a benchmark shows prompt-cache
+// effectiveness.
+const formatCachedInputTokens = (metrics: EvalMetrics): string => {
+  const cached = formatInteger(metrics.cachedInputTokens)
+  if (metrics.inputTokens === 0) {
+    return cached
+  }
+
+  return `${cached} (${formatPercent(metrics.cachedInputTokens / metrics.inputTokens)} of input)`
+}
+
 const findCase = (
   cases: readonly EvalCase[],
   caseId: string
@@ -116,6 +128,7 @@ const appendEvalSummaryMetrics = (
       `| Context mutation rate | ${formatPercent(report.metrics.contextMutationRate)} |`,
       `| Duration | ${formatDuration(report.metrics.durationMs)} |`,
       `| Input tokens | ${formatInteger(report.metrics.inputTokens)} |`,
+      `| Input tokens (cached) | ${formatCachedInputTokens(report.metrics)} |`,
       `| Output tokens | ${formatInteger(report.metrics.outputTokens)} |`,
       `| Cost | ${formatCostMetric(report.metrics)} |`
     ]

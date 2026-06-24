@@ -27,7 +27,9 @@ class UsageRecordingProvider implements ModelProvider {
       usage: {
         inputTokens: 11,
         outputTokens: 7,
-        totalTokens: 18
+        totalTokens: 18,
+        cachedInputTokens: 4,
+        reasoningTokens: 2
       }
     }
   }
@@ -116,7 +118,9 @@ describe('review runner provider workflow', () => {
     expect(provider.requests.length).toBeGreaterThan(0)
     expect(result?.usage).toEqual({
       inputTokens: 11 * provider.requests.length,
-      outputTokens: 7 * provider.requests.length
+      outputTokens: 7 * provider.requests.length,
+      cachedInputTokens: 4 * provider.requests.length,
+      reasoningTokens: 2 * provider.requests.length
     })
     expect(result?.output.admittedFindings).toEqual([])
     expect(result?.output.qualityGate.passed).toBe(true)

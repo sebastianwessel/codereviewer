@@ -29,6 +29,8 @@ export const RunSummarySchema = z.strictObject({
   durationMs: z.int().min(0),
   costUsd: z.number().min(0).optional(),
   inputTokens: z.int().min(0).optional(),
+  // Cached input tokens are a SUBSET of inputTokens (already counted there).
+  cachedInputTokens: z.int().min(0).optional(),
   outputTokens: z.int().min(0).optional(),
   warnings: z.array(z.string())
 })

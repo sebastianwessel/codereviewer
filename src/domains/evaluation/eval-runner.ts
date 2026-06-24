@@ -434,6 +434,7 @@ const buildMetricCase = (
     ).length,
     costUsd: input.reviewReport?.run.costUsd ?? 0,
     inputTokens: input.reviewReport?.run.inputTokens ?? 0,
+    cachedInputTokens: input.reviewReport?.run.cachedInputTokens ?? 0,
     outputTokens: input.reviewReport?.run.outputTokens ?? 0,
     costUnavailable: warnings.includes('cost-unavailable'),
     durationMs: input.reviewReport?.run.durationMs ?? 0,
@@ -493,6 +494,7 @@ const computeCaseResult = (
         warnings: [`provider-error:${output.result.code}`],
         durationMs: 0,
         inputTokens: 0,
+        cachedInputTokens: 0,
         outputTokens: 0,
         costUnavailable: false,
         costUsd: 0
@@ -569,6 +571,7 @@ const computeCaseResult = (
       warnings: [...reviewReport.run.warnings],
       durationMs: reviewReport.run.durationMs,
       inputTokens: reviewReport.run.inputTokens ?? 0,
+      cachedInputTokens: reviewReport.run.cachedInputTokens ?? 0,
       outputTokens: reviewReport.run.outputTokens ?? 0,
       costUnavailable: reviewReport.run.warnings.includes('cost-unavailable'),
       costUsd: reviewReport.run.costUsd ?? 0
@@ -663,6 +666,7 @@ const computeCaseResultWithSemanticJudge = async (
       warnings: [...reviewReport.run.warnings],
       durationMs: reviewReport.run.durationMs,
       inputTokens: reviewReport.run.inputTokens ?? 0,
+      cachedInputTokens: reviewReport.run.cachedInputTokens ?? 0,
       outputTokens: reviewReport.run.outputTokens ?? 0,
       costUnavailable: reviewReport.run.warnings.includes('cost-unavailable'),
       costUsd: reviewReport.run.costUsd ?? 0

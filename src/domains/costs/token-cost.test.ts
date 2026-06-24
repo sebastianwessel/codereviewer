@@ -15,8 +15,56 @@ describe('token cost tracking', () => {
     ).toEqual({
       inputTokens: 1000,
       outputTokens: 250,
+      cachedInputTokens: 0,
       totalTokens: 1250,
       costUsd: 0.001,
+      costSource: 'configured'
+    })
+  })
+
+  test('discounts cached input tokens at the cached rate when configured', () => {
+    // 1000 input of which 400 cached. Non-cached 600 @ 1.0 + cached 400 @ 0.25
+    // + output 250 @ 2.0 = 0.0006 + 0.0001 + 0.0005 = 0.0012.
+    expect(
+      calculateTokenCost({
+        inputTokens: 1000,
+        cachedInputTokens: 400,
+        outputTokens: 250,
+        prices: {
+          inputPerMillion: 1,
+          cachedInputPerMillion: 0.25,
+          outputPerMillion: 2
+        }
+      })
+    ).toEqual({
+      inputTokens: 1000,
+      outputTokens: 250,
+      cachedInputTokens: 400,
+      totalTokens: 1250,
+      costUsd: 0.0012,
+      costSource: 'configured'
+    })
+  })
+
+  test('prices cached input at the full input rate when no cached rate is known', () => {
+    // No cachedInputPerMillion: cached tokens fall back to the full input price,
+    // so cost matches the non-cached case (1000 @ 1.0 + 250 @ 2.0 = 0.0015).
+    expect(
+      calculateTokenCost({
+        inputTokens: 1000,
+        cachedInputTokens: 400,
+        outputTokens: 250,
+        prices: {
+          inputPerMillion: 1,
+          outputPerMillion: 2
+        }
+      })
+    ).toEqual({
+      inputTokens: 1000,
+      outputTokens: 250,
+      cachedInputTokens: 400,
+      totalTokens: 1250,
+      costUsd: 0.0015,
       costSource: 'configured'
     })
   })
@@ -31,6 +79,7 @@ describe('token cost tracking', () => {
     ).toEqual({
       inputTokens: 12,
       outputTokens: 8,
+      cachedInputTokens: 0,
       totalTokens: 20,
       costUsd: null,
       costSource: 'unavailable'
@@ -45,6 +94,17 @@ describe('token cost tracking', () => {
         prices: {}
       })
     ).toThrow(TypeError)
+  })
+
+  test('rejects cached input tokens exceeding input tokens', () => {
+    expect(() =>
+      calculateTokenCost({
+        inputTokens: 10,
+        cachedInputTokens: 11,
+        outputTokens: 0,
+        prices: {}
+      })
+    ).toThrow(RangeError)
   })
 })
 
@@ -68,7 +128,35 @@ describe('run cost summary', () => {
         prices: { inputPerMillion: 1, outputPerMillion: 2 },
         usage: { inputTokens: 1_000_000, outputTokens: 500_000 }
       })
-    ).toEqual({ warnings: [], costUsd: 2, inputTokens: 1_000_000, outputTokens: 500_000 })
+    ).toEqual({
+      warnings: [],
+      costUsd: 2,
+      inputTokens: 1_000_000,
+      outputTokens: 500_000,
+      cachedInputTokens: 0
+    })
+  })
+
+  test('discounts cached input tokens when a cached price is configured', () => {
+    // 1M input of which 400k cached. 600k @ 1.0 + 400k @ 0.25 + 500k @ 2.0
+    // = 0.6 + 0.1 + 1.0 = 1.7.
+    expect(
+      summarizeRunCost({
+        providerConfigured: true,
+        prices: { inputPerMillion: 1, cachedInputPerMillion: 0.25, outputPerMillion: 2 },
+        usage: {
+          inputTokens: 1_000_000,
+          cachedInputTokens: 400_000,
+          outputTokens: 500_000
+        }
+      })
+    ).toEqual({
+      warnings: [],
+      costUsd: 1.7,
+      inputTokens: 1_000_000,
+      outputTokens: 500_000,
+      cachedInputTokens: 400_000
+    })
   })
 
   test('computes cost from built-in OpenAI model prices when explicit prices are absent', () => {
@@ -80,7 +168,13 @@ describe('run cost summary', () => {
         prices: {},
         usage: { inputTokens: 1_000_000, outputTokens: 500_000 }
       })
-    ).toEqual({ warnings: [], costUsd: 1.25, inputTokens: 1_000_000, outputTokens: 500_000 })
+    ).toEqual({
+      warnings: [],
+      costUsd: 1.25,
+      inputTokens: 1_000_000,
+      outputTokens: 500_000,
+      cachedInputTokens: 0
+    })
   })
 
   test('computes cost for built-in OpenAI snapshot aliases', () => {
@@ -92,7 +186,13 @@ describe('run cost summary', () => {
         prices: {},
         usage: { inputTokens: 1_000_000, outputTokens: 1_000_000 }
       })
-    ).toEqual({ warnings: [], costUsd: 5.25, inputTokens: 1_000_000, outputTokens: 1_000_000 })
+    ).toEqual({
+      warnings: [],
+      costUsd: 5.25,
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      cachedInputTokens: 0
+    })
   })
 
   test('computes cost for supplemental OpenAI Codex model prices', () => {
@@ -104,7 +204,13 @@ describe('run cost summary', () => {
         prices: {},
         usage: { inputTokens: 1_000_000, outputTokens: 1_000_000 }
       })
-    ).toEqual({ warnings: [], costUsd: 15.75, inputTokens: 1_000_000, outputTokens: 1_000_000 })
+    ).toEqual({
+      warnings: [],
+      costUsd: 15.75,
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      cachedInputTokens: 0
+    })
   })
 
   test('warns but keeps token counts when prices are unavailable', () => {
@@ -114,6 +220,11 @@ describe('run cost summary', () => {
         prices: {},
         usage: { inputTokens: 10, outputTokens: 5 }
       })
-    ).toEqual({ warnings: ['cost-unavailable'], inputTokens: 10, outputTokens: 5 })
+    ).toEqual({
+      warnings: ['cost-unavailable'],
+      inputTokens: 10,
+      outputTokens: 5,
+      cachedInputTokens: 0
+    })
   })
 })

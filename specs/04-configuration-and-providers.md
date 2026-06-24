@@ -59,6 +59,7 @@ R1 supports only these configuration environment variables:
 | `CODEREVIEWER_OPENTELEMETRY_ENDPOINT` | `observability.openTelemetry.endpoint` | URL |
 | `CODEREVIEWER_OPENTELEMETRY_HEADERS` | `observability.openTelemetry.headers` | redacted string map |
 | `CODEREVIEWER_COST_INPUT_PER_MILLION` | `costs.inputPerMillion` | number |
+| `CODEREVIEWER_COST_CACHED_INPUT_PER_MILLION` | `costs.cachedInputPerMillion` | number |
 | `CODEREVIEWER_COST_OUTPUT_PER_MILLION` | `costs.outputPerMillion` | number |
 
 All other environment variables are ignored by config loading. Credentials are
@@ -197,12 +198,20 @@ pricing. If token counts or prices are unavailable, cost is omitted and
 `maxCostUsd` is not enforceable; the run summary must include warning code
 `cost-unavailable`.
 
+When a provider surfaces prompt-cache usage, the cached input tokens (a subset
+of the input tokens, already counted in the input aggregate) are re-priced at
+`costs.cachedInputPerMillion` (or the bundled snapshot cached rate) when one is
+known; otherwise they fall back to the full input price (no fabricated
+discount). The cached input token count is surfaced in the run summary as
+`cachedInputTokens`.
+
 Provider-backed tasks should record detailed token/cost metadata when the
 adapter exposes it:
 
 | Field | Type | Rule |
 | --- | --- | --- |
 | `inputTokens` | integer >= 0 | Provider reported or tokenizer estimate. |
+| `cachedInputTokens` | integer >= 0 | Cached (prompt-cache read) input tokens; a subset of `inputTokens`. |
 | `outputTokens` | integer >= 0 | Provider reported or tokenizer estimate. |
 | `totalTokens` | integer >= 0 | Sum of input and output tokens. |
 | `costUsd` | number or null | Calculated when prices are known. |
@@ -391,11 +400,16 @@ file config.
 | Key | Type | Default |
 | --- | --- | --- |
 | `inputPerMillion` | number >= 0 | omitted |
+| `cachedInputPerMillion` | number >= 0 | omitted |
 | `outputPerMillion` | number >= 0 | omitted |
 
 Costs are operational metadata and safe to report after redaction. The bundled
 pricing snapshot is generated from LiteLLM model pricing data and is used only
-for configured `provider.id="openai"` models.
+for configured `provider.id="openai"` models. When the snapshot exposes a cached
+(prompt-cache read) input rate for a model it is captured as the per-model
+cached rate; models without one stay conservative (cached input falls back to
+the full input price). `cachedInputPerMillion` re-prices only the cached subset
+of input tokens.
 
 ## Security Config
 

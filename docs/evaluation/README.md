@@ -99,6 +99,7 @@ noise but are not counted as false positives.
 | `nitRecall` | Recall over `nit`-tier findings. Reported for visibility but not gated. |
 | `duplicateFindingCount` | Total duplicate findings across all cases. |
 | `inputTokens` | Aggregate input token total. |
+| `cachedInputTokens` | Aggregate cached (prompt-cache read) input token total; a subset of `inputTokens`. |
 | `outputTokens` | Aggregate output token total. |
 | `costUnavailableCount` | Cases where cost could not be computed. |
 

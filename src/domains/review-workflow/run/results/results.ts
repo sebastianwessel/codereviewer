@@ -62,6 +62,9 @@ export const createReviewRunSummary = (
   ...(input.runCost?.inputTokens === undefined
     ? {}
     : { inputTokens: input.runCost.inputTokens }),
+  ...(input.runCost?.cachedInputTokens === undefined
+    ? {}
+    : { cachedInputTokens: input.runCost.cachedInputTokens }),
   ...(input.runCost?.outputTokens === undefined
     ? {}
     : { outputTokens: input.runCost.outputTokens }),

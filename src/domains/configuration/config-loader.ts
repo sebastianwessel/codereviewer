@@ -282,6 +282,21 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
     )
   }
 
+  const cachedInputPerMillion = envValue(
+    environment,
+    'CODEREVIEWER_COST_CACHED_INPUT_PER_MILLION'
+  )
+  if (cachedInputPerMillion !== undefined) {
+    setNestedValue(
+      config,
+      ['costs', 'cachedInputPerMillion'],
+      parseNumberEnv(
+        'CODEREVIEWER_COST_CACHED_INPUT_PER_MILLION',
+        cachedInputPerMillion
+      )
+    )
+  }
+
   const outputPerMillion = envValue(environment, 'CODEREVIEWER_COST_OUTPUT_PER_MILLION')
   if (outputPerMillion !== undefined) {
     setNestedValue(

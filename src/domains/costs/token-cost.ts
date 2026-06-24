@@ -6,6 +6,9 @@ export type TokenCostSource = 'provider' | 'configured' | 'unavailable'
 export type TokenCostInput = {
   readonly inputTokens: number
   readonly outputTokens: number
+  // Cached input tokens are a SUBSET of inputTokens (already counted in the
+  // input aggregate). They are re-priced at the cached rate when one is known.
+  readonly cachedInputTokens?: number
   readonly prices: Partial<CostConfig>
   readonly providerCostUsd?: number
 }
@@ -13,6 +16,7 @@ export type TokenCostInput = {
 export type TokenCostSummary = {
   readonly inputTokens: number
   readonly outputTokens: number
+  readonly cachedInputTokens: number
   readonly totalTokens: number
   readonly costUsd: number | null
   readonly costSource: TokenCostSource
@@ -32,12 +36,21 @@ export const calculateTokenCost = (
   assertNonNegativeInteger(input.inputTokens, 'inputTokens')
   assertNonNegativeInteger(input.outputTokens, 'outputTokens')
 
+  const cachedInputTokens = input.cachedInputTokens ?? 0
+  assertNonNegativeInteger(cachedInputTokens, 'cachedInputTokens')
+  if (cachedInputTokens > input.inputTokens) {
+    throw new RangeError(
+      'cachedInputTokens must not exceed inputTokens (cached input is a subset of input).'
+    )
+  }
+
   const totalTokens = input.inputTokens + input.outputTokens
 
   if (input.providerCostUsd !== undefined) {
     return {
       inputTokens: input.inputTokens,
       outputTokens: input.outputTokens,
+      cachedInputTokens,
       totalTokens,
       costUsd: roundUsd(input.providerCostUsd),
       costSource: 'provider'
@@ -48,12 +61,22 @@ export const calculateTokenCost = (
     input.prices.inputPerMillion !== undefined &&
     input.prices.outputPerMillion !== undefined
   ) {
+    // Cached input tokens are re-priced at the cached rate ONLY when one is
+    // known; otherwise they fall back to the full input price (no fabricated
+    // discount). The remaining (non-cached) input is always priced at the full
+    // input rate.
+    const cachedInputPerMillion =
+      input.prices.cachedInputPerMillion ?? input.prices.inputPerMillion
+
     return {
       inputTokens: input.inputTokens,
       outputTokens: input.outputTokens,
+      cachedInputTokens,
       totalTokens,
       costUsd: roundUsd(
-        (input.inputTokens / 1_000_000) * input.prices.inputPerMillion +
+        ((input.inputTokens - cachedInputTokens) / 1_000_000) *
+          input.prices.inputPerMillion +
+          (cachedInputTokens / 1_000_000) * cachedInputPerMillion +
           (input.outputTokens / 1_000_000) * input.prices.outputPerMillion
       ),
       costSource: 'configured'
@@ -63,6 +86,7 @@ export const calculateTokenCost = (
   return {
     inputTokens: input.inputTokens,
     outputTokens: input.outputTokens,
+    cachedInputTokens,
     totalTokens,
     costUsd: null,
     costSource: 'unavailable'
@@ -72,6 +96,9 @@ export const calculateTokenCost = (
 export type RunTokenUsage = {
   readonly inputTokens: number
   readonly outputTokens: number
+  // Cached input tokens are a SUBSET of inputTokens, not an addition to it.
+  readonly cachedInputTokens?: number
+  readonly reasoningTokens?: number
   readonly providerCostUsd?: number
 }
 
@@ -80,6 +107,7 @@ export type RunCostSummary = {
   readonly costUsd?: number
   readonly inputTokens?: number
   readonly outputTokens?: number
+  readonly cachedInputTokens?: number
 }
 
 // Summarize cost for a run. Deterministic (no-provider) runs have no model cost.
@@ -104,6 +132,9 @@ export const summarizeRunCost = (input: {
   const cost = calculateTokenCost({
     inputTokens: input.usage.inputTokens,
     outputTokens: input.usage.outputTokens,
+    ...(input.usage.cachedInputTokens === undefined
+      ? {}
+      : { cachedInputTokens: input.usage.cachedInputTokens }),
     prices: {
       ...builtInPricesFor(input),
       ...input.prices
@@ -117,7 +148,8 @@ export const summarizeRunCost = (input: {
     return {
       warnings: ['cost-unavailable'],
       inputTokens: cost.inputTokens,
-      outputTokens: cost.outputTokens
+      outputTokens: cost.outputTokens,
+      cachedInputTokens: cost.cachedInputTokens
     }
   }
 
@@ -125,6 +157,7 @@ export const summarizeRunCost = (input: {
     warnings: [],
     costUsd: cost.costUsd,
     inputTokens: cost.inputTokens,
-    outputTokens: cost.outputTokens
+    outputTokens: cost.outputTokens,
+    cachedInputTokens: cost.cachedInputTokens
   }
 }

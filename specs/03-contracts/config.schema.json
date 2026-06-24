@@ -753,6 +753,10 @@
           "type": "number",
           "minimum": 0
         },
+        "cachedInputPerMillion": {
+          "type": "number",
+          "minimum": 0
+        },
         "outputPerMillion": {
           "type": "number",
           "minimum": 0

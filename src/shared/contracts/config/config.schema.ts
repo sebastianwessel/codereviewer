@@ -236,6 +236,10 @@ export const ObservabilityConfigSchema = z.strictObject({
 
 export const CostConfigSchema = z.strictObject({
   inputPerMillion: z.number().min(0).optional(),
+  // Price per million cached input tokens. When set, the cached subset of input
+  // tokens is re-priced at this (typically lower) rate. When unset, cached input
+  // falls back to the full input price (no fabricated discount).
+  cachedInputPerMillion: z.number().min(0).optional(),
   outputPerMillion: z.number().min(0).optional()
 })
 
