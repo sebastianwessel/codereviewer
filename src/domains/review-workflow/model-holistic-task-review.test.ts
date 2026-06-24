@@ -119,7 +119,7 @@ describe('runModelBackedHolisticTaskReview', () => {
     })
     expect(candidate.id).toMatch(/^cand_[0-9a-f]{16}$/u)
     // Discovery emits candidates directly for the shared refutation/admission
-    // filter; no proof/suspicion/diagnostic artifacts are produced.
+    // filter; no diagnostic artifacts are produced.
     expect(result.evidenceRecords).toEqual([])
     expect(result.providerIssues).toEqual([])
   })

@@ -382,7 +382,7 @@ describe('eval runner', () => {
                 refutationResults: [
                   {
                     id: 'refute_eval1',
-                    proofPacketId: 'proof_eval1',
+                    candidateId: 'cand_eval1',
                     verdict: 'proved',
                     summary: 'Refutation check found no contradiction.',
                     evidenceIds: ['ev_eval1'],
@@ -414,7 +414,7 @@ describe('eval runner', () => {
     expect(result.report.caseResults[0]?.refutationResults).toEqual([
       {
         id: 'refute_eval1',
-        proofPacketId: 'proof_eval1',
+        candidateId: 'cand_eval1',
         verdict: 'proved'
       }
     ])
@@ -427,7 +427,7 @@ describe('eval runner', () => {
     const summary = renderEvalSummary({ cases, report: result.report })
     expect(summary).toContain('## Agentic Stage Coverage')
     expect(summary).toContain('Refutation results:')
-    expect(summary).toContain('- refute_eval1 proof proof_eval1 verdict proved')
+    expect(summary).toContain('- refute_eval1 candidate cand_eval1 verdict proved')
   })
 
   test('keeps artifact-only noise out of normal false-positive counts', () => {

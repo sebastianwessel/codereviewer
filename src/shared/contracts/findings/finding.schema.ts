@@ -42,7 +42,7 @@ export const RejectReasonSchema = z.enum([
   'provider-error',
   'refuted',
   'deterministic-contradiction',
-  'weak-suspicion',
+  'weak-evidence',
   'static-analysis-duplicate'
 ])
 
@@ -52,7 +52,7 @@ export const BaselineStatusSchema = z.enum(['new', 'existing', 'resolved', 'unkn
 // Internally generated ids take the form `<prefix>_<hex>` and may carry an
 // extra segment for grouped tasks (e.g. `task_intent_<hex>`). The pattern allows
 // one or more `_<alnum>` segments so multi-segment ids validate consistently
-// across candidate, proof, admission, and report contracts. Test fixtures keep
+// across candidate, refutation, admission, and report contracts. Test fixtures keep
 // the `test-...` form.
 export const ContractIdSchema = z
   .string()
@@ -173,20 +173,6 @@ export const ContextRequestSchema = z
     }
   })
 
-export const ProofPacketSchema = z.strictObject({
-  id: ContractIdSchema,
-  suspicionId: ContractIdSchema,
-  candidateId: CandidateIdSchema,
-  changedBehavior: z.string().min(1).max(1200),
-  executionOrDataPath: z.string().min(1).max(1200),
-  violatedInvariant: z.string().min(1).max(1200),
-  impact: z.string().min(1).max(1200),
-  introducedByChange: z.string().min(1).max(1200),
-  evidenceIds: z.array(ContractIdSchema).min(1),
-  contradictionChecks: z.array(z.string().min(1).max(500)),
-  fixDirection: z.string().min(1).max(1200)
-})
-
 export const RefutationVerdictSchema = z.enum([
   'proved',
   'refuted',
@@ -203,7 +189,7 @@ export const VerificationCheckSchema = z.strictObject({
 
 export const RefutationResultSchema = z.strictObject({
   id: ContractIdSchema,
-  proofPacketId: ContractIdSchema,
+  candidateId: CandidateIdSchema,
   verdict: RefutationVerdictSchema,
   summary: z.string().min(1).max(1000),
   evidenceIds: z.array(ContractIdSchema),
@@ -253,7 +239,6 @@ export const AdmittedFindingSchema = z.strictObject({
   admissionEvidenceIds: z.array(ContractIdSchema).min(1),
   reporterEligibility: ReporterEligibilitySchema,
   provenance: FindingProvenanceSchema,
-  proofPacketId: ContractIdSchema.optional(),
   refutationId: ContractIdSchema.optional(),
   baselineStatus: BaselineStatusSchema,
   fingerprints: z.array(FindingFingerprintSchema).min(1),
@@ -293,7 +278,6 @@ export type DataFlowPath = z.infer<typeof DataFlowPathSchema>
 export type FindingFingerprint = z.infer<typeof FindingFingerprintSchema>
 export type EvidenceRecord = z.infer<typeof EvidenceRecordSchema>
 export type DeterministicSignal = z.infer<typeof DeterministicSignalSchema>
-export type ProofPacket = z.infer<typeof ProofPacketSchema>
 export type RefutationVerdict = z.infer<typeof RefutationVerdictSchema>
 export type VerificationCheck = z.infer<typeof VerificationCheckSchema>
 export type ContextRequest = z.infer<typeof ContextRequestSchema>

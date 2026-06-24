@@ -1,8 +1,4 @@
-import {
-  type EvidenceRecord,
-  type ProofPacket,
-  type RefutationResult
-} from '../../shared/contracts/index.js'
+import { type EvidenceRecord } from '../../shared/contracts/index.js'
 import { type CandidateFinding } from '../admission/index.js'
 import {
   type FindingRefutationRunner,
@@ -24,8 +20,6 @@ export const prepareCandidatesForAdmission = async (
     readonly candidates: readonly CandidateFinding[]
     readonly sharedDigest: string
     readonly reviewEvidence?: readonly EvidenceRecord[]
-    readonly proofPackets: readonly ProofPacket[]
-    readonly refutationResults: readonly RefutationResult[]
     readonly refuteFinding?: FindingRefutationRunner
     readonly signal?: AbortSignal
   }
@@ -50,8 +44,6 @@ export const prepareCandidatesForAdmission = async (
         allCandidates: input.candidates,
         sharedDigest: input.sharedDigest,
         reviewEvidence,
-        proofPackets: input.proofPackets,
-        refutationResults: input.refutationResults,
         refuteFinding,
         ...(input.signal === undefined ? {} : { signal: input.signal })
       })

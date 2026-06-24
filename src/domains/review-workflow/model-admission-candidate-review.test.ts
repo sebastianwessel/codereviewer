@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import {
-  type EvidenceRecord,
-  type ProofPacket,
-  type RefutationResult
-} from '../../shared/contracts/index.js'
+import { type EvidenceRecord } from '../../shared/contracts/index.js'
 import { type CandidateFinding } from '../admission/index.js'
 import { type WorkflowReviewTask } from './model-agent-contracts.js'
 import { reviewCandidateForAdmission } from './model-admission-candidate-review.js'
@@ -72,36 +68,6 @@ const task: WorkflowReviewTask = {
   priority: 1
 }
 
-const proofPacket: ProofPacket = {
-  id: 'proof_modelcandidate',
-  suspicionId: 'susp_modelcandidate',
-  candidateId: 'cand_modelcandidate',
-  changedBehavior: 'The changed branch can lose data.',
-  executionOrDataPath: 'The reviewed branch is reachable.',
-  violatedInvariant: 'Existing data must be preserved.',
-  impact: 'A user update can drop existing state.',
-  introducedByChange: 'The reviewed diff changes the update branch.',
-  evidenceIds: ['ev_admissioncandidate'],
-  contradictionChecks: ['No contradiction was found.'],
-  fixDirection: 'Preserve the existing state in the changed branch.'
-}
-
-const refutationResult: RefutationResult = {
-  id: 'ref_modelcandidate',
-  proofPacketId: 'proof_modelcandidate',
-  verdict: 'proved',
-  summary: 'The proof packet survived refutation.',
-  evidenceIds: ['ev_admissioncandidate'],
-  checks: [
-    {
-      kind: 'proof-review',
-      result: 'passed',
-      summary: 'No contradiction was found.',
-      evidenceIds: ['ev_admissioncandidate']
-    }
-  ]
-}
-
 const workflowInput = (): ReviewWorkflowInput =>
   ReviewWorkflowInputSchema.parse({
     runId: 'run-admission-candidate',
@@ -133,8 +99,6 @@ describe('model admission candidate review', () => {
       allCandidates: [supportSignalCandidate, modelCandidate],
       sharedDigest: '(no admitted shared context yet)',
       reviewEvidence: [supportEvidence],
-      proofPackets: [proofPacket],
-      refutationResults: [refutationResult],
       refuteFinding: async () => {
         refutationCalls += 1
         throw new Error('support-signal candidate should not be refuted')
@@ -154,8 +118,6 @@ describe('model admission candidate review', () => {
       allCandidates: [supportSignalCandidate, modelCandidate],
       sharedDigest: '(no admitted shared context yet)',
       reviewEvidence: [supportEvidence],
-      proofPackets: [proofPacket],
-      refutationResults: [refutationResult],
       refuteFinding: async () => ({
         verdict: 'proved',
         rationaleSummary: 'The active admission critic proved the claim.',
@@ -171,6 +133,12 @@ describe('model admission candidate review', () => {
         })
       })
     ])
+    expect(outcome.refutationResults).toEqual([
+      expect.objectContaining({
+        candidateId: 'cand_modelcandidate',
+        verdict: 'proved'
+      })
+    ])
   })
 
   test('rejects a needs-more-evidence model candidate when policy rejects', async () => {
@@ -181,8 +149,6 @@ describe('model admission candidate review', () => {
       allCandidates: [supportSignalCandidate, modelCandidate],
       sharedDigest: '(no admitted shared context yet)',
       reviewEvidence: [supportEvidence],
-      proofPackets: [proofPacket],
-      refutationResults: [refutationResult],
       refuteFinding: async () => ({
         verdict: 'needs-more-evidence',
         rationaleSummary: 'The refuter could not prove the claim.'
@@ -191,5 +157,12 @@ describe('model admission candidate review', () => {
 
     expect(outcome.admissionCandidates).toEqual([])
     expect(outcome.rejectedFindings).toHaveLength(1)
+    expect(outcome.rejectedFindings[0]!.reason).toBe('weak-evidence')
+    expect(outcome.refutationResults).toEqual([
+      expect.objectContaining({
+        candidateId: 'cand_modelcandidate',
+        verdict: 'needs-more-evidence'
+      })
+    ])
   })
 })

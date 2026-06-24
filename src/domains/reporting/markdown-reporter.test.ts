@@ -10,7 +10,7 @@ describe('Markdown reporter', () => {
       refutationResults: [
         {
           id: 'refute_abc123',
-          proofPacketId: 'proof_abc123',
+          candidateId: 'cand_abc123',
           verdict: 'proved',
           summary: 'No contradiction found.',
           evidenceIds: ['ev_diff1'],
@@ -83,7 +83,7 @@ describe('Markdown reporter', () => {
       refutationResults: [
         {
           id: 'refute_empty',
-          proofPacketId: 'proof_empty',
+          candidateId: 'cand_empty',
           verdict: 'needs-more-evidence',
           summary: 'The refuter cited no decisive evidence.',
           evidenceIds: [],

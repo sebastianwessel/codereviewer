@@ -94,7 +94,7 @@ export const EvalAgenticStageReportSchema = z.strictObject({
 
 export const EvalRefutationResultReportSchema = z.strictObject({
   id: z.string().min(1),
-  proofPacketId: z.string().min(1),
+  candidateId: z.string().min(1),
   verdict: z.enum(['proved', 'refuted', 'needs-more-evidence', 'provider-error'])
 })
 

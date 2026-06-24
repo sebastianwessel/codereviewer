@@ -50,14 +50,14 @@ describe('model admission outcome', () => {
     const rejectedFinding: RejectedFinding = {
       candidateId: 'cand_b',
       status: 'needs-more-evidence',
-      reason: 'weak-suspicion',
+      reason: 'weak-evidence',
       message: 'Needs more proof.',
       evidenceIds: ['ev_b']
     }
     const admissionDecision: AdmissionDecisionRecord = {
       candidateId: 'cand_b',
       status: 'needs-more-evidence',
-      rejectedReason: 'weak-suspicion'
+      rejectedReason: 'weak-evidence'
     }
     const providerIssue: ProviderIssue = {
       code: 'provider_error',

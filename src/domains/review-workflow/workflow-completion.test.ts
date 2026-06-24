@@ -53,15 +53,15 @@ const contextLedgerEntry: ContextLedgerEntry = {
 
 const refutationResult: RefutationResult = {
   id: 'refute_completion1',
-  proofPacketId: 'proof_completion1',
+  candidateId: 'cand_completion1',
   verdict: 'proved',
-  summary: 'The proof survived refutation.',
+  summary: 'The candidate survived refutation.',
   evidenceIds: ['ev_completion1'],
   checks: [
     {
-      kind: 'proof-review',
+      kind: 'active-refutation',
       result: 'passed',
-      summary: 'The proof evidence is sufficient.',
+      summary: 'The candidate evidence is sufficient.',
       evidenceIds: ['ev_completion1']
     }
   ]
@@ -170,7 +170,7 @@ describe('workflow completion', () => {
       'refute_completion1'
     ])
     expect(output.refutationResults[0]?.summary).toBe(
-      'The proof survived refutation.'
+      'The candidate survived refutation.'
     )
   })
 

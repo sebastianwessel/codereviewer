@@ -448,14 +448,14 @@ const attentionMissedExpectedRows = (
 
 type EvalSummaryRefutationResult = {
   readonly id: string
-  readonly proofPacketId: string
+  readonly candidateId: string
   readonly verdict: string
 }
 
 const formatAttentionRefutationBullet = (
   refutation: EvalSummaryRefutationResult
 ): string =>
-  `- ${refutation.id} proof ${refutation.proofPacketId} verdict ${refutation.verdict}`
+  `- ${refutation.id} candidate ${refutation.candidateId} verdict ${refutation.verdict}`
 
 const appendEvalSummaryAttentionNeeded = (
   lines: string[],

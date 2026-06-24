@@ -198,8 +198,6 @@ export const runReviewWorkflowHandler = async (params: {
     candidates: mergedCandidates,
     sharedDigest: renderSharedDigest(shared.digest()),
     reviewEvidence: [...input.evidence, ...taskEvidenceRecords],
-    proofPackets: [],
-    refutationResults: [],
     ...(params.refuteFinding === undefined
       ? {}
       : { refuteFinding: params.refuteFinding }),

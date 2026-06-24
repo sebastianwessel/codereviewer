@@ -454,10 +454,6 @@
             ],
             "additionalProperties": false
           },
-          "proofPacketId": {
-            "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
-          },
           "refutationId": {
             "type": "string",
             "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
@@ -719,7 +715,7 @@
               "provider-error",
               "refuted",
               "deterministic-contradiction",
-              "weak-suspicion",
+              "weak-evidence",
               "static-analysis-duplicate"
             ]
           },
@@ -1109,9 +1105,9 @@
             "type": "string",
             "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
           },
-          "proofPacketId": {
+          "candidateId": {
             "type": "string",
-            "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
+            "pattern": "^(?:test-[A-Za-z0-9_-]+|cand_[a-z0-9]+(?:_[a-z0-9]+)*)$"
           },
           "verdict": {
             "type": "string",
@@ -1177,7 +1173,7 @@
         },
         "required": [
           "id",
-          "proofPacketId",
+          "candidateId",
           "verdict",
           "summary",
           "evidenceIds",

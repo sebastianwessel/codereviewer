@@ -1,8 +1,4 @@
-import {
-  type EvidenceRecord,
-  type ProofPacket,
-  type RefutationResult
-} from '../../shared/contracts/index.js'
+import { type EvidenceRecord } from '../../shared/contracts/index.js'
 import { type CandidateFinding } from '../admission/index.js'
 import {
   type FindingRefutationRunner,
@@ -24,7 +20,7 @@ import {
 import {
   admissibleRefutationOutcome,
   refutedCandidateOutcome,
-  weakSuspicionRejectedOutcome
+  weakEvidenceRejectedOutcome
 } from './model-admission-refutation-verdict-outcome.js'
 import { providerIssueForError } from './model-provider-issues.js'
 import { type ReviewWorkflowInput } from './workflow-contracts.js'
@@ -37,8 +33,6 @@ export const reviewCandidateForAdmission = async (
     readonly allCandidates: readonly CandidateFinding[]
     readonly sharedDigest: string
     readonly reviewEvidence: readonly EvidenceRecord[]
-    readonly proofPackets: readonly ProofPacket[]
-    readonly refutationResults: readonly RefutationResult[]
     readonly refuteFinding?: FindingRefutationRunner | undefined
     readonly signal?: AbortSignal
   }
@@ -70,8 +64,6 @@ export const reviewCandidateForAdmission = async (
     allCandidates: input.allCandidates,
     sharedDigest: input.sharedDigest,
     reviewEvidence: input.reviewEvidence,
-    proofPackets: input.proofPackets,
-    refutationResults: input.refutationResults,
     refuteFinding: input.refuteFinding,
     issueForError: providerIssueForError,
     ...(input.signal === undefined ? {} : { signal: input.signal })
@@ -88,7 +80,6 @@ export const reviewCandidateForAdmission = async (
   })
   const refutationResult = activeRefutationResultForCandidate({
     candidate: input.candidate,
-    proofPackets: input.proofPackets,
     refutation,
     refutationEvidence
   })
@@ -98,7 +89,7 @@ export const reviewCandidateForAdmission = async (
       candidate: input.candidate,
       refutation,
       refutationEvidence,
-      ...(refutationResult === undefined ? {} : { refutationResult })
+      refutationResult
     })
   }
 
@@ -106,11 +97,11 @@ export const reviewCandidateForAdmission = async (
     refutation.verdict === 'needs-more-evidence' &&
     input.workflowInput.promotionPolicy.modelWeakOrRefuted === 'rejected'
   ) {
-    return weakSuspicionRejectedOutcome({
+    return weakEvidenceRejectedOutcome({
       candidate: input.candidate,
       refutation,
       refutationEvidence,
-      ...(refutationResult === undefined ? {} : { refutationResult })
+      refutationResult
     })
   }
 
@@ -121,6 +112,6 @@ export const reviewCandidateForAdmission = async (
     candidate: input.candidate,
     refutation,
     refutationEvidence,
-    ...(refutationResult === undefined ? {} : { refutationResult })
+    refutationResult
   })
 }

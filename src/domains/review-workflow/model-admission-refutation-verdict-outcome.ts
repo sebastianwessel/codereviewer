@@ -17,12 +17,11 @@ export const refutedCandidateOutcome = (input: {
   readonly candidate: CandidateFinding
   readonly refutation: FindingRefutationResult
   readonly refutationEvidence: EvidenceRecord
-  readonly refutationResult?: RefutationResult | undefined
+  readonly refutationResult: RefutationResult
 }): AdmissionCandidateOutcome => ({
   ...emptyAdmissionCandidateOutcome(),
   evidence: [input.refutationEvidence],
-  refutationResults:
-    input.refutationResult === undefined ? [] : [input.refutationResult],
+  refutationResults: [input.refutationResult],
   rejectedFindings: [
     RejectedFindingSchema.parse({
       candidateId: input.candidate.id,
@@ -41,21 +40,20 @@ export const refutedCandidateOutcome = (input: {
   ]
 })
 
-export const weakSuspicionRejectedOutcome = (input: {
+export const weakEvidenceRejectedOutcome = (input: {
   readonly candidate: CandidateFinding
   readonly refutation: FindingRefutationResult
   readonly refutationEvidence: EvidenceRecord
-  readonly refutationResult?: RefutationResult | undefined
+  readonly refutationResult: RefutationResult
 }): AdmissionCandidateOutcome => ({
   ...emptyAdmissionCandidateOutcome(),
   evidence: [input.refutationEvidence],
-  refutationResults:
-    input.refutationResult === undefined ? [] : [input.refutationResult],
+  refutationResults: [input.refutationResult],
   rejectedFindings: [
     RejectedFindingSchema.parse({
       candidateId: input.candidate.id,
       status: 'needs-more-evidence',
-      reason: 'weak-suspicion',
+      reason: 'weak-evidence',
       message: truncateForContract(input.refutation.rationaleSummary, REJECTED_FINDING_MESSAGE_MAX),
       evidenceIds: [input.refutationEvidence.id]
     })
@@ -64,7 +62,7 @@ export const weakSuspicionRejectedOutcome = (input: {
     {
       candidateId: input.candidate.id,
       status: 'needs-more-evidence',
-      rejectedReason: 'weak-suspicion'
+      rejectedReason: 'weak-evidence'
     }
   ]
 })
@@ -73,7 +71,7 @@ export const admissibleRefutationOutcome = (input: {
   readonly candidate: CandidateFinding
   readonly refutation: FindingRefutationResult
   readonly refutationEvidence: EvidenceRecord
-  readonly refutationResult?: RefutationResult | undefined
+  readonly refutationResult: RefutationResult
 }): AdmissionCandidateOutcome => ({
   ...emptyAdmissionCandidateOutcome(),
   admissionCandidates: [
@@ -84,8 +82,7 @@ export const admissibleRefutationOutcome = (input: {
     })
   ],
   evidence: [input.refutationEvidence],
-  refutationResults:
-    input.refutationResult === undefined ? [] : [input.refutationResult],
+  refutationResults: [input.refutationResult],
   artifactOnlyCandidateIds:
     input.refutation.verdict === 'needs-more-evidence'
       ? [input.candidate.id]

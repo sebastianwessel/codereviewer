@@ -131,7 +131,7 @@ export const renderMarkdownReport = (input: unknown): string => {
 
   for (const refutation of report.refutationResults) {
     lines.push(
-      `- ${safeText(refutation.id)}: ${safeText(refutation.verdict)} for ${safeText(refutation.proofPacketId)} - ${safeText(refutation.summary)}`
+      `- ${safeText(refutation.id)}: ${safeText(refutation.verdict)} for ${safeText(refutation.candidateId)} - ${safeText(refutation.summary)}`
     )
     lines.push(`  - Refutation evidence: ${renderEvidenceIds(refutation.evidenceIds)}`)
     for (const check of refutation.checks) {

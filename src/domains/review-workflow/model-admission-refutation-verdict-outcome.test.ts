@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'vitest'
 import { type CandidateFinding } from '../admission/index.js'
-import { type EvidenceRecord } from '../../shared/contracts/index.js'
+import {
+  type EvidenceRecord,
+  type RefutationResult
+} from '../../shared/contracts/index.js'
 import { type FindingRefutationResult } from './model-agent-contracts.js'
+import { activeRefutationResultForCandidate } from './model-admission-refutation-result.js'
 import {
   admissibleRefutationOutcome,
   refutedCandidateOutcome,
-  weakSuspicionRejectedOutcome
+  weakEvidenceRejectedOutcome
 } from './model-admission-refutation-verdict-outcome.js'
 
 const candidate = (): CandidateFinding => ({
@@ -39,13 +43,25 @@ const refutation = (
   rationaleSummary: 'The checked proof outcome.'
 })
 
+const refutationResultFor = (
+  verdict: FindingRefutationResult['verdict']
+): RefutationResult =>
+  activeRefutationResultForCandidate({
+    candidate: candidate(),
+    refutation: refutation(verdict),
+    refutationEvidence
+  })
+
 describe('model admission refutation verdict outcome', () => {
   test('creates refuted candidate outcomes', () => {
+    const refutationResult = refutationResultFor('refuted')
+
     expect(
       refutedCandidateOutcome({
         candidate: candidate(),
         refutation: refutation('refuted'),
-        refutationEvidence
+        refutationEvidence,
+        refutationResult
       })
     ).toEqual({
       admissionCandidates: [],
@@ -67,17 +83,20 @@ describe('model admission refutation verdict outcome', () => {
         }
       ],
       artifactOnlyCandidateIds: [],
-      refutationResults: [],
+      refutationResults: [refutationResult],
       providerIssues: []
     })
   })
 
-  test('creates rejected weak-suspicion outcomes', () => {
+  test('creates rejected weak-evidence outcomes', () => {
+    const refutationResult = refutationResultFor('needs-more-evidence')
+
     expect(
-      weakSuspicionRejectedOutcome({
+      weakEvidenceRejectedOutcome({
         candidate: candidate(),
         refutation: refutation('needs-more-evidence'),
-        refutationEvidence
+        refutationEvidence,
+        refutationResult
       })
     ).toEqual({
       admissionCandidates: [],
@@ -86,7 +105,7 @@ describe('model admission refutation verdict outcome', () => {
         {
           candidateId: 'cand_model1',
           status: 'needs-more-evidence',
-          reason: 'weak-suspicion',
+          reason: 'weak-evidence',
           message: 'The checked proof outcome.',
           evidenceIds: ['ev_refutation1']
         }
@@ -95,11 +114,11 @@ describe('model admission refutation verdict outcome', () => {
         {
           candidateId: 'cand_model1',
           status: 'needs-more-evidence',
-          rejectedReason: 'weak-suspicion'
+          rejectedReason: 'weak-evidence'
         }
       ],
       artifactOnlyCandidateIds: [],
-      refutationResults: [],
+      refutationResults: [refutationResult],
       providerIssues: []
     })
   })
@@ -109,7 +128,8 @@ describe('model admission refutation verdict outcome', () => {
       admissibleRefutationOutcome({
         candidate: candidate(),
         refutation: refutation('proved'),
-        refutationEvidence
+        refutationEvidence,
+        refutationResult: refutationResultFor('proved')
       }).artifactOnlyCandidateIds
     ).toEqual([])
 
@@ -117,7 +137,8 @@ describe('model admission refutation verdict outcome', () => {
       admissibleRefutationOutcome({
         candidate: candidate(),
         refutation: refutation('needs-more-evidence'),
-        refutationEvidence
+        refutationEvidence,
+        refutationResult: refutationResultFor('needs-more-evidence')
       })
     ).toMatchObject({
       evidence: [refutationEvidence],

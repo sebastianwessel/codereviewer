@@ -3,6 +3,7 @@ import {
   REJECTED_FINDING_MESSAGE_MAX,
   RejectedFindingSchema
 } from './finding.schema.js'
+import { activeRefutationResultForCandidate } from '../../../domains/review-workflow/model-admission-refutation-result.js'
 import { refutedCandidateOutcome } from '../../../domains/review-workflow/model-admission-refutation-verdict-outcome.js'
 
 // Regression guard for the cap drift where model-authored rejection summaries
@@ -26,33 +27,41 @@ describe('contract text cap drift guard', () => {
   test('refuted-candidate rejections truncate over-long model summaries', () => {
     // A refutation rationale longer than the cap must not abort the run: the
     // construction site truncates it so the RejectedFinding parses.
+    const candidate = {
+      id: 'cand_0a1b2c3d4e5f6071',
+      taskId: 'task_0a1b2c3d4e5f6071',
+      category: 'bug' as const,
+      severity: 'high' as const,
+      title: 'Refuted candidate',
+      description: 'A candidate that the refuter contradicts.',
+      location: {
+        path: 'src/app.ts',
+        startLine: 4,
+        side: 'new' as const
+      },
+      evidenceIds: ['ev_0a1b2c3d4e5f6071'],
+      proposedBy: 'review-agent'
+    }
+    const refutation = {
+      verdict: 'refuted' as const,
+      rationaleSummary: 'y'.repeat(1200)
+    }
+    const refutationEvidence = {
+      id: 'ev_refutation0a1b2c3d',
+      kind: 'refutation' as const,
+      summary: 'Refutation evidence.',
+      source: 'refutation',
+      redactionApplied: true
+    }
     const outcome = refutedCandidateOutcome({
-      candidate: {
-        id: 'cand_0a1b2c3d4e5f6071',
-        taskId: 'task_0a1b2c3d4e5f6071',
-        category: 'bug',
-        severity: 'high',
-        title: 'Refuted candidate',
-        description: 'A candidate that the refuter contradicts.',
-        location: {
-          path: 'src/app.ts',
-          startLine: 4,
-          side: 'new'
-        },
-        evidenceIds: ['ev_0a1b2c3d4e5f6071'],
-        proposedBy: 'review-agent'
-      },
-      refutation: {
-        verdict: 'refuted',
-        rationaleSummary: 'y'.repeat(1200)
-      },
-      refutationEvidence: {
-        id: 'ev_refutation0a1b2c3d',
-        kind: 'refutation',
-        summary: 'Refutation evidence.',
-        source: 'refutation',
-        redactionApplied: true
-      }
+      candidate,
+      refutation,
+      refutationEvidence,
+      refutationResult: activeRefutationResultForCandidate({
+        candidate,
+        refutation,
+        refutationEvidence
+      })
     })
 
     expect(outcome.rejectedFindings).toHaveLength(1)

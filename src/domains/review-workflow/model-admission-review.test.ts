@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import {
-  type EvidenceRecord,
-  type ProofPacket,
-  type RefutationResult
-} from '../../shared/contracts/index.js'
+import { type EvidenceRecord } from '../../shared/contracts/index.js'
 import { type CandidateFinding } from '../admission/index.js'
 import {
   type FindingRefutationInput,
@@ -117,36 +113,6 @@ const refutedResult = (): FindingRefutationResult => ({
   rationaleSummary: 'The support signal does not prove the model claim.'
 })
 
-const refutationArtifact: RefutationResult = {
-  id: 'ref_model1',
-  proofPacketId: 'proof_model1',
-  verdict: 'refuted',
-  summary: 'The support signal does not prove the model claim.',
-  evidenceIds: ['ev_support1'],
-  checks: [
-    {
-      kind: 'proof-review',
-      result: 'failed',
-      summary: 'No complete proof packet supports the claim.',
-      evidenceIds: ['ev_support1']
-    }
-  ]
-}
-
-const proofArtifact: ProofPacket = {
-  id: 'proof_model1',
-  suspicionId: 'susp_model1',
-  candidateId: 'cand_model1',
-  changedBehavior: 'The changed branch can lose data.',
-  executionOrDataPath: 'The reviewed branch is reachable from the changed API.',
-  violatedInvariant: 'The API must preserve existing data.',
-  impact: 'A user update can drop existing state.',
-  introducedByChange: 'The reviewed diff changes the update branch.',
-  evidenceIds: ['ev_support1'],
-  contradictionChecks: ['No contradiction was found.'],
-  fixDirection: 'Preserve the existing state in the changed branch.'
-}
-
 describe('model admission review', () => {
   test('rejects a model candidate refuted against support-signal evidence', async () => {
     let refutationCalls = 0
@@ -156,8 +122,6 @@ describe('model admission review', () => {
       tasks: [task],
       candidates: [supportSignalCandidate, modelCandidate],
       sharedDigest: '(no admitted shared context yet)',
-      proofPackets: [],
-      refutationResults: [refutationArtifact],
       refuteFinding: async (input) => {
         refutationCalls += 1
         refutationInputs.push(input)
@@ -186,14 +150,6 @@ describe('model admission review', () => {
       tasks: [task],
       candidates: [supportSignalCandidate, modelCandidate],
       sharedDigest: '(no admitted shared context yet)',
-      proofPackets: [proofArtifact],
-      refutationResults: [
-        {
-          ...refutationArtifact,
-          verdict: 'proved',
-          summary: 'The proof packet survived refutation.'
-        }
-      ],
       refuteFinding: async () => {
         refutationCalls += 1
         return {
@@ -216,13 +172,13 @@ describe('model admission review', () => {
     ).toBe('Preserve the existing state in the changed branch.')
   })
 
-  test('passes review evidence into the admission refutation packet', async () => {
+  test('passes candidate review evidence into the admission refutation packet', async () => {
     let refutationCalls = 0
     const refutationInputs: FindingRefutationInput[] = []
-    const proofEvidence: EvidenceRecord = {
+    const investigationEvidence: EvidenceRecord = {
       id: 'ev_taskproof',
       kind: 'model-rationale',
-      summary: 'Investigation proved the changed branch reaches stale state.',
+      summary: 'Investigation showed the changed branch reaches stale state.',
       location: {
         path: 'src/admission.ts',
         startLine: 12,
@@ -231,21 +187,16 @@ describe('model admission review', () => {
       source: 'model-investigation',
       redactionApplied: true
     }
+    const investigatedCandidate: CandidateFinding = {
+      ...modelCandidate,
+      evidenceIds: ['ev_support1', investigationEvidence.id]
+    }
     const result = await prepareCandidatesForAdmission({
       workflowInput: workflowInput(),
       tasks: [task],
-      candidates: [modelCandidate],
+      candidates: [investigatedCandidate],
       sharedDigest: '(no admitted shared context yet)',
-      reviewEvidence: [supportEvidence, proofEvidence],
-      proofPackets: [proofArtifact],
-      refutationResults: [
-        {
-          ...refutationArtifact,
-          verdict: 'proved',
-          summary: 'The proof packet survived proof-loop refutation.',
-          evidenceIds: [proofEvidence.id]
-        }
-      ],
+      reviewEvidence: [supportEvidence, investigationEvidence],
       refuteFinding: async (input) => {
         refutationCalls += 1
         refutationInputs.push(input)
@@ -253,7 +204,7 @@ describe('model admission review', () => {
         return {
           verdict: 'proved',
           rationaleSummary:
-            'The task proof evidence survives active admission refutation.',
+            'The candidate evidence survives active admission refutation.',
           fixSummary: 'Preserve the existing state in the changed branch.'
         }
       }
@@ -262,7 +213,7 @@ describe('model admission review', () => {
     expect(refutationCalls).toBe(1)
     expect(refutationInputs[0]?.evidence.map((record) => record.id)).toEqual([
       'ev_support1',
-      proofEvidence.id
+      investigationEvidence.id
     ])
     expect(result.rejectedFindings).toEqual([])
     expect(result.admissionCandidates.map((candidate) => candidate.id)).toEqual([
@@ -279,8 +230,6 @@ describe('model admission review', () => {
       tasks: [task],
       candidates: [modelCandidate],
       sharedDigest: '(no admitted shared context yet)',
-      proofPackets: [proofArtifact],
-      refutationResults: [refutationArtifact],
       refuteFinding: async () => ({
         verdict: 'needs-more-evidence',
         rationaleSummary: 'The critic could not prove the claim.'
@@ -313,14 +262,6 @@ describe('model admission review', () => {
       tasks: [task],
       candidates: [modelCandidate, secondModelCandidate],
       sharedDigest: '(no admitted shared context yet)',
-      proofPackets: [proofArtifact],
-      refutationResults: [
-        {
-          ...refutationArtifact,
-          verdict: 'proved',
-          summary: 'The proof packet survived refutation.'
-        }
-      ],
       refuteFinding: async (input) => {
         activeRefutationCalls += 1
         maxActiveRefutationCalls = Math.max(

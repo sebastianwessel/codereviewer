@@ -1,8 +1,4 @@
-import {
-  type EvidenceRecord,
-  type ProofPacket,
-  type RefutationResult
-} from '../../shared/contracts/index.js'
+import { type EvidenceRecord } from '../../shared/contracts/index.js'
 import { type CandidateFinding } from '../admission/index.js'
 import {
   type FindingRefutationResult,
@@ -14,11 +10,6 @@ import {
   type RefutationProviderErrorStage
 } from './model-admission-provider-error-outcome.js'
 import { type AdmissionCandidateOutcome } from './model-admission-outcome.js'
-import {
-  proofLoopRefutationFor,
-  proofPacketForCandidate,
-  refutationResultFromProofLoop
-} from './model-admission-refutation-reuse.js'
 import { findingRefutationInputForCandidate } from './model-refutation-packet.js'
 import {
   providerIssueForError,
@@ -44,8 +35,6 @@ export const executeAdmissionRefutation = async (
     readonly allCandidates: readonly CandidateFinding[]
     readonly sharedDigest: string
     readonly reviewEvidence: readonly EvidenceRecord[]
-    readonly proofPackets: readonly ProofPacket[]
-    readonly refutationResults: readonly RefutationResult[]
     readonly refuteFinding: FindingRefutationRunner
     readonly issueForError?: ProviderIssueForError
     readonly signal?: AbortSignal
@@ -64,30 +53,6 @@ export const executeAdmissionRefutation = async (
     })
   })
 
-  const proofPacket = proofPacketForCandidate(
-    input.candidate,
-    input.proofPackets
-  )
-  const proofLoopRefutationArtifact = proofLoopRefutationFor(
-    proofPacket,
-    input.refutationResults
-  )
-  const proofLoopRefutation = refutationResultFromProofLoop({
-    candidate: input.candidate,
-    proofPackets: input.proofPackets,
-    refutationResults: input.refutationResults
-  })
-
-  if (
-    proofLoopRefutation !== undefined &&
-    proofLoopRefutation.verdict !== 'proved'
-  ) {
-    return {
-      status: 'completed',
-      refutation: proofLoopRefutation
-    }
-  }
-
   let refutationInput: ReturnType<
     typeof findingRefutationInputForCandidate
   >['input']
@@ -99,11 +64,7 @@ export const executeAdmissionRefutation = async (
       candidate: input.candidate,
       allCandidates: input.allCandidates,
       sharedDigest: input.sharedDigest,
-      reviewEvidence: input.reviewEvidence,
-      additionalEvidenceIds: [
-        ...(proofPacket?.evidenceIds ?? []),
-        ...(proofLoopRefutationArtifact?.evidenceIds ?? [])
-      ]
+      reviewEvidence: input.reviewEvidence
     }).input
   } catch (error: unknown) {
     return providerErrorOutcome(error, 'refutation-packet')

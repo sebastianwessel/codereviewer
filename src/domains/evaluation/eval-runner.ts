@@ -273,7 +273,7 @@ const refutationResultSummaries = (
   report.refutationResults.map((refutation) =>
     EvalRefutationResultReportSchema.parse({
       id: refutation.id,
-      proofPacketId: refutation.proofPacketId,
+      candidateId: refutation.candidateId,
       verdict: refutation.verdict
     })
   )
