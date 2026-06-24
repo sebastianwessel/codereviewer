@@ -229,6 +229,42 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(result.candidates).toHaveLength(0)
   })
 
+  test('pass 2 reuses the pass-1 base prefix (cacheable) and appends its findings', async () => {
+    const reviewTexts: string[] = []
+    await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          reviewTexts.push(holisticInput.reviewText)
+          return reviewTexts.length === 1
+            ? holisticResultWith([
+                {
+                  category: 'bug',
+                  severity: 'high',
+                  title: 'Pass-one defect',
+                  description: 'Found by the general pass.',
+                  path: 'src/app.ts',
+                  startLine: 1
+                }
+              ])
+            : holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(reviewTexts).toHaveLength(2)
+    // Pass 2 starts with the IDENTICAL pass-1 text (shared prompt-cache prefix).
+    expect(reviewTexts[1]!.startsWith(reviewTexts[0]!)).toBe(true)
+    // ...then appends the focused-lens section that lists pass-1's findings.
+    expect(reviewTexts[1]).toContain('## Second-pass focused re-review')
+    expect(reviewTexts[1]).toContain('Pass-one defect (src/app.ts:1)')
+    // The base (pass 1) must NOT contain the second-pass section.
+    expect(reviewTexts[0]).not.toContain('Second-pass focused re-review')
+  })
+
   test('deduplicates identical findings and reports zero-candidate reason', async () => {
     const duplicate = {
       category: 'bug',

@@ -73,10 +73,12 @@ const diffSegmentsForPaths = (
   return segments.join('\n\n')
 }
 
+// The base review text is identical across both passes, so it is the cacheable
+// prompt prefix. Pass 2 APPENDS its lens + the first pass's findings after this
+// base (never prepends) so the provider can prompt-cache this shared prefix.
 const buildReviewText = (
   taskInput: TaskReviewInput,
-  rawDiff: string,
-  focus?: string
+  rawDiff: string
 ): string => {
   const files = taskInput.task.reviewContext
     .filter(
@@ -113,11 +115,6 @@ const buildReviewText = (
         ? ''
         : `\n## Reviewed diff ranges (what changed)\n${diffRanges}`
 
-  const focusSection =
-    focus === undefined || focus.length === 0
-      ? ''
-      : `## Review lens (read this first)\n${focus}\n`
-
   // R4: referenced definitions are bounded digests of UNCHANGED dependency files
   // imported by the changed files. They are CONTEXT ONLY — do NOT filter them by
   // task.paths (they are intentionally outside it) and the section header tells
@@ -147,13 +144,36 @@ const buildReviewText = (
         `in the task's paths (the changed files).\n${referencedDefinitions}`
 
   return [
-    focusSection,
     `Review task ${taskInput.task.id}.`,
     changeSection,
     `\n## Changed files (full content, line-numbered, for context)\n${
       files.length === 0 ? '(no file content provided)' : files
     }`,
     referencedDefinitionsSection
+  ].join('\n')
+}
+
+// The focused second-pass section appended AFTER the (cached) base review text.
+// It tells the model what the first pass already found (so it reports only NEW,
+// distinct defects) and directs it at the commonly-missed high-impact classes.
+const buildFocusFollowup = (
+  priorCandidates: readonly CandidateFinding[]
+): string => {
+  const alreadyReported =
+    priorCandidates.length === 0
+      ? '(the first pass reported nothing)'
+      : priorCandidates
+          .map(
+            (candidate) =>
+              `- ${candidate.title} (${candidate.location.path}:${candidate.location.startLine})`
+          )
+          .join('\n')
+
+  return [
+    '\n\n## Second-pass focused re-review',
+    'A first general review of the SAME change above already reported these findings — do NOT repeat them; report only ADDITIONAL, distinct concrete defects:',
+    alreadyReported,
+    HOLISTIC_FOCUS_LENS
   ].join('\n')
 }
 
@@ -234,65 +254,72 @@ export const runModelBackedHolisticTaskReview = async (
     readonly signal?: AbortSignal | undefined
   }
 ): Promise<TaskReviewResult> => {
-  // Pass 1 is the general review (no lens); pass 2 prepends the focused lens.
-  // Keep the passes serial: parallel holistic calls exceed the parallel
-  // child-agent budget the workflow grants per task.
-  const passFocuses: readonly (string | undefined)[] = [
-    undefined,
-    HOLISTIC_FOCUS_LENS
-  ]
-  const passFindingCounts: number[] = []
-  const combinedFindings: unknown[] = []
-
-  for (const focus of passFocuses) {
-    const result = ModelHolisticReviewResultSchema.parse(
-      await input.runners.holisticReview(
-        {
-          runId: input.taskInput.runId,
-          taskId: input.task.id,
-          paths: [...input.task.paths],
-          reviewText: buildReviewText(
-            input.taskInput,
-            input.workflowInput.reviewedDiffText,
-            focus
-          )
-        },
-        input.signal
-      )
-    )
-
-    passFindingCounts.push(result.findings.length)
-    combinedFindings.push(...result.findings)
-  }
-
-  // Dedup by candidate id over the UNION of both passes' findings: identical
-  // findings collapse to a single candidate, new ones accumulate up to the cap.
+  // Candidates accumulate across both passes, deduped by id (identical findings
+  // collapse to one; new ones accumulate up to the cap).
   const candidatesById = new Map<string, CandidateFinding>()
   let droppedCount = 0
+  const passFindingCounts: number[] = []
 
-  for (const raw of combinedFindings) {
-    if (candidatesById.size >= HOLISTIC_MAX_CANDIDATES) {
-      break
+  const ingestFindings = (findings: readonly unknown[]): void => {
+    passFindingCounts.push(findings.length)
+    for (const raw of findings) {
+      if (candidatesById.size >= HOLISTIC_MAX_CANDIDATES) {
+        break
+      }
+      const candidate = candidateFromFinding(input.task, raw)
+      if (candidate === undefined) {
+        droppedCount += 1
+        continue
+      }
+      candidatesById.set(candidate.id, candidate)
     }
-
-    const candidate = candidateFromFinding(input.task, raw)
-
-    if (candidate === undefined) {
-      droppedCount += 1
-      continue
-    }
-
-    candidatesById.set(candidate.id, candidate)
   }
+
+  // The base review text is identical for both passes (the cacheable prefix).
+  const baseReviewText = buildReviewText(
+    input.taskInput,
+    input.workflowInput.reviewedDiffText
+  )
+
+  // Pass 1: general review.
+  const pass1 = ModelHolisticReviewResultSchema.parse(
+    await input.runners.holisticReview(
+      {
+        runId: input.taskInput.runId,
+        taskId: input.task.id,
+        paths: [...input.task.paths],
+        reviewText: baseReviewText
+      },
+      input.signal
+    )
+  )
+  ingestFindings(pass1.findings)
+
+  // Pass 2: focused re-review. Reuses the IDENTICAL base prefix (so the provider
+  // prompt-caches it) and APPENDS the first pass's findings + the focus lens, so
+  // the model sees what was already reported and hunts for additional defects.
+  const pass2 = ModelHolisticReviewResultSchema.parse(
+    await input.runners.holisticReview(
+      {
+        runId: input.taskInput.runId,
+        taskId: input.task.id,
+        paths: [...input.task.paths],
+        reviewText:
+          baseReviewText + buildFocusFollowup([...candidatesById.values()])
+      },
+      input.signal
+    )
+  )
+  ingestFindings(pass2.findings)
 
   const candidates = [...candidatesById.values()]
 
   input.logger.debug('Holistic task review completed.', {
     task_id: input.task.id,
-    pass_count: passFocuses.length,
+    pass_count: 2,
     pass1_finding_count: passFindingCounts[0] ?? 0,
     pass2_finding_count: passFindingCounts[1] ?? 0,
-    finding_count: combinedFindings.length,
+    finding_count: (passFindingCounts[0] ?? 0) + (passFindingCounts[1] ?? 0),
     candidate_count: candidates.length,
     dropped_count: droppedCount
   })
