@@ -65,19 +65,6 @@ export const runReviewWorkflowSession = async (
   }
 }
 
-export const runProvidedCandidateReviewWorkflow = (
-  options: {
-    readonly harness: ReviewHarness
-    readonly sessionId: string
-    readonly input: ReviewWorkflowInputDraft
-    readonly signal?: AbortSignal
-  }
-): Promise<ReviewWorkflowOutput> =>
-  runReviewWorkflowSession({
-    ...options,
-    operation: 'run_provided_candidate_review_workflow'
-  })
-
 export const runModelBackedReviewWorkflow = (
   options: {
     readonly harness: ModelBackedReviewHarness

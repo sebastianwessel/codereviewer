@@ -32,7 +32,7 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).optional(),
   // Raw unified diff text for the reviewed change. Holistic discovery presents
   // it to the model as the authoritative "what changed" signal. Defaults to ''
-  // (provided-candidate runs do not require it).
+  // when no diff text is supplied.
   reviewedDiffText: z.string().default(''),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
