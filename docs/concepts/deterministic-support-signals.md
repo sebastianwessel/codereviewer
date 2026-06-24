@@ -40,7 +40,7 @@ flowchart LR
 
 > **Note:** Production setups are expected to run CodeQL, linters, formatters,
 > unit tests, and build checks in adjacent pipelines. CodeReviewer uses
-> deterministic signals to help the LLM investigate semantic risk and to reject
+> deterministic signals to help the LLM review semantic risk and to reject
 > weak or contradicted claims.
 
 A small allowlist of trusted rule evidence can also seed actionable
@@ -49,18 +49,17 @@ its own evidence and remediation.
 
 ---
 
-## Signals do not waive the proof path
+## Signals do not waive refutation
 
-Generic support signals do not waive the proof path. A model-origin candidate
-that overlaps support-signal evidence still needs:
+Generic support signals do not waive refutation. A model-origin candidate that
+overlaps support-signal evidence still needs:
 
-- a complete proof packet;
-- a proved refutation result;
+- a `proved` refutation result;
 - normal admission
 
 before it can become actionable or enter worker shared context. Model
 suggestions that cite the same evidence as a trusted deterministic-rule
-candidate are treated as duplicates and dropped before proof work.
+candidate are treated as duplicates and dropped before refutation.
 
 ---
 

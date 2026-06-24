@@ -18,9 +18,9 @@ CLI
   -> review-planning
   -> provider-resolution
   -> review-workflow
-  -> agentic-review
-  -> proof-refutation
-  -> promotion/admission
+  -> holistic-discovery
+  -> refutation
+  -> admission
   -> baseline matching
   -> reporting
   -> quality gate

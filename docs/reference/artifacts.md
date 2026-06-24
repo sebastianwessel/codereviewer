@@ -41,32 +41,18 @@ hash of itself.
 A completed `report.json` includes a `coverage` object; successful completed
 reviews require `coverage.status` to be `complete`.
 
-**Provider-backed runs** include the full proof-loop state:
+**Provider-backed runs** include the full refutation + admission state:
 
-- Review intents with compact verification questions
-- Model suspicions (including structured context requests when the finding agent
-  needs bounded read/list/grep follow-up)
-- Investigation traces — whether the suspicion became a proof, was refuted,
-  needed more evidence, or hit a recovered provider issue; the trace budget
-  shows rounds allowed and used; when mediated context retrieval is active it
-  also shows the configured read/search limits and reads/searches consumed
-- Proof packets
-- Refutation results
-- Optional aggregate results — batch critic decisions across related proved
-  findings; evidence references are only the IDs explicitly cited by the batch
-  critic; an evidence-less approval or rejection is recorded as
-  `needs-more-evidence`
-- Optional judge results — challenge questions, structured verification checks,
-  structured context requests, and any bounded prose context the critic used
-  before the final verdict; evidence references are only the IDs explicitly
-  cited by the critic; an empty list means the critic did not cite decisive
-  evidence; an evidence-less approval or rejection is recorded as
-  `needs-more-evidence`
-- Promotion decisions
+- Refutation results — the `proved` / `refuted` / `needs-more-evidence` verdict
+  for each candidate, with the deciding rationale summary and cited evidence IDs
+- Admitted findings, rejected findings, and evidence records
 - Provider issues
 
+The candidate findings emitted by holistic discovery and the admission decisions
+are recorded in `shared-context.json` (see below).
+
 JSON remains the structured source of truth for full evidence arrays and
-verification checks.
+refutation results.
 
 ### `context-ledger.json`
 
@@ -76,9 +62,8 @@ decisions, reasons, and task IDs. Source entries with reason
 
 Context ledger entries are collapsed by stable ledger ID before report output,
 so reused context retrieval artifacts keep one ledger record with many
-references instead of repeated rows. Investigation context reads are traced
-through this file. Mediated read/list/grep entries use the `tool-result` ledger
-kind.
+references instead of repeated rows. Mediated read/list/grep entries use the
+`tool-result` ledger kind.
 
 ### `observability.json`
 
@@ -89,11 +74,8 @@ These fields are counts and version metadata only.
 
 ### `report.md`
 
-Markdown renders investigation trace budgets and tool-call summaries, proof
-packet evidence and proof fields, refutation summaries, refutation evidence,
-refutation check evidence, aggregate result evidence, aggregate decision
-evidence, aggregate similar-issue check evidence, judge result evidence, and
-judge verification-check evidence as cited IDs or `none cited`.
+Markdown renders candidate findings, refutation summaries, refutation evidence,
+and refutation check evidence as cited IDs or `none cited`.
 
 ### `report.sarif`
 
@@ -147,14 +129,11 @@ again from scratch.
 
 - Markdown, SARIF, and GitHub review-comment drafts are written only when
   enabled in `reporting.formats`.
-- Weak, refuted, or provider-error model output is visible to humans but is not
-  included in quality-gate counts or review-comment drafts unless promoted as
-  actionable.
+- Refuted, needs-more-evidence, or provider-error model output is visible to
+  humans but is not included in quality-gate counts or review-comment drafts
+  unless admitted as actionable.
 - Exact duplicate provider issue records are collapsed before report output;
   distinct provider stages, recovery states, or messages remain visible.
-- When optional judging is enabled, sibling sweep suspicions may create
-  additional model suspicions and proof packets for the same repeated pattern in
-  other changed ranges; they are not a separate artifact type.
 - The review runtime keeps all session and task state in memory and never
   creates persistent durable databases, session directories, or workspace
   directories.

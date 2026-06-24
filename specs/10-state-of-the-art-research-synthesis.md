@@ -22,13 +22,13 @@ in regression tests.
 | Topic | Decision | Spec Location |
 | --- | --- | --- |
 | Canonical findings | Use an internal finding/evidence model and export SARIF/Markdown/JSON from it. | `03-contracts/finding-evidence-report.md` |
-| Proof first | Actionable model-origin findings require a complete proof packet, source-backed evidence, and passed refutation. Weak or refuted model output remains artifact-only or rejected. | `05-review-workflow-and-runtime.md` |
+| Refutation first | Actionable model-origin findings require a `proved` refutation verdict and source-backed evidence. Refuted or needs-more-evidence model output remains artifact-only or rejected. | `05-review-workflow-and-runtime.md` |
 | Baselines | Track new/existing/resolved findings with stable fingerprints. | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | Context transparency | Record a context ledger for every include, skip, truncation, and summary decision. | `05-review-workflow-and-runtime.md` |
 | Provider isolation | Dynamically import only the configured provider adapter. | `04-configuration-and-providers.md` |
 | Prompt injection posture | Treat prompt injection as a risk to contain, not a problem that can be eliminated. | `07-security-privacy-operations.md` |
 | No-content telemetry | Capture IDs, counts, timings, and redacted errors only in R1. | `07-security-privacy-operations.md` |
-| Evaluation | Measure actionable precision/recall, suspicion recall, proof recall, refutation correctness, actionability, line accuracy, severity accuracy, cost, latency, provider issues, and noise. | `06-evaluation-and-quality-gates.md` |
+| Evaluation | Measure actionable precision/recall, refutation correctness, actionability, line accuracy, severity accuracy, cost, latency, provider issues, and noise. | `06-evaluation-and-quality-gates.md` |
 | CI/CD security | Separate review generation from publishing permissions and avoid privileged execution of untrusted code. | `07-security-privacy-operations.md` |
 | Supply chain | Target pinned release workflows, provenance, Scorecard, vulnerability scanning, and SBOM. | `08-dependencies-and-release.md` |
 | Deterministic support signals | Use local structural parsing and diff/scope checks as support signals for context selection, anchoring, contradictions, and de-duplication. Keep generic signals out of primary issue discovery, but allow narrow trusted rules to seed actionable deterministic candidates. | `05-review-workflow-and-runtime.md`, `08-dependencies-and-release.md` |
@@ -40,12 +40,10 @@ The review engine must separate these stages:
 1. repository intake and context planning;
 2. deterministic support signals for anchors, context hints, contradictions,
    and de-duplication;
-3. model suspicion generation;
-4. bounded runtime-mediated investigation of model-requested context;
-5. proof packet assembly;
-6. independent refutation;
-7. deterministic promotion/admission, de-duplication, and baseline matching;
-8. deterministic reporting and quality gates.
+3. holistic whole-file review producing candidate findings;
+4. per-candidate refutation;
+5. deterministic promotion/admission, de-duplication, and baseline matching;
+6. deterministic reporting and quality gates.
 
 This separation allows the product to improve model behavior while keeping
 context access, publishing, failure decisions, and sensitive-data handling under
@@ -70,7 +68,7 @@ patterns worth adopting:
 - Repository or path-scoped instructions improve relevance, but they are
   untrusted inputs and must be hashed, scoped, and excluded from logs.
 - Large changes need complete coverage accounting. Budget pressure should split
-  work into more signal/model/investigation tasks; completed reviews must not
+  work into more signal/model tasks; completed reviews must not
   silently skip or truncate required source.
 - Inline comments are capped and severity-filtered to avoid review noise.
 - Review results support machine-readable artifacts for CI/security
@@ -78,7 +76,7 @@ patterns worth adopting:
 - Hybrid static-analysis/AI products use deterministic analysis for precise
   patterns, triage, and noise reduction while applying AI to surrounding
   context and false-positive filtering. CodeReviewer adopts this as support
-  signals plus proof/refutation rather than duplicating production CodeQL,
+  signals plus refutation rather than duplicating production CodeQL,
   linter, formatter, unit-test, or build pipelines.
 
 ## Public Benchmark Posture
@@ -91,7 +89,7 @@ fresh project-owned evaluation set with:
 - negative/control cases where no finding is expected;
 - severity and location expectations;
 - noise metrics such as comments per KLOC and comments per diff hunk;
-- suspicion recall, proof recall, refutation correctness, provider issue,
+- refutation correctness, provider issue,
   cost, latency, incomplete coverage, and context mutation metrics.
 
 ## Deterministic Signal Posture
@@ -99,7 +97,7 @@ fresh project-owned evaluation set with:
 Deterministic support signals help the model focus and help admission reject
 weak or contradicted output. They are not a product-owned replacement for
 CodeQL, linters, formatters, build checks, or unit tests that production
-pipelines already run. A small trusted-rule allowlist may bypass model proof
+pipelines already run. A small trusted-rule allowlist may bypass model refutation
 when the finding is local, deterministic, evidence-backed, and fix-directed.
 
 The preferred generic local parsing layer is ast-grep when it materially

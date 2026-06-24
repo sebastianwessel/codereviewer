@@ -111,7 +111,7 @@ content. R1 controls the blast radius:
 
 - repository content, instructions, skills, prior artifacts, and provider
   responses are untrusted input;
-- model output can propose suspicions, proof packets, and refutation summaries
+- model output can propose candidate findings and refutation summaries
   only; it cannot publish, fail gates, write outside the artifact directory,
   execute commands, or read additional files without deterministic
   context-retrieval mediation;
@@ -194,8 +194,8 @@ Provider-backed review requirements:
   review product;
 - raw env vars, local absolute paths, git remotes, shell output, secrets, and
   ignored files are never provider context;
-- investigation and refutation tools must be mediated by deterministic code
-  that enforces path containment, read/search budgets, redaction, and context
+- refutation and holistic-review context tools must be mediated by deterministic
+  code that enforces path containment, read/search budgets, redaction, and context
   ledger entries before any result reaches the model;
 - provider raw responses are parsed through schemas, redacted on error, and not
   stored by default.

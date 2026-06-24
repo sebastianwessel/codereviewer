@@ -26,10 +26,13 @@ describe('evaluation package scripts', () => {
     expect(packageJson.scripts['eval:benchmark']).toContain(
       '--review-mode pr --review-depth thorough'
     )
-    expect(packageJson.scripts['eval:benchmark']).toContain(
-      '--intent-planning model --judge-findings'
-    )
     expect(packageJson.scripts['eval:benchmark']).toContain('--semantic-judge')
+    expect(packageJson.scripts['eval:benchmark']).not.toContain(
+      '--intent-planning'
+    )
+    expect(packageJson.scripts['eval:benchmark']).not.toContain(
+      '--judge-findings'
+    )
     expect(packageJson.scripts['eval:benchmark']).toContain(
       '--max-concurrent-tasks 1'
     )
@@ -45,9 +48,6 @@ describe('evaluation package scripts', () => {
     )
     expect(packageJson.scripts['eval:benchmark:debug']).toContain(
       '--review-mode pr --review-depth thorough'
-    )
-    expect(packageJson.scripts['eval:benchmark:debug']).toContain(
-      '--intent-planning model --judge-findings'
     )
     expect(packageJson.scripts['eval:benchmark:debug']).toContain(
       '--semantic-judge --max-concurrent-tasks 1'

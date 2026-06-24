@@ -20,12 +20,13 @@ Controls the review scope, git refs, file budgets, and task concurrency.
 | Key | Values / Type | Description |
 | --- | --- | --- |
 | `review.mode` | `local`, `ci`, `pr`, `full` | Review mode. |
-| `review.depth` | `fast`, `balanced`, `thorough` | Review depth; scales per-packet context budget (60 KB / 120 KB / 240 KB). |
+| `review.depth` | `fast`, `balanced`, `thorough` | Review depth; scales the per-packet context budget. |
 | `review.baseRef` | git ref (no leading `-`) | Base git ref for the diff. |
 | `review.headRef` | git ref (no leading `-`) | Head git ref for the diff. |
 | `review.maxConcurrentTasks` | `1`–`32` | Caps active review tasks **and** active provider calls. A new task may start as soon as one active provider call completes (rolling workers). |
 | `review.maxFiles` | `1`–`10000` | Maximum number of files to include in a review. |
 | `review.maxFileBytes` | `1`–`5000000` | Maximum size of an individual file in bytes; larger files are skipped. |
+| `review.inlineSeverityThreshold` | severity string (default `high`) | Minimum severity for a finding to be eligible as an inline review comment. Lower-severity findings still appear in summary reports. |
 | `review.contextMaxBytes` | `10000`–`10000000` | Per-packet context budget. This is never a coverage cap. |
 | `review.runTimeoutMs` | optional integer | Whole-run timeout in milliseconds. Unset disables the Harness run timeout. Provider calls also respect `provider.timeoutMs`. |
 
@@ -65,14 +66,14 @@ Injects reviewer guidance from files or inline strings into every model packet.
 
 ## `skills`
 
-Controls optional investigator tool skills (read / list / grep access during
-bounded context retrieval).
+Controls optional reviewer tool skills (read / list / grep access during bounded
+context retrieval).
 
 | Key | Values / Type | Description |
 | --- | --- | --- |
 | `skills.enabled` | boolean | Enable or disable skills. |
 | `skills.directories` | repository-relative path array | Directories scanned for skill definitions. |
-| `skills.allowTools` | `read`, `list`, `grep` | Tool types the investigator may call. |
+| `skills.allowTools` | `read`, `list`, `grep` | Tool types the reviewer may call. |
 
 ---
 
@@ -126,7 +127,7 @@ Tracks findings across runs to distinguish new issues from pre-existing ones.
 ## `qualityGate`
 
 Determines whether the `review` command exits with code `1` (gate failed).
-Only proved, refutation-passed, actionable model findings are gate-relevant.
+Only refutation-passed, actionable model findings are gate-relevant.
 
 | Key | Values / Type | Default | Description |
 | --- | --- | --- | --- |
@@ -140,50 +141,25 @@ Only proved, refutation-passed, actionable model findings are gate-relevant.
 
 ## `aiReview`
 
-Controls the LLM-backed proof/refutation pipeline. Requires a configured
-`provider`.
+Controls the LLM-backed holistic discovery + refutation pipeline. Requires a
+configured `provider`.
 
 | Key | Values / Type | Default | Description |
 | --- | --- | --- | --- |
 | `aiReview.enabled` | boolean | `true` when a provider is configured | Enable or disable AI review entirely. |
-| `aiReview.maxSuspicionsPerTask` | `0`–`20` | — | Maximum suspicions the discovery model may emit per task. |
-| `aiReview.maxInvestigationsPerRun` | `0`–`200` | — | Global pool bounding total investigation calls across the run. |
-| `aiReview.maxToolReadsPerInvestigation` | `0`–`50` | — | Maximum `read`/`list` tool calls per investigation. |
-| `aiReview.maxToolSearchesPerInvestigation` | `0`–`25` | — | Maximum `grep` tool calls per investigation. |
-| `aiReview.maxInvestigationRounds` | `1`–`5` | — | Maximum mediated context-retrieval rounds per investigation (also bounds optional judge follow-up). |
-| `aiReview.requireRefutation` | always `true` | `true` | Refutation gate is always active in R1. |
-| `aiReview.intentPlanning` | `auto`, `deterministic`, `model` | — | See table below. Env: `CODEREVIEWER_AI_INTENT_PLANNING`. |
-| `aiReview.discoveryMode` | `suspicion`, `holistic` | `holistic` | `holistic` (default): one recall-first whole-file review per change unit (with the raw diff), then the shared refutation/admission precision filter — benchmarks ~2x the product recall of `suspicion` at higher precision and ~half the cost. `suspicion`: the older budgeted hypothesis→investigate→prove loop. Env: `CODEREVIEWER_AI_DISCOVERY_MODE`. |
-| `aiReview.judgeFindings` | boolean | `false` | Adds a stricter per-candidate critic pass after refutation. Opt-in for high-stakes runs. Env: `CODEREVIEWER_AI_JUDGE_FINDINGS=true`. |
-| `aiReview.deterministicSignalMode` | `support`, `disabled` | — | `support`: inject parsed facts as model context (better recall). `disabled`: keep clustering, skip injection (lower cost/recall). Env: `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`. |
-| `aiReview.actionableSeverityThreshold` | severity string | `medium` | Model findings below this severity are rejected as below-threshold. Trusted deterministic-rule findings are exempt. |
-
-### `aiReview.intentPlanning` behavior
-
-| Value | Behavior |
-| --- | --- |
-| `auto` | Deterministic intents for local or single-task runs; compact model planner for multi-task non-local reviews. |
-| `deterministic` | One intent per task, no extra model call. |
-| `model` | Forces the compact model planner for multi-task runs. |
-
-> **Note:** `aiReview.judgeFindings = true` adds a stricter critic pass for
-> proved model-origin candidates before admission. It is opt-in (default off);
-> precision wins come primarily from the refutation gate, severity floor, and
-> aggregate de-duplication. Treat it as a high-stakes-run option until a full
-> judge-on vs judge-off A/B shows a precision lift that justifies the cost.
+| `aiReview.requireRefutation` | always `true` | `true` | Refutation pass is always active; every model candidate must survive it before admission. |
+| `aiReview.deterministicSignalMode` | `support`, `disabled` | `support` | `support`: inject parsed facts as model context (better recall). `disabled`: keep clustering and admission contradiction checks, skip injection (lower cost). Env: `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`. |
+| `aiReview.actionableSeverityThreshold` | severity string | `medium` | Model findings below this severity are rejected as below-threshold (still recorded as rejected findings). Trusted deterministic-rule findings are exempt. |
 
 ---
 
 ## `promotionPolicy`
 
-Controls how each class of finding is promoted into the report.
+Controls how non-actionable model output is dispositioned in the report.
 
-| Key | Allowed Values | Description |
-| --- | --- | --- |
-| `promotionPolicy.modelProof` | `actionable`, `artifact-only` | Disposition for proved model findings. |
-| `promotionPolicy.modelWeakOrRefuted` | `artifact-only`, `rejected` | Disposition for weak or refuted model findings. |
-| `promotionPolicy.staticAnalysisDuplicate` | `artifact-only`, `rejected` | Disposition for findings that duplicate a static-analysis hit. |
-| `promotionPolicy.deterministicContradiction` | `artifact-only`, `rejected` | Disposition for findings contradicted by deterministic signals. |
+| Key | Allowed Values | Default | Description |
+| --- | --- | --- | --- |
+| `promotionPolicy.modelWeakOrRefuted` | `artifact-only`, `rejected` | `artifact-only` | Disposition for a candidate the refuter judged `needs-more-evidence`. `artifact-only` keeps it auditable but out of the inline review; `rejected` drops it entirely. |
 
 ---
 
