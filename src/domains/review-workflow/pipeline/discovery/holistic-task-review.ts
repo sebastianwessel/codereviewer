@@ -13,7 +13,6 @@ import {
 } from '../agent-contracts.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
 import { modelHolisticFocusLensInstructions } from '../agent-instructions.js'
-import { languageReviewGuidance } from './language-guidance.js'
 
 // Number of serial holistic discovery passes run per task. Pass 1 is the general
 // review; pass 2 re-reads the same change through a focused commonly-missed-defect
@@ -146,7 +145,6 @@ const buildReviewText = (
 
   return [
     `Review task ${taskInput.task.id}.`,
-    languageReviewGuidance(taskInput.task.paths),
     changeSection,
     `\n## Changed files (full content, line-numbered, for context)\n${
       files.length === 0 ? '(no file content provided)' : files
