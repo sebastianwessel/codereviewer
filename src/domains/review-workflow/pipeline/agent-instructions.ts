@@ -26,25 +26,6 @@ export const modelHolisticReviewerInstructions = [
   'Return a JSON object with a findings array. Return {"findings": []} only when, after completing all four steps, the change genuinely contains no concrete defect.'
 ].join('\n')
 
-// Focused second-pass lens for holistic discovery. A general review already ran
-// over the same change; this pass deliberately re-reads it through a
-// commonly-missed-defect lens so high-impact bugs the general pass under-weights
-// (concurrency, security, edge cases) still surface. Prepended before the diff so
-// the model sees the lens directive first. Same output schema and precision rules
-// as the general pass.
-export const modelHolisticFocusLensInstructions = [
-  'FOCUSED SECOND PASS. A general review of this exact change has already run. Do not re-list the obvious findings it would have caught. Instead, hunt SPECIFICALLY for commonly-missed, high-impact defects in the changed files and report every concrete one you can justify from the code that is not already trivially obvious.',
-  'Concentrate on these frequently-overlooked defect classes:',
-  '- Concurrency & atomicity: non-atomic read-modify-write on shared mutable state, missing or incomplete locking (e.g. broken double-checked locking), TOCTOU and other races, state mutated without synchronization.',
-  '- Async correctness: unawaited or fire-and-forget async that drops errors or ordering, promises not awaited before dependent work, unhandled rejections.',
-  '- Error & failure-path handling: swallowed or ignored errors, writes/commits performed unconditionally on a failure path, operations not rolled back or not idempotent on error.',
-  '- Security: injection (SQL/command/template), missing authentication or authorization, unvalidated or untrusted input reaching a sensitive sink, SSRF, unsafe deserialization, path traversal.',
-  '- Resource leaks: unclosed files/connections/handles/listeners, use-after-close, unbounded growth or accumulation.',
-  '- Interface & contract violations: caller/callee signature, argument, or return-type mismatch, a declared never-null contract violated, a nullable value dereferenced without a guard, a changed return shape not reflected at call sites.',
-  '- Edge cases: empty, null/undefined, zero, negative, boundary, large-input, and concurrent-access paths the change does not handle.',
-  'Apply the SAME precision rules as the general pass: report ONLY real defects justified from the code, name the concrete failure and the exact path or input that triggers it, and do NOT report style, naming, formatting, documentation, or cleanup preferences. Use the same finding output schema. Return {"findings": []} when this lens surfaces no concrete defect.'
-].join('\n')
-
 export const modelFindingRefuterInstructions = [
   'Refute only the provided candidate finding. Do not review unrelated issues.',
   'Decide honestly and strictly from the provided evidence. Deeply analyze the candidate: reason through it step by step and reflect on whether the provided context actually proves or contradicts it before deciding. Never guess: if the provided context does not establish the outcome, return "needs-more-evidence" rather than assuming unseen behavior.',

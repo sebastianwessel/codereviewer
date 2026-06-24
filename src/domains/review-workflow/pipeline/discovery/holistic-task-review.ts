@@ -12,18 +12,7 @@ import {
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
-import { modelHolisticFocusLensInstructions } from '../agent-instructions.js'
 import { languageReviewGuidance } from './language-guidance.js'
-
-// Number of serial holistic discovery passes run per task. Pass 1 is the general
-// review; pass 2 re-reads the same change through a focused commonly-missed-defect
-// lens. The child-agent budget (harness/config.ts) imports this so the workflow
-// reserves enough calls for every pass.
-export const HOLISTIC_DISCOVERY_PASSES = 2
-
-// Focused-lens preamble for the second holistic pass. Prepended before the diff so
-// the model sees the lens directive first.
-const HOLISTIC_FOCUS_LENS = modelHolisticFocusLensInstructions
 
 // Present the changed source to the holistic reviewer as a clean, line-numbered
 // document (plus the diff ranges). This is the input shape that let whole-file
@@ -74,9 +63,9 @@ const diffSegmentsForPaths = (
   return segments.join('\n\n')
 }
 
-// The base review text is identical across both passes, so it is the cacheable
-// prompt prefix. Pass 2 APPENDS its lens + the first pass's findings after this
-// base (never prepends) so the provider can prompt-cache this shared prefix.
+// Build the holistic reviewer input: a clean, line-numbered document with the
+// per-path diff, full changed files, language-specific focus, and referenced
+// definitions.
 const buildReviewText = (
   taskInput: TaskReviewInput,
   rawDiff: string
@@ -155,30 +144,6 @@ const buildReviewText = (
   ].join('\n')
 }
 
-// The focused second-pass section appended AFTER the (cached) base review text.
-// It tells the model what the first pass already found (so it reports only NEW,
-// distinct defects) and directs it at the commonly-missed high-impact classes.
-const buildFocusFollowup = (
-  priorCandidates: readonly CandidateFinding[]
-): string => {
-  const alreadyReported =
-    priorCandidates.length === 0
-      ? '(the first pass reported nothing)'
-      : priorCandidates
-          .map(
-            (candidate) =>
-              `- ${candidate.title} (${candidate.location.path}:${candidate.location.startLine})`
-          )
-          .join('\n')
-
-  return [
-    '\n\n## Second-pass focused re-review',
-    'A first general review of the SAME change above already reported these findings — do NOT repeat them; report only ADDITIONAL, distinct concrete defects:',
-    alreadyReported,
-    HOLISTIC_FOCUS_LENS
-  ].join('\n')
-}
-
 type HolisticTaskReviewLogger = {
   readonly debug: (
     message: string,
@@ -241,13 +206,11 @@ const candidateFromFinding = (
   })
 }
 
-// Holistic discovery: two serial recall-first whole-change reviews per task with
-// DIFFERENT lenses (general, then focused on commonly-missed high-impact defects).
-// Their findings are unioned and deduped into candidates so a focused 2nd pass can
-// surface concurrency/security/edge-case bugs the general pass under-weights. The
-// passes run serially (not in parallel) to stay within the workflow's
-// parallel child-agent budget. The shared refutation + admission filter
-// (prepareCandidatesForAdmission) verifies or discards every candidate downstream.
+// Holistic discovery: a single recall-first whole-change review per task. It reads
+// the full changed files plus diff and enumerates concrete defects directly as
+// candidates (deduped by id, capped at HOLISTIC_MAX_CANDIDATES). The shared
+// refutation + admission filter (prepareCandidatesForAdmission) verifies or
+// discards every candidate downstream.
 export const runModelBackedHolisticTaskReview = async (
   input: {
     readonly workflowInput: ReviewWorkflowInput
@@ -258,72 +221,43 @@ export const runModelBackedHolisticTaskReview = async (
     readonly signal?: AbortSignal | undefined
   }
 ): Promise<TaskReviewResult> => {
-  // Candidates accumulate across both passes, deduped by id (identical findings
-  // collapse to one; new ones accumulate up to the cap).
   const candidatesById = new Map<string, CandidateFinding>()
   let droppedCount = 0
-  const passFindingCounts: number[] = []
 
-  const ingestFindings = (findings: readonly unknown[]): void => {
-    passFindingCounts.push(findings.length)
-    for (const raw of findings) {
-      if (candidatesById.size >= HOLISTIC_MAX_CANDIDATES) {
-        break
-      }
-      const candidate = candidateFromFinding(input.task, raw)
-      if (candidate === undefined) {
-        droppedCount += 1
-        continue
-      }
-      candidatesById.set(candidate.id, candidate)
-    }
-  }
-
-  // The base review text is identical for both passes (the cacheable prefix).
-  const baseReviewText = buildReviewText(
+  const reviewText = buildReviewText(
     input.taskInput,
     input.workflowInput.reviewedDiffText
   )
 
-  // Pass 1: general review.
-  const pass1 = ModelHolisticReviewResultSchema.parse(
+  const review = ModelHolisticReviewResultSchema.parse(
     await input.runners.holisticReview(
       {
         runId: input.taskInput.runId,
         taskId: input.task.id,
         paths: [...input.task.paths],
-        reviewText: baseReviewText
+        reviewText
       },
       input.signal
     )
   )
-  ingestFindings(pass1.findings)
 
-  // Pass 2: focused re-review. Reuses the IDENTICAL base prefix (so the provider
-  // prompt-caches it) and APPENDS the first pass's findings + the focus lens, so
-  // the model sees what was already reported and hunts for additional defects.
-  const pass2 = ModelHolisticReviewResultSchema.parse(
-    await input.runners.holisticReview(
-      {
-        runId: input.taskInput.runId,
-        taskId: input.task.id,
-        paths: [...input.task.paths],
-        reviewText:
-          baseReviewText + buildFocusFollowup([...candidatesById.values()])
-      },
-      input.signal
-    )
-  )
-  ingestFindings(pass2.findings)
+  for (const raw of review.findings) {
+    if (candidatesById.size >= HOLISTIC_MAX_CANDIDATES) {
+      break
+    }
+    const candidate = candidateFromFinding(input.task, raw)
+    if (candidate === undefined) {
+      droppedCount += 1
+      continue
+    }
+    candidatesById.set(candidate.id, candidate)
+  }
 
   const candidates = [...candidatesById.values()]
 
   input.logger.debug('Holistic task review completed.', {
     task_id: input.task.id,
-    pass_count: 2,
-    pass1_finding_count: passFindingCounts[0] ?? 0,
-    pass2_finding_count: passFindingCounts[1] ?? 0,
-    finding_count: (passFindingCounts[0] ?? 0) + (passFindingCounts[1] ?? 0),
+    finding_count: review.findings.length,
     candidate_count: candidates.length,
     dropped_count: droppedCount
   })
