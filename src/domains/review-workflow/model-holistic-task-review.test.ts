@@ -126,6 +126,57 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(result.modelTaskDiagnostics[0]?.selectedCandidateCount).toBe(1)
   })
 
+  test('presents the per-path raw unified diff and full file in reviewText', async () => {
+    const diff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,1 +1,1 @@',
+      '-export const value = 0',
+      '+export const value = 1',
+      'diff --git a/src/other.ts b/src/other.ts',
+      '@@ -5,1 +5,1 @@',
+      '-const x = 1',
+      '+const x = 2'
+    ].join('\n')
+    const workflowInputWithDiff = ReviewWorkflowInputSchema.parse({
+      runId: 'run-holistic',
+      reviewedPaths: ['src/app.ts'],
+      reviewedDiffText: diff,
+      evidence: [],
+      candidates: [],
+      instructions: [],
+      skills: [],
+      discoveryMode: 'holistic',
+      provenance: {
+        reviewer: 'review-agent',
+        modelProvider: 'openai',
+        modelName: 'holistic-test',
+        signalVersions: { typescript: '6.0.3' },
+        configHash
+      }
+    })
+    let captured: { reviewText: string } | undefined
+    await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithDiff,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          captured = holisticInput
+          return { findings: [] }
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(captured?.reviewText).toContain('+export const value = 1')
+    // Only the task's path is included, not unrelated files in the diff blob.
+    expect(captured?.reviewText).not.toContain('src/other.ts')
+    // Full file content is still present for context.
+    expect(captured?.reviewText).toContain('1: export const value = 1')
+  })
+
   test('deduplicates identical findings and reports zero-candidate reason', async () => {
     const duplicate = {
       category: 'bug',
