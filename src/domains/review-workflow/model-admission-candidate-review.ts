@@ -137,10 +137,20 @@ export const reviewCandidateForAdmission = async (
     })
   }
 
+  // The judge is a strict critic OF A PROOF PACKET. Holistic-discovery
+  // candidates are verified by refutation directly from reviewContext and carry
+  // no proof packet, so a judge pass has nothing to critique and rejects them
+  // wholesale. Only run the judge when the candidate actually has a proof packet
+  // (suspicion-mode candidates); otherwise the refutation verdict stands.
+  const candidateHasProofPacket = input.proofPackets.some(
+    (packet) => packet.candidateId === input.candidate.id
+  )
+
   if (
     input.workflowInput.judgeFindings &&
     input.judgeFinding !== undefined &&
     refutation.verdict === 'proved' &&
+    candidateHasProofPacket &&
     !input.skipJudgeCandidateIds?.has(input.candidate.id)
   ) {
     const judgeOutcome = await reviewCandidateWithJudge({
