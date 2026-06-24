@@ -29,8 +29,6 @@ import {
   EvalExpectedFindingReportSchema,
   EvalFalsePositiveFindingReportSchema,
   EvalMetricGroupSchema,
-  EvalProofPacketReportSchema,
-  EvalPromotionDecisionReportSchema,
   EvalProviderIssueReportSchema,
   EvalRegressionThresholdsSchema,
   EvalRefutationResultReportSchema,
@@ -218,21 +216,8 @@ const agenticStagesForReport = (
   const recoveredProviderIssues = providerIssuesFromReport(report).filter(
     (issue) => issue.recovered
   ).length
-  const modelDiscoveryAttemptCount =
-    report.run.provider === undefined && report.run.model === undefined
-      ? report.modelSuspicions.length
-      : Math.max(
-          report.modelSuspicions.length,
-          report.reviewIntents.filter((intent) => intent.source === 'model').length
-        )
   const stageCounts = [
-    ['intent-planning', report.reviewIntents.length],
-    ['suspicion-generation', modelDiscoveryAttemptCount],
-    ['suspicion-investigation', report.investigationTraces.length],
-    ['proof-packet', report.proofPackets.length],
-    ['refutation', report.refutationResults.length],
-    ['aggregate-critic', report.aggregateResults.length],
-    ['judge', report.judgeResults.length]
+    ['refutation', report.refutationResults.length]
   ] as const
 
   return [
@@ -251,15 +236,7 @@ const agenticStagesForReport = (
   ]
 }
 
-const providerErrorStageNames = [
-  'intent-planning',
-  'suspicion-generation',
-  'suspicion-investigation',
-  'proof-packet',
-  'refutation',
-  'aggregate-critic',
-  'judge'
-] as const
+const providerErrorStageNames = ['refutation'] as const
 
 type ProviderErrorStageName = (typeof providerErrorStageNames)[number]
 
@@ -290,73 +267,16 @@ const agenticStagesForProviderError = (
       })
     )
 
-const promotionDecisionByCandidateId = (
-  report: ReviewReport
-): ReadonlyMap<string, ReviewReport['promotionDecisions'][number]> =>
-  new Map(
-    report.promotionDecisions.map((decision) => [decision.candidateId, decision])
-  )
-
-const proofPacketSummaries = (
-  report: ReviewReport
-): readonly z.infer<typeof EvalProofPacketReportSchema>[] => {
-  const promotionByCandidateId = promotionDecisionByCandidateId(report)
-
-  return report.proofPackets.map((proofPacket) =>
-    EvalProofPacketReportSchema.parse({
-      id: proofPacket.id,
-      suspicionId: proofPacket.suspicionId,
-      candidateId: proofPacket.candidateId,
-      evidenceCount: proofPacket.evidenceIds.length,
-      ...(promotionByCandidateId.get(proofPacket.candidateId)?.status === undefined
-        ? {}
-        : {
-            promotionStatus:
-              promotionByCandidateId.get(proofPacket.candidateId)?.status
-          })
-    })
-  )
-}
-
 const refutationResultSummaries = (
   report: ReviewReport
 ): readonly z.infer<typeof EvalRefutationResultReportSchema>[] =>
   report.refutationResults.map((refutation) =>
     EvalRefutationResultReportSchema.parse({
       id: refutation.id,
-      proofPacketId: refutation.proofPacketId,
+      candidateId: refutation.candidateId,
       verdict: refutation.verdict
     })
   )
-
-const promotionDecisionSummaries = (
-  report: ReviewReport
-): readonly z.infer<typeof EvalPromotionDecisionReportSchema>[] =>
-  report.promotionDecisions.map((decision) =>
-    EvalPromotionDecisionReportSchema.parse({
-      candidateId: decision.candidateId,
-      ...(decision.proofPacketId === undefined
-        ? {}
-        : { proofPacketId: decision.proofPacketId }),
-      ...(decision.refutationId === undefined
-        ? {}
-        : { refutationId: decision.refutationId }),
-      status: decision.status,
-      reason: decision.reason
-    })
-  )
-
-const staticDuplicateDemotionCount = (report: ReviewReport): number =>
-  report.promotionDecisions.filter(
-    (decision) =>
-      decision.status !== 'actionable' &&
-      decision.reason.toLowerCase().includes('static-analysis')
-  ).length
-
-const investigationToolReadCount = (report: ReviewReport): number =>
-  report.evidence.filter(
-    (record) => record.kind === 'tool-read' || record.kind === 'tool-search'
-  ).length
 
 const actionableFindingsForEval = (
   admittedFindings: readonly AdmittedFinding[]
@@ -453,19 +373,8 @@ const buildMetricCase = (
   const contextLedgerEntries = input.output.contextLedger.filter(
     (entry) => entry.consideredForModelContext
   )
-  const proofPackets = input.reviewReport?.proofPackets ?? []
-  const promotionDecisions = input.reviewReport?.promotionDecisions ?? []
   const refutationResults = input.reviewReport?.refutationResults ?? []
-  const actionablePromotedProofCount = promotionDecisions.filter(
-    (decision) => decision.status === 'actionable' && decision.proofPacketId !== undefined
-  ).length
-  const weakOrDemotedProofCount = promotionDecisions.filter(
-    (decision) =>
-      decision.proofPacketId !== undefined &&
-      decision.status !== 'actionable' &&
-      !decision.reason.toLowerCase().includes('static-analysis') &&
-      !decision.reason.toLowerCase().includes('deterministic contradiction')
-  ).length
+  const rejectedFindings = input.reviewReport?.rejectedFindings ?? []
 
   return {
     caseId: input.evalCase.id,
@@ -509,26 +418,11 @@ const buildMetricCase = (
     artifactOnlyFalsePositiveCount:
       input.artifactOnlyMatchResult.falsePositiveFindingIds.length,
     trustedDeterministicFindingCount: trustedDeterministicFindings.length,
-    modelSuspicionCount: input.reviewReport?.modelSuspicions.length ?? 0,
-    proofPacketCount: proofPackets.length,
-    promotedProofCount: promotionDecisions.filter(
-      (decision) => decision.proofPacketId !== undefined
+    provedRefutationCount: refutationResults.filter(
+      (refutation) => refutation.verdict === 'proved'
     ).length,
-    actionablePromotedProofCount,
-    refutedProofCount: refutationResults.filter(
-      (refutation) => refutation.verdict === 'refuted'
-    ).length,
-    weakOrDemotedProofCount,
-    staticDuplicateDemotionCount:
-      input.reviewReport === undefined
-        ? 0
-        : staticDuplicateDemotionCount(input.reviewReport),
-    investigationToolReadCount:
-      input.reviewReport === undefined
-        ? 0
-        : investigationToolReadCount(input.reviewReport),
+    rejectedFindingCount: rejectedFindings.length,
     tierCounts: tierCountsForCase(input.evalCase, input.matchResult),
-    judgedFindingCount: input.reviewReport?.judgeResults.length ?? 0,
     noFindingZoneFalsePositiveCount:
       input.matchResult.noFindingZoneFalsePositiveIds.length,
     changedLineCount: input.output.changedLineCount,
@@ -540,6 +434,7 @@ const buildMetricCase = (
     ).length,
     costUsd: input.reviewReport?.run.costUsd ?? 0,
     inputTokens: input.reviewReport?.run.inputTokens ?? 0,
+    cachedInputTokens: input.reviewReport?.run.cachedInputTokens ?? 0,
     outputTokens: input.reviewReport?.run.outputTokens ?? 0,
     costUnavailable: warnings.includes('cost-unavailable'),
     durationMs: input.reviewReport?.run.durationMs ?? 0,
@@ -594,15 +489,12 @@ const computeCaseResult = (
         artifactOnlyMatchedFindings: [],
         artifactOnlyFalsePositiveFindingIds: [],
         artifactOnlyFalsePositiveFindings: [],
-        modelSuspicionIds: [],
-        modelTaskDiagnostics: [],
-        proofPackets: [],
         refutationResults: [],
-        promotionDecisions: [],
         inlineFindingCount: 0,
         warnings: [`provider-error:${output.result.code}`],
         durationMs: 0,
         inputTokens: 0,
+        cachedInputTokens: 0,
         outputTokens: 0,
         costUnavailable: false,
         costUsd: 0
@@ -673,18 +565,13 @@ const computeCaseResult = (
           artifactOnlyMatchResult.falsePositiveFindingIds
         )
       ],
-      modelSuspicionIds: reviewReport.modelSuspicions.map(
-        (suspicion) => suspicion.id
-      ),
-      modelTaskDiagnostics: [...reviewReport.modelTaskDiagnostics],
-      proofPackets: [...proofPacketSummaries(reviewReport)],
       refutationResults: [...refutationResultSummaries(reviewReport)],
-      promotionDecisions: [...promotionDecisionSummaries(reviewReport)],
       inlineFindingCount,
       providerIssues: [...providerIssuesFromReport(reviewReport)],
       warnings: [...reviewReport.run.warnings],
       durationMs: reviewReport.run.durationMs,
       inputTokens: reviewReport.run.inputTokens ?? 0,
+      cachedInputTokens: reviewReport.run.cachedInputTokens ?? 0,
       outputTokens: reviewReport.run.outputTokens ?? 0,
       costUnavailable: reviewReport.run.warnings.includes('cost-unavailable'),
       costUsd: reviewReport.run.costUsd ?? 0
@@ -767,13 +654,7 @@ const computeCaseResultWithSemanticJudge = async (
           artifactOnlyMatchResult.falsePositiveFindingIds
         )
       ],
-      modelSuspicionIds: reviewReport.modelSuspicions.map(
-        (suspicion) => suspicion.id
-      ),
-      modelTaskDiagnostics: [...reviewReport.modelTaskDiagnostics],
-      proofPackets: [...proofPacketSummaries(reviewReport)],
       refutationResults: [...refutationResultSummaries(reviewReport)],
-      promotionDecisions: [...promotionDecisionSummaries(reviewReport)],
       inlineFindingCount,
       providerIssues: [
         ...providerIssuesFromReport(reviewReport),
@@ -785,6 +666,7 @@ const computeCaseResultWithSemanticJudge = async (
       warnings: [...reviewReport.run.warnings],
       durationMs: reviewReport.run.durationMs,
       inputTokens: reviewReport.run.inputTokens ?? 0,
+      cachedInputTokens: reviewReport.run.cachedInputTokens ?? 0,
       outputTokens: reviewReport.run.outputTokens ?? 0,
       costUnavailable: reviewReport.run.warnings.includes('cost-unavailable'),
       costUsd: reviewReport.run.costUsd ?? 0
@@ -912,7 +794,6 @@ const thresholdReasons = (
     readonly thresholds: EvalRegressionThresholds
     readonly metrics: z.infer<typeof EvalMetricsSchema>
     readonly caseResults: readonly EvalMetricCaseResult[]
-    readonly judgeFindingsEnabled: boolean
   }
 ): {
   readonly reasons: readonly string[]
@@ -974,16 +855,6 @@ const thresholdReasons = (
     input.thresholds.minSeverityWeightedF1
   )
   addBelowReason('productRecall', input.thresholds.minProductRecall)
-  addBelowReason(
-    'suspicionStageCoverage',
-    input.thresholds.minSuspicionStageCoverage
-  )
-  // judgeCoverage is only meaningful when finding judging runs; otherwise no
-  // candidates are judged and the metric carries no signal, so the gate is
-  // skipped rather than failing a run that never enabled the judge.
-  if (input.judgeFindingsEnabled) {
-    addBelowReason('judgeCoverage', input.thresholds.minJudgeCoverage)
-  }
   addAboveReason(
     'falsePositiveCount',
     input.thresholds.maxFalsePositiveCount,
@@ -1031,9 +902,6 @@ type RunEvaluationInput = {
     readonly selectedCaseIds?: readonly string[]
   }
   readonly generatedAt?: string
-  // Enables the judgeCoverage quality gate. When false the gate is skipped
-  // because no candidates are judged.
-  readonly judgeFindingsEnabled?: boolean
 }
 
 const buildEvaluationResult = (
@@ -1044,7 +912,6 @@ const buildEvaluationResult = (
     readonly scoring: EvalReportScoring
     readonly generatedAt?: string
     readonly caseComputations: readonly EvalCaseComputation[]
-    readonly judgeFindingsEnabled: boolean
   }
 ): {
   readonly artifactName: typeof EVAL_REPORT_ARTIFACT_NAME
@@ -1066,8 +933,7 @@ const buildEvaluationResult = (
   const gate = thresholdReasons({
     thresholds: input.thresholds,
     metrics,
-    caseResults: metricCases,
-    judgeFindingsEnabled: input.judgeFindingsEnabled
+    caseResults: metricCases
   })
   const report = EvalReportSchema.parse({
     schemaVersion: '1.0',
@@ -1138,8 +1004,7 @@ export const runEvaluation = (
       semanticMatcher: 'deterministic'
     },
     ...(input.generatedAt === undefined ? {} : { generatedAt: input.generatedAt }),
-    caseComputations,
-    judgeFindingsEnabled: input.judgeFindingsEnabled ?? false
+    caseComputations
   })
 }
 
@@ -1179,7 +1044,6 @@ export const runEvaluationWithSemanticJudge = async (
       semanticMatcher: 'semantic-judge'
     },
     ...(input.generatedAt === undefined ? {} : { generatedAt: input.generatedAt }),
-    caseComputations,
-    judgeFindingsEnabled: input.judgeFindingsEnabled ?? false
+    caseComputations
   })
 }

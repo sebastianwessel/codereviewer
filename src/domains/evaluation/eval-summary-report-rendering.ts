@@ -32,6 +32,18 @@ export const EVAL_RECALL_REPORT_ARTIFACT_NAME = 'eval-recall-report.md'
 
 type EvalMetrics = EvalReport['metrics']
 
+// Cached input tokens are a subset of input tokens. Render the absolute count
+// alongside the share of input it represents so a benchmark shows prompt-cache
+// effectiveness.
+const formatCachedInputTokens = (metrics: EvalMetrics): string => {
+  const cached = formatInteger(metrics.cachedInputTokens)
+  if (metrics.inputTokens === 0) {
+    return cached
+  }
+
+  return `${cached} (${formatPercent(metrics.cachedInputTokens / metrics.inputTokens)} of input)`
+}
+
 const findCase = (
   cases: readonly EvalCase[],
   caseId: string
@@ -92,8 +104,6 @@ const appendEvalSummaryMetrics = (
       `| Recall | ${formatPercent(report.metrics.recall)} |`,
       `| Product recall | ${formatPercent(report.metrics.productRecall)} |`,
       `| Nit recall | ${formatPercent(report.metrics.nitRecall)} |`,
-      `| Suspicion stage coverage | ${formatPercent(report.metrics.suspicionStageCoverage)} |`,
-      `| Judge coverage | ${formatPercent(report.metrics.judgeCoverage)} |`,
       `| Precision | ${formatPercent(report.metrics.precision)} |`,
       `| F1 | ${formatPercent(report.metrics.f1)} |`,
       `| Severity weighted F1 | ${formatPercent(report.metrics.severityWeightedF1)} |`,
@@ -109,13 +119,8 @@ const appendEvalSummaryMetrics = (
       `| Artifact-only matched | ${report.metrics.artifactOnlyMatchedFindingCount} |`,
       `| Artifact-only false positives | ${report.metrics.artifactOnlyFalsePositiveCount} |`,
       `| Trusted deterministic findings | ${report.metrics.trustedDeterministicFindingCount} |`,
-      `| Suspicion recall | ${formatPercent(report.metrics.suspicionRecall)} |`,
-      `| Proof recall | ${formatPercent(report.metrics.proofRecall)} |`,
-      `| Proof promotion precision | ${formatPercent(report.metrics.proofPromotionPrecision)} |`,
       `| Refutation false negatives | ${report.metrics.refutationFalseNegativeCount} |`,
       `| Refutation false positives | ${report.metrics.refutationFalsePositiveCount} |`,
-      `| Static duplicate demotions | ${report.metrics.staticDuplicateDemotionCount} |`,
-      `| Investigation tool reads | ${report.metrics.investigationToolReadCount} |`,
       `| Duplicate findings | ${report.metrics.duplicateFindingCount} |`,
       `| No-finding-zone hits | ${report.metrics.noFindingZoneFalsePositiveCount} |`,
       `| Actionable rate | ${formatPercent(report.metrics.actionableRate)} |`,
@@ -123,6 +128,7 @@ const appendEvalSummaryMetrics = (
       `| Context mutation rate | ${formatPercent(report.metrics.contextMutationRate)} |`,
       `| Duration | ${formatDuration(report.metrics.durationMs)} |`,
       `| Input tokens | ${formatInteger(report.metrics.inputTokens)} |`,
+      `| Input tokens (cached) | ${formatCachedInputTokens(report.metrics)} |`,
       `| Output tokens | ${formatInteger(report.metrics.outputTokens)} |`,
       `| Cost | ${formatCostMetric(report.metrics)} |`
     ]
@@ -238,19 +244,7 @@ const formatEvalSummaryAgenticStageRow = (
     '|',
     escapeMarkdownCell(caseResult.caseId),
     '|',
-    agenticStageLabel(caseResult, 'intent-planning'),
-    '|',
-    agenticStageLabel(caseResult, 'suspicion-generation'),
-    '|',
-    agenticStageLabel(caseResult, 'suspicion-investigation'),
-    '|',
-    agenticStageLabel(caseResult, 'proof-packet'),
-    '|',
     agenticStageLabel(caseResult, 'refutation'),
-    '|',
-    agenticStageLabel(caseResult, 'aggregate-critic'),
-    '|',
-    agenticStageLabel(caseResult, 'judge'),
     '|',
     agenticStageLabel(caseResult, 'provider-recovery'),
     '|'
@@ -270,109 +264,12 @@ const appendEvalSummaryAgenticStageCoverage = (
 
   lines.push('## Agentic Stage Coverage')
   lines.push('')
-  lines.push(
-    '| Case | Intent | Suspicion | Investigation | Proof | Refutation | Aggregate | Judge | Provider recovery |'
-  )
-  lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |')
+  lines.push('| Case | Refutation | Provider recovery |')
+  lines.push('| --- | --- | --- |')
   for (const caseResult of stageCoverageCases) {
     lines.push(formatEvalSummaryAgenticStageRow(caseResult))
   }
   lines.push('')
-}
-
-const formatDropReasons = (
-  reasons: z.infer<typeof EvalCaseReportSchema>['modelTaskDiagnostics'][number]['droppedSuspicionReasons']
-): string => {
-  const nonZeroReasons = Object.entries(reasons).filter(
-    ([, count]) => count > 0
-  )
-
-  return nonZeroReasons.length === 0
-    ? '-'
-    : nonZeroReasons
-        .map(([reason, count]) => `${reason}: ${count}`)
-        .join(', ')
-}
-
-const formatCountRecord = (
-  counts: Readonly<Record<string, number>> | undefined
-): string => {
-  if (counts === undefined) {
-    return '-'
-  }
-
-  const nonZeroCounts = Object.entries(counts).filter(([, count]) => count > 0)
-
-  return nonZeroCounts.length === 0
-    ? '-'
-    : nonZeroCounts.map(([key, count]) => `${key}: ${count}`).join(', ')
-}
-
-const optionalCountCell = (value: number | undefined): string =>
-  value === undefined ? '-' : `${value}`
-
-const optionalTextCell = (value: string | undefined): string => value ?? '-'
-
-const formatModelTaskDiagnosticRow = (
-  caseResult: z.infer<typeof EvalCaseReportSchema>,
-  diagnostic: z.infer<typeof EvalCaseReportSchema>['modelTaskDiagnostics'][number]
-): string =>
-  [
-    '|',
-    escapeMarkdownCell(caseResult.caseId),
-    '|',
-    escapeMarkdownCell(diagnostic.taskId),
-    '|',
-    escapeMarkdownCell(optionalTextCell(diagnostic.taskKind)),
-    '|',
-    diagnostic.suggestionCount,
-    '|',
-    optionalCountCell(diagnostic.convertedCandidateCount),
-    '|',
-    diagnostic.selectedCandidateCount,
-    '|',
-    optionalCountCell(diagnostic.budgetDroppedCandidateCount),
-    '|',
-    diagnostic.modelSuspicionCount,
-    '|',
-    diagnostic.proofPacketCount,
-    '|',
-    optionalCountCell(diagnostic.evidenceCount),
-    '|',
-    optionalCountCell(diagnostic.reviewContextCount),
-    '|',
-    optionalCountCell(diagnostic.reviewIntentCount),
-    '|',
-    optionalCountCell(diagnostic.verificationQuestionCount),
-    '|',
-    escapeMarkdownCell(optionalTextCell(diagnostic.zeroCandidateReason)),
-    '|',
-    escapeMarkdownCell(formatDropReasons(diagnostic.droppedSuspicionReasons)),
-    '|',
-    escapeMarkdownCell(
-      formatCountRecord(diagnostic.schemaInvalidSuggestionIssueCounts)
-    ),
-    '|'
-  ].join(' ')
-
-const appendEvalSummaryModelDiscoveryDiagnostics = (
-  lines: string[],
-  report: EvalReport
-): void => {
-  const rows = report.caseResults.flatMap((caseResult) =>
-    caseResult.modelTaskDiagnostics.map((diagnostic) =>
-      formatModelTaskDiagnosticRow(caseResult, diagnostic)
-    )
-  )
-
-  appendMarkdownTable(lines, {
-    heading: '## Model Discovery Diagnostics',
-    header:
-      '| Case | Task | Kind | Suggestions | Converted | Selected | Budget-dropped | Suspicions | Proofs | Evidence | Context | Intents | Questions | Zero-candidate reason | Dropped | Schema invalid issues |',
-    alignment:
-      '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- |',
-    rows
-  })
 }
 
 const formatEvalSummaryContextLedgerRow = (
@@ -488,9 +385,7 @@ const attentionCasesForSummary = (
       caseStatus(caseResult) !== 'PASS' ||
       caseResult.artifactOnlyMatchedFindings.length > 0 ||
       caseResult.artifactOnlyFalsePositiveFindings.length > 0 ||
-      caseResult.proofPackets.length > 0 ||
       caseResult.refutationResults.length > 0 ||
-      caseResult.promotionDecisions.length > 0 ||
       caseResult.providerIssues.length > 0
   )
 
@@ -564,63 +459,16 @@ const attentionMissedExpectedRows = (
   return rows
 }
 
-type EvalSummaryProofPacket = {
-  readonly id: string
-  readonly suspicionId: string
-  readonly candidateId: string
-  readonly evidenceCount: number
-  readonly promotionStatus?: string | undefined
-}
-
-const formatAttentionProofPacketBullet = (
-  proofPacket: EvalSummaryProofPacket
-): string => {
-  const promotionStatus =
-    proofPacket.promotionStatus === undefined
-      ? 'unpromoted'
-      : proofPacket.promotionStatus
-  return `- ${proofPacket.id} suspicion ${proofPacket.suspicionId} candidate ${proofPacket.candidateId} evidence ${proofPacket.evidenceCount} promotion ${promotionStatus}`
-}
-
 type EvalSummaryRefutationResult = {
   readonly id: string
-  readonly proofPacketId: string
+  readonly candidateId: string
   readonly verdict: string
 }
 
 const formatAttentionRefutationBullet = (
   refutation: EvalSummaryRefutationResult
 ): string =>
-  `- ${refutation.id} proof ${refutation.proofPacketId} verdict ${refutation.verdict}`
-
-type EvalSummaryPromotionDecision = {
-  readonly candidateId: string
-  readonly status: string
-  readonly proofPacketId?: string | undefined
-  readonly refutationId?: string | undefined
-  readonly reason: string
-}
-
-const formatAttentionPromotionDecisionBullet = (
-  decision: EvalSummaryPromotionDecision,
-  activeRefutationByProofPacketId: ReadonlyMap<string, EvalSummaryRefutationResult>
-): string => {
-  const proofPacket =
-    decision.proofPacketId === undefined
-      ? 'no proof'
-      : `proof ${decision.proofPacketId}`
-  const activeRefutation =
-    decision.proofPacketId === undefined
-      ? undefined
-      : activeRefutationByProofPacketId.get(decision.proofPacketId)
-  const refutation =
-    decision.refutationId === undefined
-      ? activeRefutation === undefined
-        ? 'no refutation'
-        : `active refutation ${activeRefutation.id}`
-      : `refutation ${decision.refutationId}`
-  return `- ${decision.candidateId} ${decision.status} (${proofPacket}, ${refutation}) - ${decision.reason}`
-}
+  `- ${refutation.id} candidate ${refutation.candidateId} verdict ${refutation.verdict}`
 
 const appendEvalSummaryAttentionNeeded = (
   lines: string[],
@@ -678,31 +526,8 @@ const appendEvalSummaryAttentionNeeded = (
     }
 
     appendAttentionBulletSection(lines, {
-      heading: 'Proof packets:',
-      rows: caseResult.proofPackets.map(formatAttentionProofPacketBullet)
-    })
-
-    appendAttentionBulletSection(lines, {
       heading: 'Refutation results:',
       rows: caseResult.refutationResults.map(formatAttentionRefutationBullet)
-    })
-
-    const activeRefutationByProofPacketId = new Map(
-      caseResult.refutationResults.map((refutation) => [
-        refutation.proofPacketId,
-        refutation
-      ])
-    )
-
-    appendAttentionBulletSection(lines, {
-      heading: 'Promotion decisions:',
-      rows: caseResult.promotionDecisions.map(
-        (decision) =>
-          formatAttentionPromotionDecisionBullet(
-            decision,
-            activeRefutationByProofPacketId
-          )
-      )
     })
 
     if (caseResult.providerIssues.length > 0) {
@@ -738,7 +563,6 @@ export const renderEvalSummary = (
     report: input.report
   })
   appendEvalSummaryAgenticStageCoverage(lines, input.report)
-  appendEvalSummaryModelDiscoveryDiagnostics(lines, input.report)
   appendEvalSummaryContextLedgerKinds(lines, input.report)
   appendEvalSummaryGateReasons(lines, input.report)
   appendEvalSummaryProviderIssues(lines, input.report)

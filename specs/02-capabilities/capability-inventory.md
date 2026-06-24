@@ -6,8 +6,8 @@ Date: 2026-06-22
 Each capability is implementation-ready only when its linked spec sections
 define contracts, errors, permissions, observability, acceptance, and tests.
 R1 is intentionally LLM-centric: deterministic code provides safety, context,
-and corroboration signals, while semantic issue discovery is owned by bounded
-model investigation and proof/refutation loops.
+and corroboration signals, while semantic issue discovery is owned by a holistic
+whole-file review and a per-candidate refutation pass.
 
 ## Inventory
 
@@ -20,11 +20,9 @@ model investigation and proof/refutation loops.
 | CAP-PROV-001 | Provider resolution | ACT-DEV, ACT-CI | Yes | `04-configuration-and-providers.md` |
 | CAP-INSTR-001 | Reviewer instructions | ACT-DEV | Yes | `04-configuration-and-providers.md` |
 | CAP-SKILL-001 | Mounted reviewer skills | ACT-DEV | Yes | `04-configuration-and-providers.md`, `07-security-privacy-operations.md` |
-| CAP-AI-001 | Suspicion generation | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
-| CAP-AI-002 | Tool-mediated investigation loop | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `07-security-privacy-operations.md` |
-| CAP-AI-003 | Proof packet assembly | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
-| CAP-AI-004 | Refutation gate | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
-| CAP-ADM-001 | Promotion and admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
+| CAP-AI-001 | Holistic discovery | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
+| CAP-AI-004 | Refutation | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
+| CAP-ADM-001 | Admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-002 | Markdown report | ACT-DEV, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-003 | SARIF report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md` |
@@ -84,7 +82,7 @@ model investigation and proof/refutation loops.
 
 ### CAP-SIGNAL-001 Deterministic Support Signals
 
-- Trigger: after repository intake and before model investigation.
+- Trigger: after repository intake and before holistic discovery.
 - Contracts: emits language-neutral `DeterministicSignal` and `EvidenceRecord`
   data for changed-line anchors, symbol spans, imports, test/config hints,
   scope validity, known contradiction checks, and duplicate keys.
@@ -130,81 +128,57 @@ model investigation and proof/refutation loops.
   allowed.
 - Verification: traversal denial and allowlist tests.
 
-### CAP-AI-001 Suspicion Generation
+### CAP-AI-001 Holistic Discovery
 
 - Trigger: provider-backed review after deterministic support signals and task
   packets are assembled.
-- Contracts: emits `ModelSuspicion[]`, not findings. A suspicion identifies a
-  changed behavior, risk category, likely path/symbol, requested follow-up
-  context, and initial evidence references.
+- Contracts: a single recall-first whole-file review per task reads the unified
+  diff plus the full line-numbered changed files and emits `CandidateFinding[]`
+  directly (capped per task), not findings. Each candidate names a concrete
+  defect, its triggering path, and impact.
 - Side effects: provider calls only when model-backed review is configured.
-- Final state: every suspicion is queued for investigation, rejected as weak, or
-  retained as artifact-only diagnostic output.
-- Verification: hermetic provider fixture tests for high-value suspicion creation,
-  weak-suspicion rejection, schema invalid output, and budget limits.
+- Final state: every candidate is passed to refutation; raw candidates do not
+  become actionable on their own.
+- Verification: hermetic provider fixture tests for candidate creation, schema
+  invalid output, and per-task candidate caps.
 
-### CAP-AI-002 Runtime-Mediated Investigation Loop
+### CAP-AI-004 Refutation
 
-- Trigger: each non-rejected model suspicion.
-- Contracts: suspicion output may include bounded `requestedContext` strings.
-  Runtime-owned context retrieval maps only conservative read/list/grep-style
-  requests into evidence records after containment, scope, budget, redaction,
-  and ledger checks.
-- Side effects: provider calls and repository reads/searches only. No shell,
-  network, write, publish, provider-configuration, direct model repository
-  tool, or git mutation capability is available to model output.
-- Final state: mediated evidence supports a proof packet, a refuted suspicion,
-  or `needs-more-evidence` artifact-only output.
-- Verification: tests for requested-context mediation, per-suspicion
-  read/search budgets, prompt-injection resistance, redacted traces, and
-  context ledger entries.
-
-### CAP-AI-003 Proof Packet Assembly
-
-- Trigger: investigation concludes a suspicion is likely actionable.
-- Contracts: proof packet must identify changed behavior, execution/data path,
-  violated invariant or contract, concrete impact, why the reviewed change
-  introduced or exposed the issue, exact evidence IDs, contradiction checks, and
-  manual fix direction.
-- Side effects: none beyond redacted artifacts and model calls already counted
-  in the investigation.
-- Final state: complete proof packets proceed to refutation; incomplete proof
-  packets become artifact-only or rejected.
-- Verification: schema tests, proof-completeness matrix tests, and eval cases
-  for missing reachability, missing impact, and missing fix direction.
-
-### CAP-AI-004 Refutation Gate
-
-- Trigger: every complete proof packet before promotion/admission.
-- Contracts: model-assisted or hermetic-test refutation must attempt to disprove the
-  proof by checking reachability, guards, framework semantics, contradictory
-  deterministic signals, outside-scope status, and evidence sufficiency.
+- Trigger: every model-origin candidate finding within reviewed scope before
+  admission.
+- Contracts: model-assisted or hermetic-test refutation uses only the provided
+  candidate, reviewed diff ranges, evidence, review context, support-signal
+  candidates, instructions, skills metadata, shared digest, and provenance to
+  prove or disprove the candidate (reachability, guards, framework semantics,
+  declared contracts, outside-scope status, evidence sufficiency).
 - Side effects: provider calls and mediated repository reads only when
   configured; no publication or write authority.
-- Final state: `proved`, `refuted`, `needs-more-evidence`, or
-  `provider-error` result. Only `proved` may be promoted to actionable.
-- Verification: tests with intentionally false suspicions, guard-protected code,
-  out-of-scope references, provider failures, and deterministic contradictions.
+- Final state: `proved`, `refuted`, `needs-more-evidence`, or `provider-error`
+  result. Only `proved` may continue to actionable admission; `refuted` is
+  rejected; `needs-more-evidence` is dispositioned by `promotionPolicy`.
+- Verification: tests with intentionally false candidates, guard-protected code,
+  out-of-scope references, and provider failures.
 
-### CAP-ADM-001 Promotion And Admission Gate
+### CAP-ADM-001 Admission Gate
 
 - Trigger: refutation result generated.
-- Preconditions: proof packet and refutation result conform to schema.
+- Preconditions: candidate finding and refutation result conform to schema.
 - Side effects: writes admitted, rejected, or artifact-only decision to shared
   context.
 - Final state: every actionable admitted finding has location, evidence,
-  severity, provenance, proof packet, refutation result, and reporter
-  eligibility. Weak or refuted model output remains visible only as configured
-  artifact-only diagnostic output or rejected records.
-- Verification: promotion policy and admission matrix tests.
+  severity, provenance, a `proved` refutation result, and reporter eligibility,
+  and meets the severity floor. Refuted or needs-more-evidence model output
+  remains visible only as configured artifact-only diagnostic output or rejected
+  records.
+- Verification: admission matrix tests.
 
 ### CAP-REP-001 JSON Report
 
 - Trigger: run completion.
 - Contract: `ReviewReport` JSON schema.
 - Side effects: writes `report.json`.
-- Final state: machine-readable artifact contains admitted findings, rejected
-  findings, artifact-only suspicions/proofs, provider issues, and redacted
+- Final state: machine-readable artifact contains candidate findings, admitted
+  findings, rejected findings, refutation results, provider issues, and redacted
   evidence summaries.
 - Verification: schema validation and snapshot tests.
 
@@ -225,7 +199,7 @@ model investigation and proof/refutation loops.
 - Side effects: writes `report.sarif` in the run artifact directory.
 - Final state: machine-readable artifact contains redacted actionable results
   with stable fingerprints and repository-relative locations. Artifact-only
-  suspicions are not SARIF results unless a future spec defines suppressed
+  findings are not SARIF results unless a future spec defines suppressed
   diagnostics.
 - Verification: SARIF schema validation, GitHub-target subset validation when
   configured, and redaction snapshot tests.
@@ -237,13 +211,13 @@ model investigation and proof/refutation loops.
 - Contract: renders a deterministic local JSON array of GitHub review-comment
   drafts from actionable admitted findings only.
 - Preconditions: admitted finding has `reporterEligibility = inline`, a
-  resolvable new-side diff location, a complete proof packet, a passed
-  refutation result, and severity at or above the configured inline threshold.
+  resolvable new-side diff location, a `proved` refutation result, and severity
+  at or above the configured inline threshold.
 - Side effects: writes `github-review-comments.json` in the run artifact
   directory only. It performs no network IO and does not publish comments.
 - Final state: each comment draft carries repository-relative path, line or
-  start-line range, side, redacted body, source finding ID, proof summary, and
-  optional manual suggestion block when safe.
+  start-line range, side, redacted body, source finding ID, and optional manual
+  suggestion block when safe.
 - Verification: renderer tests for actionable, artifact-only, refuted,
   ineligible, old-side, and unsafe multi-edit fix cases.
 
@@ -260,12 +234,12 @@ model investigation and proof/refutation loops.
 
 ### CAP-CTX-001 Context Ledger
 
-- Trigger: planning, model context assembly, and investigation tool mediation.
+- Trigger: planning, model context assembly, and refutation tool mediation.
 - Contracts: records every included source chunk, tool-mediated context read,
   search, and other considered context decisions without raw content.
 - Side effects: writes redacted context ledger into run artifacts.
-- Final state: source chunk and tool-read records can prove what context
-  informed each suspicion/proof/refutation.
+- Final state: source chunk and tool-read records can show what context informed
+  each candidate and refutation.
 - Verification: ledger unit tests and snapshot tests proving no raw source is
   stored.
 
@@ -284,18 +258,19 @@ model investigation and proof/refutation loops.
 
 - Trigger: `codereviewer eval run` CLI command.
 - Side effects: writes eval report artifacts.
-- Final state: metrics include actionable proof recall/precision, suspicion
-  recall, proof promotion precision, artifact-only noise, provider issue rate,
-  latency, token use, cost, and parse validity.
+- Final state: metrics include actionable recall/precision, product recall,
+  recall by tier, F1, refutation false-positive/false-negative counts,
+  artifact-only noise, provider issue rate, latency, token use, cost, and parse
+  validity.
 - Verification: eval runner integration test.
 
 ### CAP-EVAL-002 Evaluation Analysis Commands
 
 - Trigger: eval compare, recall-report, and slice-manifest commands.
 - Side effects: reads eval artifacts and writes local summaries only.
-- Final state: humans can compare case selection, scoring mode, proof quality,
-  missed expectations, false positives, artifact-only suspicions, and provider
-  issues.
+- Final state: humans can compare case selection, scoring mode, refutation
+  quality, missed expectations, false positives, artifact-only findings, and
+  provider issues.
 - Verification: focused CLI tests.
 
 ### CAP-EVAL-003 Semantic Judge Matching
@@ -306,16 +281,14 @@ model investigation and proof/refutation loops.
   production admission decisions.
 - Verification: hermetic provider fixture semantic-judge tests.
 
-### CAP-EVAL-004 Agentic Benchmark Posture
+### CAP-EVAL-004 Benchmark Posture
 
-- Trigger: `codereviewer eval run --review-mode pr --review-depth thorough
-  --intent-planning model --judge-findings`.
-- Side effects: provider calls for review, optional critic judging, and optional
-  semantic eval matching when `--semantic-judge` is also supplied.
-- Final state: benchmark runs can force the intended PR-review agentic path
-  without changing repository config. The default costly benchmark script uses
-  this posture; a separately named baseline script preserves current-config
-  provider benchmark comparisons.
+- Trigger: `codereviewer eval run --review-mode pr --review-depth thorough`.
+- Side effects: provider calls for review, and optional semantic eval matching
+  when `--semantic-judge` is also supplied.
+- Final state: benchmark runs can force the intended PR-review path without
+  changing repository config. The default costly benchmark script uses this
+  posture.
 - Verification: focused eval CLI override tests and package-script tests.
 
 ### CAP-GATE-001 Quality Gate Result
@@ -331,8 +304,8 @@ model investigation and proof/refutation loops.
 - Trigger: every command.
 - Side effects: sanitized logs and run artifacts only.
 - Final state: provider issues, retries, recovered/unrecovered status, token
-  counts, costs, task timings, investigation budgets, and redacted failure
-  codes are visible to humans without exposing source or prompts.
+  counts, costs, task timings, and redacted failure codes are visible to humans
+  without exposing source or prompts.
 - Verification: log/redaction snapshot tests.
 
 ### CAP-DRIFT-001 Drift, Gap, And Ambiguity Checks

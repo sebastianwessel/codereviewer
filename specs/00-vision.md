@@ -6,9 +6,10 @@ Date: 2026-06-20
 ## Product Vision
 
 Build a local-first, LLM-centric semantic code review engine for developers and
-CI. The product produces precise, auditable findings from model-driven
-investigation loops that gather repository context, prove or refute suspicions,
-and pass deterministic safety gates. It favors correctness, traceability,
+CI. The product produces precise, auditable findings through a holistic
+whole-file review that discovers candidate defects, then an independent
+refutation pass that verifies or discards each one, and finally deterministic
+safety gates. It favors correctness, traceability,
 privacy, and low noise over comment volume, and it assumes production pipelines
 already run CodeQL, linters, formatters, tests, and build checks.
 
@@ -30,7 +31,7 @@ already run CodeQL, linters, formatters, tests, and build checks.
 
 | ID | Criterion | Verification |
 | --- | --- | --- |
-| VIS-001 | Actionable review output includes only admitted findings backed by a complete proof packet and refutation result. | Admission, proof/refutation, and report integration tests. |
+| VIS-001 | Actionable review output includes only admitted findings whose refutation verdict is `proved`. | Admission, refutation, and report integration tests. |
 | VIS-002 | Default runs leak no raw source, prompts, provider responses, or secrets into logs/traces/reports. | Redaction and artifact snapshot tests. |
 | VIS-003 | Provider packages are optional and isolated from base imports. | Provider-resolution unit tests and static import scan. |
 | VIS-004 | Reports are deterministic from canonical contracts. | Snapshot and schema validation tests. |

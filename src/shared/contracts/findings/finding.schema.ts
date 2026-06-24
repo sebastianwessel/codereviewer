@@ -28,8 +28,7 @@ export const EvidenceKindSchema = z.enum([
   'tool-read',
   'tool-search',
   'proof',
-  'refutation',
-  'judge'
+  'refutation'
 ])
 
 export const RejectReasonSchema = z.enum([
@@ -43,7 +42,7 @@ export const RejectReasonSchema = z.enum([
   'provider-error',
   'refuted',
   'deterministic-contradiction',
-  'weak-suspicion',
+  'weak-evidence',
   'static-analysis-duplicate'
 ])
 
@@ -53,7 +52,7 @@ export const BaselineStatusSchema = z.enum(['new', 'existing', 'resolved', 'unkn
 // Internally generated ids take the form `<prefix>_<hex>` and may carry an
 // extra segment for grouped tasks (e.g. `task_intent_<hex>`). The pattern allows
 // one or more `_<alnum>` segments so multi-segment ids validate consistently
-// across candidate, proof, admission, and report contracts. Test fixtures keep
+// across candidate, refutation, admission, and report contracts. Test fixtures keep
 // the `test-...` form.
 export const ContractIdSchema = z
   .string()
@@ -149,15 +148,6 @@ export const DeterministicSignalSchema = z.strictObject({
   evidenceIds: z.array(ContractIdSchema)
 })
 
-export const SuspicionStatusSchema = z.enum([
-  'queued',
-  'investigating',
-  'proved',
-  'refuted',
-  'needs-more-evidence',
-  'rejected'
-])
-
 export const ContextRequestSchema = z
   .strictObject({
     tool: z.enum(['read', 'list', 'grep']),
@@ -183,133 +173,11 @@ export const ContextRequestSchema = z
     }
   })
 
-export const ModelSuspicionSchema = z.strictObject({
-  id: ContractIdSchema,
-  taskId: TaskIdSchema,
-  category: FindingCategorySchema,
-  severityHint: SeveritySchema,
-  title: z.string().min(1).max(120),
-  hypothesis: z.string().min(1).max(1200),
-  primaryLocation: CodeLocationSchema.optional(),
-  contextRequests: z.array(ContextRequestSchema).max(10).default([]),
-  requestedContext: z.array(z.string().min(1).max(300)).max(10),
-  evidenceIds: z.array(ContractIdSchema),
-  status: SuspicionStatusSchema,
-  proposedBy: z.string().min(1)
-})
-
-export const ModelSuspicionDropReasonSchema = z.enum([
-  'schema-invalid',
-  'missing-required-field',
-  'path-outside-task',
-  'missing-task-evidence',
-  'duplicate-input-candidate',
-  'unsupported-truncation-claim'
-])
-
-export const ModelSuspicionDropReasonCountsSchema = z.record(
-  ModelSuspicionDropReasonSchema,
-  z.int().min(0)
-)
-
-export const ModelSchemaInvalidIssueCountsSchema = z.record(
-  z.string().min(1).max(120),
-  z.int().min(0)
-)
-
-export const ModelTaskDiagnosticSchema = z.strictObject({
-  taskId: TaskIdSchema,
-  taskKind: z.enum(['file', 'dependency-cluster']).optional(),
-  round: z.int().min(1),
-  paths: z.array(RepositoryRelativePathSchema),
-  evidenceCount: z.int().min(0).optional(),
-  reviewContextCount: z.int().min(0).optional(),
-  reviewIntentCount: z.int().min(0).optional(),
-  verificationQuestionCount: z.int().min(0).optional(),
-  suggestionCount: z.int().min(0),
-  convertedCandidateCount: z.int().min(0).optional(),
-  selectedCandidateCount: z.int().min(0),
-  budgetDroppedCandidateCount: z.int().min(0).optional(),
-  modelSuspicionCount: z.int().min(0),
-  proofPacketCount: z.int().min(0),
-  zeroCandidateReason: z
-    .enum([
-      'none',
-      'no-suggestions',
-      'all-suggestions-dropped',
-      'investigation-budget-exhausted'
-    ])
-    .optional(),
-  droppedSuspicionReasons: ModelSuspicionDropReasonCountsSchema,
-  schemaInvalidSuggestionIssueCounts:
-    ModelSchemaInvalidIssueCountsSchema.optional()
-})
-
-export const ReviewIntentSchema = z.strictObject({
-  id: ContractIdSchema,
-  title: z.string().min(1).max(120),
-  objective: z.string().min(1).max(1200),
-  paths: z.array(RepositoryRelativePathSchema).min(1),
-  taskIds: z.array(TaskIdSchema).min(1),
-  focusAreas: z.array(z.string().min(1).max(160)).max(8),
-  riskAreas: z.array(z.string().min(1).max(160)).max(8),
-  verificationQuestions: z.array(z.string().min(1).max(240)).max(8),
-  source: z.enum(['deterministic', 'model'])
-})
-
-export const InvestigationTraceSchema = z.strictObject({
-  suspicionId: ContractIdSchema,
-  toolCalls: z.array(
-    z.strictObject({
-      tool: z.string().min(1),
-      targetHash: Sha256Schema.optional(),
-      status: z.enum(['completed', 'skipped', 'failed']),
-      ledgerEntryId: ContractIdSchema.optional(),
-      summary: z.string().min(1).max(500).optional()
-    })
-  ),
-  contextLedgerEntryIds: z.array(ContractIdSchema),
-  budget: z.strictObject({
-    maxReads: z.int().min(0),
-    usedReads: z.int().min(0),
-    maxSearches: z.int().min(0),
-    usedSearches: z.int().min(0),
-    maxRounds: z.int().min(0),
-    usedRounds: z.int().min(0)
-  }),
-  result: z.enum(['proof', 'refuted', 'needs-more-evidence', 'provider-error'])
-})
-
-export const ProofPacketSchema = z.strictObject({
-  id: ContractIdSchema,
-  suspicionId: ContractIdSchema,
-  candidateId: CandidateIdSchema,
-  changedBehavior: z.string().min(1).max(1200),
-  executionOrDataPath: z.string().min(1).max(1200),
-  violatedInvariant: z.string().min(1).max(1200),
-  impact: z.string().min(1).max(1200),
-  introducedByChange: z.string().min(1).max(1200),
-  evidenceIds: z.array(ContractIdSchema).min(1),
-  contradictionChecks: z.array(z.string().min(1).max(500)),
-  fixDirection: z.string().min(1).max(1200)
-})
-
 export const RefutationVerdictSchema = z.enum([
   'proved',
   'refuted',
   'needs-more-evidence',
   'provider-error'
-])
-
-// Shared critic verdict for the aggregate critic's per-candidate decisions and
-// the per-candidate judge — identical value set, kept in one place so the two
-// stages cannot drift apart. (The model-output verdict enums in
-// model-agent-contracts intentionally omit system-only values like
-// `provider-error`, so those subsets are deliberate, not drift.)
-export const CriticVerdictSchema = z.enum([
-  'valid',
-  'false-positive',
-  'needs-more-evidence'
 ])
 
 export const VerificationCheckSchema = z.strictObject({
@@ -321,61 +189,11 @@ export const VerificationCheckSchema = z.strictObject({
 
 export const RefutationResultSchema = z.strictObject({
   id: ContractIdSchema,
-  proofPacketId: ContractIdSchema,
+  candidateId: CandidateIdSchema,
   verdict: RefutationVerdictSchema,
   summary: z.string().min(1).max(1000),
   evidenceIds: z.array(ContractIdSchema),
   checks: z.array(VerificationCheckSchema)
-})
-
-export const FindingAggregateDecisionSchema = z.strictObject({
-  candidateId: CandidateIdSchema,
-  verdict: CriticVerdictSchema,
-  summary: z.string().min(1).max(1000),
-  evidenceIds: z.array(ContractIdSchema),
-  relatedCandidateIds: z.array(ContractIdSchema).default([])
-})
-
-export const FindingAggregateResultSchema = z.strictObject({
-  id: ContractIdSchema,
-  scope: z.enum(['run', 'intent']),
-  verdict: z.enum(['valid', 'mixed', 'needs-more-evidence']),
-  summary: z.string().min(1).max(1000),
-  candidateIds: z.array(ContractIdSchema).min(1),
-  evidenceIds: z.array(ContractIdSchema),
-  decisions: z.array(FindingAggregateDecisionSchema).max(50),
-  similarIssueChecks: z.array(VerificationCheckSchema).max(12).default([])
-})
-
-export const FindingJudgeVerdictSchema = CriticVerdictSchema
-
-export const FindingJudgeResultSchema = z.strictObject({
-  id: ContractIdSchema,
-  candidateId: CandidateIdSchema,
-  verdict: FindingJudgeVerdictSchema,
-  summary: z.string().min(1).max(1000),
-  challengeQuestions: z.array(z.string().min(1).max(300)).max(8).default([]),
-  verificationChecks: z.array(VerificationCheckSchema).max(8).default([]),
-  contextRequests: z.array(ContextRequestSchema).max(6).default([]),
-  requestedContext: z.array(z.string().min(1).max(300)).max(6).default([]),
-  evidenceIds: z.array(ContractIdSchema),
-  proofPacketId: ContractIdSchema.optional(),
-  refutationId: ContractIdSchema.optional()
-})
-
-export const PromotionDecisionStatusSchema = z.enum([
-  'actionable',
-  'artifact-only',
-  'rejected'
-])
-
-export const PromotionDecisionSchema = z.strictObject({
-  candidateId: CandidateIdSchema,
-  proofPacketId: ContractIdSchema.optional(),
-  refutationId: ContractIdSchema.optional(),
-  status: PromotionDecisionStatusSchema,
-  reason: z.string().min(1).max(500),
-  policy: z.string().min(1)
 })
 
 export const FindingProvenanceSchema = z.strictObject({
@@ -421,7 +239,6 @@ export const AdmittedFindingSchema = z.strictObject({
   admissionEvidenceIds: z.array(ContractIdSchema).min(1),
   reporterEligibility: ReporterEligibilitySchema,
   provenance: FindingProvenanceSchema,
-  proofPacketId: ContractIdSchema.optional(),
   refutationId: ContractIdSchema.optional(),
   baselineStatus: BaselineStatusSchema,
   fingerprints: z.array(FindingFingerprintSchema).min(1),
@@ -461,25 +278,10 @@ export type DataFlowPath = z.infer<typeof DataFlowPathSchema>
 export type FindingFingerprint = z.infer<typeof FindingFingerprintSchema>
 export type EvidenceRecord = z.infer<typeof EvidenceRecordSchema>
 export type DeterministicSignal = z.infer<typeof DeterministicSignalSchema>
-export type SuspicionStatus = z.infer<typeof SuspicionStatusSchema>
-export type ModelSuspicion = z.infer<typeof ModelSuspicionSchema>
-export type ModelSuspicionDropReason = z.infer<
-  typeof ModelSuspicionDropReasonSchema
->
-export type ModelTaskDiagnostic = z.infer<typeof ModelTaskDiagnosticSchema>
-export type ReviewIntent = z.infer<typeof ReviewIntentSchema>
-export type InvestigationTrace = z.infer<typeof InvestigationTraceSchema>
-export type ProofPacket = z.infer<typeof ProofPacketSchema>
 export type RefutationVerdict = z.infer<typeof RefutationVerdictSchema>
 export type VerificationCheck = z.infer<typeof VerificationCheckSchema>
 export type ContextRequest = z.infer<typeof ContextRequestSchema>
 export type RefutationResult = z.infer<typeof RefutationResultSchema>
-export type FindingAggregateDecision = z.infer<typeof FindingAggregateDecisionSchema>
-export type FindingAggregateResult = z.infer<typeof FindingAggregateResultSchema>
-export type FindingJudgeVerdict = z.infer<typeof FindingJudgeVerdictSchema>
-export type FindingJudgeResult = z.infer<typeof FindingJudgeResultSchema>
-export type PromotionDecisionStatus = z.infer<typeof PromotionDecisionStatusSchema>
-export type PromotionDecision = z.infer<typeof PromotionDecisionSchema>
 export type FindingProvenance = z.infer<typeof FindingProvenanceSchema>
 export type FixEdit = z.infer<typeof FixEditSchema>
 export type FixProposal = z.infer<typeof FixProposalSchema>

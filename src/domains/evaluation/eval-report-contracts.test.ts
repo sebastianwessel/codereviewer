@@ -38,12 +38,12 @@ describe('eval report contracts', () => {
     })
     expect(
       EvalAgenticStageReportSchema.parse({
-        stage: 'judge',
+        stage: 'refutation',
         status: 'skipped',
         count: 0
       })
     ).toEqual({
-      stage: 'judge',
+      stage: 'refutation',
       status: 'skipped',
       count: 0
     })

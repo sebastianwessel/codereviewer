@@ -1,0 +1,117 @@
+import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
+import { type CandidateFinding } from '../../../admission/index.js'
+import {
+  type FindingRefutationRunner,
+  type WorkflowReviewTask
+} from '../agent-contracts.js'
+import {
+  candidateWithinReviewedScope,
+  isModelProposedCandidate
+} from './candidate-scope.js'
+import { createRefutationEvidence } from '../refutation/evidence.js'
+import { executeAdmissionRefutation } from '../refutation/execution.js'
+import { activeRefutationResultForCandidate } from '../refutation/result.js'
+import { type AdmissionCandidateOutcome } from './outcome.js'
+import {
+  noRefuterAdmissionOutcome,
+  outOfDiffScopeOutcome,
+  supportSignalCandidateOutcome
+} from './preflight-outcome.js'
+import {
+  admissibleRefutationOutcome,
+  refutedCandidateOutcome,
+  weakEvidenceRejectedOutcome
+} from '../refutation/verdict-outcome.js'
+import { providerIssueForError } from '../provider-issues.js'
+import { type ReviewWorkflowInput } from '../contracts.js'
+
+export const reviewCandidateForAdmission = async (
+  input: {
+    readonly workflowInput: ReviewWorkflowInput
+    readonly tasks: readonly WorkflowReviewTask[]
+    readonly candidate: CandidateFinding
+    readonly allCandidates: readonly CandidateFinding[]
+    readonly sharedDigest: string
+    readonly reviewEvidence: readonly EvidenceRecord[]
+    readonly refuteFinding?: FindingRefutationRunner | undefined
+    readonly signal?: AbortSignal
+  }
+): Promise<AdmissionCandidateOutcome> => {
+  if (input.refuteFinding === undefined) {
+    return noRefuterAdmissionOutcome({
+      candidates: [input.candidate],
+      workflowEvidence: input.workflowInput.evidence
+    })
+  }
+
+  if (!isModelProposedCandidate(input.candidate)) {
+    return supportSignalCandidateOutcome(input.candidate)
+  }
+
+  if (
+    !candidateWithinReviewedScope(
+      input.candidate,
+      input.workflowInput.reviewedDiffRanges
+    )
+  ) {
+    return outOfDiffScopeOutcome(input.candidate)
+  }
+
+  const refutationExecution = await executeAdmissionRefutation({
+    workflowInput: input.workflowInput,
+    tasks: input.tasks,
+    candidate: input.candidate,
+    allCandidates: input.allCandidates,
+    sharedDigest: input.sharedDigest,
+    reviewEvidence: input.reviewEvidence,
+    refuteFinding: input.refuteFinding,
+    issueForError: providerIssueForError,
+    ...(input.signal === undefined ? {} : { signal: input.signal })
+  })
+
+  if (refutationExecution.status === 'provider-error') {
+    return refutationExecution.outcome
+  }
+
+  const refutation = refutationExecution.refutation
+  const refutationEvidence = createRefutationEvidence({
+    candidate: input.candidate,
+    refutation
+  })
+  const refutationResult = activeRefutationResultForCandidate({
+    candidate: input.candidate,
+    refutation,
+    refutationEvidence
+  })
+
+  if (refutation.verdict === 'refuted') {
+    return refutedCandidateOutcome({
+      candidate: input.candidate,
+      refutation,
+      refutationEvidence,
+      refutationResult
+    })
+  }
+
+  if (
+    refutation.verdict === 'needs-more-evidence' &&
+    input.workflowInput.promotionPolicy.modelWeakOrRefuted === 'rejected'
+  ) {
+    return weakEvidenceRejectedOutcome({
+      candidate: input.candidate,
+      refutation,
+      refutationEvidence,
+      refutationResult
+    })
+  }
+
+  // A candidate that passes refutation (`proved`) is admitted directly;
+  // `needs-more-evidence` is admitted as artifact-only (see
+  // admissibleRefutationOutcome); `refuted` was already rejected above.
+  return admissibleRefutationOutcome({
+    candidate: input.candidate,
+    refutation,
+    refutationEvidence,
+    refutationResult
+  })
+}

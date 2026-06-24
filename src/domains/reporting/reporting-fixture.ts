@@ -117,14 +117,7 @@ export const createReportFixture = (): ReviewReport =>
         redactionApplied: true
       }
     ],
-    reviewIntents: [],
-    modelSuspicions: [],
-    investigationTraces: [],
-    proofPackets: [],
     refutationResults: [],
-    aggregateResults: [],
-    judgeResults: [],
-    promotionDecisions: [],
     providerIssues: [],
     skippedFiles: [
       {

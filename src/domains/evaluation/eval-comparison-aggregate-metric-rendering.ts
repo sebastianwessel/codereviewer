@@ -172,21 +172,6 @@ export const appendEvalComparisonMetricDeltas = (
         base: input.base.metrics.providerIssueCount,
         head: input.head.metrics.providerIssueCount
       }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Suspicion recall',
-        base: input.base.metrics.suspicionRecall,
-        head: input.head.metrics.suspicionRecall
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Proof recall',
-        base: input.base.metrics.proofRecall,
-        head: input.head.metrics.proofRecall
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Proof promotion precision',
-        base: input.base.metrics.proofPromotionPrecision,
-        head: input.head.metrics.proofPromotionPrecision
-      }),
       formatEvalComparisonCountMetricDeltaRow({
         metric: 'Refutation false negatives',
         base: input.base.metrics.refutationFalseNegativeCount,
@@ -206,6 +191,11 @@ export const appendEvalComparisonMetricDeltas = (
         metric: 'Input tokens',
         base: input.base.metrics.inputTokens,
         head: input.head.metrics.inputTokens
+      }),
+      formatEvalComparisonIntegerMetricDeltaRow({
+        metric: 'Input tokens (cached)',
+        base: input.base.metrics.cachedInputTokens,
+        head: input.head.metrics.cachedInputTokens
       }),
       formatEvalComparisonIntegerMetricDeltaRow({
         metric: 'Output tokens',

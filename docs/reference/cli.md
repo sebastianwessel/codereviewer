@@ -43,7 +43,7 @@ codereviewer config validate --config .codereviewer/config.json
 ## `review`
 
 Runs a full review pipeline: repository intake, deterministic support-signal
-extraction, LLM-backed proof/refutation (when a provider is configured),
+extraction, holistic discovery and refutation (when a provider is configured),
 admission, quality gates, and report rendering.
 
 ### Synopsis

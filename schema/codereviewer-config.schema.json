@@ -409,8 +409,6 @@
     "aiReview": {
       "default": {
         "requireRefutation": true,
-        "intentPlanning": "auto",
-        "judgeFindings": false,
         "deterministicSignalMode": "support",
         "actionableSeverityThreshold": "medium"
       },
@@ -419,48 +417,10 @@
         "enabled": {
           "type": "boolean"
         },
-        "maxSuspicionsPerTask": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 20
-        },
-        "maxInvestigationsPerRun": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 200
-        },
-        "maxToolReadsPerInvestigation": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 50
-        },
-        "maxToolSearchesPerInvestigation": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 25
-        },
-        "maxInvestigationRounds": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 5
-        },
         "requireRefutation": {
           "default": true,
           "type": "boolean",
           "const": true
-        },
-        "intentPlanning": {
-          "default": "auto",
-          "type": "string",
-          "enum": [
-            "auto",
-            "deterministic",
-            "model"
-          ]
-        },
-        "judgeFindings": {
-          "default": false,
-          "type": "boolean"
         },
         "deterministicSignalMode": {
           "default": "support",
@@ -484,8 +444,6 @@
       },
       "required": [
         "requireRefutation",
-        "intentPlanning",
-        "judgeFindings",
         "deterministicSignalMode",
         "actionableSeverityThreshold"
       ],
@@ -493,39 +451,12 @@
     },
     "promotionPolicy": {
       "default": {
-        "modelProof": "actionable",
-        "modelWeakOrRefuted": "artifact-only",
-        "staticAnalysisDuplicate": "artifact-only",
-        "deterministicContradiction": "rejected"
+        "modelWeakOrRefuted": "artifact-only"
       },
       "type": "object",
       "properties": {
-        "modelProof": {
-          "default": "actionable",
-          "type": "string",
-          "enum": [
-            "actionable",
-            "artifact-only"
-          ]
-        },
         "modelWeakOrRefuted": {
           "default": "artifact-only",
-          "type": "string",
-          "enum": [
-            "artifact-only",
-            "rejected"
-          ]
-        },
-        "staticAnalysisDuplicate": {
-          "default": "artifact-only",
-          "type": "string",
-          "enum": [
-            "artifact-only",
-            "rejected"
-          ]
-        },
-        "deterministicContradiction": {
-          "default": "rejected",
           "type": "string",
           "enum": [
             "artifact-only",
@@ -534,10 +465,7 @@
         }
       },
       "required": [
-        "modelProof",
-        "modelWeakOrRefuted",
-        "staticAnalysisDuplicate",
-        "deterministicContradiction"
+        "modelWeakOrRefuted"
       ],
       "additionalProperties": false
     },
@@ -822,6 +750,10 @@
       "type": "object",
       "properties": {
         "inputPerMillion": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cachedInputPerMillion": {
           "type": "number",
           "minimum": 0
         },

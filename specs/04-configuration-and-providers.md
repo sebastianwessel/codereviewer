@@ -50,9 +50,7 @@ R1 supports only these configuration environment variables:
 | `CODEREVIEWER_PROVIDER_MODEL` | `provider.model` | string |
 | `CODEREVIEWER_PROVIDER_REASONING_EFFORT` | `provider.reasoningEffort` | reasoning effort enum |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `provider.baseUrl` | URL |
-| `CODEREVIEWER_AI_INTENT_PLANNING` | `aiReview.intentPlanning` | intent planning enum |
 | `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `aiReview.deterministicSignalMode` | signal mode enum |
-| `CODEREVIEWER_AI_JUDGE_FINDINGS` | `aiReview.judgeFindings` | boolean |
 | `CODEREVIEWER_ARTIFACT_DIR` | `paths.artifactDir` | repository-relative path |
 | `CODEREVIEWER_CONFIG_PATH` | CLI/config loader default path override | repository-relative path |
 | `CODEREVIEWER_SKILLS_DIR` | `skills.directories[0]` | repository-relative path |
@@ -61,6 +59,7 @@ R1 supports only these configuration environment variables:
 | `CODEREVIEWER_OPENTELEMETRY_ENDPOINT` | `observability.openTelemetry.endpoint` | URL |
 | `CODEREVIEWER_OPENTELEMETRY_HEADERS` | `observability.openTelemetry.headers` | redacted string map |
 | `CODEREVIEWER_COST_INPUT_PER_MILLION` | `costs.inputPerMillion` | number |
+| `CODEREVIEWER_COST_CACHED_INPUT_PER_MILLION` | `costs.cachedInputPerMillion` | number |
 | `CODEREVIEWER_COST_OUTPUT_PER_MILLION` | `costs.outputPerMillion` | number |
 
 All other environment variables are ignored by config loading. Credentials are
@@ -93,8 +92,8 @@ provider-specific object as passthrough.
 | `drift` | no | object | drift checks enabled as warnings |
 | `observability` | no | object | OpenTelemetry disabled |
 | `costs` | no | object | detailed token/cost tracking enabled with no prices |
-| `aiReview` | no | object | agentic proof-loop defaults |
-| `promotionPolicy` | no | object | proof/actionability defaults |
+| `aiReview` | no | object | holistic discovery + refutation defaults |
+| `promotionPolicy` | no | object | non-actionable model output disposition |
 
 ## Review Config
 
@@ -114,36 +113,21 @@ provider-specific object as passthrough.
 
 ## AI Review Config
 
-The AI review block controls model-driven suspicion, investigation, proof, and
-refutation loops. It does not enable shell, network beyond the selected
-provider, filesystem writes, or publishing.
+The AI review block controls model-driven holistic discovery and refutation. It
+does not enable shell, network beyond the selected provider, filesystem writes,
+or publishing.
 
 | Key | Type | Default | Rule |
 | --- | --- | --- | --- |
 | `enabled` | boolean | `true` when provider is configured | When false, no provider-backed review runs. |
-| `maxSuspicionsPerTask` | integer 0..20 | depth-defined | Caps hypotheses before investigation. |
-| `maxInvestigationsPerRun` | integer 0..200 | depth-defined | Caps total investigated suspicions. |
-| `maxToolReadsPerInvestigation` | integer 0..50 | depth-defined | Mediated repository reads only. |
-| `maxToolSearchesPerInvestigation` | integer 0..25 | depth-defined | Mediated grep/symbol/test/config lookups only. |
-| `maxInvestigationRounds` | integer 1..5 | depth-defined | Caps mediated investigator follow-up rounds and optional judge follow-up rounds. |
-| `requireRefutation` | boolean | `true` | Must be true in R1. |
-| `intentPlanning` | `"auto" | "deterministic" | "model"` | `"auto"` | `auto` uses deterministic intents for local or single-task runs and a compact model planner for multi-task non-local reviews. `model` forces the planner for multi-task runs. |
-| `judgeFindings` | boolean | `false` | Disabled by default; opt-in for high-stakes runs. When true, proved model-origin candidates must pass a separate critic judge before admission (adds provider cost and latency). |
+| `requireRefutation` | boolean (always `true`) | `true` | Every model candidate must survive the refutation pass before admission. |
 | `actionableSeverityThreshold` | severity | `medium` | Minimum severity for a MODEL-origin finding to be admitted as actionable. Below this it is rejected as `below-threshold` (still recorded as a rejected finding). Trusted deterministic-rule findings are exempt. Keeps the engine focused on impactful runtime/security defects over low-severity nits. |
-| `deterministicSignalMode` | `"support" | "disabled"` | `"support"` | `support` injects deterministic facts as model context (single-case A/B: materially improves recall). `disabled` keeps facts for free task clustering but does NOT inject support-signal context into model packets — lower token cost, lower recall. Override with `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`. |
+| `deterministicSignalMode` | `"support" | "disabled"` | `"support"` | `support` injects deterministic facts as model context (materially improves recall). `disabled` keeps facts for free task clustering and admission contradiction checks but does NOT inject support-signal context into model packets — lower token cost, lower recall. Override with `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`. |
 
-Investigation, optional aggregate, and critic judge packets reuse the provider
-task-input budget instead of introducing stage-specific public settings. Under
-tight budgets the workflow removes optional review-intent, trace, digest, and
-ambient review context before recording a recovered provider issue.
-
-Depth defaults:
-
-| Depth | `maxSuspicionsPerTask` | `maxInvestigationsPerRun` | `maxToolReadsPerInvestigation` | `maxToolSearchesPerInvestigation` | `maxInvestigationRounds` |
-| --- | --- | --- | --- | --- | --- |
-| `fast` | `3` | `20` | `10` | `5` | `2` |
-| `balanced` | `6` | `60` | `20` | `10` | `3` |
-| `thorough` | `10` | `120` | `40` | `20` | `4` |
+Holistic discovery and refutation packets reuse the provider task-input budget
+instead of introducing stage-specific public settings. Under tight budgets the
+workflow removes optional digest and ambient review context before recording a
+recovered provider issue.
 
 When a provider is configured and `contextMaxBytes` is not set explicitly, the
 per-packet model-bound context budget scales with depth so deeper reviews see
@@ -171,7 +155,7 @@ Provider schema:
 | `baseUrl` | conditional | URL | Required for `openai-compatible`; optional otherwise. |
 | `temperature` | no | number 0..2 | Default `0`. |
 | `maxOutputTokens` | no | integer >= 1 | Default provider adapter setting. |
-| `reasoningEffort` | no | `"minimal" \| "low" \| "medium" \| "high"` | Unset uses the provider default. Maps to the OpenAI Responses API `reasoning.effort`; raises proof/investigation quality on smaller reasoning models at higher token cost. |
+| `reasoningEffort` | no | `"minimal" \| "low" \| "medium" \| "high"` | Unset uses the provider default. Maps to the OpenAI Responses API `reasoning.effort`; raises discovery/refutation quality on smaller reasoning models at higher token cost. |
 | `timeoutMs` | no | integer 1000..600000 | Default `120000`. |
 | `maxRetries` | no | integer 0..5 | Default `2`. Classified retries of provider task calls; total attempts are `maxRetries + 1`. |
 | `retryBackoffMs` | no | integer 0..60000 | Default `500`. Base delay for exponential backoff between retries. |
@@ -214,12 +198,20 @@ pricing. If token counts or prices are unavailable, cost is omitted and
 `maxCostUsd` is not enforceable; the run summary must include warning code
 `cost-unavailable`.
 
+When a provider surfaces prompt-cache usage, the cached input tokens (a subset
+of the input tokens, already counted in the input aggregate) are re-priced at
+`costs.cachedInputPerMillion` (or the bundled snapshot cached rate) when one is
+known; otherwise they fall back to the full input price (no fabricated
+discount). The cached input token count is surfaced in the run summary as
+`cachedInputTokens`.
+
 Provider-backed tasks should record detailed token/cost metadata when the
 adapter exposes it:
 
 | Field | Type | Rule |
 | --- | --- | --- |
 | `inputTokens` | integer >= 0 | Provider reported or tokenizer estimate. |
+| `cachedInputTokens` | integer >= 0 | Cached (prompt-cache read) input tokens; a subset of `inputTokens`. |
 | `outputTokens` | integer >= 0 | Provider reported or tokenizer estimate. |
 | `totalTokens` | integer >= 0 | Sum of input and output tokens. |
 | `costUsd` | number or null | Calculated when prices are known. |
@@ -342,34 +334,28 @@ configuration block:
 | `failOnProviderError` | boolean | `true` |
 | `failOnNewOnly` | boolean | value from `baseline.failOnNewOnly` |
 
-`qualityGate.minEvidenceLevel` is removed by the agentic proof refactor.
-Actionability is now determined by `promotionPolicy`, proof completeness, and
-refutation results.
+Actionability is determined by `promotionPolicy`, refutation verdict, and the
+severity floor.
 
 ## Promotion Policy
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `modelProof` | `"actionable" | "artifact-only"` | `"actionable"` |
 | `modelWeakOrRefuted` | `"artifact-only" | "rejected"` | `"artifact-only"` |
-| `staticAnalysisDuplicate` | `"artifact-only" | "rejected"` | `"artifact-only"` |
-| `deterministicContradiction` | `"artifact-only" | "rejected"` | `"rejected"` |
 
 Rules:
 
-- `modelProof = "actionable"` requires a complete proof packet and
-  `RefutationResult.verdict = "proved"`;
-- model suspicions, weak proofs, and refuted proofs never become inline or
-  quality-gate findings;
+- a model candidate becomes actionable only when its `RefutationResult.verdict =
+  "proved"` and it meets the severity floor;
+- a `refuted` candidate is rejected; a `needs-more-evidence` candidate is
+  dispositioned by `modelWeakOrRefuted` (`artifact-only` keeps it auditable but
+  out of the inline review; `rejected` drops it entirely);
+- model candidates never become inline or quality-gate findings until they pass
+  refutation;
 - deterministic signal-only output is not actionable by default because
   production relies on adjacent CodeQL/linter/formatter/test/build pipelines.
-  Trusted allowlisted deterministic rules are separate from generic
-  signal-only output and may seed actionable evidence-backed candidates
-  directly;
-- static-analysis duplicates are de-prioritized unless the proof packet adds
-  semantic context not normally available from those tools;
-- deterministic contradictions reject or demote model-origin claims according
-  to policy.
+  Trusted allowlisted deterministic rules are separate from generic signal-only
+  output and may seed actionable evidence-backed candidates directly.
 
 ## Reporting
 
@@ -414,11 +400,16 @@ file config.
 | Key | Type | Default |
 | --- | --- | --- |
 | `inputPerMillion` | number >= 0 | omitted |
+| `cachedInputPerMillion` | number >= 0 | omitted |
 | `outputPerMillion` | number >= 0 | omitted |
 
 Costs are operational metadata and safe to report after redaction. The bundled
 pricing snapshot is generated from LiteLLM model pricing data and is used only
-for configured `provider.id="openai"` models.
+for configured `provider.id="openai"` models. When the snapshot exposes a cached
+(prompt-cache read) input rate for a model it is captured as the per-model
+cached rate; models without one stay conservative (cached input falls back to
+the full input price). `cachedInputPerMillion` re-prices only the cached subset
+of input tokens.
 
 ## Security Config
 

@@ -240,7 +240,6 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
     ['CODEREVIEWER_PROVIDER_BASE_URL', ['provider', 'baseUrl']],
     ['CODEREVIEWER_PROVIDER_REASONING_EFFORT', ['provider', 'reasoningEffort']],
     ['CODEREVIEWER_ARTIFACT_DIR', ['paths', 'artifactDir']],
-    ['CODEREVIEWER_AI_INTENT_PLANNING', ['aiReview', 'intentPlanning']],
     [
       'CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE',
       ['aiReview', 'deterministicSignalMode']
@@ -265,15 +264,6 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
     )
   }
 
-  const judgeFindings = envValue(environment, 'CODEREVIEWER_AI_JUDGE_FINDINGS')
-  if (judgeFindings !== undefined) {
-    setNestedValue(
-      config,
-      ['aiReview', 'judgeFindings'],
-      parseBooleanEnv('CODEREVIEWER_AI_JUDGE_FINDINGS', judgeFindings)
-    )
-  }
-
   const openTelemetryHeaders = envValue(environment, 'CODEREVIEWER_OPENTELEMETRY_HEADERS')
   if (openTelemetryHeaders !== undefined) {
     setNestedValue(
@@ -289,6 +279,21 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
       config,
       ['costs', 'inputPerMillion'],
       parseNumberEnv('CODEREVIEWER_COST_INPUT_PER_MILLION', inputPerMillion)
+    )
+  }
+
+  const cachedInputPerMillion = envValue(
+    environment,
+    'CODEREVIEWER_COST_CACHED_INPUT_PER_MILLION'
+  )
+  if (cachedInputPerMillion !== undefined) {
+    setNestedValue(
+      config,
+      ['costs', 'cachedInputPerMillion'],
+      parseNumberEnv(
+        'CODEREVIEWER_COST_CACHED_INPUT_PER_MILLION',
+        cachedInputPerMillion
+      )
     )
   }
 

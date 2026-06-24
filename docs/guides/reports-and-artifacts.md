@@ -54,41 +54,26 @@ of writing a successful report.
 
 ### `report.json` (provider-backed runs)
 
-Includes review intents with compact verification questions, model suspicions,
-investigation traces, proof packets, refutation results, optional judge results,
-optional aggregate results, promotion decisions, and provider issues.
+Includes refutation results, admitted findings, rejected findings, evidence
+records, and provider issues. The candidate findings emitted by holistic
+discovery and the admission decisions are recorded in `shared-context.json`.
 
 Key details:
 
-- Model suspicions and judge results can include structured context requests
-  recording the requested tool, path/query, and reason; legacy prose requests
-  remain human-readable audit text.
-- Investigation traces record bounded follow-up rounds when the investigator
-  asks for more read/list/grep context before proving or refuting a suspicion.
-- Identical structured retrieval requests in one pass are executed once before
-  budget is spent, so reports may show one ledgered evidence item for repeated
-  equivalent model requests.
-- Investigation trace budgets show the configured read/search limits when
-  mediated retrieval is active, and the trace-local reads/searches consumed.
-- Judge results include the critic verdict, challenge questions, structured
-  verification checks, and critic-cited evidence references from all bounded
-  judge follow-up rounds.
-- An evidence-less critic approval or rejection is recorded as
-  `needs-more-evidence`. Empty judge evidence means the critic did not cite
-  decisive evidence — proof evidence is not implicitly copied.
-- Aggregate results record batch critic decisions for related proved findings
-  when optional judging is enabled.
-- Sibling sweep findings appear through the normal model suspicion,
-  investigation trace, proof packet, and aggregate sections.
+- Each refutation result records the verdict (`proved` / `refuted` /
+  `needs-more-evidence`), the deciding rationale summary, and cited evidence IDs.
+- A candidate becomes actionable only when refutation returns `proved`; `refuted`
+  candidates are rejected and `needs-more-evidence` candidates are dispositioned
+  by `promotionPolicy.modelWeakOrRefuted`.
+- Evidence references are the IDs explicitly cited by the refuter; an empty list
+  means the refuter did not cite decisive evidence.
 
 ### `report.md`
 
-Renders planner, proof, critic, and provider-degradation state so humans can
-read the full evidence chain without opening raw JSON. Investigation, proof
-packet, refutation, aggregate, and judge sections show trace budgets,
-tool-call summaries, cited evidence IDs, or `none cited` for investigation,
-proof, and critic evidence fields (including contradiction checks, refutation
-checks, similar-issue checks, and verification checks).
+Renders candidate, refutation, and provider-degradation state so humans can read
+the evidence chain without opening raw JSON. Candidate and refutation sections
+show cited evidence IDs or `none cited` for refutation summaries, refutation
+evidence, and refutation check evidence.
 
 ### `report.sarif`
 
@@ -168,7 +153,7 @@ artifact schema.
   commands.
 - [Configuration guide](configuration.md) — `reporting.formats`,
   `paths.artifactDir`, and `review.inlineSeverityThreshold`.
-- [Architecture](../concepts/architecture.md) — step 13 (Reporting) and the
+- [Architecture](../concepts/architecture.md) — step 10 (Reporting) and the
   admission/quality-gate steps that determine what reaches a report.
 - [Artifacts reference](../reference/artifacts.md) — full artifact schema
   reference.

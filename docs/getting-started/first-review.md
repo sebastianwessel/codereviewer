@@ -31,7 +31,7 @@ sequenceDiagram
 
   CLI->>Engine: review --file / --base-ref / --head-ref
   Engine->>Engine: Intake → Signals → Planning
-  Engine->>Engine: Discovery → Investigation → Refutation
+  Engine->>Engine: Holistic discovery → Refutation → Admission
   Engine->>Artifacts: Write run artifacts
   Engine-->>CLI: Exit code (0 = gate passed, 1 = gate failed)
 ```
@@ -49,7 +49,7 @@ Artifacts are written under:
 | File | Purpose |
 | --- | --- |
 | `report.json` | Machine-readable review report. |
-| `report.md` | Human-readable summary with the full proof/refutation evidence chain. |
+| `report.md` | Human-readable summary with the candidate/refutation evidence chain. |
 | `report.sarif` | SARIF output for security and code-scanning tools. |
 | `github-review-comments.json` | Inline PR comment drafts (written when `github-review-comments` is in `reporting.formats`). |
 | `run-summary.json` | Run metadata used by automation and status checks. |

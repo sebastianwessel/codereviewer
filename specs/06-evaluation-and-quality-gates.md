@@ -6,7 +6,7 @@ Date: 2026-06-19
 ## Evaluation Goal
 
 Evaluation is a product capability, not only test infrastructure. It measures
-semantic review quality, proof/refutation quality, regression risk, cost, and
+semantic review quality, refutation quality, regression risk, cost, and
 latency across golden fixtures before review behavior changes are accepted.
 
 `codereviewer eval run` must not load the repository root `.env` file inside
@@ -169,8 +169,8 @@ Normalization rules:
 | Metric | Definition |
 | --- | --- |
 | `parseValidity` | Fraction of outputs validating against schemas. |
-| `recall` | Expected findings matched by actionable admitted findings divided by expected findings. Model-origin actionable findings require complete proof/refutation; trusted deterministic-rule findings are proof-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. |
-| `precision` | Actionable admitted findings matched to expected findings divided by actionable admitted findings. Model-origin actionable findings require complete proof/refutation; trusted deterministic-rule findings are proof-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. |
+| `recall` | Expected findings matched by actionable admitted findings divided by expected findings. Model-origin actionable findings require a `proved` refutation verdict; trusted deterministic-rule findings are refutation-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. |
+| `precision` | Actionable admitted findings matched to expected findings divided by actionable admitted findings. Model-origin actionable findings require a `proved` refutation verdict; trusted deterministic-rule findings are refutation-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. |
 | `f1` | Harmonic mean of precision and recall. |
 | `severityWeightedPrecision` | Precision weighted by expected severity impact. |
 | `severityWeightedRecall` | Recall weighted by expected severity impact. |
@@ -179,8 +179,6 @@ Normalization rules:
 | `precisionByTier` | Per-tier precision. Admitted findings carry no expected-tier label, so this mirrors `recallByTier` as a best-effort signal (documented in code). |
 | `productRecall` | Headline recall over the product tiers (`runtime-critical` + `security` + `logic`), excluding `nit`. This is the number the >80% accuracy target is measured against, matching the low-noise product scope in `00-vision.md`. |
 | `nitRecall` | Recall over `nit`-tier expected findings only. Reported for visibility; not part of the headline target or gates. |
-| `suspicionStageCoverage` | Fraction of non-provider-error cases that produced at least one model suspicion. A low value means discovery never ran for many cases. |
-| `judgeCoverage` | When `judgeFindings` is enabled, judged candidates divided by actionable-promoted proofs. A low value means findings were admitted without the strict per-candidate judge actually reviewing them. |
 | `lineAccuracy` | Fraction of matched findings with overlapping line range when expected line exists. Semantic-only benchmark expectations are excluded from the denominator. |
 | `severityAccuracy` | Fraction of matched findings with exact severity. |
 | `falsePositiveCount` | Actionable admitted findings not matched to expected findings. |
@@ -189,19 +187,14 @@ Normalization rules:
 | `artifactOnlyFindingCount` | Count of admitted findings marked `reporterEligibility = "artifact-only"`. |
 | `artifactOnlyMatchedFindingCount` | Count of artifact-only findings matched to expected findings. |
 | `artifactOnlyFalsePositiveCount` | Count of artifact-only findings that neither match expected findings nor duplicate matched artifact-only findings. |
-| `trustedDeterministicFindingCount` | Count of actionable findings seeded by trusted deterministic-rule evidence rather than model proof. |
-| `suspicionRecall` | Expected findings matched by any model suspicion, whether or not promoted, divided by expected findings. Diagnostic only. |
-| `proofRecall` | Expected findings matched by any complete proof packet divided by expected findings. Diagnostic only. |
-| `proofPromotionPrecision` | Promoted actionable proof packets matched to expected findings divided by promoted actionable proof packets. |
-| `refutationFalseNegativeCount` | Expected findings with a matching proof packet that were refuted or demoted without deterministic contradiction. |
-| `refutationFalsePositiveCount` | Refutation results marked `proved` whose promoted finding is unmatched. |
-| `staticDuplicateDemotionCount` | Count of model outputs demoted as CodeQL/linter/formatter/test/build-equivalent duplicates. |
+| `trustedDeterministicFindingCount` | Count of actionable findings seeded by trusted deterministic-rule evidence rather than model review. |
+| `refutationFalseNegativeCount` | Expected findings with a matching candidate finding that was refuted or demoted. |
+| `refutationFalsePositiveCount` | Refutation results marked `proved` whose admitted finding is unmatched. |
 | `actionableRate` | Actionable admitted findings with resolvable location, impact, evidence, and a concrete remediation direction divided by actionable admitted findings. |
 | `commentsPerKloc` | Actionable admitted findings per thousand changed lines. |
 | `commentsPerDiffHunk` | Actionable admitted findings per changed diff hunk. |
 | `incompleteCoverageRate` | Runs whose report coverage is incomplete divided by total runs. The release target is `0`. |
 | `contextMutationRate` | Context ledger entries with budget-driven mutation divided by entries considered for model context. The release target is `0`. |
-| `investigationToolReadCount` | Total mediated read/list/grep/symbol/test/config lookups used by investigations and refutations. |
 | `costUsd` | Provider-reported or estimated cost. |
 | `durationMs` | Wall-clock run duration. |
 
@@ -238,35 +231,29 @@ warnings so users can inspect partial overlap, new cases, removed cases, and
 scoring-mode differences. When either compared report includes context ledger
 entries, the comparison must render aggregate base/head/delta counts by context
 ledger kind so benchmark readers can see context usage changes alongside metric
-deltas. When either compared report includes agentic stage coverage, the
-comparison must also render aggregate base/head/delta counts by agentic stage so
-planning, proof, refutation, aggregate, and optional judge behavior changes are
-visible beside quality metrics. Metric deltas must include input-token and
+deltas. Metric deltas must include input-token and
 output-token totals so token-use regressions are visible during benchmark
 comparison. Cost deltas must use the same known/unavailable wording as eval
 summaries and must include unavailable-cost case counts so missing pricing data
-is not presented as free or cheaper. Agentic stage delta rows must omit stages
-whose aggregate base and head counts are both zero so skipped-stage noise does
-not obscure meaningful planning, proof, refutation, aggregate, or judge changes.
+is not presented as free or cheaper.
 Metric deltas must also include provider error rate, provider issue rate, and
 provider issue case counts so provider instability is visible beside model
 quality, token, cost, and duration changes. Metric deltas must include
-suspicion recall, proof recall, proof promotion precision, refutation false
-negative count, and refutation false positive count so proof-loop quality
-regressions are visible during benchmark comparison. When both reports include
+refutation false negative count and refutation false positive count so
+refutation quality regressions are visible during benchmark comparison. When
+both reports include
 matching `sourceProfile` or `language` metric groups, the comparison must render
 group-level fixture counts plus recall, precision, F1, and false-positive deltas
 so aggregate benchmark results cannot hide a segment-specific regression. The
-same matching groups must also render proof-loop deltas for suspicion recall,
-proof recall, proof promotion precision, refutation false negatives, and
-refutation false positives so agentic proof quality regressions are visible by
+same matching groups must also render refutation deltas for refutation false
+negatives and false positives so refutation quality regressions are visible by
 segment. They must also render resource deltas for input tokens, output tokens,
 known cost, and unavailable-cost case counts using the same known/unavailable
 cost wording as aggregate comparisons, so token or pricing regressions are
 visible by segment. The comparison must separately render fixture-count
 coverage deltas for the union of `sourceProfile` and `language` metric groups,
 including groups present in only one report, and omit unchanged group counts.
-Detailed quality, proof-loop, and resource group deltas remain limited to groups
+Detailed quality, refutation, and resource group deltas remain limited to groups
 present in both reports.
 
 `codereviewer eval slice-manifest --slice-root <path>` prints a deterministic
@@ -320,24 +307,22 @@ matching strategy produced the run:
 
 `codereviewer eval run` may override review posture for one run without editing
 repository config. Supported eval-only overrides are `--review-mode
-<local|ci|pr|full>`, `--review-depth <fast|balanced|thorough>`,
-`--intent-planning <auto|deterministic|model>`, `--judge-findings`, and
+<local|ci|pr|full>`, `--review-depth <fast|balanced|thorough>`, and
 `--max-concurrent-tasks <1-32>`. These flags must merge above file and
 environment config for the eval invocation only. They exist to make benchmark
-quality comparisons reproducible, especially for the agentic PR-review path
-that should force PR mode, thorough depth, model intent planning, optional
-finding judging, semantic scoring, serial provider calls, and sanitized debug
-logs.
+quality comparisons reproducible, especially for the PR-review path
+that should force PR mode, thorough depth, semantic scoring, serial provider
+calls, and sanitized debug logs.
 
-The committed Code Review Bench-style package scripts must make the agentic
+The committed Code Review Bench-style package scripts must make the
 PR-review posture the default costly benchmark path. `eval:benchmark` hydrates
-the benchmark pack and runs PR mode, thorough depth, model intent planning,
-optional finding judging, semantic scoring, and serial provider calls.
-`eval:cheap` must provide a low-cost provider-backed proof-quality smoke path
+the benchmark pack and runs PR mode, thorough depth, semantic scoring, and
+serial provider calls.
+`eval:cheap` must provide a low-cost provider-backed review-quality smoke path
 that first runs zero-token refutation gate regressions, then runs the
 project-owned semantic authz positive/control slices plus small benchmark-derived
 scheduling, cache-concurrency, and branch-asymmetric business-rule regression
-slices with the same PR/thorough/model-intent/judge posture. The package scripts
+slices with the same PR/thorough posture. The package scripts
 must also expose `eval:cheap:refutation` for the zero-token precheck and
 `eval:cheap:provider` for the artifact-producing provider-backed slice run.
 `eval:benchmark:debug` runs the same posture with sanitized no-content debug
@@ -391,29 +376,24 @@ availability from the review report:
 | `matchedFindings[].semanticReason` | string or omitted | Concise report-safe rationale from the optional semantic judge when that judge accepted the match. Omitted for deterministic matches. |
 | `artifactOnlyMatchedFindings[].semanticReason` | string or omitted | Same rationale field for artifact-only semantic judge matches. |
 | `contextLedger` | object[] | Report-safe context ledger summaries for the case. Each entry includes `kind`, `consideredForModelContext`, and `truncated`; legacy eval inputs without `kind` are reported as `unknown`. |
-| `providerIssues` | object[] | Provider instability observed for the case, including unrecovered provider errors, recovered eval retries, investigation/refutation provider issues, and budget/timeouts. Each entry includes `code`, `stage`, and `recovered`. |
-| `agenticStages` | object[] | Artifact-derived stage coverage for `intent-planning`, `suspicion-generation`, `suspicion-investigation`, `proof-packet`, `refutation`, `aggregate-critic`, `judge`, and `provider-recovery`. Each entry includes `status` and `count`; it is audit metadata only and must not imply hidden provider calls when the corresponding artifacts are absent. |
-| `modelSuspicions` | object[] | Sanitized suspicion summaries with ID, category, severity hint, path/line when known, status, and title. |
-| `proofPackets` | object[] | Sanitized proof summaries with ID, source suspicion ID, proof completeness status, matched expected index when any, and promotion decision. |
-| `refutationResults` | object[] | Sanitized refutation summaries with ID, proof packet ID, verdict, and reason code. |
+| `providerIssues` | object[] | Provider instability observed for the case, including unrecovered provider errors, recovered eval retries, refutation provider issues, and budget/timeouts. Each entry includes `code`, `stage`, and `recovered`. |
+| `refutationResults` | object[] | Sanitized refutation summaries with ID, refuted candidate ID, verdict, and reason code. |
 | `inputTokens` | integer >= 0 | Total input tokens surfaced by the review report for this case, or `0` when unavailable. |
+| `cachedInputTokens` | integer >= 0 | Cached (prompt-cache read) input tokens surfaced by the review report for this case (a subset of `inputTokens`), or `0` when unavailable. |
 | `outputTokens` | integer >= 0 | Total output tokens surfaced by the review report for this case, or `0` when unavailable. |
 | `costUsd` | number >= 0 | Known cost for this case, or `0` when unavailable. |
 | `costUnavailable` | boolean | `true` when cost/token metadata was incomplete and the case warnings include `cost-unavailable`. |
 
 `metrics` and every `metricGroups[].metrics` entry must aggregate
 `duplicateFindingCount`, artifact-only diagnostic metrics,
-`trustedDeterministicFindingCount`, `inputTokens`, `outputTokens`, and
-`costUnavailableCount`. They must also aggregate
+`trustedDeterministicFindingCount`, `inputTokens`, `cachedInputTokens`,
+`outputTokens`, and `costUnavailableCount`. They must also aggregate
 `providerIssueCount` and `providerIssueRate` separately from
 `providerErrorRate`, because recovered provider retries must remain visible
 without being treated as unrecovered case errors. Markdown summaries must render
 token totals and must not present missing cost as a free run. When any case has
 unavailable cost, the cost row must show known cost plus the number of cases
-with unavailable cost. Markdown summaries must also render agentic stage
-coverage as a compact case table so benchmark readers can see whether planning,
-suspicion, proof/refutation, aggregate critic, optional judge, or
-provider-recovery artifacts were produced without opening debug logs.
+with unavailable cost.
 Markdown summaries must also render context ledger kind coverage as a compact
 case table when cases include context ledger entries. The table must show
 per-kind counts plus the number of entries considered for model context and the
@@ -507,13 +487,9 @@ Quality gate config:
 | `failOnProviderError` | boolean | `true` |
 | `failOnNewOnly` | boolean | value from baseline config |
 | `minProductRecall` | number 0..1 | unset (no fail) |
-| `minSuspicionStageCoverage` | number 0..1 | unset (no fail) |
-| `minJudgeCoverage` | number 0..1 | unset (no fail) |
 
-When set, `minProductRecall`, `minSuspicionStageCoverage`, and `minJudgeCoverage`
-fail the gate if the corresponding metric falls below the threshold.
-`minJudgeCoverage` is only enforced when `aiReview.judgeFindings` is enabled, so
-a run without optional judging is not penalised for zero judge coverage.
+When set, `minProductRecall` fails the gate if `productRecall` falls below the
+threshold.
 
 Gate result:
 
@@ -521,8 +497,8 @@ Gate result:
 - records threshold inputs;
 - records admitted finding IDs that caused failure;
 - never consumes model-generated confidence scores from review artifacts;
-- treats model-origin findings as gate-relevant only when they have a complete
-  proof packet, `RefutationResult.verdict = "proved"`, and actionable promotion.
+- treats model-origin findings as gate-relevant only when their
+  `RefutationResult.verdict = "proved"` and they are admitted as actionable.
 - records whether baseline filtering was applied.
 
 ## Drift And Ambiguity Gates
@@ -575,7 +551,7 @@ Benchmark-style datasets should use self-contained repository slices:
 metadata and expected findings plus a minimal `repo/` tree that preserves the
 paths and context needed to reproduce a real review decision. Slice cases should
 support recall, precision/noise, line accuracy when line data exists, severity
-accuracy, suspicion recall, proof recall, refutation correctness, cost, latency,
+accuracy, refutation correctness, cost, latency,
 and run-to-run comparison across presets, models, and provider configurations.
 
 Benchmark-compatible CRB-style datasets are allowed in `eval/fixtures/slices/`
@@ -593,7 +569,7 @@ reviewed head-file line range. The expected result is a rejected candidate with
 that candidate.
 
 Diff-anchor reliability evals must include at least one explicit-file or slice
-case where a proof-backed finding on a changed source line becomes a new-side
+case where a refutation-proved finding on a changed source line becomes a new-side
 inline-eligible finding only because the eval-supplied unified diff contains the
 matching new-side hunk. The same class of finding must remain summary-only when
 no effective diff map covers the line.
@@ -619,15 +595,13 @@ eval report contract and owns summary, recall, and comparison formatting. Eval
 execution owns case computation, matching, metrics, gates, and report assembly.
 Summary section rendering must stay in focused renderer helpers when a table
 has distinct row semantics, so selection, aggregate metrics, metric-group,
-case, agentic-stage coverage, context-ledger kind, gate-reason,
+case, context-ledger kind, gate-reason,
 provider-issue, semantic-judge match, attention-detail, and artifact-link
 sections do not expand the runner or a single monolithic summary block.
 Metric-group summary table rows must share a focused formatter that preserves
 source-profile/language group output.
 Case summary table rows must share a focused formatter that preserves
 source-profile and expected-count fallback behavior.
-Agentic-stage coverage table rows must share a focused formatter that preserves
-the fixed stage order.
 Context-ledger kind table rows must share a focused formatter that preserves
 kind, considered, and truncated count rendering.
 Provider-issue and semantic-judge diagnostic table rows must share focused
@@ -635,13 +609,13 @@ formatters that preserve existing Markdown output.
 Gate-reason and artifact-link bullet sections must share a focused helper that
 preserves full Markdown section spacing.
 Attention-detail rendering must share a non-empty bullet-section helper for
-repeated finding, proof, refutation, and promotion subsections.
+repeated finding and refutation subsections.
 Finding-like attention bullets must share one formatter for finding ID,
 severity, category, path/line, and title rows.
 Matched-finding attention bullets must share one formatter for finding ID,
 expected-finding label, and semantic score rows.
-Proof-loop attention bullets must share focused formatters for proof packet,
-refutation result, and promotion decision rows.
+Refutation attention bullets must share a focused formatter for refutation
+result rows.
 Missed-expected attention rows must share focused helpers that preserve stale
 expected-index skipping while keeping row formatting local to the renderer.
 Recall report section rendering must stay in focused renderer helpers, so run,
@@ -651,8 +625,8 @@ Recall expected-finding table rows must share a focused formatter that preserves
 location, recall-rate, and run-mark rendering.
 Comparison section rendering must stay in focused renderer helpers when a table
 has distinct row semantics, so aggregate metrics, context-ledger kind,
-agentic-stage, gate, selection, case-transition, grouped quality, resource,
-proof-loop, and coverage sections do not expand the runner or a single
+gate, selection, case-transition, grouped quality, resource,
+refutation, and coverage sections do not expand the runner or a single
 monolithic comparison block. Comparison helpers must share a local report-pair
 input type instead of duplicating `{ base, head }` report shapes.
 Comparison gate table rows must share a focused formatter that preserves the
@@ -665,33 +639,32 @@ Comparison metric-group quality rows must share a focused formatter that
 preserves recall, precision, F1, false-positive, and delta rendering.
 Comparison metric-group resource rows must share a focused formatter that
 preserves token, cost, unavailable-cost, and delta rendering.
-Comparison metric-group proof-loop rows must share a focused formatter that
-preserves suspicion, proof, promotion, refutation, and delta rendering.
+Comparison metric-group refutation rows must share a focused formatter that
+preserves refutation false negative, refutation false positive, and delta
+rendering.
 Comparison context-ledger kind rows must share a focused formatter that
 preserves kind, base/head count, and delta rendering.
-Comparison agentic-stage rows must share a focused formatter that preserves
-stage, base/head count, and delta rendering.
 Comparison case-transition rows must share a focused formatter that preserves
 case ID, missing-status fallback, and transition label rendering.
 Comparison aggregate metric rows must share a focused formatter that preserves
 metric labels, base/head values, and delta rendering.
-Comparison count-delta rows shared by context-ledger and agentic-stage sections
+Comparison count-delta rows for the context-ledger section
 must use one escaped-label formatter that preserves base/head count and delta
 rendering.
-Comparison count-delta tables shared by context-ledger and agentic-stage
-sections must use one local appender that preserves section headings, headers,
+Comparison count-delta tables for the context-ledger
+section must use one local appender that preserves section headings, headers,
 zero-count filtering policy, escaped labels, and delta row rendering.
 Comparison metric-group detail rows must share one escaped group/key and
-base/head fixture prefix helper so quality, resource, and proof-loop rows keep
+base/head fixture prefix helper so quality, resource, and refutation rows keep
 their common identity columns consistent.
 Comparison metric-group percentage rows must share one percent/base-head-delta
-cell helper so quality and proof-loop percentage metrics stay consistent.
+cell helper so quality percentage metrics stay consistent.
 Comparison metric-group count rows must share one raw-count/base-head-delta
-cell helper so quality, resource, and proof-loop count metrics stay consistent.
+cell helper so quality, resource, and refutation count metrics stay consistent.
 Comparison metric-group integer rows must share one formatted-integer/base-head
 delta cell helper so resource token metrics stay consistent.
 Comparison metric-group identity cells must share one escaped group/key and
-base/head fixture formatter across coverage, quality, resource, and proof-loop
+base/head fixture formatter across coverage, quality, resource, and refutation
 rows.
 Comparison cost metric rows must share one formatted-cost/base-head-delta cell
 helper across aggregate and metric-group resource rows.
@@ -720,7 +693,7 @@ Eval report expected-finding labels must live in a focused helper module so
 summary attention and recall renderers share line-range, semantic-only, and
 match-mode fallback rules.
 Eval report case-result labels must live in a focused helper module so summary
-case, provider issue, agentic stage, context ledger, and note rows share one
+case, provider issue, context ledger, and note rows share one
 status and fallback policy.
 Eval recall report rendering must live in a focused renderer module while the
 public evaluation rendering entrypoint keeps exporting the recall renderer for
@@ -735,15 +708,15 @@ Eval comparison gate and selection rendering must live in a focused helper
 module so dataset-compatibility warnings and selection status rows are owned by
 one tested component.
 Eval comparison count-delta table rendering must live in a focused helper module
-so context-ledger and agentic-stage delta sections share one table policy.
+so the context-ledger delta section has one table policy.
 Eval comparison case-transition rendering must live in a focused helper module
 so pass/fail transition labels and escaped case rows have one tested owner.
 Eval comparison metric-group rendering must live in a focused helper module so
-coverage, quality, resource, and proof-loop group deltas share one owner.
+coverage, quality, resource, and refutation group deltas share one owner.
 Eval comparison aggregate metric-delta rendering must live in a focused helper
-module so percent, count, duration, token, cost, provider, and proof-loop metric
+module so percent, count, duration, token, cost, provider, and refutation metric
 rows share one owner.
-Eval comparison context-ledger and agentic-stage delta rendering must live in a
+Eval comparison context-ledger delta rendering must live in a
 focused helper module so count collection, zero-row policy, and section headings
 share one owner.
 
@@ -758,7 +731,7 @@ uncontrolled external provider latency:
 | Repository intake for 500 changed paths with no file over cap | <= 5000 ms |
 | Report rendering for 100 admitted findings | <= 2000 ms |
 | Eval metric calculation for 100 findings and 100 expectations | <= 1000 ms |
-| Hermetic provider fixture balanced review of 25 changed files with proof/refutation loops | <= 90000 ms |
+| Hermetic provider fixture balanced review of 25 changed files with holistic discovery and refutation | <= 90000 ms |
 
 External provider runs must enforce provider `timeoutMs`, provider
 `maxRetries`, whole-run `runTimeoutMs`, task packet budgets, and preset

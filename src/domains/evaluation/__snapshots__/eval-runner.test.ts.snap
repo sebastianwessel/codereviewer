@@ -7,37 +7,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "agenticStages": [
         {
           "count": 0,
-          "stage": "intent-planning",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
-          "stage": "suspicion-generation",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
-          "stage": "suspicion-investigation",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
-          "stage": "proof-packet",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
           "stage": "refutation",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
-          "stage": "aggregate-critic",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
-          "stage": "judge",
           "status": "skipped",
         },
         {
@@ -50,6 +20,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "artifactOnlyFalsePositiveFindings": [],
       "artifactOnlyFindingIds": [],
       "artifactOnlyMatchedFindings": [],
+      "cachedInputTokens": 0,
       "caseId": "typescript-positive",
       "contextLedger": [
         {
@@ -90,13 +61,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "severityMatches": true,
         },
       ],
-      "modelSuspicionIds": [],
-      "modelTaskDiagnostics": [],
       "noFindingZoneFalsePositiveIds": [],
       "outputTokens": 0,
       "parseValid": true,
-      "promotionDecisions": [],
-      "proofPackets": [],
       "providerErrored": false,
       "providerIssues": [],
       "refutationResults": [],
@@ -107,37 +74,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "agenticStages": [
         {
           "count": 0,
-          "stage": "intent-planning",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
-          "stage": "suspicion-generation",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
-          "stage": "suspicion-investigation",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
-          "stage": "proof-packet",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
           "stage": "refutation",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
-          "stage": "aggregate-critic",
-          "status": "skipped",
-        },
-        {
-          "count": 0,
-          "stage": "judge",
           "status": "skipped",
         },
         {
@@ -150,6 +87,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "artifactOnlyFalsePositiveFindings": [],
       "artifactOnlyFindingIds": [],
       "artifactOnlyMatchedFindings": [],
+      "cachedInputTokens": 0,
       "caseId": "typescript-negative",
       "contextLedger": [],
       "costUnavailable": false,
@@ -174,15 +112,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "inlineFindingCount": 1,
       "inputTokens": 0,
       "matchedFindings": [],
-      "modelSuspicionIds": [],
-      "modelTaskDiagnostics": [],
       "noFindingZoneFalsePositiveIds": [
         "find_noise1",
       ],
       "outputTokens": 0,
       "parseValid": true,
-      "promotionDecisions": [],
-      "proofPackets": [],
       "providerErrored": false,
       "providerIssues": [],
       "refutationResults": [],
@@ -208,6 +142,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "artifactOnlyMatchedFindingCount": 0,
         "artifactOnlyPrecision": 1,
         "artifactOnlyRecall": 0,
+        "cachedInputTokens": 0,
         "commentsPerDiffHunk": 0.666667,
         "commentsPerKloc": 33.333333,
         "contextMutationRate": 0,
@@ -219,8 +154,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "falsePositiveCount": 1,
         "incompleteCoverageRate": 0,
         "inputTokens": 0,
-        "investigationToolReadCount": 0,
-        "judgeCoverage": 1,
         "lineAccuracy": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
@@ -234,8 +167,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "security": 1,
         },
         "productRecall": 1,
-        "proofPromotionPrecision": 1,
-        "proofRecall": 0,
         "providerErrorRate": 0,
         "providerIssueCount": 0,
         "providerIssueRate": 0,
@@ -252,9 +183,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
-        "staticDuplicateDemotionCount": 0,
-        "suspicionRecall": 1,
-        "suspicionStageCoverage": 0,
         "trustedDeterministicFindingCount": 0,
       },
     },
@@ -273,6 +201,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "artifactOnlyMatchedFindingCount": 0,
         "artifactOnlyPrecision": 1,
         "artifactOnlyRecall": 0,
+        "cachedInputTokens": 0,
         "commentsPerDiffHunk": 0.666667,
         "commentsPerKloc": 33.333333,
         "contextMutationRate": 0,
@@ -284,8 +213,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "falsePositiveCount": 1,
         "incompleteCoverageRate": 0,
         "inputTokens": 0,
-        "investigationToolReadCount": 0,
-        "judgeCoverage": 1,
         "lineAccuracy": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
@@ -299,8 +226,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "security": 1,
         },
         "productRecall": 1,
-        "proofPromotionPrecision": 1,
-        "proofRecall": 0,
         "providerErrorRate": 0,
         "providerIssueCount": 0,
         "providerIssueRate": 0,
@@ -317,9 +242,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
-        "staticDuplicateDemotionCount": 0,
-        "suspicionRecall": 1,
-        "suspicionStageCoverage": 0,
         "trustedDeterministicFindingCount": 0,
       },
     },
@@ -337,6 +259,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "artifactOnlyMatchedFindingCount": 0,
         "artifactOnlyPrecision": 1,
         "artifactOnlyRecall": 1,
+        "cachedInputTokens": 0,
         "commentsPerDiffHunk": 1,
         "commentsPerKloc": 100,
         "contextMutationRate": 0,
@@ -348,8 +271,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "falsePositiveCount": 1,
         "incompleteCoverageRate": 0,
         "inputTokens": 0,
-        "investigationToolReadCount": 0,
-        "judgeCoverage": 1,
         "lineAccuracy": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
@@ -363,8 +284,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "security": 1,
         },
         "productRecall": 1,
-        "proofPromotionPrecision": 1,
-        "proofRecall": 1,
         "providerErrorRate": 0,
         "providerIssueCount": 0,
         "providerIssueRate": 0,
@@ -381,9 +300,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedF1": 0,
         "severityWeightedPrecision": 0,
         "severityWeightedRecall": 1,
-        "staticDuplicateDemotionCount": 0,
-        "suspicionRecall": 1,
-        "suspicionStageCoverage": 0,
         "trustedDeterministicFindingCount": 0,
       },
     },
@@ -401,6 +317,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "artifactOnlyMatchedFindingCount": 0,
         "artifactOnlyPrecision": 1,
         "artifactOnlyRecall": 0,
+        "cachedInputTokens": 0,
         "commentsPerDiffHunk": 0.5,
         "commentsPerKloc": 20,
         "contextMutationRate": 0,
@@ -412,8 +329,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "falsePositiveCount": 0,
         "incompleteCoverageRate": 0,
         "inputTokens": 0,
-        "investigationToolReadCount": 0,
-        "judgeCoverage": 1,
         "lineAccuracy": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 0,
@@ -427,8 +342,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "security": 1,
         },
         "productRecall": 1,
-        "proofPromotionPrecision": 1,
-        "proofRecall": 0,
         "providerErrorRate": 0,
         "providerIssueCount": 0,
         "providerIssueRate": 0,
@@ -445,9 +358,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedF1": 1,
         "severityWeightedPrecision": 1,
         "severityWeightedRecall": 1,
-        "staticDuplicateDemotionCount": 0,
-        "suspicionRecall": 1,
-        "suspicionStageCoverage": 0,
         "trustedDeterministicFindingCount": 0,
       },
     },
@@ -466,6 +376,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "artifactOnlyMatchedFindingCount": 0,
         "artifactOnlyPrecision": 1,
         "artifactOnlyRecall": 0,
+        "cachedInputTokens": 0,
         "commentsPerDiffHunk": 0.666667,
         "commentsPerKloc": 33.333333,
         "contextMutationRate": 0,
@@ -477,8 +388,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "falsePositiveCount": 1,
         "incompleteCoverageRate": 0,
         "inputTokens": 0,
-        "investigationToolReadCount": 0,
-        "judgeCoverage": 1,
         "lineAccuracy": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
@@ -492,8 +401,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "security": 1,
         },
         "productRecall": 1,
-        "proofPromotionPrecision": 1,
-        "proofRecall": 0,
         "providerErrorRate": 0,
         "providerIssueCount": 0,
         "providerIssueRate": 0,
@@ -510,9 +417,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
-        "staticDuplicateDemotionCount": 0,
-        "suspicionRecall": 1,
-        "suspicionStageCoverage": 0,
         "trustedDeterministicFindingCount": 0,
       },
     },
@@ -524,6 +428,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "artifactOnlyMatchedFindingCount": 0,
     "artifactOnlyPrecision": 1,
     "artifactOnlyRecall": 0,
+    "cachedInputTokens": 0,
     "commentsPerDiffHunk": 0.666667,
     "commentsPerKloc": 33.333333,
     "contextMutationRate": 0,
@@ -535,8 +440,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "falsePositiveCount": 1,
     "incompleteCoverageRate": 0,
     "inputTokens": 0,
-    "investigationToolReadCount": 0,
-    "judgeCoverage": 1,
     "lineAccuracy": 1,
     "nitRecall": 1,
     "noFindingZoneFalsePositiveCount": 1,
@@ -550,8 +453,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "security": 1,
     },
     "productRecall": 1,
-    "proofPromotionPrecision": 1,
-    "proofRecall": 0,
     "providerErrorRate": 0,
     "providerIssueCount": 0,
     "providerIssueRate": 0,
@@ -568,9 +469,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "severityWeightedF1": 0.666667,
     "severityWeightedPrecision": 0.5,
     "severityWeightedRecall": 1,
-    "staticDuplicateDemotionCount": 0,
-    "suspicionRecall": 1,
-    "suspicionStageCoverage": 0,
     "trustedDeterministicFindingCount": 0,
   },
   "regressionGate": {
@@ -627,8 +525,6 @@ Fixtures: 2
 | Recall | 100.0% |
 | Product recall | 100.0% |
 | Nit recall | 100.0% |
-| Suspicion stage coverage | 0.0% |
-| Judge coverage | 100.0% |
 | Precision | 50.0% |
 | F1 | 66.7% |
 | Severity weighted F1 | 66.7% |
@@ -644,13 +540,8 @@ Fixtures: 2
 | Artifact-only matched | 0 |
 | Artifact-only false positives | 0 |
 | Trusted deterministic findings | 0 |
-| Suspicion recall | 100.0% |
-| Proof recall | 0.0% |
-| Proof promotion precision | 100.0% |
 | Refutation false negatives | 0 |
 | Refutation false positives | 0 |
-| Static duplicate demotions | 0 |
-| Investigation tool reads | 0 |
 | Duplicate findings | 0 |
 | No-finding-zone hits | 1 |
 | Actionable rate | 100.0% |
@@ -658,6 +549,7 @@ Fixtures: 2
 | Context mutation rate | 0.0% |
 | Duration | 2.0s |
 | Input tokens | 0 |
+| Input tokens (cached) | 0 |
 | Output tokens | 0 |
 | Cost | $0.2000 |
 
@@ -686,10 +578,10 @@ Fixtures: 2
 
 ## Agentic Stage Coverage
 
-| Case | Intent | Suspicion | Investigation | Proof | Refutation | Aggregate | Judge | Provider recovery |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| typescript-positive | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 |
-| typescript-negative | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 | skipped 0 |
+| Case | Refutation | Provider recovery |
+| --- | --- | --- |
+| typescript-positive | skipped 0 | skipped 0 |
+| typescript-negative | skipped 0 | skipped 0 |
 
 ## Context Ledger Kinds
 

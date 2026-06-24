@@ -10,7 +10,8 @@ describe('model pricing snapshot lookup', () => {
       })
     ).toEqual({
       inputPerMillion: 0.25,
-      outputPerMillion: 2
+      outputPerMillion: 2,
+      cachedInputPerMillion: 0.025
     })
   })
 
@@ -22,7 +23,8 @@ describe('model pricing snapshot lookup', () => {
       })
     ).toEqual({
       inputPerMillion: 0.75,
-      outputPerMillion: 4.5
+      outputPerMillion: 4.5,
+      cachedInputPerMillion: 0.075
     })
   })
 
@@ -34,7 +36,8 @@ describe('model pricing snapshot lookup', () => {
       })
     ).toEqual({
       inputPerMillion: 1.75,
-      outputPerMillion: 14
+      outputPerMillion: 14,
+      cachedInputPerMillion: 0.175
     })
   })
 

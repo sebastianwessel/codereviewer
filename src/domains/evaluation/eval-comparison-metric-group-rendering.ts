@@ -230,16 +230,7 @@ const formatMetricGroupResourceDeltaRow = (
 const formatMetricGroupProofLoopDeltaRow = (
   pair: ComparableMetricGroupPair
 ): string =>
-  `${formatMetricGroupComparisonPrefix(pair)} | ${formatPercentMetricDeltaCells(
-    pair.base.metrics.suspicionRecall,
-    pair.head.metrics.suspicionRecall
-  )} | ${formatPercentMetricDeltaCells(
-    pair.base.metrics.proofRecall,
-    pair.head.metrics.proofRecall
-  )} | ${formatPercentMetricDeltaCells(
-    pair.base.metrics.proofPromotionPrecision,
-    pair.head.metrics.proofPromotionPrecision
-  )} | ${formatCountMetricDeltaCells(
+  `${formatMetricGroupComparisonPrefix(pair)} | ${formatCountMetricDeltaCells(
     pair.base.metrics.refutationFalseNegativeCount,
     pair.head.metrics.refutationFalseNegativeCount
   )} | ${formatCountMetricDeltaCells(
@@ -294,9 +285,9 @@ export const appendMetricGroupProofLoopDeltas = (
   appendMarkdownTable(lines, {
     heading: '## Metric Group Proof-Loop Deltas',
     header:
-      '| Group | Key | Base fixtures | Head fixtures | Base suspicion recall | Head suspicion recall | Suspicion recall delta | Base proof recall | Head proof recall | Proof recall delta | Base proof promotion precision | Head proof promotion precision | Proof promotion precision delta | Base refutation false negatives | Head refutation false negatives | Refutation false negative delta | Base refutation false positives | Head refutation false positives | Refutation false positive delta |',
+      '| Group | Key | Base fixtures | Head fixtures | Base refutation false negatives | Head refutation false negatives | Refutation false negative delta | Base refutation false positives | Head refutation false positives | Refutation false positive delta |',
     alignment:
-      '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+      '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     rows: pairs.map(formatMetricGroupProofLoopDeltaRow)
   })
 }

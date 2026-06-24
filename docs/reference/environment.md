@@ -31,14 +31,13 @@ Where both exist, the env variable wins over the file but loses to a CLI flag.
 | `CODEREVIEWER_CONFIG_PATH` | `.codereviewer/config.json` | config file location |
 | `CODEREVIEWER_ARTIFACT_DIR` | `.codereviewer/runs` | `paths.artifactDir` |
 | `CODEREVIEWER_SKILLS_DIR` | `.codereviewer/skills` | `skills.directories` |
-| `CODEREVIEWER_AI_INTENT_PLANNING` | `auto` | `aiReview.intentPlanning` |
 | `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `support` | `aiReview.deterministicSignalMode` |
-| `CODEREVIEWER_AI_JUDGE_FINDINGS` | `false` | `aiReview.judgeFindings` |
 | `CODEREVIEWER_LOG_LEVEL` | `info` | `observability.logging.level` |
 | `CODEREVIEWER_OPENTELEMETRY_ENABLED` | `false` | `observability.openTelemetry.enabled` |
 | `CODEREVIEWER_OPENTELEMETRY_ENDPOINT` | `http://localhost:4318/v1/traces` | OpenTelemetry trace endpoint |
 | `CODEREVIEWER_OPENTELEMETRY_HEADERS` | `{"Authorization":"Bearer ..."}` | OpenTelemetry request headers (JSON object) |
 | `CODEREVIEWER_COST_INPUT_PER_MILLION` | `0.25` | `costs.inputPerMillion` |
+| `CODEREVIEWER_COST_CACHED_INPUT_PER_MILLION` | `0.05` | `costs.cachedInputPerMillion` |
 | `CODEREVIEWER_COST_OUTPUT_PER_MILLION` | `1.25` | `costs.outputPerMillion` |
 
 ---

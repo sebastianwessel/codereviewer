@@ -42,6 +42,9 @@ export type RepositoryIntake = {
   readonly changedFiles: readonly ChangedFile[]
   readonly skippedFiles: readonly SkippedFile[]
   readonly diffMaps: readonly DiffMap[]
+  // Raw unified diff text for the changed files (empty when unavailable, e.g.
+  // explicit-file runs). Used by holistic discovery to show what changed.
+  readonly rawDiff: string
 }
 
 export type GitCommandRunner = (
@@ -445,14 +448,14 @@ const collectDiffMaps = async (
   options: CollectRepositoryIntakeOptions,
   runGit: GitCommandRunner,
   changedFiles: readonly ChangedFile[]
-): Promise<readonly DiffMap[]> => {
+): Promise<{ readonly diffMaps: readonly DiffMap[]; readonly rawDiff: string }> => {
   if (
     options.explicitFiles !== undefined ||
     changedFiles.length === 0 ||
     options.baseRef === undefined ||
     options.headRef === undefined
   ) {
-    return []
+    return { diffMaps: [], rawDiff: '' }
   }
 
   const diffOutput = await runGit(
@@ -467,7 +470,9 @@ const collectDiffMaps = async (
     createGitRunnerOptions(options.repositoryRoot, options.signal)
   )
 
-  return parseGitDiffMaps(diffOutput)
+  // Retain the raw unified diff alongside the parsed ranges: holistic discovery
+  // needs the actual before/after hunks (what changed), not just line ranges.
+  return { diffMaps: parseGitDiffMaps(diffOutput), rawDiff: diffOutput }
 }
 
 const partitionIntakeRecords = (
@@ -518,7 +523,11 @@ export const collectRepositoryIntake = async (
       enforceRealPathContainment
     })
     const { changedFiles, skippedFiles } = partitionIntakeRecords(inspectedRecords)
-    const diffMaps = await collectDiffMaps(options, runGit, changedFiles)
+    const { diffMaps, rawDiff } = await collectDiffMaps(
+      options,
+      runGit,
+      changedFiles
+    )
 
     return {
       repositorySnapshot: {
@@ -528,7 +537,8 @@ export const collectRepositoryIntake = async (
       },
       changedFiles,
       skippedFiles,
-      diffMaps
+      diffMaps,
+      rawDiff
     }
   } catch (error) {
     throw normalizeError(error, {

@@ -105,6 +105,7 @@ describe('configuration loader', () => {
           'CODEREVIEWER_OPENTELEMETRY_ENABLED=true',
           'CODEREVIEWER_OPENTELEMETRY_ENDPOINT=http://127.0.0.1:4318/v1/traces',
           'CODEREVIEWER_COST_INPUT_PER_MILLION=0.25',
+          'CODEREVIEWER_COST_CACHED_INPUT_PER_MILLION=0.05',
           'CODEREVIEWER_COST_OUTPUT_PER_MILLION=1.25'
         ].join('\n')
       )
@@ -133,6 +134,7 @@ describe('configuration loader', () => {
       expect(result.config.costs).toEqual(
         expect.objectContaining({
           inputPerMillion: 0.25,
+          cachedInputPerMillion: 0.05,
           outputPerMillion: 1.25
         })
       )
@@ -148,14 +150,12 @@ describe('configuration loader', () => {
       const result = await loadCodeReviewerConfig({
         repositoryRoot: root,
         environment: {
-          CODEREVIEWER_AI_INTENT_PLANNING: 'model',
-          CODEREVIEWER_AI_JUDGE_FINDINGS: 'true'
+          CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE: 'disabled'
         },
         loadDotEnv: false
       })
 
-      expect(result.config.aiReview.intentPlanning).toBe('model')
-      expect(result.config.aiReview.judgeFindings).toBe(true)
+      expect(result.config.aiReview.deterministicSignalMode).toBe('disabled')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

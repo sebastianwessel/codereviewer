@@ -26,8 +26,8 @@
     "dev": "tsx src/index.ts",
     "cli": "node --env-file-if-exists=.env --import tsx src/cli/main.ts",
     "eval:hydrate": "node --import tsx scripts/hydrate-code-review-benchmark.ts",
-    "eval:benchmark": "node --import tsx scripts/hydrate-code-review-benchmark.ts --quiet && node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run --slice-root .codereviewer/eval/benchmark-slices/code-review-bench-style --review-mode pr --review-depth thorough --intent-planning model --judge-findings --semantic-judge --max-concurrent-tasks 1",
-    "eval:benchmark:debug": "node --import tsx scripts/hydrate-code-review-benchmark.ts --quiet && node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run --slice-root .codereviewer/eval/benchmark-slices/code-review-bench-style --review-mode pr --review-depth thorough --intent-planning model --judge-findings --semantic-judge --max-concurrent-tasks 1 --debug --log-file .codereviewer/eval/log.log",
+    "eval:benchmark": "node --import tsx scripts/hydrate-code-review-benchmark.ts --quiet && node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run --slice-root .codereviewer/eval/benchmark-slices/code-review-bench-style --review-mode pr --review-depth thorough --semantic-judge --max-concurrent-tasks 1",
+    "eval:benchmark:debug": "node --import tsx scripts/hydrate-code-review-benchmark.ts --quiet && node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run --slice-root .codereviewer/eval/benchmark-slices/code-review-bench-style --review-mode pr --review-depth thorough --semantic-judge --max-concurrent-tasks 1 --debug --log-file .codereviewer/eval/log.log",
     "provider:install:openai": "npm install @purista/harness-openai",
     "provider:install:bedrock": "npm install @purista/harness-bedrock",
     "provider:install:azure": "npm install @purista/harness-azure-foundry",
@@ -40,21 +40,21 @@
     "@ast-grep/lang-ruby": "^0.0.7",
     "@ast-grep/lang-rust": "^0.0.7",
     "@ast-grep/napi": "^0.44.0",
-    "@purista/harness": "^1.5.2",
+    "@purista/harness": "^1.6.0",
     "typescript": "^6.0.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@purista/harness-openai": "^1.5.2",
+    "@purista/harness-openai": "^1.6.0",
     "@types/node": "^26.0.0",
     "@vitest/coverage-v8": "^4.1.9",
     "tsx": "^4.22.4",
     "vitest": "^4.1.9"
   },
   "peerDependencies": {
-    "@purista/harness-azure-foundry": "^1.5.2",
-    "@purista/harness-bedrock": "^1.5.2",
-    "@purista/harness-openai": "^1.5.2"
+    "@purista/harness-azure-foundry": "^1.6.0",
+    "@purista/harness-bedrock": "^1.6.0",
+    "@purista/harness-openai": "^1.6.0"
   },
   "peerDependenciesMeta": {
     "@purista/harness-azure-foundry": {

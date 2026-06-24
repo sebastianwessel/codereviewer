@@ -2,7 +2,7 @@
 
 The evaluation runner measures review quality by running fixtures through the
 same pipeline as a normal review, then matching admitted findings against
-expected findings and reporting recall, precision, and pipeline coverage metrics.
+expected findings and reporting recall, precision, and related metrics.
 
 Fixtures live under `eval/fixtures/`. Artifacts are written under
 `.codereviewer/eval/`.
@@ -35,7 +35,6 @@ flowchart LR
   Report["Review report artifacts"]
   Match["Expected-finding matcher"]
   Groups["Metric groups"]
-  Stages["Agentic stage coverage"]
   Summary["Eval JSON, Markdown, and comparisons"]
 
   Fixtures --> Review --> Report
@@ -43,10 +42,8 @@ flowchart LR
   Fixtures --> Groups
   Report --> Match
   Report --> Groups
-  Report --> Stages
   Match --> Summary
   Groups --> Summary
-  Stages --> Summary
 ```
 
 The runner computes case results and gates; a focused rendering module turns the
@@ -63,8 +60,8 @@ convenience copies):
 
 | File | Purpose |
 | --- | --- |
-| `eval-report.json` | Evaluation selection metadata, aggregate metrics, grouped metrics, case results, context ledger kind summaries, provider issues, and artifact-derived agentic stage coverage. |
-| `eval-summary.md` | Human-readable selection, grouped metrics, gate result, metric tables, case table, context ledger kind coverage, agentic stage coverage, and failure details. |
+| `eval-report.json` | Evaluation selection metadata, aggregate metrics, grouped metrics, case results, context ledger kind summaries, and provider issues. |
+| `eval-summary.md` | Human-readable selection, grouped metrics, gate result, metric tables, case table, context ledger kind coverage, and failure details. |
 | `eval-recall-report.md` | Per-expected-finding recall report for the current run. |
 
 Each run is also archived under `.codereviewer/eval/runs/<run-id>/` with the
@@ -100,10 +97,9 @@ noise but are not counted as false positives.
 | `precisionByTier` | Precision mirrored per tier (same computation as `recallByTier`; admitted findings carry no expected-tier label so precise per-tier precision is not derivable). |
 | `productRecall` | Headline recall over `runtime-critical`, `security`, and `logic` tiers, excluding `nit`. This is the primary accuracy target. |
 | `nitRecall` | Recall over `nit`-tier findings. Reported for visibility but not gated. |
-| `suspicionStageCoverage` | Fraction of non-provider-error cases that produced at least one model suspicion. |
-| `judgeCoverage` | When `judgeFindings` is enabled, judged candidates divided by actionable-promoted proofs. |
 | `duplicateFindingCount` | Total duplicate findings across all cases. |
 | `inputTokens` | Aggregate input token total. |
+| `cachedInputTokens` | Aggregate cached (prompt-cache read) input token total; a subset of `inputTokens`. |
 | `outputTokens` | Aggregate output token total. |
 | `costUnavailableCount` | Cases where cost could not be computed. |
 
@@ -128,8 +124,6 @@ corresponding gate check is skipped.
 | `maxCostUsd` | Maximum total cost in USD. |
 | `maxDurationMs` | Maximum total duration in milliseconds. |
 | `minProductRecall` | Minimum recall over `runtime-critical`, `security`, and `logic` tiers (excluding `nit`). This is the primary accuracy target gate. Fails if `productRecall` is below the configured value. |
-| `minSuspicionStageCoverage` | Minimum fraction of non-provider-error cases that produced at least one model suspicion. Fails if `suspicionStageCoverage` is below the configured value. |
-| `minJudgeCoverage` | Minimum judged candidates divided by actionable-promoted proofs. Only enforced when `judgeFindings` is enabled. |
 | `failOnProviderError` | Whether any provider-errored case fails the gate. Default `true`. |
 
 ---
@@ -167,8 +161,6 @@ derived deterministically from `category` and `severity`:
 | `nitRecall` | Recall over `nit`-tier findings. Reported for visibility; not gated by default. |
 | `recallByTier` | Recall per tier: `runtime-critical`, `security`, `logic`, `nit`. |
 | `precisionByTier` | Precision mirrored per tier (admitted findings carry no expected-tier label). |
-| `suspicionStageCoverage` | Fraction of non-provider-error cases that produced at least one model suspicion. |
-| `judgeCoverage` | When `judgeFindings` is enabled: judged candidates divided by actionable-promoted proofs. |
 
 > **Note:** `productRecall` excludes nits because the product's low-noise scope
 > deliberately suppresses comments that belong in a linter or style guide.
@@ -189,7 +181,6 @@ summary) plus:
 | `duplicateFindingIds` | Extra findings on the same path and line as an already-matched expected finding (counted as noise, not false positives). |
 | `contextLedger` | Case-level context ledger summaries, including context kind such as `file`, `support-signal-output`, or `tool-result`. |
 | `providerIssues` | Provider failures or recovered provider retries observed while scoring the case. |
-| `agenticStages` | Artifact-derived stage coverage for intent planning, suspicion generation, investigation, proof, refutation, aggregate critic, optional judge, and provider recovery. |
 | `inputTokens` / `outputTokens` | Token totals surfaced by the review run for that case. |
 | `costUnavailable` | Whether cost metadata was incomplete for that case. |
 
@@ -200,13 +191,12 @@ Additional rendering behaviors:
   as free.
 - Provider issues are shown separately from hard provider errors, so a recovered
   retry remains visible without failing the provider-error gate.
-- Agentic stage coverage is rendered as a compact summary table.
 - When cases include context ledger entries, the summary renders a `Context
   Ledger Kinds` table with per-case kind counts plus considered and truncated
   counts.
 - The metric row `Trusted deterministic findings` counts actionable findings
   seeded from the trusted deterministic-rule allowlist. These findings are
-  proof-exempt; model-origin findings still require proof/refutation before they
+  refutation-exempt; model-origin findings still require refutation before they
   can be actionable.
 
 ### Artifact-only findings
@@ -219,8 +209,7 @@ precision, finding count, matched count, and false-positive count so uncertain
 AI findings remain visible without being treated as publishable review comments.
 
 Trusted deterministic-rule findings are scored as actionable findings, but
-reported separately from proof-based model findings so proof recall remains
-interpretable.
+reported separately from model findings so model recall remains interpretable.
 
 ---
 
@@ -232,10 +221,9 @@ interpretable.
 npm run eval:benchmark
 ```
 
-`eval:benchmark` forces: PR mode, thorough review depth, model intent planning,
-optional finding judging, semantic eval judging, and serial provider calls
-(`--max-concurrent-tasks 1`) so large captured slices do not fail under parallel
-provider-call timeout pressure.
+`eval:benchmark` forces: PR mode, thorough review depth, semantic eval judging,
+and serial provider calls (`--max-concurrent-tasks 1`) so large captured slices
+do not fail under parallel provider-call timeout pressure.
 
 For ad hoc eval runs, pass the same flags explicitly when you want this posture
 without changing `.codereviewer/config.json`.
@@ -246,7 +234,7 @@ without changing `.codereviewer/config.json`.
 npm run eval:benchmark:debug
 ```
 
-Runs the same agentic benchmark with sanitized live debug logs written as
+Runs the same benchmark with sanitized live debug logs written as
 newline-delimited JSON to `.codereviewer/eval/log.log`. The Markdown summary
 remains in `eval-summary.md` and stdout instead of being mixed into the log
 file.
@@ -274,8 +262,6 @@ subset while tuning prompts or provider settings. These values are persisted in
 | `--max-concurrent-tasks <1-32>` | Override review task/provider-call concurrency for this eval run without changing repository config. |
 | `--review-mode <local\|ci\|pr\|full>` | Force the review mode for this run without editing config. |
 | `--review-depth <fast\|balanced\|thorough>` | Force the review depth for this run without editing config. |
-| `--intent-planning <auto\|deterministic\|model>` | Force intent-planning mode for this run. |
-| `--judge-findings` | Enable the optional judge critic for this run. |
 | `--semantic-judge` | Use provider-backed semantic matching (for explicit benchmark scoring only; the default matcher is deterministic and offline). |
 | `--debug` | Emit no-content stage logs. |
 | `--log-file <path>` | Write newline-delimited JSON logs to a repository-relative file. |
@@ -286,9 +272,9 @@ after confirming they used the same case set and semantic matcher.
 
 `--max-concurrent-tasks` is useful for focused provider-backed benchmark runs
 where serial execution avoids transient provider timeout noise. The
-`--review-mode`, `--review-depth`, `--intent-planning`, and `--judge-findings`
-flags are intended for apples-to-apples benchmark experiments, especially when
-comparing the agentic PR-review path against the default local/balanced path.
+`--review-mode` and `--review-depth` flags are intended for apples-to-apples
+benchmark experiments, especially when comparing the PR-review path against the
+default local/balanced path.
 
 ### Compare two saved reports
 
@@ -305,15 +291,11 @@ Comparison output includes:
 - A warning when semantic matcher modes differ (runs used different scoring
   modes).
 - `Context Ledger Kind Deltas` when either report includes ledger entries.
-- `Agentic Stage Deltas` when either report includes stage coverage; zero/zero
-  skipped stages are omitted.
 - Metric deltas for input/output token totals, provider errors, provider issues,
-  and proof-loop quality (suspicion recall, proof recall, proof promotion
-  precision, refutation false-positive/false-negative counts).
+  and refutation quality (refutation false-positive/false-negative counts).
 - `Metric Group Deltas` (fixture counts, recall, precision, F1, false-positive
   deltas) when both reports contain matching `sourceProfile` or `language`
   metric groups.
-- `Metric Group Proof-Loop Deltas` for the same groups.
 - `Metric Group Resource Deltas` (input tokens, output tokens, known cost,
   unavailable-cost cases).
 - `Metric Group Coverage Deltas` for groups that are new, removed, or changed
@@ -450,5 +432,5 @@ keeps cases reviewable by humans while still exercising the normal review runner
   schema for review run outputs.
 - [Architecture](../concepts/architecture.md) — the evaluation harness section
   at the end of the architecture doc.
-- [Configuration guide](../guides/configuration.md) — `aiReview.judgeFindings`
-  and depth settings used by the benchmark posture.
+- [Configuration guide](../guides/configuration.md) — `aiReview` and depth
+  settings used by the benchmark posture.

@@ -14,7 +14,7 @@ research_evidence:
   source_index: specs/10-state-of-the-art-research-synthesis.md
 approved_updates:
   - superseded deterministic extractor promotion with deterministic support signals
-  - selected agentic suspicion, investigation, proof packet, refutation, and promotion policy as the review-quality architecture
+  - selected holistic whole-file discovery, per-candidate refutation, and admission policy as the review-quality architecture
   - selected ast-grep as an optional generic structural parsing layer for support signals with Tree-sitter fallback evidence
 deterministic_checks:
   readiness_checker: /Users/sebastianwessel/.agents/skills/spec-readiness-review/scripts/check_specs.mjs

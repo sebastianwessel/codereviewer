@@ -40,7 +40,7 @@ flowchart LR
 
 > **Note:** Production setups are expected to run CodeQL, linters, formatters,
 > unit tests, and build checks in adjacent pipelines. CodeReviewer uses
-> deterministic signals to help the LLM investigate semantic risk and to reject
+> deterministic signals to help the LLM review semantic risk and to reject
 > weak or contradicted claims.
 
 A small allowlist of trusted rule evidence can also seed actionable
@@ -49,18 +49,17 @@ its own evidence and remediation.
 
 ---
 
-## Signals do not waive the proof path
+## Signals do not waive refutation
 
-Generic support signals do not waive the proof path. A model-origin candidate
-that overlaps support-signal evidence still needs:
+Generic support signals do not waive refutation. A model-origin candidate that
+overlaps support-signal evidence still needs:
 
-- a complete proof packet;
-- a proved refutation result;
+- a `proved` refutation result;
 - normal admission
 
 before it can become actionable or enter worker shared context. Model
 suggestions that cite the same evidence as a trusted deterministic-rule
-candidate are treated as duplicates and dropped before proof work.
+candidate are treated as duplicates and dropped before refutation.
 
 ---
 
@@ -83,6 +82,27 @@ candidate are treated as duplicates and dropped before proof work.
 | `disabled` | Signals are still used for file clustering and admission (contradiction checks), but serialized facts are not injected into the model packet. Lower token cost. |
 
 Env: `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`.
+
+---
+
+## Referenced-definition context
+
+Import facts also drive bounded cross-file context for holistic discovery. For
+each task, context assembly resolves the changed files' relative imports
+(`./`/`../`) to existing repository files that are NOT part of the change, ranks
+them by import frequency, and injects a bounded, line-numbered digest of each
+(preferring exported/public declaration lines) as a `referenced-definition`
+review-context document. This lets the model reason about a callee's contract
+even when that callee lives in an unchanged file.
+
+The injection is token-conscious: at most six dependency files per task, a ~12KB
+total section budget, and a per-file digest cap. Package/bare imports and any
+path resolving outside the repository root or to a changed file are skipped, and
+the whole feature is gated off together with `deterministicSignalMode:
+'disabled'`. Referenced definitions are context only — they are never added to a
+task's reviewed paths, and findings remain restricted to the changed files (a
+finding pointing at a referenced-definition file is dropped during candidate
+mapping).
 
 ---
 

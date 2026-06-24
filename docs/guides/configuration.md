@@ -58,16 +58,14 @@ every major block. Unknown keys are rejected — use only documented keys (see t
 
   // ── AI review pipeline ────────────────────────────────────────────────────
   "aiReview": {
-    "intentPlanning": "auto",              // "auto" | "deterministic" | "model"
+    "requireRefutation": true,             // always on; every candidate is refuted
     "deterministicSignalMode": "support",  // "support" | "disabled"
-    "judgeFindings": false,                // opt-in strict critic pass
     "actionableSeverityThreshold": "medium"
   },
 
   // ── Promotion policy ──────────────────────────────────────────────────────
   "promotionPolicy": {
-    "modelProof": "actionable",
-    "modelWeakOrRefuted": "artifact-only"
+    "modelWeakOrRefuted": "artifact-only"  // "artifact-only" | "rejected"
   },
 
   // ── Path filters ──────────────────────────────────────────────────────────
@@ -137,12 +135,12 @@ every major block. Unknown keys are rejected — use only documented keys (see t
 | `aiReview.actionableSeverityThreshold` | `medium` | Model findings below this severity are recorded but not actionable. |
 | `review.inlineSeverityThreshold` | `high` | Actionable findings below this severity appear in summary only, not as inline PR comments. |
 
-### Judge pass (`aiReview.judgeFindings`)
+### Refutation (`aiReview.requireRefutation`)
 
-Disabled by default. When enabled, adds a strict per-candidate critic pass
-after the refutation gate, re-checking proved model candidates before admission.
-This adds provider cost and latency. Enable it for high-stakes runs where
-false-positive precision matters more than throughput.
+Always on. Every model candidate from holistic discovery passes through an
+independent per-candidate refutation pass before admission. Only candidates the
+refuter judges `proved` become actionable; `refuted` candidates are rejected and
+`needs-more-evidence` candidates are dispositioned by `promotionPolicy`.
 
 ### Deterministic signals (`aiReview.deterministicSignalMode`)
 
