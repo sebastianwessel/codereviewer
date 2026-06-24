@@ -172,6 +172,8 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(captured?.reviewText).not.toContain('src/other.ts')
     // Full file content is still present for context.
     expect(captured?.reviewText).toContain('1: export const value = 1')
+    // The language-specific focus for the change's language is injected.
+    expect(captured?.reviewText).toContain('## Language-specific focus (TypeScript)')
   })
 
   test('includes referenced-definition context in its own section without affecting finding scope', async () => {
