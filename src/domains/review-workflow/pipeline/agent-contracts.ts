@@ -31,7 +31,15 @@ export const SkillContextDocumentSchema = z.strictObject({
 })
 
 export const ReviewContextDocumentSchema = z.strictObject({
-  kind: z.enum(['file', 'support-signal-output', 'test-mapping']),
+  // 'referenced-definition' carries a bounded digest of an UNCHANGED file that a
+  // changed file imports (R4). It is context only: findings remain restricted to
+  // task.paths and these entries are not review targets.
+  kind: z.enum([
+    'file',
+    'support-signal-output',
+    'test-mapping',
+    'referenced-definition'
+  ]),
   path: RepositoryRelativePathSchema.optional(),
   content: z.string(),
   ledgerEntryId: ContextLedgerIdSchema

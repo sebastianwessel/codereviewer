@@ -118,13 +118,42 @@ const buildReviewText = (
       ? ''
       : `## Review lens (read this first)\n${focus}\n`
 
+  // R4: referenced definitions are bounded digests of UNCHANGED dependency files
+  // imported by the changed files. They are CONTEXT ONLY — do NOT filter them by
+  // task.paths (they are intentionally outside it) and the section header tells
+  // the model to use them only as context, never as review targets.
+  const referencedDefinitions = taskInput.task.reviewContext
+    .filter(
+      (
+        entry
+      ): entry is typeof entry & {
+        readonly path: string
+        readonly content: string
+      } =>
+        entry.kind === 'referenced-definition' &&
+        typeof entry.content === 'string' &&
+        entry.content.length > 0 &&
+        typeof entry.path === 'string'
+    )
+    .map((entry) => `### DEFINITION: ${entry.path}\n${entry.content}`)
+    .join('\n\n')
+  const referencedDefinitionsSection =
+    referencedDefinitions.length === 0
+      ? ''
+      : `\n## Referenced definitions (from unchanged files, for context only)\n` +
+        `These are bounded digests of unchanged files that the changed files ` +
+        `import. Use them to understand callee contracts. Do NOT review them and ` +
+        `do NOT report findings for these files — report findings ONLY for files ` +
+        `in the task's paths (the changed files).\n${referencedDefinitions}`
+
   return [
     focusSection,
     `Review task ${taskInput.task.id}.`,
     changeSection,
     `\n## Changed files (full content, line-numbered, for context)\n${
       files.length === 0 ? '(no file content provided)' : files
-    }`
+    }`,
+    referencedDefinitionsSection
   ].join('\n')
 }
 

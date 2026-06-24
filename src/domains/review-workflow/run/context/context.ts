@@ -31,6 +31,7 @@ import {
   type InstructionContextDocument,
   type SkillContextDocument
 } from './static-context.js'
+import { collectReferencedDefinitions } from './referenced-definitions.js'
 
 export type {
   InstructionContextDocument,
@@ -191,17 +192,29 @@ export const assembleContext = async (
     task: ReviewTask,
     taskId: string,
     inputContexts: readonly ContextInput[],
-    paths: readonly string[]
+    paths: readonly string[],
+    // Referenced-definition contexts (R4) are appended to reviewContext but MUST
+    // NOT influence task.paths: they are unchanged dependency files included for
+    // context only, never review targets. They are passed separately so the
+    // caller can derive paths solely from the changed-file/support-signal batch.
+    referencedDefinitionContexts: readonly ContextInput[] = []
   ): WorkflowReviewTask => {
     const reviewContext: ReviewContextDocument[] = []
     const contextEntryIds: string[] = []
     const pathSet = new Set(paths)
 
-    for (const inputContext of inputContexts) {
+    for (const inputContext of [
+      ...inputContexts,
+      ...referencedDefinitionContexts
+    ]) {
       const contentBytes = bytesOf(inputContext.content)
       const ledgerEntry = createContextLedgerEntry({
+        // The context ledger has no dedicated kinds for 'test-mapping' or
+        // 'referenced-definition'; both are recorded as support-signal-output
+        // (derived context, not a reviewed changed file).
         kind:
-          inputContext.kind === 'test-mapping'
+          inputContext.kind === 'test-mapping' ||
+          inputContext.kind === 'referenced-definition'
             ? 'support-signal-output'
             : inputContext.kind,
         ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
@@ -209,7 +222,9 @@ export const assembleContext = async (
         reason:
           inputContext.kind === 'file'
             ? 'task-context-source-chunk'
-            : 'task-context-support-signal-chunk',
+            : inputContext.kind === 'referenced-definition'
+              ? 'task-context-referenced-definition'
+              : 'task-context-support-signal-chunk',
         decision: 'included',
         bytesConsidered: contentBytes,
         bytesIncluded: contentBytes,
@@ -269,6 +284,11 @@ export const assembleContext = async (
   const tasks: WorkflowReviewTask[] = []
   const chunkBudget = sourceChunkBudgetFor(input.config)
   const testMappings = discoverDeterministicSignalTestMappings(input.sourceFiles)
+  // Every changed/source file path: referenced-definition resolution must never
+  // surface one of these (they are reviewed directly, not injected as context).
+  const allSourcePaths = new Set(
+    input.sourceFiles.map((sourceFile) => sourceFile.path)
+  )
 
   const supportSignalContextsForPaths = (
     task: ReviewTask,
@@ -395,6 +415,26 @@ export const assembleContext = async (
       )
     }
 
+    // R4: collect bounded referenced-definition digests for unchanged files the
+    // task's changed files import (relative imports only). Context only — these
+    // never enter task.paths and are not review targets. `allSourcePaths` covers
+    // every changed file so a dependency that happens to be changed is excluded.
+    const referencedDefinitionContexts: ContextInput[] =
+      input.config.aiReview.deterministicSignalMode === 'disabled'
+        ? []
+        : (
+            await collectReferencedDefinitions({
+              repositoryRoot: input.repositoryRoot,
+              taskPaths: task.paths,
+              facts: input.analysis.facts,
+              knownPaths: allSourcePaths
+            })
+          ).map((digest) => ({
+            kind: 'referenced-definition' as const,
+            path: digest.path,
+            content: digest.content
+          }))
+
     batches.forEach((batch, index) => {
       const paths = workflowTaskPaths(task, batch, task.paths)
 
@@ -407,7 +447,8 @@ export const assembleContext = async (
             batchCount: batches.length
           }),
           batch,
-          paths
+          paths,
+          referencedDefinitionContexts
         )
       )
     })

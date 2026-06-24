@@ -132,6 +132,21 @@ Task limits:
   output is not the main actionable finding source by default, but a narrow
   trusted-rule allowlist may seed deterministic candidates directly when the
   rule has local evidence and a concrete remediation.
+- workflow context assembly injects bounded "referenced-definition" context for
+  unchanged dependency files that the changed files import. For each task it
+  resolves the changed files' RELATIVE imports (`./`/`../`) to existing repo
+  files outside the task's paths, ranks them by import frequency, and attaches a
+  bounded, line-numbered digest of each (preferring exported/public declaration
+  lines) as a `referenced-definition` review-context document. Resolution always
+  goes through the path-safety helper and never escapes the repository root;
+  package/bare imports and anything resolving to a changed file are skipped. The
+  injection is capped (at most six dependency files per task, a ~12KB section
+  byte budget, and a per-file digest cap) and is gated off together with
+  deterministic support signals (`deterministicSignalMode: 'disabled'`).
+  Referenced-definition documents are context only: they are never added to the
+  task's paths and findings remain restricted to the changed files. Each is
+  recorded in the context ledger as `support-signal-output` with reason
+  `task-context-referenced-definition`.
 - model-backed task execution is a focused review-workflow boundary. The
   ai-harness builder defines agents and injects raw agent calls, while task
   execution owns holistic candidate-finding discovery, per-candidate refutation,
@@ -252,6 +267,13 @@ id before refutation.
   line-numbered changed files, alongside deterministic support signals,
   instruction/skill metadata, and a compact safe digest. The focused pass
   prepends its lens directive before the diff.
+- When referenced-definition context is present, the input also carries a
+  separate "Referenced definitions (from unchanged files, for context only)"
+  section holding bounded digests of unchanged dependency files the changed files
+  import. The section header instructs the reviewer to use these only as context
+  for callee contracts and to report findings ONLY for the changed files; the
+  candidate mapping drops any finding whose path is outside the task's paths, so
+  a finding pointing at a referenced-definition file is discarded.
 - The reviewer follows four steps: understand the intent of the change; trace
   control and data flow on every path; verify correctness against that intent;
   then systematically sweep defect classes.

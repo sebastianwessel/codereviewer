@@ -174,6 +174,61 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(captured?.reviewText).toContain('1: export const value = 1')
   })
 
+  test('includes referenced-definition context in its own section without affecting finding scope', async () => {
+    const taskWithReferencedDefinition: WorkflowReviewTask = {
+      ...task,
+      reviewContext: [
+        ...task.reviewContext,
+        {
+          kind: 'referenced-definition',
+          path: 'src/dep.ts',
+          content: '1: export const calc = (value: number): number => value * 2',
+          ledgerEntryId: 'ctx_bbbbbbbbbbbbbbbbbbbbbbbb'
+        }
+      ]
+    }
+    const taskInputWithReferencedDefinition = TaskReviewInputSchema.parse({
+      ...taskInput,
+      task: taskWithReferencedDefinition
+    })
+
+    let captured: { reviewText: string } | undefined
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput: taskInputWithReferencedDefinition,
+      task: taskWithReferencedDefinition,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          captured = holisticInput
+          return holisticResultWith([
+            // A finding pointing at the referenced-definition file (NOT a changed
+            // file) must still be dropped: findings are restricted to task.paths.
+            {
+              category: 'bug',
+              severity: 'high',
+              title: 'Defect in a referenced (unchanged) dependency',
+              description: 'Pointed at a referenced-definition file.',
+              path: 'src/dep.ts',
+              startLine: 1
+            }
+          ])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // Referenced definition appears in its own context-only section.
+    expect(captured?.reviewText).toContain(
+      '## Referenced definitions (from unchanged files, for context only)'
+    )
+    expect(captured?.reviewText).toContain('### DEFINITION: src/dep.ts')
+    expect(captured?.reviewText).toContain('export const calc')
+    // The changed file remains in the changed-files section.
+    expect(captured?.reviewText).toContain('### FILE: src/app.ts')
+    // Findings for the referenced-definition file are dropped (not a task path).
+    expect(result.candidates).toHaveLength(0)
+  })
+
   test('deduplicates identical findings and reports zero-candidate reason', async () => {
     const duplicate = {
       category: 'bug',
