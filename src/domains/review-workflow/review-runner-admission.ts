@@ -35,19 +35,11 @@ export type ReviewRunnerAdmissionState = Pick<
 > & {
   readonly evidence: readonly EvidenceRecord[]
   readonly candidateFindings: readonly CandidateFinding[]
-  readonly modelSuspicions: ReviewReport['modelSuspicions']
-  readonly modelTaskDiagnostics: ReviewReport['modelTaskDiagnostics']
-  readonly investigationTraces: ReviewReport['investigationTraces']
-  readonly proofPackets: ReviewReport['proofPackets']
   readonly refutationResults: ReviewReport['refutationResults']
-  readonly aggregateResults: ReviewReport['aggregateResults']
-  readonly promotionDecisions: ReviewReport['promotionDecisions']
   readonly providerIssues: ReviewReport['providerIssues']
   readonly contextLedgerEntries: readonly ContextLedgerEntry[]
   readonly admissionDecisions: ReviewSharedContextSnapshot['admissionDecisions']
   readonly taskEvents: ReviewSharedContextSnapshot['taskEvents']
-  readonly reviewIntents: ReviewReport['reviewIntents']
-  readonly judgeResults: ReviewReport['judgeResults']
   readonly warnings: readonly string[]
 }
 
@@ -255,19 +247,11 @@ export const runDeterministicAdmission = (
     qualityGate,
     evidence: [...input.evidence],
     candidateFindings: [...input.candidates],
-    modelSuspicions: [],
-    modelTaskDiagnostics: [],
-    investigationTraces: [],
-    proofPackets: [],
     refutationResults: [],
-    aggregateResults: [],
-    promotionDecisions: [],
     providerIssues: [],
     contextLedgerEntries: [],
     admissionDecisions,
     taskEvents: input.taskEvents,
-    reviewIntents: [],
-    judgeResults: [],
     warnings: [...baseline.warnings]
   }
 }
@@ -280,15 +264,7 @@ export const admissionFromProviderWorkflowOutput = (
   rejectedFindings: output.rejectedFindings,
   qualityGate: output.qualityGate,
   candidateFindings: output.candidateFindings,
-  modelSuspicions: output.modelSuspicions,
-  modelTaskDiagnostics: output.modelTaskDiagnostics,
-  investigationTraces: output.investigationTraces,
-  proofPackets: output.proofPackets,
   refutationResults: output.refutationResults,
-  aggregateResults: output.aggregateResults,
-  reviewIntents: output.reviewIntents,
-  judgeResults: output.judgeResults,
-  promotionDecisions: output.promotionDecisions,
   providerIssues: output.providerIssues,
   contextLedgerEntries: output.contextLedgerEntries,
   admissionDecisions: output.admissionDecisions.map(

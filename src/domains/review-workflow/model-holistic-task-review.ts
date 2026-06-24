@@ -1,27 +1,24 @@
 import {
-  ModelSuspicionDropReasonSchema,
-  ModelTaskDiagnosticSchema
-} from '../../shared/contracts/index.js'
-import {
   CandidateFindingSchema,
   type CandidateFinding
 } from '../admission/index.js'
 import { sha256 } from '../../shared/hash/hash.js'
 import {
+  ModelHolisticFindingSchema,
   ModelHolisticReviewResultSchema,
-  ModelSuspicionSuggestionSchema,
   type HolisticReviewRunner,
   type TaskReviewInput,
   type TaskReviewResult,
   type WorkflowReviewTask
 } from './model-agent-contracts.js'
+import { type ReviewWorkflowInput } from './workflow-contracts.js'
 
 // Present the changed source to the holistic reviewer as a clean, line-numbered
-// document (plus the diff ranges), rather than the structured task packet. This
-// is the input shape that let whole-file holistic review out-recall the gauntlet
-// in probes; burying the source inside the packet dilutes whole-file reasoning.
-// Extract the unified-diff segments for the task's paths from the raw diff blob
-// (the blob covers all changed files; split on `diff --git` file headers).
+// document (plus the diff ranges). This is the input shape that let whole-file
+// holistic review out-recall the gauntlet in probes; burying the source inside a
+// structured packet dilutes whole-file reasoning. Extract the unified-diff
+// segments for the task's paths from the raw diff blob (the blob covers all
+// changed files; split on `diff --git` file headers).
 const diffSegmentsForPaths = (
   rawDiff: string,
   paths: readonly string[]
@@ -109,7 +106,6 @@ const buildReviewText = (taskInput: TaskReviewInput, rawDiff: string): string =>
     }`
   ].join('\n')
 }
-import { type ReviewWorkflowInput } from './workflow-contracts.js'
 
 type HolisticTaskReviewLogger = {
   readonly debug: (
@@ -120,22 +116,14 @@ type HolisticTaskReviewLogger = {
 
 // Upper bound on candidates emitted per task. Holistic discovery favors recall,
 // but every candidate costs one downstream refutation call, so we bound it. The
-// refutation/judge filter (not this cap) is what controls precision.
+// refutation filter (not this cap) is what controls precision.
 const HOLISTIC_MAX_CANDIDATES = 12
-
-// Holistic discovery emits candidates directly (no suspicion drop pipeline), so
-// every suspicion drop-reason count is zero. The diagnostic schema requires all
-// enum keys, so zero-fill them from the enum (stays correct if the enum grows).
-const EMPTY_DROP_REASON_COUNTS: Readonly<Record<string, number>> =
-  Object.fromEntries(
-    ModelSuspicionDropReasonSchema.options.map((reason) => [reason, 0])
-  )
 
 const candidateFromFinding = (
   task: WorkflowReviewTask,
   raw: unknown
 ): CandidateFinding | undefined => {
-  const parsed = ModelSuspicionSuggestionSchema.safeParse(raw)
+  const parsed = ModelHolisticFindingSchema.safeParse(raw)
 
   if (!parsed.success) {
     return undefined
@@ -180,10 +168,9 @@ const candidateFromFinding = (
 }
 
 // Holistic discovery: one recall-first whole-change review per task that emits
-// candidate findings directly. No suspicion/investigation/proof loop runs here;
-// the shared refutation + judge + admission filter (prepareCandidatesForAdmission)
-// verifies or discards every candidate downstream, exactly as it does for
-// suspicion-mode candidates.
+// candidate findings directly. The shared refutation + admission filter
+// (prepareCandidatesForAdmission) verifies or discards every candidate
+// downstream.
 export const runModelBackedHolisticTaskReview = async (
   input: {
     readonly workflowInput: ReviewWorkflowInput
@@ -239,40 +226,6 @@ export const runModelBackedHolisticTaskReview = async (
   return {
     candidates,
     evidenceRecords: [],
-    modelSuspicions: [],
-    investigationTraces: [],
-    proofPackets: [],
-    refutationResults: [],
-    aggregateResults: [],
-    promotionDecisions: [],
-    providerIssues: [],
-    modelTaskDiagnostics: [
-      ModelTaskDiagnosticSchema.parse({
-        taskId: input.task.id,
-        taskKind: input.task.kind,
-        round: input.task.round,
-        paths: input.task.paths,
-        evidenceCount: input.taskInput.evidence.length,
-        reviewContextCount: input.task.reviewContext.length,
-        reviewIntentCount: input.taskInput.reviewIntents.length,
-        verificationQuestionCount: input.taskInput.reviewIntents.reduce(
-          (count, intent) => count + intent.verificationQuestions.length,
-          0
-        ),
-        suggestionCount: result.findings.length,
-        convertedCandidateCount: candidates.length,
-        selectedCandidateCount: candidates.length,
-        budgetDroppedCandidateCount: 0,
-        modelSuspicionCount: 0,
-        proofPacketCount: 0,
-        zeroCandidateReason:
-          candidates.length > 0
-            ? 'none'
-            : result.findings.length === 0
-              ? 'no-suggestions'
-              : 'all-suggestions-dropped',
-        droppedSuspicionReasons: EMPTY_DROP_REASON_COUNTS
-      })
-    ]
+    providerIssues: []
   }
 }

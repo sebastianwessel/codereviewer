@@ -67,11 +67,7 @@ const task: WorkflowReviewTask = {
   priority: 1
 }
 
-const workflowInput = (
-  input: {
-    readonly judgeFindings?: boolean
-  } = {}
-): ReviewWorkflowInput =>
+const workflowInput = (): ReviewWorkflowInput =>
   ReviewWorkflowInputSchema.parse({
     runId: 'run-refutation-execution',
     reviewedPaths: ['src/admission.ts'],
@@ -82,12 +78,8 @@ const workflowInput = (
     candidates: [candidate],
     instructions: [],
     skills: [],
-    judgeFindings: input.judgeFindings ?? false,
     promotionPolicy: {
-      modelProof: 'actionable',
-      modelWeakOrRefuted: 'rejected',
-      staticAnalysisDuplicate: 'artifact-only',
-      deterministicContradiction: 'rejected'
+      modelWeakOrRefuted: 'rejected'
     },
     provenance: {
       reviewer: 'review-agent',
@@ -132,10 +124,10 @@ const provedRefutation = (): FindingRefutationResult => ({
 })
 
 describe('model admission refutation execution', () => {
-  test('calls the active refuter for proved proof-loop refutations when judging is enabled', async () => {
+  test('calls the active refuter for proved proof-loop refutations', async () => {
     let refutationCalls = 0
     const result = await executeAdmissionRefutation({
-      workflowInput: workflowInput({ judgeFindings: true }),
+      workflowInput: workflowInput(),
       tasks: [task],
       candidate,
       allCandidates: [candidate],
@@ -164,7 +156,7 @@ describe('model admission refutation execution', () => {
     )
   })
 
-  test('reuses non-proved proof-loop refutations when judging is enabled', async () => {
+  test('reuses non-proved proof-loop refutations', async () => {
     const needsMoreEvidenceRefutation: RefutationResult = {
       ...refutationResult,
       verdict: 'needs-more-evidence',
@@ -172,7 +164,7 @@ describe('model admission refutation execution', () => {
     }
 
     const result = await executeAdmissionRefutation({
-      workflowInput: workflowInput({ judgeFindings: true }),
+      workflowInput: workflowInput(),
       tasks: [task],
       candidate,
       allCandidates: [candidate],
@@ -259,10 +251,10 @@ describe('model admission refutation execution', () => {
     )
   })
 
-  test('calls the active refuter for judge-enabled proof packets without proof-loop refutations', async () => {
+  test('calls the active refuter for proof packets without proof-loop refutations', async () => {
     let refutationCalls = 0
     const result = await executeAdmissionRefutation({
-      workflowInput: workflowInput({ judgeFindings: true }),
+      workflowInput: workflowInput(),
       tasks: [task],
       candidate,
       allCandidates: [candidate],

@@ -3,28 +3,15 @@ import {
   ContextLedgerIdSchema,
   ContextRequestSchema,
   EvidenceRecordSchema,
-  FindingAggregateResultSchema,
-  FindingJudgeResultSchema,
   FindingProvenanceSchema,
-  InvestigationTraceSchema,
-  ModelTaskDiagnosticSchema,
-  ModelSuspicionSchema,
-  ProofPacketSchema,
-  PromotionDecisionSchema,
-  RefutationResultSchema,
   RejectedFindingSchema,
   RepositoryRelativePathSchema,
-  ReviewIntentSchema,
   ReviewReportSchema,
   SeveritySchema,
-  VerificationCheckSchema,
-  type ContextRequest,
-  type ReviewIntent,
   type ReviewReport
 } from '../../shared/contracts/index.js'
 import {
-  CandidateFindingSchema,
-  type CandidateFinding
+  CandidateFindingSchema
 } from '../admission/index.js'
 import { ReviewTaskSchema as PlannedReviewTaskSchema } from '../review-planning/index.js'
 
@@ -313,7 +300,11 @@ const modelLocationValue = (
   modelNestedLocationValue(record, 'primaryLocation', key) ??
   modelNestedLocationValue(record, 'location', key)
 
-export const ModelSuspicionSuggestionSchema = z.preprocess((value) => {
+// Holistic discovery emits loosely structured raw findings. This schema
+// normalizes the category/severity/path/startLine fields that holistic needs to
+// build a CandidateFinding, tolerating common model-output drift (aliases,
+// stringified line numbers, nested location objects).
+export const ModelHolisticFindingSchema = z.preprocess((value) => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return value
   }
@@ -412,15 +403,10 @@ export const ModelSuspicionSuggestionSchema = z.preprocess((value) => {
     .catch(undefined)
 }))
 
-export const ModelTaskSuggestionsSchema = z.strictObject({
-  suspicions: z.array(z.unknown()).default([])
-})
-
-// Dedicated holistic discovery input. Unlike the suspicion stage (which reuses
-// the full structured task packet), holistic review gets a single clean,
+// Dedicated holistic discovery input. Holistic review gets a single clean,
 // line-numbered presentation of the changed files plus the diff ranges - this
 // matches the input shape that made holistic review out-recall the gauntlet in
-// probes (the structured packet buries the source and dilutes whole-file
+// probes (a structured packet buries the source and dilutes whole-file
 // reasoning).
 export const HolisticReviewInputSchema = z.strictObject({
   runId: z.string().min(1),
@@ -431,9 +417,9 @@ export const HolisticReviewInputSchema = z.strictObject({
 
 export type HolisticReviewInput = z.infer<typeof HolisticReviewInputSchema>
 
-// Holistic discovery output. Loose like ModelTaskSuggestionsSchema (tolerates
-// model output drift); each raw finding is normalized via
-// ModelSuspicionSuggestionSchema and mapped to a CandidateFinding downstream.
+// Holistic discovery output. Loose (tolerates model output drift); each raw
+// finding is normalized via ModelHolisticFindingSchema and mapped to a
+// CandidateFinding downstream.
 export const ModelHolisticReviewResultSchema = z.strictObject({
   findings: z.array(z.unknown()).default([])
 })
@@ -447,140 +433,9 @@ export type HolisticReviewRunner = (
   signal: AbortSignal | undefined
 ) => Promise<ModelHolisticReviewResult>
 
-const IntentPlanningTaskSummarySchema = z.strictObject({
-  id: PlannedReviewTaskSchema.shape.id,
-  kind: PlannedReviewTaskSchema.shape.kind,
-  paths: PlannedReviewTaskSchema.shape.paths,
-  evidenceIds: z.array(z.string()),
-  candidateIds: z.array(z.string()),
-  focusAreas: z.array(z.string().min(1).max(160)),
-  riskAreas: z.array(z.string().min(1).max(160)),
-  verificationQuestions: z.array(z.string().min(1).max(240))
-})
-
-export const IntentPlanningInputSchema = z.strictObject({
-  runId: z.string().min(1),
-  reviewedPaths: z.array(RepositoryRelativePathSchema),
-  reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
-  tasks: z.array(IntentPlanningTaskSummarySchema),
-  evidenceSummaries: z.array(
-    z.strictObject({
-      id: EvidenceRecordSchema.shape.id,
-      kind: EvidenceRecordSchema.shape.kind,
-      path: RepositoryRelativePathSchema.optional(),
-      summary: EvidenceRecordSchema.shape.summary
-    })
-  ),
-  candidateSummaries: z.array(
-    z.strictObject({
-      id: CandidateFindingSchema.shape.id,
-      path: RepositoryRelativePathSchema,
-      title: CandidateFindingSchema.shape.title,
-      category: CandidateFindingSchema.shape.category,
-      severity: CandidateFindingSchema.shape.severity
-    })
-  )
-})
-
-const truncateModelStringArray = (
-  value: unknown,
-  maxItems: number,
-  maxLength: number
-): unknown => {
-  const arrayValue = normalizeModelStringArray(value)
-
-  if (!Array.isArray(arrayValue)) {
-    return arrayValue
-  }
-
-  return arrayValue
-    .filter((item): item is string => typeof item === 'string')
-    .slice(0, maxItems)
-    .map((item) => item.slice(0, maxLength))
-}
-
-const ModelReviewIntentSuggestionSchema = z.preprocess((value) => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return value
-  }
-
-  const record = value as Record<string, unknown>
-
-  return {
-    title: record.title ?? record.name ?? record.intent,
-    objective: record.objective ?? record.summary ?? record.description,
-    taskIds: record.taskIds ?? record.task_ids ?? record.tasks,
-    paths: record.paths ?? record.filePaths ?? record.files,
-    focusAreas: record.focusAreas ?? record.focus_areas ?? record.focus,
-    riskAreas: record.riskAreas ?? record.risk_areas ?? record.risks,
-    verificationQuestions:
-      record.verificationQuestions ??
-      record.verification_questions ??
-      record.questions
-  }
-}, z.object({
-  title: z.preprocess(
-    (value) => truncateModelString(value, 120),
-    z.string().min(1).max(120)
-  ),
-  objective: z.preprocess(
-    (value) => truncateModelString(value, 1200),
-    z.string().min(1).max(1200)
-  ),
-  taskIds: z
-    .preprocess(
-      (value) => truncateModelStringArray(value, 20, 120),
-      z.array(PlannedReviewTaskSchema.shape.id).min(1).max(20)
-    ),
-  paths: z
-    .preprocess(
-      (value) => truncateModelStringArray(value, 50, 500),
-      z.array(RepositoryRelativePathSchema).min(1).max(50).optional()
-    )
-    .catch(undefined),
-  focusAreas: z
-    .preprocess(
-      (value) => truncateModelStringArray(value, 8, 160),
-      z.array(z.string().min(1).max(160)).max(8).default([])
-    )
-    .catch([]),
-  riskAreas: z
-    .preprocess(
-      (value) => truncateModelStringArray(value, 8, 160),
-      z.array(z.string().min(1).max(160)).max(8).default([])
-    )
-    .catch([]),
-  verificationQuestions: z
-    .preprocess(
-      (value) => truncateModelStringArray(value, 8, 240),
-      z.array(z.string().min(1).max(240)).max(8).default([])
-    )
-    .catch([])
-}))
-
-export const ModelReviewIntentPlanSchema = z.preprocess((value) => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return value
-  }
-
-  const record = value as Record<string, unknown>
-
-  return {
-    intents:
-      record.intents ??
-      record.reviewIntents ??
-      record.review_intents ??
-      record.plan ??
-      record.items
-  }
-}, z.object({
-  intents: z.array(ModelReviewIntentSuggestionSchema).default([])
-}))
-
 export const TaskReviewInputSchema = z.strictObject({
   runId: z.string().min(1),
   task: WorkflowReviewTaskSchema,
-  reviewIntents: z.array(ReviewIntentSchema).default([]),
   reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
@@ -593,35 +448,7 @@ export const TaskReviewInputSchema = z.strictObject({
 export const TaskReviewResultSchema = z.strictObject({
   candidates: z.array(CandidateFindingSchema),
   evidenceRecords: z.array(EvidenceRecordSchema).default([]),
-  modelSuspicions: z.array(ModelSuspicionSchema).default([]),
-  modelTaskDiagnostics: z.array(ModelTaskDiagnosticSchema).default([]),
-  investigationTraces: z.array(InvestigationTraceSchema).default([]),
-  proofPackets: z.array(ProofPacketSchema).default([]),
-  refutationResults: z.array(RefutationResultSchema).default([]),
-  aggregateResults: z.array(FindingAggregateResultSchema).default([]),
-  promotionDecisions: z.array(PromotionDecisionSchema).default([]),
   providerIssues: ReviewReportSchema.shape.providerIssues.default([])
-})
-
-export const SiblingSweepInputSchema = TaskReviewInputSchema.extend({
-  proofPackets: z.array(ProofPacketSchema),
-  modelSuspicions: z.array(ModelSuspicionSchema),
-  investigationTraces: z.array(InvestigationTraceSchema)
-})
-
-export const FindingInvestigationInputSchema = z.strictObject({
-  runId: z.string().min(1),
-  task: WorkflowReviewTaskSchema,
-  candidate: CandidateFindingSchema,
-  suspicion: ModelSuspicionSchema,
-  proofQuestions: z.array(z.string().min(1).max(240)).max(8).default([]),
-  reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
-  evidence: z.array(EvidenceRecordSchema),
-  reviewContext: z.array(ReviewContextDocumentSchema),
-  instructions: z.array(ContextDocumentSchema),
-  skills: z.array(SkillContextDocumentSchema),
-  sharedDigest: z.string(),
-  provenance: WorkflowProvenanceInputSchema
 })
 
 export const FindingRefutationInputSchema = z.strictObject({
@@ -653,74 +480,6 @@ export const FindingRefutationResultSchema = z.strictObject({
     )
     .max(5)
     .optional()
-})
-
-export const FindingJudgeInputSchema = z.strictObject({
-  runId: z.string().min(1),
-  candidate: CandidateFindingSchema,
-  reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
-  evidence: z.array(EvidenceRecordSchema),
-  reviewContext: z.array(ReviewContextDocumentSchema),
-  reviewIntents: z.array(ReviewIntentSchema),
-  proofPackets: z.array(ProofPacketSchema),
-  refutationResults: z.array(RefutationResultSchema),
-  instructions: z.array(ContextDocumentSchema),
-  skills: z.array(SkillContextDocumentSchema),
-  sharedDigest: z.string(),
-  provenance: WorkflowProvenanceInputSchema
-})
-
-export const FindingAggregateReviewInputSchema = z.strictObject({
-  runId: z.string().min(1),
-  reviewIntents: z.array(ReviewIntentSchema),
-  candidates: z.array(CandidateFindingSchema),
-  proofPackets: z.array(ProofPacketSchema),
-  refutationResults: z.array(RefutationResultSchema),
-  investigationTraces: z.array(InvestigationTraceSchema),
-  evidence: z.array(EvidenceRecordSchema),
-  sharedDigest: z.string(),
-  provenance: WorkflowProvenanceInputSchema
-})
-
-const ModelFindingAggregateDecisionSchema = z.object({
-  candidateId: z.string().min(1),
-  verdict: z.enum(['valid', 'false-positive', 'needs-more-evidence']),
-  summary: FindingAggregateResultSchema.shape.summary,
-  evidenceIds: z.array(z.string()).default([]),
-  relatedCandidateIds: z.array(z.string()).default([])
-})
-
-export const ModelFindingAggregateResultSchema = z.object({
-  verdict: z.enum(['valid', 'mixed', 'needs-more-evidence']),
-  summary: FindingAggregateResultSchema.shape.summary,
-  decisions: z.array(ModelFindingAggregateDecisionSchema).max(50).default([]),
-  similarIssueChecks: z.array(VerificationCheckSchema).max(12).default([]),
-  evidenceIds: z.array(z.string()).default([])
-})
-
-export const ModelFindingJudgeResultSchema = z.object({
-  verdict: z.enum(['valid', 'false-positive', 'needs-more-evidence']),
-  summary: FindingJudgeResultSchema.shape.summary,
-  challengeQuestions: FindingJudgeResultSchema.shape.challengeQuestions,
-  verificationChecks: z.array(VerificationCheckSchema).max(8).default([]),
-  evidenceIds: z.array(z.string()).default([]),
-  contextRequests: FindingJudgeResultSchema.shape.contextRequests,
-  requestedContext: FindingJudgeResultSchema.shape.requestedContext
-})
-
-export const ModelFindingInvestigationResultSchema = z.object({
-  verdict: z.enum(['proved', 'refuted', 'needs-more-evidence']),
-  rationaleSummary: z.string().min(1).max(1200),
-  evidenceIds: z.array(z.string()).default([]),
-  contextRequests: z.array(ContextRequestSchema).max(10).default([]),
-  requestedContext: z.array(z.string().min(1).max(300)).max(10).default([]),
-  changedBehavior: ProofPacketSchema.shape.changedBehavior.optional(),
-  executionOrDataPath: ProofPacketSchema.shape.executionOrDataPath.optional(),
-  violatedInvariant: ProofPacketSchema.shape.violatedInvariant.optional(),
-  impact: ProofPacketSchema.shape.impact.optional(),
-  introducedByChange: ProofPacketSchema.shape.introducedByChange.optional(),
-  contradictionChecks: ProofPacketSchema.shape.contradictionChecks.default([]),
-  fixDirection: ProofPacketSchema.shape.fixDirection.optional()
 })
 
 export const ModelFindingRefutationResultSchema = z.preprocess((value) => {
@@ -794,65 +553,13 @@ export type ContextDocument = z.infer<typeof ContextDocumentSchema>
 export type SkillContextDocument = z.infer<typeof SkillContextDocumentSchema>
 export type TaskReviewInput = z.infer<typeof TaskReviewInputSchema>
 export type TaskReviewResult = z.infer<typeof TaskReviewResultSchema>
-export type SiblingSweepInput = z.infer<typeof SiblingSweepInputSchema>
-export type IntentPlanningInput = z.infer<typeof IntentPlanningInputSchema>
-export type FindingInvestigationInput = z.infer<
-  typeof FindingInvestigationInputSchema
->
-export type FindingInvestigationResult = z.infer<
-  typeof ModelFindingInvestigationResultSchema
->
 export type FindingRefutationInput = z.infer<typeof FindingRefutationInputSchema>
 export type FindingRefutationResult = z.infer<
   typeof FindingRefutationResultSchema
 >
-export type FindingJudgeInput = z.infer<typeof FindingJudgeInputSchema>
-export type FindingJudgeOutput = z.infer<typeof ModelFindingJudgeResultSchema>
-export type FindingAggregateReviewInput = z.infer<
-  typeof FindingAggregateReviewInputSchema
->
-export type FindingAggregateReviewOutput = z.infer<
-  typeof ModelFindingAggregateResultSchema
->
-export type ModelSuspicionSuggestion = z.infer<
-  typeof ModelSuspicionSuggestionSchema
->
-export type ModelTaskSuggestions = z.infer<typeof ModelTaskSuggestionsSchema>
-export type ModelReviewIntentPlan = z.infer<typeof ModelReviewIntentPlanSchema>
-export type ModelFindingJudgeVerdict = z.infer<
-  typeof ModelFindingJudgeResultSchema
->['verdict']
+export type ModelHolisticFinding = z.infer<typeof ModelHolisticFindingSchema>
 export type ProviderIssue = ReviewReport['providerIssues'][number]
-export type ReviewIntentPlanningRunner = (
-  input: IntentPlanningInput,
-  signal: AbortSignal | undefined
-) => Promise<readonly ReviewIntent[]>
-export type FindingInvestigationRunner = (
-  input: FindingInvestigationInput,
-  signal: AbortSignal | undefined
-) => Promise<FindingInvestigationResult>
 export type FindingRefutationRunner = (
   input: FindingRefutationInput,
   signal: AbortSignal | undefined
 ) => Promise<FindingRefutationResult>
-export type FindingJudgeRunner = (
-  input: FindingJudgeInput,
-  signal: AbortSignal | undefined
-) => Promise<FindingJudgeOutput>
-export type FindingAggregateReviewRunner = (
-  input: FindingAggregateReviewInput,
-  signal: AbortSignal | undefined
-) => Promise<FindingAggregateReviewOutput>
-export type ModelSuspicionConversion = {
-  readonly candidate?: CandidateFinding
-  readonly contextRequests?: readonly ContextRequest[]
-  readonly requestedContext?: readonly string[]
-  readonly dropReason?: ModelSuspicionDropReason
-}
-export type ModelSuspicionDropReason =
-  | 'schema-invalid'
-  | 'missing-required-field'
-  | 'path-outside-task'
-  | 'missing-task-evidence'
-  | 'duplicate-input-candidate'
-  | 'unsupported-truncation-claim'

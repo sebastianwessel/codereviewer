@@ -1,4 +1,3 @@
-import { type ReviewIntent } from '../../shared/contracts/index.js'
 import { assertDeterministicSignalEvidenceOwnsPath } from '../deterministic-signals/index.js'
 import {
   TaskReviewInputSchema,
@@ -39,23 +38,8 @@ const fitTaskReviewInputToBudget = (
     }
   }
 
-  if (taskInput.reviewIntents.length > 0) {
-    const fallbackTaskInput = TaskReviewInputSchema.parse({
-      ...taskInput,
-      reviewIntents: []
-    })
-    const fallbackBytes = serializedBytes(fallbackTaskInput)
-
-    if (fallbackBytes <= maxTaskInputBytes) {
-      return {
-        input: fallbackTaskInput
-      }
-    }
-  }
-
   const withoutSharedDigest = TaskReviewInputSchema.parse({
     ...taskInput,
-    reviewIntents: [],
     sharedDigest: '(shared digest omitted for task packet budget)'
   })
 
@@ -75,7 +59,6 @@ const fitTaskReviewInputToBudget = (
 export const taskReviewInputFor = (
   input: ReviewWorkflowInput,
   task: WorkflowReviewTask,
-  reviewIntents: readonly ReviewIntent[],
   sharedDigest: string
 ): TaskReviewPacket => {
   const evidence = input.evidence.filter((record) =>
@@ -91,11 +74,6 @@ export const taskReviewInputFor = (
   const taskInput = TaskReviewInputSchema.parse({
     runId: input.runId,
     task,
-    reviewIntents: reviewIntents.filter(
-      (intent) =>
-        intent.taskIds.includes(task.id) ||
-        intent.paths.some((path) => task.paths.includes(path))
-    ),
     reviewedDiffRanges: (input.reviewedDiffRanges ?? []).filter((range) =>
       taskCoversPath(task, range.path)
     ),

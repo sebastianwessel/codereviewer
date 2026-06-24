@@ -58,8 +58,6 @@ export const EvalRegressionThresholdsSchema = z.strictObject({
   maxCostUsd: z.number().min(0).optional(),
   maxDurationMs: z.int().min(0).optional(),
   minProductRecall: z.number().min(0).max(1).optional(),
-  minSuspicionStageCoverage: z.number().min(0).max(1).optional(),
-  minJudgeCoverage: z.number().min(0).max(1).optional(),
   failOnProviderError: z.boolean().default(true)
 })
 
@@ -89,40 +87,15 @@ export const EvalProviderIssueReportSchema = z.strictObject({
 })
 
 export const EvalAgenticStageReportSchema = z.strictObject({
-  stage: z.enum([
-    'intent-planning',
-    'suspicion-generation',
-    'suspicion-investigation',
-    'proof-packet',
-    'refutation',
-    'aggregate-critic',
-    'judge',
-    'provider-recovery'
-  ]),
+  stage: z.enum(['refutation', 'provider-recovery']),
   status: z.enum(['active', 'skipped', 'recovered', 'error']),
   count: z.int().min(0)
-})
-
-export const EvalProofPacketReportSchema = z.strictObject({
-  id: z.string().min(1),
-  suspicionId: z.string().min(1),
-  candidateId: z.string().min(1),
-  evidenceCount: z.int().min(0),
-  promotionStatus: z.enum(['actionable', 'artifact-only', 'rejected']).optional()
 })
 
 export const EvalRefutationResultReportSchema = z.strictObject({
   id: z.string().min(1),
   proofPacketId: z.string().min(1),
   verdict: z.enum(['proved', 'refuted', 'needs-more-evidence', 'provider-error'])
-})
-
-export const EvalPromotionDecisionReportSchema = z.strictObject({
-  candidateId: z.string().min(1),
-  proofPacketId: z.string().min(1).optional(),
-  refutationId: z.string().min(1).optional(),
-  status: z.enum(['actionable', 'artifact-only', 'rejected']),
-  reason: z.string().min(1).max(500)
 })
 
 export const EvalExpectedFindingReportSchema = z.strictObject({
@@ -156,11 +129,7 @@ export const EvalCaseReportSchema = z.strictObject({
   artifactOnlyFalsePositiveFindings: z
     .array(EvalFalsePositiveFindingReportSchema)
     .default([]),
-  modelSuspicionIds: z.array(z.string().min(1)).default([]),
-  modelTaskDiagnostics: ReviewReportSchema.shape.modelTaskDiagnostics,
-  proofPackets: z.array(EvalProofPacketReportSchema).default([]),
   refutationResults: z.array(EvalRefutationResultReportSchema).default([]),
-  promotionDecisions: z.array(EvalPromotionDecisionReportSchema).default([]),
   inlineFindingCount: z.int().min(0).default(0),
   warnings: z.array(z.string()),
   durationMs: z.int().min(0),

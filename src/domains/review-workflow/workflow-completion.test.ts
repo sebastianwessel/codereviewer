@@ -1,10 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
   type EvidenceRecord,
-  type FindingAggregateResult,
-  type FindingJudgeResult,
-  type ModelSuspicion,
-  type ProofPacket,
   type RefutationResult
 } from '../../shared/contracts/index.js'
 import { type CandidateFinding } from '../admission/index.js'
@@ -55,39 +51,6 @@ const contextLedgerEntry: ContextLedgerEntry = {
   bytesIncluded: 120
 }
 
-const modelSuspicion: ModelSuspicion = {
-  id: 'susp_completion1',
-  taskId: 'task_completion1',
-  category: 'bug',
-  severityHint: 'high',
-  title: 'Changed branch can lose data',
-  hypothesis: 'The changed branch can lose data before persistence.',
-  primaryLocation: {
-    path: 'src/completion.ts',
-    startLine: 10,
-    side: 'new'
-  },
-  contextRequests: [],
-  requestedContext: [],
-  evidenceIds: ['ev_completion1'],
-  status: 'proved',
-  proposedBy: 'review-agent'
-}
-
-const proofPacket: ProofPacket = {
-  id: 'proof_completion1',
-  suspicionId: 'susp_completion1',
-  candidateId: 'cand_completion1',
-  changedBehavior: 'The changed branch can lose data.',
-  executionOrDataPath: 'The changed branch is reachable.',
-  violatedInvariant: 'Persistence must retain data.',
-  impact: 'A caller can lose data.',
-  introducedByChange: 'The reviewed branch changed persistence behavior.',
-  evidenceIds: ['ev_completion1'],
-  contradictionChecks: ['No contradiction found.'],
-  fixDirection: 'Preserve existing data before persistence.'
-}
-
 const refutationResult: RefutationResult = {
   id: 'refute_completion1',
   proofPacketId: 'proof_completion1',
@@ -102,46 +65,6 @@ const refutationResult: RefutationResult = {
       evidenceIds: ['ev_completion1']
     }
   ]
-}
-
-const aggregateResult: FindingAggregateResult = {
-  id: 'agg_completion1',
-  scope: 'run',
-  verdict: 'valid',
-  summary: 'The aggregate proof remains valid.',
-  candidateIds: ['cand_completion1'],
-  evidenceIds: ['ev_completion1'],
-  decisions: [
-    {
-      candidateId: 'cand_completion1',
-      verdict: 'valid',
-      summary: 'The candidate is valid.',
-      evidenceIds: ['ev_completion1'],
-      relatedCandidateIds: []
-    }
-  ],
-  similarIssueChecks: []
-}
-
-const judgeResult: FindingJudgeResult = {
-  id: 'judge_completion1',
-  candidateId: 'cand_completion1',
-  verdict: 'valid',
-  summary: 'The judge accepted the proof.',
-  challengeQuestions: ['Is the changed branch reachable?'],
-  verificationChecks: [
-    {
-      kind: 'proof-review',
-      result: 'passed',
-      summary: 'The proof evidence is sufficient.',
-      evidenceIds: ['ev_completion1']
-    }
-  ],
-  contextRequests: [],
-  requestedContext: [],
-  evidenceIds: ['ev_completion1'],
-  proofPacketId: 'proof_completion1',
-  refutationId: 'refute_completion1'
 }
 
 const workflowInput = ReviewWorkflowInputSchema.parse({
@@ -172,14 +95,7 @@ describe('workflow completion', () => {
       candidateFindings: [candidate],
       admissionCandidates: [candidate],
       artifactOnlyCandidateIds: ['cand_completion1'],
-      modelSuspicions: [],
-      investigationTraces: [],
-      proofPackets: [],
       refutationResults: [],
-      aggregateResults: [],
-      reviewIntents: [],
-      judgeResults: [],
-      promotionDecisions: [],
       providerIssues: [],
       contextLedgerEntries: [],
       evidence: [evidence],
@@ -213,14 +129,7 @@ describe('workflow completion', () => {
       candidateFindings: [candidate],
       admissionCandidates: [candidate],
       artifactOnlyCandidateIds: [],
-      modelSuspicions: [],
-      investigationTraces: [],
-      proofPackets: [],
       refutationResults: [],
-      aggregateResults: [],
-      reviewIntents: [],
-      judgeResults: [],
-      promotionDecisions: [],
       providerIssues: [],
       contextLedgerEntries: [],
       evidence: [evidence, { ...evidence, summary: 'Duplicate later copy.' }],
@@ -237,35 +146,16 @@ describe('workflow completion', () => {
     expect(output.admittedFindings).toHaveLength(1)
   })
 
-  test('deduplicates stable-id model artifacts before report output', () => {
+  test('deduplicates stable-id refutation artifacts before report output', () => {
     const output = completeReviewWorkflow({
       workflowInput,
       candidateFindings: [candidate],
       admissionCandidates: [candidate],
       artifactOnlyCandidateIds: [],
-      modelSuspicions: [
-        modelSuspicion,
-        { ...modelSuspicion, hypothesis: 'Duplicate later suspicion.' }
-      ],
-      investigationTraces: [],
-      proofPackets: [
-        proofPacket,
-        { ...proofPacket, changedBehavior: 'Duplicate later proof.' }
-      ],
       refutationResults: [
         refutationResult,
         { ...refutationResult, summary: 'Duplicate later refutation.' }
       ],
-      aggregateResults: [
-        aggregateResult,
-        { ...aggregateResult, summary: 'Duplicate later aggregate.' }
-      ],
-      reviewIntents: [],
-      judgeResults: [
-        judgeResult,
-        { ...judgeResult, summary: 'Duplicate later judge.' }
-      ],
-      promotionDecisions: [],
       providerIssues: [],
       contextLedgerEntries: [],
       evidence: [evidence],
@@ -276,23 +166,11 @@ describe('workflow completion', () => {
       skillHashes: []
     })
 
-    expect(output.modelSuspicions.map((artifact) => artifact.id)).toEqual([
-      'susp_completion1'
-    ])
-    expect(output.proofPackets.map((artifact) => artifact.id)).toEqual([
-      'proof_completion1'
-    ])
     expect(output.refutationResults.map((artifact) => artifact.id)).toEqual([
       'refute_completion1'
     ])
-    expect(output.aggregateResults.map((artifact) => artifact.id)).toEqual([
-      'agg_completion1'
-    ])
-    expect(output.judgeResults.map((artifact) => artifact.id)).toEqual([
-      'judge_completion1'
-    ])
-    expect(output.modelSuspicions[0]?.hypothesis).toBe(
-      'The changed branch can lose data before persistence.'
+    expect(output.refutationResults[0]?.summary).toBe(
+      'The proof survived refutation.'
     )
   })
 
@@ -305,14 +183,7 @@ describe('workflow completion', () => {
       ],
       admissionCandidates: [candidate],
       artifactOnlyCandidateIds: [],
-      modelSuspicions: [],
-      investigationTraces: [],
-      proofPackets: [],
       refutationResults: [],
-      aggregateResults: [],
-      reviewIntents: [],
-      judgeResults: [],
-      promotionDecisions: [],
       providerIssues: [],
       contextLedgerEntries: [],
       evidence: [evidence],
@@ -340,14 +211,7 @@ describe('workflow completion', () => {
         { ...candidate, title: 'Duplicate later admission candidate' }
       ],
       artifactOnlyCandidateIds: [],
-      modelSuspicions: [],
-      investigationTraces: [],
-      proofPackets: [],
       refutationResults: [],
-      aggregateResults: [],
-      reviewIntents: [],
-      judgeResults: [],
-      promotionDecisions: [],
       providerIssues: [],
       contextLedgerEntries: [],
       evidence: [evidence],
@@ -375,14 +239,7 @@ describe('workflow completion', () => {
       candidateFindings: [candidate],
       admissionCandidates: [candidate],
       artifactOnlyCandidateIds: [],
-      modelSuspicions: [],
-      investigationTraces: [],
-      proofPackets: [],
       refutationResults: [],
-      aggregateResults: [],
-      reviewIntents: [],
-      judgeResults: [],
-      promotionDecisions: [],
       providerIssues: [],
       contextLedgerEntries: [],
       evidence: [evidence],
@@ -426,130 +283,6 @@ describe('workflow completion', () => {
     ])
   })
 
-  test('demotes proof-time promotion decisions for pre-admission rejected candidates', () => {
-    const output = completeReviewWorkflow({
-      workflowInput,
-      candidateFindings: [candidate],
-      admissionCandidates: [candidate],
-      artifactOnlyCandidateIds: [],
-      modelSuspicions: [],
-      investigationTraces: [],
-      proofPackets: [proofPacket],
-      refutationResults: [
-        {
-          ...refutationResult,
-          verdict: 'refuted',
-          summary: 'The proof was refuted during active admission review.'
-        }
-      ],
-      aggregateResults: [],
-      reviewIntents: [],
-      judgeResults: [],
-      promotionDecisions: [
-        {
-          candidateId: 'cand_completion1',
-          proofPacketId: 'proof_completion1',
-          status: 'actionable',
-          reason:
-            'Proof artifacts were assembled before active admission refutation.',
-          policy: 'promotion-policy-v1'
-        }
-      ],
-      providerIssues: [],
-      contextLedgerEntries: [],
-      evidence: [evidence],
-      preRejectedFindings: [
-        {
-          candidateId: 'cand_completion1',
-          status: 'rejected',
-          reason: 'refuted',
-          message: 'The candidate was refuted before admission.',
-          evidenceIds: ['ev_completion1']
-        }
-      ],
-      preAdmissionDecisions: [
-        {
-          candidateId: 'cand_completion1',
-          status: 'rejected',
-          rejectedReason: 'refuted'
-        }
-      ],
-      taskEvents: [],
-      instructionHashes: [configHash],
-      skillHashes: []
-    })
-
-    expect(output.admittedFindings).toEqual([])
-    expect(output.promotionDecisions).toEqual([
-      {
-        candidateId: 'cand_completion1',
-        proofPacketId: 'proof_completion1',
-        refutationId: 'refute_completion1',
-        status: 'rejected',
-        reason: 'Final admission rejected this proof candidate: refuted.',
-        policy: 'promotion-policy-v1'
-      }
-    ])
-  })
-
-  test('demotes proof-time promotion decisions for artifact-only refutation outcomes', () => {
-    const output = completeReviewWorkflow({
-      workflowInput,
-      candidateFindings: [candidate],
-      admissionCandidates: [candidate],
-      artifactOnlyCandidateIds: ['cand_completion1'],
-      modelSuspicions: [modelSuspicion],
-      investigationTraces: [],
-      proofPackets: [proofPacket],
-      refutationResults: [
-        {
-          ...refutationResult,
-          verdict: 'needs-more-evidence',
-          summary:
-            'The active refutation could not prove this candidate enough for inline admission.'
-        }
-      ],
-      aggregateResults: [],
-      reviewIntents: [],
-      judgeResults: [],
-      promotionDecisions: [
-        {
-          candidateId: 'cand_completion1',
-          proofPacketId: 'proof_completion1',
-          status: 'actionable',
-          reason:
-            'Proof artifacts were assembled before active admission refutation.',
-          policy: 'promotion-policy-v1'
-        }
-      ],
-      providerIssues: [],
-      contextLedgerEntries: [contextLedgerEntry],
-      evidence: [evidence],
-      preRejectedFindings: [],
-      preAdmissionDecisions: [],
-      taskEvents: [],
-      instructionHashes: [configHash],
-      skillHashes: []
-    })
-
-    expect(output.admittedFindings).toEqual([
-      expect.objectContaining({
-        reporterEligibility: 'artifact-only'
-      })
-    ])
-    expect(output.promotionDecisions).toEqual([
-      {
-        candidateId: 'cand_completion1',
-        proofPacketId: 'proof_completion1',
-        refutationId: 'refute_completion1',
-        status: 'artifact-only',
-        reason:
-          'Final admission kept this proof candidate artifact-only: needs-more-evidence.',
-        policy: 'promotion-policy-v1'
-      }
-    ])
-  })
-
   test('deduplicates pre-admission rejection records by candidate id', () => {
     const rejectedFinding = {
       candidateId: 'cand_completion1',
@@ -568,14 +301,7 @@ describe('workflow completion', () => {
       candidateFindings: [candidate],
       admissionCandidates: [],
       artifactOnlyCandidateIds: [],
-      modelSuspicions: [],
-      investigationTraces: [],
-      proofPackets: [],
       refutationResults: [],
-      aggregateResults: [],
-      reviewIntents: [],
-      judgeResults: [],
-      promotionDecisions: [],
       providerIssues: [],
       contextLedgerEntries: [],
       evidence: [evidence],
@@ -602,30 +328,23 @@ describe('workflow completion', () => {
       candidateFindings: [candidate],
       admissionCandidates: [candidate],
       artifactOnlyCandidateIds: [],
-      modelSuspicions: [],
-      investigationTraces: [],
-      proofPackets: [],
       refutationResults: [],
-      aggregateResults: [],
-      reviewIntents: [],
-      judgeResults: [],
-      promotionDecisions: [],
       providerIssues: [
         {
           code: 'provider_timeout',
-          stage: 'judge-finding',
+          stage: 'refute-finding',
           recovered: true,
           message: 'Provider timed out once.'
         },
         {
           code: 'provider_timeout',
-          stage: 'judge-finding',
+          stage: 'refute-finding',
           recovered: true,
           message: 'Provider timed out once.'
         },
         {
           code: 'provider_timeout',
-          stage: 'judge-follow-up',
+          stage: 'holistic-review',
           recovered: true,
           message: 'Provider timed out once.'
         }
@@ -642,13 +361,13 @@ describe('workflow completion', () => {
     expect(output.providerIssues).toEqual([
       {
         code: 'provider_timeout',
-        stage: 'judge-finding',
+        stage: 'refute-finding',
         recovered: true,
         message: 'Provider timed out once.'
       },
       {
         code: 'provider_timeout',
-        stage: 'judge-follow-up',
+        stage: 'holistic-review',
         recovered: true,
         message: 'Provider timed out once.'
       }
@@ -661,14 +380,7 @@ describe('workflow completion', () => {
       candidateFindings: [candidate],
       admissionCandidates: [candidate],
       artifactOnlyCandidateIds: [],
-      modelSuspicions: [],
-      investigationTraces: [],
-      proofPackets: [],
       refutationResults: [],
-      aggregateResults: [],
-      reviewIntents: [],
-      judgeResults: [],
-      promotionDecisions: [],
       providerIssues: [],
       contextLedgerEntries: [
         contextLedgerEntry,

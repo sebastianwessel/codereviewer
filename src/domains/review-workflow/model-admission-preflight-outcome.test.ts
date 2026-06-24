@@ -73,7 +73,6 @@ describe('model admission preflight outcome', () => {
       rejectedFindings: [],
       admissionDecisions: [],
       artifactOnlyCandidateIds: ['cand_support1'],
-      judgeResults: [],
       refutationResults: [],
       providerIssues: []
     })
@@ -86,7 +85,6 @@ describe('model admission preflight outcome', () => {
       rejectedFindings: [],
       admissionDecisions: [],
       artifactOnlyCandidateIds: ['cand_support1'],
-      judgeResults: [],
       refutationResults: [],
       providerIssues: []
     })
@@ -99,7 +97,6 @@ describe('model admission preflight outcome', () => {
       rejectedFindings: [],
       admissionDecisions: [],
       artifactOnlyCandidateIds: [],
-      judgeResults: [],
       refutationResults: [],
       providerIssues: []
     })
@@ -127,7 +124,6 @@ describe('model admission preflight outcome', () => {
         }
       ],
       artifactOnlyCandidateIds: [],
-      judgeResults: [],
       refutationResults: [],
       providerIssues: []
     })

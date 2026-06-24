@@ -1,11 +1,8 @@
 import { type Logger } from '@purista/harness'
 import {
   type ContextDocument,
-  type FindingAggregateReviewRunner,
-  type FindingJudgeRunner,
   type FindingRefutationRunner,
   type ProviderIssue,
-  type ReviewIntentPlanningRunner,
   type SkillContextDocument,
   type TaskReviewInput,
   type TaskReviewResult,
@@ -25,30 +22,18 @@ import {
 import { createStructuredError } from '../../shared/errors/error-normalizer.js'
 import { sha256 } from '../../shared/hash/hash.js'
 import { prepareCandidatesForAdmission } from './model-admission-review.js'
-import { reviewAggregateFindingProofs } from './model-aggregate-review.js'
-import { providerIssueForError } from './model-provider-issues.js'
 import {
   isTaskPacketBudgetExceededError,
   taskReviewInputFor
 } from './model-task-packet.js'
 import { renderSharedDigest } from './model-shared-digest.js'
-import {
-  applyReviewIntentsToTasks,
-  deterministicReviewIntentsForTasks,
-  executionTasksForReviewIntents,
-  intentPlanningInputFor,
-  tasksForWorkflowInput
-} from './workflow-task-planning.js'
+import { tasksForWorkflowInput } from './workflow-task-planning.js'
 import {
   ReviewTaskExecutionError,
   isReviewTaskExecutionError,
   runQueuedReviewTasks
 } from './workflow-task-queue.js'
-import {
-  admissionDecisionForRejectedPromotion,
-  completeReviewWorkflow,
-  rejectedFindingForPromotionDecision
-} from './workflow-completion.js'
+import { completeReviewWorkflow } from './workflow-completion.js'
 import {
   type ReviewWorkflowInput,
   type ReviewWorkflowOutput
@@ -133,8 +118,7 @@ export type ReviewWorkflowTaskRunner = (
   taskInput: TaskReviewInput,
   task: WorkflowReviewTask,
   signal: AbortSignal | undefined,
-  contextRetriever: ContextRetriever | undefined,
-  reserveModelInvestigationSlots: (requested: number) => number
+  contextRetriever: ContextRetriever | undefined
 ) => Promise<TaskReviewResult>
 
 export const runReviewWorkflowHandler = async (params: {
@@ -145,80 +129,21 @@ export const runReviewWorkflowHandler = async (params: {
   readonly onTaskEvent?: (event: WorkflowTaskEvent) => void
   readonly runTask: ReviewWorkflowTaskRunner
   readonly refuteFinding?: FindingRefutationRunner
-  readonly planReviewIntents?: ReviewIntentPlanningRunner
-  readonly aggregateFindingProofs?: FindingAggregateReviewRunner
-  readonly judgeFinding?: FindingJudgeRunner
 }): Promise<ReviewWorkflowOutput> => {
   const { input, logger } = params
-  const rawTasks = tasksForWorkflowInput(input)
+  const tasks = tasksForWorkflowInput(input)
   const concurrency = boundedWorkflowConcurrency(
     input.maxConcurrentTasks,
     params.maxConcurrentTasks
   )
   logger.debug('Review workflow handler started.', {
-    task_count: rawTasks.length,
+    task_count: tasks.length,
     reviewed_path_count: input.reviewedPaths.length,
     max_concurrent_tasks: concurrency
   })
   const instructionHashes = hashAllowedInstructionContent(input.instructions)
   const skillHashes = hashAllowedSkillContent(input.skills)
-  const planningProviderIssues: ProviderIssue[] = []
-  const shouldRunModelIntentPlanner =
-    input.intentPlanning === 'model' &&
-    rawTasks.length > 1 &&
-    params.planReviewIntents !== undefined
-  const reviewIntents =
-    shouldRunModelIntentPlanner
-      ? await params
-          .planReviewIntents(intentPlanningInputFor(input, rawTasks), params.signal)
-          .catch((error: unknown) => {
-            planningProviderIssues.push(
-              providerIssueForError({
-                error,
-                stage: 'intent-planning',
-                recovered: true
-              })
-            )
-
-            return deterministicReviewIntentsForTasks(rawTasks)
-          })
-      : deterministicReviewIntentsForTasks(rawTasks)
-  const intentAnnotatedTasks = applyReviewIntentsToTasks(rawTasks, reviewIntents)
-  const tasks = executionTasksForReviewIntents(
-    intentAnnotatedTasks,
-    reviewIntents,
-    {
-      canUseClusterTask: (task) => {
-        try {
-          taskReviewInputFor(
-            input,
-            task,
-            reviewIntents,
-            '(no admitted shared context yet)'
-          )
-          return true
-        } catch (error: unknown) {
-          if (isTaskPacketBudgetExceededError(error)) {
-            return false
-          }
-
-          throw error
-        }
-      }
-    }
-  )
   const shared = createWorkflowSharedContext(input)
-  let remainingModelInvestigations =
-    input.maxInvestigationsPerRun ?? Number.POSITIVE_INFINITY
-  const reserveModelInvestigationSlots = (requested: number): number => {
-    const allowed = Math.max(
-      0,
-      Math.min(requested, remainingModelInvestigations)
-    )
-    remainingModelInvestigations -= allowed
-
-    return allowed
-  }
   const contextLedgerEntries: ContextLedgerEntry[] = []
   const contextRetriever =
     input.repositoryRoot === undefined
@@ -239,18 +164,12 @@ export const runReviewWorkflowHandler = async (params: {
       : { onTaskEvent: params.onTaskEvent }),
     sharedDigest: () => renderSharedDigest(shared.digest()),
     runTask: async (task, sharedDigest) => {
-      const taskPacket = taskReviewInputFor(
-        input,
-        task,
-        reviewIntents,
-        sharedDigest
-      )
+      const taskPacket = taskReviewInputFor(input, task, sharedDigest)
       return params.runTask(
         taskPacket.input,
         task,
         params.signal,
-        contextRetriever,
-        reserveModelInvestigationSlots
+        contextRetriever
       )
     }
   }).catch((error: unknown) => {
@@ -269,79 +188,21 @@ export const runReviewWorkflowHandler = async (params: {
   const taskEvidenceRecords = queued.results.flatMap(
     (result) => result.evidenceRecords
   )
-  const modelSuspicions = queued.results.flatMap(
-    (result) => result.modelSuspicions
-  )
-  const modelTaskDiagnostics = queued.results.flatMap(
-    (result) => result.modelTaskDiagnostics
-  )
-  const investigationTraces = queued.results.flatMap(
-    (result) => result.investigationTraces
-  )
-  const proofPackets = queued.results.flatMap((result) => result.proofPackets)
-  const refutationResults = queued.results.flatMap(
-    (result) => result.refutationResults
-  )
-  const taskPromotionDecisions = queued.results.flatMap(
-    (result) => result.promotionDecisions
-  )
   const taskProviderIssues = queued.results.flatMap(
     (result) => result.providerIssues
   )
   const mergedCandidates = mergeCandidates(input.candidates, taskCandidates)
-  const rejectedPromotionDecisions = taskPromotionDecisions.filter(
-    (decision) => decision.status === 'rejected'
-  )
-  const rejectedPromotionCandidateIds = new Set(
-    rejectedPromotionDecisions.map((decision) => decision.candidateId)
-  )
-  const promotionArtifactOnlyCandidateIds = taskPromotionDecisions
-    .filter((decision) => decision.status === 'artifact-only')
-    .map((decision) => decision.candidateId)
-  const promotionRejectedFindings = rejectedPromotionDecisions.map(
-    rejectedFindingForPromotionDecision
-  )
-  const promotionAdmissionDecisions = rejectedPromotionDecisions.map(
-    admissionDecisionForRejectedPromotion
-  )
-  const aggregateReview = await reviewAggregateFindingProofs({
-    workflowInput: input,
-    ...(params.aggregateFindingProofs === undefined
-      ? {}
-      : { aggregateFindingProofs: params.aggregateFindingProofs }),
-    candidates: mergedCandidates,
-    sharedDigest: renderSharedDigest(shared.digest()),
-    reviewIntents,
-    proofPackets,
-    refutationResults,
-    investigationTraces,
-    evidence: [...input.evidence, ...taskEvidenceRecords],
-    ...(params.signal === undefined ? {} : { signal: params.signal })
-  })
-  const visibleTaskPromotionDecisions = taskPromotionDecisions.filter(
-    (decision) => !aggregateReview.rejectedCandidateIds.has(decision.candidateId)
-  )
   const prepared = await prepareCandidatesForAdmission({
     workflowInput: input,
     tasks,
-    candidates: mergedCandidates.filter(
-      (candidate) =>
-        !rejectedPromotionCandidateIds.has(candidate.id) &&
-        !aggregateReview.rejectedCandidateIds.has(candidate.id)
-    ),
+    candidates: mergedCandidates,
     sharedDigest: renderSharedDigest(shared.digest()),
     reviewEvidence: [...input.evidence, ...taskEvidenceRecords],
-    reviewIntents,
-    proofPackets,
-    refutationResults,
+    proofPackets: [],
+    refutationResults: [],
     ...(params.refuteFinding === undefined
       ? {}
       : { refuteFinding: params.refuteFinding }),
-    skipJudgeCandidateIds: aggregateReview.coveredCandidateIds,
-    ...(params.judgeFinding === undefined
-      ? {}
-      : { judgeFinding: params.judgeFinding }),
-    ...(contextRetriever === undefined ? {} : { contextRetriever }),
     ...(params.signal === undefined ? {} : { signal: params.signal })
   }).catch((error: unknown) => {
     throw new ReviewTaskExecutionError({
@@ -351,41 +212,22 @@ export const runReviewWorkflowHandler = async (params: {
     })
   })
 
+  const providerIssues: ProviderIssue[] = [
+    ...taskProviderIssues,
+    ...prepared.providerIssues
+  ]
+
   const output = completeReviewWorkflow({
     workflowInput: input,
     candidateFindings: mergedCandidates,
     admissionCandidates: prepared.admissionCandidates,
-    artifactOnlyCandidateIds: [
-      ...prepared.artifactOnlyCandidateIds,
-      ...promotionArtifactOnlyCandidateIds
-    ],
-    modelSuspicions,
-    investigationTraces,
-    proofPackets,
-    refutationResults: [...refutationResults, ...prepared.refutationResults],
-    aggregateResults: aggregateReview.aggregateResults,
-    reviewIntents,
-    modelTaskDiagnostics,
-    judgeResults: prepared.judgeResults,
-    promotionDecisions: visibleTaskPromotionDecisions,
-    providerIssues: [
-      ...planningProviderIssues,
-      ...taskProviderIssues,
-      ...aggregateReview.providerIssues,
-      ...prepared.providerIssues
-    ],
+    artifactOnlyCandidateIds: prepared.artifactOnlyCandidateIds,
+    refutationResults: prepared.refutationResults,
+    providerIssues,
     contextLedgerEntries,
     evidence: [...prepared.evidence, ...taskEvidenceRecords],
-    preRejectedFindings: [
-      ...prepared.rejectedFindings,
-      ...aggregateReview.rejectedFindings,
-      ...promotionRejectedFindings
-    ],
-    preAdmissionDecisions: [
-      ...prepared.admissionDecisions,
-      ...aggregateReview.admissionDecisions,
-      ...promotionAdmissionDecisions
-    ],
+    preRejectedFindings: prepared.rejectedFindings,
+    preAdmissionDecisions: prepared.admissionDecisions,
     taskEvents: queued.taskEvents,
     instructionHashes,
     skillHashes
@@ -400,3 +242,5 @@ export const runReviewWorkflowHandler = async (params: {
 
   return output
 }
+
+export { isTaskPacketBudgetExceededError }

@@ -148,15 +148,7 @@ export const runProviderWorkflow = async (
   const maxChildAgentCalls = maxChildAgentCallsForReview({
     taskCount:
       input.workflowInput.tasks?.length ?? input.workflowInput.reviewedPaths.length,
-    maxConcurrentTasks: input.config.review.maxConcurrentTasks,
-    judgeFindings: input.workflowInput.judgeFindings,
-    intentPlanning: input.workflowInput.intentPlanning,
-    ...(input.workflowInput.maxInvestigationsPerRun === undefined
-      ? {}
-      : { maxInvestigationsPerRun: input.workflowInput.maxInvestigationsPerRun }),
-    ...(input.workflowInput.maxInvestigationRounds === undefined
-      ? {}
-      : { maxInvestigationRounds: input.workflowInput.maxInvestigationRounds })
+    maxConcurrentTasks: input.config.review.maxConcurrentTasks
   })
   const harness = createModelBackedReviewHarness({
     modelAlias: usageRecorder.modelAlias,

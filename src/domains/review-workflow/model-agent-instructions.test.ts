@@ -1,34 +1,31 @@
 import { describe, expect, test } from 'vitest'
-import { modelReviewerInstructions } from './model-agent-instructions.js'
+import {
+  modelFindingRefuterInstructions,
+  modelHolisticReviewerInstructions
+} from './model-agent-instructions.js'
 
 describe('model agent instructions', () => {
-  test('constrains task review to concrete packet-backed semantic defects', () => {
-    expect(modelReviewerInstructions).toContain(
-      'Focus suspicions on concrete semantic correctness, security, reliability, data-integrity, or maintainability defects visible in the provided packet.'
+  test('holistic reviewer drives a recall-first whole-change review method', () => {
+    expect(modelHolisticReviewerInstructions).toContain(
+      'STEP 1 - Understand the intent.'
     )
-    expect(modelReviewerInstructions).toContain(
-      'Return no suspicion for style, preference, naming, formatting, helper-refactor, or cleanup-only concerns unless the provided packet proves a concrete user-visible, runtime, security, or data-integrity impact.'
+    expect(modelHolisticReviewerInstructions).toContain(
+      'STEP 3 - Verify correctness against the intent, technically AND logically.'
     )
-    expect(modelReviewerInstructions).toContain(
-      'Do not guess about callers, configuration, tests, file content, dependencies, or runtime behavior that is not present in the packet.'
-    )
-  })
-
-  test('requires intent-question driven discovery', () => {
-    expect(modelReviewerInstructions).toContain(
-      'For each reviewIntents verificationQuestions entry that applies to task.paths, inspect the provided packet for evidence that proves, contradicts, or leaves the risk undecidable.'
-    )
-    expect(modelReviewerInstructions).toContain(
-      'Return a suspicion for each concrete packet-backed defect discovered while answering the verification questions; when a question is undecidable, request the smallest follow-up context instead of guessing.'
+    expect(modelHolisticReviewerInstructions).toContain(
+      'Precision: report ONLY real defects.'
     )
   })
 
-  test('keeps benchmark-derived semantic discovery checks in the task prompt', () => {
-    expect(modelReviewerInstructions).toContain(
-      'Use a semantic bug checklist before returning no suspicions: falsy zero handling, wrong variable or copy/paste source reuse, nullable or optional access without guards, non-deterministic hash/order assumptions, numeric operations on datetime or non-numeric keys, and unsynchronized shared mutable state.'
+  test('refuter only judges the provided candidate from provided context', () => {
+    expect(modelFindingRefuterInstructions).toContain(
+      'Refute only the provided candidate finding. Do not review unrelated issues.'
     )
-    expect(modelReviewerInstructions).toContain(
-      'Check branch-asymmetric business-rule calculations where one branch omits a field or adjustment used by a sibling branch.'
+    expect(modelFindingRefuterInstructions).toContain(
+      'Return verdict "proved" only when the provided context proves the finding and its impact.'
+    )
+    expect(modelFindingRefuterInstructions).toContain(
+      'Return verdict "refuted" when the candidate is contradicted by the provided context.'
     )
   })
 })

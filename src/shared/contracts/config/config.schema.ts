@@ -141,20 +141,7 @@ export const QualityGateConfigSchema = z.strictObject({
 
 export const AiReviewConfigSchema = z.strictObject({
   enabled: z.boolean().optional(),
-  maxSuspicionsPerTask: z.int().min(0).max(20).optional(),
-  maxInvestigationsPerRun: z.int().min(0).max(200).optional(),
-  maxToolReadsPerInvestigation: z.int().min(0).max(50).optional(),
-  maxToolSearchesPerInvestigation: z.int().min(0).max(25).optional(),
-  maxInvestigationRounds: z.int().min(1).max(5).optional(),
   requireRefutation: z.literal(true).default(true),
-  intentPlanning: z.enum(['auto', 'deterministic', 'model']).default('auto'),
-  // Discovery strategy. 'holistic' (default) = one recall-first whole-file review
-  // per change unit (with the raw diff), then the shared refutation/admission
-  // precision filter; benchmarks ~2x the product recall of 'suspicion' at higher
-  // precision and ~half the cost. 'suspicion' = the older budgeted
-  // hypothesis->investigate->prove loop.
-  discoveryMode: z.enum(['suspicion', 'holistic']).default('holistic'),
-  judgeFindings: z.boolean().default(false),
   deterministicSignalMode: z.enum(['support', 'disabled']).default('support'),
   // Minimum severity for a MODEL-origin finding to be admitted as actionable.
   // Below this, model findings are rejected as below-threshold (still recorded as
@@ -166,10 +153,10 @@ export const AiReviewConfigSchema = z.strictObject({
 })
 
 export const PromotionPolicyConfigSchema = z.strictObject({
-  modelProof: z.enum(['actionable', 'artifact-only']).default('actionable'),
-  modelWeakOrRefuted: z.enum(['artifact-only', 'rejected']).default('artifact-only'),
-  staticAnalysisDuplicate: z.enum(['artifact-only', 'rejected']).default('artifact-only'),
-  deterministicContradiction: z.enum(['artifact-only', 'rejected']).default('rejected')
+  // Disposition for a candidate the refuter judged `needs-more-evidence`.
+  // `artifact-only` keeps it auditable but out of the inline review;
+  // `rejected` drops it entirely.
+  modelWeakOrRefuted: z.enum(['artifact-only', 'rejected']).default('artifact-only')
 })
 
 export const DriftCategorySchema = z.enum([
@@ -291,17 +278,11 @@ export const CodeReviewerConfigSchema = z.strictObject({
   }),
   aiReview: AiReviewConfigSchema.default({
     requireRefutation: true,
-    intentPlanning: 'auto',
-    discoveryMode: 'holistic',
-    judgeFindings: false,
     deterministicSignalMode: 'support',
     actionableSeverityThreshold: 'medium'
   }),
   promotionPolicy: PromotionPolicyConfigSchema.default({
-    modelProof: 'actionable',
-    modelWeakOrRefuted: 'artifact-only',
-    staticAnalysisDuplicate: 'artifact-only',
-    deterministicContradiction: 'rejected'
+    modelWeakOrRefuted: 'artifact-only'
   }),
   security: SecurityConfigSchema.default({
     allowShell: false,

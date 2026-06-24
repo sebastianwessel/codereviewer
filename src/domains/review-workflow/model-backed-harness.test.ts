@@ -19,7 +19,7 @@ class EmptyFindingProvider implements ModelProvider {
     this.requests.push(req)
 
     return {
-      object: { suspicions: [] } as unknown as T,
+      object: { findings: [] } as unknown as T,
       finishReason: 'stop',
       usage: {
         inputTokens: 1,
@@ -48,7 +48,6 @@ describe('model-backed harness', () => {
       harness,
       sessionId: 'model-backed-test',
       input: {
-        discoveryMode: 'suspicion',
         runId: 'model-backed-run',
         reviewedPaths: ['src/model-backed.ts'],
         evidence: [],

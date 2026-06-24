@@ -235,15 +235,7 @@ describe('review runner results', () => {
       evidence: [],
       skippedFiles: [],
       qualityGate: undefined,
-      reviewIntents: [],
-      modelSuspicions: [],
-      modelTaskDiagnostics: [],
-      investigationTraces: [],
-      proofPackets: [],
       refutationResults: [],
-      aggregateResults: [],
-      judgeResults: [],
-      promotionDecisions: [],
       providerIssues: []
     })
 
@@ -282,13 +274,7 @@ describe('review runner results', () => {
       admittedFindings: [],
       rejectedFindings: [],
       qualityGate: undefined,
-      modelSuspicions: [],
-      modelTaskDiagnostics: [],
-      investigationTraces: [],
-      proofPackets: [],
       refutationResults: [],
-      aggregateResults: [],
-      promotionDecisions: [],
       providerIssues: [],
       contextLedgerEntries: [],
       admissionDecisions: [],
@@ -301,8 +287,6 @@ describe('review runner results', () => {
           state: 'completed'
         }
       ],
-      reviewIntents: [],
-      judgeResults: [],
       warnings: []
     }
     const analysis = {

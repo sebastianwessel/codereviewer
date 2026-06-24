@@ -2,14 +2,10 @@ import { describe, expect, test } from 'vitest'
 import {
   type EvidenceRecord,
   type ProofPacket,
-  type RefutationResult,
-  type ReviewIntent
+  type RefutationResult
 } from '../../shared/contracts/index.js'
 import { type CandidateFinding } from '../admission/index.js'
-import {
-  type FindingJudgeInput,
-  type WorkflowReviewTask
-} from './model-agent-contracts.js'
+import { type WorkflowReviewTask } from './model-agent-contracts.js'
 import { reviewCandidateForAdmission } from './model-admission-candidate-review.js'
 import {
   ReviewWorkflowInputSchema,
@@ -76,18 +72,6 @@ const task: WorkflowReviewTask = {
   priority: 1
 }
 
-const reviewIntent: ReviewIntent = {
-  id: 'intent_admissioncandidate',
-  title: 'Verify admission candidate',
-  objective: 'Verify changed candidate behavior.',
-  paths: ['src/admission-candidate.ts'],
-  taskIds: ['task_admissioncandidate'],
-  focusAreas: ['data persistence'],
-  riskAreas: ['data loss'],
-  verificationQuestions: ['Does the changed branch preserve data?'],
-  source: 'model'
-}
-
 const proofPacket: ProofPacket = {
   id: 'proof_modelcandidate',
   suspicionId: 'susp_modelcandidate',
@@ -118,11 +102,7 @@ const refutationResult: RefutationResult = {
   ]
 }
 
-const workflowInput = (
-  input: {
-    readonly judgeFindings?: boolean
-  } = {}
-): ReviewWorkflowInput =>
+const workflowInput = (): ReviewWorkflowInput =>
   ReviewWorkflowInputSchema.parse({
     runId: 'run-admission-candidate',
     reviewedPaths: ['src/admission-candidate.ts'],
@@ -133,12 +113,8 @@ const workflowInput = (
     candidates: [supportSignalCandidate, modelCandidate],
     instructions: [],
     skills: [],
-    judgeFindings: input.judgeFindings ?? true,
     promotionPolicy: {
-      modelProof: 'actionable',
-      modelWeakOrRefuted: 'rejected',
-      staticAnalysisDuplicate: 'artifact-only',
-      deterministicContradiction: 'rejected'
+      modelWeakOrRefuted: 'rejected'
     },
     provenance: {
       reviewer: 'review-agent',
@@ -157,7 +133,6 @@ describe('model admission candidate review', () => {
       allCandidates: [supportSignalCandidate, modelCandidate],
       sharedDigest: '(no admitted shared context yet)',
       reviewEvidence: [supportEvidence],
-      reviewIntents: [reviewIntent],
       proofPackets: [proofPacket],
       refutationResults: [refutationResult],
       refuteFinding: async () => {
@@ -171,48 +146,23 @@ describe('model admission candidate review', () => {
     expect(outcome.artifactOnlyCandidateIds).toEqual(['cand_supportcandidate'])
   })
 
-  test('runs optional judge for unskipped proved model candidates', async () => {
-    let judgeInput: FindingJudgeInput | undefined
+  test('admits a proved model candidate with the refuter fix summary', async () => {
     const outcome = await reviewCandidateForAdmission({
-      workflowInput: workflowInput({ judgeFindings: true }),
+      workflowInput: workflowInput(),
       tasks: [task],
       candidate: modelCandidate,
       allCandidates: [supportSignalCandidate, modelCandidate],
       sharedDigest: '(no admitted shared context yet)',
       reviewEvidence: [supportEvidence],
-      reviewIntents: [reviewIntent],
       proofPackets: [proofPacket],
       refutationResults: [refutationResult],
       refuteFinding: async () => ({
         verdict: 'proved',
         rationaleSummary: 'The active admission critic proved the claim.',
         fixSummary: 'Preserve the existing state in the changed branch.'
-      }),
-      judgeFinding: async (input) => {
-        judgeInput = input
-
-        return {
-          verdict: 'valid',
-          summary: 'The proof remains valid after optional critic review.',
-          challengeQuestions: [
-            'Does the proof establish reachable changed behavior?'
-          ],
-          verificationChecks: [
-            {
-              kind: 'proof-review',
-              result: 'passed',
-              summary: 'The proof artifact and refutation artifact agree.',
-              evidenceIds: ['ev_admissioncandidate']
-            }
-          ],
-          evidenceIds: ['ev_admissioncandidate'],
-          contextRequests: [],
-          requestedContext: []
-        }
-      }
+      })
     })
 
-    expect(judgeInput?.candidate.id).toBe('cand_modelcandidate')
     expect(outcome.admissionCandidates).toEqual([
       expect.objectContaining({
         id: 'cand_modelcandidate',
@@ -221,11 +171,25 @@ describe('model admission candidate review', () => {
         })
       })
     ])
-    expect(outcome.judgeResults).toEqual([
-      expect.objectContaining({
-        candidateId: 'cand_modelcandidate',
-        verdict: 'valid'
+  })
+
+  test('rejects a needs-more-evidence model candidate when policy rejects', async () => {
+    const outcome = await reviewCandidateForAdmission({
+      workflowInput: workflowInput(),
+      tasks: [task],
+      candidate: modelCandidate,
+      allCandidates: [supportSignalCandidate, modelCandidate],
+      sharedDigest: '(no admitted shared context yet)',
+      reviewEvidence: [supportEvidence],
+      proofPackets: [proofPacket],
+      refutationResults: [refutationResult],
+      refuteFinding: async () => ({
+        verdict: 'needs-more-evidence',
+        rationaleSummary: 'The refuter could not prove the claim.'
       })
-    ])
+    })
+
+    expect(outcome.admissionCandidates).toEqual([])
+    expect(outcome.rejectedFindings).toHaveLength(1)
   })
 })

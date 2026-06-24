@@ -9,13 +9,9 @@ const compactAgentMaxSteps = 1
 const contextHeavyAgentMaxSteps = 4
 
 export type ReviewAgentRole =
-  | 'plan_review_intents'
-  | 'review_task'
-  | 'investigate_suspicion'
-  | 'aggregate_findings'
-  | 'sweep_sibling_suspicions'
+  | 'holistic_review'
   | 'refute_finding'
-  | 'judge_finding'
+  | 'propose_candidates'
 
 export const effectiveMaxConcurrentTasks = (
   maxConcurrentTasks: number | undefined
@@ -25,36 +21,16 @@ export const maxChildAgentCallsForReview = (
   input: {
     readonly taskCount?: number
     readonly maxConcurrentTasks?: number
-    readonly maxInvestigationsPerRun?: number
-    readonly maxInvestigationRounds?: number
-    readonly judgeFindings?: boolean
-    readonly intentPlanning?: 'deterministic' | 'model'
   } = {}
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
   const maxConcurrentTasks = effectiveMaxConcurrentTasks(input.maxConcurrentTasks)
-  const maxInvestigationsPerRun = Math.max(
-    0,
-    input.maxInvestigationsPerRun ?? 0
-  )
-  const maxInvestigationRounds = Math.max(1, input.maxInvestigationRounds ?? 1)
-  const plannerCalls =
-    input.intentPlanning === 'model' && taskCount > 1 ? 1 : 0
-  const reviewTaskCalls = taskCount
-  const investigationCalls = maxInvestigationsPerRun * maxInvestigationRounds
-  const proofLoopRefutationCalls = maxInvestigationsPerRun
-  const siblingSweepCalls = input.judgeFindings === true ? taskCount : 0
-  const criticCalls =
-    input.judgeFindings === true ? maxInvestigationsPerRun + 1 : 0
+  // One holistic discovery call per task, plus one refutation call per emitted
+  // candidate (bounded downstream), plus a concurrency buffer.
+  const holisticCalls = taskCount
+  const refutationCalls = taskCount
   const concurrencyBuffer = maxConcurrentTasks * 2
-  const derived =
-    plannerCalls +
-    reviewTaskCalls +
-    investigationCalls +
-    proofLoopRefutationCalls +
-    siblingSweepCalls +
-    criticCalls +
-    concurrencyBuffer
+  const derived = holisticCalls + refutationCalls + concurrencyBuffer
 
   return Math.min(
     maxChildAgentCallCap,
@@ -78,7 +54,7 @@ export const reviewWorkflowDelegation = (
   maxConcurrentTasks: number,
   maxChildAgentCalls = maxChildAgentCallsForReview({ maxConcurrentTasks })
 ) => ({
-  agents: ['review_task'] as const,
+  agents: ['propose_candidates'] as const,
   modelAliases: ['reviewer'] as const,
   maxChildAgentCalls,
   maxParallelChildAgentCalls: maxConcurrentTasks
@@ -88,16 +64,7 @@ export const modelReviewWorkflowDelegation = (
   maxConcurrentTasks: number,
   maxChildAgentCalls = maxChildAgentCallsForReview({ maxConcurrentTasks })
 ) => ({
-  agents: [
-    'plan_review_intents',
-    'review_task',
-    'holistic_review',
-    'investigate_suspicion',
-    'aggregate_findings',
-    'sweep_sibling_suspicions',
-    'refute_finding',
-    'judge_finding'
-  ] as const,
+  agents: ['holistic_review', 'refute_finding'] as const,
   modelAliases: ['reviewer'] as const,
   maxChildAgentCalls,
   maxParallelChildAgentCalls: maxConcurrentTasks
@@ -128,17 +95,9 @@ export const reviewAgentOptionsForRole = (
   }
 ) => {
   switch (input.role) {
-    case 'review_task':
-    case 'investigate_suspicion':
+    case 'holistic_review':
     case 'refute_finding':
-    case 'judge_finding':
+    case 'propose_candidates':
       return reviewSkillAgentOptions(input)
-    case 'plan_review_intents':
-    case 'aggregate_findings':
-    case 'sweep_sibling_suspicions':
-      return {
-        builtinTools: false as const,
-        maxSteps: compactAgentMaxSteps
-      }
   }
 }

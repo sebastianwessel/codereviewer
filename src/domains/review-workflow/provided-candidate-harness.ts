@@ -69,7 +69,7 @@ export const createProvidedCandidateReviewHarness = (
     .tools({})
     .skills(skills)
     .agents(({ agent }) => ({
-      review_task: agent({
+      propose_candidates: agent({
         model: 'reviewer',
         input: TaskReviewInputSchema,
         output: ProposedCandidatesSchema,
@@ -102,13 +102,7 @@ export const createProvidedCandidateReviewHarness = (
             ...(options.onTaskEvent === undefined
               ? {}
               : { onTaskEvent: options.onTaskEvent }),
-            runTask: async (
-              taskInput,
-              task,
-              signal,
-              _contextRetriever,
-              _reserveModelInvestigationSlots
-            ) => {
+            runTask: async (taskInput, task, signal) => {
               logger.debug('Review task call started.', {
                 task_id: task.id,
                 task_round: task.round,
@@ -117,7 +111,7 @@ export const createProvidedCandidateReviewHarness = (
                 evidence_count: taskInput.evidence.length,
                 candidate_count: taskInput.candidates.length
               })
-              const proposed = await ctx.agents.review_task(
+              const proposed = await ctx.agents.propose_candidates(
                 taskInput,
                 signal === undefined ? {} : { signal }
               )

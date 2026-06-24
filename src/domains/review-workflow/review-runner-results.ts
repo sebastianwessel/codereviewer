@@ -176,15 +176,7 @@ export const createReviewReport = (input: {
   readonly evidence: readonly EvidenceRecord[]
   readonly skippedFiles: readonly ReviewReport['skippedFiles'][number][]
   readonly qualityGate: ReviewReport['qualityGate']
-  readonly reviewIntents: ReviewReport['reviewIntents']
-  readonly modelSuspicions: ReviewReport['modelSuspicions']
-  readonly modelTaskDiagnostics: ReviewReport['modelTaskDiagnostics']
-  readonly investigationTraces: ReviewReport['investigationTraces']
-  readonly proofPackets: ReviewReport['proofPackets']
   readonly refutationResults: ReviewReport['refutationResults']
-  readonly aggregateResults: ReviewReport['aggregateResults']
-  readonly judgeResults: ReviewReport['judgeResults']
-  readonly promotionDecisions: ReviewReport['promotionDecisions']
   readonly providerIssues: ReviewReport['providerIssues']
   readonly resolvedBaselineEntries?: readonly NonNullable<
     ReviewReport['resolvedBaselineEntries']
@@ -199,15 +191,7 @@ export const createReviewReport = (input: {
     evidence: input.evidence,
     skippedFiles: input.skippedFiles,
     qualityGate: input.qualityGate,
-    reviewIntents: input.reviewIntents,
-    modelSuspicions: input.modelSuspicions,
-    modelTaskDiagnostics: input.modelTaskDiagnostics,
-    investigationTraces: input.investigationTraces,
-    proofPackets: input.proofPackets,
     refutationResults: input.refutationResults,
-    aggregateResults: input.aggregateResults,
-    judgeResults: input.judgeResults,
-    promotionDecisions: input.promotionDecisions,
     providerIssues: input.providerIssues,
     ...(input.resolvedBaselineEntries === undefined
       ? {}
@@ -272,15 +256,7 @@ export const prepareReviewRunnerSuccessResult = (
     evidence: input.admission.evidence,
     skippedFiles: input.skippedFiles,
     qualityGate: input.admission.qualityGate,
-    reviewIntents: input.admission.reviewIntents,
-    modelSuspicions: input.admission.modelSuspicions,
-    modelTaskDiagnostics: input.admission.modelTaskDiagnostics,
-    investigationTraces: input.admission.investigationTraces,
-    proofPackets: input.admission.proofPackets,
     refutationResults: input.admission.refutationResults,
-    aggregateResults: input.admission.aggregateResults,
-    judgeResults: input.admission.judgeResults,
-    promotionDecisions: input.admission.promotionDecisions,
     providerIssues: input.admission.providerIssues,
     ...(input.config.baseline.includeResolvedInReport
       ? { resolvedBaselineEntries: input.resolvedBaselineEntries }

@@ -20,17 +20,11 @@ describe('CodeReviewerConfigSchema', () => {
     })
     expect(parsed.aiReview).toEqual({
       requireRefutation: true,
-      intentPlanning: 'auto',
-      discoveryMode: 'holistic',
-      judgeFindings: false,
       deterministicSignalMode: 'support',
       actionableSeverityThreshold: 'medium'
     })
     expect(parsed.promotionPolicy).toEqual({
-      modelProof: 'actionable',
-      modelWeakOrRefuted: 'artifact-only',
-      staticAnalysisDuplicate: 'artifact-only',
-      deterministicContradiction: 'rejected'
+      modelWeakOrRefuted: 'artifact-only'
     })
     expect(parsed.paths.exclude).toEqual(
       expect.arrayContaining([

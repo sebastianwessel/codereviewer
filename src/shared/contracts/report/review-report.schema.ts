@@ -4,17 +4,9 @@ import {
   AdmittedFindingSchema,
   ContractIdSchema,
   EvidenceRecordSchema,
-  FindingAggregateResultSchema,
-  FindingJudgeResultSchema,
   FindingFingerprintSchema,
-  InvestigationTraceSchema,
-  ModelTaskDiagnosticSchema,
-  ModelSuspicionSchema,
-  ProofPacketSchema,
-  PromotionDecisionSchema,
   RejectedFindingSchema,
   RefutationResultSchema,
-  ReviewIntentSchema,
   Sha256Schema,
   TaskIdSchema
 } from '../findings/finding.schema.js'
@@ -105,15 +97,7 @@ export const ReviewReportSchema = z.strictObject({
   evidence: z.array(EvidenceRecordSchema),
   skippedFiles: z.array(SkippedFileSchema),
   qualityGate: QualityGateResultSchema.optional(),
-  reviewIntents: z.array(ReviewIntentSchema),
-  modelSuspicions: z.array(ModelSuspicionSchema),
-  modelTaskDiagnostics: z.array(ModelTaskDiagnosticSchema).default([]),
-  investigationTraces: z.array(InvestigationTraceSchema),
-  proofPackets: z.array(ProofPacketSchema),
   refutationResults: z.array(RefutationResultSchema),
-  aggregateResults: z.array(FindingAggregateResultSchema),
-  judgeResults: z.array(FindingJudgeResultSchema),
-  promotionDecisions: z.array(PromotionDecisionSchema),
   providerIssues: z.array(
     z.strictObject({
       code: z.string().min(1),

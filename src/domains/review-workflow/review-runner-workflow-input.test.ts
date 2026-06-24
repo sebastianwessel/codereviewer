@@ -9,7 +9,6 @@ import type { WorkflowReviewTask } from './review-runner-context.js'
 import {
   contextEvidenceForTasks,
   createWorkflowInput,
-  effectiveIntentPlanningMode,
   qualityGateThresholdsFor
 } from './review-runner-workflow-input.js'
 
@@ -85,42 +84,7 @@ describe('review runner workflow input', () => {
     ])
   })
 
-  test('selects deterministic or model intent planning from mode and task count', () => {
-    const local = CodeReviewerConfigSchema.parse({
-      review: { mode: 'local' }
-    })
-    const pr = CodeReviewerConfigSchema.parse({
-      review: { mode: 'pr' }
-    })
-    const forcedModel = CodeReviewerConfigSchema.parse({
-      review: { mode: 'local' },
-      aiReview: { intentPlanning: 'model' }
-    })
-
-    expect(effectiveIntentPlanningMode(pr, [task({ id: 'task_a' })])).toBe(
-      'deterministic'
-    )
-    expect(
-      effectiveIntentPlanningMode(local, [
-        task({ id: 'task_a' }),
-        task({ id: 'task_b', paths: ['src/b.ts'] })
-      ])
-    ).toBe('deterministic')
-    expect(
-      effectiveIntentPlanningMode(pr, [
-        task({ id: 'task_a' }),
-        task({ id: 'task_b', paths: ['src/b.ts'] })
-      ])
-    ).toBe('model')
-    expect(
-      effectiveIntentPlanningMode(forcedModel, [
-        task({ id: 'task_a' }),
-        task({ id: 'task_b', paths: ['src/b.ts'] })
-      ])
-    ).toBe('model')
-  })
-
-  test('creates provider workflow input with budgets, context evidence, judge flag, and cloned baseline', () => {
+  test('creates provider workflow input with budgets, context evidence, and cloned baseline', () => {
     const evidence = EvidenceRecordSchema.parse({
       id: 'ev_alpha',
       kind: 'deterministic-signal',
@@ -135,15 +99,7 @@ describe('review runner workflow input', () => {
         contextMaxBytes: 120000,
         maxConcurrentTasks: 2
       },
-      provider: { id: 'openai', model: 'review-model' },
-      aiReview: {
-        judgeFindings: true,
-        maxSuspicionsPerTask: 4,
-        maxInvestigationsPerRun: 5,
-        maxToolReadsPerInvestigation: 2,
-        maxToolSearchesPerInvestigation: 1,
-        maxInvestigationRounds: 2
-      }
+      provider: { id: 'openai', model: 'review-model' }
     })
     const baselineFingerprints = [
       { fingerprints: [{ algorithm: 'sha256', value: 'abc123' }] }
@@ -179,19 +135,13 @@ describe('review runner workflow input', () => {
     // contextMaxBytes=120 000, input cap=360 000 → min(120 000, 360 000)=120 000
     expect(workflowInput.maxTaskInputBytes).toBe(120000)
     expect(workflowInput.maxConcurrentTasks).toBe(2)
-    expect(workflowInput.maxSuspicionsPerTask).toBe(4)
-    expect(workflowInput.maxInvestigationsPerRun).toBe(5)
     // contextMaxBytes=120 000, depthContextCap(balanced)=120 000
     // → maxBytesPerRead = min(120 000, 120 000) = 120 000
     expect(workflowInput.contextRetrievalBudget).toEqual(
       expect.objectContaining({
-        maxReads: 10,
-        maxSearches: 5,
         maxBytesPerRead: 120000
       })
     )
-    expect(workflowInput.intentPlanning).toBe('model')
-    expect(workflowInput.judgeFindings).toBe(true)
     expect(workflowInput.evidence.map((record) => record.id)).toEqual([
       'ev_alpha',
       expect.stringMatching(/^evctx_[a-f0-9]{24}$/u),

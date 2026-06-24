@@ -1,16 +1,9 @@
 import { z } from 'zod'
 import {
   EvidenceRecordSchema,
-  FindingAggregateResultSchema,
-  FindingJudgeResultSchema,
-  InvestigationTraceSchema,
-  ModelSuspicionSchema,
-  ProofPacketSchema,
-  PromotionDecisionSchema,
   PromotionPolicyConfigSchema,
   RepositoryRelativePathSchema,
   RefutationResultSchema,
-  ReviewIntentSchema,
   ReviewReportSchema
 } from '../../shared/contracts/index.js'
 import { ContextLedgerEntrySchema } from '../review-planning/index.js'
@@ -39,7 +32,7 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).optional(),
   // Raw unified diff text for the reviewed change. Holistic discovery presents
   // it to the model as the authoritative "what changed" signal. Defaults to ''
-  // (suspicion mode and provided-candidate runs do not require it).
+  // (provided-candidate runs do not require it).
   reviewedDiffText: z.string().default(''),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
@@ -49,18 +42,9 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   tasks: z.array(WorkflowReviewTaskSchema).optional(),
   maxConcurrentTasks: z.int().min(1).max(32).optional(),
   maxTaskInputBytes: z.int().min(10000).max(10000000).optional(),
-  maxSuspicionsPerTask: z.int().min(0).max(20).optional(),
-  maxInvestigationsPerRun: z.int().min(0).max(200).optional(),
-  maxInvestigationRounds: z.int().min(1).max(5).optional(),
   contextRetrievalBudget: ContextRetrievalBudgetSchema.optional(),
-  intentPlanning: z.enum(['deterministic', 'model']).default('deterministic'),
-  discoveryMode: z.enum(['suspicion', 'holistic']).default('holistic'),
-  judgeFindings: z.boolean().default(false),
   promotionPolicy: PromotionPolicyConfigSchema.default({
-    modelProof: 'actionable',
-    modelWeakOrRefuted: 'artifact-only',
-    staticAnalysisDuplicate: 'artifact-only',
-    deterministicContradiction: 'rejected'
+    modelWeakOrRefuted: 'artifact-only'
   }),
   provenance: WorkflowProvenanceInputSchema,
   baselineFingerprints: z.array(BaselineFingerprintRecordSchema).optional(),
@@ -79,15 +63,7 @@ export const ReviewWorkflowOutputSchema = z.strictObject({
   evidence: z.array(EvidenceRecordSchema),
   candidateFindings: z.array(CandidateFindingSchema),
   contextLedgerEntries: z.array(ContextLedgerEntrySchema),
-  reviewIntents: z.array(ReviewIntentSchema),
-  modelSuspicions: z.array(ModelSuspicionSchema),
-  modelTaskDiagnostics: ReviewReportSchema.shape.modelTaskDiagnostics,
-  investigationTraces: z.array(InvestigationTraceSchema),
-  proofPackets: z.array(ProofPacketSchema),
   refutationResults: z.array(RefutationResultSchema),
-  aggregateResults: z.array(FindingAggregateResultSchema),
-  judgeResults: z.array(FindingJudgeResultSchema),
-  promotionDecisions: z.array(PromotionDecisionSchema),
   providerIssues: ReviewReportSchema.shape.providerIssues,
   admissionDecisions: z.array(WorkflowAdmissionDecisionSchema),
   taskEvents: z.array(WorkflowTaskEventSchema),

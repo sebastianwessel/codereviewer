@@ -172,21 +172,6 @@ export const appendEvalComparisonMetricDeltas = (
         base: input.base.metrics.providerIssueCount,
         head: input.head.metrics.providerIssueCount
       }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Suspicion recall',
-        base: input.base.metrics.suspicionRecall,
-        head: input.head.metrics.suspicionRecall
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Proof recall',
-        base: input.base.metrics.proofRecall,
-        head: input.head.metrics.proofRecall
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Proof promotion precision',
-        base: input.base.metrics.proofPromotionPrecision,
-        head: input.head.metrics.proofPromotionPrecision
-      }),
       formatEvalComparisonCountMetricDeltaRow({
         metric: 'Refutation false negatives',
         base: input.base.metrics.refutationFalseNegativeCount,

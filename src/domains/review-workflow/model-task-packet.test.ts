@@ -73,7 +73,6 @@ describe('model task packet', () => {
     const packet = taskReviewInputFor(
       workflowInput(),
       task,
-      [],
       'large admitted digest '.repeat(700)
     )
 

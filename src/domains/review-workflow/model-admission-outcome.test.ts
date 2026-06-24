@@ -41,7 +41,6 @@ describe('model admission outcome', () => {
       rejectedFindings: [],
       admissionDecisions: [],
       artifactOnlyCandidateIds: [],
-      judgeResults: [],
       refutationResults: [],
       providerIssues: []
     })
@@ -93,7 +92,6 @@ describe('model admission outcome', () => {
       rejectedFindings: [rejectedFinding],
       admissionDecisions: [admissionDecision],
       artifactOnlyCandidateIds: ['cand_a'],
-      judgeResults: [],
       refutationResults: [],
       providerIssues: [providerIssue]
     })

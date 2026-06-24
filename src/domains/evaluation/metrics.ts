@@ -85,13 +85,8 @@ export const EvalMetricsSchema = z.strictObject({
   artifactOnlyMatchedFindingCount: z.int().min(0).default(0),
   artifactOnlyFalsePositiveCount: z.int().min(0).default(0),
   trustedDeterministicFindingCount: z.int().min(0).default(0),
-  suspicionRecall: RateSchema.default(1),
-  proofRecall: RateSchema.default(1),
-  proofPromotionPrecision: RateSchema.default(1),
   refutationFalseNegativeCount: z.int().min(0).default(0),
   refutationFalsePositiveCount: z.int().min(0).default(0),
-  staticDuplicateDemotionCount: z.int().min(0).default(0),
-  investigationToolReadCount: z.int().min(0).default(0),
   recallByTier: TierRateSchema,
   // precisionByTier mirrors recallByTier rather than computing a finding-side
   // tier. Admitted findings carry no expected-tier label, so a precise
@@ -100,8 +95,6 @@ export const EvalMetricsSchema = z.strictObject({
   precisionByTier: TierRateSchema,
   productRecall: RateSchema.default(1),
   nitRecall: RateSchema.default(1),
-  suspicionStageCoverage: RateSchema.default(1),
-  judgeCoverage: RateSchema.default(1),
   inputTokens: z.int().min(0).default(0),
   outputTokens: z.int().min(0).default(0),
   costUnavailableCount: z.int().min(0).default(0),
@@ -133,16 +126,13 @@ export type EvalMetricCaseResult = {
   readonly artifactOnlyMatchedFindingCount: number
   readonly artifactOnlyFalsePositiveCount: number
   readonly trustedDeterministicFindingCount: number
-  readonly modelSuspicionCount: number
-  readonly proofPacketCount: number
-  readonly promotedProofCount: number
-  readonly actionablePromotedProofCount: number
-  readonly refutedProofCount: number
-  readonly weakOrDemotedProofCount: number
-  readonly staticDuplicateDemotionCount: number
-  readonly investigationToolReadCount: number
+  // Refutation results with a `proved` verdict. Used to derive the refutation
+  // false-positive count (proved refutations whose finding never matched).
+  readonly provedRefutationCount: number
+  // Rejected/demoted candidates. Used to derive the refutation false-negative
+  // count (expected findings demoted without a matching admitted finding).
+  readonly rejectedFindingCount: number
   readonly tierCounts: Record<ExpectedFindingTier, TierFindingCounts>
-  readonly judgedFindingCount: number
   readonly noFindingZoneFalsePositiveCount: number
   readonly changedLineCount: number
   readonly diffHunkCount: number
@@ -219,28 +209,6 @@ const calculate = (
   const totalTrustedDeterministicFindingCount = sum(
     caseResults.map((result) => result.trustedDeterministicFindingCount)
   )
-  const totalSuspicionMatchedFindingCount = Math.min(
-    totalExpectedFindingCount,
-    totalMatchedFindingCount + totalArtifactOnlyMatchedFindingCount
-  )
-  const totalProofMatchedFindingCount = Math.min(
-    totalExpectedFindingCount,
-    sum(
-      caseResults.map((result) =>
-        Math.min(
-          result.matchedFindingCount + result.artifactOnlyMatchedFindingCount,
-          result.proofPacketCount
-        )
-      )
-    )
-  )
-  const totalActionablePromotedProofCount = sum(
-    caseResults.map((result) => result.actionablePromotedProofCount)
-  )
-  const totalPromotedProofMatchCount = Math.min(
-    totalMatchedFindingCount,
-    totalActionablePromotedProofCount
-  )
   const totalExpectedSeverityWeight = sum(
     caseResults.flatMap((result) => result.expectedSeverityWeights)
   )
@@ -284,24 +252,6 @@ const calculate = (
     1
   )
   const nitRecall = recallByTier.nit
-  const nonProviderErrorCases = caseResults.filter(
-    (result) => !result.providerErrored
-  )
-  const suspicionStageCoverage = ratio(
-    nonProviderErrorCases.filter((result) => result.modelSuspicionCount > 0)
-      .length,
-    nonProviderErrorCases.length,
-    1
-  )
-  // The judge runs on every proved survivor; some are then rejected, so the
-  // judged count can exceed the actionable-promoted count. RateSchema clamps the
-  // resulting ratio to 1 (full coverage); values below 1 still flag findings
-  // admitted without a judge pass, which is the gate-relevant signal.
-  const judgeCoverage = ratio(
-    sum(caseResults.map((result) => result.judgedFindingCount)),
-    sum(caseResults.map((result) => result.actionablePromotedProofCount)),
-    1
-  )
   const severityWeightedPrecision = ratio(
     totalMatchedExpectedSeverityWeight,
     totalMatchedExpectedSeverityWeight + totalFalsePositiveSeverityWeight,
@@ -395,49 +345,28 @@ const calculate = (
     artifactOnlyMatchedFindingCount: totalArtifactOnlyMatchedFindingCount,
     artifactOnlyFalsePositiveCount: totalArtifactOnlyFalsePositiveCount,
     trustedDeterministicFindingCount: totalTrustedDeterministicFindingCount,
-    suspicionRecall: ratio(
-      totalSuspicionMatchedFindingCount,
-      totalExpectedFindingCount,
-      1
-    ),
-    proofRecall: ratio(
-      totalProofMatchedFindingCount,
-      totalExpectedFindingCount,
-      1
-    ),
-    proofPromotionPrecision: ratio(
-      totalPromotedProofMatchCount,
-      totalActionablePromotedProofCount,
-      1
-    ),
+    // Expected findings that were demoted/rejected without a matching admitted
+    // finding. Bounded by the unmatched-expected count so a case that rejected
+    // many duplicates of an otherwise-matched expectation is not penalised.
     refutationFalseNegativeCount: sum(
       caseResults.map((result) =>
         Math.min(
-          result.weakOrDemotedProofCount,
+          result.rejectedFindingCount,
           Math.max(0, result.expectedFindingCount - result.matchedFindingCount)
         )
       )
     ),
+    // Refutations marked `proved` whose admitted finding never matched an
+    // expected finding.
     refutationFalsePositiveCount: sum(
       caseResults.map((result) =>
-        Math.max(
-          0,
-          result.actionablePromotedProofCount - result.matchedFindingCount
-        )
+        Math.max(0, result.provedRefutationCount - result.matchedFindingCount)
       )
-    ),
-    staticDuplicateDemotionCount: sum(
-      caseResults.map((result) => result.staticDuplicateDemotionCount)
-    ),
-    investigationToolReadCount: sum(
-      caseResults.map((result) => result.investigationToolReadCount)
     ),
     recallByTier,
     precisionByTier,
     productRecall,
     nitRecall,
-    suspicionStageCoverage,
-    judgeCoverage,
     inputTokens: sum(caseResults.map((result) => result.inputTokens)),
     outputTokens: sum(caseResults.map((result) => result.outputTokens)),
     costUnavailableCount: caseResults.filter((result) => result.costUnavailable)

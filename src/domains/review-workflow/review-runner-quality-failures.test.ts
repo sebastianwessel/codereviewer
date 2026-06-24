@@ -53,13 +53,7 @@ const admission = {
   admittedFindings: [],
   rejectedFindings: [],
   qualityGate: undefined,
-  modelSuspicions: [],
-  modelTaskDiagnostics: [],
-  investigationTraces: [],
-  proofPackets: [],
   refutationResults: [],
-  aggregateResults: [],
-  promotionDecisions: [],
   providerIssues: [],
   contextLedgerEntries: [],
   admissionDecisions: [],
@@ -72,8 +66,6 @@ const admission = {
       state: 'completed'
     }
   ],
-  reviewIntents: [],
-  judgeResults: [],
   warnings: []
 } satisfies ReviewRunnerAdmissionState
 

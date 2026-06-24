@@ -67,7 +67,6 @@ describe('model admission refutation verdict outcome', () => {
         }
       ],
       artifactOnlyCandidateIds: [],
-      judgeResults: [],
       refutationResults: [],
       providerIssues: []
     })
@@ -100,7 +99,6 @@ describe('model admission refutation verdict outcome', () => {
         }
       ],
       artifactOnlyCandidateIds: [],
-      judgeResults: [],
       refutationResults: [],
       providerIssues: []
     })

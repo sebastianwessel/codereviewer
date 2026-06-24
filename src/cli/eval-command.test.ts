@@ -290,7 +290,7 @@ class SemanticJudgeCliProvider implements ModelProvider {
 
     return {
       object: {
-        suspicions: [
+        findings: [
           {
             category: 'bug',
             severity: 'high',
@@ -330,7 +330,7 @@ class FailFirstEvalReviewProvider implements ModelProvider {
     }
 
     return {
-      object: { suspicions: [] } as unknown as T,
+      object: { findings: [] } as unknown as T,
       finishReason: 'stop',
       usage: {
         inputTokens: 1,
@@ -361,7 +361,7 @@ class ConcurrencyTrackingProvider implements ModelProvider {
     }
 
     return {
-      object: { suspicions: [] } as unknown as T,
+      object: { findings: [] } as unknown as T,
       finishReason: 'stop',
       usage: {
         inputTokens: 1,
@@ -375,38 +375,17 @@ class ConcurrencyTrackingProvider implements ModelProvider {
 class AgenticOverrideTrackingProvider implements ModelProvider {
   readonly id = 'agentic-override-tracking'
   readonly genAiSystem = 'scripted'
-  intentPlanningCalls = 0
   reviewCalls = 0
 
   async object<T extends JsonValue = JsonValue>(
     request: ObjectRequest<T>
   ): Promise<ObjectResponse<T>> {
-    const promptText = request.messages
-      .map((message) => String(message.content))
-      .join('\n')
-
-    if (promptText.includes('Create a compact review plan')) {
-      this.intentPlanningCalls += 1
-
-      return {
-        object: {
-          intents: []
-        } as unknown as T,
-        finishReason: 'stop',
-        usage: {
-          inputTokens: 1,
-          outputTokens: 1,
-          totalTokens: 2
-        }
-      }
-    }
-
     if (request.schemaName !== 'eval_semantic_match') {
       this.reviewCalls += 1
     }
 
     return {
-      object: { suspicions: [] } as unknown as T,
+      object: { findings: [] } as unknown as T,
       finishReason: 'stop',
       usage: {
         inputTokens: 1,
@@ -764,9 +743,6 @@ describe('eval CLI', () => {
           review: {
             depth: 'fast'
           },
-          aiReview: {
-            discoveryMode: 'suspicion'
-          },
           drift: {
             enabled: false
           }
@@ -832,9 +808,6 @@ describe('eval CLI', () => {
           review: {
             depth: 'fast',
             maxConcurrentTasks: 4
-          },
-          aiReview: {
-            discoveryMode: 'suspicion'
           },
           drift: {
             enabled: false
@@ -931,9 +904,6 @@ describe('eval CLI', () => {
             depth: 'fast',
             maxConcurrentTasks: 4
           },
-          aiReview: {
-            discoveryMode: 'suspicion'
-          },
           drift: {
             enabled: false
           }
@@ -1002,7 +972,7 @@ describe('eval CLI', () => {
     }
   })
 
-  test('overrides eval review mode, depth, intent planning, and optional judge from the CLI', async () => {
+  test('overrides eval review mode, depth, and concurrency from the CLI', async () => {
     const root = await createTempDir()
     const provider = new AgenticOverrideTrackingProvider()
 
@@ -1020,11 +990,6 @@ describe('eval CLI', () => {
             mode: 'local',
             depth: 'fast',
             maxConcurrentTasks: 4
-          },
-          aiReview: {
-            discoveryMode: 'suspicion',
-            intentPlanning: 'auto',
-            judgeFindings: false
           },
           drift: {
             enabled: false
@@ -1080,9 +1045,6 @@ describe('eval CLI', () => {
           'pr',
           '--review-depth',
           'thorough',
-          '--intent-planning',
-          'model',
-          '--judge-findings',
           '--max-concurrent-tasks',
           '1'
         ],
@@ -1098,7 +1060,6 @@ describe('eval CLI', () => {
       )
 
       expect(result.exitCode).toBe(0)
-      expect(provider.intentPlanningCalls).toBe(1)
       expect(provider.reviewCalls).toBeGreaterThan(0)
       const report = JSON.parse(
         await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')

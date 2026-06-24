@@ -64,7 +64,6 @@ describe('model admission provider-error outcome', () => {
         }
       ],
       artifactOnlyCandidateIds: [],
-      judgeResults: [],
       refutationResults: [],
       providerIssues: [
         {

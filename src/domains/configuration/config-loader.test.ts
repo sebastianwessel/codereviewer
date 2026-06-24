@@ -148,16 +148,12 @@ describe('configuration loader', () => {
       const result = await loadCodeReviewerConfig({
         repositoryRoot: root,
         environment: {
-          CODEREVIEWER_AI_INTENT_PLANNING: 'model',
-          CODEREVIEWER_AI_DISCOVERY_MODE: 'holistic',
-          CODEREVIEWER_AI_JUDGE_FINDINGS: 'true'
+          CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE: 'disabled'
         },
         loadDotEnv: false
       })
 
-      expect(result.config.aiReview.intentPlanning).toBe('model')
-      expect(result.config.aiReview.discoveryMode).toBe('holistic')
-      expect(result.config.aiReview.judgeFindings).toBe(true)
+      expect(result.config.aiReview.deterministicSignalMode).toBe('disabled')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

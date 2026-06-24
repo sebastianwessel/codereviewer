@@ -31,7 +31,6 @@ export const noRefuterAdmissionOutcome = (input: {
   artifactOnlyCandidateIds: supportSignalArtifactOnlyCandidateIds(
     input.candidates
   ),
-  judgeResults: [],
   refutationResults: [],
   providerIssues: []
 })

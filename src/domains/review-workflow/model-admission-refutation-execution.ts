@@ -79,7 +79,6 @@ export const executeAdmissionRefutation = async (
   })
 
   if (
-    input.workflowInput.judgeFindings &&
     proofLoopRefutation !== undefined &&
     proofLoopRefutation.verdict !== 'proved'
   ) {

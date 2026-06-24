@@ -1,6 +1,5 @@
 import {
   type EvidenceRecord,
-  type FindingJudgeResult,
   type RefutationResult,
   type RejectedFinding
 } from '../../shared/contracts/index.js'
@@ -14,7 +13,6 @@ export type AdmissionCandidateOutcome = {
   readonly rejectedFindings: readonly RejectedFinding[]
   readonly admissionDecisions: readonly AdmissionDecisionRecord[]
   readonly artifactOnlyCandidateIds: readonly string[]
-  readonly judgeResults: readonly FindingJudgeResult[]
   readonly refutationResults: readonly RefutationResult[]
   readonly providerIssues: readonly ProviderIssue[]
 }
@@ -25,7 +23,6 @@ export const emptyAdmissionCandidateOutcome = (): AdmissionCandidateOutcome => (
   rejectedFindings: [],
   admissionDecisions: [],
   artifactOnlyCandidateIds: [],
-  judgeResults: [],
   refutationResults: [],
   providerIssues: []
 })
@@ -48,7 +45,6 @@ export const mergeAdmissionCandidateOutcomes = (input: {
   artifactOnlyCandidateIds: input.outcomes.flatMap(
     (outcome) => outcome.artifactOnlyCandidateIds
   ),
-  judgeResults: input.outcomes.flatMap((outcome) => outcome.judgeResults),
   refutationResults: input.outcomes.flatMap(
     (outcome) => outcome.refutationResults
   ),

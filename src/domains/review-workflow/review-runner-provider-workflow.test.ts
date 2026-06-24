@@ -22,7 +22,7 @@ class UsageRecordingProvider implements ModelProvider {
     this.requests.push(request)
 
     return {
-      object: { suspicions: [] } as unknown as T,
+      object: { findings: [] } as unknown as T,
       finishReason: 'stop',
       usage: {
         inputTokens: 11,
@@ -79,7 +79,6 @@ describe('review runner provider workflow', () => {
 
     const result = await runProviderWorkflow({
       workflowInput: ReviewWorkflowInputSchema.parse({
-        discoveryMode: 'suspicion',
         runId: 'run-provider-boundary',
         reviewedPaths: ['src/app.ts'],
         evidence: [],

@@ -26,21 +26,14 @@ const caseResult = (
   artifactOnlyMatchedFindingCount: 0,
   artifactOnlyFalsePositiveCount: 0,
   trustedDeterministicFindingCount: 1,
-  modelSuspicionCount: 1,
-  proofPacketCount: 1,
-  promotedProofCount: 1,
-  actionablePromotedProofCount: 1,
-  refutedProofCount: 0,
-  weakOrDemotedProofCount: 0,
-  staticDuplicateDemotionCount: 0,
-  investigationToolReadCount: 2,
+  provedRefutationCount: 0,
+  rejectedFindingCount: 0,
   tierCounts: {
     'runtime-critical': { expected: 1, matched: 1 },
     security: { expected: 0, matched: 0 },
     logic: { expected: 1, matched: 0 },
     nit: { expected: 0, matched: 0 }
   },
-  judgedFindingCount: 1,
   noFindingZoneFalsePositiveCount: 1,
   changedLineCount: 200,
   diffHunkCount: 4,
@@ -86,17 +79,10 @@ describe('eval metrics', () => {
       artifactOnlyMatchedFindingCount: 0,
       artifactOnlyFalsePositiveCount: 0,
       trustedDeterministicFindingCount: 1,
-      suspicionRecall: 0.5,
-      proofRecall: 0.5,
-      proofPromotionPrecision: 1,
       refutationFalseNegativeCount: 0,
       refutationFalsePositiveCount: 0,
-      staticDuplicateDemotionCount: 0,
-      investigationToolReadCount: 2,
       productRecall: 0.5,
       nitRecall: 1,
-      suspicionStageCoverage: 1,
-      judgeCoverage: 1,
       inputTokens: 100,
       outputTokens: 50,
       costUnavailableCount: 0,
@@ -130,40 +116,10 @@ describe('eval metrics', () => {
     expect(metrics.nitRecall).toBe(0.25)
   })
 
-  test('measures suspicion-stage and judge coverage', () => {
-    const metrics = calculateEvalMetrics([
-      caseResult({ modelSuspicionCount: 0, judgedFindingCount: 0 }),
-      caseResult({
-        modelSuspicionCount: 2,
-        judgedFindingCount: 3,
-        actionablePromotedProofCount: 2
-      }),
-      caseResult({ providerErrored: true, modelSuspicionCount: 0 })
-    ])
-
-    // Provider-error case excluded from the suspicion-stage denominator: 1 of 2.
-    expect(metrics.suspicionStageCoverage).toBe(0.5)
-    // judged 0+3+1 over actionable-promoted 1+2+1 = 4/4.
-    expect(metrics.judgeCoverage).toBe(1)
-  })
-
-  test('clamps judge coverage to 1 when judged candidates exceed actionable proofs', () => {
-    // Regression: the judge runs on every proved survivor, and judge-rejected
-    // candidates are not actionable-promoted, so aggregate judged can exceed
-    // aggregate actionable-promoted. The raw ratio (>1) must clamp to 1 so it
-    // does not fail EvalMetricsSchema and abort the whole run at report assembly.
-    const metrics = calculateEvalMetrics([
-      caseResult({ judgedFindingCount: 8, actionablePromotedProofCount: 1 }),
-      caseResult({ judgedFindingCount: 5, actionablePromotedProofCount: 2 })
-    ])
-
-    expect(metrics.judgeCoverage).toBe(1)
-  })
-
   test('never emits a rate outside [0,1] under adversarial case results', () => {
     // Drift guard: aggregating inconsistent/extreme per-case counts must not
     // produce a rate > 1 (or < 0). An out-of-range rate fails EvalMetricsSchema
-    // and aborts the whole run at report assembly (the judgeCoverage>1 bug).
+    // and aborts the whole run at report assembly.
     // calculateEvalMetrics parses against EvalMetricsSchema internally, so a
     // successful return already proves schema validity; we also assert ranges.
     const metrics = calculateEvalMetrics([
@@ -171,8 +127,6 @@ describe('eval metrics', () => {
         expectedFindingCount: 1,
         matchedFindingCount: 9,
         admittedFindingCount: 0,
-        actionablePromotedProofCount: 1,
-        judgedFindingCount: 50,
         tierCounts: {
           'runtime-critical': { expected: 1, matched: 9 },
           security: { expected: 0, matched: 4 },
@@ -181,10 +135,7 @@ describe('eval metrics', () => {
         }
       }),
       caseResult({
-        providerErrored: true,
-        modelSuspicionCount: 0,
-        judgedFindingCount: 7,
-        actionablePromotedProofCount: 0
+        providerErrored: true
       })
     ])
 
@@ -194,9 +145,6 @@ describe('eval metrics', () => {
       metrics.f1,
       metrics.productRecall,
       metrics.nitRecall,
-      metrics.suspicionStageCoverage,
-      metrics.judgeCoverage,
-      metrics.proofPromotionPrecision,
       ...Object.values(metrics.recallByTier),
       ...Object.values(metrics.precisionByTier)
     ]
@@ -227,21 +175,14 @@ describe('eval metrics', () => {
         artifactOnlyMatchedFindingCount: 0,
         artifactOnlyFalsePositiveCount: 0,
         trustedDeterministicFindingCount: 0,
-        modelSuspicionCount: 0,
-        proofPacketCount: 0,
-        promotedProofCount: 0,
-        actionablePromotedProofCount: 0,
-        refutedProofCount: 0,
-        weakOrDemotedProofCount: 0,
-        staticDuplicateDemotionCount: 0,
-        investigationToolReadCount: 0,
+        provedRefutationCount: 0,
+        rejectedFindingCount: 0,
         tierCounts: {
           'runtime-critical': { expected: 0, matched: 0 },
           security: { expected: 0, matched: 0 },
           logic: { expected: 0, matched: 0 },
           nit: { expected: 0, matched: 0 }
         },
-        judgedFindingCount: 0,
         noFindingZoneFalsePositiveCount: 0,
         changedLineCount: 0,
         diffHunkCount: 0,
@@ -304,29 +245,28 @@ describe('eval metrics', () => {
     expect(metrics.providerIssueCount).toBe(1)
   })
 
-  test('calculates proof quality metrics from case-level proof counts', () => {
+  test('derives refutation false negatives from rejected findings, bounded by unmatched expected', () => {
     const metrics = calculateEvalMetrics([
       caseResult({
         expectedFindingCount: 2,
         matchedFindingCount: 1,
-        artifactOnlyMatchedFindingCount: 1,
-        proofPacketCount: 2,
-        promotedProofCount: 2,
-        actionablePromotedProofCount: 1,
-        weakOrDemotedProofCount: 1,
-        staticDuplicateDemotionCount: 1,
-        investigationToolReadCount: 3
+        rejectedFindingCount: 3
       })
     ])
 
-    expect(metrics).toMatchObject({
-      suspicionRecall: 1,
-      proofRecall: 1,
-      proofPromotionPrecision: 1,
-      refutationFalseNegativeCount: 1,
-      refutationFalsePositiveCount: 0,
-      staticDuplicateDemotionCount: 1,
-      investigationToolReadCount: 3
-    })
+    // Unmatched expected = 2 - 1 = 1 bounds the 3 rejected findings.
+    expect(metrics.refutationFalseNegativeCount).toBe(1)
+  })
+
+  test('derives refutation false positives from proved refutations whose findings never matched', () => {
+    const metrics = calculateEvalMetrics([
+      caseResult({
+        matchedFindingCount: 1,
+        provedRefutationCount: 3
+      })
+    ])
+
+    // 3 proved refutations, only 1 matched: 2 unmatched proved refutations.
+    expect(metrics.refutationFalsePositiveCount).toBe(2)
   })
 })

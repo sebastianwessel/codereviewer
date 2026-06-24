@@ -19,7 +19,6 @@ const generatedIdPrefixes = [
   'proof',
   'refute',
   'ref',
-  'judge',
   'agg',
   'susp',
   'ev',

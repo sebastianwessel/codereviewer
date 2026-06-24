@@ -26,22 +26,13 @@ describe('workflow harness config', () => {
       }
     })
     expect(reviewWorkflowDelegation(2)).toEqual({
-      agents: ['review_task'],
+      agents: ['propose_candidates'],
       modelAliases: ['reviewer'],
       maxChildAgentCalls: 16,
       maxParallelChildAgentCalls: 2
     })
     expect(modelReviewWorkflowDelegation(2)).toEqual({
-      agents: [
-        'plan_review_intents',
-        'review_task',
-        'holistic_review',
-        'investigate_suspicion',
-        'aggregate_findings',
-        'sweep_sibling_suspicions',
-        'refute_finding',
-        'judge_finding'
-      ],
+      agents: ['holistic_review', 'refute_finding'],
       modelAliases: ['reviewer'],
       maxChildAgentCalls: 16,
       maxParallelChildAgentCalls: 2
@@ -50,25 +41,19 @@ describe('workflow harness config', () => {
   })
 
   test('derives bounded child-agent call budgets from review scale', () => {
+    // taskCount + taskCount (one refutation each) + maxConcurrentTasks * 2
     expect(
       maxChildAgentCallsForReview({
         taskCount: 8,
-        maxConcurrentTasks: 2,
-        maxInvestigationsPerRun: 12,
-        maxInvestigationRounds: 3,
-        judgeFindings: true,
-        intentPlanning: 'model'
+        maxConcurrentTasks: 2
       })
-    ).toBe(82)
+    ).toBe(20)
 
+    // Above the cap → clamped to the maximum child-agent call budget.
     expect(
       maxChildAgentCallsForReview({
         taskCount: 5000,
-        maxConcurrentTasks: 32,
-        maxInvestigationsPerRun: 200,
-        maxInvestigationRounds: 5,
-        judgeFindings: true,
-        intentPlanning: 'model'
+        maxConcurrentTasks: 32
       })
     ).toBe(2048)
   })
@@ -103,11 +88,11 @@ describe('workflow harness config', () => {
     })
   })
 
-  test('keeps planning compact while allowing bounded context-heavy critic roles to use skill tools', () => {
+  test('keeps review roles compact without skills and skill-tool capable with them', () => {
     expect(
       reviewAgentOptionsForRole({
-        role: 'plan_review_intents',
-        skillIds: ['secure-review']
+        role: 'holistic_review',
+        skillIds: []
       })
     ).toEqual({
       builtinTools: false,
@@ -116,7 +101,7 @@ describe('workflow harness config', () => {
 
     expect(
       reviewAgentOptionsForRole({
-        role: 'investigate_suspicion',
+        role: 'refute_finding',
         skillIds: ['secure-review']
       })
     ).toEqual({
@@ -127,7 +112,7 @@ describe('workflow harness config', () => {
 
     expect(
       reviewAgentOptionsForRole({
-        role: 'judge_finding',
+        role: 'propose_candidates',
         skillIds: ['secure-review'],
         skillTools: ['read']
       })

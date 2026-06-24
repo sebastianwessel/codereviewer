@@ -62,7 +62,6 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
 describe('workflow handler', () => {
   test('runs task results through shared completion without harness builder wiring', async () => {
     let observedTaskPaths: readonly string[] = []
-    let observedIntentCount = 0
     let observedSharedDigest = ''
 
     const output = await runReviewWorkflowHandler({
@@ -72,7 +71,6 @@ describe('workflow handler', () => {
       maxConcurrentTasks: 1,
       runTask: async (taskInput, task) => {
         observedTaskPaths = task.paths
-        observedIntentCount = taskInput.reviewIntents.length
         observedSharedDigest = taskInput.sharedDigest
 
         return TaskReviewResultSchema.parse({
@@ -82,7 +80,6 @@ describe('workflow handler', () => {
     })
 
     expect(observedTaskPaths).toEqual(['src/handler.ts'])
-    expect(observedIntentCount).toBe(1)
     expect(observedSharedDigest).toContain('(no admitted shared context yet)')
     expect(output.candidateFindings).toEqual([candidate])
     expect(output.admittedFindings).toHaveLength(1)
@@ -96,10 +93,9 @@ describe('workflow handler', () => {
       'running',
       'completed'
     ])
-    expect(output.reviewIntents).toHaveLength(1)
   })
 
-  test('passes task proof evidence into optional judge packets', async () => {
+  test('runs discovered candidates through refutation before admission', async () => {
     const proofEvidence: EvidenceRecord = {
       id: 'ev_taskproofhandler',
       kind: 'model-rationale',
@@ -112,13 +108,9 @@ describe('workflow handler', () => {
       source: 'model-investigation',
       redactionApplied: true
     }
-    const judgedEvidenceIds: string[][] = []
 
     const output = await runReviewWorkflowHandler({
-      input: ReviewWorkflowInputSchema.parse({
-        ...workflowInput,
-        judgeFindings: true
-      }),
+      input: workflowInput,
       signal: undefined,
       logger: createNoopReviewLogger(),
       maxConcurrentTasks: 1,
@@ -130,78 +122,19 @@ describe('workflow handler', () => {
               evidenceIds: ['ev_handler1', proofEvidence.id]
             }
           ],
-          evidenceRecords: [proofEvidence],
-          proofPackets: [
-            {
-              id: 'proof_handler1',
-              suspicionId: 'susp_handler1',
-              candidateId: 'cand_handler1',
-              changedBehavior: 'The changed branch returns stale state.',
-              executionOrDataPath:
-                'The changed API branch reaches the stale return path.',
-              violatedInvariant: 'The handler must return fresh state.',
-              impact: 'Callers can observe stale state after the change.',
-              introducedByChange:
-                'The reviewed diff changed the branch return behavior.',
-              evidenceIds: [proofEvidence.id],
-              contradictionChecks: ['No contradiction was found.'],
-              fixDirection: 'Return the freshly computed state.'
-            }
-          ],
-          refutationResults: [
-            {
-              id: 'refute_handler1',
-              proofPacketId: 'proof_handler1',
-              verdict: 'proved',
-              summary: 'The proof packet survived refutation.',
-              evidenceIds: [proofEvidence.id],
-              checks: [
-                {
-                  kind: 'proof-review',
-                  result: 'passed',
-                  summary: 'The proof evidence supports the changed path.',
-                  evidenceIds: [proofEvidence.id]
-                }
-              ]
-            }
-          ]
+          evidenceRecords: [proofEvidence]
         }),
       refuteFinding: async () => ({
         verdict: 'proved',
         rationaleSummary: 'The active admission critic proved the claim.',
         fixSummary: 'Return the freshly computed state.'
-      }),
-      judgeFinding: async (judgeInput) => {
-        judgedEvidenceIds.push(judgeInput.evidence.map((record) => record.id))
-
-        return {
-          verdict: 'valid',
-          summary: 'The proof remains valid after critic review.',
-          challengeQuestions: ['Does the task proof evidence support the claim?'],
-          verificationChecks: [
-            {
-              kind: 'proof-review',
-              result: 'passed',
-              summary: 'The critic cited the task proof evidence.',
-              evidenceIds: [proofEvidence.id]
-            }
-          ],
-          evidenceIds: [proofEvidence.id],
-          contextRequests: [],
-          requestedContext: []
-        }
-      }
+      })
     })
 
-    expect(judgedEvidenceIds).toEqual([
-      expect.arrayContaining([proofEvidence.id])
-    ])
-    expect(output.judgeResults).toEqual([
-      expect.objectContaining({
-        verdict: 'valid',
-        evidenceIds: [proofEvidence.id]
-      })
-    ])
+    expect(output.candidateFindings).toHaveLength(1)
     expect(output.admittedFindings).toHaveLength(1)
+    expect(output.admittedFindings[0]).toMatchObject({
+      title: 'Changed branch returns stale state'
+    })
   })
 })

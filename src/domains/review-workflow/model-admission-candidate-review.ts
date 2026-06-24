@@ -1,15 +1,10 @@
 import {
   type EvidenceRecord,
   type ProofPacket,
-  type RefutationResult,
-  type ReviewIntent
+  type RefutationResult
 } from '../../shared/contracts/index.js'
 import { type CandidateFinding } from '../admission/index.js'
-import { type ContextRetriever } from '../context-retrieval/index.js'
-import { type ContextRequestArtifactCache } from './model-context-artifacts.js'
-import { reviewCandidateWithJudge } from './model-judge-review.js'
 import {
-  type FindingJudgeRunner,
   type FindingRefutationRunner,
   type WorkflowReviewTask
 } from './model-agent-contracts.js'
@@ -20,7 +15,6 @@ import {
 import { createRefutationEvidence } from './model-admission-refutation-evidence.js'
 import { executeAdmissionRefutation } from './model-admission-refutation-execution.js'
 import { activeRefutationResultForCandidate } from './model-admission-refutation-result.js'
-import { admissionOutcomeForJudgeReview } from './model-admission-judge-outcome.js'
 import { type AdmissionCandidateOutcome } from './model-admission-outcome.js'
 import {
   noRefuterAdmissionOutcome,
@@ -43,14 +37,9 @@ export const reviewCandidateForAdmission = async (
     readonly allCandidates: readonly CandidateFinding[]
     readonly sharedDigest: string
     readonly reviewEvidence: readonly EvidenceRecord[]
-    readonly reviewIntents: readonly ReviewIntent[]
     readonly proofPackets: readonly ProofPacket[]
     readonly refutationResults: readonly RefutationResult[]
     readonly refuteFinding?: FindingRefutationRunner | undefined
-    readonly judgeFinding?: FindingJudgeRunner | undefined
-    readonly skipJudgeCandidateIds?: ReadonlySet<string> | undefined
-    readonly contextRetriever?: ContextRetriever | undefined
-    readonly judgeContextArtifactCache?: ContextRequestArtifactCache | undefined
     readonly signal?: AbortSignal
   }
 ): Promise<AdmissionCandidateOutcome> => {
@@ -125,65 +114,9 @@ export const reviewCandidateForAdmission = async (
     })
   }
 
-  const artifactOnlyCandidateIds =
-    refutation.verdict === 'needs-more-evidence' ? [input.candidate.id] : []
-
-  if (refutation.verdict === 'needs-more-evidence') {
-    return admissibleRefutationOutcome({
-      candidate: input.candidate,
-      refutation,
-      refutationEvidence,
-      ...(refutationResult === undefined ? {} : { refutationResult })
-    })
-  }
-
-  // The judge is a strict critic OF A PROOF PACKET. Holistic-discovery
-  // candidates are verified by refutation directly from reviewContext and carry
-  // no proof packet, so a judge pass has nothing to critique and rejects them
-  // wholesale. Only run the judge when the candidate actually has a proof packet
-  // (suspicion-mode candidates); otherwise the refutation verdict stands.
-  const candidateHasProofPacket = input.proofPackets.some(
-    (packet) => packet.candidateId === input.candidate.id
-  )
-
-  if (
-    input.workflowInput.judgeFindings &&
-    input.judgeFinding !== undefined &&
-    refutation.verdict === 'proved' &&
-    candidateHasProofPacket &&
-    !input.skipJudgeCandidateIds?.has(input.candidate.id)
-  ) {
-    const judgeOutcome = await reviewCandidateWithJudge({
-      workflowInput: input.workflowInput,
-      tasks: input.tasks,
-      candidate: input.candidate,
-      sharedDigest: input.sharedDigest,
-      evidence: [...input.reviewEvidence, refutationEvidence],
-      reviewIntents: input.reviewIntents,
-      proofPackets: input.proofPackets,
-      refutationResults: input.refutationResults,
-      refutationEvidence,
-      judgeFinding: input.judgeFinding,
-      providerIssueForError,
-      ...(input.judgeContextArtifactCache === undefined
-        ? {}
-        : { contextArtifactCache: input.judgeContextArtifactCache }),
-      ...(input.contextRetriever === undefined
-        ? {}
-        : { contextRetriever: input.contextRetriever }),
-      ...(input.signal === undefined ? {} : { signal: input.signal })
-    })
-
-    return admissionOutcomeForJudgeReview({
-      candidate: input.candidate,
-      refutation,
-      refutationEvidence,
-      ...(refutationResult === undefined ? {} : { refutationResult }),
-      artifactOnlyCandidateIds,
-      judgeOutcome
-    })
-  }
-
+  // A candidate that passes refutation (`proved`) is admitted directly;
+  // `needs-more-evidence` is admitted as artifact-only (see
+  // admissibleRefutationOutcome); `refuted` was already rejected above.
   return admissibleRefutationOutcome({
     candidate: input.candidate,
     refutation,

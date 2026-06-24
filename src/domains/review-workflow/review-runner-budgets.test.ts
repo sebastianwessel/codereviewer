@@ -89,48 +89,65 @@ describe('review runner budgets', () => {
     expect(sourceChunkBudgetFor(withProvider)).toBe(54000)
   })
 
-  test('derives AI review retrieval budget from depth defaults and configured overrides', () => {
-    const defaultBudget = aiReviewBudgetFor(
+  test('derives AI review retrieval budget from per-depth caps', () => {
+    const fastBudget = aiReviewBudgetFor(
       CodeReviewerConfigSchema.parse({ review: { depth: 'fast' } })
     )
-    const configuredBudget = aiReviewBudgetFor(
+    const balancedBudget = aiReviewBudgetFor(
+      CodeReviewerConfigSchema.parse({ review: { depth: 'balanced' } })
+    )
+    const thoroughBudget = aiReviewBudgetFor(
+      CodeReviewerConfigSchema.parse({ review: { depth: 'thorough' } })
+    )
+    const explicitContextBudget = aiReviewBudgetFor(
       CodeReviewerConfigSchema.parse({
-        review: { contextMaxBytes: 10000 },
-        aiReview: {
-          maxSuspicionsPerTask: 4,
-          maxInvestigationsPerRun: 7,
-          maxToolReadsPerInvestigation: 3,
-          maxToolSearchesPerInvestigation: 2,
-          maxInvestigationRounds: 5
-        }
+        review: { contextMaxBytes: 10000 }
       })
     )
 
-    expect(defaultBudget).toEqual({
-      maxSuspicionsPerTask: 3,
-      maxInvestigationsPerRun: 20,
-      maxInvestigationRounds: 2,
+    expect(fastBudget).toEqual({
       contextRetrievalBudget: {
         maxReads: 200,
         usedReads: 0,
         maxSearches: 100,
         usedSearches: 0,
         maxBytesPerRead: 60000,
-        maxMatches: 10
+        maxMatches: 50
       }
     })
-    expect(configuredBudget).toEqual({
-      maxSuspicionsPerTask: 4,
-      maxInvestigationsPerRun: 7,
-      maxInvestigationRounds: 5,
+    expect(balancedBudget).toEqual({
       contextRetrievalBudget: {
-        maxReads: 21,
+        maxReads: 1200,
         usedReads: 0,
-        maxSearches: 14,
+        maxSearches: 600,
+        usedSearches: 0,
+        maxBytesPerRead: 120000,
+        maxMatches: 150
+      }
+    })
+    expect(thoroughBudget).toEqual({
+      contextRetrievalBudget: {
+        maxReads: 4800,
+        usedReads: 0,
+        maxSearches: 2400,
+        usedSearches: 0,
+        maxBytesPerRead: 240000,
+        maxMatches: 320
+      }
+    })
+    // explicit contextMaxBytes caps maxBytesPerRead at balanced depth (default)
+    expect(explicitContextBudget).toEqual({
+      contextRetrievalBudget: {
+        maxReads: 1200,
+        usedReads: 0,
+        maxSearches: 600,
         usedSearches: 0,
         maxBytesPerRead: 10000,
-        maxMatches: 10
+        maxMatches: 150
       }
     })
+    expect(fastBudget).not.toHaveProperty('maxSuspicionsPerTask')
+    expect(fastBudget).not.toHaveProperty('maxInvestigationsPerRun')
+    expect(fastBudget).not.toHaveProperty('maxInvestigationRounds')
   })
 })

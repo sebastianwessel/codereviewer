@@ -1,19 +1,9 @@
 import { z } from 'zod'
 import {
-  RejectedFindingSchema,
   type AdmittedFinding,
   type EvidenceRecord,
-  type FindingAggregateResult,
-  type FindingJudgeResult,
-  type InvestigationTrace,
-  type ModelSuspicion,
-  type ProofPacket,
-  type PromotionDecision,
-  PromotionDecisionSchema,
   type RefutationResult,
-  type RejectedFinding,
-  type ReviewIntent,
-  type ReviewReport
+  type RejectedFinding
 } from '../../shared/contracts/index.js'
 import { assertDeterministicSignalEvidenceOwnsPath } from '../deterministic-signals/index.js'
 import {
@@ -145,49 +135,6 @@ const reviewedLineRangesFromReviewContext = (
   return ranges.length === 0 ? undefined : ranges
 }
 
-export const rejectedReasonForPromotionDecision = (
-  decision: PromotionDecision
-): RejectedFinding['reason'] => {
-  const reason = decision.reason.toLowerCase()
-
-  if (reason.includes('deterministic contradiction')) {
-    return 'deterministic-contradiction'
-  }
-
-  if (reason.includes('refuted')) {
-    return 'refuted'
-  }
-
-  if (reason.includes('static-analysis')) {
-    return 'static-analysis-duplicate'
-  }
-
-  if (decision.refutationId !== undefined) {
-    return 'refuted'
-  }
-
-  return 'insufficient-evidence'
-}
-
-export const rejectedFindingForPromotionDecision = (
-  decision: PromotionDecision
-): RejectedFinding =>
-  RejectedFindingSchema.parse({
-    candidateId: decision.candidateId,
-    status: 'rejected',
-    reason: rejectedReasonForPromotionDecision(decision),
-    message: decision.reason,
-    evidenceIds: []
-  })
-
-export const admissionDecisionForRejectedPromotion = (
-  decision: PromotionDecision
-): AdmissionDecisionRecord => ({
-  candidateId: decision.candidateId,
-  status: 'rejected',
-  rejectedReason: rejectedReasonForPromotionDecision(decision)
-})
-
 const uniqueEvidenceRecords = (
   evidenceRecords: readonly EvidenceRecord[]
 ): readonly EvidenceRecord[] => {
@@ -242,142 +189,6 @@ const uniqueAdmissionDecisionsByCandidateId = (
   }
 
   return [...byCandidateId.values()]
-}
-
-const refutationIdByProofPacketId = (
-  refutationResults: readonly RefutationResult[]
-): ReadonlyMap<string, string> => {
-  const byProofPacketId = new Map<string, string>()
-
-  for (const refutation of refutationResults) {
-    if (!byProofPacketId.has(refutation.proofPacketId)) {
-      byProofPacketId.set(refutation.proofPacketId, refutation.id)
-    }
-  }
-
-  return byProofPacketId
-}
-
-const refutationByProofPacketId = (
-  refutationResults: readonly RefutationResult[]
-): ReadonlyMap<string, RefutationResult> => {
-  const byProofPacketId = new Map<string, RefutationResult>()
-
-  for (const refutation of refutationResults) {
-    if (!byProofPacketId.has(refutation.proofPacketId)) {
-      byProofPacketId.set(refutation.proofPacketId, refutation)
-    }
-  }
-
-  return byProofPacketId
-}
-
-const nonAdmittedDecisionByCandidateId = (
-  decisions: readonly AdmissionDecisionRecord[]
-): ReadonlyMap<string, AdmissionDecisionRecord> => {
-  const byCandidateId = new Map<string, AdmissionDecisionRecord>()
-
-  for (const decision of decisions) {
-    if (decision.status !== 'admitted' && !byCandidateId.has(decision.candidateId)) {
-      byCandidateId.set(decision.candidateId, decision)
-    }
-  }
-
-  return byCandidateId
-}
-
-const rejectedFindingByCandidateId = (
-  findings: readonly RejectedFinding[]
-): ReadonlyMap<string, RejectedFinding> => {
-  const byCandidateId = new Map<string, RejectedFinding>()
-
-  for (const finding of findings) {
-    if (!byCandidateId.has(finding.candidateId)) {
-      byCandidateId.set(finding.candidateId, finding)
-    }
-  }
-
-  return byCandidateId
-}
-
-const terminalPromotionReason = (input: {
-  readonly decision: AdmissionDecisionRecord
-  readonly rejectedFinding?: RejectedFinding | undefined
-}): RejectedFinding['reason'] =>
-  input.decision.rejectedReason ??
-  input.rejectedFinding?.reason ??
-  'insufficient-evidence'
-
-const reconcilePromotionDecisionsWithAdmission = (input: {
-  readonly promotionDecisions: readonly PromotionDecision[]
-  readonly artifactOnlyCandidateIds: ReadonlySet<string>
-  readonly admissionDecisions: readonly AdmissionDecisionRecord[]
-  readonly rejectedFindings: readonly RejectedFinding[]
-  readonly refutationResults: readonly RefutationResult[]
-}): readonly PromotionDecision[] => {
-  const terminalDecisions = nonAdmittedDecisionByCandidateId(
-    input.admissionDecisions
-  )
-  const rejectedFindings = rejectedFindingByCandidateId(input.rejectedFindings)
-  const refutationIds = refutationIdByProofPacketId(input.refutationResults)
-  const refutations = refutationByProofPacketId(input.refutationResults)
-
-  return input.promotionDecisions.map((decision) => {
-    const terminalDecision = terminalDecisions.get(decision.candidateId)
-    const refutationId =
-      decision.proofPacketId === undefined
-        ? undefined
-        : refutationIds.get(decision.proofPacketId)
-
-    if (terminalDecision === undefined) {
-      if (
-        decision.status === 'actionable' &&
-        input.artifactOnlyCandidateIds.has(decision.candidateId)
-      ) {
-        const reason =
-          decision.proofPacketId === undefined
-            ? 'artifact-only'
-            : (refutations.get(decision.proofPacketId)?.verdict ??
-              'artifact-only')
-
-        return PromotionDecisionSchema.parse({
-          ...decision,
-          ...(decision.refutationId !== undefined || refutationId === undefined
-            ? {}
-            : { refutationId }),
-          status: 'artifact-only',
-          reason: `Final admission kept this proof candidate artifact-only: ${reason}.`
-        })
-      }
-
-      return decision
-    }
-
-    if (decision.status === 'rejected') {
-      return decision
-    }
-
-    const reason = terminalPromotionReason({
-      decision: terminalDecision,
-      rejectedFinding: rejectedFindings.get(decision.candidateId)
-    })
-    const status =
-      terminalDecision.status === 'rejected' ? 'rejected' : 'artifact-only'
-
-    return PromotionDecisionSchema.parse({
-      ...decision,
-      ...(decision.refutationId !== undefined ||
-      decision.proofPacketId === undefined ||
-      refutationId === undefined
-        ? {}
-        : { refutationId }),
-      status,
-      reason:
-        terminalDecision.status === 'rejected'
-          ? `Final admission rejected this proof candidate: ${reason}.`
-          : `Final admission kept this proof candidate artifact-only: ${reason}.`
-    })
-  })
 }
 
 const providerIssueKey = (issue: ProviderIssue): string =>
@@ -437,15 +248,7 @@ export const completeReviewWorkflow = (
     readonly candidateFindings: readonly CandidateFinding[]
     readonly admissionCandidates: readonly CandidateFinding[]
     readonly artifactOnlyCandidateIds: readonly string[]
-    readonly modelSuspicions: readonly ModelSuspicion[]
-    readonly investigationTraces: readonly InvestigationTrace[]
-    readonly proofPackets: readonly ProofPacket[]
     readonly refutationResults: readonly RefutationResult[]
-    readonly aggregateResults: readonly FindingAggregateResult[]
-    readonly reviewIntents: readonly ReviewIntent[]
-    readonly modelTaskDiagnostics?: readonly ReviewReport['modelTaskDiagnostics'][number][]
-    readonly judgeResults: readonly FindingJudgeResult[]
-    readonly promotionDecisions: readonly PromotionDecision[]
     readonly providerIssues: readonly ProviderIssue[]
     readonly contextLedgerEntries: readonly ContextLedgerEntry[]
     readonly evidence: readonly EvidenceRecord[]
@@ -457,11 +260,7 @@ export const completeReviewWorkflow = (
   }
 ): ReviewWorkflowOutput => {
   const evidence = uniqueEvidenceRecords(input.evidence)
-  const modelSuspicions = uniqueById(input.modelSuspicions)
-  const proofPackets = uniqueById(input.proofPackets)
   const refutationResults = uniqueById(input.refutationResults)
-  const aggregateResults = uniqueById(input.aggregateResults)
-  const judgeResults = uniqueById(input.judgeResults)
   const providerIssues = uniqueProviderIssues(input.providerIssues)
   const contextLedgerEntries = uniqueContextLedgerEntries(
     input.contextLedgerEntries
@@ -485,16 +284,9 @@ export const completeReviewWorkflow = (
     candidates: admissionCandidates,
     evidence,
     rejectedFindings: preRejectedFindings,
-      admissionDecisions: preAdmissionDecisions
-    })
-  const artifactOnlyCandidateIds = new Set(input.artifactOnlyCandidateIds)
-  const promotionDecisions = reconcilePromotionDecisionsWithAdmission({
-    promotionDecisions: input.promotionDecisions,
-    artifactOnlyCandidateIds,
-    admissionDecisions,
-    rejectedFindings,
-    refutationResults
+    admissionDecisions: preAdmissionDecisions
   })
+  const artifactOnlyCandidateIds = new Set(input.artifactOnlyCandidateIds)
   const artifactOnlyFindingIds = new Set(
     admissionDecisions.flatMap((decision) =>
       artifactOnlyCandidateIds.has(decision.candidateId) &&
@@ -533,15 +325,7 @@ export const completeReviewWorkflow = (
     evidence,
     candidateFindings,
     contextLedgerEntries,
-    reviewIntents: input.reviewIntents,
-    modelSuspicions,
-    modelTaskDiagnostics: input.modelTaskDiagnostics ?? [],
-    investigationTraces: input.investigationTraces,
-    proofPackets,
     refutationResults,
-    aggregateResults,
-    judgeResults,
-    promotionDecisions,
     providerIssues,
     admissionDecisions,
     taskEvents: input.taskEvents,

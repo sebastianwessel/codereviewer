@@ -153,17 +153,9 @@ const reviewReport = (
     ]
   },
   admittedFindings: [...admittedFindings],
-  rejectedFindings: [],
+  rejectedFindings: reportOverrides.rejectedFindings ?? [],
   evidence: reportOverrides.evidence ?? [evidence],
-  reviewIntents: [],
-  modelSuspicions: [],
-  modelTaskDiagnostics: reportOverrides.modelTaskDiagnostics ?? [],
-  investigationTraces: [],
-  proofPackets: [],
   refutationResults: [],
-  aggregateResults: [],
-  judgeResults: [],
-  promotionDecisions: [],
   providerIssues: [],
   artifacts: [],
   skippedFiles: [],
@@ -361,7 +353,7 @@ describe('eval runner', () => {
     )
   })
 
-  test('reports proof quality metrics and proof-loop case summaries', () => {
+  test('derives refutation metrics and surfaces refutation results in case reports', () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
     const result = runEvaluation({
       cases,
@@ -379,72 +371,12 @@ describe('eval runner', () => {
               'complete',
               {},
               {
-                evidence: [
-                  evidence,
+                rejectedFindings: [
                   {
-                    id: 'ev_toolread1',
-                    kind: 'tool-read',
-                    summary: 'Mediated context read for proof.',
-                    location: {
-                      path: 'src/app.ts',
-                      startLine: 4,
-                      side: 'file'
-                    },
-                    source: 'context-retrieval',
-                    redactionApplied: true
-                  }
-                ],
-                reviewIntents: [
-                  {
-                    id: 'intent_eval1',
-                    title: 'Verify changed branch',
-                    objective: 'Verify the changed branch end to end.',
-                    taskIds: ['task_eval1'],
-                    paths: ['src/app.ts'],
-                    focusAreas: ['changed branch'],
-                    riskAreas: ['incorrect return value'],
-                    verificationQuestions: [
-                      'Does the changed branch return the expected value?'
-                    ],
-                    source: 'model'
-                  }
-                ],
-                modelSuspicions: [
-                  {
-                    id: 'susp_eval1',
-                    taskId: 'task_eval1',
-                    category: 'bug',
-                    severityHint: 'high',
-                    title: 'Incorrect return value',
-                    hypothesis:
-                      'The changed branch can return an incorrect value.',
-                    primaryLocation: {
-                      path: 'src/app.ts',
-                      startLine: 4,
-                      side: 'new'
-                    },
-                    contextRequests: [],
-                    requestedContext: ['Inspect src/app.ts near line 4.'],
-                    evidenceIds: ['ev_eval1'],
-                    status: 'proved',
-                    proposedBy: 'review-agent'
-                  }
-                ],
-                proofPackets: [
-                  {
-                    id: 'proof_eval1',
-                    suspicionId: 'susp_eval1',
-                    candidateId: 'cand_eval1',
-                    changedBehavior:
-                      'The changed branch can return an incorrect value.',
-                    executionOrDataPath: 'src/app.ts changed branch.',
-                    violatedInvariant: 'Branch returns computed value.',
-                    impact: 'Callers receive the wrong result.',
-                    introducedByChange:
-                      'The reviewed change introduced the return branch.',
-                    evidenceIds: ['ev_eval1', 'ev_toolread1'],
-                    contradictionChecks: ['No contradiction evidence cited.'],
-                    fixDirection: 'Return the computed value.'
+                    candidateId: 'cand_rejected1',
+                    status: 'rejected',
+                    reason: 'refuted',
+                    message: 'Refutation found a contradiction.'
                   }
                 ],
                 refutationResults: [
@@ -463,24 +395,6 @@ describe('eval runner', () => {
                       }
                     ]
                   }
-                ],
-                promotionDecisions: [
-                  {
-                    candidateId: 'cand_eval1',
-                    proofPacketId: 'proof_eval1',
-                    refutationId: 'refute_eval1',
-                    status: 'actionable',
-                    reason: 'Proof and refutation passed.',
-                    policy: 'promotion-policy-v1'
-                  }
-                ],
-                providerIssues: [
-                  {
-                    code: 'provider_timeout',
-                    stage: 'refutation-check',
-                    recovered: true,
-                    message: 'Refutation check timed out once and recovered.'
-                  }
                 ]
               }
             )
@@ -490,245 +404,30 @@ describe('eval runner', () => {
       generatedAt: '2026-06-20T00:00:02.000Z'
     })
 
+    // One expected finding matched, so the rejected finding is not an unmatched
+    // false negative, and the single proved refutation matches the admitted
+    // finding, so there is no refutation false positive.
     expect(result.report.metrics).toMatchObject({
-      suspicionRecall: 1,
-      proofRecall: 1,
-      proofPromotionPrecision: 1,
       refutationFalseNegativeCount: 0,
-      refutationFalsePositiveCount: 0,
-      investigationToolReadCount: 1,
-      providerIssueCount: 1
+      refutationFalsePositiveCount: 0
     })
-    expect(result.report.caseResults[0]).toMatchObject({
-      agenticStages: [
-        {
-          stage: 'intent-planning',
-          status: 'active',
-          count: 1
-        },
-        {
-          stage: 'suspicion-generation',
-          status: 'active',
-          count: 1
-        },
-        {
-          stage: 'suspicion-investigation',
-          status: 'skipped',
-          count: 0
-        },
-        {
-          stage: 'proof-packet',
-          status: 'active',
-          count: 1
-        },
-        {
-          stage: 'refutation',
-          status: 'active',
-          count: 1
-        },
-        {
-          stage: 'aggregate-critic',
-          status: 'skipped',
-          count: 0
-        },
-        {
-          stage: 'judge',
-          status: 'skipped',
-          count: 0
-        },
-        {
-          stage: 'provider-recovery',
-          status: 'recovered',
-          count: 1
-        }
-      ],
-      modelSuspicionIds: ['susp_eval1'],
-      proofPackets: [
-        {
-          id: 'proof_eval1',
-          suspicionId: 'susp_eval1',
-          candidateId: 'cand_eval1',
-          evidenceCount: 2,
-          promotionStatus: 'actionable'
-        }
-      ],
-      refutationResults: [
-        {
-          id: 'refute_eval1',
-          proofPacketId: 'proof_eval1',
-          verdict: 'proved'
-        }
-      ],
-      promotionDecisions: [
-        {
-          candidateId: 'cand_eval1',
-          proofPacketId: 'proof_eval1',
-          refutationId: 'refute_eval1',
-          status: 'actionable'
-        }
-      ],
-      providerIssues: [
-        {
-          code: 'provider_timeout',
-          stage: 'refutation-check',
-          recovered: true,
-          message: 'Refutation check timed out once and recovered.'
-        }
-      ]
-    })
+    expect(result.report.caseResults[0]?.refutationResults).toEqual([
+      {
+        id: 'refute_eval1',
+        proofPacketId: 'proof_eval1',
+        verdict: 'proved'
+      }
+    ])
+    expect(
+      result.report.caseResults[0]?.agenticStages.find(
+        (stage) => stage.stage === 'refutation'
+      )
+    ).toEqual({ stage: 'refutation', status: 'active', count: 1 })
 
     const summary = renderEvalSummary({ cases, report: result.report })
-    expect(summary).toContain('| Proof recall | 100.0% |')
-    expect(summary).toContain('| Proof promotion precision | 100.0% |')
-    expect(summary).toContain('| Investigation tool reads | 1 |')
-    expect(summary).toContain(
-      'recovered:provider_timeout@refutation-check - Refutation check timed out once and recovered.'
-    )
     expect(summary).toContain('## Agentic Stage Coverage')
-    expect(summary).toContain(
-      '| typescript-positive | active 1 | active 1 | skipped 0 | active 1 | active 1 | skipped 0 | skipped 0 | recovered 1 |'
-    )
-  })
-
-  test('reports model discovery attempts even when no suspicion survives selection', () => {
-    const cases = parseEvalCases([inlineEvalCases[0]])
-    const result = runEvaluation({
-      cases,
-      outputs: [
-        {
-          caseId: 'typescript-positive',
-          changedLineCount: 50,
-          diffHunkCount: 2,
-          contextLedger: [],
-          result: {
-            status: 'ok',
-            reviewReport: reviewReport(
-              [],
-              [],
-              'complete',
-              {
-                provider: 'openai',
-                model: 'gpt-5.3-codex'
-              },
-              {
-                reviewIntents: [
-                  {
-                    id: 'intent_eval1',
-                    title: 'Verify changed branch',
-                    objective:
-                      'Verify the changed branch and discover concrete issues.',
-                    taskIds: ['task_eval1'],
-                    paths: ['src/app.ts'],
-                    focusAreas: ['changed branch'],
-                    riskAreas: ['incorrect return value'],
-                    verificationQuestions: [
-                      'Does the changed branch return the expected value?'
-                    ],
-                    source: 'model'
-                  }
-                ],
-                modelSuspicions: []
-              }
-            )
-          }
-        }
-      ],
-      generatedAt: '2026-06-20T00:00:02.000Z'
-    })
-
-    const caseResult = result.report.caseResults[0]
-    expect(caseResult).toMatchObject({
-      modelSuspicionIds: []
-    })
-    expect(
-      caseResult?.agenticStages.find(
-        (stage) => stage.stage === 'intent-planning'
-      )
-    ).toEqual({
-      stage: 'intent-planning',
-      status: 'active',
-      count: 1
-    })
-    expect(
-      caseResult?.agenticStages.find(
-        (stage) => stage.stage === 'suspicion-generation'
-      )
-    ).toEqual({
-      stage: 'suspicion-generation',
-      status: 'active',
-      count: 1
-    })
-    expect(result.report.metrics).toMatchObject({
-      recall: 0,
-      suspicionRecall: 0
-    })
-  })
-
-  test('propagates model discovery diagnostics into eval case reports', () => {
-    const cases = parseEvalCases([inlineEvalCases[0]])
-    const result = runEvaluation({
-      cases,
-      outputs: [
-        {
-          caseId: 'typescript-positive',
-          changedLineCount: 50,
-          diffHunkCount: 2,
-          contextLedger: [],
-          result: {
-            status: 'ok',
-            reviewReport: reviewReport(
-              [],
-              [],
-              'complete',
-              {
-                provider: 'openai',
-                model: 'gpt-5.3-codex'
-              },
-              {
-                modelTaskDiagnostics: [
-                  {
-                    taskId: 'task_eval1',
-                    round: 1,
-                    paths: ['src/app.ts'],
-                    suggestionCount: 2,
-                    selectedCandidateCount: 0,
-                    modelSuspicionCount: 0,
-                    proofPacketCount: 0,
-                    droppedSuspicionReasons: {
-                      'schema-invalid': 0,
-                      'missing-required-field': 1,
-                      'path-outside-task': 1,
-                      'missing-task-evidence': 0,
-                      'duplicate-input-candidate': 0,
-                      'unsupported-truncation-claim': 0
-                    }
-                  }
-                ]
-              } as unknown as Partial<ReviewReport>
-            )
-          }
-        }
-      ],
-      generatedAt: '2026-06-20T00:00:02.000Z'
-    })
-
-    expect(
-      (
-        result.report.caseResults[0] as {
-          readonly modelTaskDiagnostics?: readonly unknown[]
-        }
-      ).modelTaskDiagnostics
-    ).toEqual([
-      expect.objectContaining({
-        taskId: 'task_eval1',
-        suggestionCount: 2,
-        selectedCandidateCount: 0,
-        droppedSuspicionReasons: expect.objectContaining({
-          'missing-required-field': 1,
-          'path-outside-task': 1
-        })
-      })
-    ])
+    expect(summary).toContain('Refutation results:')
+    expect(summary).toContain('- refute_eval1 proof proof_eval1 verdict proved')
   })
 
   test('keeps artifact-only noise out of normal false-positive counts', () => {
@@ -1266,9 +965,6 @@ describe('eval runner', () => {
         ...base.report,
         metrics: {
           ...base.report.metrics,
-          suspicionRecall: 0.5,
-          proofRecall: 0.25,
-          proofPromotionPrecision: 1,
           refutationFalseNegativeCount: 1,
           refutationFalsePositiveCount: 0
         },
@@ -1283,9 +979,6 @@ describe('eval runner', () => {
               recall: 0.5,
               precision: 1,
               f1: 0.667,
-              suspicionRecall: 0.5,
-              proofRecall: 0.25,
-              proofPromotionPrecision: 1,
               refutationFalseNegativeCount: 1,
               refutationFalsePositiveCount: 0,
               falsePositiveCount: 0
@@ -1301,9 +994,6 @@ describe('eval runner', () => {
               recall: 0.5,
               precision: 1,
               f1: 0.667,
-              suspicionRecall: 0.5,
-              proofRecall: 0.25,
-              proofPromotionPrecision: 1,
               refutationFalseNegativeCount: 1,
               refutationFalsePositiveCount: 0,
               falsePositiveCount: 0
@@ -1316,12 +1006,7 @@ describe('eval runner', () => {
                 ...caseResult,
                 agenticStages: [
                   {
-                    stage: 'intent-planning',
-                    status: 'active',
-                    count: 1
-                  },
-                  {
-                    stage: 'proof-packet',
+                    stage: 'refutation',
                     status: 'active',
                     count: 1
                   }
@@ -1337,9 +1022,6 @@ describe('eval runner', () => {
           providerErrorRate: 0.5,
           providerIssueRate: 1,
           providerIssueCount: 1,
-          suspicionRecall: 1,
-          proofRecall: 0.75,
-          proofPromotionPrecision: 0.5,
           refutationFalseNegativeCount: 0,
           refutationFalsePositiveCount: 2
         },
@@ -1354,9 +1036,6 @@ describe('eval runner', () => {
               recall: 1,
               precision: 0.5,
               f1: 0.667,
-              suspicionRecall: 1,
-              proofRecall: 0.75,
-              proofPromotionPrecision: 0.5,
               refutationFalseNegativeCount: 0,
               refutationFalsePositiveCount: 2,
               falsePositiveCount: 1
@@ -1372,9 +1051,6 @@ describe('eval runner', () => {
               recall: 1,
               precision: 0.5,
               f1: 0.667,
-              suspicionRecall: 1,
-              proofRecall: 0.75,
-              proofPromotionPrecision: 0.5,
               refutationFalseNegativeCount: 0,
               refutationFalsePositiveCount: 2,
               falsePositiveCount: 1
@@ -1398,14 +1074,9 @@ describe('eval runner', () => {
           ...caseResult,
           agenticStages: [
             {
-              stage: 'intent-planning',
+              stage: 'refutation',
               status: 'active',
               count: 2
-            },
-            {
-              stage: 'judge',
-              status: 'active',
-              count: 1
             }
           ]
         }))
@@ -1425,20 +1096,21 @@ describe('eval runner', () => {
     expect(comparison).toContain('| Provider error rate | 0.0% | 50.0% | +50.0pp |')
     expect(comparison).toContain('| Provider issue rate | 0.0% | 100.0% | +100.0pp |')
     expect(comparison).toContain('| Provider issue cases | 0 | 1 | +1 |')
-    expect(comparison).toContain('| Suspicion recall | 50.0% | 100.0% | +50.0pp |')
-    expect(comparison).toContain('| Proof recall | 25.0% | 75.0% | +50.0pp |')
-    expect(comparison).toContain('| Proof promotion precision | 100.0% | 50.0% | -50.0pp |')
     expect(comparison).toContain('| Refutation false negatives | 1 | 0 | -1 |')
     expect(comparison).toContain('| Refutation false positives | 0 | 2 | +2 |')
+    expect(comparison).not.toContain('| Suspicion recall ')
+    expect(comparison).not.toContain('| Proof recall ')
+    expect(comparison).not.toContain('| Proof promotion precision ')
     expect(comparison).toContain('## Context Ledger Kind Deltas')
     expect(comparison).toContain('| file | 0 | 1 | +1 |')
     expect(comparison).toContain('| support-signal-output | 1 | 0 | -1 |')
     expect(comparison).toContain('| tool-result | 1 | 0 | -1 |')
     expect(comparison).toContain('## Agentic Stage Deltas')
-    expect(comparison).toContain('| intent-planning | 1 | 2 | +1 |')
-    expect(comparison).toContain('| judge | 0 | 1 | +1 |')
-    expect(comparison).toContain('| proof-packet | 1 | 0 | -1 |')
-    expect(comparison).not.toContain('| aggregate-critic | 0 | 0 | 0 |')
+    expect(comparison).toContain('| refutation | 1 | 2 | +1 |')
+    expect(comparison).not.toContain('| intent-planning ')
+    expect(comparison).not.toContain('| proof-packet ')
+    expect(comparison).not.toContain('| judge ')
+    expect(comparison).not.toContain('| aggregate-critic ')
     expect(comparison).not.toContain('| provider-recovery | 0 | 0 | 0 |')
     expect(comparison).toContain('## Metric Group Deltas')
     expect(comparison).toContain(
@@ -1449,10 +1121,10 @@ describe('eval runner', () => {
     )
     expect(comparison).toContain('## Metric Group Proof-Loop Deltas')
     expect(comparison).toContain(
-      '| sourceProfile | project | 2 | 1 | 50.0% | 100.0% | +50.0pp | 25.0% | 75.0% | +50.0pp | 100.0% | 50.0% | -50.0pp | 1 | 0 | -1 | 0 | 2 | +2 |'
+      '| sourceProfile | project | 2 | 1 | 1 | 0 | -1 | 0 | 2 | +2 |'
     )
     expect(comparison).toContain(
-      '| language | typescript | 2 | 1 | 50.0% | 100.0% | +50.0pp | 25.0% | 75.0% | +50.0pp | 100.0% | 50.0% | -50.0pp | 1 | 0 | -1 | 0 | 2 | +2 |'
+      '| language | typescript | 2 | 1 | 1 | 0 | -1 | 0 | 2 | +2 |'
     )
     expect(comparison).toContain('## Metric Group Resource Deltas')
     expect(comparison).toContain(
@@ -1501,81 +1173,4 @@ describe('eval runner', () => {
     )
   })
 
-  test('fails the gate when suspicion-stage coverage is below threshold', () => {
-    const cases = parseEvalCases([inlineEvalCases[0]])
-    const result = runEvaluation({
-      cases,
-      outputs: [
-        {
-          caseId: 'typescript-positive',
-          changedLineCount: 50,
-          diffHunkCount: 2,
-          contextLedger: [],
-          result: {
-            status: 'ok',
-            reviewReport: reviewReport([admittedFinding()])
-          }
-        }
-      ],
-      thresholds: {
-        minSuspicionStageCoverage: 1,
-        failOnProviderError: true
-      },
-      generatedAt: '2026-06-20T00:00:02.000Z'
-    })
-
-    expect(result.report.metrics.suspicionStageCoverage).toBe(0)
-    expect(result.report.regressionGate.reasons).toContain(
-      'suspicionStageCoverage below threshold: 0 < 1'
-    )
-  })
-
-  test('only gates judge coverage when finding judging is enabled', () => {
-    const cases = parseEvalCases([inlineEvalCases[0]])
-    const output = {
-      caseId: 'typescript-positive',
-      changedLineCount: 50,
-      diffHunkCount: 2,
-      contextLedger: [],
-      result: {
-        status: 'ok' as const,
-        // One actionable-promoted proof but no judged findings: coverage is 0.
-        reviewReport: reviewReport([admittedFinding()], [], 'complete', {}, {
-          promotionDecisions: [
-            {
-              candidateId: 'cand_eval1',
-              proofPacketId: 'proof_eval1',
-              status: 'actionable',
-              reason: 'Proof artifacts admitted the candidate.',
-              policy: 'eval-test'
-            }
-          ]
-        })
-      }
-    }
-
-    const withoutJudge = runEvaluation({
-      cases,
-      outputs: [output],
-      thresholds: { minJudgeCoverage: 1, failOnProviderError: true },
-      generatedAt: '2026-06-20T00:00:02.000Z'
-    })
-
-    expect(withoutJudge.report.regressionGate.reasons).not.toContain(
-      'judgeCoverage below threshold: 0 < 1'
-    )
-
-    const withJudge = runEvaluation({
-      cases,
-      outputs: [output],
-      thresholds: { minJudgeCoverage: 1, failOnProviderError: true },
-      judgeFindingsEnabled: true,
-      generatedAt: '2026-06-20T00:00:02.000Z'
-    })
-
-    expect(withJudge.report.metrics.judgeCoverage).toBe(0)
-    expect(withJudge.report.regressionGate.reasons).toContain(
-      'judgeCoverage below threshold: 0 < 1'
-    )
-  })
 })

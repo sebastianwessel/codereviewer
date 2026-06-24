@@ -830,15 +830,6 @@ const runEval = async (
       'balanced',
       'thorough'
     ] as const)
-    const intentPlanning = parseEnumOption(evalArgs, '--intent-planning', [
-      'auto',
-      'deterministic',
-      'model'
-    ] as const)
-    const discoveryMode = parseEnumOption(evalArgs, '--discovery-mode', [
-      'suspicion',
-      'holistic'
-    ] as const)
     const maxConcurrentTasks = parseIntegerOption(
       evalArgs,
       '--max-concurrent-tasks',
@@ -848,7 +839,6 @@ const runEval = async (
       }
     )
     const semanticJudgeEnabled = evalArgs.includes('--semantic-judge')
-    const judgeFindingsEnabled = evalArgs.includes('--judge-findings')
     const cliConfig = {
       ...(logLevelOverride.level === undefined
         ? {}
@@ -870,19 +860,6 @@ const runEval = async (
               ...(maxConcurrentTasks === undefined
                 ? {}
                 : { maxConcurrentTasks })
-            }
-          }),
-      ...(intentPlanning === undefined &&
-      discoveryMode === undefined &&
-      !judgeFindingsEnabled
-        ? {}
-        : {
-            aiReview: {
-              ...(intentPlanning === undefined
-                ? {}
-                : { intentPlanning }),
-              ...(discoveryMode === undefined ? {} : { discoveryMode }),
-              ...(judgeFindingsEnabled ? { judgeFindings: true } : {})
             }
           })
     }
@@ -987,8 +964,7 @@ const runEval = async (
         maxFalsePositiveCount: 0,
         failOnProviderError: true
       },
-      generatedAt: '2026-06-20T00:00:02.000Z',
-      judgeFindingsEnabled
+      generatedAt: '2026-06-20T00:00:02.000Z'
     }
     const result =
       semanticJudge === undefined

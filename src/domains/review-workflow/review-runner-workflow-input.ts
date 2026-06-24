@@ -75,21 +75,6 @@ export const contextEvidenceForTasks = (
   return [...evidenceById.values()]
 }
 
-export const effectiveIntentPlanningMode = (
-  config: CodeReviewerConfig,
-  tasks: readonly WorkflowReviewTask[]
-): ReviewWorkflowInput['intentPlanning'] => {
-  if (tasks.length <= 1 || config.aiReview.intentPlanning === 'deterministic') {
-    return 'deterministic'
-  }
-
-  if (config.aiReview.intentPlanning === 'model') {
-    return 'model'
-  }
-
-  return config.review.mode === 'local' ? 'deterministic' : 'model'
-}
-
 export const createWorkflowInput = (
   input: {
     readonly runId: string
@@ -137,13 +122,7 @@ export const createWorkflowInput = (
   ...(taskInputBudgetFor(input.config) === undefined
     ? {}
     : { maxTaskInputBytes: taskInputBudgetFor(input.config) }),
-  maxSuspicionsPerTask: input.aiReviewBudget.maxSuspicionsPerTask,
-  maxInvestigationsPerRun: input.aiReviewBudget.maxInvestigationsPerRun,
-  maxInvestigationRounds: input.aiReviewBudget.maxInvestigationRounds,
   contextRetrievalBudget: input.aiReviewBudget.contextRetrievalBudget,
-  intentPlanning: effectiveIntentPlanningMode(input.config, input.tasks),
-  discoveryMode: input.config.aiReview.discoveryMode,
-  judgeFindings: input.config.aiReview.judgeFindings,
   promotionPolicy: input.config.promotionPolicy,
   provenance: {
     reviewer: 'review-agent',

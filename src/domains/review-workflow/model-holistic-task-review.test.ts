@@ -33,7 +33,6 @@ const task: WorkflowReviewTask = {
 const taskInput = TaskReviewInputSchema.parse({
   runId: 'run-holistic',
   task,
-  reviewIntents: [],
   reviewedDiffRanges: [{ path: 'src/app.ts', startLine: 1, endLine: 1 }],
   evidence: [],
   candidates: [],
@@ -56,7 +55,6 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
   candidates: [],
   instructions: [],
   skills: [],
-  discoveryMode: 'holistic',
   provenance: {
     reviewer: 'review-agent',
     modelProvider: 'openai',
@@ -109,6 +107,8 @@ describe('runModelBackedHolisticTaskReview', () => {
       logger: { debug: () => {} }
     })
 
+    // Three findings in, only the in-scope, fully-specified one becomes a
+    // candidate; the others (out-of-scope path, missing location) are dropped.
     expect(result.candidates).toHaveLength(1)
     const candidate = result.candidates[0]!
     expect(candidate.proposedBy).toBe('review-agent')
@@ -118,12 +118,10 @@ describe('runModelBackedHolisticTaskReview', () => {
       side: 'file'
     })
     expect(candidate.id).toMatch(/^cand_[0-9a-f]{16}$/u)
-    // No proof/suspicion artifacts: discovery emits candidates directly for the
-    // shared refutation/judge filter.
-    expect(result.proofPackets).toEqual([])
-    expect(result.modelSuspicions).toEqual([])
-    expect(result.modelTaskDiagnostics[0]?.suggestionCount).toBe(3)
-    expect(result.modelTaskDiagnostics[0]?.selectedCandidateCount).toBe(1)
+    // Discovery emits candidates directly for the shared refutation/admission
+    // filter; no proof/suspicion/diagnostic artifacts are produced.
+    expect(result.evidenceRecords).toEqual([])
+    expect(result.providerIssues).toEqual([])
   })
 
   test('presents the per-path raw unified diff and full file in reviewText', async () => {
@@ -147,7 +145,6 @@ describe('runModelBackedHolisticTaskReview', () => {
       candidates: [],
       instructions: [],
       skills: [],
-      discoveryMode: 'holistic',
       provenance: {
         reviewer: 'review-agent',
         modelProvider: 'openai',
@@ -206,8 +203,5 @@ describe('runModelBackedHolisticTaskReview', () => {
       logger: { debug: () => {} }
     })
     expect(empty.candidates).toHaveLength(0)
-    expect(empty.modelTaskDiagnostics[0]?.zeroCandidateReason).toBe(
-      'no-suggestions'
-    )
   })
 })

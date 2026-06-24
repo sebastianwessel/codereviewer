@@ -29,34 +29,16 @@ const providerTaskContextMaxBytesByDepth = {
 // so it never becomes the binding constraint at thorough depth.
 const defaultProviderTaskInputMaxBytes = 360_000
 
-const defaultAiReviewBudgetsByDepth = {
-  fast: {
-    maxSuspicionsPerTask: 3,
-    maxInvestigationsPerRun: 20,
-    maxToolReadsPerInvestigation: 10,
-    maxToolSearchesPerInvestigation: 5,
-    maxInvestigationRounds: 2
-  },
-  balanced: {
-    maxSuspicionsPerTask: 6,
-    maxInvestigationsPerRun: 60,
-    maxToolReadsPerInvestigation: 20,
-    maxToolSearchesPerInvestigation: 10,
-    maxInvestigationRounds: 3
-  },
-  thorough: {
-    maxSuspicionsPerTask: 10,
-    maxInvestigationsPerRun: 120,
-    maxToolReadsPerInvestigation: 40,
-    maxToolSearchesPerInvestigation: 20,
-    maxInvestigationRounds: 4
-  }
+// Per-depth context-retrieval caps. Holistic discovery does not run an
+// investigation loop, but the workflow still exposes a bounded context retriever;
+// these caps keep that retrieval bounded per depth.
+const defaultContextRetrievalCapsByDepth = {
+  fast: { maxReads: 200, maxSearches: 100, maxMatches: 50 },
+  balanced: { maxReads: 1200, maxSearches: 600, maxMatches: 150 },
+  thorough: { maxReads: 4800, maxSearches: 2400, maxMatches: 320 }
 } as const
 
 export type AiReviewRuntimeBudget = {
-  readonly maxSuspicionsPerTask: number
-  readonly maxInvestigationsPerRun: number
-  readonly maxInvestigationRounds: number
   readonly contextRetrievalBudget: ContextRetrievalBudget
 }
 
@@ -82,17 +64,7 @@ export const taskInputBudgetFor = (
 export const aiReviewBudgetFor = (
   config: CodeReviewerConfig
 ): AiReviewRuntimeBudget => {
-  const defaults = defaultAiReviewBudgetsByDepth[config.review.depth]
-  const maxInvestigationsPerRun =
-    config.aiReview.maxInvestigationsPerRun ?? defaults.maxInvestigationsPerRun
-  const maxToolReadsPerInvestigation =
-    config.aiReview.maxToolReadsPerInvestigation ??
-    defaults.maxToolReadsPerInvestigation
-  const maxToolSearchesPerInvestigation =
-    config.aiReview.maxToolSearchesPerInvestigation ??
-    defaults.maxToolSearchesPerInvestigation
-  const maxInvestigationRounds =
-    config.aiReview.maxInvestigationRounds ?? defaults.maxInvestigationRounds
+  const caps = defaultContextRetrievalCapsByDepth[config.review.depth]
   const depthContextCap = providerTaskContextMaxBytesByDepth[config.review.depth]
   const maxBytesPerRead = Math.max(
     1,
@@ -103,17 +75,13 @@ export const aiReviewBudgetFor = (
   )
 
   return {
-    maxSuspicionsPerTask:
-      config.aiReview.maxSuspicionsPerTask ?? defaults.maxSuspicionsPerTask,
-    maxInvestigationsPerRun,
-    maxInvestigationRounds,
     contextRetrievalBudget: {
-      maxReads: maxInvestigationsPerRun * maxToolReadsPerInvestigation,
+      maxReads: caps.maxReads,
       usedReads: 0,
-      maxSearches: maxInvestigationsPerRun * maxToolSearchesPerInvestigation,
+      maxSearches: caps.maxSearches,
       usedSearches: 0,
       maxBytesPerRead,
-      maxMatches: Math.max(1, maxToolSearchesPerInvestigation * maxInvestigationRounds)
+      maxMatches: caps.maxMatches
     }
   }
 }
