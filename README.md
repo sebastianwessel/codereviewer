@@ -119,16 +119,19 @@ to improve.
 
 | Metric | Value |
 | --- | --- |
-| **productRecall** (runtime-critical + security + logic tiers — headline accuracy target) | **36.5%** |
-| Overall recall | 30.1% |
-| Precision | 55.6% |
-| F1 | 39.0% |
-| False positives | 32 |
+| **productRecall** (runtime-critical + security + logic tiers — headline accuracy target) | **39.4%** |
+| Overall recall | 33.1% |
+| Precision | 53.0% |
+| F1 | 40.7% |
+| False positives | 39 |
 | Provider errors | 0 |
-| Cost | ~$13.5 |
+| Cost | ~$11.9 |
 | Duration | ~32 min |
 
-Recall by tier: runtime-critical **47%**, security **44%**, logic **23%**.
+Recall by tier: runtime-critical **36%**, security **50%**, logic **40%**.
+
+Per-case LLM variance is roughly ±2–3 points on these aggregate metrics, so treat
+small differences between runs as noise rather than signal.
 
 ---
 
