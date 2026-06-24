@@ -149,6 +149,31 @@ describe('finding refutation packet', () => {
     ])
   })
 
+  test('serializes task-shared fields before per-candidate fields (cache prefix)', () => {
+    const context = reviewContext()
+    const packet = findingRefutationInputForCandidate({
+      workflowInput: workflowInput(),
+      tasks: [task([context])],
+      candidate: modelCandidate,
+      allCandidates: [modelCandidate, supportCandidate],
+      sharedDigest: '(no admitted shared context yet)'
+    })
+    const serialized = JSON.stringify(packet.input)
+    const at = (key: string): number => serialized.indexOf(`"${key}"`)
+
+    // The large task-shared context must precede every per-candidate field so a
+    // task's candidates share a cacheable prompt prefix; `candidate` is last.
+    for (const perCandidate of [
+      'reviewedDiffRanges',
+      'evidence',
+      'supportSignalCandidates',
+      'candidate'
+    ]) {
+      expect(at('reviewContext')).toBeLessThan(at(perCandidate))
+    }
+    expect(at('candidate')).toBe(Math.max(...['runId', 'reviewContext', 'instructions', 'skills', 'provenance', 'sharedDigest', 'reviewedDiffRanges', 'evidence', 'supportSignalCandidates', 'candidate'].map(at)))
+  })
+
   test('drops unrelated same-file support signals from the refutation packet', () => {
     const packet = findingRefutationInputForCandidate({
       workflowInput: workflowInput(),

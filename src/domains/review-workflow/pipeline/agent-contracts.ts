@@ -459,17 +459,24 @@ export const TaskReviewResultSchema = z.strictObject({
   providerIssues: ReviewReportSchema.shape.providerIssues.default([])
 })
 
+// Field order is deliberate for provider prompt caching: fields IDENTICAL across
+// all of a task's candidates come first (a stable, cacheable prompt prefix) and
+// the per-candidate fields come last. The large `reviewContext` (the task's file
+// content) is placed early; `candidate`/`evidence`/`supportSignalCandidates`/
+// `reviewedDiffRanges` are filtered per candidate, so they go last. `sharedDigest`
+// is usually shared but can be budget-replaced per candidate, so it sits after
+// the always-stable fields. Keep `candidate` LAST.
 export const FindingRefutationInputSchema = z.strictObject({
   runId: z.string().min(1),
-  candidate: CandidateFindingSchema,
-  reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
-  evidence: z.array(EvidenceRecordSchema),
-  supportSignalCandidates: z.array(CandidateFindingSchema),
   reviewContext: z.array(ReviewContextDocumentSchema),
   instructions: z.array(ContextDocumentSchema),
   skills: z.array(SkillContextDocumentSchema),
+  provenance: WorkflowProvenanceInputSchema,
   sharedDigest: z.string(),
-  provenance: WorkflowProvenanceInputSchema
+  reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
+  evidence: z.array(EvidenceRecordSchema),
+  supportSignalCandidates: z.array(CandidateFindingSchema),
+  candidate: CandidateFindingSchema
 })
 
 export const FindingRefutationResultSchema = z.strictObject({
