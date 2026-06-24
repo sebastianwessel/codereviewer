@@ -91,6 +91,7 @@ export const modelReviewWorkflowDelegation = (
   agents: [
     'plan_review_intents',
     'review_task',
+    'holistic_review',
     'investigate_suspicion',
     'aggregate_findings',
     'sweep_sibling_suspicions',
