@@ -13,14 +13,14 @@ import {
   createModelBackedReviewHarness,
   isReviewTaskExecutionError,
   runModelBackedReviewWorkflow
-} from './harness-workflow.js'
+} from './harness/workflow.js'
 import {
   CodeReviewerConfigSchema
 } from '../../shared/contracts/index.js'
 import {
   isReviewRunFailedError,
   runReview
-} from './review-runner.js'
+} from './run/review-runner.js'
 import { renderGithubReviewComments } from '../reporting/github-review-comments.js'
 import { parseGitDiffMaps } from '../repository-intake/index.js'
 

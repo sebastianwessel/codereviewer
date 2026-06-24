@@ -1,0 +1,56 @@
+import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
+import { type CandidateFinding } from '../../../admission/index.js'
+import {
+  type FindingRefutationRunner,
+  type WorkflowReviewTask
+} from '../agent-contracts.js'
+import { reviewCandidateForAdmission } from './candidate-review.js'
+import { noRefuterAdmissionOutcome } from './preflight-outcome.js'
+import { mapWithBoundedConcurrencyInOrder } from '../ordered-bounded-map.js'
+import {
+  mergeAdmissionCandidateOutcomes,
+  type AdmissionCandidateOutcome
+} from './outcome.js'
+import { type ReviewWorkflowInput } from '../contracts.js'
+
+export const prepareCandidatesForAdmission = async (
+  input: {
+    readonly workflowInput: ReviewWorkflowInput
+    readonly tasks: readonly WorkflowReviewTask[]
+    readonly candidates: readonly CandidateFinding[]
+    readonly sharedDigest: string
+    readonly reviewEvidence?: readonly EvidenceRecord[]
+    readonly refuteFinding?: FindingRefutationRunner
+    readonly signal?: AbortSignal
+  }
+): Promise<AdmissionCandidateOutcome> => {
+  if (input.refuteFinding === undefined) {
+    return noRefuterAdmissionOutcome({
+      candidates: input.candidates,
+      workflowEvidence: input.workflowInput.evidence
+    })
+  }
+  const refuteFinding = input.refuteFinding
+  const reviewEvidence = input.reviewEvidence ?? input.workflowInput.evidence
+
+  const outcomes = await mapWithBoundedConcurrencyInOrder({
+    items: input.candidates,
+    concurrency: input.workflowInput.maxConcurrentTasks ?? 1,
+    mapItem: (candidate) =>
+      reviewCandidateForAdmission({
+        workflowInput: input.workflowInput,
+        tasks: input.tasks,
+        candidate,
+        allCandidates: input.candidates,
+        sharedDigest: input.sharedDigest,
+        reviewEvidence,
+        refuteFinding,
+        ...(input.signal === undefined ? {} : { signal: input.signal })
+      })
+  })
+
+  return mergeAdmissionCandidateOutcomes({
+    workflowEvidence: input.workflowInput.evidence,
+    outcomes
+  })
+}

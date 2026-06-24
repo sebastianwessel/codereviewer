@@ -3,8 +3,8 @@ import {
   REJECTED_FINDING_MESSAGE_MAX,
   RejectedFindingSchema
 } from './finding.schema.js'
-import { activeRefutationResultForCandidate } from '../../../domains/review-workflow/model-admission-refutation-result.js'
-import { refutedCandidateOutcome } from '../../../domains/review-workflow/model-admission-refutation-verdict-outcome.js'
+import { activeRefutationResultForCandidate } from '../../../domains/review-workflow/pipeline/refutation/result.js'
+import { refutedCandidateOutcome } from '../../../domains/review-workflow/pipeline/refutation/verdict-outcome.js'
 
 // Regression guard for the cap drift where model-authored rejection summaries
 // (capped at 1200 upstream) flowed into `RejectedFinding.message` (capped at 500)
