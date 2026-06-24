@@ -71,16 +71,9 @@ const createFindingRefutationInput = (
           (context) => context.path === undefined || context.path === candidatePath
         )
 
-  // Construct in the same order as FindingRefutationInputSchema so the serialized
-  // packet keeps the task-shared fields (the cacheable prefix) before the
-  // per-candidate fields; `candidate` is last.
   return FindingRefutationInputSchema.parse({
     runId: input.workflowInput.runId,
-    reviewContext,
-    instructions: input.workflowInput.instructions,
-    skills: input.workflowInput.skills,
-    provenance: input.workflowInput.provenance,
-    sharedDigest: input.sharedDigest,
+    candidate: input.candidate,
     reviewedDiffRanges: (input.workflowInput.reviewedDiffRanges ?? []).filter(
       (range) => range.path === candidatePath
     ),
@@ -91,7 +84,11 @@ const createFindingRefutationInput = (
       (supportCandidate) =>
         supportSignalCandidateSupports(input.candidate, supportCandidate)
     ),
-    candidate: input.candidate
+    reviewContext,
+    instructions: input.workflowInput.instructions,
+    skills: input.workflowInput.skills,
+    sharedDigest: input.sharedDigest,
+    provenance: input.workflowInput.provenance
   })
 }
 
