@@ -188,8 +188,10 @@ type HolisticTaskReviewLogger = {
 
 // Upper bound on candidates emitted per task. Holistic discovery favors recall,
 // but every candidate costs one downstream refutation call, so we bound it. The
-// refutation filter (not this cap) is what controls precision.
-const HOLISTIC_MAX_CANDIDATES = 12
+// refutation filter (not this cap) is what controls precision. Exported so the
+// child-agent budget (harness/config.ts) can reserve one refutation call per
+// candidate — under-reserving starves refutation and leaks unfiltered findings.
+export const HOLISTIC_MAX_CANDIDATES = 12
 
 const candidateFromFinding = (
   task: WorkflowReviewTask,
