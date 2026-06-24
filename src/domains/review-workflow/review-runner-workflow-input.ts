@@ -140,6 +140,7 @@ export const createWorkflowInput = (
   maxInvestigationRounds: input.aiReviewBudget.maxInvestigationRounds,
   contextRetrievalBudget: input.aiReviewBudget.contextRetrievalBudget,
   intentPlanning: effectiveIntentPlanningMode(input.config, input.tasks),
+  discoveryMode: input.config.aiReview.discoveryMode,
   judgeFindings: input.config.aiReview.judgeFindings,
   promotionPolicy: input.config.promotionPolicy,
   provenance: {

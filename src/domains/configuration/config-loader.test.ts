@@ -149,12 +149,14 @@ describe('configuration loader', () => {
         repositoryRoot: root,
         environment: {
           CODEREVIEWER_AI_INTENT_PLANNING: 'model',
+          CODEREVIEWER_AI_DISCOVERY_MODE: 'holistic',
           CODEREVIEWER_AI_JUDGE_FINDINGS: 'true'
         },
         loadDotEnv: false
       })
 
       expect(result.config.aiReview.intentPlanning).toBe('model')
+      expect(result.config.aiReview.discoveryMode).toBe('holistic')
       expect(result.config.aiReview.judgeFindings).toBe(true)
     } finally {
       await rm(root, { recursive: true, force: true })

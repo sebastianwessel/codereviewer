@@ -416,6 +416,22 @@ export const ModelTaskSuggestionsSchema = z.strictObject({
   suspicions: z.array(z.unknown()).default([])
 })
 
+// Holistic discovery output. Loose like ModelTaskSuggestionsSchema (tolerates
+// model output drift); each raw finding is normalized via
+// ModelSuspicionSuggestionSchema and mapped to a CandidateFinding downstream.
+export const ModelHolisticReviewResultSchema = z.strictObject({
+  findings: z.array(z.unknown()).default([])
+})
+
+export type ModelHolisticReviewResult = z.infer<
+  typeof ModelHolisticReviewResultSchema
+>
+
+export type HolisticReviewRunner = (
+  input: TaskReviewInput,
+  signal: AbortSignal | undefined
+) => Promise<ModelHolisticReviewResult>
+
 const IntentPlanningTaskSummarySchema = z.strictObject({
   id: PlannedReviewTaskSchema.shape.id,
   kind: PlannedReviewTaskSchema.shape.kind,

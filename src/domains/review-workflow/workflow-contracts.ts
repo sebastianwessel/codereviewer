@@ -50,6 +50,7 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   maxInvestigationRounds: z.int().min(1).max(5).optional(),
   contextRetrievalBudget: ContextRetrievalBudgetSchema.optional(),
   intentPlanning: z.enum(['deterministic', 'model']).default('deterministic'),
+  discoveryMode: z.enum(['suspicion', 'holistic']).default('suspicion'),
   judgeFindings: z.boolean().default(false),
   promotionPolicy: PromotionPolicyConfigSchema.default({
     modelProof: 'actionable',

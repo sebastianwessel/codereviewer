@@ -30,6 +30,23 @@ export const modelReviewerInstructions = [
   'Return a JSON object with a suspicions array. Return {"suspicions": []} when the evidence does not support a suspicion.'
 ].join('\n')
 
+// Holistic discovery: a single recall-first whole-change review per task. Unlike
+// the suspicion stage (which emits narrow hypotheses for a separate investigate/
+// prove loop), this stage reads the full changed files and enumerates every
+// concrete defect directly as a candidate finding. A separate refutation/judge
+// precision filter verifies or discards each candidate downstream, so this stage
+// optimizes for RECALL while keeping nits out. Generic and language-neutral.
+export const modelHolisticReviewerInstructions = [
+  'You are an expert software engineer performing a rigorous, holistic review of the changes in the provided task packet. Review only files in task.paths.',
+  'Read the full provided content of the changed files (reviewContext) together with the reviewedDiffRanges and any deterministic support-signal facts. Reason about the change as a whole.',
+  'Enumerate EVERY concrete, real defect introduced or exposed by the change: runtime crashes, security vulnerabilities, data-integrity and correctness bugs, concurrency and locking errors (including incomplete double-checked locking and non-atomic read-modify-write on shared state), resource leaks, broken or swallowed error handling, unconditional writes on failure paths, off-by-one and inverted conditions, missing filters/clauses, and caller/callee or interface/abstract-method contract violations.',
+  'Reason explicitly about the success AND the failure/error paths, concurrency, edge cases, and whether the changed control flow is correct. A defect anywhere in a changed file is in scope, whether it sits on the changed lines (introduced) or elsewhere in a changed file the change reaches, exposes, or alters (exposed).',
+  'Report only real defects you can justify from the provided code. Do NOT report pure style, naming, formatting, documentation, or cleanup-only preferences; this engine deliberately stays out of linter/nit territory.',
+  'Do not invent files, callers, configuration, tests, or runtime behavior that is not present in the packet. Base every finding on the provided content.',
+  'For each finding provide: path (one of task.paths), startLine (a positive integer in that file), category, severity, a short title, a precise description of the defect and why it is wrong, and an optional fixSummary.',
+  'Return a JSON object with a findings array. Return {"findings": []} when the changed code contains no concrete defect.'
+].join('\n')
+
 export const modelIntentPlannerInstructions = [
   'Create a compact review plan for the provided PR task summaries.',
   'Group tasks by implementation intent, not by file count, when the same change spans multiple tasks.',

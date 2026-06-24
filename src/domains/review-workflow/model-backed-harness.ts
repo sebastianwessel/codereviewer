@@ -5,6 +5,7 @@ import {
   modelFindingInvestigatorInstructions,
   modelFindingJudgeInstructions,
   modelFindingRefuterInstructions,
+  modelHolisticReviewerInstructions,
   modelIntentPlannerInstructions,
   modelReviewerInstructions,
   modelSiblingSweepInstructions
@@ -19,6 +20,7 @@ import {
   ModelFindingInvestigationResultSchema,
   ModelFindingJudgeResultSchema,
   ModelFindingRefutationResultSchema,
+  ModelHolisticReviewResultSchema,
   ModelReviewIntentPlanSchema,
   ModelTaskSuggestionsSchema,
   SiblingSweepInputSchema,
@@ -35,6 +37,7 @@ import {
   runRefutationProviderCall
 } from './model-provider-call-adapters.js'
 import { runModelBackedTaskReview } from './model-task-review.js'
+import { runModelBackedHolisticTaskReview } from './model-holistic-task-review.js'
 import { tasksForWorkflowInput } from './workflow-task-planning.js'
 import {
   type ModelBackedReviewHarness,
@@ -93,6 +96,13 @@ export const createModelBackedReviewHarness = (
         output: ModelTaskSuggestionsSchema,
         ...agentOptionsForRole('review_task'),
         instructions: modelReviewerInstructions
+      }),
+      holistic_review: agent({
+        model: 'reviewer',
+        input: TaskReviewInputSchema,
+        output: ModelHolisticReviewResultSchema,
+        ...agentOptionsForRole('review_task'),
+        instructions: modelHolisticReviewerInstructions
       }),
       investigate_suspicion: agent({
         model: 'reviewer',
@@ -169,7 +179,24 @@ export const createModelBackedReviewHarness = (
               contextRetriever,
               reserveModelInvestigationSlots
             ) =>
-              runModelBackedTaskReview({
+              ctx.input.discoveryMode === 'holistic'
+                ? runModelBackedHolisticTaskReview({
+                    workflowInput: ctx.input,
+                    taskInput,
+                    task,
+                    runners: {
+                      holisticReview: (holisticInput, holisticSignal) =>
+                        ctx.agents.holistic_review(
+                          holisticInput,
+                          holisticSignal === undefined
+                            ? {}
+                            : { signal: holisticSignal }
+                        )
+                    },
+                    logger,
+                    ...(signal === undefined ? {} : { signal })
+                  })
+                : runModelBackedTaskReview({
                 workflowInput: ctx.input,
                 taskInput,
                 task,

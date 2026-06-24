@@ -148,6 +148,10 @@ export const AiReviewConfigSchema = z.strictObject({
   maxInvestigationRounds: z.int().min(1).max(5).optional(),
   requireRefutation: z.literal(true).default(true),
   intentPlanning: z.enum(['auto', 'deterministic', 'model']).default('auto'),
+  // Discovery strategy: 'suspicion' = budgeted hypothesis->investigate->prove
+  // loop; 'holistic' = one recall-first whole-file review per change unit, then
+  // the same refutation/judge precision filter.
+  discoveryMode: z.enum(['suspicion', 'holistic']).default('suspicion'),
   judgeFindings: z.boolean().default(false),
   deterministicSignalMode: z.enum(['support', 'disabled']).default('support'),
   // Minimum severity for a MODEL-origin finding to be admitted as actionable.
@@ -286,6 +290,7 @@ export const CodeReviewerConfigSchema = z.strictObject({
   aiReview: AiReviewConfigSchema.default({
     requireRefutation: true,
     intentPlanning: 'auto',
+    discoveryMode: 'suspicion',
     judgeFindings: false,
     deterministicSignalMode: 'support',
     actionableSeverityThreshold: 'medium'

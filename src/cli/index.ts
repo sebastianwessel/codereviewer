@@ -832,6 +832,10 @@ const runEval = async (
       'deterministic',
       'model'
     ] as const)
+    const discoveryMode = parseEnumOption(evalArgs, '--discovery-mode', [
+      'suspicion',
+      'holistic'
+    ] as const)
     const maxConcurrentTasks = parseIntegerOption(
       evalArgs,
       '--max-concurrent-tasks',
@@ -865,13 +869,16 @@ const runEval = async (
                 : { maxConcurrentTasks })
             }
           }),
-      ...(intentPlanning === undefined && !judgeFindingsEnabled
+      ...(intentPlanning === undefined &&
+      discoveryMode === undefined &&
+      !judgeFindingsEnabled
         ? {}
         : {
             aiReview: {
               ...(intentPlanning === undefined
                 ? {}
                 : { intentPlanning }),
+              ...(discoveryMode === undefined ? {} : { discoveryMode }),
               ...(judgeFindingsEnabled ? { judgeFindings: true } : {})
             }
           })

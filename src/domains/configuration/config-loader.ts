@@ -241,6 +241,7 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
     ['CODEREVIEWER_PROVIDER_REASONING_EFFORT', ['provider', 'reasoningEffort']],
     ['CODEREVIEWER_ARTIFACT_DIR', ['paths', 'artifactDir']],
     ['CODEREVIEWER_AI_INTENT_PLANNING', ['aiReview', 'intentPlanning']],
+    ['CODEREVIEWER_AI_DISCOVERY_MODE', ['aiReview', 'discoveryMode']],
     [
       'CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE',
       ['aiReview', 'deterministicSignalMode']

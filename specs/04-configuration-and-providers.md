@@ -51,6 +51,7 @@ R1 supports only these configuration environment variables:
 | `CODEREVIEWER_PROVIDER_REASONING_EFFORT` | `provider.reasoningEffort` | reasoning effort enum |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `provider.baseUrl` | URL |
 | `CODEREVIEWER_AI_INTENT_PLANNING` | `aiReview.intentPlanning` | intent planning enum |
+| `CODEREVIEWER_AI_DISCOVERY_MODE` | `aiReview.discoveryMode` | discovery mode enum |
 | `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `aiReview.deterministicSignalMode` | signal mode enum |
 | `CODEREVIEWER_AI_JUDGE_FINDINGS` | `aiReview.judgeFindings` | boolean |
 | `CODEREVIEWER_ARTIFACT_DIR` | `paths.artifactDir` | repository-relative path |
@@ -128,6 +129,7 @@ provider, filesystem writes, or publishing.
 | `maxInvestigationRounds` | integer 1..5 | depth-defined | Caps mediated investigator follow-up rounds and optional judge follow-up rounds. |
 | `requireRefutation` | boolean | `true` | Must be true in R1. |
 | `intentPlanning` | `"auto" | "deterministic" | "model"` | `"auto"` | `auto` uses deterministic intents for local or single-task runs and a compact model planner for multi-task non-local reviews. `model` forces the planner for multi-task runs. |
+| `discoveryMode` | `"suspicion" | "holistic"` | `"suspicion"` | `suspicion` runs the budgeted hypothesis→investigate→prove loop. `holistic` runs one recall-first whole-file review per change unit, then the same refutation/judge precision filter. |
 | `judgeFindings` | boolean | `false` | Disabled by default; opt-in for high-stakes runs. When true, proved model-origin candidates must pass a separate critic judge before admission (adds provider cost and latency). |
 | `actionableSeverityThreshold` | severity | `medium` | Minimum severity for a MODEL-origin finding to be admitted as actionable. Below this it is rejected as `below-threshold` (still recorded as a rejected finding). Trusted deterministic-rule findings are exempt. Keeps the engine focused on impactful runtime/security defects over low-severity nits. |
 | `deterministicSignalMode` | `"support" | "disabled"` | `"support"` | `support` injects deterministic facts as model context (single-case A/B: materially improves recall). `disabled` keeps facts for free task clustering but does NOT inject support-signal context into model packets — lower token cost, lower recall. Override with `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`. |

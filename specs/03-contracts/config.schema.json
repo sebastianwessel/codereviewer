@@ -410,6 +410,7 @@
       "default": {
         "requireRefutation": true,
         "intentPlanning": "auto",
+        "discoveryMode": "suspicion",
         "judgeFindings": false,
         "deterministicSignalMode": "support",
         "actionableSeverityThreshold": "medium"
@@ -458,6 +459,14 @@
             "model"
           ]
         },
+        "discoveryMode": {
+          "default": "suspicion",
+          "type": "string",
+          "enum": [
+            "suspicion",
+            "holistic"
+          ]
+        },
         "judgeFindings": {
           "default": false,
           "type": "boolean"
@@ -485,6 +494,7 @@
       "required": [
         "requireRefutation",
         "intentPlanning",
+        "discoveryMode",
         "judgeFindings",
         "deterministicSignalMode",
         "actionableSeverityThreshold"
