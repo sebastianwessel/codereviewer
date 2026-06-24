@@ -12,7 +12,6 @@ import {
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
-import { languageReviewGuidance } from './language-guidance.js'
 
 // Present the changed source to the holistic reviewer as a clean, line-numbered
 // document (plus the diff ranges). This is the input shape that let whole-file
@@ -135,7 +134,6 @@ const buildReviewText = (
 
   return [
     `Review task ${taskInput.task.id}.`,
-    languageReviewGuidance(taskInput.task.paths),
     changeSection,
     `\n## Changed files (full content, line-numbered, for context)\n${
       files.length === 0 ? '(no file content provided)' : files

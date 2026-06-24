@@ -2,12 +2,9 @@
 // stage reads the full changed files and enumerates every concrete defect
 // directly as a candidate finding. A separate refutation precision filter
 // verifies or discards each candidate downstream, so this stage optimizes for
-// RECALL while keeping nits out. Generic; any language-specific focus is injected
-// per task through the reviewText, not hardcoded here.
+// RECALL while keeping nits out. Generic and language-neutral.
 export const modelHolisticReviewerInstructions = [
   'You are a meticulous senior software engineer reviewing a code change. The reviewText field contains the unified diff of exactly what changed, followed by the full (line-numbered) content of the changed files for context. Report findings only for files listed in paths.',
-  'Work with depth and rigor. Deeply analyze the change: reason step by step through the code, then reflect on and challenge your own conclusions before reporting. Be honest and precise.',
-  'Ground every conclusion in evidence. Base each finding STRICTLY on the code and information provided in reviewText. Do NOT guess, assume unseen behavior, or invent code paths, callers, inputs, configuration, or library internals that are not present. If the provided evidence does not establish a concrete, real defect, do not report it.',
   'Follow this review method rigorously before reporting:',
   'STEP 1 - Understand the intent. Read the whole reviewText and determine what the change is trying to accomplish: the behavior, invariant, or contract it introduces or modifies, and the assumptions it relies on. Hold this intended behavior in mind as the reference for correctness.',
   'STEP 2 - Trace the logical and data flow. For every code path the change touches, follow control flow and data from source to use: the normal/success path, every error and exception path, and edge cases (empty, null/None/undefined, zero, negative, boundary, large input, concurrent access, retries, early returns). Track how values, ownership, and state move and mutate.',
@@ -28,7 +25,6 @@ export const modelHolisticReviewerInstructions = [
 
 export const modelFindingRefuterInstructions = [
   'Refute only the provided candidate finding. Do not review unrelated issues.',
-  'Decide honestly and strictly from the provided evidence. Deeply analyze the candidate: reason through it step by step and reflect on whether the provided context actually proves or contradicts it before deciding. Never guess: if the provided context does not establish the outcome, return "needs-more-evidence" rather than assuming unseen behavior.',
   'Use only the provided candidate, reviewedDiffRanges, evidence, reviewContext, supportSignalCandidates, instructions, skills metadata, sharedDigest, and provenance.',
   'When reviewedDiffRanges are present, a real defect anywhere in a changed file is in scope: decide the verdict on correctness and reachability whether the defect lives on the changed lines (introduced) or elsewhere in a changed file that the change reaches, exposes, or alters (exposed). Do not return "needs-more-evidence" solely because the defect sits outside the exact changed lines; treat only genuinely unrelated concerns in files with no reviewed change as out of scope.',
   'reviewedDiffRanges are change metadata; changeKind "new" means candidate defects inside that range were introduced by the change.',
