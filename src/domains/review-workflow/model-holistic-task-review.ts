@@ -20,7 +20,52 @@ import {
 // document (plus the diff ranges), rather than the structured task packet. This
 // is the input shape that let whole-file holistic review out-recall the gauntlet
 // in probes; burying the source inside the packet dilutes whole-file reasoning.
-const buildReviewText = (taskInput: TaskReviewInput): string => {
+// Extract the unified-diff segments for the task's paths from the raw diff blob
+// (the blob covers all changed files; split on `diff --git` file headers).
+const diffSegmentsForPaths = (
+  rawDiff: string,
+  paths: readonly string[]
+): string => {
+  if (rawDiff.trim().length === 0) {
+    return ''
+  }
+
+  const headerPattern = /^diff --git (?:"?a\/(.+?)"?) (?:"?b\/(.+?)"?)$/u
+  const segments: string[] = []
+  let current: string[] | undefined
+  let currentPath: string | undefined
+
+  const flush = (): void => {
+    if (
+      current !== undefined &&
+      currentPath !== undefined &&
+      paths.includes(currentPath)
+    ) {
+      segments.push(current.join('\n'))
+    }
+  }
+
+  for (const line of rawDiff.split('\n')) {
+    const match = headerPattern.exec(line)
+
+    if (match !== null) {
+      flush()
+      current = [line]
+      currentPath = match[2] ?? match[1]
+      continue
+    }
+
+    if (current !== undefined) {
+      current.push(line)
+    }
+  }
+
+  flush()
+
+  return segments.join('\n\n')
+}
+
+const buildReviewText = (taskInput: TaskReviewInput, rawDiff: string): string => {
   const files = taskInput.task.reviewContext
     .filter(
       (entry): entry is typeof entry & { readonly path: string } =>
@@ -38,6 +83,9 @@ const buildReviewText = (taskInput: TaskReviewInput): string => {
     })
     .join('\n\n')
 
+  // Prefer the actual unified diff (before/after); fall back to line ranges when
+  // the raw diff is unavailable (e.g. explicit-file runs with no diff).
+  const diffText = diffSegmentsForPaths(rawDiff, taskInput.task.paths)
   const diffRanges = taskInput.reviewedDiffRanges
     .map(
       (range) =>
@@ -46,13 +94,17 @@ const buildReviewText = (taskInput: TaskReviewInput): string => {
         }`
     )
     .join('\n')
+  const changeSection =
+    diffText.length > 0
+      ? `\n## Diff - exactly what this change modified (review this closely)\n\`\`\`diff\n${diffText}\n\`\`\``
+      : diffRanges.length === 0
+        ? ''
+        : `\n## Reviewed diff ranges (what changed)\n${diffRanges}`
 
   return [
     `Review task ${taskInput.task.id}.`,
-    diffRanges.length === 0
-      ? ''
-      : `\n## Reviewed diff ranges (what changed)\n${diffRanges}`,
-    `\n## Changed files (full content, line-numbered)\n${
+    changeSection,
+    `\n## Changed files (full content, line-numbered, for context)\n${
       files.length === 0 ? '(no file content provided)' : files
     }`
   ].join('\n')
@@ -148,7 +200,10 @@ export const runModelBackedHolisticTaskReview = async (
         runId: input.taskInput.runId,
         taskId: input.task.id,
         paths: [...input.task.paths],
-        reviewText: buildReviewText(input.taskInput)
+        reviewText: buildReviewText(
+          input.taskInput,
+          input.workflowInput.reviewedDiffText
+        )
       },
       input.signal
     )

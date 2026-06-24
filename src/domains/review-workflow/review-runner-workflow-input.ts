@@ -97,6 +97,7 @@ export const createWorkflowInput = (
     readonly reviewedPaths: readonly string[]
     readonly reviewedLineRanges: readonly ReviewedLineRange[]
     readonly reviewedDiffRanges: readonly ReviewedDiffRange[]
+    readonly reviewedDiffText: string
     readonly evidence: readonly EvidenceRecord[]
     readonly candidates: readonly CandidateFinding[]
     readonly config: CodeReviewerConfig
@@ -117,6 +118,7 @@ export const createWorkflowInput = (
   reviewedPaths: [...input.reviewedPaths],
   reviewedLineRanges: input.reviewedLineRanges.map((range) => ({ ...range })),
   reviewedDiffRanges: input.reviewedDiffRanges.map((range) => ({ ...range })),
+  reviewedDiffText: input.reviewedDiffText,
   evidence: [
     ...input.evidence.map((record) => ({ ...record })),
     ...contextEvidenceForTasks(input.tasks)

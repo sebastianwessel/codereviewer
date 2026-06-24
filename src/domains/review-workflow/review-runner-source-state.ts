@@ -39,6 +39,9 @@ export const prepareReviewRunnerSourceState = async (
     ...(options.reviewDiffMaps === undefined
       ? {}
       : { reviewDiffMaps: options.reviewDiffMaps }),
+    ...(options.reviewRawDiff === undefined
+      ? {}
+      : { reviewRawDiff: options.reviewRawDiff }),
     ...(options.explicitFiles === undefined
       ? {}
       : { explicitFiles: options.explicitFiles }),

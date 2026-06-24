@@ -157,6 +157,7 @@ describe('review runner workflow input', () => {
       reviewedDiffRanges: [
         { path: 'src/a.ts', startLine: 1, endLine: 1, changeKind: 'modified' }
       ],
+      reviewedDiffText: '',
       evidence: [evidence],
       candidates: [],
       config,

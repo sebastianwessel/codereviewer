@@ -64,11 +64,13 @@ describe('review runner source state', () => {
           reason: 'too-large'
         }
       ],
-      diffMaps: []
+      diffMaps: [],
+      rawDiff: ''
     }
     const intakeState: ReviewRunnerRepositoryIntakeState = {
       intake,
       effectiveDiffMaps: [],
+      effectiveRawDiff: '',
       effectiveDiffRanges: [
         {
           path: 'src/app.ts',

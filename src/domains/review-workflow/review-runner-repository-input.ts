@@ -16,6 +16,9 @@ export type ReviewRunnerRepositoryInputOptions = {
   readonly config: CodeReviewerConfig
   readonly explicitFiles?: readonly string[] | undefined
   readonly reviewDiffMaps?: readonly DiffMap[] | undefined
+  // Raw unified diff text provided by the caller (e.g. eval slices). When unset,
+  // the intake-computed raw diff is used.
+  readonly reviewRawDiff?: string | undefined
   readonly baseRef?: string | undefined
   readonly headRef?: string | undefined
   readonly signal?: AbortSignal | undefined
@@ -34,6 +37,7 @@ export type ReviewRunnerRepositoryIntakeState = {
   readonly intake: RepositoryIntake
   readonly effectiveDiffMaps: readonly DiffMap[]
   readonly effectiveDiffRanges: readonly ReviewedDiffRange[]
+  readonly effectiveRawDiff: string
   readonly intakeMetrics: ReviewRunnerRepositoryIntakeMetrics
 }
 
@@ -62,11 +66,13 @@ export const collectReviewRunnerRepositoryIntake = async (
     ...(options.signal === undefined ? {} : { signal: options.signal })
   })
   const effectiveDiffMaps = options.reviewDiffMaps ?? intake.diffMaps
+  const effectiveRawDiff = options.reviewRawDiff ?? intake.rawDiff
 
   return {
     intake,
     effectiveDiffMaps,
     effectiveDiffRanges: reviewedDiffRangesForDiffMaps(effectiveDiffMaps),
+    effectiveRawDiff,
     intakeMetrics: {
       changedFileCount: intake.changedFiles.length,
       skippedFileCount: intake.skippedFiles.length

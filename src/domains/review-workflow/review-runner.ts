@@ -54,6 +54,7 @@ export type RunReviewOptions = {
   readonly baselineExplicitlyConfigured?: boolean
   readonly explicitFiles?: readonly string[]
   readonly reviewDiffMaps?: readonly DiffMap[]
+  readonly reviewRawDiff?: string
   readonly baseRef?: string
   readonly headRef?: string
   readonly environment?: Readonly<Record<string, string | undefined>>
@@ -112,12 +113,16 @@ export const runReview = async (
       ...(options.reviewDiffMaps === undefined
         ? {}
         : { reviewDiffMaps: options.reviewDiffMaps }),
+      ...(options.reviewRawDiff === undefined
+        ? {}
+        : { reviewRawDiff: options.reviewRawDiff }),
       ...(options.explicitFiles === undefined
         ? {}
         : { explicitFiles: options.explicitFiles }),
       ...(runSignal.signal === undefined ? {} : { signal: runSignal.signal })
     })
-    const { intake, effectiveDiffRanges, sourceFiles } = sourceState
+    const { intake, effectiveDiffRanges, effectiveRawDiff, sourceFiles } =
+      sourceState
     const planningState = prepareReviewRunnerPlanningState({
       config: options.config,
       files: intake.changedFiles,
@@ -151,6 +156,7 @@ export const runReview = async (
       reviewedPaths: intake.changedFiles.map((file) => file.path),
       reviewedLineRanges: reviewedLineRangesForSourceFiles(sourceFiles),
       reviewedDiffRanges: effectiveDiffRanges,
+      reviewedDiffText: effectiveRawDiff,
       evidence,
       candidates: supportSignalCandidates,
       config: options.config,

@@ -681,7 +681,10 @@ const runEvalCase = async (
       explicitFiles: input.evalCase.changedFiles,
       ...(input.evalCase.diff === undefined
         ? {}
-        : { reviewDiffMaps: parseGitDiffMaps(input.evalCase.diff) }),
+        : {
+            reviewDiffMaps: parseGitDiffMaps(input.evalCase.diff),
+            reviewRawDiff: input.evalCase.diff
+          }),
       ...(input.evalCase.baseRef === undefined
         ? {}
         : { baseRef: input.evalCase.baseRef }),

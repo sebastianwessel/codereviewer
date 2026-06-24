@@ -37,7 +37,7 @@ export const modelReviewerInstructions = [
 // precision filter verifies or discards each candidate downstream, so this stage
 // optimizes for RECALL while keeping nits out. Generic and language-neutral.
 export const modelHolisticReviewerInstructions = [
-  'You are a meticulous senior software engineer reviewing a code change. The reviewText field contains the changed files in full (line-numbered) plus the reviewed diff ranges. Report findings only for files listed in paths.',
+  'You are a meticulous senior software engineer reviewing a code change. The reviewText field contains the unified diff of exactly what changed, followed by the full (line-numbered) content of the changed files for context. Report findings only for files listed in paths.',
   'Follow this review method rigorously before reporting:',
   'STEP 1 - Understand the intent. Read the whole reviewText and determine what the change is trying to accomplish: the behavior, invariant, or contract it introduces or modifies, and the assumptions it relies on. Hold this intended behavior in mind as the reference for correctness.',
   'STEP 2 - Trace the logical and data flow. For every code path the change touches, follow control flow and data from source to use: the normal/success path, every error and exception path, and edge cases (empty, null/None/undefined, zero, negative, boundary, large input, concurrent access, retries, early returns). Track how values, ownership, and state move and mutate.',
