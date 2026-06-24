@@ -17,8 +17,10 @@ Date: 2026-06-19
 10. Build deterministic support signals.
 11. Plan review tasks.
 12. Resolve provider when model-backed review is enabled.
-13. Run holistic discovery: one recall-first whole-file review per task that
-    emits candidate findings.
+13. Run holistic discovery: two serial diverse-lens recall-first whole-file
+    reviews per task (a general pass, then a pass focused on commonly-missed
+    high-impact defects) whose findings are unioned and deduped into candidate
+    findings.
 14. Run refutation per candidate finding.
 15. Admit or reject candidates against the admission gate.
 16. Match actionable admitted findings against baseline.
@@ -214,8 +216,9 @@ Task queue rules:
   calls cannot exceed the configured cap;
 - provider-backed workflows must also enforce a scale-derived total
   child-agent call cap at the Harness delegation boundary. The cap is derived
-  from planned task count, per-candidate refutation calls, and a small
-  concurrency buffer. It must never use an effectively unbounded constant. The
+  from planned task count (with two serial holistic discovery passes per task),
+  per-candidate refutation calls, and a small concurrency buffer. It must never
+  use an effectively unbounded constant. The
   R1 hard ceiling is 2048 child agent calls per run, with a minimum floor of 16
   for small reviews;
 - task state transitions are append-only: `planned -> running -> completed`
@@ -235,12 +238,20 @@ Task queue rules:
 
 ## Holistic Discovery
 
-Provider-backed review runs one recall-first whole-file review per task. The
-`review_task` agent performs the review and emits candidate findings directly.
+Provider-backed review runs two serial diverse-lens recall-first whole-file
+reviews per task. The `holistic_review` agent performs both passes and emits
+candidate findings directly; their findings are unioned and deduped by candidate
+id before refutation.
 
+- Pass 1 is the general review (no lens). Pass 2 re-reads the same change through
+  a focused lens that hunts specifically for commonly-missed, high-impact defects
+  (concurrency and atomicity, unawaited async, error/failure-path handling,
+  security, resource leaks, interface/contract violations, and edge cases). The
+  passes run serially to stay within the workflow's parallel child-agent budget.
 - The review input is the task's unified-diff segment plus the full
   line-numbered changed files, alongside deterministic support signals,
-  instruction/skill metadata, and a compact safe digest.
+  instruction/skill metadata, and a compact safe digest. The focused pass
+  prepends its lens directive before the diff.
 - The reviewer follows four steps: understand the intent of the change; trace
   control and data flow on every path; verify correctness against that intent;
   then systematically sweep defect classes.

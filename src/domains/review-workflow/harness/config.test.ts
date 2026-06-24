@@ -41,13 +41,14 @@ describe('workflow harness config', () => {
   })
 
   test('derives bounded child-agent call budgets from review scale', () => {
-    // taskCount + taskCount (one refutation each) + maxConcurrentTasks * 2
+    // taskCount * 2 holistic passes + taskCount (one refutation each) +
+    // maxConcurrentTasks * 2
     expect(
       maxChildAgentCallsForReview({
         taskCount: 8,
         maxConcurrentTasks: 2
       })
-    ).toBe(20)
+    ).toBe(28)
 
     // Above the cap → clamped to the maximum child-agent call budget.
     expect(

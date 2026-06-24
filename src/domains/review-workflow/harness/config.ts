@@ -1,4 +1,5 @@
 import { type BuiltinToolName } from '@purista/harness'
+import { HOLISTIC_DISCOVERY_PASSES } from '../pipeline/discovery/holistic-task-review.js'
 
 const defaultMaxConcurrentTasks = 4
 const defaultRunTimeoutMs = 0
@@ -25,9 +26,10 @@ export const maxChildAgentCallsForReview = (
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
   const maxConcurrentTasks = effectiveMaxConcurrentTasks(input.maxConcurrentTasks)
-  // One holistic discovery call per task, plus one refutation call per emitted
-  // candidate (bounded downstream), plus a concurrency buffer.
-  const holisticCalls = taskCount
+  // HOLISTIC_DISCOVERY_PASSES holistic discovery calls per task (serial
+  // diverse-lens passes), plus one refutation call per emitted candidate
+  // (bounded downstream), plus a concurrency buffer.
+  const holisticCalls = taskCount * HOLISTIC_DISCOVERY_PASSES
   const refutationCalls = taskCount
   const concurrencyBuffer = maxConcurrentTasks * 2
   const derived = holisticCalls + refutationCalls + concurrencyBuffer

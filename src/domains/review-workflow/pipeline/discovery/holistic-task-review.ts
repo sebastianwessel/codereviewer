@@ -12,6 +12,17 @@ import {
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
+import { modelHolisticFocusLensInstructions } from '../agent-instructions.js'
+
+// Number of serial holistic discovery passes run per task. Pass 1 is the general
+// review; pass 2 re-reads the same change through a focused commonly-missed-defect
+// lens. The child-agent budget (harness/config.ts) imports this so the workflow
+// reserves enough calls for every pass.
+export const HOLISTIC_DISCOVERY_PASSES = 2
+
+// Focused-lens preamble for the second holistic pass. Prepended before the diff so
+// the model sees the lens directive first.
+const HOLISTIC_FOCUS_LENS = modelHolisticFocusLensInstructions
 
 // Present the changed source to the holistic reviewer as a clean, line-numbered
 // document (plus the diff ranges). This is the input shape that let whole-file
@@ -62,7 +73,11 @@ const diffSegmentsForPaths = (
   return segments.join('\n\n')
 }
 
-const buildReviewText = (taskInput: TaskReviewInput, rawDiff: string): string => {
+const buildReviewText = (
+  taskInput: TaskReviewInput,
+  rawDiff: string,
+  focus?: string
+): string => {
   const files = taskInput.task.reviewContext
     .filter(
       (entry): entry is typeof entry & { readonly path: string } =>
@@ -98,7 +113,13 @@ const buildReviewText = (taskInput: TaskReviewInput, rawDiff: string): string =>
         ? ''
         : `\n## Reviewed diff ranges (what changed)\n${diffRanges}`
 
+  const focusSection =
+    focus === undefined || focus.length === 0
+      ? ''
+      : `## Review lens (read this first)\n${focus}\n`
+
   return [
+    focusSection,
     `Review task ${taskInput.task.id}.`,
     changeSection,
     `\n## Changed files (full content, line-numbered, for context)\n${
@@ -167,10 +188,13 @@ const candidateFromFinding = (
   })
 }
 
-// Holistic discovery: one recall-first whole-change review per task that emits
-// candidate findings directly. The shared refutation + admission filter
-// (prepareCandidatesForAdmission) verifies or discards every candidate
-// downstream.
+// Holistic discovery: two serial recall-first whole-change reviews per task with
+// DIFFERENT lenses (general, then focused on commonly-missed high-impact defects).
+// Their findings are unioned and deduped into candidates so a focused 2nd pass can
+// surface concurrency/security/edge-case bugs the general pass under-weights. The
+// passes run serially (not in parallel) to stay within the workflow's
+// parallel child-agent budget. The shared refutation + admission filter
+// (prepareCandidatesForAdmission) verifies or discards every candidate downstream.
 export const runModelBackedHolisticTaskReview = async (
   input: {
     readonly workflowInput: ReviewWorkflowInput
@@ -181,25 +205,43 @@ export const runModelBackedHolisticTaskReview = async (
     readonly signal?: AbortSignal | undefined
   }
 ): Promise<TaskReviewResult> => {
-  const result = ModelHolisticReviewResultSchema.parse(
-    await input.runners.holisticReview(
-      {
-        runId: input.taskInput.runId,
-        taskId: input.task.id,
-        paths: [...input.task.paths],
-        reviewText: buildReviewText(
-          input.taskInput,
-          input.workflowInput.reviewedDiffText
-        )
-      },
-      input.signal
-    )
-  )
+  // Pass 1 is the general review (no lens); pass 2 prepends the focused lens.
+  // Keep the passes serial: parallel holistic calls exceed the parallel
+  // child-agent budget the workflow grants per task.
+  const passFocuses: readonly (string | undefined)[] = [
+    undefined,
+    HOLISTIC_FOCUS_LENS
+  ]
+  const passFindingCounts: number[] = []
+  const combinedFindings: unknown[] = []
 
+  for (const focus of passFocuses) {
+    const result = ModelHolisticReviewResultSchema.parse(
+      await input.runners.holisticReview(
+        {
+          runId: input.taskInput.runId,
+          taskId: input.task.id,
+          paths: [...input.task.paths],
+          reviewText: buildReviewText(
+            input.taskInput,
+            input.workflowInput.reviewedDiffText,
+            focus
+          )
+        },
+        input.signal
+      )
+    )
+
+    passFindingCounts.push(result.findings.length)
+    combinedFindings.push(...result.findings)
+  }
+
+  // Dedup by candidate id over the UNION of both passes' findings: identical
+  // findings collapse to a single candidate, new ones accumulate up to the cap.
   const candidatesById = new Map<string, CandidateFinding>()
   let droppedCount = 0
 
-  for (const raw of result.findings) {
+  for (const raw of combinedFindings) {
     if (candidatesById.size >= HOLISTIC_MAX_CANDIDATES) {
       break
     }
@@ -218,7 +260,10 @@ export const runModelBackedHolisticTaskReview = async (
 
   input.logger.debug('Holistic task review completed.', {
     task_id: input.task.id,
-    finding_count: result.findings.length,
+    pass_count: passFocuses.length,
+    pass1_finding_count: passFindingCounts[0] ?? 0,
+    pass2_finding_count: passFindingCounts[1] ?? 0,
+    finding_count: combinedFindings.length,
     candidate_count: candidates.length,
     dropped_count: droppedCount
   })

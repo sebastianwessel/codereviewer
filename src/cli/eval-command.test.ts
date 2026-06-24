@@ -858,7 +858,9 @@ describe('eval CLI', () => {
       )
 
       expect(result.exitCode).toBe(0)
-      expect(provider.reviewCalls).toBe(2)
+      // The first holistic pass fails and the case retries; the successful retry
+      // runs both serial holistic discovery passes (2 calls), so 3 total.
+      expect(provider.reviewCalls).toBe(3)
       const report = JSON.parse(
         await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
       )

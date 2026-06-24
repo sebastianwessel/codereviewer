@@ -112,7 +112,10 @@ class FailingSecondTaskProvider implements ModelProvider {
   ): Promise<ObjectResponse<T>> {
     this.requests.push(req)
 
-    if (this.requests.length === 2) {
+    // Discovery makes two serial holistic passes per task, so the first task
+    // occupies requests 1-2; fail on the second task's first pass (request 3) to
+    // keep the first task fully completed and the second task failed.
+    if (this.requests.length === 3) {
       throw new Error('provider failed with sk-proj-secret-value')
     }
 
@@ -196,6 +199,23 @@ const isFindingRefutationRequest = (req: ObjectRequest): boolean => {
     schema.properties !== null &&
     'verdict' in schema.properties &&
     'rationaleSummary' in schema.properties
+  )
+}
+
+// A holistic discovery request asks for a `findings` array; a refutation request
+// asks for a `verdict`/`rationaleSummary`. Discovery now makes two serial
+// holistic passes per task (diverse lenses), so stateful scripted providers must
+// recognize a holistic request by its schema rather than by request ordinal.
+const isHolisticReviewRequest = (req: ObjectRequest): boolean => {
+  const schema = req.schema
+
+  return (
+    typeof schema === 'object' &&
+    schema !== null &&
+    'properties' in schema &&
+    typeof schema.properties === 'object' &&
+    schema.properties !== null &&
+    'findings' in schema.properties
   )
 }
 
@@ -1037,7 +1057,7 @@ class ProofPendingModelFindingProvider implements ModelProvider {
   ): Promise<ObjectResponse<T>> {
     this.requests.push(req)
 
-    if (this.requests.length === 1) {
+    if (isHolisticReviewRequest(req)) {
       return {
         object: {
           findings: [
@@ -1089,7 +1109,7 @@ class ProvedModelFindingProvider implements ModelProvider {
   ): Promise<ObjectResponse<T>> {
     this.requests.push(req)
 
-    if (this.requests.length === 1) {
+    if (isHolisticReviewRequest(req)) {
       return {
         object: {
           findings: [
@@ -1303,7 +1323,8 @@ describe('review workflow', () => {
     })
 
     expect(result.admittedFindings).toEqual([])
-    expect(provider.requests).toHaveLength(2)
+    // Two file tasks, two serial holistic discovery passes each.
+    expect(provider.requests).toHaveLength(4)
   })
 
   test('provider-backed workflow retry avoids persistent per-task provider storage', async () => {
@@ -1380,8 +1401,10 @@ describe('review workflow', () => {
       })
 
       expect(result.admittedFindings).toEqual([])
-      expect(firstProvider.requests).toHaveLength(2)
-      expect(secondProvider.requests).toHaveLength(2)
+      // First run: task1's two holistic passes (1-2) succeed, task2's first pass
+      // (3) throws. Resume re-runs both tasks with two holistic passes each.
+      expect(firstProvider.requests).toHaveLength(3)
+      expect(secondProvider.requests).toHaveLength(4)
     } finally {
       await secondHarness.shutdown()
     }
@@ -1433,7 +1456,8 @@ describe('review workflow', () => {
       })
 
       expect(result.admittedFindings).toEqual([])
-      expect(provider.requests).toHaveLength(6)
+      // Six file tasks, two serial holistic discovery passes each.
+      expect(provider.requests).toHaveLength(12)
       expect(provider.maxActiveRequests).toBeLessThanOrEqual(2)
     } finally {
       await harness.shutdown()
@@ -1479,7 +1503,8 @@ describe('review workflow', () => {
       })
 
       expect(result.admittedFindings).toEqual([])
-      expect(provider.requests).toHaveLength(4)
+      // Four file tasks, two serial holistic discovery passes each.
+      expect(provider.requests).toHaveLength(8)
       expect(provider.maxActiveRequests).toBeLessThanOrEqual(2)
       expect(provider.starts[2]).toBeLessThan(provider.completions[0] ?? 0)
     } finally {
@@ -1827,7 +1852,7 @@ describe('review workflow', () => {
       (record) => record.kind === 'model-rationale'
     )
 
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.candidateFindings).toHaveLength(1)
     expect(result.admittedFindings).toHaveLength(1)
     expect(result.rejectedFindings).toHaveLength(0)
@@ -1892,7 +1917,7 @@ describe('review workflow', () => {
       (record) => record.kind === 'model-rationale'
     )
 
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.rejectedFindings).toHaveLength(0)
     expect(result.admittedFindings).toEqual([
       expect.objectContaining({
@@ -1957,7 +1982,7 @@ describe('review workflow', () => {
       (record) => record.kind === 'model-rationale'
     )
 
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.candidateFindings).toHaveLength(1)
     expect(result.rejectedFindings).toHaveLength(0)
     expect(result.admittedFindings).toEqual([
@@ -2043,7 +2068,7 @@ describe('review workflow', () => {
     expect(String(refutationSystemMessage?.content)).toContain(
       'Do not require proof of actual concurrent requests when reviewContext shows a non-atomic read-modify-write flow on shared mutable state.'
     )
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.rejectedFindings).toEqual([])
     expect(result.admittedFindings).toEqual([
       expect.objectContaining({
@@ -2107,7 +2132,7 @@ describe('review workflow', () => {
       (record) => record.kind === 'model-rationale'
     )
 
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.candidateFindings).toHaveLength(1)
     expect(result.rejectedFindings).toEqual([
       expect.objectContaining({
@@ -2280,7 +2305,7 @@ describe('review workflow', () => {
       }
     })
 
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.candidateFindings).toHaveLength(1)
     expect(result.admittedFindings).toHaveLength(0)
     expect(result.rejectedFindings).toEqual([
@@ -2365,7 +2390,7 @@ describe('review workflow', () => {
     // (so refutation runs — a 3rd request — instead of an early not-in-scope
     // reject), and the proved finding is admitted. (Inline-comment eligibility,
     // decided separately, still keys on hunk overlap.)
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.candidateFindings).toHaveLength(1)
     expect(result.admittedFindings).toHaveLength(1)
     expect(
@@ -2416,7 +2441,7 @@ describe('review workflow', () => {
       }
     })
 
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.candidateFindings).toHaveLength(1)
     expect(result.admittedFindings).toHaveLength(1)
     expect(result.admittedFindings[0]?.title).toBe(
@@ -2467,7 +2492,7 @@ describe('review workflow', () => {
       }
     })
 
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.candidateFindings).toEqual([
       expect.objectContaining({
         category: 'bug',
@@ -2534,7 +2559,7 @@ describe('review workflow', () => {
       }
     })
 
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     // The model naming-alias category is still normalized to `maintainability`
     // during discovery.
     expect(result.candidateFindings).toEqual([
@@ -2620,7 +2645,7 @@ describe('review workflow', () => {
       }
     })
 
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.admittedFindings).toEqual([
       expect.objectContaining({
         title: 'Changed branch returns wrong value',
@@ -2701,7 +2726,7 @@ describe('review workflow', () => {
         record.source === 'refutation-check'
     )
 
-    expect(provider.requests).toHaveLength(2)
+    expect(provider.requests).toHaveLength(3)
     expect(result.admittedFindings).toHaveLength(1)
     expect(refutationEvidence).toBeDefined()
     expect(result.admittedFindings[0]?.reporterEligibility).toBe('summary-only')
@@ -2967,7 +2992,9 @@ describe('review workflow', () => {
         throw new Error('expected ReviewRunFailedError')
       }
 
-      expect(provider.requests).toHaveLength(2)
+      // Task a's two holistic passes (1-2) complete; task b's first pass (3)
+      // throws.
+      expect(provider.requests).toHaveLength(3)
       expect(capturedError.structuredError).toMatchObject({
         code: 'provider_error',
         category: 'provider',
@@ -3347,11 +3374,12 @@ describe('review workflow', () => {
         })
       })
 
-      expect(provider.requests).toHaveLength(2)
+      // Two file tasks, two serial holistic discovery passes each.
+      expect(provider.requests).toHaveLength(4)
       expect(result.report.run).toMatchObject({
-        inputTokens: 2,
-        outputTokens: 2,
-        costUsd: 0.000006
+        inputTokens: 4,
+        outputTokens: 4,
+        costUsd: 0.000012
       })
       expect(result.report.run.warnings).not.toContain('cost-unavailable')
     } finally {
@@ -3398,11 +3426,12 @@ describe('review workflow', () => {
         })
       })
 
-      expect(provider.requests).toHaveLength(2)
+      // Two file tasks, two serial holistic discovery passes each.
+      expect(provider.requests).toHaveLength(4)
       expect(result.report.run).toMatchObject({
-        inputTokens: 2,
-        outputTokens: 2,
-        costUsd: 0.000005
+        inputTokens: 4,
+        outputTokens: 4,
+        costUsd: 0.000009
       })
       expect(result.report.run.warnings).not.toContain('cost-unavailable')
     } finally {
@@ -3514,7 +3543,7 @@ describe('review workflow', () => {
           })
         ])
       )
-      expect(provider.requests).toHaveLength(2)
+      expect(provider.requests).toHaveLength(3)
       expect(result.sharedContext.candidateFindings).toHaveLength(1)
       expect(result.sharedContext.candidateFindings[0]?.evidenceIds).toEqual(
         []
@@ -3578,7 +3607,7 @@ describe('review workflow', () => {
         })
       })
 
-      expect(provider.requests).toHaveLength(2)
+      expect(provider.requests).toHaveLength(3)
       expect(result.sharedContext.candidateFindings).toHaveLength(1)
       expect(result.report.admittedFindings).toEqual([])
       expect(result.report.rejectedFindings).toEqual([
@@ -3650,10 +3679,12 @@ describe('review workflow', () => {
         category: 'quality-gate',
         exitCode: 1
       })
+      // The single file task runs two serial holistic passes before its cost is
+      // checked, so the partial summary reflects both passes' usage.
       expect(capturedError.partialState.runSummary).toMatchObject({
-        inputTokens: 1,
-        outputTokens: 1,
-        costUsd: 0.000003
+        inputTokens: 2,
+        outputTokens: 2,
+        costUsd: 0.000006
       })
     } finally {
       await rm(root, { recursive: true, force: true })
@@ -3700,7 +3731,9 @@ describe('review workflow', () => {
         })
       })
 
-      expect(provider.requests).toHaveLength(1)
+      // maxFiles caps review to a single file task, run with two serial holistic
+      // discovery passes.
+      expect(provider.requests).toHaveLength(2)
       expect(result.report.skippedFiles).toEqual([
         {
           path: 'src/b.ts',
