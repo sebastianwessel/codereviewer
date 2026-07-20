@@ -170,7 +170,10 @@ const checkStalePathReferences = (
     const findings: DriftFinding[] = []
     const contentForLegacyArtifactScan = file.content
 
-    if (/\bspec\//u.test(file.content)) {
+    // `\b` also matches after a slash, which made prose like
+    // "documentation/spec/implementation" read as a stale spec root. Require
+    // that `spec/` does not continue a word or an existing path segment.
+    if (/(?<![\w/])spec\//u.test(file.content)) {
       findings.push(
         createFinding(config, {
           category: 'spec-drift',
@@ -229,6 +232,7 @@ const checkAmbiguity = (
 const implementedCliCommands = new Set([
   'config',
   'review',
+  'baseline',
   'eval',
   'drift'
 ])

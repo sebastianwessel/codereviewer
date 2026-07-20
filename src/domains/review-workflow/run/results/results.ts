@@ -26,6 +26,7 @@ type ReviewRunSummaryInput = {
   readonly config: CodeReviewerConfig
   readonly baseRef?: string | undefined
   readonly headRef?: string | undefined
+  readonly mergeBaseRef?: string | undefined
   readonly runId: string
   readonly startedAt: Date
   readonly completedAt: Date
@@ -45,6 +46,9 @@ export const createReviewRunSummary = (
   repositoryRootHash: sha256(input.repositoryRoot),
   baseRef: input.baseRef ?? input.config.review.baseRef,
   headRef: input.headRef ?? input.config.review.headRef,
+  ...(input.mergeBaseRef === undefined
+    ? {}
+    : { mergeBaseRef: input.mergeBaseRef }),
   configHash: input.configHash,
   ...(input.config.provider === undefined
     ? {}
@@ -221,6 +225,7 @@ export const prepareReviewRunnerSuccessResult = (
     readonly config: CodeReviewerConfig
     readonly baseRef?: string | undefined
     readonly headRef?: string | undefined
+    readonly mergeBaseRef?: string | undefined
     readonly runId: string
     readonly startedAt: Date
     readonly completedAt: Date
@@ -246,6 +251,9 @@ export const prepareReviewRunnerSuccessResult = (
       config: input.config,
       ...(input.baseRef === undefined ? {} : { baseRef: input.baseRef }),
       ...(input.headRef === undefined ? {} : { headRef: input.headRef }),
+      ...(input.mergeBaseRef === undefined
+        ? {}
+        : { mergeBaseRef: input.mergeBaseRef }),
       runId: input.runId,
       startedAt: input.startedAt,
       completedAt: input.completedAt,

@@ -150,7 +150,7 @@ discloses no source content.
 
 ## Run Index Contract
 
-`runs/index.json` under the artifact directory is a JSON object:
+`index.json` at the root of the artifact directory is a JSON object:
 
 | Field | Required | Type | Rule |
 | --- | --- | --- | --- |

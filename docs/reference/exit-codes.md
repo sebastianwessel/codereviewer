@@ -38,6 +38,19 @@ to tune thresholds.
 
 ---
 
+## Code `3` — repository intake error
+
+Returned when the repository state prevents a review from being scoped. Notable
+codes:
+
+| Code | Cause | Fix |
+| --- | --- | --- |
+| `merge_base_unavailable` | The base and head refs share no history reachable from the checkout — usually a shallow clone. | Check out with full depth (`fetch-depth: 0`). |
+| `baseline_source_unavailable` | `baseline write` found no report to build from. | Run a review first, or pass `--report <path>`. |
+| `repository_timeout` | A git command exceeded its timeout. | Retry; investigate repository size if persistent. |
+
+---
+
 ## Code `4` — provider/model runtime error
 
 When exit code `4` is returned **and** the path to `paths.artifactDir` appears

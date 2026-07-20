@@ -485,7 +485,7 @@ const resolveMergeBase = async (
         'No merge base exists for the configured base and head refs. Fetch enough history for both refs (for example a full-depth checkout) and retry.',
       category: 'repository',
       recoverable: true,
-      exitCode: 2,
+      exitCode: 3,
       details: { baseRef, headRef }
     })
   }

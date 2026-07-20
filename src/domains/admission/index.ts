@@ -22,6 +22,13 @@ export {
   type BaselineMatchResult
 } from './baseline-matcher.js'
 export {
+  BaselineEntrySchema,
+  BaselineFileSchema,
+  buildBaselineEntries,
+  renderBaselineJson,
+  type BaselineEntry
+} from './baseline-writer.js'
+export {
   evaluateQualityGate,
   type QualityGateThresholds
 } from './quality-gate.js'

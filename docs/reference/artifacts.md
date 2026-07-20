@@ -2,8 +2,10 @@
 
 Reference for every file written by the CodeReviewer CLI. All paths are
 relative to `paths.artifactDir` (default `.codereviewer/`) unless noted.
-Review runs are stateless and one-shot: nothing is persisted beyond the
-redacted run artifacts listed here.
+Each review run is self-contained: a run never reads another run's results.
+The only cross-run state is the run index described below, which records where
+each run wrote its artifacts, and the baseline file you generate explicitly
+with `codereviewer baseline write`.
 
 See [Reports and Artifacts guide](../guides/reports-and-artifacts.md) for
 how to read and use these files.
@@ -26,11 +28,48 @@ Written to:
 | `report.md` | Human-readable report. |
 | `report.sarif` | SARIF report. |
 | `github-review-comments.json` | Local GitHub PR review-comment draft array, when enabled. |
-| `run-summary.json` | Run metadata. |
+| `run-summary.json` | Run metadata, including `baseRef`, `headRef`, and the `mergeBaseRef` the diff was actually taken against. |
 | `context-ledger.json` | Redacted ledger of context items considered and included source chunks. |
 | `shared-context.json` | Run snapshot with compact shared entries, exact `taskEvents`, derived `currentTasks`, evidence, internal candidates, and admission decisions. |
 | `observability.json` | No-content event trace with run steps and task events. |
 | `error.json` | Redacted normalized error for partial failed runs. |
+
+---
+
+## Run index
+
+Written to:
+
+```text
+.codereviewer/runs/index.json
+```
+
+Records where each run wrote its artifacts, so tooling can find the newest
+report without enumerating run directories. Newest entry first, capped at 50
+entries; trimming the index never deletes a run directory.
+
+| Field | Description |
+| --- | --- |
+| `runId` | Matches the run directory name. |
+| `startedAt` | Run start timestamp. |
+| `completedAt` | Present when the run finished. |
+| `status` | `completed` or `failed`. |
+| `reportPath` | Repository-relative path to `report.json`, when one was written. |
+
+A corrupt or unreadable index is replaced on the next run. Failing to record a
+run never fails a review that already produced its artifacts.
+
+---
+
+## Baseline file
+
+Written to `baseline.path` (default `.codereviewer/baseline.json`) by
+`codereviewer baseline write`. **The `review` command never writes it**, so a
+review cannot suppress its own findings.
+
+The file is an array of entries holding fingerprints only — no titles, paths,
+severities, or timestamps — so it discloses no source content and is safe to
+commit.
 
 ### `report.json`
 

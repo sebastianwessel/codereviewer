@@ -68,7 +68,7 @@ Rules:
   as changed files.
 - When no merge base exists (unrelated histories, or a clone shallow enough to
   exclude the divergence point), intake must fail with the structured error code
-  `merge_base_unavailable`, category `repository`, exit code 2. Intake must not
+  `merge_base_unavailable`, category `repository`, exit code 3. Intake must not
   silently fall back to a direct `baseRef`-to-`headRef` diff, because that
   produces a changed-file set that includes unrelated base-branch commits.
 - The resolved merge-base commit must be recorded on `RepositorySnapshot` as
@@ -736,7 +736,7 @@ Rules:
   must not recompute fingerprints, because recomputation without the original
   source state would produce values that cannot match a later run;
 - the command fails with `baseline_source_unavailable`, category `repository`,
-  exit code 2 when no source report can be resolved;
+  exit code 3 when no source report can be resolved;
 - writing the baseline is an explicit operation. The `review` command must never
   write the baseline file, so that a review run cannot suppress its own
   findings.
@@ -747,8 +747,8 @@ Run artifacts are addressable across runs.
 
 Rules:
 
-- each completed or partially completed run writes `runs/index.json` under the
-  artifact directory, containing an ordered list of run entries with `runId`,
+- each completed or partially completed run writes `index.json` at the root of
+  the artifact directory, containing an ordered list of run entries with `runId`,
   `startedAt`, `completedAt` when known, `status` (`completed` or `failed`),
   and the repository-relative `reportPath` when a report was written;
 - the newest entry is first; the index is capped at 50 entries and older entries

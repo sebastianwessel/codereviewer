@@ -317,7 +317,9 @@ that needs the backing records.
 
 ### Statelessness and partial failures
 
-Review runs are stateless and one-shot. Provider-backed runs keep all Harness
+Review runs are one-shot: a run never reads another run's results, and the only
+cross-run state is the run index plus an explicitly generated baseline file.
+Provider-backed runs keep all Harness
 session and task state in memory; review workers do not require a persistent
 sandbox workspace, so runs never create durable databases, session directories,
 or workspace directories. Per-task provider packets and provider responses are

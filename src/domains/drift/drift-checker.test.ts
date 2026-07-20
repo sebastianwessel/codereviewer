@@ -153,4 +153,50 @@ describe('drift checker', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  test('does not read a slash-separated word as a stale spec root', async () => {
+    const root = await createRoot()
+
+    try {
+      await writeFile(
+        join(root, 'README.md'),
+        'Drift checks flag documentation/spec/implementation mismatches.\n'
+      )
+
+      const result = await runDriftCheck({
+        repositoryRoot: root,
+        config: CodeReviewerConfigSchema.parse({})
+      })
+
+      expect(
+        result.findings.filter((finding) => finding.category === 'spec-drift')
+      ).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('still flags a genuine stale spec root reference', async () => {
+    const root = await createRoot()
+
+    try {
+      await writeFile(
+        join(root, 'README.md'),
+        'See spec/05-review-workflow-and-runtime.md for details.\n'
+      )
+
+      const result = await runDriftCheck({
+        repositoryRoot: root,
+        config: CodeReviewerConfigSchema.parse({})
+      })
+
+      expect(result.findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ category: 'spec-drift', evidence: 'spec/' })
+        ])
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })

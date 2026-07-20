@@ -330,6 +330,27 @@ describe('repository intake', () => {
     expect(intake.repositorySnapshot.mergeBaseRef).toBe(mergeBaseSha)
   })
 
+  test('excludes base-branch commits the head branch never had', async () => {
+    const repositoryRoot = await createFixtureRepository()
+    // Two-dot `diff main HEAD` would report dist/generated.js as deleted here,
+    // because it exists on the base branch but not on the feature branch.
+    const runGit = scriptedGitRunner({
+      'merge-base main HEAD': `${mergeBaseSha}\n`,
+      [`diff --name-status ${mergeBaseSha} HEAD`]: 'M\tsrc/app.ts\n',
+      [`diff --unified=0 ${mergeBaseSha} HEAD -- src/app.ts`]: ''
+    })
+
+    const intake = await collectRepositoryIntake({
+      repositoryRoot,
+      baseRef: 'main',
+      headRef: 'HEAD',
+      runGit
+    })
+
+    expect(intake.changedFiles.map((file) => file.path)).toEqual(['src/app.ts'])
+    expect(intake.skippedFiles).toEqual([])
+  })
+
   test('fails with merge_base_unavailable when the refs share no history', async () => {
     await expect(
       collectRepositoryIntake({
@@ -343,7 +364,7 @@ describe('repository intake', () => {
     ).rejects.toMatchObject({
       code: 'merge_base_unavailable',
       category: 'repository',
-      exitCode: 2
+      exitCode: 3
     })
   })
 

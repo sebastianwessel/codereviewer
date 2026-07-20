@@ -211,6 +211,7 @@ export const runReview = async (
       startedAt,
       now,
       configHash,
+      mergeBaseRef: intake.repositorySnapshot.mergeBaseRef,
       sourceFiles,
       skippedFiles: intake.skippedFiles,
       analysis,
