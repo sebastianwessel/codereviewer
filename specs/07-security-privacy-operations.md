@@ -1,7 +1,7 @@
 # 07: Security, Privacy, And Operations
 
 Status: Approved
-Date: 2026-06-19
+Date: 2026-07-20
 
 ## Threat Model
 
@@ -61,7 +61,7 @@ code, not by model behavior:
 | Config path escape | `--config ../../secret.json`, `CODEREVIEWER_CONFIG_PATH=C:\Users\...` | Resolve through root-bound path service and reject escape. |
 | Artifact path escape | `paths.artifactDir=../outside` or symlinked `.codereviewer/runs` | Resolve real parent paths under root before write; reject symlink escape. |
 | Instruction/skill escape | `.codereviewer/skills/../../private/SKILL.md` | Normalize and resolve each requested file under root; reject traversal and symlink escape. |
-| Git ref injection | `--base-ref=-c core.sshCommand=...` | Reject refs starting with `-`; execute only allowlisted `git diff` argument arrays. |
+| Git ref injection | `--base-ref=-c core.sshCommand=...` | Reject refs starting with `-`; execute only allowlisted `git diff` and `git merge-base` argument arrays. |
 | Destructive git | hidden path to `git reset`, `clean`, `checkout`, `push`, `commit` | Do not expose a generic git runner to config/model/plugin paths; enforce read-only command allowlist. |
 | Shell injection | file path containing `; rm -rf` | Never use shell command strings; pass paths as args after `--`. |
 | Provider exfiltration | malicious config points to attacker OpenAI-compatible URL | Require explicit provider config, document provider trust boundary, redact secrets, ledger context, and allow local runs with no provider. |
@@ -161,14 +161,19 @@ Allowed R1 git commands:
 
 | Purpose | Command Shape |
 | --- | --- |
-| Changed path discovery | `git diff --name-status <baseRef> <headRef>` |
-| Diff hunk map | `git diff --unified=0 <baseRef> <headRef> -- <paths...>` |
+| Divergence point | `git merge-base <baseRef> <headRef>` |
+| Changed path discovery | `git diff --name-status <mergeBase> <headRef>` |
+| Diff hunk map | `git diff --unified=0 <mergeBase> <headRef> -- <paths...>` |
 
 Rules:
 
 - No `git reset`, `clean`, `checkout`, `switch`, `restore`, `commit`, `push`,
   `pull`, `fetch`, `merge`, `rebase`, `tag`, `worktree`, `submodule`, `config`,
-  `remote`, `gc`, `maintenance`, or hook execution is allowed.
+  `remote`, `gc`, `maintenance`, or hook execution is allowed. `merge-base` is
+  allowed and is a distinct read-only subcommand from `merge`; it resolves a
+  commit id and never mutates the repository, index, or working tree.
+- The allowlist matches on exact argument-array shape, not on a command prefix,
+  so no additional flags can be appended to an allowlisted invocation.
 - Git refs must be non-empty and must not start with `-`.
 - File paths passed to git must be repository-relative portable paths validated
   by path service and placed after `--`.

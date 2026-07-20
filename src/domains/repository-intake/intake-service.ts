@@ -35,6 +35,9 @@ export type RepositorySnapshot = {
   readonly repositoryRoot: string
   readonly changedFileCount: number
   readonly skippedFileCount: number
+  // Commit the diff was actually taken against: the merge base of baseRef and
+  // headRef. Absent for explicit-file runs, which bypass git entirely.
+  readonly mergeBaseRef?: string
 }
 
 export type RepositoryIntake = {
@@ -109,8 +112,22 @@ const defaultGitRunner: GitCommandRunner = async (args, options) => {
 export const assertReadOnlyGitArgs = (args: readonly string[]): void => {
   const [command, ...rest] = args
 
+  // `merge-base` resolves the divergence commit of two refs. It is a distinct
+  // subcommand from `merge`: it only prints a commit id and never touches the
+  // repository, index, or working tree.
+  if (command === 'merge-base') {
+    if (rest.length !== 2) {
+      throw new TypeError('Git merge-base command shape is not allowlisted.')
+    }
+
+    assertSafeGitRef(rest[0], 'baseRef')
+    assertSafeGitRef(rest[1], 'headRef')
+
+    return
+  }
+
   if (command !== 'diff') {
-    throw new TypeError('Only read-only git diff commands are allowed.')
+    throw new TypeError('Only read-only git diff and merge-base commands are allowed.')
   }
 
   const [mode, baseRef, headRef, separator] = rest
@@ -422,10 +439,65 @@ const inspectChangedPathsWithinLimit = async (
   return records
 }
 
+const commitIdPattern = /^[0-9a-f]{7,64}$/u
+
+// git reports "the refs have no common ancestor" as a bare exit status 1 with
+// empty stderr. Unknown refs exit 128 and runtime failures surface as string
+// error codes, so both keep flowing to the normal error path.
+const isNoMergeBaseExitStatus = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  (error as { readonly code: unknown }).code === 1
+
+// The reviewed change set is what `headRef` added since it diverged from
+// `baseRef`. Diffing the two refs directly would also surface commits that
+// landed on `baseRef` after the divergence point, inflating every review on a
+// branch that has fallen behind. Resolving the merge base first pins the diff
+// to the branch's own work.
+const resolveMergeBase = async (
+  options: CollectRepositoryIntakeOptions,
+  runGit: GitCommandRunner
+): Promise<string> => {
+  const baseRef = assertSafeGitRef(options.baseRef, 'baseRef')
+  const headRef = assertSafeGitRef(options.headRef, 'headRef')
+
+  // `git merge-base` exits 1 with no output when the refs share no history.
+  // Every other failure (unknown ref, timeout, abort) must keep its own
+  // classification rather than being reported as a missing merge base.
+  const mergeBaseOutput = await runGit(
+    ['merge-base', baseRef, headRef],
+    createGitRunnerOptions(options.repositoryRoot, options.signal)
+  ).catch((error: unknown) => {
+    if (isNoMergeBaseExitStatus(error)) {
+      return ''
+    }
+
+    throw error
+  })
+
+  const mergeBase = mergeBaseOutput.trim()
+
+  if (!commitIdPattern.test(mergeBase)) {
+    throw createStructuredError({
+      code: 'merge_base_unavailable',
+      message:
+        'No merge base exists for the configured base and head refs. Fetch enough history for both refs (for example a full-depth checkout) and retry.',
+      category: 'repository',
+      recoverable: true,
+      exitCode: 2,
+      details: { baseRef, headRef }
+    })
+  }
+
+  return mergeBase
+}
+
 const collectChangedPaths = async (
   options: CollectRepositoryIntakeOptions,
   runGit: GitCommandRunner,
-  pathFlavor: FileSystemFlavor
+  pathFlavor: FileSystemFlavor,
+  mergeBase: string | undefined
 ): Promise<readonly GitChangedPath[]> => {
   if (options.explicitFiles !== undefined && options.explicitFiles.length > 0) {
     return options.explicitFiles.map((pathValue) => ({
@@ -434,10 +506,10 @@ const collectChangedPaths = async (
     }))
   }
 
-  const baseRef = assertSafeGitRef(options.baseRef, 'baseRef')
   const headRef = assertSafeGitRef(options.headRef, 'headRef')
+  const diffBase = assertSafeGitRef(mergeBase, 'mergeBase')
   const nameStatusOutput = await runGit(
-    ['diff', '--name-status', baseRef, headRef],
+    ['diff', '--name-status', diffBase, headRef],
     createGitRunnerOptions(options.repositoryRoot, options.signal)
   )
 
@@ -447,12 +519,13 @@ const collectChangedPaths = async (
 const collectDiffMaps = async (
   options: CollectRepositoryIntakeOptions,
   runGit: GitCommandRunner,
-  changedFiles: readonly ChangedFile[]
+  changedFiles: readonly ChangedFile[],
+  mergeBase: string | undefined
 ): Promise<{ readonly diffMaps: readonly DiffMap[]; readonly rawDiff: string }> => {
   if (
     options.explicitFiles !== undefined ||
     changedFiles.length === 0 ||
-    options.baseRef === undefined ||
+    mergeBase === undefined ||
     options.headRef === undefined
   ) {
     return { diffMaps: [], rawDiff: '' }
@@ -462,7 +535,7 @@ const collectDiffMaps = async (
     [
       'diff',
       '--unified=0',
-      options.baseRef,
+      mergeBase,
       options.headRef,
       '--',
       ...changedFiles.map((file) => file.path)
@@ -509,8 +582,21 @@ export const collectRepositoryIntake = async (
   const includeMatchers = compileGlobMatchers(options.includePatterns ?? [])
   const excludeMatchers = compileGlobMatchers(options.excludePatterns ?? [])
 
+  const usesGitDiff =
+    !(options.explicitFiles !== undefined && options.explicitFiles.length > 0) &&
+    options.baseRef !== undefined &&
+    options.headRef !== undefined
+
   try {
-    const changedPaths = await collectChangedPaths(options, runGit, pathFlavor)
+    const mergeBase = usesGitDiff
+      ? await resolveMergeBase(options, runGit)
+      : undefined
+    const changedPaths = await collectChangedPaths(
+      options,
+      runGit,
+      pathFlavor,
+      mergeBase
+    )
     const inspectedRecords = await inspectChangedPathsWithinLimit({
       repositoryRoot: options.repositoryRoot,
       changedPaths,
@@ -526,14 +612,16 @@ export const collectRepositoryIntake = async (
     const { diffMaps, rawDiff } = await collectDiffMaps(
       options,
       runGit,
-      changedFiles
+      changedFiles,
+      mergeBase
     )
 
     return {
       repositorySnapshot: {
         repositoryRoot: options.repositoryRoot,
         changedFileCount: changedFiles.length,
-        skippedFileCount: skippedFiles.length
+        skippedFileCount: skippedFiles.length,
+        ...(mergeBase === undefined ? {} : { mergeBaseRef: mergeBase })
       },
       changedFiles,
       skippedFiles,
