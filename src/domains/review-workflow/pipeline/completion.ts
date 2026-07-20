@@ -8,6 +8,8 @@ import {
 import { assertDeterministicSignalEvidenceOwnsPath } from '../../deterministic-signals/index.js'
 import {
   admitCandidate,
+  anchorSourceFilesFromChunks,
+  createSourceAnchorResolver,
   evaluateQualityGate,
   matchBaselineFindings,
   reviewedLineRangeForContent,
@@ -57,6 +59,9 @@ const runAdmission = (
     ...(input.admissionDecisions ?? [])
   ]
   const evidenceRecords = input.evidence ?? input.workflowInput.evidence
+  const resolveAnchorText = createSourceAnchorResolver(
+    anchorSourceFilesFromChunks(input.workflowInput.reviewContext ?? [])
+  )
   const reviewedLineRanges =
     input.workflowInput.reviewedLineRanges ??
     reviewedLineRangesFromReviewContext(input.workflowInput.reviewContext ?? [])
@@ -74,6 +79,7 @@ const runAdmission = (
       candidate,
       evidence: evidenceRecords,
       existingAdmittedFindings: admittedFindings,
+      resolveAnchorText,
       policy: {
         reviewedPaths: input.workflowInput.reviewedPaths,
         ...(reviewedLineRanges === undefined ? {} : { reviewedLineRanges }),

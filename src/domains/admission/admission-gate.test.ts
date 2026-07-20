@@ -6,6 +6,7 @@ import {
   type AdmissionPolicy
 } from './admission-gate.js'
 import {
+  createSourceAnchorResolver,
   evaluateQualityGate,
   matchBaselineFindings,
   type BaselineFingerprintRecord
@@ -116,7 +117,86 @@ describe('admission gate', () => {
       })
     })
     expect(result.admittedFinding?.fingerprints[0]?.algorithm).toBe(
-      'v1-category-rule-path-location-title-evidence'
+      'v2-category-path-title-anchor'
+    )
+  })
+
+  test('keeps the fingerprint stable when edits above shift the finding', () => {
+    const source = 'const a = 1\nconst b = 2\nconst c = 3\nreturn wrongValue\n'
+    const shiftedSource = `// new header\n// another new line\n${source}`
+
+    const fingerprintAt = (
+      content: string,
+      startLine: number
+    ): string | undefined => {
+      const result = admitCandidate({
+        candidate: {
+          ...candidate,
+          location: { ...candidate.location, startLine }
+        },
+        evidence: [{ ...diffEvidence, location: { ...diffEvidence.location, path: 'src/app.ts', startLine, side: 'new' } }],
+        existingAdmittedFindings: [],
+        resolveAnchorText: createSourceAnchorResolver([
+          { path: 'src/app.ts', content }
+        ]),
+        policy: {
+          ...policy,
+          reviewedDiffRanges: [
+            { path: 'src/app.ts', startLine, endLine: startLine }
+          ]
+        }
+      })
+
+      return result.admittedFinding?.fingerprints[0]?.value
+    }
+
+    // `return wrongValue` moves from line 4 to line 6; the anchored text does
+    // not change, so the finding keeps its identity across the push.
+    expect(fingerprintAt(source, 4)).toBe(fingerprintAt(shiftedSource, 6))
+    expect(fingerprintAt(source, 4)).toBeDefined()
+  })
+
+  test('changes the fingerprint when the anchored line itself changes', () => {
+    const before = 'const a = 1\nconst b = 2\nconst c = 3\nreturn wrongValue\n'
+    const after = 'const a = 1\nconst b = 2\nconst c = 3\nreturn correctValue\n'
+
+    const fingerprintFor = (content: string): string | undefined =>
+      admitCandidate({
+        candidate,
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        resolveAnchorText: createSourceAnchorResolver([
+          { path: 'src/app.ts', content }
+        ]),
+        policy: diffBackedPolicy
+      }).admittedFinding?.fingerprints[0]?.value
+
+    expect(fingerprintFor(before)).not.toBe(fingerprintFor(after))
+  })
+
+  test('distinguishes same-titled findings anchored on different lines', () => {
+    const content = 'first(bad)\nsecond(alsoBad)\n'
+    const resolveAnchorText = createSourceAnchorResolver([
+      { path: 'src/app.ts', content }
+    ])
+
+    const first = admitCandidate({
+      candidate: { ...candidate, location: { ...candidate.location, startLine: 1 } },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      resolveAnchorText,
+      policy: { ...policy, reviewedDiffRanges: [{ path: 'src/app.ts', startLine: 1, endLine: 2 }] }
+    })
+    const second = admitCandidate({
+      candidate: { ...candidate, id: 'cand_bug2', location: { ...candidate.location, startLine: 2 } },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      resolveAnchorText,
+      policy: { ...policy, reviewedDiffRanges: [{ path: 'src/app.ts', startLine: 1, endLine: 2 }] }
+    })
+
+    expect(first.admittedFinding?.fingerprints[0]?.value).not.toBe(
+      second.admittedFinding?.fingerprints[0]?.value
     )
   })
 

@@ -124,6 +124,11 @@ category, the repository-relative path, the normalized title, and a normalized
 runs of non-alphanumeric characters collapsed to single spaces and trimmed. When
 the source line cannot be resolved the anchor contributes the empty string.
 
+Anchor sources are indexed by head-side content. A location with `side` of `old`
+resolves to no anchor, because line N of the head file is not the line such a
+finding refers to and an anchor taken from the wrong revision would be worse
+than no anchor.
+
 The fingerprint must not encode line numbers. A finding keeps its identity when
 unrelated edits shift it up or down a file, and loses it when the anchored line
 itself changes — which is the intended signal that the finding was addressed.

@@ -73,6 +73,13 @@ export type AdmissionPolicy = {
   readonly admittedAt: string
 }
 
+// Resolves the source line a finding points at, so the fingerprint can anchor
+// on content instead of a line number. Returns undefined when the line cannot
+// be resolved (for example a location on the old side of the diff).
+export type AnchorTextResolver = (
+  location: CandidateFinding['location']
+) => string | undefined
+
 export type AdmissionResult =
   | {
       readonly status: 'admitted'
@@ -228,19 +235,22 @@ const hasUnknownFixProposalEvidence = (candidate: CandidateFinding): boolean => 
 const allEvidenceRedacted = (evidence: readonly EvidenceRecord[]): boolean =>
   evidence.every((record) => record.redactionApplied)
 
+// Anchoring on the text of the reported line rather than its number is what
+// lets a finding keep its identity across pushes: edits above it shift the line
+// but not the anchor. Editing the anchored line itself does change the
+// fingerprint, which is the intended signal that the finding was addressed.
+// The emitted value is a truncated hash, so no source text is disclosed.
 const createFingerprint = (
   candidate: CandidateFinding,
-  evidence: readonly EvidenceRecord[]
+  resolveAnchorText: AnchorTextResolver | undefined
 ): FindingFingerprint => ({
-  algorithm: 'v1-category-rule-path-location-title-evidence',
+  algorithm: 'v2-category-path-title-anchor',
   value: sha256(
     [
       candidate.category,
       candidate.location.path,
-      candidate.location.startLine,
-      candidate.location.side,
       normalizeText(candidate.title),
-      evidence.map((record) => record.kind).sort().join(',')
+      normalizeText(resolveAnchorText?.(candidate.location) ?? '')
     ].join(':')
   ).slice(0, 32)
 })
@@ -371,6 +381,7 @@ export const admitCandidate = (
     readonly evidence: readonly EvidenceRecord[]
     readonly existingAdmittedFindings: readonly AdmittedFinding[]
     readonly policy: AdmissionPolicy
+    readonly resolveAnchorText?: AnchorTextResolver
   }
 ): AdmissionResult => {
   const parsedCandidate = CandidateFindingSchema.safeParse(input.candidate)
@@ -491,7 +502,7 @@ export const admitCandidate = (
     }
   }
 
-  const fingerprint = createFingerprint(candidate, evidence)
+  const fingerprint = createFingerprint(candidate, input.resolveAnchorText)
 
   if (
     hasDuplicateFingerprint(fingerprint, input.existingAdmittedFindings) ||

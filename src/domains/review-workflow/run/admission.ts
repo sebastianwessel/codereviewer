@@ -2,8 +2,11 @@ import type { Logger } from '@purista/harness'
 import {
   admitCandidate,
   CandidateFindingSchema,
+  createSourceAnchorResolver,
   evaluateQualityGate,
   matchBaselineFindings,
+  type AnchorSourceFile,
+  type AnchorTextResolver,
   type BaselineFingerprintRecord,
   type CandidateFinding,
   type ReviewedDiffRange,
@@ -178,6 +181,7 @@ export const runDeterministicAdmission = (
     readonly baselineConfigured: boolean
     readonly baselineFingerprints?: readonly BaselineFingerprintRecord[]
     readonly taskEvents: ReviewSharedContextSnapshot['taskEvents']
+    readonly resolveAnchorText?: AnchorTextResolver
   }
 ): ReviewRunnerAdmissionState => {
   const admittedFindings = []
@@ -193,6 +197,9 @@ export const runDeterministicAdmission = (
       candidate,
       evidence: input.evidence,
       existingAdmittedFindings: admittedFindings,
+      ...(input.resolveAnchorText === undefined
+        ? {}
+        : { resolveAnchorText: input.resolveAnchorText }),
       policy: {
         reviewedPaths: input.reviewedPaths,
         reviewedLineRanges: input.reviewedLineRanges,
@@ -290,6 +297,7 @@ export const prepareReviewRunnerAdmissionState = (
     readonly baselineConfigured: boolean
     readonly baselineFingerprints?: readonly BaselineFingerprintRecord[] | undefined
     readonly tasks: readonly WorkflowReviewTask[]
+    readonly sourceFiles?: readonly AnchorSourceFile[]
     readonly observability?: NoContentEventRecorder | undefined
     readonly logger?: Logger | undefined
   }
@@ -333,6 +341,7 @@ export const prepareReviewRunnerAdmissionState = (
       skillHashes: input.skillHashes,
       baselineConfigured: input.baselineConfigured,
       taskEvents,
+      resolveAnchorText: createSourceAnchorResolver(input.sourceFiles ?? []),
       ...(input.baselineFingerprints === undefined
         ? {}
         : { baselineFingerprints: input.baselineFingerprints })

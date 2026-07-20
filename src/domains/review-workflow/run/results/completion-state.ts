@@ -82,6 +82,7 @@ export const prepareReviewRunnerCompletionState = (
     skillHashes: input.skillHashes,
     baselineConfigured: input.baselineConfigured,
     tasks: input.tasks,
+    sourceFiles: input.sourceFiles,
     observability: input.observability,
     logger: input.logger,
     ...(input.baselineFingerprints === undefined

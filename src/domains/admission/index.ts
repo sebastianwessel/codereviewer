@@ -3,12 +3,18 @@ export {
   CandidateFindingSchema,
   type AdmissionPolicy,
   type AdmissionResult,
+  type AnchorTextResolver,
   type CandidateFinding,
   type ReviewedDiffRange,
   type ReviewedLineRange,
   reviewedLineRangeForContent,
   sourceLineCount
 } from './admission-gate.js'
+export {
+  anchorSourceFilesFromChunks,
+  createSourceAnchorResolver,
+  type AnchorSourceFile
+} from './source-anchor.js'
 export {
   matchBaselineFindings,
   resolveBaselineFingerprints,
