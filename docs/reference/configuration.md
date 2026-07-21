@@ -163,6 +163,34 @@ Controls how non-actionable model output is dispositioned in the report.
 
 ---
 
+## `contextSources`
+
+Assembles external change-intent context (PR/ticket/changed-doc) into a bounded,
+redacted brief injected before the review. Disabled by default. See
+[External Change-Intent Context](../concepts/change-intent-context.md).
+
+| Key | Allowed Values | Default | Description |
+| --- | --- | --- | --- |
+| `contextSources.enabled` | boolean | `false` | Master switch. Disabled leaves the review unchanged. |
+| `contextSources.providers` | array | `[]` | Context providers to run (see below). |
+| `contextSources.summary.mode` | `model`, `digest` | `model` when a provider is configured, else `digest` | `model` runs the dedicated summarizer call; `digest` is deterministic. |
+| `contextSources.summary.maxBytes` | integer | `4000` | Byte cap on the injected brief. |
+
+Each provider object is discriminated by `type`:
+
+| `type` | Keys | Description |
+| --- | --- | --- |
+| `inbox` | `dir` (default `.codereviewer/context`), `maxFiles`, `maxFileBytes` | Reads frontmatter-markdown files a pipeline wrote before the run. No network. |
+| `changed-files` | `include` (globs, default `['**/*.md']`), `maxFiles`, `maxFileBytes` | Surfaces PR-changed files matching the globs as intent context. No network. |
+
+> **Note:** Issue trackers such as JIRA are integrated through the `inbox`
+> provider, not by the tool: a pipeline step fetches the ticket and writes a
+> markdown file into the inbox directory, so no tracker credentials enter the
+> tool. The brief is redacted before use and can never change findings, severity,
+> gates, or baseline status.
+
+---
+
 ## `costs`
 
 Overrides the bundled pricing snapshot for cost estimation.

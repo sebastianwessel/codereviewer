@@ -92,6 +92,15 @@ every major block. Unknown keys are rejected — use only documented keys (see t
     "failOnNewOnly": true
   },
 
+  // ── External change-intent context (off by default) ───────────────────────
+  "contextSources": {
+    "enabled": true,
+    "providers": [
+      { "type": "inbox", "dir": ".codereviewer/context" },
+      { "type": "changed-files", "include": ["specs/**", "docs/**"] }
+    ]
+  },
+
   // ── Quality gate ──────────────────────────────────────────────────────────
   "qualityGate": {
     "maxCritical": 0,

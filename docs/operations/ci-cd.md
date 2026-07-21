@@ -145,6 +145,28 @@ not require a separate ast-grep CLI step.
 
 ---
 
+## Supplying Change-Intent Context
+
+When [`contextSources`](../reference/configuration.md#contextsources) is enabled,
+CodeReviewer reads a short intent brief before the review. The tool integrates no
+issue trackers; instead, a pipeline step writes context into the inbox directory
+before the review runs:
+
+```yaml
+      - name: Fetch ticket context
+        run: |
+          mkdir -p .codereviewer/context
+          ./scripts/fetch-jira.sh "$TICKET_ID" > .codereviewer/context/ticket.md
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+      - run: codereviewer review --base-ref origin/main --head-ref HEAD
+```
+
+The tracker credential stays in your pipeline; it never reaches CodeReviewer. The
+gathered context is redacted and cannot change findings, severity, or gates.
+
+---
+
 ## Report Formats In CI
 
 Add `"github-review-comments"` to `reporting.formats` to generate inline PR comment

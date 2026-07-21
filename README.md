@@ -166,7 +166,7 @@ recall is the dial we keep working to raise without adding noise.
 | Section | Pages |
 | --- | --- |
 | **Getting started** | [Quick Setup](docs/getting-started/quick-setup.md) · [First Review](docs/getting-started/first-review.md) |
-| **Concepts** | [Architecture](docs/concepts/architecture.md) · [Review Modes and Flows](docs/concepts/review-modes-and-flows.md) · [Deterministic Support Signals](docs/concepts/deterministic-support-signals.md) |
+| **Concepts** | [Architecture](docs/concepts/architecture.md) · [Review Modes and Flows](docs/concepts/review-modes-and-flows.md) · [Deterministic Support Signals](docs/concepts/deterministic-support-signals.md) · [Change-Intent Context](docs/concepts/change-intent-context.md) |
 | **Guides** | [Configuration](docs/guides/configuration.md) · [Providers](docs/guides/providers.md) · [Instructions and Skills](docs/guides/instructions-and-skills.md) · [Reports and Artifacts](docs/guides/reports-and-artifacts.md) |
 | **Evaluation** | [Evaluation & Benchmarking](docs/evaluation/README.md) |
 | **Operations** | [CI/CD](docs/operations/ci-cd.md) · [Troubleshooting](docs/operations/troubleshooting.md) · [Secrets and Env](docs/security/secrets-and-env.md) · [Data Handling](docs/security/data-handling.md) |
