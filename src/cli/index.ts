@@ -40,12 +40,23 @@ import {
   type ReviewLogSink
 } from '../domains/observability/index.js'
 import {
+  latestRunWithReport,
+  parseRunIndex,
+  renderRunIndexJson,
   renderRunSummaryJson,
-  writeReportingArtifacts
+  runIndexFileName,
+  upsertRunIndexEntry,
+  writeReportingArtifacts,
+  type RunIndexEntry
 } from '../domains/reporting/index.js'
+import {
+  buildBaselineEntries,
+  renderBaselineJson
+} from '../domains/admission/index.js'
 import { loadCodeReviewerConfig } from '../domains/configuration/config-loader.js'
 import { createRedactedConfigSummary } from '../domains/configuration/config-summary.js'
 import {
+  createStructuredError,
   isFileSystemError,
   isZodError,
   normalizeError,
@@ -399,6 +410,52 @@ const writeRunArtifact = async (
   )
 }
 
+const readRunIndex = async (
+  repositoryRoot: string,
+  artifactDir: string
+): Promise<string | undefined> => {
+  try {
+    return await readFile(
+      await resolveExistingPathInsideRoot(
+        repositoryRoot,
+        path.posix.join(artifactDir, runIndexFileName)
+      ),
+      'utf8'
+    )
+  } catch {
+    return undefined
+  }
+}
+
+// Run directories are otherwise opaque and unenumerated, so nothing downstream
+// can find the newest report. The index is bookkeeping: a failure to record a
+// run must never fail a review that already produced its artifacts.
+const recordRunInIndex = async (
+  input: {
+    readonly repositoryRoot: string
+    readonly artifactDir: string
+    readonly entry: RunIndexEntry
+  }
+): Promise<void> => {
+  try {
+    const index = parseRunIndex(
+      await readRunIndex(input.repositoryRoot, input.artifactDir)
+    )
+    const indexPath = await resolveArtifactWritePath(
+      input.repositoryRoot,
+      path.posix.join(input.artifactDir, runIndexFileName)
+    )
+
+    await ensureDirectory(path.dirname(indexPath))
+    await writeFile(
+      indexPath,
+      renderRunIndexJson(upsertRunIndexEntry(index, input.entry))
+    )
+  } catch {
+    // Bookkeeping only; the run's own artifacts are already durable.
+  }
+}
+
 const writeReviewArtifacts = async (
   input: {
     readonly repositoryRoot: string
@@ -564,6 +621,17 @@ const runReview = async (
       observability: result.observability,
       config: loadedConfig.config
     })
+    await recordRunInIndex({
+      repositoryRoot: options.cwd,
+      artifactDir: loadedConfig.config.paths.artifactDir,
+      entry: {
+        runId: result.report.run.runId,
+        startedAt: result.report.run.startedAt,
+        completedAt: result.report.run.completedAt,
+        status: 'completed',
+        reportPath: path.posix.join(runArtifactRoot, 'report.json')
+      }
+    })
 
     return {
       exitCode:
@@ -584,6 +652,15 @@ const runReview = async (
         artifactRoot: error.partialState.artifactRoot,
         partialState: error.partialState
       })
+      await recordRunInIndex({
+        repositoryRoot: options.cwd,
+        artifactDir: path.posix.dirname(error.partialState.artifactRoot),
+        entry: {
+          runId: error.partialState.runSummary.runId,
+          startedAt: error.partialState.runSummary.startedAt,
+          status: 'failed'
+        }
+      })
 
       return {
         exitCode: error.structuredError.exitCode,
@@ -596,6 +673,95 @@ const runReview = async (
       }
     }
 
+    return mapErrorResult(error, 'repository')
+  }
+}
+
+const resolveBaselineSourceReport = async (
+  input: {
+    readonly repositoryRoot: string
+    readonly artifactDir: string
+    readonly explicitReportPath: string | undefined
+  }
+): Promise<{ readonly reportPath: string; readonly content: string }> => {
+  const reportPath =
+    input.explicitReportPath ??
+    latestRunWithReport(
+      parseRunIndex(await readRunIndex(input.repositoryRoot, input.artifactDir))
+    )?.reportPath
+
+  if (reportPath === undefined) {
+    throw createStructuredError({
+      code: 'baseline_source_unavailable',
+      message:
+        'No completed review report was found to build a baseline from. Run a review first, or pass --report <path>.',
+      category: 'repository',
+      recoverable: true,
+      exitCode: 3,
+      details: { artifactDir: input.artifactDir }
+    })
+  }
+
+  try {
+    return {
+      reportPath,
+      content: await readFile(
+        await resolveExistingPathInsideRoot(input.repositoryRoot, reportPath),
+        'utf8'
+      )
+    }
+  } catch {
+    throw createStructuredError({
+      code: 'baseline_source_unavailable',
+      message: 'The review report to build a baseline from could not be read.',
+      category: 'repository',
+      recoverable: true,
+      exitCode: 3,
+      details: { reportPath }
+    })
+  }
+}
+
+const runBaselineWrite = async (
+  args: readonly string[],
+  options: CliRunOptions
+): Promise<CliResult> => {
+  try {
+    const configPath = parseConfigPath(args)
+    const loadedConfig = await loadCodeReviewerConfig({
+      repositoryRoot: options.cwd,
+      environment: options.environment ?? {},
+      ...(configPath === undefined ? {} : { configPath })
+    })
+    const source = await resolveBaselineSourceReport({
+      repositoryRoot: options.cwd,
+      artifactDir: loadedConfig.config.paths.artifactDir,
+      explicitReportPath: parseOptionValue(args, '--report')
+    })
+    const report = JSON.parse(source.content) as {
+      readonly admittedFindings?: readonly {
+        readonly fingerprints: readonly unknown[]
+      }[]
+    }
+    const entries = buildBaselineEntries(report.admittedFindings ?? [])
+    const baselinePath = await resolveArtifactWritePath(
+      options.cwd,
+      loadedConfig.config.baseline.path
+    )
+
+    await ensureDirectory(path.dirname(baselinePath))
+    await writeFile(baselinePath, renderBaselineJson(entries))
+
+    return {
+      exitCode: 0,
+      stdout: jsonResult({
+        baselinePath: loadedConfig.config.baseline.path,
+        sourceReportPath: source.reportPath,
+        entryCount: entries.length
+      }),
+      stderr: ''
+    }
+  } catch (error) {
     return mapErrorResult(error, 'repository')
   }
 }
@@ -1241,6 +1407,10 @@ export const runCli = async (
     }
   }
 
+  if (command === 'baseline' && subcommand === 'write') {
+    return runBaselineWrite(rest, options)
+  }
+
   if (command === 'drift') {
     return runDrift(
       [subcommand, ...rest].filter((value): value is string => value !== undefined),
@@ -1249,6 +1419,6 @@ export const runCli = async (
   }
 
   return usageError(
-    'Expected command: config validate, review, eval run, eval compare, eval recall-report, eval slice-manifest, or drift check'
+    'Expected command: config validate, review, baseline write, eval run, eval compare, eval recall-report, eval slice-manifest, or drift check'
   )
 }

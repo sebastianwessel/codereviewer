@@ -1,8 +1,9 @@
 # CLI Reference
 
-Complete reference for every command exposed by the CodeReviewer CLI. Each
-command is stateless and one-shot: nothing is persisted beyond the redacted
-run artifacts in `paths.artifactDir`.
+Complete reference for every command exposed by the CodeReviewer CLI. `review`
+is one-shot: it never reads a previous run's results, and persists nothing
+beyond the redacted run artifacts in `paths.artifactDir` and an entry in the
+run index. Cross-run state is opt-in, via `baseline write`.
 
 > **Note:** Commands below assume the installed `codereviewer` binary (from
 > `npm install -g @sebastianwessel/codereviewer`). You can also run it without
@@ -78,8 +79,9 @@ codereviewer review \
   and redacted error codes. They **never** include source snippets, prompts,
   request/response bodies, provider headers, environment values, tokens, or
   secrets.
-- Review runs are stateless and one-shot. A failed run writes partial artifacts
-  for inspection; rerun the command to review again from scratch.
+- Review runs are one-shot: a run never reads another run's results. A failed
+  run writes partial artifacts for inspection and is recorded in the run index
+  with status `failed`; rerun the command to review again from scratch.
 
 ### Example
 
@@ -101,6 +103,47 @@ command's exit status.
 > **Note:** Evaluation/benchmark commands (`eval run`, `eval compare`,
 > `eval recall-report`, `eval slice-manifest`) run from a cloned repository —
 > see [Evaluation](../evaluation/README.md).
+
+---
+
+## `baseline write`
+
+Generates the baseline file from a completed review report, so later runs can
+tell new findings from pre-existing ones.
+
+### Synopsis
+
+```bash
+codereviewer baseline write [--config path/to/config.json] [--report path/to/report.json]
+```
+
+### Flags
+
+| Flag | Description |
+| --- | --- |
+| `--config <path>` | Path to an explicit config file. |
+| `--report <path>` | Report to build the baseline from. Defaults to the newest run in `.codereviewer/runs/index.json`. |
+
+### What it does
+
+Copies each admitted finding's fingerprints into `baseline.path` (default
+`.codereviewer/baseline.json`). Fingerprints are copied verbatim rather than
+recomputed, because a fingerprint derived from anything but the original run's
+source state could never match a later run.
+
+The written file contains fingerprints only — no titles, paths, or severities.
+
+Exits `2` with `baseline_source_unavailable` when no report can be resolved.
+
+> **Note:** `review` never writes the baseline. Generating it is always an
+> explicit step, so a review run cannot suppress its own findings.
+
+### Example
+
+```bash
+codereviewer review --base-ref origin/main --head-ref HEAD
+codereviewer baseline write
+```
 
 ---
 

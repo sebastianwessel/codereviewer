@@ -1,7 +1,7 @@
 # 03: Finding, Evidence, And Report Contracts
 
 Status: Approved
-Date: 2026-06-19
+Date: 2026-07-20
 
 ## Contract Source Rule
 
@@ -114,14 +114,57 @@ primary finding location.
 
 | Field | Required | Type | Rule |
 | --- | --- | --- | --- |
-| `algorithm` | yes | string | Stable algorithm identifier, for example `v1-rule-path-location-title`. |
+| `algorithm` | yes | string | Stable algorithm identifier. |
 | `value` | yes | string | Lowercase base32/hex hash. |
 
-R1 must generate at least one fingerprint per admitted finding from normalized
-category, rule ID when present, repository-relative path, normalized location,
-title, and evidence kind. Fingerprints drive de-duplication and baseline status;
-they must not include raw source text, absolute paths, provider response IDs, or
-timestamps.
+Every admitted finding carries exactly one fingerprint, produced by the
+`v2-category-path-title-anchor` algorithm. Its input is the normalized finding
+category, the repository-relative path, the normalized title, and a normalized
+**anchor text**: the source line at the finding's `startLine`, lowercased with
+runs of non-alphanumeric characters collapsed to single spaces and trimmed. When
+the source line cannot be resolved the anchor contributes the empty string.
+
+Anchor sources are indexed by head-side content. A location with `side` of `old`
+resolves to no anchor, because line N of the head file is not the line such a
+finding refers to and an anchor taken from the wrong revision would be worse
+than no anchor.
+
+The fingerprint must not encode line numbers. A finding keeps its identity when
+unrelated edits shift it up or down a file, and loses it when the anchored line
+itself changes — which is the intended signal that the finding was addressed.
+
+Fingerprints drive de-duplication and baseline status. The emitted `value` is a
+truncated hash and must not expose raw source text; the fingerprint input must
+not include absolute paths, provider response IDs, or timestamps.
+
+## Baseline File Contract
+
+The baseline file is a JSON array. Each entry:
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `fingerprints` | yes | non-empty `FindingFingerprint[]` | Copied verbatim from an admitted finding. |
+
+Entries carry no severity, title, path, or timestamp, so the baseline file
+discloses no source content.
+
+## Run Index Contract
+
+`index.json` at the root of the artifact directory is a JSON object:
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `runs` | yes | `RunIndexEntry[]` | Newest first, at most 50 entries. |
+
+`RunIndexEntry` fields:
+
+| Field | Required | Type | Rule |
+| --- | --- | --- | --- |
+| `runId` | yes | string | Matches the run directory name. |
+| `startedAt` | yes | ISO-8601 string | Run start. |
+| `completedAt` | no | ISO-8601 string | Absent when the run did not finish. |
+| `status` | yes | `completed \| failed` | Outcome of the run. |
+| `reportPath` | no | repository-relative path | Present when a report was written. |
 
 ## EvidenceRecord
 

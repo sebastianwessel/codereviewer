@@ -23,6 +23,11 @@ const createFixtureRepository = async (): Promise<string> => {
   return rootPath
 }
 
+// Stand-in for the commit `git merge-base` resolves for the fixture refs. The
+// diff calls are keyed on this rather than on `main`, which is the whole point
+// of the merge-base resolution.
+const mergeBaseSha = '9f1c2ab3d4e5f60718293a4b5c6d7e8f90a1b2c3'
+
 const scriptedGitRunner =
   (outputs: Readonly<Record<string, string>>): GitCommandRunner =>
   async (args) => {
@@ -52,7 +57,18 @@ describe('repository intake', () => {
       ])
     ).not.toThrow()
 
+    expect(() =>
+      assertReadOnlyGitArgs(['merge-base', 'main', 'HEAD'])
+    ).not.toThrow()
+
     expect(() => assertReadOnlyGitArgs(['reset', '--hard'])).toThrow(TypeError)
+    expect(() => assertReadOnlyGitArgs(['merge', 'main'])).toThrow(TypeError)
+    expect(() =>
+      assertReadOnlyGitArgs(['merge-base', 'main', 'HEAD', '--all'])
+    ).toThrow(TypeError)
+    expect(() =>
+      assertReadOnlyGitArgs(['merge-base', '-bad', 'HEAD'])
+    ).toThrow(expect.objectContaining({ code: 'invalid_git_ref' }))
     expect(() => assertReadOnlyGitArgs(['diff', '--name-status', '-bad', 'HEAD'])).toThrow(
       expect.objectContaining({ code: 'invalid_git_ref' })
     )
@@ -64,9 +80,10 @@ describe('repository intake', () => {
   test('collects changed files, skipped files, and diff maps from a valid git diff', async () => {
     const repositoryRoot = await createFixtureRepository()
     const runGit = scriptedGitRunner({
-      'diff --name-status main HEAD':
+      'merge-base main HEAD': `${mergeBaseSha}\n`,
+      [`diff --name-status ${mergeBaseSha} HEAD`]:
         'M\tsrc/app.ts\nD\tsrc/deleted.ts\nM\tbin/blob.dat\nM\tlarge.txt\nM\tdist/generated.js\n',
-      'diff --unified=0 main HEAD -- src/app.ts':
+      [`diff --unified=0 ${mergeBaseSha} HEAD -- src/app.ts`]:
         'diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,0 +1,1 @@\n+export const value = 1\n'
     })
 
@@ -111,7 +128,8 @@ describe('repository intake', () => {
   test('includePatterns narrows the reviewed set', async () => {
     const repositoryRoot = await createFixtureRepository()
     const runGit = scriptedGitRunner({
-      'diff --name-status main HEAD': 'M\tsrc/app.ts\n'
+      'merge-base main HEAD': `${mergeBaseSha}\n`,
+      [`diff --name-status ${mergeBaseSha} HEAD`]: 'M\tsrc/app.ts\n'
     })
 
     const intake = await collectRepositoryIntake({
@@ -254,9 +272,10 @@ describe('repository intake', () => {
   test('does not count deleted or excluded files toward maxFiles', async () => {
     const repositoryRoot = await createFixtureRepository()
     const runGit = scriptedGitRunner({
-      'diff --name-status main HEAD':
+      'merge-base main HEAD': `${mergeBaseSha}\n`,
+      [`diff --name-status ${mergeBaseSha} HEAD`]:
         'D\tsrc/deleted.ts\nM\tdist/generated.js\nM\tsrc/app.ts\nM\tlarge.txt\n',
-      'diff --unified=0 main HEAD -- src/app.ts': ''
+      [`diff --unified=0 ${mergeBaseSha} HEAD -- src/app.ts`]: ''
     })
 
     const intake = await collectRepositoryIntake({
@@ -278,6 +297,104 @@ describe('repository intake', () => {
         message: 'Skipped because review.maxFiles is 1.'
       }
     ])
+  })
+
+  test('diffs against the merge base so base-branch commits are not reviewed', async () => {
+    const repositoryRoot = await createFixtureRepository()
+    const issuedCommands: string[] = []
+    const runGit: GitCommandRunner = async (args) => {
+      issuedCommands.push(args.join(' '))
+
+      if (args[0] === 'merge-base') {
+        return `${mergeBaseSha}\n`
+      }
+
+      return args[1] === '--name-status' ? 'M\tsrc/app.ts\n' : ''
+    }
+
+    const intake = await collectRepositoryIntake({
+      repositoryRoot,
+      baseRef: 'main',
+      headRef: 'HEAD',
+      runGit
+    })
+
+    expect(issuedCommands[0]).toBe('merge-base main HEAD')
+    // Neither diff may reference `main` directly; both are pinned to the base.
+    expect(
+      issuedCommands.slice(1).every((command) => command.includes(mergeBaseSha))
+    ).toBe(true)
+    expect(
+      issuedCommands.slice(1).some((command) => / main /u.test(command))
+    ).toBe(false)
+    expect(intake.repositorySnapshot.mergeBaseRef).toBe(mergeBaseSha)
+  })
+
+  test('excludes base-branch commits the head branch never had', async () => {
+    const repositoryRoot = await createFixtureRepository()
+    // Two-dot `diff main HEAD` would report dist/generated.js as deleted here,
+    // because it exists on the base branch but not on the feature branch.
+    const runGit = scriptedGitRunner({
+      'merge-base main HEAD': `${mergeBaseSha}\n`,
+      [`diff --name-status ${mergeBaseSha} HEAD`]: 'M\tsrc/app.ts\n',
+      [`diff --unified=0 ${mergeBaseSha} HEAD -- src/app.ts`]: ''
+    })
+
+    const intake = await collectRepositoryIntake({
+      repositoryRoot,
+      baseRef: 'main',
+      headRef: 'HEAD',
+      runGit
+    })
+
+    expect(intake.changedFiles.map((file) => file.path)).toEqual(['src/app.ts'])
+    expect(intake.skippedFiles).toEqual([])
+  })
+
+  test('fails with merge_base_unavailable when the refs share no history', async () => {
+    await expect(
+      collectRepositoryIntake({
+        repositoryRoot: '/repo',
+        baseRef: 'main',
+        headRef: 'HEAD',
+        runGit: async () => {
+          throw Object.assign(new Error('git exited with code 1'), { code: 1 })
+        }
+      })
+    ).rejects.toMatchObject({
+      code: 'merge_base_unavailable',
+      category: 'repository',
+      exitCode: 3
+    })
+  })
+
+  test('fails with merge_base_unavailable when merge-base prints nothing', async () => {
+    await expect(
+      collectRepositoryIntake({
+        repositoryRoot: '/repo',
+        baseRef: 'main',
+        headRef: 'HEAD',
+        runGit: async () => ''
+      })
+    ).rejects.toMatchObject({
+      code: 'merge_base_unavailable',
+      category: 'repository'
+    })
+  })
+
+  test('explicit file intake needs no merge base', async () => {
+    const repositoryRoot = await createFixtureRepository()
+
+    const intake = await collectRepositoryIntake({
+      repositoryRoot,
+      explicitFiles: ['src/app.ts'],
+      runGit: async () => {
+        throw new Error('git must not be called for explicit file intake')
+      }
+    })
+
+    expect(intake.changedFiles.map((file) => file.path)).toEqual(['src/app.ts'])
+    expect(intake.repositorySnapshot.mergeBaseRef).toBeUndefined()
   })
 
   test('normalizes timeout-shaped git failures as repository errors', async () => {

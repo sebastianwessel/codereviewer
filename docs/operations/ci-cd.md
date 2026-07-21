@@ -47,6 +47,12 @@ codereviewer review --base-ref origin/main --head-ref HEAD
 A minimal GitHub Actions job that runs the pipeline and uploads artifacts:
 
 ```yaml
+# Supersede an in-flight review when a new commit lands on the same PR, so
+# rapid pushes do not stack full reviews.
+concurrency:
+  group: codereviewer-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   review:
     runs-on: ubuntu-latest
@@ -55,6 +61,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Required: the review resolves the merge base of the base and head
+          # refs. A shallow checkout that excludes the divergence point fails
+          # with `merge_base_unavailable`.
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
@@ -71,6 +80,41 @@ jobs:
           name: codereviewer-runs
           path: .codereviewer/runs/**
 ```
+
+---
+
+## Controlling Cost On Repeated Pushes
+
+A review costs roughly one provider call per review task plus one per candidate,
+so re-reviewing an unchanged file on every push is the main source of avoidable
+spend. In order of effort:
+
+| Lever | Effect | Cost |
+| --- | --- | --- |
+| `concurrency.cancel-in-progress` | Supersedes superseded runs instead of stacking them. | None. |
+| `paths-ignore` for docs/lockfile-only pushes | Skips the run entirely. | None. |
+| `review.depth: fast` on intermediate pushes, `thorough` on the merge gate | One task per file instead of dependency clusters. | Lower recall on intermediate runs — keep those non-blocking. |
+| Baseline suppression with `failOnNewOnly` | Gate reacts only to findings introduced since the baseline. | Requires generating and committing the baseline. |
+
+> **Note:** Narrowing `--base-ref` to the previously reviewed commit is **not**
+> recommended. A defect anywhere in a changed file is in scope, so a file
+> touched by an earlier push would drop out of review entirely, and the report
+> would describe one push rather than the change under review.
+
+### Baseline suppression in CI
+
+Generate the baseline once from a review of the base branch, commit it, and let
+the gate fail only on findings that are new relative to it:
+
+```bash
+codereviewer review --base-ref origin/main~1 --head-ref origin/main
+codereviewer baseline write
+```
+
+With `baseline.enabled` and `qualityGate.failOnNewOnly` set, pre-existing
+findings stay in the report but stop blocking merges. Fingerprints are anchored
+on source text rather than line numbers, so a finding keeps its baseline
+identity when unrelated edits shift it within a file.
 
 ---
 

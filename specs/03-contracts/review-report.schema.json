@@ -50,6 +50,9 @@
         "headRef": {
           "type": "string"
         },
+        "mergeBaseRef": {
+          "type": "string"
+        },
         "configHash": {
           "type": "string",
           "pattern": "^[a-f0-9]{64}$"

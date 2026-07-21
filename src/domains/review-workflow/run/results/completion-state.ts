@@ -41,6 +41,7 @@ export const prepareReviewRunnerCompletionState = (
     readonly configWarnings?: readonly string[] | undefined
     readonly driftFindings: readonly DriftFinding[]
     readonly baseRef?: string | undefined
+    readonly mergeBaseRef?: string | undefined
     readonly headRef?: string | undefined
     readonly runId: string
     readonly startedAt: Date
@@ -82,6 +83,7 @@ export const prepareReviewRunnerCompletionState = (
     skillHashes: input.skillHashes,
     baselineConfigured: input.baselineConfigured,
     tasks: input.tasks,
+    sourceFiles: input.sourceFiles,
     observability: input.observability,
     logger: input.logger,
     ...(input.baselineFingerprints === undefined
@@ -163,6 +165,7 @@ export const prepareReviewRunnerCompletionState = (
     config: input.config,
     baseRef: input.baseRef,
     headRef: input.headRef,
+    mergeBaseRef: input.mergeBaseRef,
     runId: input.runId,
     startedAt: input.startedAt,
     completedAt,

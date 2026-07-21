@@ -1,21 +1,12 @@
 import { readFile } from 'node:fs/promises'
 import type { Logger } from '@purista/harness'
-import { z } from 'zod'
 import { resolveExistingPathInsideRoot } from '../../../platform/path-service.js'
 import type { CodeReviewerConfig } from '../../../shared/contracts/index.js'
-import type { BaselineFingerprintRecord } from '../../admission/index.js'
+import {
+  BaselineFileSchema,
+  type BaselineFingerprintRecord
+} from '../../admission/index.js'
 import type { NoContentEventRecorder } from '../../observability/index.js'
-
-const BaselineFileSchema = z.array(
-  z.strictObject({
-    fingerprints: z.array(
-      z.strictObject({
-        algorithm: z.string().min(1),
-        value: z.string().regex(/^[a-z0-9]+$/)
-      })
-    )
-  })
-)
 
 export const loadBaselineFingerprints = async (
   repositoryRoot: string,

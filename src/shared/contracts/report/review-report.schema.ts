@@ -23,6 +23,9 @@ export const RunSummarySchema = z.strictObject({
   repositoryRootHash: Sha256Schema,
   baseRef: z.string().optional(),
   headRef: z.string().optional(),
+  // Commit the diff was actually taken against: the merge base of baseRef and
+  // headRef. Absent for explicit-file runs, which bypass git entirely.
+  mergeBaseRef: z.string().optional(),
   configHash: Sha256Schema,
   provider: z.string().optional(),
   model: z.string().optional(),

@@ -1,7 +1,7 @@
 # 05: Review Workflow And Runtime
 
 Status: Approved
-Date: 2026-06-19
+Date: 2026-07-20
 
 ## End-To-End Flow
 
@@ -60,6 +60,19 @@ Rules:
 - Git command execution is read-only and allowlisted as defined by the security
   spec.
 - Explicit files bypass git diff but still require repository-root containment.
+- The reviewed change set is the set of changes present on `headRef` since it
+  diverged from `baseRef`. Intake must resolve the merge base of `baseRef` and
+  `headRef` with `git merge-base <baseRef> <headRef>` and use the resulting
+  commit as the diff base for both the name-status and unified diff calls.
+  Commits that landed on `baseRef` after the divergence point must not appear
+  as changed files.
+- When no merge base exists (unrelated histories, or a clone shallow enough to
+  exclude the divergence point), intake must fail with the structured error code
+  `merge_base_unavailable`, category `repository`, exit code 3. Intake must not
+  silently fall back to a direct `baseRef`-to-`headRef` diff, because that
+  produces a changed-file set that includes unrelated base-branch commits.
+- The resolved merge-base commit must be recorded on `RepositorySnapshot` as
+  `mergeBaseRef` so run artifacts state which base the review actually used.
 - Deleted files are recorded as skipped with reason `deleted`.
 - Binary files are skipped with reason `binary`.
 - Oversized files are skipped with reason `too-large`.
@@ -699,6 +712,8 @@ Rules:
 
 - match by `FindingFingerprint` values;
 - never match by title alone;
+- a baseline entry and an admitted finding match when they share at least one
+  fingerprint with the same `algorithm` and `value`;
 - mark admitted findings as `new`, `existing`, or `unknown`;
 - calculate resolved baseline entries when configured baseline data contains a
   fingerprint absent from current admitted findings;
@@ -706,6 +721,42 @@ Rules:
   is enabled and configured to fail on new findings only;
 - baseline reads and writes must use `path-service` and remain under repository
   root.
+
+## Baseline Generation
+
+The baseline file is produced by the product, not hand-authored.
+
+Rules:
+
+- `codereviewer baseline write` reads a completed `report.json` and writes the
+  configured `baseline.path` as the baseline file contract defined in spec 03;
+- the source report defaults to the most recent run recorded in the run index
+  and may be overridden with an explicit report path;
+- the command writes every admitted finding's `fingerprints` array verbatim; it
+  must not recompute fingerprints, because recomputation without the original
+  source state would produce values that cannot match a later run;
+- the command fails with `baseline_source_unavailable`, category `repository`,
+  exit code 3 when no source report can be resolved;
+- writing the baseline is an explicit operation. The `review` command must never
+  write the baseline file, so that a review run cannot suppress its own
+  findings.
+
+## Run Index
+
+Run artifacts are addressable across runs.
+
+Rules:
+
+- each completed or partially completed run writes `index.json` at the root of
+  the artifact directory, containing an ordered list of run entries with `runId`,
+  `startedAt`, `completedAt` when known, `status` (`completed` or `failed`),
+  and the repository-relative `reportPath` when a report was written;
+- the newest entry is first; the index is capped at 50 entries and older entries
+  are dropped from the index only, never deleted from disk;
+- index writes use `path-service` and stay under the artifact directory;
+- a corrupt or unreadable index is replaced with a fresh single-entry index
+  rather than failing the run, because artifact bookkeeping must not fail a
+  review that otherwise succeeded.
 
 ## Error Handling
 

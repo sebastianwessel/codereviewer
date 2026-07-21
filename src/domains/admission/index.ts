@@ -3,6 +3,7 @@ export {
   CandidateFindingSchema,
   type AdmissionPolicy,
   type AdmissionResult,
+  type AnchorTextResolver,
   type CandidateFinding,
   type ReviewedDiffRange,
   type ReviewedLineRange,
@@ -10,11 +11,23 @@ export {
   sourceLineCount
 } from './admission-gate.js'
 export {
+  anchorSourceFilesFromChunks,
+  createSourceAnchorResolver,
+  type AnchorSourceFile
+} from './source-anchor.js'
+export {
   matchBaselineFindings,
   resolveBaselineFingerprints,
   type BaselineFingerprintRecord,
   type BaselineMatchResult
 } from './baseline-matcher.js'
+export {
+  BaselineEntrySchema,
+  BaselineFileSchema,
+  buildBaselineEntries,
+  renderBaselineJson,
+  type BaselineEntry
+} from './baseline-writer.js'
 export {
   evaluateQualityGate,
   type QualityGateThresholds
