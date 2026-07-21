@@ -1,5 +1,6 @@
 export {
   calculateTokenCost,
+  combineRunTokenUsage,
   summarizeRunCost,
   type RunCostSummary,
   type RunTokenUsage,

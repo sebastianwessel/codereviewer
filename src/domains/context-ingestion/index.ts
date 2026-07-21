@@ -13,6 +13,7 @@ export type {
 export { createInboxProvider } from './inbox-provider.js'
 export { createChangedFilesProvider } from './changed-files-provider.js'
 export { createDigestSummarizer } from './digest-summarizer.js'
+export { createModelSummarizer } from './model-summarizer.js'
 export {
   runContextIngestion,
   type ContextIngestionResult,

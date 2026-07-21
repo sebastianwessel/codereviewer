@@ -1,5 +1,32 @@
 import { describe, expect, test } from 'vitest'
-import { calculateTokenCost, summarizeRunCost } from './token-cost.js'
+import {
+  calculateTokenCost,
+  combineRunTokenUsage,
+  summarizeRunCost
+} from './token-cost.js'
+
+describe('combineRunTokenUsage', () => {
+  test('returns the other side when one is undefined', () => {
+    const usage = { inputTokens: 5, outputTokens: 2 }
+    expect(combineRunTokenUsage(usage, undefined)).toBe(usage)
+    expect(combineRunTokenUsage(undefined, usage)).toBe(usage)
+    expect(combineRunTokenUsage(undefined, undefined)).toBeUndefined()
+  })
+
+  test('sums token fields, keeping cached as a subset', () => {
+    expect(
+      combineRunTokenUsage(
+        { inputTokens: 100, outputTokens: 20, cachedInputTokens: 10 },
+        { inputTokens: 40, outputTokens: 8, reasoningTokens: 3 }
+      )
+    ).toEqual({
+      inputTokens: 140,
+      outputTokens: 28,
+      cachedInputTokens: 10,
+      reasoningTokens: 3
+    })
+  })
+})
 
 describe('token cost tracking', () => {
   test('calculates configured token costs', () => {

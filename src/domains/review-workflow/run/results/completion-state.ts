@@ -33,6 +33,7 @@ import {
 import { recordObservedTaskEvents } from '../support/observability.js'
 import type { ReviewRunnerProviderState } from '../provider/provider-state.js'
 import type { BaselineFingerprintRecord } from '../../../admission/index.js'
+import { combineRunTokenUsage, type RunTokenUsage } from '../../../costs/index.js'
 
 export const prepareReviewRunnerCompletionState = (
   input: {
@@ -54,6 +55,7 @@ export const prepareReviewRunnerCompletionState = (
     readonly evidence: readonly EvidenceRecord[]
     readonly supportSignalCandidates: readonly CandidateFinding[]
     readonly providerWorkflow: ReviewRunnerProviderState['providerWorkflow']
+    readonly contextIngestionUsage?: RunTokenUsage | undefined
     readonly providerTaskEventsObservedLive: boolean
     readonly reviewedPaths: readonly string[]
     readonly reviewedLineRanges: readonly ReviewedLineRange[]
@@ -112,9 +114,15 @@ export const prepareReviewRunnerCompletionState = (
       ...(input.baselineFingerprints === undefined
         ? {}
         : { baselineFingerprints: input.baselineFingerprints }),
-      ...(input.providerWorkflow?.usage === undefined
-        ? {}
-        : { providerUsage: input.providerWorkflow.usage })
+      // Fold the dedicated summarizer's tokens into the run's provider usage so
+      // they count toward run cost.
+      ...((() => {
+        const usage = combineRunTokenUsage(
+          input.providerWorkflow?.usage,
+          input.contextIngestionUsage
+        )
+        return usage === undefined ? {} : { providerUsage: usage }
+      })())
     })
   if (coverage.status !== 'complete') {
     throw createReviewRunnerCoverageFailure({

@@ -146,15 +146,20 @@ export const runReview = async (
     // Ingest external change-intent context and inject the summarized brief into
     // the tasks before the workflow input is assembled. Disabled or empty
     // ingestion returns the assembled context unchanged.
-    const assembledContext = await prepareReviewRunnerChangeIntentContext({
+    const changeIntent = await prepareReviewRunnerChangeIntentContext({
       repositoryRoot: options.repositoryRoot,
       config: options.config,
       assembledContext: contextState.assembledContext,
       sourceFiles,
+      environment: options.environment ?? {},
       observability,
       logger,
+      ...(options.providerImport === undefined
+        ? {}
+        : { providerImport: options.providerImport }),
       ...(runSignal.signal === undefined ? {} : { signal: runSignal.signal })
     })
+    const assembledContext = changeIntent.assembledContext
     const baseline = await prepareReviewRunnerBaseline({
       repositoryRoot: options.repositoryRoot,
       config: options.config,
@@ -231,6 +236,9 @@ export const runReview = async (
       contextLedger: assembledContext.contextLedger,
       evidence,
       supportSignalCandidates,
+      ...(changeIntent.usage === undefined
+        ? {}
+        : { contextIngestionUsage: changeIntent.usage }),
       providerWorkflow,
       providerTaskEventsObservedLive,
       reviewedPaths: intake.changedFiles.map((file) => file.path),

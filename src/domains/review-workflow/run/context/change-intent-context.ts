@@ -8,15 +8,77 @@ import {
 } from '../../../review-planning/index.js'
 import {
   createDigestSummarizer,
+  createModelSummarizer,
   runContextIngestion,
   type ContextSummarizer
 } from '../../../context-ingestion/index.js'
+import {
+  combineRunTokenUsage,
+  type RunTokenUsage
+} from '../../../costs/index.js'
+import {
+  resolveProviderModelAlias,
+  type ProviderImport
+} from '../../../provider-resolution/index.js'
 import { createRedactor } from '../../../../shared/redaction/redactor.js'
 import {
   WorkflowReviewTaskSchema,
   type WorkflowReviewTask
 } from '../../pipeline/agent-contracts.js'
 import type { ContextAssemblyResult } from './context.js'
+
+export type ChangeIntentContextResult = {
+  readonly assembledContext: ContextAssemblyResult
+  readonly usage: RunTokenUsage | undefined
+}
+
+// Selects the summarizer for the run. `model` is used only when a provider is
+// configured and model-backed review is not disabled; otherwise the
+// deterministic digest is used. A model summarizer that throws at resolution
+// time falls back to the digest so ingestion never fails the review.
+const selectSummarizer = async (input: {
+  readonly config: CodeReviewerConfig
+  readonly environment: Readonly<Record<string, string | undefined>>
+  readonly providerImport?: ProviderImport | undefined
+  readonly logger: Logger
+  readonly onUsage: (usage: RunTokenUsage) => void
+  readonly signal?: AbortSignal | undefined
+}): Promise<ContextSummarizer> => {
+  const requested =
+    input.config.contextSources.summary.mode ??
+    (input.config.provider !== undefined ? 'model' : 'digest')
+
+  if (
+    requested !== 'model' ||
+    input.config.provider === undefined ||
+    input.config.aiReview.enabled === false
+  ) {
+    return createDigestSummarizer()
+  }
+
+  try {
+    const resolved = await resolveProviderModelAlias({
+      provider: input.config.provider,
+      environment: input.environment,
+      logger: input.logger,
+      ...(input.providerImport === undefined
+        ? {}
+        : { importProvider: input.providerImport })
+    })
+
+    if (resolved.modelAlias.provider.object === undefined) {
+      return createDigestSummarizer()
+    }
+
+    return createModelSummarizer({
+      modelAlias: resolved.modelAlias,
+      onUsage: input.onUsage,
+      ...(input.signal === undefined ? {} : { signal: input.signal })
+    })
+  } catch {
+    return createDigestSummarizer()
+  }
+}
 
 const ledgerDecisionFor = (
   mode: 'model' | 'digest',
@@ -42,18 +104,35 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
   readonly config: CodeReviewerConfig
   readonly assembledContext: ContextAssemblyResult
   readonly sourceFiles: readonly SupportSignalSourceFile[]
+  readonly environment: Readonly<Record<string, string | undefined>>
   readonly observability: NoContentEventRecorder
   readonly logger: Logger
+  readonly providerImport?: ProviderImport | undefined
   readonly summarizer?: ContextSummarizer
   readonly signal?: AbortSignal | undefined
-}): Promise<ContextAssemblyResult> => {
+}): Promise<ChangeIntentContextResult> => {
   const contextSources = input.config.contextSources
 
   if (!contextSources.enabled || contextSources.providers.length === 0) {
-    return input.assembledContext
+    return { assembledContext: input.assembledContext, usage: undefined }
   }
 
-  const summarizer = input.summarizer ?? createDigestSummarizer()
+  let usage: RunTokenUsage | undefined
+  const summarizer =
+    input.summarizer ??
+    (await selectSummarizer({
+      config: input.config,
+      environment: input.environment,
+      logger: input.logger,
+      onUsage: (recorded) => {
+        usage = combineRunTokenUsage(usage, recorded)
+      },
+      ...(input.providerImport === undefined
+        ? {}
+        : { providerImport: input.providerImport }),
+      ...(input.signal === undefined ? {} : { signal: input.signal })
+    }))
+
   const step = input.observability.startStep('context_ingestion', {
     providerCount: contextSources.providers.length,
     summaryMode: summarizer.mode
@@ -71,6 +150,10 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
       content: file.content
     })),
     summarizer,
+    // A model summarization that throws degrades to the deterministic digest.
+    ...(summarizer.mode === 'model'
+      ? { fallbackSummarizer: createDigestSummarizer() }
+      : {}),
     maxBytes: contextSources.summary.maxBytes,
     redact: (value) => redactor.redact(value),
     ...(input.signal === undefined ? {} : { signal: input.signal })
@@ -90,7 +173,7 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
       fragment_count: result.fragmentCount,
       failed_providers: failedProviders
     })
-    return input.assembledContext
+    return { assembledContext: input.assembledContext, usage }
   }
 
   const brief = result.brief
@@ -137,8 +220,11 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
   })
 
   return {
-    ...input.assembledContext,
-    tasks,
-    contextLedger: [...input.assembledContext.contextLedger, ledgerEntry]
+    assembledContext: {
+      ...input.assembledContext,
+      tasks,
+      contextLedger: [...input.assembledContext.contextLedger, ledgerEntry]
+    },
+    usage
   }
 }

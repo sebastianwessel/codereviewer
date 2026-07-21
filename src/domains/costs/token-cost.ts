@@ -102,6 +102,38 @@ export type RunTokenUsage = {
   readonly providerCostUsd?: number
 }
 
+// Sum two token-usage records into one. Used to fold a dedicated model call
+// (e.g. the change-intent summarizer) into the run's provider usage so its
+// tokens are counted in run cost. `cachedInputTokens` is a subset of
+// `inputTokens`, so it sums the same way.
+export const combineRunTokenUsage = (
+  a: RunTokenUsage | undefined,
+  b: RunTokenUsage | undefined
+): RunTokenUsage | undefined => {
+  if (a === undefined) {
+    return b
+  }
+
+  if (b === undefined) {
+    return a
+  }
+
+  const cached = (a.cachedInputTokens ?? 0) + (b.cachedInputTokens ?? 0)
+  const reasoning = (a.reasoningTokens ?? 0) + (b.reasoningTokens ?? 0)
+  const providerCost =
+    a.providerCostUsd === undefined && b.providerCostUsd === undefined
+      ? undefined
+      : (a.providerCostUsd ?? 0) + (b.providerCostUsd ?? 0)
+
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    ...(cached === 0 ? {} : { cachedInputTokens: cached }),
+    ...(reasoning === 0 ? {} : { reasoningTokens: reasoning }),
+    ...(providerCost === undefined ? {} : { providerCostUsd: providerCost })
+  }
+}
+
 export type RunCostSummary = {
   readonly warnings: readonly string[]
   readonly costUsd?: number

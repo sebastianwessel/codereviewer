@@ -50,6 +50,9 @@ export const runContextIngestion = async (input: {
     readonly content: string
   }[]
   readonly summarizer: ContextSummarizer
+  // Used when the primary summarizer throws, so a failed model summarization
+  // degrades to the deterministic digest instead of failing the review.
+  readonly fallbackSummarizer?: ContextSummarizer
   readonly maxBytes: number
   readonly redact: (value: string) => string
   readonly signal?: AbortSignal | undefined
@@ -98,10 +101,19 @@ export const runContextIngestion = async (input: {
     return { brief: undefined, fragmentCount: 0, providerMetrics }
   }
 
-  const brief = await input.summarizer.summarize(fragments, {
+  const summarizeInput = {
     maxBytes: input.maxBytes,
     ...(input.signal === undefined ? {} : { signal: input.signal })
-  })
+  }
+  const brief = await input.summarizer
+    .summarize(fragments, summarizeInput)
+    .catch(async (error: unknown) => {
+      if (input.fallbackSummarizer === undefined) {
+        throw error
+      }
+
+      return input.fallbackSummarizer.summarize(fragments, summarizeInput)
+    })
 
   return {
     brief: brief.text.trim().length === 0 ? undefined : brief,
