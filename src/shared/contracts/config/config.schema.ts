@@ -159,6 +159,47 @@ export const PromotionPolicyConfigSchema = z.strictObject({
   modelWeakOrRefuted: z.enum(['artifact-only', 'rejected']).default('artifact-only')
 })
 
+// External change-intent context ingestion (spec 11). Phase 1 ships the two
+// no-network providers; the `platform` adapter (event/api) is a later phase and
+// is added to this union when its adapter lands, so config validation never
+// accepts a provider the runtime cannot honor.
+export const ContextInboxProviderSchema = z.strictObject({
+  type: z.literal('inbox'),
+  // Directory a pipeline writes frontmatter-markdown context files into before
+  // the review. Filesystem-only, resolved under the repository root.
+  dir: RepositoryRelativePathSchema.default('.codereviewer/context'),
+  maxFiles: z.int().min(1).max(200).default(20),
+  maxFileBytes: z.int().min(1).max(1_000_000).default(64_000)
+})
+
+export const ContextChangedFilesProviderSchema = z.strictObject({
+  type: z.literal('changed-files'),
+  // Globs selecting PR-changed repository files to surface as intent context
+  // (for example changed specs/docs that explain the code change).
+  include: z.array(z.string()).min(1).default(['**/*.md']),
+  maxFiles: z.int().min(1).max(200).default(20),
+  maxFileBytes: z.int().min(1).max(1_000_000).default(64_000)
+})
+
+export const ContextProviderConfigSchema = z.discriminatedUnion('type', [
+  ContextInboxProviderSchema,
+  ContextChangedFilesProviderSchema
+])
+
+export const ContextSummaryConfigSchema = z.strictObject({
+  // `model` runs the dedicated summarizer call; `digest` is deterministic. When
+  // omitted the mode is resolved at runtime: `model` if a provider is
+  // configured, otherwise `digest`.
+  mode: z.enum(['model', 'digest']).optional(),
+  maxBytes: z.int().min(256).max(20_000).default(4_000)
+})
+
+export const ContextSourcesConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  providers: z.array(ContextProviderConfigSchema).default([]),
+  summary: ContextSummaryConfigSchema.default({ maxBytes: 4_000 })
+})
+
 export const DriftCategorySchema = z.enum([
   'documentation-drift',
   'spec-drift',
@@ -288,6 +329,11 @@ export const CodeReviewerConfigSchema = z.strictObject({
   promotionPolicy: PromotionPolicyConfigSchema.default({
     modelWeakOrRefuted: 'artifact-only'
   }),
+  contextSources: ContextSourcesConfigSchema.default({
+    enabled: false,
+    providers: [],
+    summary: { maxBytes: 4_000 }
+  }),
   security: SecurityConfigSchema.default({
     allowShell: false,
     allowNetwork: false,
@@ -338,6 +384,8 @@ export type BaselineConfig = z.infer<typeof BaselineConfigSchema>
 export type QualityGateConfig = z.infer<typeof QualityGateConfigSchema>
 export type AiReviewConfig = z.infer<typeof AiReviewConfigSchema>
 export type PromotionPolicyConfig = z.infer<typeof PromotionPolicyConfigSchema>
+export type ContextSourcesConfig = z.infer<typeof ContextSourcesConfigSchema>
+export type ContextProviderConfig = z.infer<typeof ContextProviderConfigSchema>
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>
 export type DriftCategory = z.infer<typeof DriftCategorySchema>
 export type DriftConfig = z.infer<typeof DriftConfigSchema>
