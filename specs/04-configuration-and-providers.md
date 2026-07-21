@@ -1,7 +1,7 @@
 # 04: Configuration And Providers
 
 Status: Approved
-Date: 2026-06-19
+Date: 2026-07-21
 
 ## Configuration Files
 
@@ -94,6 +94,7 @@ provider-specific object as passthrough.
 | `costs` | no | object | detailed token/cost tracking enabled with no prices |
 | `aiReview` | no | object | holistic discovery + refutation defaults |
 | `promotionPolicy` | no | object | non-actionable model output disposition |
+| `contextSources` | no | object | external change-intent context disabled |
 
 ## Review Config
 
@@ -356,6 +357,46 @@ Rules:
   production relies on adjacent CodeQL/linter/formatter/test/build pipelines.
   Trusted allowlisted deterministic rules are separate from generic signal-only
   output and may seed actionable evidence-backed candidates directly.
+
+## Context Sources
+
+Controls external change-intent context ingestion
+(`11-external-context-ingestion.md`). Disabled by default.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `contextSources.enabled` | boolean | `false` |
+| `contextSources.providers` | array of provider objects | `[]` |
+| `contextSources.summary.mode` | `"model" \| "digest"` | `"model"` when a provider is configured, else `"digest"` |
+| `contextSources.summary.maxBytes` | integer | bounded change-intent-brief cap |
+
+Each provider object is discriminated by `type`:
+
+| `type` | Required keys | Purpose |
+| --- | --- | --- |
+| `platform` | `platform`, `transport`, `include` | Read PR/MR title, description, and comments through a `PlatformAdapter`. |
+| `inbox` | `dir` | Read frontmatter-markdown context files a pipeline wrote before the run. No network. |
+| `changed-files` | `include` | Surface PR-changed repository files matching globs as intent context. No network. |
+
+Rules:
+
+- the block is off unless `enabled` is `true`; a disabled block yields a review
+  identical to one with no external context;
+- `platform` is `github` in initial scope; `gitlab` and `bitbucket` are future
+  implementations of the same adapter interface;
+- `platform.transport` is `event` (read a CI payload file already on disk, no
+  network) or `api` (read-only HTTP from an allowlisted `host`);
+- `platform.include` selects among `title`, `description`, and `comments`;
+- `inbox.dir` resolves under the repository root (default `.codereviewer/context`)
+  and is bounded by file-count and per-file byte caps;
+- `changed-files.include` selects PR-changed files by glob (for example
+  `specs/**`, `docs/**`, `**/*.md`), bounded by file-count and byte caps;
+- a network `host` is treated as an allowlist: only that host is contacted, and
+  fetch targets are never derived from repository content or model output;
+- credentials are referenced only by environment variable name (`tokenEnv`); a
+  literal secret in configuration is rejected;
+- an unknown `type`, a missing required key, or a non-allowlisted host fails
+  `config validate` with `context_source_misconfigured` (exit code 2).
 
 ## Reporting
 

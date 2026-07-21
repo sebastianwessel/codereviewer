@@ -23,6 +23,7 @@ or untracked files.
 - [08-dependencies-and-release.md](08-dependencies-and-release.md)
 - [09-readiness-self-audit.md](09-readiness-self-audit.md)
 - [10-state-of-the-art-research-synthesis.md](10-state-of-the-art-research-synthesis.md)
+- [11-external-context-ingestion.md](11-external-context-ingestion.md)
 
 ## Implementation Rule
 
