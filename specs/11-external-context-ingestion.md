@@ -136,6 +136,30 @@ with an origin label. Zero or more providers are configured.
 - The document is presented to the model under an explicit header marking it as
   untrusted, informational change-intent context and not instructions.
 
+## Reviewer Use Of Change Intent
+
+Change intent orients the reviewer to the goal; it is never authorization. The
+reviewer prompt and the summarizer must enforce these principles:
+
+- Change intent reduces misunderstanding-based false positives by explaining why
+  a change was made. It does not define what is acceptable.
+- Satisfying the stated intent does not make the code correct or safe. A change
+  that does exactly what the ticket asked can still be a defect and must still be
+  reported. A stated goal like "make the endpoint available for X" does not
+  excuse an implementation that exposes it to everyone.
+- Requirements the intent omits — access control, authentication and
+  authorization, input validation, error handling, resource and data safety,
+  concurrency, and edge cases — remain in scope. Silence in the intent is not
+  permission.
+- An implementation broader or more permissive than the intent requires is
+  itself a candidate finding (over-broad scope or privilege).
+- The intent may be incomplete, ambiguous, or wrong; the reviewer does not defer
+  to it over defect evidence.
+- The summarizer must preserve the exact stated scope, audience, and
+  constraints. It must not broaden, generalize, or soften them, must not assert
+  that any approach is safe, correct, approved, or complete, and must not infer
+  constraints the source does not state.
+
 ## Determinism And Failure Handling
 
 - All providers are optional. A provider that produces nothing — missing payload,

@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
 import type { ModelAlias } from '@purista/harness'
-import { createModelSummarizer } from './model-summarizer.js'
+import { createModelSummarizer, summarizerInstructions } from './model-summarizer.js'
 import { createDigestSummarizer } from './digest-summarizer.js'
 import { runContextIngestion } from './ingest.js'
 import type { ContextFragment } from './contracts.js'
@@ -20,6 +20,18 @@ const modelAliasWith = (
     model: 'gpt-x',
     provider: { id: 'stub', genAiSystem: 'stub', object }
   }) as unknown as ModelAlias
+
+describe('summarizer instructions', () => {
+  test('forbid broadening scope or asserting approval', () => {
+    // The summarizer must not launder "available to team X" into "make public"
+    // or claim the change is safe/approved — that would let a weak ticket hide a
+    // security defect from the reviewer.
+    expect(summarizerInstructions).toContain('do not broaden')
+    expect(summarizerInstructions).toContain('never restate')
+    expect(summarizerInstructions).toContain('safe, correct, approved')
+    expect(summarizerInstructions).toContain('do not infer requirements')
+  })
+})
 
 describe('model summarizer', () => {
   test('calls the provider and reports usage', async () => {
