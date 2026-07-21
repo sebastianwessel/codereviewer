@@ -17,6 +17,8 @@ const sectionFor = (fragment: ContextFragment): string => {
  * Fragments are emitted in input order; earlier fragments are kept whole and the
  * first fragment that overflows the cap is truncated, after which emission stops.
  */
+const separatorBytes = Buffer.byteLength('\n\n', 'utf8')
+
 export const createDigestSummarizer = (): ContextSummarizer => ({
   mode: 'digest',
   summarize: async (fragments, input) => {
@@ -26,28 +28,32 @@ export const createDigestSummarizer = (): ContextSummarizer => ({
     let truncated = false
 
     for (const fragment of fragments) {
-      const separator = sections.length === 0 ? '' : '\n\n'
-      const section = sectionFor(fragment)
-      const separatorBytes = Buffer.byteLength(separator, 'utf8')
-      const sectionBytes = Buffer.byteLength(section, 'utf8')
+      const budget =
+        input.maxBytes - usedBytes - (sections.length === 0 ? 0 : separatorBytes)
 
-      if (usedBytes + separatorBytes + sectionBytes > input.maxBytes) {
-        const remaining = input.maxBytes - usedBytes - separatorBytes
-        const partial = truncateToUtf8Bytes(section, remaining)
-
-        // Only keep a partial section if it carries content past the heading.
-        if (partial.includes('\n') && partial.split('\n').slice(1).join('\n').trim().length > 0) {
-          sections.push(partial)
-          origins.push(fragment.origin)
-        }
-
+      if (budget <= 0) {
         truncated = true
         break
       }
 
-      sections.push(section)
+      const section = sectionFor(fragment)
+      const fitted = truncateToUtf8Bytes(section, budget)
+
+      if (fitted.length === 0) {
+        truncated = true
+        break
+      }
+
+      sections.push(fitted)
       origins.push(fragment.origin)
-      usedBytes += separatorBytes + sectionBytes
+      usedBytes +=
+        (sections.length === 1 ? 0 : separatorBytes) +
+        Buffer.byteLength(fitted, 'utf8')
+
+      if (fitted.length < section.length) {
+        truncated = true
+        break
+      }
     }
 
     const brief: ChangeIntentBrief = {

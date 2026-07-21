@@ -1,10 +1,11 @@
 // Unified contracts for external change-intent context ingestion (spec 11).
 //
-// The core composes providers and a summarizer and depends only on these types,
-// so platform-specific integrations stay isolated behind `PlatformAdapter` and a
-// new platform is added without touching the core.
+// The core composes providers and a summarizer and depends only on these types.
+// A new context source is a new `ContextProvider`; a new PR/MR platform is a new
+// provider added without touching the core. The platform-adapter contract is
+// defined with its implementation in a later phase.
 
-export type ContextFragmentKind = 'pull-request' | 'inbox' | 'changed-file'
+export type ContextFragmentKind = 'inbox' | 'changed-file'
 
 /** The normalized unit every provider emits. */
 export type ContextFragment = {
@@ -47,36 +48,4 @@ export type ContextSummarizer = {
     fragments: readonly ContextFragment[],
     input: SummarizeInput
   ): Promise<ChangeIntentBrief>
-}
-
-// Platform seam. Adapters (github, then gitlab/bitbucket) implement this in a
-// later phase; the platform-neutral type is defined here so the interface is the
-// contract, not any one platform's shape.
-
-export type PullRequestComment = {
-  readonly author?: string
-  readonly body: string
-  readonly kind: 'review' | 'issue'
-}
-
-export type PullRequestContext = {
-  readonly platform: string
-  readonly id: string
-  readonly title: string
-  readonly description: string
-  readonly author?: string
-  readonly labels: readonly string[]
-  readonly comments: readonly PullRequestComment[]
-  readonly linkedIssueRefs: readonly string[]
-  readonly sourceBranch?: string
-  readonly targetBranch?: string
-  readonly url?: string
-}
-
-export type PlatformAdapter = {
-  readonly platform: string
-  readPullRequest(input: {
-    readonly repositoryRoot: string
-    readonly signal?: AbortSignal | undefined
-  }): Promise<PullRequestContext | undefined>
 }

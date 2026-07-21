@@ -104,6 +104,12 @@ export const prepareReviewRunnerCompletionState = (
     sourceFiles: input.sourceFiles,
     contextLedger: effectiveContextLedger
   })
+  // Fold the dedicated summarizer's tokens into the run's provider usage so they
+  // count toward run cost.
+  const providerUsage = combineRunTokenUsage(
+    input.providerWorkflow?.usage,
+    input.contextIngestionUsage
+  )
   const { runCost, warnings, resolvedBaselineEntries } =
     prepareReviewRunFinalization({
       config: input.config,
@@ -114,15 +120,7 @@ export const prepareReviewRunnerCompletionState = (
       ...(input.baselineFingerprints === undefined
         ? {}
         : { baselineFingerprints: input.baselineFingerprints }),
-      // Fold the dedicated summarizer's tokens into the run's provider usage so
-      // they count toward run cost.
-      ...((() => {
-        const usage = combineRunTokenUsage(
-          input.providerWorkflow?.usage,
-          input.contextIngestionUsage
-        )
-        return usage === undefined ? {} : { providerUsage: usage }
-      })())
+      ...(providerUsage === undefined ? {} : { providerUsage })
     })
   if (coverage.status !== 'complete') {
     throw createReviewRunnerCoverageFailure({

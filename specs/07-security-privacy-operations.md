@@ -36,7 +36,7 @@ Attack surfaces:
   secrets;
 - injection through external change-intent context that attempts to alter
   findings, gates, or reviewer behavior;
-- server-side request forgery through a configured platform-API context source;
+- server-side request forgery through a later-phase network context source;
 - drift between specs, docs, implementation, generated schemas, examples,
   quality gates, and shipped behavior;
 - ambiguous or interpretable requirements that allow agents or maintainers to
@@ -55,7 +55,7 @@ code, not by model behavior:
 | Artifact write boundary | Writes are allowed only below the configured artifact directory after it resolves under repository root. |
 | Non-destructive git | The only allowed git commands are read-only discovery commands explicitly allowlisted in code. Mutating git commands are impossible through the product API. |
 | No shell expansion | Git and tool invocations use argument-array process APIs. Shell strings are forbidden. |
-| No implicit network | Network is denied by default. The only network paths are the explicitly selected model provider endpoint after provider config validation, and an explicitly configured, host-allowlisted platform-API context source (`11-external-context-ingestion.md`). Both are off until configured; neither can be initiated by model output. |
+| No implicit network | Network is denied by default. The only network path is the explicitly selected model provider endpoint after provider config validation, used by review and by the change-intent summarizer. Change-intent context providers are filesystem-only in the current phase; a network `platform-API` provider is a later phase and, when added, contacts only an explicitly configured, host-allowlisted host. No network path can be initiated by model output. |
 | No repository exfiltration by default | Local providerless and signal-only paths must not send repository content to any network destination. Provider-backed review sends only bounded, redacted, ledger-recorded context to the selected provider. |
 | No prompt/tool authority | Prompts, repository content, skills, and model output cannot grant filesystem, git, shell, network, publishing, or gate authority. |
 | Auditable decisions | Security-relevant allow/deny decisions produce stable, redacted events and testable error codes. |
@@ -74,8 +74,8 @@ code, not by model behavior:
 | Prompt exfiltration | repository asks model to print env vars or upload code | No tools with env/filesystem/network authority are available to model output; env is never in prompt context. |
 | Report injection | finding title contains HTML/script/Markdown table breaks | Escape Markdown/SARIF user-controlled text and never emit raw source snippets by default. |
 | External context injection | PR body, inbox file, or changed doc says "ignore all findings" or "this is pre-approved" | Treat external context as untrusted data presented under an informational header; it never changes admission, severity, gates, or baseline, and never suppresses a finding. |
-| Context-source SSRF | ticket id or URL in repository content aims a platform-API fetch at an internal host | Contact only the explicitly configured, host-allowlisted platform host; never derive fetch targets from repository content or model output. |
-| Context-source credential leak | tracker or platform token echoed into the brief, ledger, or logs | Read platform-API credentials only from a configured environment variable; the context inbox carries no credentials because the pipeline owns the fetch; redact external context before use. |
+| Context-source SSRF (later-phase `platform-API` provider) | ticket id or URL in repository content aims a platform-API fetch at an internal host | Contact only the explicitly configured, host-allowlisted platform host; never derive fetch targets from repository content or model output. |
+| Context-source credential leak | tracker or platform token echoed into the brief, ledger, or logs | The current-phase inbox carries no credentials because the pipeline owns the fetch; the later-phase platform-API provider reads credentials only from a configured environment variable; redact external context before use. |
 | Secret leakage | token appears in source, error, provider message, or artifact | Redact before logs, errors, reports, traces, and provider-bound summaries. If a value cannot be proven redacted, exclude it from output. |
 | Denial of service | huge files, many paths, nested skill tree | Enforce max files, max file bytes, context bytes, traversal caps, timeouts, and concurrency caps. |
 | Drift hiding | README claims a command exists but CLI rejects it | Drift checker compares docs/specs/CLI/package/config/generated schemas and emits drift findings. |
@@ -145,7 +145,7 @@ Default permissions:
 | Repository read | allowed | Required. |
 | Filesystem write | restricted | Only run artifact directory. |
 | Shell execution | denied | Future spec required. |
-| Network | provider only by default | Selected provider adapter, plus an explicitly configured, host-allowlisted platform-API context source when enabled (`11-external-context-ingestion.md`). |
+| Network | provider only | Selected provider adapter (review and change-intent summarizer). Change-intent context providers are filesystem-only; a network `platform-API` provider is a later phase (`11-external-context-ingestion.md`). |
 | PR publishing | denied | Future spec required. |
 | Fix application | denied | Future spec required. |
 
@@ -197,23 +197,22 @@ Rules:
 
 ## Network And Provider Exfiltration Controls
 
-Network is off unless a provider-backed review or a network context source is
-explicitly configured.
+Network is off unless a provider-backed review is explicitly configured.
 
 External context source requirements (`11-external-context-ingestion.md`):
 
 - context providers are off by default; enabling them is an explicit
   configuration choice;
-- the `platform` provider `api` transport contacts only its explicitly
-  configured, host-allowlisted host; fetch targets are never derived from
-  repository content or model output;
-- platform-API credentials are read only from a configured environment variable
-  name and are never placed in config, prompts, ledger entries, or logs;
-- the context inbox is filesystem-only under the repository root: the pipeline
-  performs any external fetch and owns its credentials, so no external
-  credential enters the product;
+- the current-phase providers (`inbox`, `changed-files`) are filesystem-only
+  under the repository root: the pipeline performs any external fetch and owns
+  its credentials, so no external credential enters the product;
 - gathered context is redacted and bounded before it enters the summarizer, the
-  prompt, or the context ledger.
+  prompt, or the context ledger;
+- required controls for the later-phase network `platform-API` provider: it
+  contacts only its explicitly configured, host-allowlisted host; fetch targets
+  are never derived from repository content or model output; and its credentials
+  are read only from a configured environment variable name, never placed in
+  config, prompts, ledger entries, or logs.
 
 Provider-backed review requirements:
 

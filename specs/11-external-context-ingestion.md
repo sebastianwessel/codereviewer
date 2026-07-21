@@ -29,31 +29,40 @@ Design rationale and phasing:
 
 ## Architecture And Separation
 
-Platform-specific code is isolated behind interfaces so additional platforms are
-added without changing the core. The core composes providers and a summarizer and
-depends only on the interfaces below.
+The core composes providers and a summarizer and depends only on the interfaces
+below, so a new context source is a new `ContextProvider` and a new PR/MR
+platform is a new adapter — neither changes the core.
 
-Types:
+Implemented interfaces and types:
 
-- `PullRequestContext` — platform-neutral pull/merge-request metadata: platform,
-  id, title, description, author, labels, comments, linked-issue references,
-  source branch, target branch, url.
 - `ContextFragment` — the normalized unit every provider emits: origin label,
   kind, optional title, body text, and a bounded metadata map.
 - `ChangeIntentBrief` — the summarized output: brief text, contributing origin
   labels, and a truncation flag.
-
-Interfaces:
-
-- `PlatformAdapter` — `readPullRequest(input) -> PullRequestContext | undefined`.
-  One implementation per platform (`github` in initial scope; `gitlab` and
-  `bitbucket` are future implementations of the same interface). The adapter owns
-  its transport (CI event payload on disk, or a read-only API call).
-- `ContextProvider` — `gather(input) -> ContextFragment[]`. Initial providers:
-  `platform`, `inbox`, `changed-files`. The interface is designed to admit a
-  future `agentic` provider without changing the core.
+- `ContextProvider` — `gather(input) -> ContextFragment[]`. Implemented
+  providers: `inbox`, `changed-files`. The interface admits a future `platform`
+  provider and an `agentic` provider without changing the core.
 - `ContextSummarizer` — `summarize(fragments, budget) -> ChangeIntentBrief`. Two
   implementations: `model` and `digest`.
+
+Planned platform contract (defined with its implementation in the platform
+phase):
+
+- `PullRequestContext` — platform-neutral pull/merge-request metadata (title,
+  description, author, labels, comments, linked-issue references, branches, url).
+- `PlatformAdapter` — `readPullRequest(input) -> PullRequestContext | undefined`,
+  one implementation per platform (GitHub first, then GitLab and Bitbucket), each
+  owning its transport (CI event payload on disk, or a read-only API call).
+
+## Implementation Phasing
+
+- **Phase 1 (implemented):** the `inbox` and `changed-files` providers (both
+  no-network), the deterministic `digest` and the dedicated `model` summarizer,
+  and injection of the `change-intent` document.
+- **Later phases (interfaces reserved above):** the `platform` provider
+  (`PlatformAdapter`, GitHub then GitLab/Bitbucket, `event` then `api`
+  transport) and an optional `agentic` provider. Config accepts a provider
+  `type` only once its provider is implemented.
 
 ## Stage Placement
 
@@ -65,23 +74,6 @@ proceeds unchanged.
 
 Each provider is independent and bounded, and emits `ContextFragment`s tagged
 with an origin label. Zero or more providers are configured.
-
-### `platform`
-
-- Wraps a `PlatformAdapter` to read pull/merge-request title, description, and a
-  configured subset of comments.
-- Transport is `event` or `api`:
-  - `event` reads a continuous-integration payload file already present on disk
-    (for example the file referenced by `GITHUB_EVENT_PATH`). No network access.
-    The path is resolved through `path-service`; when supplied by an environment
-    variable, the resolved path must remain under a configured allowed root.
-  - `api` performs authenticated read-only HTTP requests to a configured,
-    host-allowlisted platform host. The credential is read only from a configured
-    environment variable name. Only the configured host is contacted; fetch
-    targets are never derived from repository content or model output.
-- The adapter may extract linked-issue references from the metadata using a
-  configured pattern, but it does not fetch them. Issue content reaches the review
-  through the `inbox` provider.
 
 ### `inbox`
 
@@ -209,5 +201,8 @@ literal secret in configuration) fails `config validate` with
 - Redaction removes known secret patterns from gathered context before it enters
   the summarizer call, the prompt, or any log.
 - `change-intent` context never appears as a finding location in a report.
-- Adding a platform is a new `PlatformAdapter` only: a test drives the core with a
-  stub adapter and asserts no platform-specific branching in the core path.
+- The core composes providers and a summarizer through their interfaces only; a
+  new provider or summarizer is added without editing the core stage. A failing
+  model summarizer degrades to the digest and is proven by a test.
+- The reviewer prompt and the summarizer enforce the change-intent principles in
+  "Reviewer Use Of Change Intent"; both are locked by tests.

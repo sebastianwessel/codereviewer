@@ -1,3 +1,6 @@
+// Public API of the context-ingestion domain. Providers, the frontmatter
+// parser, and text helpers are internal to the domain (composed by
+// `runContextIngestion`) and are imported directly by their colocated tests.
 export type {
   ChangeIntentBrief,
   ContextFragment,
@@ -5,13 +8,8 @@ export type {
   ContextGatherInput,
   ContextProvider,
   ContextSummarizer,
-  PlatformAdapter,
-  PullRequestComment,
-  PullRequestContext,
   SummarizeInput
 } from './contracts.js'
-export { createInboxProvider } from './inbox-provider.js'
-export { createChangedFilesProvider } from './changed-files-provider.js'
 export { createDigestSummarizer } from './digest-summarizer.js'
 export { createModelSummarizer } from './model-summarizer.js'
 export {
@@ -19,5 +17,3 @@ export {
   type ContextIngestionResult,
   type ProviderGatherMetric
 } from './ingest.js'
-export { parseFrontmatter, type ParsedFrontmatter } from './frontmatter.js'
-export { truncateToUtf8Bytes } from './text.js'
