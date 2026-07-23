@@ -32,6 +32,9 @@ whole-file review and a per-candidate refutation pass.
 | CAP-CTX-002 | External change-intent context ingestion (inbox + changed-files providers, digest/model summarizer, change-intent injection) | ACT-CI, ACT-DEV | Yes | `11-external-context-ingestion.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
 | CAP-CTX-003 | Platform PR/MR context adapters (GitHub/GitLab/Bitbucket) | ACT-CI, ACT-DEV | No | Later phase — `11-external-context-ingestion.md` |
 | CAP-CTX-005 | Read-only MCP context provider (e.g. JIRA) with tool-name allowlist | ACT-CI, ACT-DEV | No | Later phase — `11-external-context-ingestion.md`, `07-security-privacy-operations.md` |
+| CAP-VERIFY-001 | Agentic verification flow (bounded read/list/grep agent, claim verdicts, corroboration) | ACT-CI, ACT-DEV, ACT-MODEL | Yes | `12-verification-flow.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
+| CAP-VERIFY-002 | Claim providers (claims-file, prior-findings) | ACT-CI, ACT-DEV | Yes | `12-verification-flow.md` |
+| CAP-VERIFY-003 | Analyzer (SARIF) and comment claim providers | ACT-CI, ACT-DEV | No | Later phase — `12-verification-flow.md` |
 | CAP-COV-001 | Review coverage certificate | ACT-DEV, ACT-CI, ACT-OPS | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-EVAL-001 | Evaluation runner | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-002 | Evaluation analysis commands | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |

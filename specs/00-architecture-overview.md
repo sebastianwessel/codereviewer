@@ -38,6 +38,7 @@ CLI
 | SARIF | Export format only; internal domain model remains canonical. |
 | Evaluation | Product capability with fixtures and metrics, not only test helper code. |
 | Deterministic support signals | Local tooling layer that emits normalized anchors, context hints, contradictions, and evidence; a narrow trusted-rule allowlist may seed actionable deterministic candidates directly. |
+| Verification flow | A separate, optional agentic flow (`12-verification-flow.md`) that verifies specific claims with bounded, mediated read/list/grep tools; distinct from the deterministic single-shot general review, whose guarantees it does not change. |
 
 ## Clean Rebuild Decision
 

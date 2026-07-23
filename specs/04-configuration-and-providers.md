@@ -95,6 +95,7 @@ provider-specific object as passthrough.
 | `aiReview` | no | object | holistic discovery + refutation defaults |
 | `promotionPolicy` | no | object | non-actionable model output disposition |
 | `contextSources` | no | object | external change-intent context disabled |
+| `verification` | no | object | agentic verification flow disabled |
 
 ## Review Config
 
@@ -393,6 +394,36 @@ Rules:
   `digest` if that call fails;
 - an unknown `type` or a missing required key fails `config validate` with exit
   code 2.
+
+## Verification
+
+Controls the agentic verification flow (`12-verification-flow.md`). Disabled by
+default.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `verification.enabled` | boolean | `false` |
+| `verification.providers` | array of claim-provider objects | `[]` |
+| `verification.maxToolCallsPerClaim` | integer | bounded default |
+| `verification.maxBytesPerRead` | integer | bounded default |
+| `verification.maxMatches` | integer | bounded default |
+
+Claim-provider objects are discriminated by `type`:
+
+| `type` | Keys | Purpose |
+| --- | --- | --- |
+| `claims-file` | `path` | Read a neutral claims file a pipeline wrote before the run. No network. |
+| `prior-findings` | `report` | Derive claims from a previous run report or the baseline. |
+
+Rules:
+
+- the block is off unless `enabled` is `true`; a disabled block yields no
+  verification flow and an unchanged general review;
+- claim inputs are untrusted and cannot change admission, severity, gates, or
+  baseline;
+- an unknown `type` or a missing required key fails config validation (exit 2);
+- the later-phase `analyzer` (SARIF) and `comment` claim providers are added to
+  this list when their adapters ship.
 
 ## Reporting
 

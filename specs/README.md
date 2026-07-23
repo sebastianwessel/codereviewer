@@ -24,6 +24,7 @@ or untracked files.
 - [09-readiness-self-audit.md](09-readiness-self-audit.md)
 - [10-state-of-the-art-research-synthesis.md](10-state-of-the-art-research-synthesis.md)
 - [11-external-context-ingestion.md](11-external-context-ingestion.md)
+- [12-verification-flow.md](12-verification-flow.md)
 
 ## Implementation Rule
 

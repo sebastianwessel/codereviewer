@@ -1,6 +1,6 @@
 schema_version: "1.0"
 status: approved
-updated_at: "2026-07-21"
+updated_at: "2026-07-22"
 spec_root: specs
 source_of_truth:
   - specs/README.md
