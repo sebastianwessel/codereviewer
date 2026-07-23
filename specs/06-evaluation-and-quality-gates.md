@@ -164,6 +164,60 @@ Normalization rules:
 - `lineRange` is the only line range field.
 - `matchMode` defaults from `path` and `lineRange`.
 
+## Expected-Finding Matching
+
+Matching decides whether an admitted finding is the defect an expected finding
+describes. It is the ground truth for every quality metric, including the fix-lane
+metrics, so an unreliable matcher does not merely add noise — it inverts scores: a
+correct finding scored as unmatched costs recall AND precision, and marks a correct
+fix-lane judgment as wrong.
+
+Matching has exactly two stages:
+
+1. **Deterministic gates.** `matchMode` derives from `path` and `lineRange`. For
+   `path-line` and `path-semantic` the finding path must equal the expected `path`;
+   for `path-line` the line ranges must overlap within a tolerance of 3 lines.
+   These checks are exact and reproducible, and are applied before any model call.
+2. **Semantic identity.** Whether two natural-language defect descriptions denote
+   the same defect is a judgment, and is decided only by the semantic judge. There
+   is no lexical or token-similarity scoring. Vocabulary overlap measures shared
+   topic, not identity of defect: two different defects in one function share most
+   of their words, while one defect described twice may share almost none. Such a
+   heuristic ranks true matches below false ones and is forbidden in the matcher.
+
+A match carries a boolean decision and the judge's report-safe reason. There is no
+numeric similarity score — an invented number is not evidence.
+
+### Judge Reliability
+
+The judge is the sole semantic authority, so its reliability is a requirement, not
+an assumption:
+
+- Judge calls use deterministic sampling where the provider supports it.
+- Transient provider errors are retried under the configured provider retry policy.
+- A judge call that cannot be completed yields `inconclusive` for that pair. An
+  inconclusive pair is **excluded from the recall and precision denominators** and
+  surfaced as a run warning and in the report. It must never be recorded as "no
+  match": a provider failure would otherwise fabricate both a missed expected
+  finding and a false positive.
+- Judge agreement is measured against a committed calibration set of human-labeled
+  pairs covering clear matches, clear non-matches, and near-misses. A run whose
+  agreement falls below the configured minimum reports itself as untrustworthy.
+
+### Provider Requirement
+
+Semantic matching runs only for cases that declare expected findings. A case with
+no expected findings needs no judge and scores offline. Scoring a case that has
+expected findings without an available judge fails the run with a configuration
+error; the engine never falls back to a heuristic.
+
+### Baseline Discontinuity
+
+Removing lexical scoring changes every quality metric. Eval reports produced
+before this change are not comparable to reports produced after it, and any
+recorded baseline from the lexical matcher is void. A new baseline must be
+recorded deliberately after this change.
+
 ## Metrics
 
 | Metric | Definition |
@@ -176,7 +230,6 @@ Normalization rules:
 | `severityWeightedRecall` | Recall weighted by expected severity impact. |
 | `severityWeightedF1` | Harmonic mean of severity-weighted precision and recall. |
 | `recallByTier` | Recall computed per intent tier (`runtime-critical`, `security`, `logic`, `nit`). Each expected finding carries an explicit `tier` or one derived from category/severity. Lets product-critical recall be read separately from nits. |
-| `precisionByTier` | Per-tier precision. Admitted findings carry no expected-tier label, so this mirrors `recallByTier` as a best-effort signal (documented in code). |
 | `productRecall` | Headline recall over the product tiers (`runtime-critical` + `security` + `logic`), excluding `nit`. This is the number the >80% accuracy target is measured against, matching the low-noise product scope in `00-vision.md`. |
 | `nitRecall` | Recall over `nit`-tier expected findings only. Reported for visibility; not part of the headline target or gates. |
 | `lineAccuracy` | Fraction of matched findings with overlapping line range when expected line exists. Semantic-only benchmark expectations are excluded from the denominator. |
@@ -198,6 +251,9 @@ Normalization rules:
 | `fixGroundTruthFalsePositiveCount` | Denominator of `fixFalsePositiveDetectionRate`: ground-truth false-positive findings. |
 | `fixRealFindingCount` | Denominator of `fixProduceRate`: real (matched) findings. |
 | `fixAttemptedCount` | Denominator of `fixApplyFailureRate`: fixes the lane attempted. |
+| `judgeAgreement` | Fraction of calibration pairs whose semantic-judge decision matched the human label. Reported whenever the calibration set is scored. A run below the configured minimum reports itself as untrustworthy. |
+| `judgeAgreementPairCount` | Denominator of `judgeAgreement`: calibration pairs scored. |
+| `inconclusiveMatchCount` | Expected/finding pairs the judge could not decide because the judge call failed. Excluded from the recall and precision denominators and surfaced as a run warning. |
 | `actionableRate` | Actionable admitted findings with resolvable location, impact, evidence, and a concrete remediation direction divided by actionable admitted findings. |
 | `commentsPerKloc` | Actionable admitted findings per thousand changed lines. |
 | `commentsPerDiffHunk` | Actionable admitted findings per changed diff hunk. |
@@ -252,14 +308,14 @@ for automation.
 two eval reports and prints gate status, selection status, metric deltas, and
 case transitions. Selection status must identify whether
 `selection.selectedCaseIds` are identical and whether fixture source/slice root
-metadata match. It must also identify whether
-`scoring.semanticMatcher` modes match. When selected case sets differ, the
-comparison must render a warning before metric deltas because aggregate numbers
-are not same-dataset comparable. When semantic matcher modes differ, the
-comparison must render a warning before metric deltas because aggregate numbers
-are not scoring-mode comparable. The command may still exit `0` after rendering
-warnings so users can inspect partial overlap, new cases, removed cases, and
-scoring-mode differences. When either compared report includes context ledger
+metadata match. When selected case sets differ, the comparison must render a
+warning before metric deltas because aggregate numbers are not same-dataset
+comparable. When either report has `scoring.judgeTrustworthy = false`, or the two
+reports' `scoring.judgeAgreement` values differ materially, the comparison must
+render a warning before metric deltas because the deltas may reflect judge
+variance rather than review quality. The command may still exit `0` after
+rendering warnings so users can inspect partial overlap, new cases, removed
+cases, and judge-reliability differences. When either compared report includes context ledger
 entries, the comparison must render aggregate base/head/delta counts by context
 ledger kind so benchmark readers can see context usage changes alongside metric
 deltas. Metric deltas must include input-token and
@@ -334,7 +390,8 @@ matching strategy produced the run:
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `scoring.semanticMatcher` | `"deterministic" | "semantic-judge"` | `deterministic` means offline token matching; `semantic-judge` means the caller explicitly enabled provider-backed semantic matching. |
+| `scoring.judgeAgreement` | number or omitted | Measured semantic-judge agreement against the calibration set for this run. Omitted when no pair was judged. |
+| `scoring.judgeTrustworthy` | boolean | `false` when `judgeAgreement` is below the configured minimum, marking the run's quality metrics untrustworthy. |
 
 `codereviewer eval run` may override review posture for one run without editing
 repository config. Supported eval-only overrides are `--review-mode
@@ -404,7 +461,7 @@ availability from the review report:
 | `artifactOnlyMatchedFindings` | object[] | Match records for artifact-only findings that overlap expected findings. |
 | `artifactOnlyFalsePositiveFindingIds` | string[] | Artifact-only findings that neither match an expected finding nor duplicate a matched artifact-only finding. |
 | `artifactOnlyFalsePositiveFindings` | object[] | Sanitized artifact-only noise summaries with ID, severity, category, path, line, and title. |
-| `matchedFindings[].semanticReason` | string or omitted | Concise report-safe rationale from the optional semantic judge when that judge accepted the match. Omitted for deterministic matches. |
+| `matchedFindings[].semanticReason` | string | Concise report-safe rationale from the semantic judge that accepted the match. |
 | `artifactOnlyMatchedFindings[].semanticReason` | string or omitted | Same rationale field for artifact-only semantic judge matches. |
 | `contextLedger` | object[] | Report-safe context ledger summaries for the case. Each entry includes `kind` (one of the eight context-ledger kinds), `consideredForModelContext`, and `truncated`. |
 | `providerIssues` | object[] | Provider instability observed for the case, including unrecovered provider errors, recovered eval retries, refutation provider issues, and budget/timeouts. Each entry includes `code`, `stage`, and `recovered`. |
@@ -471,14 +528,12 @@ location, match mode, summary, detection rate, and run marks.
   unified diff text, prompt instructions, secrets, raw tool output, or
   repository files.
 - Judge results must parse as a strict object with `match` and `reason`.
-  `reason` is a concise report-safe rationale for audit only. Judge-backed
-  matches use deterministic accepted-match scoring (`semanticScore = 1`) rather
-  than provider-generated confidence, and the eval report must set
-  `scoring.semanticMatcher = "semantic-judge"`. Accepted judge-backed matches
-  persist the bounded rationale as `semanticReason` and the Markdown summary
-  renders a compact `Semantic Judge Matches` audit table.
-- Judge-backed matching is for benchmark parity analysis and explicit local
-  quality experiments. It must not silently replace deterministic gates.
+  `reason` is a concise report-safe rationale for audit only. The judge returns a
+  boolean decision and never a numeric confidence. Accepted matches persist the
+  bounded rationale as `semanticReason` and the Markdown summary renders a compact
+  `Semantic Judge Matches` audit table.
+- The judge decides semantic identity only. It never replaces the deterministic
+  path and line gates, which are always applied first.
 - One admitted finding can match at most one expected finding.
 - An unmatched admitted finding at the same path and exact overlapping line
   range as an already matched finding is classified as a duplicate finding.
