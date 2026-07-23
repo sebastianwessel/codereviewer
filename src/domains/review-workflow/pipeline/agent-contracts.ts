@@ -111,10 +111,6 @@ export const BaselineFingerprintRecordSchema = z.strictObject({
   )
 })
 
-export const ProposedCandidatesSchema = z.strictObject({
-  candidates: z.array(CandidateFindingSchema)
-})
-
 const normalizeModelEnumValue = <T extends string>(
   value: unknown,
   allowedValues: readonly T[],
