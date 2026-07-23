@@ -48,7 +48,8 @@ describe('eval report rendering', () => {
           selectedCaseIds: ['semantic-case']
         },
         scoring: {
-          semanticMatcher: 'semantic-judge'
+          judgeAgreement: 1,
+          judgeTrustworthy: true
         },
         caseResults: [
           {
@@ -82,13 +83,15 @@ describe('eval report rendering', () => {
               {
                 expectedIndex: 0,
                 findingId: 'find_semantic1',
-                semanticScore: 1,
                 semanticReason: 'Both findings describe the leaked descriptor.',
                 lineOverlaps: false,
                 severityMatches: true
               }
             ],
             unmatchedExpectedIndexes: [],
+            inconclusiveExpectedIndexes: [],
+            inconclusiveFindingIds: [],
+            inconclusiveMatches: [],
             duplicateFindingIds: [],
             duplicateFindings: [],
             falsePositiveFindingIds: [],
@@ -153,12 +156,9 @@ describe('eval report rendering', () => {
             logic: 1,
             nit: 1
           },
-          precisionByTier: {
-            'runtime-critical': 1,
-            security: 1,
-            logic: 1,
-            nit: 1
-          },
+          judgeAgreement: 1,
+          judgeAgreementPairCount: 12,
+          inconclusiveMatchCount: 0,
           productRecall: 1,
           nitRecall: 1,
           inputTokens: 0,
@@ -181,6 +181,8 @@ describe('eval report rendering', () => {
     })
 
     expect(summary).toContain('## Semantic Judge Matches')
+    expect(summary).toContain('| Judge agreement | 100.0% (12 pairs) |')
+    expect(summary).toContain('| Judge trustworthy | yes |')
     expect(summary).toContain('## Context Ledger Kinds')
     expect(summary).toContain('| semantic-case | tool-result: 1, support-signal-output: 1 | 2 | 1 |')
     expect(summary).toContain(

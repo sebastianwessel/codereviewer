@@ -91,6 +91,7 @@ describe('eval report case labels', () => {
       noteForCase({
         artifactOnlyFalsePositiveFindingIds: [],
         artifactOnlyMatchedFindings: [],
+        inconclusiveMatches: [],
         duplicateFindingIds: [],
         falsePositiveFindingIds: [],
         noFindingZoneFalsePositiveIds: [],
@@ -104,6 +105,7 @@ describe('eval report case labels', () => {
       noteForCase({
         artifactOnlyFalsePositiveFindingIds: ['artifact-noise'],
         artifactOnlyMatchedFindings: ['artifact-match'],
+        inconclusiveMatches: ['inconclusive'],
         duplicateFindingIds: ['duplicate'],
         falsePositiveFindingIds: ['fp1', 'fp2'],
         noFindingZoneFalsePositiveIds: ['nfz'],
@@ -113,7 +115,7 @@ describe('eval report case labels', () => {
         warnings: ['config-file-missing', 'semantic-judge-unavailable']
       })
     ).toBe(
-      'provider recovered 1; missing 1; false positives 2; duplicates 1; no-finding-zone hits 1; artifact-only matched 1; artifact-only noise 1; warnings 1'
+      'provider recovered 1; missing 1; false positives 2; inconclusive 1; duplicates 1; no-finding-zone hits 1; artifact-only matched 1; artifact-only noise 1; warnings 1'
     )
   })
 })

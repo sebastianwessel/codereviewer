@@ -56,6 +56,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "falsePositiveFindingIds": [],
       "falsePositiveFindings": [],
       "fixOutcomes": [],
+      "inconclusiveExpectedIndexes": [],
+      "inconclusiveFindingIds": [],
+      "inconclusiveMatches": [],
       "inlineFindingCount": 1,
       "inputTokens": 0,
       "matchedFindings": [
@@ -63,7 +66,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "expectedIndex": 0,
           "findingId": "find_eval1",
           "lineOverlaps": true,
-          "semanticScore": 0.833333,
+          "semanticReason": "Both summaries describe the same defect.",
           "severityMatches": true,
         },
       ],
@@ -121,6 +124,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
       ],
       "fixOutcomes": [],
+      "inconclusiveExpectedIndexes": [],
+      "inconclusiveFindingIds": [],
+      "inconclusiveMatches": [],
       "inlineFindingCount": 1,
       "inputTokens": 0,
       "matchedFindings": [],
@@ -173,19 +179,16 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "fixProduceRate": 0,
         "fixRealFindingCount": 1,
         "incompleteCoverageRate": 0,
+        "inconclusiveMatchCount": 0,
         "inputTokens": 0,
+        "judgeAgreement": 1,
+        "judgeAgreementPairCount": 12,
         "lineAccuracy": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
         "outputTokens": 0,
         "parseValidity": 1,
         "precision": 0.5,
-        "precisionByTier": {
-          "logic": 1,
-          "nit": 1,
-          "runtime-critical": 1,
-          "security": 1,
-        },
         "productRecall": 1,
         "providerErrorRate": 0,
         "providerIssueCount": 0,
@@ -240,19 +243,16 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "fixProduceRate": 0,
         "fixRealFindingCount": 1,
         "incompleteCoverageRate": 0,
+        "inconclusiveMatchCount": 0,
         "inputTokens": 0,
+        "judgeAgreement": 1,
+        "judgeAgreementPairCount": 12,
         "lineAccuracy": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
         "outputTokens": 0,
         "parseValidity": 1,
         "precision": 0.5,
-        "precisionByTier": {
-          "logic": 1,
-          "nit": 1,
-          "runtime-critical": 1,
-          "security": 1,
-        },
         "productRecall": 1,
         "providerErrorRate": 0,
         "providerIssueCount": 0,
@@ -306,19 +306,16 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "fixProduceRate": 0,
         "fixRealFindingCount": 0,
         "incompleteCoverageRate": 0,
+        "inconclusiveMatchCount": 0,
         "inputTokens": 0,
+        "judgeAgreement": 1,
+        "judgeAgreementPairCount": 12,
         "lineAccuracy": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
         "outputTokens": 0,
         "parseValidity": 1,
         "precision": 0,
-        "precisionByTier": {
-          "logic": 1,
-          "nit": 1,
-          "runtime-critical": 1,
-          "security": 1,
-        },
         "productRecall": 1,
         "providerErrorRate": 0,
         "providerIssueCount": 0,
@@ -372,19 +369,16 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "fixProduceRate": 0,
         "fixRealFindingCount": 1,
         "incompleteCoverageRate": 0,
+        "inconclusiveMatchCount": 0,
         "inputTokens": 0,
+        "judgeAgreement": 1,
+        "judgeAgreementPairCount": 12,
         "lineAccuracy": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 0,
         "outputTokens": 0,
         "parseValidity": 1,
         "precision": 1,
-        "precisionByTier": {
-          "logic": 1,
-          "nit": 1,
-          "runtime-critical": 1,
-          "security": 1,
-        },
         "productRecall": 1,
         "providerErrorRate": 0,
         "providerIssueCount": 0,
@@ -439,19 +433,16 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "fixProduceRate": 0,
         "fixRealFindingCount": 1,
         "incompleteCoverageRate": 0,
+        "inconclusiveMatchCount": 0,
         "inputTokens": 0,
+        "judgeAgreement": 1,
+        "judgeAgreementPairCount": 12,
         "lineAccuracy": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
         "outputTokens": 0,
         "parseValidity": 1,
         "precision": 0.5,
-        "precisionByTier": {
-          "logic": 1,
-          "nit": 1,
-          "runtime-critical": 1,
-          "security": 1,
-        },
         "productRecall": 1,
         "providerErrorRate": 0,
         "providerIssueCount": 0,
@@ -499,19 +490,16 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "fixProduceRate": 0,
     "fixRealFindingCount": 1,
     "incompleteCoverageRate": 0,
+    "inconclusiveMatchCount": 0,
     "inputTokens": 0,
+    "judgeAgreement": 1,
+    "judgeAgreementPairCount": 12,
     "lineAccuracy": 1,
     "nitRecall": 1,
     "noFindingZoneFalsePositiveCount": 1,
     "outputTokens": 0,
     "parseValidity": 1,
     "precision": 0.5,
-    "precisionByTier": {
-      "logic": 1,
-      "nit": 1,
-      "runtime-critical": 1,
-      "security": 1,
-    },
     "productRecall": 1,
     "providerErrorRate": 0,
     "providerIssueCount": 0,
@@ -548,7 +536,8 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
   },
   "schemaVersion": "1.0",
   "scoring": {
-    "semanticMatcher": "deterministic",
+    "judgeAgreement": 1,
+    "judgeTrustworthy": true,
   },
   "selection": {
     "caseFilters": [],
@@ -576,7 +565,8 @@ Fixtures: 2
 | Slice root | - |
 | Case filters | - |
 | Selected cases | typescript-positive, typescript-negative |
-| Semantic matcher | deterministic |
+| Judge agreement | 100.0% (12 pairs) |
+| Judge trustworthy | yes |
 
 ## Metrics
 
@@ -594,6 +584,7 @@ Fixtures: 2
 | Provider error rate | 0.0% |
 | Provider issue rate | 0.0% (0 cases) |
 | False positives | 1 |
+| Inconclusive matches | 0 |
 | Artifact-only recall | 0.0% |
 | Artifact-only precision | 100.0% |
 | Artifact-only findings | 0 |
@@ -619,12 +610,12 @@ Fixtures: 2
 
 ## Recall by Tier
 
-| Tier | Recall | Precision |
-| --- | ---: | ---: |
-| runtime-critical | 100.0% | 100.0% |
-| security | 100.0% | 100.0% |
-| logic | 100.0% | 100.0% |
-| nit | 100.0% | 100.0% |
+| Tier | Recall |
+| --- | ---: |
+| runtime-critical | 100.0% |
+| security | 100.0% |
+| logic | 100.0% |
+| nit | 100.0% |
 
 ## Metric Groups
 
@@ -656,6 +647,12 @@ Fixtures: 2
 ## Gate Reasons
 
 - falsePositiveCount above threshold: 1 > 0
+
+## Semantic Judge Matches
+
+| Case | Finding | Expected | Reason |
+| --- | --- | --- | --- |
+| typescript-positive | find_eval1 | expected #0 high bug | Both summaries describe the same defect. |
 
 ## Attention Needed
 

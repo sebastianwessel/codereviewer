@@ -10,6 +10,7 @@ const caseResult = (
   providerErrored: false,
   providerIssueCount: 0,
   expectedFindingCount: 2,
+  inconclusiveMatchCount: 0,
   admittedFindingCount: 3,
   matchedFindingCount: 1,
   expectedSeverityWeights: [4, 2],
@@ -119,8 +120,6 @@ describe('eval metrics', () => {
       logic: 0,
       nit: 0.25
     })
-    // precisionByTier mirrors recallByTier (documented recall-parity).
-    expect(metrics.precisionByTier).toEqual(metrics.recallByTier)
     // productRecall over runtime-critical + security + logic: 3 matched / 5 expected.
     expect(metrics.productRecall).toBe(0.6)
     expect(metrics.nitRecall).toBe(0.25)
@@ -155,8 +154,7 @@ describe('eval metrics', () => {
       metrics.f1,
       metrics.productRecall,
       metrics.nitRecall,
-      ...Object.values(metrics.recallByTier),
-      ...Object.values(metrics.precisionByTier)
+      ...Object.values(metrics.recallByTier)
     ]
 
     for (const rate of rateFields) {

@@ -508,6 +508,20 @@ cached rate; models without one stay conservative (cached input falls back to
 the full input price). `cachedInputPerMillion` re-prices only the cached subset
 of input tokens.
 
+## Evaluation Config
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `enabled` | boolean | `false` |
+| `minJudgeAgreement` | number 0..1 | `0.9` |
+
+`minJudgeAgreement` is the minimum semantic-judge agreement against the
+committed calibration set described in `06-evaluation-and-quality-gates.md`. The
+judge is the sole authority for every eval quality metric, so a run whose
+measured agreement falls below this value reports
+`scoring.judgeTrustworthy = false`. It marks the run's metrics as untrustworthy;
+it does not by itself fail the regression gate.
+
 ## Security Config
 
 | Key | Type | Default |

@@ -861,17 +861,25 @@
     },
     "evaluation": {
       "default": {
-        "enabled": false
+        "enabled": false,
+        "minJudgeAgreement": 0.9
       },
       "type": "object",
       "properties": {
         "enabled": {
           "default": false,
           "type": "boolean"
+        },
+        "minJudgeAgreement": {
+          "default": 0.9,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "required": [
-        "enabled"
+        "enabled",
+        "minJudgeAgreement"
       ],
       "additionalProperties": false
     },

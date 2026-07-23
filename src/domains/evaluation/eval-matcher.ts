@@ -1,5 +1,9 @@
 import type { AdmittedFinding } from '../../shared/contracts/index.js'
-import { normalizeError } from '../../shared/errors/error-normalizer.js'
+import {
+  createStructuredError,
+  normalizeError,
+  type StructuredError
+} from '../../shared/errors/error-normalizer.js'
 import type {
   EvalCase,
   EvalLineRange,
@@ -14,57 +18,57 @@ export type EvalJudgeProviderIssue = {
   readonly message?: string
 }
 
-const MINIMUM_SEMANTIC_SCORE = 0.35
+// Line gate tolerance. Deterministic, exact, and applied before any judge call.
 const LINE_TOLERANCE = 3
 
-const stopWords = new Set([
-  'a',
-  'an',
-  'and',
-  'are',
-  'as',
-  'be',
-  'by',
-  'can',
-  'for',
-  'from',
-  'in',
-  'is',
-  'it',
-  'of',
-  'on',
-  'or',
-  'that',
-  'the',
-  'this',
-  'to',
-  'with'
-])
+export const EVAL_SEMANTIC_JUDGE_STAGE = 'eval_semantic_judge'
 
 export type EvalFindingMatch = {
   readonly expectedIndex: number
   readonly findingId: string
-  readonly semanticScore: number
-  readonly semanticReason?: string
+  // Report-safe rationale from the semantic judge that accepted the match.
+  // Every match is a judge decision, so this is always present. There is no
+  // numeric similarity score: an invented number is not evidence.
+  readonly semanticReason: string
   readonly lineOverlaps: boolean
   readonly severityMatches: boolean
 }
 
+// A pair the judge could not decide because the judge call failed after the
+// configured provider retries. It is neither a match nor a non-match, and is
+// excluded from the recall and precision denominators.
+export type EvalInconclusiveMatch = {
+  readonly expectedIndex: number
+  readonly findingId: string
+  readonly code: string
+  readonly message?: string
+}
+
 export type EvalMatcherResult = {
   readonly matches: readonly EvalFindingMatch[]
+  // Expected findings proven unmatched: every candidate pair was gated out or
+  // rejected by the judge. Inconclusive expectations are NOT listed here.
   readonly unmatchedExpectedIndexes: readonly number[]
+  // Expected findings whose verdict is unknown because a judge call failed.
+  readonly inconclusiveExpectedIndexes: readonly number[]
+  // Admitted findings whose verdict is unknown because a judge call failed.
+  // They are neither false positives nor duplicates.
+  readonly inconclusiveFindingIds: readonly string[]
+  readonly inconclusiveMatches: readonly EvalInconclusiveMatch[]
   readonly duplicateFindingIds: readonly string[]
   readonly falsePositiveFindingIds: readonly string[]
   readonly noFindingZoneFalsePositiveIds: readonly string[]
-  // Provider issues raised by the semantic judge. A judge provider error is
-  // recorded here and the affected pair is left unmatched, so one judge failure
-  // never rejects the whole eval run.
+  // Provider issues raised by the semantic judge, so a judge failure stays
+  // visible as provider instability instead of silently changing scores.
   readonly judgeProviderIssues?: readonly EvalJudgeProviderIssue[]
 }
 
+// The judge sees report-safe summaries only. Source text, diffs, prompts, tool
+// output, paths, and line numbers are structurally excluded from its input.
 export type EvalSemanticJudgeInput = {
-  readonly expected: ExpectedFinding
-  readonly finding: AdmittedFinding
+  readonly expectedSummary: string
+  readonly findingTitle: string
+  readonly findingDescription: string
 }
 
 export type EvalSemanticJudgeResult = {
@@ -76,52 +80,17 @@ export type EvalSemanticJudge = (
   input: EvalSemanticJudgeInput
 ) => Promise<EvalSemanticJudgeResult>
 
-type CandidatePair = {
-  readonly expectedIndex: number
-  readonly findingIndex: number
-  readonly semanticScore: number
-  readonly semanticReason?: string
-  readonly lineOverlaps: boolean
-  readonly severityMatches: boolean
-}
-
-const roundScore = (value: number): number => Math.round(value * 1_000_000) / 1_000_000
-
-const tokenize = (value: string): ReadonlySet<string> => {
-  const tokens = value
-    .toLowerCase()
-    .match(/[a-z0-9]+/gu)
-
-  if (tokens === null) {
-    return new Set()
-  }
-
-  return new Set(tokens.filter((token) => !stopWords.has(token)))
-}
-
-const jaccardSimilarity = (
-  left: ReadonlySet<string>,
-  right: ReadonlySet<string>
-): number => {
-  if (left.size === 0 && right.size === 0) {
-    return 1
-  }
-
-  if (left.size === 0 || right.size === 0) {
-    return 0
-  }
-
-  let intersectionCount = 0
-  for (const token of left) {
-    if (right.has(token)) {
-      intersectionCount += 1
-    }
-  }
-
-  const unionCount = new Set([...left, ...right]).size
-
-  return unionCount === 0 ? 0 : intersectionCount / unionCount
-}
+// A case with expected findings needs the judge. Failing loudly is required:
+// falling back to a heuristic would silently produce fabricated scores.
+export const missingSemanticJudgeError = (caseId: string): StructuredError =>
+  createStructuredError({
+    code: 'eval_semantic_judge_missing',
+    message: `Eval case "${caseId}" declares expected findings but no semantic judge is available. Configure a provider; the matcher never falls back to a heuristic.`,
+    category: 'config',
+    recoverable: true,
+    exitCode: 2,
+    details: { case_id: caseId }
+  })
 
 const findingLineRange = (
   finding: AdmittedFinding
@@ -147,7 +116,7 @@ const lineRulePasses = (
 ): boolean =>
   expected.lineRange === undefined
     ? true
-      : rangesOverlap(expected.lineRange, findingLineRange(finding), LINE_TOLERANCE)
+    : rangesOverlap(expected.lineRange, findingLineRange(finding), LINE_TOLERANCE)
 
 const matchModeFor = (
   expected: ExpectedFinding
@@ -159,106 +128,20 @@ const matchModeFor = (
       ? 'path-semantic'
       : 'path-line')
 
-const semanticScoreFor = (
+// Deterministic gates. Exact, reproducible, and always evaluated before the
+// judge is called, so the judge can never move a finding to another file or
+// line.
+const gatesPass = (
   expected: ExpectedFinding,
   finding: AdmittedFinding
-): number =>
-  roundScore(
-    jaccardSimilarity(
-      tokenize(expected.semanticSummary),
-      tokenize(`${finding.title} ${finding.description}`)
-    )
-  )
-
-const pairFor = (
-  expected: ExpectedFinding,
-  finding: AdmittedFinding,
-  expectedIndex: number,
-  findingIndex: number
-): CandidatePair | undefined => {
+): boolean => {
   const matchMode = matchModeFor(expected)
 
-  if (
-    matchMode !== 'semantic-only' &&
-    expected.path !== finding.location.path
-  ) {
-    return undefined
+  if (matchMode !== 'semantic-only' && expected.path !== finding.location.path) {
+    return false
   }
 
-  if (matchMode === 'path-line' && !lineRulePasses(expected, finding)) {
-    return undefined
-  }
-
-  const semanticScore = semanticScoreFor(expected, finding)
-
-  if (semanticScore < MINIMUM_SEMANTIC_SCORE) {
-    return undefined
-  }
-
-  return {
-    expectedIndex,
-    findingIndex,
-    semanticScore,
-    lineOverlaps:
-      matchMode === 'path-line' ? lineRulePasses(expected, finding) : false,
-    severityMatches: expected.severity === finding.severity
-  }
-}
-
-const pairForJudgedMatch = async (
-  expected: ExpectedFinding,
-  finding: AdmittedFinding,
-  expectedIndex: number,
-  findingIndex: number,
-  judge: EvalSemanticJudge,
-  // A judge provider error is reported here and the pair is left unmatched,
-  // rather than rejecting the whole report via Promise.all.
-  onJudgeError: (issue: EvalJudgeProviderIssue) => void
-): Promise<CandidatePair | undefined> => {
-  const matchMode = matchModeFor(expected)
-
-  if (
-    matchMode !== 'semantic-only' &&
-    expected.path !== finding.location.path
-  ) {
-    return undefined
-  }
-
-  if (matchMode === 'path-line' && !lineRulePasses(expected, finding)) {
-    return undefined
-  }
-
-  let judged: EvalSemanticJudgeResult
-  try {
-    judged = await judge({ expected, finding })
-  } catch (error) {
-    const normalized = normalizeError(error, {
-      source: 'provider',
-      operation: 'eval_semantic_judge'
-    })
-    onJudgeError({
-      code: 'provider_error',
-      stage: 'eval_semantic_judge',
-      recovered: false,
-      message: normalized.message
-    })
-
-    return undefined
-  }
-
-  if (!judged.match) {
-    return undefined
-  }
-
-  return {
-    expectedIndex,
-    findingIndex,
-    semanticScore: 1,
-    semanticReason: judged.reason,
-    lineOverlaps:
-      matchMode === 'path-line' ? lineRulePasses(expected, finding) : false,
-    severityMatches: expected.severity === finding.severity
-  }
+  return matchMode !== 'path-line' || lineRulePasses(expected, finding)
 }
 
 const isInNoFindingZone = (
@@ -286,84 +169,185 @@ const isDuplicateOfMatchedFinding = (
       rangesOverlap(findingLineRange(finding), findingLineRange(matchedFinding), 0)
   )
 
-const buildMatchResult = (
+type AssignedMatch = {
+  readonly expectedIndex: number
+  readonly findingIndex: number
+  readonly semanticReason: string
+  readonly lineOverlaps: boolean
+  readonly severityMatches: boolean
+}
+
+type InconclusivePair = {
+  readonly expectedIndex: number
+  readonly findingIndex: number
+  readonly code: string
+  readonly message?: string
+}
+
+type JudgePassResult = {
+  readonly assignedMatches: readonly AssignedMatch[]
+  readonly inconclusivePairs: readonly InconclusivePair[]
+  readonly judgeProviderIssues: readonly EvalJudgeProviderIssue[]
+}
+
+// Assignment order is fully deterministic: expected findings ascending, then
+// admitted findings ascending. The first judge-accepted finding wins the
+// expectation and is removed from the pool, so one admitted finding matches at
+// most one expected finding and repeated runs over the same inputs assign the
+// same pairs.
+const runJudgePass = async (
   input: {
     readonly evalCase: EvalCase
     readonly admittedFindings: readonly AdmittedFinding[]
-    readonly candidatePairs: readonly CandidatePair[]
-    // Matches already assigned by an earlier pass (e.g. deterministic matching
-    // before the semantic judge). Their expected/finding indexes are reserved.
-    readonly seededMatches?: readonly EvalFindingMatch[]
-    readonly reservedExpectedIndexes?: ReadonlySet<number>
-    readonly reservedFindingIndexes?: ReadonlySet<number>
+    readonly judge: EvalSemanticJudge | undefined
   }
-): EvalMatcherResult => {
-  const matchedExpectedIndexes = new Set<number>(input.reservedExpectedIndexes)
-  const matchedFindingIndexes = new Set<number>(input.reservedFindingIndexes)
-  const matches: EvalFindingMatch[] = [...(input.seededMatches ?? [])]
-  const candidatePairs = [...input.candidatePairs].sort(
-    (left, right) =>
-      right.semanticScore - left.semanticScore ||
-      left.expectedIndex - right.expectedIndex ||
-      left.findingIndex - right.findingIndex
+): Promise<JudgePassResult> => {
+  const assignedMatches: AssignedMatch[] = []
+  const inconclusivePairs: InconclusivePair[] = []
+  const judgeProviderIssues: EvalJudgeProviderIssue[] = []
+  const claimedFindingIndexes = new Set<number>()
+
+  for (const [expectedIndex, expected] of input.evalCase.expectedFindings.entries()) {
+    for (const [findingIndex, finding] of input.admittedFindings.entries()) {
+      if (claimedFindingIndexes.has(findingIndex)) {
+        continue
+      }
+
+      if (!gatesPass(expected, finding)) {
+        continue
+      }
+
+      if (input.judge === undefined) {
+        throw missingSemanticJudgeError(input.evalCase.id)
+      }
+
+      let judged: EvalSemanticJudgeResult
+      try {
+        judged = await input.judge({
+          expectedSummary: expected.semanticSummary,
+          findingTitle: finding.title,
+          findingDescription: finding.description
+        })
+      } catch (error) {
+        const normalized = normalizeError(error, {
+          source: 'provider',
+          operation: EVAL_SEMANTIC_JUDGE_STAGE
+        })
+        judgeProviderIssues.push({
+          code: normalized.code,
+          stage: EVAL_SEMANTIC_JUDGE_STAGE,
+          recovered: false,
+          message: normalized.message
+        })
+        inconclusivePairs.push({
+          expectedIndex,
+          findingIndex,
+          code: normalized.code,
+          message: normalized.message
+        })
+
+        continue
+      }
+
+      if (!judged.match) {
+        continue
+      }
+
+      claimedFindingIndexes.add(findingIndex)
+      assignedMatches.push({
+        expectedIndex,
+        findingIndex,
+        semanticReason: judged.reason,
+        lineOverlaps:
+          matchModeFor(expected) === 'path-line'
+            ? lineRulePasses(expected, finding)
+            : false,
+        severityMatches: expected.severity === finding.severity
+      })
+
+      break
+    }
+  }
+
+  return { assignedMatches, inconclusivePairs, judgeProviderIssues }
+}
+
+export const matchEvalFindings = async (
+  input: {
+    readonly evalCase: EvalCase
+    readonly admittedFindings: readonly AdmittedFinding[]
+    // Optional only because a case without expected findings needs no judge.
+    // A case with expected findings and gate-passing candidates fails loudly.
+    readonly judge?: EvalSemanticJudge
+  }
+): Promise<EvalMatcherResult> => {
+  const pass = await runJudgePass({
+    evalCase: input.evalCase,
+    admittedFindings: input.admittedFindings,
+    judge: input.judge
+  })
+  const matchedExpectedIndexes = new Set(
+    pass.assignedMatches.map((match) => match.expectedIndex)
   )
+  const matchedFindingIndexes = new Set(
+    pass.assignedMatches.map((match) => match.findingIndex)
+  )
+  const matches = pass.assignedMatches
+    .map((match) => ({
+      expectedIndex: match.expectedIndex,
+      findingId: input.admittedFindings[match.findingIndex]!.id,
+      semanticReason: match.semanticReason,
+      lineOverlaps: match.lineOverlaps,
+      severityMatches: match.severityMatches
+    }))
+    .sort((left, right) => left.expectedIndex - right.expectedIndex)
 
-  for (const pair of candidatePairs) {
-    if (
-      matchedExpectedIndexes.has(pair.expectedIndex) ||
-      matchedFindingIndexes.has(pair.findingIndex)
-    ) {
-      continue
-    }
-
-    const finding = input.admittedFindings[pair.findingIndex]
-    if (finding === undefined) {
-      continue
-    }
-
-    matchedExpectedIndexes.add(pair.expectedIndex)
-    matchedFindingIndexes.add(pair.findingIndex)
-    matches.push({
-      expectedIndex: pair.expectedIndex,
-      findingId: finding.id,
-      semanticScore: pair.semanticScore,
-      ...(pair.semanticReason === undefined
-        ? {}
-        : { semanticReason: pair.semanticReason }),
-      lineOverlaps: pair.lineOverlaps,
-      severityMatches: pair.severityMatches
-    })
-  }
-
-  matches.sort((left, right) => left.expectedIndex - right.expectedIndex)
+  // An inconclusive pair only clouds an expectation or finding that stayed
+  // unmatched. Once either side is matched, its verdict is known.
+  const inconclusiveExpectedIndexes = [
+    ...new Set(
+      pass.inconclusivePairs
+        .map((pair) => pair.expectedIndex)
+        .filter((expectedIndex) => !matchedExpectedIndexes.has(expectedIndex))
+    )
+  ].sort((left, right) => left - right)
+  const inconclusiveFindingIndexes = new Set(
+    pass.inconclusivePairs
+      .map((pair) => pair.findingIndex)
+      .filter((findingIndex) => !matchedFindingIndexes.has(findingIndex))
+  )
+  const inconclusiveMatches = pass.inconclusivePairs.map((pair) => ({
+    expectedIndex: pair.expectedIndex,
+    findingId: input.admittedFindings[pair.findingIndex]!.id,
+    code: pair.code,
+    ...(pair.message === undefined ? {} : { message: pair.message })
+  }))
 
   const unmatchedExpectedIndexes = input.evalCase.expectedFindings
     .map((_expected, expectedIndex) => expectedIndex)
-    .filter((expectedIndex) => !matchedExpectedIndexes.has(expectedIndex))
+    .filter(
+      (expectedIndex) =>
+        !matchedExpectedIndexes.has(expectedIndex) &&
+        !inconclusiveExpectedIndexes.includes(expectedIndex)
+    )
   const matchedFindings = [...matchedFindingIndexes]
     .map((findingIndex) => input.admittedFindings[findingIndex])
     .filter((finding): finding is AdmittedFinding => finding !== undefined)
-
-  const falsePositiveFindingIds = input.admittedFindings
+  const undecidedFindings = input.admittedFindings
     .map((finding, findingIndex) => ({ finding, findingIndex }))
-    .filter(({ findingIndex }) => !matchedFindingIndexes.has(findingIndex))
     .filter(
-      ({ finding }) =>
-        !isDuplicateOfMatchedFinding(finding, matchedFindings)
+      ({ findingIndex }) =>
+        !matchedFindingIndexes.has(findingIndex) &&
+        !inconclusiveFindingIndexes.has(findingIndex)
     )
-    .map(({ finding }) => finding.id)
 
-  const duplicateFindingIds = input.admittedFindings
-    .map((finding, findingIndex) => ({ finding, findingIndex }))
-    .filter(({ findingIndex }) => !matchedFindingIndexes.has(findingIndex))
-    .filter(({ finding }) =>
-      isDuplicateOfMatchedFinding(finding, matchedFindings)
-    )
+  const duplicateFindingIds = undecidedFindings
+    .filter(({ finding }) => isDuplicateOfMatchedFinding(finding, matchedFindings))
     .map(({ finding }) => finding.id)
-
-  const noFindingZoneFalsePositiveIds = input.admittedFindings
-    .map((finding, findingIndex) => ({ finding, findingIndex }))
-    .filter(({ findingIndex }) => !matchedFindingIndexes.has(findingIndex))
+  const falsePositiveFindingIds = undecidedFindings
+    .filter(({ finding }) => !isDuplicateOfMatchedFinding(finding, matchedFindings))
+    .map(({ finding }) => finding.id)
+  const noFindingZoneFalsePositiveIds = undecidedFindings
     .filter(({ finding }) => !duplicateFindingIds.includes(finding.id))
     .filter(({ finding }) =>
       input.evalCase.expectedNoFindingZones.some((zone) =>
@@ -372,105 +356,20 @@ const buildMatchResult = (
     )
     .map(({ finding }) => finding.id)
 
-  return {
+  const result: EvalMatcherResult = {
     matches,
     unmatchedExpectedIndexes,
+    inconclusiveExpectedIndexes,
+    inconclusiveFindingIds: [...inconclusiveFindingIndexes]
+      .sort((left, right) => left - right)
+      .map((findingIndex) => input.admittedFindings[findingIndex]!.id),
+    inconclusiveMatches,
     duplicateFindingIds,
     falsePositiveFindingIds,
     noFindingZoneFalsePositiveIds
   }
-}
 
-export const matchEvalFindings = (
-  input: {
-    readonly evalCase: EvalCase
-    readonly admittedFindings: readonly AdmittedFinding[]
-  }
-): EvalMatcherResult => {
-  const candidatePairs: CandidatePair[] = []
-
-  input.evalCase.expectedFindings.forEach((expected, expectedIndex) => {
-    input.admittedFindings.forEach((finding, findingIndex) => {
-      const pair = pairFor(expected, finding, expectedIndex, findingIndex)
-
-      if (pair !== undefined) {
-        candidatePairs.push(pair)
-      }
-    })
-  })
-
-  return buildMatchResult({
-    evalCase: input.evalCase,
-    admittedFindings: input.admittedFindings,
-    candidatePairs
-  })
-}
-
-export const matchEvalFindingsWithSemanticJudge = async (
-  input: {
-    readonly evalCase: EvalCase
-    readonly admittedFindings: readonly AdmittedFinding[]
-    readonly judge: EvalSemanticJudge
-  }
-): Promise<EvalMatcherResult> => {
-  // Deterministic matching runs first. The LLM judge only resolves expected
-  // findings the deterministic matcher left unmatched. Path and line gates still
-  // run before judging, so the judge can resolve wording variance without moving
-  // a finding to another file or line. Deterministic matches always win.
-  const deterministic = matchEvalFindings({
-    evalCase: input.evalCase,
-    admittedFindings: input.admittedFindings
-  })
-  const findingIndexById = new Map(
-    input.admittedFindings.map((finding, index) => [finding.id, index])
-  )
-  const reservedExpectedIndexes = new Set(
-    deterministic.matches.map((match) => match.expectedIndex)
-  )
-  const reservedFindingIndexes = new Set(
-    deterministic.matches
-      .map((match) => findingIndexById.get(match.findingId))
-      .filter((index): index is number => index !== undefined)
-  )
-
-  const judgeProviderIssues: EvalJudgeProviderIssue[] = []
-  const recordJudgeError = (issue: EvalJudgeProviderIssue): void => {
-    judgeProviderIssues.push(issue)
-  }
-
-  const judgedPairs = (
-    await Promise.all(
-      input.evalCase.expectedFindings.flatMap((expected, expectedIndex) => {
-        if (reservedExpectedIndexes.has(expectedIndex)) {
-          return []
-        }
-
-        return input.admittedFindings.map((finding, findingIndex) =>
-          reservedFindingIndexes.has(findingIndex)
-            ? Promise.resolve(undefined)
-            : pairForJudgedMatch(
-                expected,
-                finding,
-                expectedIndex,
-                findingIndex,
-                input.judge,
-                recordJudgeError
-              )
-        )
-      })
-    )
-  ).filter((pair): pair is CandidatePair => pair !== undefined)
-
-  const result = buildMatchResult({
-    evalCase: input.evalCase,
-    admittedFindings: input.admittedFindings,
-    candidatePairs: judgedPairs,
-    seededMatches: deterministic.matches,
-    reservedExpectedIndexes,
-    reservedFindingIndexes
-  })
-
-  return judgeProviderIssues.length === 0
+  return pass.judgeProviderIssues.length === 0
     ? result
-    : { ...result, judgeProviderIssues }
+    : { ...result, judgeProviderIssues: pass.judgeProviderIssues }
 }

@@ -43,6 +43,14 @@ const formatCachedInputTokens = (metrics: EvalMetrics): string => {
   return `${cached} (${formatPercent(metrics.cachedInputTokens / metrics.inputTokens)} of input)`
 }
 
+// Judge agreement is omitted when no calibration pair was scored (a fully
+// negative fixture set needs no judge). Render the denominator with it so a
+// partially scored calibration set is visible.
+const formatJudgeAgreement = (report: EvalReport): string =>
+  report.scoring.judgeAgreement === undefined
+    ? 'not scored'
+    : `${formatPercent(report.scoring.judgeAgreement)} (${report.metrics.judgeAgreementPairCount} pairs)`
+
 const findCase = (
   cases: readonly EvalCase[],
   caseId: string
@@ -86,7 +94,8 @@ const appendEvalSummarySelection = (
       `| Slice root | ${escapeMarkdownCell(report.selection.sliceRoot ?? '-')} |`,
       `| Case filters | ${formatListValue(report.selection.caseFilters)} |`,
       `| Selected cases | ${formatListValue(report.selection.selectedCaseIds)} |`,
-      `| Semantic matcher | ${report.scoring.semanticMatcher} |`
+      `| Judge agreement | ${formatJudgeAgreement(report)} |`,
+      `| Judge trustworthy | ${report.scoring.judgeTrustworthy ? 'yes' : 'no'} |`
     ]
   })
 }
@@ -112,6 +121,7 @@ const appendEvalSummaryMetrics = (
       `| Provider error rate | ${formatPercent(report.metrics.providerErrorRate)} |`,
       `| Provider issue rate | ${formatPercent(report.metrics.providerIssueRate)} (${report.metrics.providerIssueCount} cases) |`,
       `| False positives | ${report.metrics.falsePositiveCount} |`,
+      `| Inconclusive matches | ${report.metrics.inconclusiveMatchCount} |`,
       `| Artifact-only recall | ${formatPercent(report.metrics.artifactOnlyRecall)} |`,
       `| Artifact-only precision | ${formatPercent(report.metrics.artifactOnlyPrecision)} |`,
       `| Artifact-only findings | ${report.metrics.artifactOnlyFindingCount} |`,
@@ -151,11 +161,10 @@ const appendEvalSummaryRecallByTier = (
 ): void => {
   appendMarkdownTable(lines, {
     heading: '## Recall by Tier',
-    header: '| Tier | Recall | Precision |',
-    alignment: '| --- | ---: | ---: |',
+    header: '| Tier | Recall |',
+    alignment: '| --- | ---: |',
     rows: tierDisplayOrder.map(
-      (tier) =>
-        `| ${tier} | ${formatPercent(report.metrics.recallByTier[tier])} | ${formatPercent(report.metrics.precisionByTier[tier])} |`
+      (tier) => `| ${tier} | ${formatPercent(report.metrics.recallByTier[tier])} |`
     )
   })
 }
@@ -388,6 +397,7 @@ const attentionCasesForSummary = (
   report.caseResults.filter(
     (caseResult) =>
       caseStatus(caseResult) !== 'PASS' ||
+      caseResult.inconclusiveMatches.length > 0 ||
       caseResult.artifactOnlyMatchedFindings.length > 0 ||
       caseResult.artifactOnlyFalsePositiveFindings.length > 0 ||
       caseResult.refutationResults.length > 0 ||
@@ -426,14 +436,28 @@ const formatAttentionFindingBullet = (
 type EvalSummaryAttentionMatch = {
   readonly findingId: string
   readonly expectedIndex: number
-  readonly semanticScore: number
+  readonly semanticReason: string
 }
 
 const formatAttentionMatchedFindingBullet = (
   caseResult: z.infer<typeof EvalCaseReportSchema>,
   match: EvalSummaryAttentionMatch
 ): string =>
-  `- ${match.findingId} matched ${expectedLabelForMatch(caseResult, match.expectedIndex)} (semantic ${formatPercent(match.semanticScore)})`
+  `- ${match.findingId} matched ${expectedLabelForMatch(caseResult, match.expectedIndex)} - ${match.semanticReason}`
+
+type EvalSummaryInconclusiveMatch = {
+  readonly findingId: string
+  readonly expectedIndex: number
+  readonly code: string
+}
+
+// Inconclusive pairs are neither misses nor false positives. They are rendered
+// separately so a reader never mistakes a failed judge call for review quality.
+const formatAttentionInconclusiveBullet = (
+  caseResult: z.infer<typeof EvalCaseReportSchema>,
+  inconclusive: EvalSummaryInconclusiveMatch
+): string =>
+  `- ${inconclusive.findingId} vs ${expectedLabelForMatch(caseResult, inconclusive.expectedIndex)} undecided (${inconclusive.code}); excluded from recall and precision`
 
 type EvalSummaryExpectedFinding = EvalCase['expectedFindings'][number]
 
@@ -498,6 +522,13 @@ const appendEvalSummaryAttentionNeeded = (
     appendAttentionBulletSection(lines, {
       heading: 'Missed expected findings:',
       rows: attentionMissedExpectedRows(caseResult, evalCase)
+    })
+
+    appendAttentionBulletSection(lines, {
+      heading: 'Inconclusive judge decisions:',
+      rows: caseResult.inconclusiveMatches.map((inconclusive) =>
+        formatAttentionInconclusiveBullet(caseResult, inconclusive)
+      )
     })
 
     appendAttentionBulletSection(lines, {

@@ -115,12 +115,15 @@ export const EvalMetricsSchema = z.strictObject({
   fixGroundTruthFalsePositiveCount: z.int().min(0).default(0),
   fixRealFindingCount: z.int().min(0).default(0),
   fixAttemptedCount: z.int().min(0).default(0),
+  // Semantic-judge reliability for the run. `judgeAgreement` is the fraction of
+  // human-labeled calibration pairs the judge decided correctly; it is omitted
+  // when no calibration pair was scored (an offline run needs no judge).
+  judgeAgreement: z.number().min(0).max(1).optional(),
+  judgeAgreementPairCount: z.int().min(0).default(0),
+  // Expected/finding pairs the judge could not decide. Excluded from the recall
+  // and precision denominators; surfaced as a run warning.
+  inconclusiveMatchCount: z.int().min(0).default(0),
   recallByTier: TierRateSchema,
-  // precisionByTier mirrors recallByTier rather than computing a finding-side
-  // tier. Admitted findings carry no expected-tier label, so a precise
-  // per-tier precision is not derivable from the match result. We expose
-  // recall-parity here so consumers have a stable, documented value.
-  precisionByTier: TierRateSchema,
   productRecall: RateSchema.default(1),
   nitRecall: RateSchema.default(1),
   inputTokens: z.int().min(0).default(0),
@@ -139,7 +142,12 @@ export type EvalMetricCaseResult = {
   readonly parseValid: boolean
   readonly providerErrored: boolean
   readonly providerIssueCount: number
+  // Expected findings that were actually SCORED: declared expected findings
+  // minus the ones whose verdict is inconclusive because a judge call failed.
+  // This is the recall denominator.
   readonly expectedFindingCount: number
+  // Expected/finding pairs the judge could not decide for this case.
+  readonly inconclusiveMatchCount: number
   readonly admittedFindingCount: number
   readonly matchedFindingCount: number
   readonly expectedSeverityWeights: readonly number[]
@@ -216,13 +224,25 @@ const hasProviderIssue = (result: EvalMetricCaseResult): boolean =>
   result.providerIssueCount > 0 ||
   result.warnings.some(isProviderIssueWarning)
 
+// Run-level semantic-judge reliability. It is not derivable from case results
+// (the calibration set is scored once per run), so it is passed in and repeated
+// on every metric group: the same judge produced every group's numbers.
+export type EvalJudgeReliability = {
+  readonly judgeAgreement?: number
+  readonly judgeAgreementPairCount: number
+}
+
 type CalculateEvalMetrics = {
-  (caseResults: readonly EvalMetricCaseResult[]): EvalMetrics
+  (
+    caseResults: readonly EvalMetricCaseResult[],
+    judgeReliability?: EvalJudgeReliability
+  ): EvalMetrics
   readonly severityWeight: (severity: Severity) => number
 }
 
 const calculate = (
-  caseResults: readonly EvalMetricCaseResult[]
+  caseResults: readonly EvalMetricCaseResult[],
+  judgeReliability?: EvalJudgeReliability
 ): EvalMetrics => {
   const totalCaseCount = caseResults.length
   const totalExpectedFindingCount = sum(
@@ -283,7 +303,6 @@ const calculate = (
       ratio(matched, expected, 1)
     ])
   ) as Record<ExpectedFindingTier, number>
-  const precisionByTier = recallByTier
   const productTierTotals = tierTotals.filter((entry) =>
     (productRecallTiers as readonly string[]).includes(entry.tier)
   )
@@ -439,8 +458,14 @@ const calculate = (
     fixAttemptedCount: sum(
       caseResults.map((result) => result.fixApplyAttemptedCount)
     ),
+    ...(judgeReliability?.judgeAgreement === undefined
+      ? {}
+      : { judgeAgreement: judgeReliability.judgeAgreement }),
+    judgeAgreementPairCount: judgeReliability?.judgeAgreementPairCount ?? 0,
+    inconclusiveMatchCount: sum(
+      caseResults.map((result) => result.inconclusiveMatchCount)
+    ),
     recallByTier,
-    precisionByTier,
     productRecall,
     nitRecall,
     inputTokens: sum(caseResults.map((result) => result.inputTokens)),

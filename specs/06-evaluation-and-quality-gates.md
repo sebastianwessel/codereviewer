@@ -399,13 +399,14 @@ repository config. Supported eval-only overrides are `--review-mode
 `--max-concurrent-tasks <1-32>`. These flags must merge above file and
 environment config for the eval invocation only. They exist to make benchmark
 quality comparisons reproducible, especially for the PR-review path
-that should force PR mode, thorough depth, semantic scoring, serial provider
-calls, and sanitized debug logs.
+that should force PR mode, thorough depth, serial provider calls, and sanitized
+debug logs. Semantic scoring is not a flag: the judge is constructed whenever a
+provider is configured.
 
 The committed Code Review Bench-style package scripts must make the
 PR-review posture the default costly benchmark path. `eval:benchmark` hydrates
-the benchmark pack and runs PR mode, thorough depth, semantic scoring, and
-serial provider calls.
+the benchmark pack and runs PR mode, thorough depth, and serial provider calls;
+the configured provider supplies the semantic judge.
 `eval:cheap` must provide a low-cost provider-backed review-quality smoke path
 that first runs zero-token refutation gate regressions, then runs the
 project-owned semantic authz positive/control slices plus small benchmark-derived
@@ -462,7 +463,10 @@ availability from the review report:
 | `artifactOnlyFalsePositiveFindingIds` | string[] | Artifact-only findings that neither match an expected finding nor duplicate a matched artifact-only finding. |
 | `artifactOnlyFalsePositiveFindings` | object[] | Sanitized artifact-only noise summaries with ID, severity, category, path, line, and title. |
 | `matchedFindings[].semanticReason` | string | Concise report-safe rationale from the semantic judge that accepted the match. |
-| `artifactOnlyMatchedFindings[].semanticReason` | string or omitted | Same rationale field for artifact-only semantic judge matches. |
+| `artifactOnlyMatchedFindings[].semanticReason` | string | Same rationale field for artifact-only semantic judge matches. Every match is a judge decision, so the reason is always present. |
+| `inconclusiveExpectedIndexes` | integer[] | Expected findings whose verdict is unknown because a judge call failed. Excluded from the recall denominator and from `unmatchedExpectedIndexes`. |
+| `inconclusiveFindingIds` | string[] | Admitted findings whose verdict is unknown because a judge call failed. Excluded from false positives and duplicates. |
+| `inconclusiveMatches` | object[] | Undecided expected/finding pairs with `expectedIndex`, `findingId`, provider error `code`, and optional `message`. |
 | `contextLedger` | object[] | Report-safe context ledger summaries for the case. Each entry includes `kind` (one of the eight context-ledger kinds), `consideredForModelContext`, and `truncated`. |
 | `providerIssues` | object[] | Provider instability observed for the case, including unrecovered provider errors, recovered eval retries, refutation provider issues, and budget/timeouts. Each entry includes `code`, `stage`, and `recovered`. |
 | `refutationResults` | object[] | Sanitized refutation summaries with ID, refuted candidate ID, verdict, and reason code. |
@@ -508,33 +512,28 @@ location, match mode, summary, detection rate, and run marks.
 - `path-line`: exact path match is required and admitted finding location must
   overlap the expected range within three lines.
 - `path-semantic`: exact path match is required and line overlap is not scored.
-- `semantic-only`: path and line are not used for matching; semantic similarity
+- `semantic-only`: path and line are not used for matching; the judge decision
   and one-to-one assignment determine recall/precision.
-- R1 semantic matching is deterministic by default, and the deterministic
-  matcher always runs first. Normalize `semanticSummary`, admitted title, and
-  admitted description to lowercase word tokens; remove English stop words; match
-  when Jaccard similarity is at least `0.35`. Provider-backed judging is an
-  explicit opt-in described below and only supplements deterministic results.
-- `codereviewer eval run --semantic-judge` enables provider-backed semantic
-  matching for semantic-only and path-semantic expected findings that the
-  deterministic matcher does not match. The default remains deterministic and
-  offline.
-- `--semantic-judge` requires explicit provider configuration and credentials
-  from CLI/config/process environment. Provider-backed npm scripts may load
-  `.env` with Node's native env-file flag; the CLI implementation itself still
-  must not auto-load the repository root `.env` file.
+- Semantic identity is decided only by the semantic judge. There is no lexical,
+  token, or similarity-score matcher, and no similarity threshold.
+- The judge is constructed whenever a provider is configured; it is not a mode
+  flag. Provider-backed npm scripts may load `.env` with Node's native env-file
+  flag; the CLI implementation itself still must not auto-load the repository
+  root `.env` file.
 - The semantic judge request may include only the expected semantic summary and
   admitted finding title/description. It must not include source snippets,
-  unified diff text, prompt instructions, secrets, raw tool output, or
-  repository files.
+  unified diff text, prompt instructions, secrets, raw tool output, repository
+  files, paths, or line numbers.
 - Judge results must parse as a strict object with `match` and `reason`.
   `reason` is a concise report-safe rationale for audit only. The judge returns a
-  boolean decision and never a numeric confidence. Accepted matches persist the
-  bounded rationale as `semanticReason` and the Markdown summary renders a compact
+  boolean decision and never a numeric confidence. Matches persist the bounded
+  rationale as `semanticReason` and the Markdown summary renders a compact
   `Semantic Judge Matches` audit table.
 - The judge decides semantic identity only. It never replaces the deterministic
   path and line gates, which are always applied first.
-- One admitted finding can match at most one expected finding.
+- One admitted finding can match at most one expected finding. Pair assignment is
+  deterministic: expected findings ascending, then admitted findings ascending;
+  the first judge-accepted admitted finding claims the expectation.
 - An unmatched admitted finding at the same path and exact overlapping line
   range as an already matched finding is classified as a duplicate finding.
   Duplicate findings are tracked as review noise and must not be counted as
@@ -699,7 +698,9 @@ repeated finding and refutation subsections.
 Finding-like attention bullets must share one formatter for finding ID,
 severity, category, path/line, and title rows.
 Matched-finding attention bullets must share one formatter for finding ID,
-expected-finding label, and semantic score rows.
+expected-finding label, and judge-reason rows. Inconclusive judge decisions must
+render as their own attention subsection so an undecided pair is never read as a
+missed expectation or a false positive.
 Refutation attention bullets must share a focused formatter for refutation
 result rows.
 Missed-expected attention rows must share focused helpers that preserve stale

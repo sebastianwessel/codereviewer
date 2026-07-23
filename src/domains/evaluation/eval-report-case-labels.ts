@@ -34,6 +34,7 @@ export type EvalContextLedgerLabelInput = {
 }
 
 export type EvalCaseNoteInput = EvalProviderIssueLabelInput & {
+  readonly inconclusiveMatches: readonly unknown[]
   readonly artifactOnlyFalsePositiveFindingIds: readonly unknown[]
   readonly artifactOnlyMatchedFindings: readonly unknown[]
   readonly duplicateFindingIds: readonly unknown[]
@@ -137,6 +138,12 @@ export const noteForCase = (caseResult: EvalCaseNoteInput): string => {
 
   if (caseResult.falsePositiveFindingIds.length > 0) {
     notes.push(`false positives ${caseResult.falsePositiveFindingIds.length}`)
+  }
+
+  // Undecided pairs are not misses and not false positives; they left both
+  // denominators, so the reader must see how much of the case went unscored.
+  if (caseResult.inconclusiveMatches.length > 0) {
+    notes.push(`inconclusive ${caseResult.inconclusiveMatches.length}`)
   }
 
   if (caseResult.duplicateFindingIds.length > 0) {

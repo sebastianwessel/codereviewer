@@ -18,6 +18,60 @@ const scalarSelectionStatus = (
   right: string | undefined
 ): 'same' | 'different' => (left ?? '') === (right ?? '') ? 'same' : 'different'
 
+// Judge agreement difference above which the two runs' quality deltas may
+// reflect judge variance rather than review quality.
+const MATERIAL_JUDGE_AGREEMENT_DELTA = 0.05
+
+export type EvalJudgeReliabilityStatus = {
+  readonly baseTrustworthy: boolean
+  readonly headTrustworthy: boolean
+  readonly baseAgreement?: number
+  readonly headAgreement?: number
+  readonly agreementDiffersMaterially: boolean
+  readonly warnings: readonly string[]
+}
+
+const formatAgreement = (agreement: number | undefined): string =>
+  agreement === undefined ? 'not scored' : `${(agreement * 100).toFixed(1)}%`
+
+// The judge is the sole semantic authority, so an untrustworthy or differently
+// calibrated judge makes metric deltas unreadable as review-quality signal.
+const judgeReliabilityStatus = (
+  input: EvalReportPair
+): EvalJudgeReliabilityStatus => {
+  const baseAgreement = input.base.scoring.judgeAgreement
+  const headAgreement = input.head.scoring.judgeAgreement
+  const agreementDiffersMaterially =
+    baseAgreement !== undefined &&
+    headAgreement !== undefined &&
+    Math.abs(baseAgreement - headAgreement) > MATERIAL_JUDGE_AGREEMENT_DELTA
+  const warnings: string[] = []
+
+  if (
+    !input.base.scoring.judgeTrustworthy ||
+    !input.head.scoring.judgeTrustworthy
+  ) {
+    warnings.push(
+      'Warning: a compared report marks its semantic judge as untrustworthy; metric deltas may reflect judge error rather than review quality.'
+    )
+  }
+
+  if (agreementDiffersMaterially) {
+    warnings.push(
+      `Warning: judge agreement differs materially (${formatAgreement(baseAgreement)} vs ${formatAgreement(headAgreement)}); metric deltas may reflect judge variance rather than review quality.`
+    )
+  }
+
+  return {
+    baseTrustworthy: input.base.scoring.judgeTrustworthy,
+    headTrustworthy: input.head.scoring.judgeTrustworthy,
+    ...(baseAgreement === undefined ? {} : { baseAgreement }),
+    ...(headAgreement === undefined ? {} : { headAgreement }),
+    agreementDiffersMaterially,
+    warnings
+  }
+}
+
 export const selectionStatus = (
   input: EvalReportPair
 ): {
@@ -25,7 +79,7 @@ export const selectionStatus = (
   readonly sliceRoot: 'same' | 'different'
   readonly caseFilters: 'same' | 'different'
   readonly caseSet: 'same' | 'different'
-  readonly semanticMatcher: 'same' | 'different'
+  readonly judgeReliability: EvalJudgeReliabilityStatus
   readonly baseOnlyCaseIds: readonly string[]
   readonly headOnlyCaseIds: readonly string[]
 } => {
@@ -50,10 +104,7 @@ export const selectionStatus = (
       ? 'same'
       : 'different',
     caseSet: arraysEqual(baseCaseIds, headCaseIds) ? 'same' : 'different',
-    semanticMatcher: scalarSelectionStatus(
-      input.base.scoring.semanticMatcher,
-      input.head.scoring.semanticMatcher
-    ),
+    judgeReliability: judgeReliabilityStatus(input),
     baseOnlyCaseIds: baseCaseIds.filter((caseId) => !headCaseIdSet.has(caseId)),
     headOnlyCaseIds: headCaseIds.filter((caseId) => !baseCaseIdSet.has(caseId))
   }
@@ -97,10 +148,8 @@ export const appendEvalComparisonSelection = (
     )
     lines.push('')
   }
-  if (selection.semanticMatcher === 'different') {
-    lines.push(
-      'Warning: semantic matcher modes differ; aggregate metric deltas are not scoring-mode comparable.'
-    )
+  for (const warning of selection.judgeReliability.warnings) {
+    lines.push(warning)
     lines.push('')
   }
   lines.push('| Field | Status |')
@@ -115,8 +164,14 @@ export const appendEvalComparisonSelection = (
   lines.push(formatEvalComparisonSelectionRow('Case set', selection.caseSet))
   lines.push(
     formatEvalComparisonSelectionRow(
-      'Semantic matcher',
-      selection.semanticMatcher
+      'Judge agreement',
+      `${formatAgreement(selection.judgeReliability.baseAgreement)} -> ${formatAgreement(selection.judgeReliability.headAgreement)}`
+    )
+  )
+  lines.push(
+    formatEvalComparisonSelectionRow(
+      'Judge trustworthy',
+      `${selection.judgeReliability.baseTrustworthy ? 'yes' : 'no'} -> ${selection.judgeReliability.headTrustworthy ? 'yes' : 'no'}`
     )
   )
   lines.push(

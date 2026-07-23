@@ -176,14 +176,21 @@ publishes (no network/write permission); your CI posts them.
 ## Evaluation harness (how quality is measured)
 
 Evaluation runs fixtures/benchmark slices through the same pipeline, then matches
-admitted findings to expected findings (deterministic token overlap first, then
-an optional semantic judge) and reports metrics. Key design points:
+admitted findings to expected findings (deterministic path/line gates first, then
+a semantic judge that decides identity of defect) and reports metrics. Key design
+points:
 
 - **Tiered recall.** Expected findings carry a tier (`runtime-critical`,
   `security`, `logic`, `nit`). The headline **`productRecall`** counts only the
   non-nit tiers — matching the product's low-noise scope — while `nitRecall` is
   reported separately. A raw aggregate recall would penalize the engine for
   *correctly* ignoring nits.
+- **Judge-only semantic matching.** Whether two defect descriptions denote the
+  same defect is decided by the semantic judge, never by token overlap: shared
+  vocabulary measures topic, not identity. A pair the judge cannot decide is
+  *inconclusive* and leaves both the recall and the precision denominator, and
+  the judge itself is scored each run against a committed human-labeled
+  calibration set (`scoring.judgeAgreement` / `judgeTrustworthy`).
 - **Trustworthy by construction.** Benchmark slices must be *hydrated* with real
   PR code before scoring (the run errors on un-hydrated positive slices instead
   of scoring 0). All rate metrics are clamped so a single out-of-range value

@@ -26,7 +26,11 @@ describe('evaluation package scripts', () => {
     expect(packageJson.scripts['eval:benchmark']).toContain(
       '--review-mode pr --review-depth thorough'
     )
-    expect(packageJson.scripts['eval:benchmark']).toContain('--semantic-judge')
+    // The semantic judge is no longer a mode flag: it is constructed whenever a
+    // provider is configured, so the scripts must not pass a judge flag.
+    expect(packageJson.scripts['eval:benchmark']).not.toContain(
+      '--semantic-judge'
+    )
     expect(packageJson.scripts['eval:benchmark']).not.toContain(
       '--intent-planning'
     )
@@ -49,8 +53,11 @@ describe('evaluation package scripts', () => {
     expect(packageJson.scripts['eval:benchmark:debug']).toContain(
       '--review-mode pr --review-depth thorough'
     )
+    expect(packageJson.scripts['eval:benchmark:debug']).not.toContain(
+      '--semantic-judge'
+    )
     expect(packageJson.scripts['eval:benchmark:debug']).toContain(
-      '--semantic-judge --max-concurrent-tasks 1'
+      '--max-concurrent-tasks 1'
     )
     expect(packageJson.scripts['eval:benchmark:debug']).toContain('--debug')
     expect(packageJson.scripts['eval:benchmark:debug']).toContain(

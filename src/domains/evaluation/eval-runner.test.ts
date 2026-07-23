@@ -6,13 +6,41 @@ import type {
   ReviewReport
 } from '../../shared/contracts/index.js'
 import { parseEvalCases } from './eval-fixture.schema.js'
+import { evalJudgeCalibrationSet } from './eval-judge-calibration.js'
+import type { EvalSemanticJudge } from './eval-matcher.js'
 import {
   renderEvalComparison,
   renderEvalRecallReport,
   renderEvalSummary,
-  runEvaluation,
-  runEvaluationWithSemanticJudge
+  runEvaluation
 } from './eval-runner.js'
+
+// Hermetic judge: answers the committed calibration set exactly as a human
+// labeled it (so the run reports a trustworthy judge) and accepts every pair the
+// deterministic gates let through.
+const acceptingJudge: EvalSemanticJudge = async (input) => {
+  const calibrationPair = evalJudgeCalibrationSet.find(
+    (pair) =>
+      pair.expectedSummary === input.expectedSummary &&
+      pair.findingTitle === input.findingTitle
+  )
+
+  return calibrationPair === undefined
+    ? { match: true, reason: 'Both summaries describe the same defect.' }
+    : { match: calibrationPair.expectedMatch, reason: 'Calibration pair.' }
+}
+
+const rejectingJudge: EvalSemanticJudge = async (input) => {
+  const calibrationPair = evalJudgeCalibrationSet.find(
+    (pair) =>
+      pair.expectedSummary === input.expectedSummary &&
+      pair.findingTitle === input.findingTitle
+  )
+
+  return calibrationPair === undefined
+    ? { match: false, reason: 'The summaries describe different defects.' }
+    : { match: calibrationPair.expectedMatch, reason: 'Calibration pair.' }
+}
 
 const inlineEvalCases = [
   {
@@ -175,10 +203,11 @@ const reviewReport = (
 })
 
 describe('eval runner', () => {
-  test('validates fixture samples and returns a deterministic eval report', () => {
+  test('validates fixture samples and returns a deterministic eval report', async () => {
     const cases = parseEvalCases(inlineEvalCases)
-    const result = runEvaluation({
+    const result = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -235,7 +264,8 @@ describe('eval runner', () => {
 
     expect(result.artifactName).toBe('eval-report.json')
     expect(result.report.scoring).toEqual({
-      semanticMatcher: 'deterministic'
+      judgeAgreement: 1,
+      judgeTrustworthy: true
     })
     expect(result.report.caseResults[0]?.contextLedger).toEqual([
       {
@@ -254,10 +284,11 @@ describe('eval runner', () => {
     expect(renderEvalSummary({ cases, report: result.report })).toMatchSnapshot()
   })
 
-  test('preserves token usage and renders unavailable cost explicitly', () => {
+  test('preserves token usage and renders unavailable cost explicitly', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
-    const result = runEvaluation({
+    const result = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -301,10 +332,11 @@ describe('eval runner', () => {
     expect(summary).toContain('| Cost | $0.00 known; unavailable for 1 case(s) |')
   })
 
-  test('scores artifact-only findings separately from actionable eval metrics', () => {
+  test('scores artifact-only findings separately from actionable eval metrics', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
-    const result = runEvaluation({
+    const result = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -357,10 +389,11 @@ describe('eval runner', () => {
     )
   })
 
-  test('derives refutation metrics and surfaces refutation results in case reports', () => {
+  test('derives refutation metrics and surfaces refutation results in case reports', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
-    const result = runEvaluation({
+    const result = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -434,10 +467,11 @@ describe('eval runner', () => {
     expect(summary).toContain('- refute_eval1 candidate cand_eval1 verdict proved')
   })
 
-  test('keeps artifact-only noise out of normal false-positive counts', () => {
+  test('keeps artifact-only noise out of normal false-positive counts', async () => {
     const cases = parseEvalCases([inlineEvalCases[1]])
-    const result = runEvaluation({
+    const result = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-negative',
@@ -497,7 +531,7 @@ describe('eval runner', () => {
     )
   })
 
-  test('records malformed fixture, provider error, and incomplete coverage outcomes', () => {
+  test('records malformed fixture, provider error, and incomplete coverage outcomes', async () => {
     expect(() =>
       parseEvalCases([
         {
@@ -512,8 +546,9 @@ describe('eval runner', () => {
     ).toThrow()
 
     const cases = parseEvalCases(inlineEvalCases)
-    const result = runEvaluation({
+    const result = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -565,7 +600,7 @@ describe('eval runner', () => {
     ])
   })
 
-  test('records selection metadata and grouped metrics for comparison', () => {
+  test('records selection metadata and grouped metrics for comparison', async () => {
     const cases = parseEvalCases([
       ...inlineEvalCases,
       {
@@ -587,8 +622,9 @@ describe('eval runner', () => {
         sourceProfile: 'benchmark-semantic'
       }
     ])
-    const result = runEvaluation({
+    const result = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -703,7 +739,7 @@ describe('eval runner', () => {
     expect(summary).toContain('| language | typescript | 2 | 100.0% | 100.0% | 100.0% | 100.0% | 0 |')
   })
 
-  test('uses semantic judge matches in eval reports without changing deterministic default', async () => {
+  test('scores semantic-only paraphrases through the judge and records its reason', async () => {
     const cases = parseEvalCases([
       {
         id: 'semantic-benchmark',
@@ -755,30 +791,38 @@ describe('eval runner', () => {
       }
     ]
 
-    const deterministic = runEvaluation({
+    const rejected = await runEvaluation({
       cases,
+      judge: rejectingJudge,
       outputs,
       generatedAt: '2026-06-20T00:00:02.000Z'
     })
-    const judged = await runEvaluationWithSemanticJudge({
+    const judged = await runEvaluation({
       cases,
       outputs,
       generatedAt: '2026-06-20T00:00:02.000Z',
-      judge: async () => ({
-        match: true,
-        reason: 'Both findings describe the same leaked descriptor.'
-      })
+      judge: async (input) =>
+        input.findingTitle === 'File handle stays open'
+          ? {
+              match: true,
+              reason: 'Both findings describe the same leaked descriptor.'
+            }
+          : acceptingJudge(input)
     })
 
-    expect(deterministic.report.metrics.recall).toBe(0)
-    expect(deterministic.report.scoring.semanticMatcher).toBe('deterministic')
+    expect(rejected.report.metrics.recall).toBe(0)
     expect(judged.report.metrics.recall).toBe(1)
-    expect(judged.report.scoring.semanticMatcher).toBe('semantic-judge')
+    expect(judged.report.scoring).toEqual({
+      judgeAgreement: 1,
+      judgeTrustworthy: true
+    })
+    expect(judged.report.metrics.judgeAgreementPairCount).toBe(
+      evalJudgeCalibrationSet.length
+    )
     expect(judged.report.caseResults[0]?.matchedFindings).toEqual([
       {
         expectedIndex: 0,
         findingId: 'find_paraphrase1',
-        semanticScore: 1,
         semanticReason: 'Both findings describe the same leaked descriptor.',
         lineOverlaps: false,
         severityMatches: true
@@ -786,10 +830,174 @@ describe('eval runner', () => {
     ])
   })
 
-  test('records expected finding details and renders per-expected recall report', () => {
-    const cases = parseEvalCases(inlineEvalCases)
-    const hit = runEvaluation({
+  test('excludes inconclusive pairs from recall and precision and warns about them', async () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const result = await runEvaluation({
       cases,
+      judge: async (input) => {
+        if (input.findingTitle === 'Incorrect return value') {
+          throw new Error('judge provider exploded')
+        }
+
+        return acceptingJudge(input)
+      },
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding()])
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    // The undecided pair leaves BOTH denominators: it is neither a missed
+    // expected finding nor a false positive.
+    expect(result.report.metrics).toMatchObject({
+      recall: 1,
+      precision: 1,
+      productRecall: 1,
+      falsePositiveCount: 0,
+      inconclusiveMatchCount: 1
+    })
+    expect(result.report.caseResults[0]).toMatchObject({
+      matchedFindings: [],
+      unmatchedExpectedIndexes: [],
+      falsePositiveFindingIds: [],
+      duplicateFindingIds: [],
+      inconclusiveExpectedIndexes: [0],
+      inconclusiveFindingIds: ['find_eval1'],
+      inconclusiveMatches: [
+        {
+          expectedIndex: 0,
+          findingId: 'find_eval1',
+          code: 'provider_error'
+        }
+      ]
+    })
+    expect(result.report.caseResults[0]?.warnings).toContain(
+      'eval-inconclusive-match:1'
+    )
+    expect(result.report.caseResults[0]?.providerIssues).toEqual([
+      expect.objectContaining({
+        code: 'provider_error',
+        stage: 'eval_semantic_judge',
+        recovered: false
+      })
+    ])
+
+    const summary = renderEvalSummary({ cases, report: result.report })
+    expect(summary).toContain('| Inconclusive matches | 1 |')
+    expect(summary).toContain('Inconclusive judge decisions:')
+    expect(summary).toContain(
+      '- find_eval1 vs expected #0 high bug undecided (provider_error); excluded from recall and precision'
+    )
+  })
+
+  test('fails loudly when a case with expected findings has no judge', async () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+
+    await expect(
+      runEvaluation({
+        cases,
+        outputs: [
+          {
+            caseId: 'typescript-positive',
+            changedLineCount: 50,
+            diffHunkCount: 2,
+            contextLedger: [],
+            result: {
+              status: 'ok',
+              reviewReport: reviewReport([admittedFinding()])
+            }
+          }
+        ],
+        generatedAt: '2026-06-20T00:00:02.000Z'
+      })
+    ).rejects.toMatchObject({
+      code: 'eval_semantic_judge_missing',
+      category: 'config',
+      exitCode: 2
+    })
+  })
+
+  test('scores a negative-only fixture set offline without a judge', async () => {
+    const cases = parseEvalCases([inlineEvalCases[1]])
+    const result = await runEvaluation({
+      cases,
+      outputs: [
+        {
+          caseId: 'typescript-negative',
+          changedLineCount: 10,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([])
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.regressionGate.passed).toBe(true)
+    expect(result.report.scoring).toEqual({ judgeTrustworthy: true })
+    expect(result.report.metrics.judgeAgreementPairCount).toBe(0)
+  })
+
+  test('marks a run untrustworthy when judge agreement is below the minimum', async () => {
+    const cases = parseEvalCases([inlineEvalCases[1]])
+    const result = await runEvaluation({
+      cases,
+      // Flips every near-miss calibration pair: the exact failure mode of a
+      // vocabulary-overlap heuristic.
+      judge: async (input) => {
+        const calibrationPair = evalJudgeCalibrationSet.find(
+          (pair) =>
+            pair.expectedSummary === input.expectedSummary &&
+            pair.findingTitle === input.findingTitle
+        )
+
+        return {
+          match:
+            calibrationPair !== undefined && calibrationPair.kind === 'near-miss'
+              ? !calibrationPair.expectedMatch
+              : (calibrationPair?.expectedMatch ?? true),
+          reason: 'Decided from shared vocabulary.'
+        }
+      },
+      outputs: [
+        {
+          caseId: 'typescript-negative',
+          changedLineCount: 10,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([])
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.scoring.judgeTrustworthy).toBe(false)
+    expect(result.report.scoring.judgeAgreement).toBeLessThan(0.9)
+
+    const summary = renderEvalSummary({ cases, report: result.report })
+    expect(summary).toContain('| Judge trustworthy | no |')
+  })
+
+  test('records expected finding details and renders per-expected recall report', async () => {
+    const cases = parseEvalCases(inlineEvalCases)
+    const hit = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -832,8 +1040,9 @@ describe('eval runner', () => {
       ],
       generatedAt: '2026-06-20T00:00:02.000Z'
     })
-    const miss = runEvaluation({
+    const miss = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -885,10 +1094,11 @@ describe('eval runner', () => {
     expect(recallReport).toContain('| typescript-positive | 0 | high | src/app.ts:4 | path-line | incorrect return value from changed branch | 1/2 | Y N |')
   })
 
-  test('renders eval comparison selection status and mismatch warning before metrics', () => {
+  test('renders eval comparison selection status and mismatch warning before metrics', async () => {
     const cases = parseEvalCases(inlineEvalCases)
-    const base = runEvaluation({
+    const base = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -932,8 +1142,9 @@ describe('eval runner', () => {
       generatedAt: '2026-06-20T00:00:02.000Z'
     })
     const headCases = parseEvalCases([inlineEvalCases[0]])
-    const head = runEvaluation({
+    const head = await runEvaluation({
       cases: headCases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -1146,7 +1357,7 @@ describe('eval runner', () => {
     )
   })
 
-  test('scores the fix lane over real and false-positive findings and shows the fix stage', () => {
+  test('scores the fix lane over real and false-positive findings and shows the fix stage', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
     const noiseFinding = admittedFinding({
       id: 'find_noise1',
@@ -1159,8 +1370,9 @@ describe('eval runner', () => {
       },
       fingerprints: [{ algorithm: 'test', value: 'noise1' }]
     })
-    const result = runEvaluation({
+    const result = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',
@@ -1235,10 +1447,11 @@ describe('eval runner', () => {
     expect(summary).toContain('| Case | Refutation | Fix | Provider recovery |')
   })
 
-  test('fails the gate when product recall is below threshold', () => {
+  test('fails the gate when product recall is below threshold', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
-    const result = runEvaluation({
+    const result = await runEvaluation({
       cases,
+      judge: acceptingJudge,
       outputs: [
         {
           caseId: 'typescript-positive',

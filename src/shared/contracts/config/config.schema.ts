@@ -326,7 +326,11 @@ export const ReportingConfigSchema = z.strictObject({
 })
 
 export const EvaluationConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false)
+  enabled: z.boolean().default(false),
+  // Minimum semantic-judge agreement against the committed calibration set. The
+  // judge is the sole authority for every eval quality metric, so a run whose
+  // agreement falls below this bar reports `scoring.judgeTrustworthy = false`.
+  minJudgeAgreement: z.number().min(0).max(1).default(0.9)
 })
 
 export const OpenTelemetryConfigSchema = z
@@ -452,7 +456,8 @@ export const CodeReviewerConfigSchema = z.strictObject({
     }
   }),
   evaluation: EvaluationConfigSchema.default({
-    enabled: false
+    enabled: false,
+    minJudgeAgreement: 0.9
   }),
   drift: DriftConfigSchema.default({
     enabled: true,

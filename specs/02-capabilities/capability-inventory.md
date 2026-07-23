@@ -26,7 +26,7 @@ whole-file review and a per-candidate refutation pass.
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-002 | Markdown report | ACT-DEV, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-003 | SARIF report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md` |
-| CAP-REP-004 | GitHub PR review-comment artifact | ACT-DEV, ACT-CI, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `06-evaluation-and-quality-gates.md` |
+| CAP-REP-004 | Platform-neutral review-comment artifacts (GitHub/GitLab/Bitbucket/generic renderers) | ACT-DEV, ACT-CI, ACT-REVIEWER | Yes | `13-review-comments-and-suggestions.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-BASE-001 | Baseline matching | ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-CTX-001 | Context ledger | ACT-OPS, ACT-DEV | Yes | `05-review-workflow-and-runtime.md`, `07-security-privacy-operations.md` |
 | CAP-CTX-002 | External change-intent context ingestion (inbox + changed-files providers, digest/model summarizer, change-intent injection) | ACT-CI, ACT-DEV | Yes | `11-external-context-ingestion.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
@@ -35,6 +35,7 @@ whole-file review and a per-candidate refutation pass.
 | CAP-VERIFY-001 | Agentic verification flow (bounded read/list/grep agent, claim verdicts, corroboration) | ACT-CI, ACT-DEV, ACT-MODEL | Yes | `12-verification-flow.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
 | CAP-VERIFY-002 | Claim providers (claims-file, prior-findings) | ACT-CI, ACT-DEV | Yes | `12-verification-flow.md` |
 | CAP-VERIFY-003 | Analyzer (SARIF) and comment claim providers | ACT-CI, ACT-DEV | No | Later phase — `12-verification-flow.md` |
+| CAP-VERIFY-004 | Finding investigation and fix lane (current-findings claims, boolean finding judgment, apply-checked fix enrichment) | ACT-CI, ACT-DEV, ACT-MODEL | Yes | `12-verification-flow.md`, `04-configuration-and-providers.md` |
 | CAP-COV-001 | Review coverage certificate | ACT-DEV, ACT-CI, ACT-OPS | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-EVAL-001 | Evaluation runner | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-002 | Evaluation analysis commands | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
@@ -285,17 +286,21 @@ whole-file review and a per-candidate refutation pass.
 
 ### CAP-EVAL-003 Semantic Judge Matching
 
-- Trigger: `codereviewer eval run --semantic-judge`.
-- Side effects: provider calls for eval matching only.
-- Final state: benchmark-parity matching metadata is recorded separately from
-  production admission decisions.
-- Verification: hermetic provider fixture semantic-judge tests.
+- Trigger: `codereviewer eval run` scoring a case that declares expected
+  findings, with a configured provider.
+- Side effects: provider calls for eval matching and judge calibration only.
+- Final state: every expected-finding match carries a judge decision and reason,
+  judge agreement and trustworthiness are recorded, undecided pairs are reported
+  as inconclusive, and a case with expected findings and no judge fails with a
+  config error. Matching metadata is recorded separately from production
+  admission decisions.
+- Verification: hermetic scripted-judge matcher, calibration, and CLI tests.
 
 ### CAP-EVAL-004 Benchmark Posture
 
 - Trigger: `codereviewer eval run --review-mode pr --review-depth thorough`.
-- Side effects: provider calls for review, and optional semantic eval matching
-  when `--semantic-judge` is also supplied.
+- Side effects: provider calls for review, plus semantic eval matching and judge
+  calibration whenever a provider is configured.
 - Final state: benchmark runs can force the intended PR-review path without
   changing repository config. The default costly benchmark script uses this
   posture.

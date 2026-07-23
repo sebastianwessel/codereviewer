@@ -7,6 +7,7 @@ import { uniqueSorted } from '../../shared/text/unique-sorted.js'
 import { COST_UNAVAILABLE_WARNING } from '../costs/index.js'
 import {
   EVAL_PROVIDER_RETRY_WARNING_PREFIX,
+  inconclusiveMatchWarnings,
   PROVIDER_ERROR_WARNING_PREFIX
 } from './eval-warnings.js'
 import {
@@ -17,15 +18,20 @@ import {
 } from './eval-fixture.schema.js'
 import {
   matchEvalFindings,
-  matchEvalFindingsWithSemanticJudge,
+  missingSemanticJudgeError,
   type EvalMatcherResult,
   type EvalSemanticJudge
 } from './eval-matcher.js'
+import {
+  scoreJudgeCalibration,
+  type EvalJudgeCalibrationResult
+} from './eval-judge-calibration.js'
 import {
   calculateEvalMetrics,
   emptyTierCounts,
   EvalMetricsSchema,
   severityWeight,
+  type EvalJudgeReliability,
   type EvalMetricCaseResult,
   type EvalMetrics
 } from './metrics.js'
@@ -83,8 +89,10 @@ type EvalCaseComputation = {
 
 // Threshold helpers only compare scalar metrics; per-tier record metrics are
 // excluded so a Record value never reaches a numeric comparison.
+// `-?` strips optionality so an optional metric (e.g. `judgeAgreement`) cannot
+// leak `undefined` into the key union and index the metrics record.
 type NumericMetricKey = {
-  [Key in keyof EvalMetrics]: EvalMetrics[Key] extends number ? Key : never
+  [Key in keyof EvalMetrics]-?: EvalMetrics[Key] extends number ? Key : never
 }[keyof EvalMetrics]
 
 const formatMetricValue = (value: number): string => value.toString()
@@ -328,8 +336,17 @@ const tierCountsForCase = (
   const matchedExpectedIndexes = new Set(
     matchResult.matches.map((match) => match.expectedIndex)
   )
+  // Inconclusive expectations leave the per-tier recall denominator for the
+  // same reason they leave the aggregate one: a failed judge call is not a miss.
+  const inconclusiveExpectedIndexes = new Set(
+    matchResult.inconclusiveExpectedIndexes
+  )
 
   evalCase.expectedFindings.forEach((expected, expectedIndex) => {
+    if (inconclusiveExpectedIndexes.has(expectedIndex)) {
+      return
+    }
+
     const tier = resolveExpectedFindingTier(expected)
     counts[tier] = {
       expected: counts[tier].expected + 1,
@@ -463,12 +480,22 @@ const buildMetricCase = (
       input.output.result.status === 'provider-error'
         ? 1
         : providerIssues.length + judgeProviderIssueCount,
-    expectedFindingCount: input.evalCase.expectedFindings.length,
+    // Recall denominator: declared expectations minus the ones the judge could
+    // not decide. An inconclusive expectation must never be scored as missed.
+    expectedFindingCount:
+      input.evalCase.expectedFindings.length -
+      input.matchResult.inconclusiveExpectedIndexes.length,
+    inconclusiveMatchCount:
+      input.matchResult.inconclusiveMatches.length +
+      input.artifactOnlyMatchResult.inconclusiveMatches.length,
     admittedFindingCount: actionableFindings.length,
     matchedFindingCount: input.matchResult.matches.length,
-    expectedSeverityWeights: input.evalCase.expectedFindings.map((expected) =>
-      severityWeight(expected.severity)
-    ),
+    expectedSeverityWeights: input.evalCase.expectedFindings
+      .filter(
+        (_expected, expectedIndex) =>
+          !input.matchResult.inconclusiveExpectedIndexes.includes(expectedIndex)
+      )
+      .map((expected) => severityWeight(expected.severity)),
     matchedExpectedSeverityWeights,
     falsePositiveSeverityWeights: falsePositiveFindings.map((finding) =>
       severityWeight(finding.severity)
@@ -526,10 +553,7 @@ const buildMetricCase = (
   }
 }
 
-// Assemble the per-case eval report entry. The deterministic and semantic-judge
-// case computations differ only in how `providerIssues` is composed (the judge
-// path appends judge issues), so both pass the already-composed list here and
-// share this single literal.
+// Assemble the per-case eval report entry.
 const buildReportCase = (
   input: {
     readonly evalCase: EvalCase
@@ -556,6 +580,17 @@ const buildReportCase = (
   expectedFindings: [...expectedFindingSummaries(input.evalCase)],
   matchedFindings: [...input.matchResult.matches],
   unmatchedExpectedIndexes: [...input.matchResult.unmatchedExpectedIndexes],
+  inconclusiveExpectedIndexes: [
+    ...input.matchResult.inconclusiveExpectedIndexes
+  ],
+  inconclusiveFindingIds: [
+    ...input.matchResult.inconclusiveFindingIds,
+    ...input.artifactOnlyMatchResult.inconclusiveFindingIds
+  ],
+  inconclusiveMatches: [
+    ...input.matchResult.inconclusiveMatches,
+    ...input.artifactOnlyMatchResult.inconclusiveMatches
+  ],
   duplicateFindingIds: [...input.matchResult.duplicateFindingIds],
   duplicateFindings: [
     ...falsePositiveFindingSummaries(
@@ -587,7 +622,13 @@ const buildReportCase = (
   refutationResults: [...refutationResultSummaries(input.reviewReport)],
   inlineFindingCount: input.inlineFindingCount,
   providerIssues: [...input.providerIssues],
-  warnings: [...input.reviewReport.run.warnings],
+  warnings: [
+    ...input.reviewReport.run.warnings,
+    ...inconclusiveMatchWarnings(
+      input.matchResult.inconclusiveMatches.length +
+        input.artifactOnlyMatchResult.inconclusiveMatches.length
+    )
+  ],
   durationMs: input.reviewReport.run.durationMs,
   inputTokens: input.reviewReport.run.inputTokens ?? 0,
   cachedInputTokens: input.reviewReport.run.cachedInputTokens ?? 0,
@@ -596,16 +637,23 @@ const buildReportCase = (
   costUsd: input.reviewReport.run.costUsd ?? 0
 })
 
-const computeCaseResult = (
+// One case-computation path. The semantic judge is optional only because a case
+// without expected findings needs no judge; a case with expected findings and no
+// judge fails loudly inside the matcher.
+const computeCaseResult = async (
   evalCase: EvalCase,
-  output: EvalCaseOutput
-): EvalCaseComputation => {
+  output: EvalCaseOutput,
+  judge: EvalSemanticJudge | undefined
+): Promise<EvalCaseComputation> => {
   if (output.result.status === 'provider-error') {
     const matchResult: EvalMatcherResult = {
       matches: [],
       unmatchedExpectedIndexes: evalCase.expectedFindings.map(
         (_finding, index) => index
       ),
+      inconclusiveExpectedIndexes: [],
+      inconclusiveFindingIds: [],
+      inconclusiveMatches: [],
       duplicateFindingIds: [],
       falsePositiveFindingIds: [],
       noFindingZoneFalsePositiveIds: []
@@ -634,6 +682,9 @@ const computeCaseResult = (
         expectedFindings: [...expectedFindingSummaries(evalCase)],
         matchedFindings: [],
         unmatchedExpectedIndexes: [...matchResult.unmatchedExpectedIndexes],
+        inconclusiveExpectedIndexes: [],
+        inconclusiveFindingIds: [],
+        inconclusiveMatches: [],
         duplicateFindingIds: [],
         duplicateFindings: [],
         falsePositiveFindingIds: [],
@@ -672,65 +723,15 @@ const computeCaseResult = (
   const inlineFindingCount = reviewReport.admittedFindings.filter(
     (finding) => finding.reporterEligibility === 'inline'
   ).length
-  const matchResult = matchEvalFindings({
-    evalCase,
-    admittedFindings: actionableFindings
-  })
-  const artifactOnlyMatchResult = matchEvalFindings({
-    evalCase,
-    admittedFindings: artifactOnlyFindings
-  })
-
-  return {
-    reportCase: buildReportCase({
-      evalCase,
-      output,
-      reviewReport,
-      actionableFindings,
-      artifactOnlyFindings,
-      inlineFindingCount,
-      matchResult,
-      artifactOnlyMatchResult,
-      providerIssues: providerIssuesFromReport(reviewReport)
-    }),
-    metricCase: buildMetricCase({
-      evalCase,
-      output,
-      matchResult,
-      artifactOnlyMatchResult,
-      reviewReport
-    })
-  }
-}
-
-const computeCaseResultWithSemanticJudge = async (
-  evalCase: EvalCase,
-  output: EvalCaseOutput,
-  judge: EvalSemanticJudge
-): Promise<EvalCaseComputation> => {
-  if (output.result.status === 'provider-error') {
-    return computeCaseResult(evalCase, output)
-  }
-
-  const reviewReport = output.result.reviewReport
-  const actionableFindings = actionableFindingsForEval(
-    reviewReport.admittedFindings
-  )
-  const artifactOnlyFindings = artifactOnlyFindingsForEval(
-    reviewReport.admittedFindings
-  )
-  const inlineFindingCount = reviewReport.admittedFindings.filter(
-    (finding) => finding.reporterEligibility === 'inline'
-  ).length
-  const matchResult = await matchEvalFindingsWithSemanticJudge({
+  const matchResult = await matchEvalFindings({
     evalCase,
     admittedFindings: actionableFindings,
-    judge
+    ...(judge === undefined ? {} : { judge })
   })
-  const artifactOnlyMatchResult = await matchEvalFindingsWithSemanticJudge({
+  const artifactOnlyMatchResult = await matchEvalFindings({
     evalCase,
     admittedFindings: artifactOnlyFindings,
-    judge
+    ...(judge === undefined ? {} : { judge })
   })
 
   return {
@@ -797,6 +798,9 @@ const buildMetricGroupsForDimension = (
     readonly cases: readonly EvalCase[]
     readonly metricCaseMap: ReadonlyMap<string, EvalMetricCaseResult>
     readonly groupBy: 'sourceProfile' | 'language' | 'tag'
+    // Run-level judge reliability, repeated on every group: one judge produced
+    // every group's numbers.
+    readonly judgeReliability: EvalJudgeReliability
   }
 ): readonly z.infer<typeof EvalMetricGroupSchema>[] => {
   const grouped = new Map<
@@ -839,14 +843,15 @@ const buildMetricGroupsForDimension = (
         key,
         fixtureCount: group.caseIds.length,
         caseIds: group.caseIds,
-        metrics: calculateEvalMetrics(group.metricCases)
+        metrics: calculateEvalMetrics(group.metricCases, input.judgeReliability)
       })
     )
 }
 
 const buildMetricGroups = (
   cases: readonly EvalCase[],
-  metricCases: readonly EvalMetricCaseResult[]
+  metricCases: readonly EvalMetricCaseResult[],
+  judgeReliability: EvalJudgeReliability
 ): readonly z.infer<typeof EvalMetricGroupSchema>[] => {
   const metricCaseMap = metricCaseById(metricCases)
 
@@ -854,16 +859,19 @@ const buildMetricGroups = (
     ...buildMetricGroupsForDimension({
       cases,
       metricCaseMap,
+      judgeReliability,
       groupBy: 'sourceProfile'
     }),
     ...buildMetricGroupsForDimension({
       cases,
       metricCaseMap,
+      judgeReliability,
       groupBy: 'language'
     }),
     ...buildMetricGroupsForDimension({
       cases,
       metricCaseMap,
+      judgeReliability,
       groupBy: 'tag'
     })
   ]
@@ -977,6 +985,12 @@ type RunEvaluationInput = {
   // `EvalCaseOutputSchema`, so callers may omit fields that carry a schema
   // default (e.g. `fixOutcomes`, `contextLedger`).
   readonly outputs: readonly z.input<typeof EvalCaseOutputSchema>[]
+  // The sole semantic authority for expected-finding matching. Required for any
+  // case that declares expected findings; omitted only for fully negative
+  // fixture sets, which score offline.
+  readonly judge?: EvalSemanticJudge
+  // Agreement below which the run reports its own metrics as untrustworthy.
+  readonly judgeAgreementMinimum?: number
   readonly thresholds?: EvalRegressionThresholds
   readonly selection?: {
     readonly fixtureSource: EvalReportSelection['fixtureSource']
@@ -993,6 +1007,7 @@ const buildEvaluationResult = (
     readonly thresholds: EvalRegressionThresholds
     readonly selection?: RunEvaluationInput['selection']
     readonly scoring: EvalReportScoring
+    readonly judgeReliability: EvalJudgeReliability
     readonly generatedAt?: string
     readonly caseComputations: readonly EvalCaseComputation[]
   }
@@ -1003,7 +1018,7 @@ const buildEvaluationResult = (
   const metricCases = input.caseComputations.map(
     (computation) => computation.metricCase
   )
-  const metrics = calculateEvalMetrics(metricCases)
+  const metrics = calculateEvalMetrics(metricCases, input.judgeReliability)
   const selection = EvalReportSelectionSchema.parse({
     fixtureSource: input.selection?.fixtureSource ?? 'default',
     ...(input.selection?.sliceRoot === undefined
@@ -1012,7 +1027,11 @@ const buildEvaluationResult = (
     caseFilters: input.selection?.caseFilters ?? [],
     selectedCaseIds: input.cases.map((evalCase) => evalCase.id)
   })
-  const metricGroups = buildMetricGroups(input.cases, metricCases)
+  const metricGroups = buildMetricGroups(
+    input.cases,
+    metricCases,
+    input.judgeReliability
+  )
   const gate = thresholdReasons({
     thresholds: input.thresholds,
     metrics,
@@ -1059,72 +1078,84 @@ const prepareEvaluationInputs = (
   return { cases, outputs, thresholds }
 }
 
-export const runEvaluation = (
+// Judge availability is a run-level precondition. A case that declares expected
+// findings cannot be scored without the semantic judge, and the engine never
+// falls back to a heuristic, so the run fails with a config error (exit 2)
+// before any case is scored.
+const assertJudgeAvailableForExpectations = (
+  cases: readonly EvalCase[],
+  judge: EvalSemanticJudge | undefined
+): void => {
+  if (judge !== undefined) {
+    return
+  }
+
+  const positiveCase = cases.find(
+    (evalCase) => evalCase.expectedFindings.length > 0
+  )
+
+  if (positiveCase !== undefined) {
+    throw missingSemanticJudgeError(positiveCase.id)
+  }
+}
+
+export const runEvaluation = async (
   input: RunEvaluationInput
-): {
+): Promise<{
   readonly artifactName: typeof EVAL_REPORT_ARTIFACT_NAME
   readonly report: EvalReport
-} => {
+}> => {
   const prepared = prepareEvaluationInputs(input)
+  assertJudgeAvailableForExpectations(prepared.cases, input.judge)
+
   const outputByCaseId = new Map(
     prepared.outputs.map((output) => [output.caseId, output])
   )
-  const caseComputations = prepared.cases.map((evalCase) => {
+  // Case computations run sequentially so judge calls stay ordered and the run
+  // stays reproducible.
+  const caseComputations: EvalCaseComputation[] = []
+  for (const evalCase of prepared.cases) {
     const output = outputByCaseId.get(evalCase.id)
 
     if (output === undefined) {
       throw new Error(`Missing eval output for case "${evalCase.id}".`)
     }
 
-    return computeCaseResult(EvalCaseSchema.parse(evalCase), output)
-  })
-
-  return buildEvaluationResult({
-    cases: prepared.cases,
-    thresholds: prepared.thresholds,
-    ...(input.selection === undefined ? {} : { selection: input.selection }),
-    scoring: {
-      semanticMatcher: 'deterministic'
-    },
-    ...(input.generatedAt === undefined ? {} : { generatedAt: input.generatedAt }),
-    caseComputations
-  })
-}
-
-export const runEvaluationWithSemanticJudge = async (
-  input: RunEvaluationInput & {
-    readonly judge: EvalSemanticJudge
+    caseComputations.push(
+      await computeCaseResult(EvalCaseSchema.parse(evalCase), output, input.judge)
+    )
   }
-): Promise<{
-  readonly artifactName: typeof EVAL_REPORT_ARTIFACT_NAME
-  readonly report: EvalReport
-}> => {
-  const prepared = prepareEvaluationInputs(input)
-  const outputByCaseId = new Map(
-    prepared.outputs.map((output) => [output.caseId, output])
-  )
-  const caseComputations = await Promise.all(
-    prepared.cases.map(async (evalCase) => {
-      const output = outputByCaseId.get(evalCase.id)
 
-      if (output === undefined) {
-        throw new Error(`Missing eval output for case "${evalCase.id}".`)
-      }
-
-      return computeCaseResultWithSemanticJudge(
-        EvalCaseSchema.parse(evalCase),
-        output,
-        input.judge
-      )
-    })
-  )
+  // Measure the judge itself against the committed human-labeled calibration
+  // set. Calibration pairs whose judge call failed leave the agreement
+  // denominator; if none could be scored, the run cannot claim trustworthiness.
+  const calibration: EvalJudgeCalibrationResult | undefined =
+    input.judge === undefined
+      ? undefined
+      : await scoreJudgeCalibration({
+          judge: input.judge,
+          ...(input.judgeAgreementMinimum === undefined
+            ? {}
+            : { minimumAgreement: input.judgeAgreementMinimum })
+        })
 
   return buildEvaluationResult({
     cases: prepared.cases,
     thresholds: prepared.thresholds,
     ...(input.selection === undefined ? {} : { selection: input.selection }),
     scoring: {
-      semanticMatcher: 'semantic-judge'
+      ...(calibration?.judgeAgreement === undefined
+        ? {}
+        : { judgeAgreement: calibration.judgeAgreement }),
+      // With no judge in play there is no semantic authority to distrust: such a
+      // run scores only cases without expected findings, fully deterministically.
+      judgeTrustworthy: calibration?.judgeTrustworthy ?? true
+    },
+    judgeReliability: {
+      ...(calibration?.judgeAgreement === undefined
+        ? {}
+        : { judgeAgreement: calibration.judgeAgreement }),
+      judgeAgreementPairCount: calibration?.judgeAgreementPairCount ?? 0
     },
     ...(input.generatedAt === undefined ? {} : { generatedAt: input.generatedAt }),
     caseComputations

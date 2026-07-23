@@ -207,8 +207,14 @@ describe('fix-lane fixture', () => {
         tags: ['fix-lane', 'typescript']
       }
     ])
-    const evalResult = runEvaluation({
+    const evalResult = await runEvaluation({
       cases,
+      // Hermetic judge: the eval matcher's semantic decision is not what this
+      // fixture measures, so it accepts every gate-passing pair.
+      judge: async () => ({
+        match: true,
+        reason: 'Both summaries describe the same discount defect.'
+      }),
       outputs: [
         {
           caseId: 'fix-lane',

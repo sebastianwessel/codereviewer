@@ -191,7 +191,8 @@ const evalReport = (
     selectedCaseIds: ['case-a']
   },
   scoring: overrides.scoring ?? {
-    semanticMatcher: 'deterministic'
+    judgeAgreement: 1,
+    judgeTrustworthy: true
   },
   caseResults:
     overrides.caseResults ?? [
@@ -725,7 +726,7 @@ describe('eval CLI', () => {
     }
   })
 
-  test('uses configured provider as an opt-in semantic judge for benchmark evals', async () => {
+  test('uses the configured provider as the semantic judge for benchmark evals', async () => {
     const root = await createTempDir()
     const provider = new SemanticJudgeCliProvider()
     provider.reasonText = 'semantic match '.repeat(40)
@@ -751,13 +752,7 @@ describe('eval CLI', () => {
       await writeSemanticJudgeSliceEvalCase(root)
 
       const result = await runCli(
-        [
-          'eval',
-          'run',
-          '--slice-root',
-          'eval/benchmarks/semantic',
-          '--semantic-judge'
-        ],
+        ['eval', 'run', '--slice-root', 'eval/benchmarks/semantic'],
         {
           cwd: root,
           environment: {
@@ -779,13 +774,41 @@ describe('eval CLI', () => {
 
       expect(report.metrics.recall).toBe(1)
       expect(report.metrics.artifactOnlyRecall).toBe(0)
-      expect(report.scoring).toEqual({
-        semanticMatcher: 'semantic-judge'
-      })
       expect(report.caseResults[0].matchedFindings[0]).toMatchObject({
-        semanticScore: 1,
         semanticReason: provider.reasonText
       })
+      expect(report.caseResults[0].matchedFindings[0].semanticScore).toBeUndefined()
+      // A provider that answers "match" to everything fails the calibration set,
+      // so the run must declare its own quality metrics untrustworthy.
+      expect(report.scoring.judgeTrustworthy).toBe(false)
+      expect(report.scoring.judgeAgreement).toBeLessThan(0.9)
+      expect(report.metrics.judgeAgreementPairCount).toBeGreaterThan(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('fails with a config error when a positive case has no judge provider', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'eval', 'fixtures'), { recursive: true })
+      await writeFile(join(root, 'eval', 'fixtures', 'sample-eval-cases.json'), '[]\n')
+      await writeSemanticJudgeSliceEvalCase(root)
+
+      const result = await runCli(
+        ['eval', 'run', '--slice-root', 'eval/benchmarks/semantic'],
+        {
+          cwd: root,
+          environment: {}
+        }
+      )
+
+      // No provider means no semantic judge; the engine must never fall back to
+      // a heuristic for a case that declares expected findings.
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('eval_semantic_judge_missing')
+      expect(result.stderr).toContain('semantic-local-1')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -1287,7 +1310,8 @@ describe('eval CLI', () => {
         JSON.stringify(
           evalReport({
             scoring: {
-              semanticMatcher: 'semantic-judge'
+              judgeAgreement: 0.6,
+              judgeTrustworthy: false
             },
             selection: {
               fixtureSource: 'slice-root',
@@ -1339,12 +1363,18 @@ describe('eval CLI', () => {
 
       expect(result.exitCode).toBe(0)
       expect(result.stdout).toContain('| Case set | different |')
-      expect(result.stdout).toContain('| Semantic matcher | different |')
+      expect(result.stdout).toContain('| Judge agreement | 100.0% -> 60.0% |')
+      expect(result.stdout).toContain('| Judge trustworthy | yes -> no |')
       expect(result.stdout).toContain('| Slice root | different |')
       expect(result.stdout).toContain('| Base-only cases | case-b |')
       expect(result.stdout).toContain('| Head-only cases | case-c |')
       expect(result.stdout).toContain('Warning: selected case sets differ; aggregate metric deltas are not same-dataset comparable.')
-      expect(result.stdout).toContain('Warning: semantic matcher modes differ; aggregate metric deltas are not scoring-mode comparable.')
+      expect(result.stdout).toContain(
+        'Warning: a compared report marks its semantic judge as untrustworthy; metric deltas may reflect judge error rather than review quality.'
+      )
+      expect(result.stdout).toContain(
+        'Warning: judge agreement differs materially (100.0% vs 60.0%); metric deltas may reflect judge variance rather than review quality.'
+      )
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -1378,7 +1408,7 @@ describe('eval CLI', () => {
                   {
                     expectedIndex: 0,
                     findingId: 'find-a',
-                    semanticScore: 1,
+                    semanticReason: 'Both summaries describe the same defect.',
                     lineOverlaps: true,
                     severityMatches: true
                   }

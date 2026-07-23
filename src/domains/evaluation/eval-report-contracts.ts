@@ -69,10 +69,20 @@ export const EvalRegressionThresholdsSchema = z.strictObject({
 export const EvalFindingMatchReportSchema = z.strictObject({
   expectedIndex: z.int().min(0),
   findingId: z.string().min(1),
-  semanticScore: z.number().min(0).max(1),
-  semanticReason: z.string().min(1).max(1000).optional(),
+  // Report-safe rationale from the semantic judge that accepted the match.
+  // There is no numeric similarity score: identity of defect is a judgment.
+  semanticReason: z.string().min(1).max(1000),
   lineOverlaps: z.boolean(),
   severityMatches: z.boolean()
+})
+
+// An expected/finding pair the judge could not decide. It is excluded from the
+// recall and precision denominators instead of being recorded as "no match".
+export const EvalInconclusiveMatchReportSchema = z.strictObject({
+  expectedIndex: z.int().min(0),
+  findingId: z.string().min(1),
+  code: z.string().min(1),
+  message: z.string().min(1).max(500).optional()
 })
 
 export const EvalFalsePositiveFindingReportSchema = z.strictObject({
@@ -123,6 +133,11 @@ export const EvalCaseReportSchema = z.strictObject({
   expectedFindings: z.array(EvalExpectedFindingReportSchema),
   matchedFindings: z.array(EvalFindingMatchReportSchema),
   unmatchedExpectedIndexes: z.array(z.int().min(0)),
+  inconclusiveExpectedIndexes: z.array(z.int().min(0)).default([]),
+  inconclusiveFindingIds: z.array(z.string().min(1)).default([]),
+  inconclusiveMatches: z
+    .array(EvalInconclusiveMatchReportSchema)
+    .default([]),
   duplicateFindingIds: z.array(z.string().min(1)).default([]),
   duplicateFindings: z.array(EvalFalsePositiveFindingReportSchema).default([]),
   falsePositiveFindingIds: z.array(z.string().min(1)),
@@ -162,8 +177,12 @@ export const EvalReportSelectionSchema = z.strictObject({
   selectedCaseIds: z.array(z.string().min(1))
 })
 
+// Scoring metadata proves how reliable the run's sole semantic authority was.
+// `judgeAgreement` is omitted when no calibration pair was scored (an offline
+// run with no expected findings needs no judge).
 export const EvalReportScoringSchema = z.strictObject({
-  semanticMatcher: z.enum(['deterministic', 'semantic-judge'])
+  judgeAgreement: z.number().min(0).max(1).optional(),
+  judgeTrustworthy: z.boolean()
 })
 
 export const EvalMetricGroupSchema = z.strictObject({
@@ -179,9 +198,9 @@ export const EvalReportSchema = z.strictObject({
   generatedAt: z.iso.datetime(),
   fixtureCount: z.int().min(0),
   selection: EvalReportSelectionSchema,
-  scoring: EvalReportScoringSchema.default({
-    semanticMatcher: 'deterministic'
-  }),
+  // Required: the producer always writes scoring. Defaulting it would let a
+  // report carrying no scoring data silently claim `judgeTrustworthy: true`.
+  scoring: EvalReportScoringSchema,
   caseResults: z.array(EvalCaseReportSchema),
   metrics: EvalMetricsSchema,
   metricGroups: z.array(EvalMetricGroupSchema),

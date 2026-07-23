@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'vitest'
 import type {
   AdmittedFinding,
-  EvidenceRecord,
   FindingProvenance
 } from '../../shared/contracts/index.js'
 import type { EvalCase } from './eval-fixture.schema.js'
 import {
   matchEvalFindings,
-  matchEvalFindingsWithSemanticJudge
+  type EvalSemanticJudge,
+  type EvalSemanticJudgeInput
 } from './eval-matcher.js'
 
 const configHash =
@@ -19,14 +19,6 @@ const provenance: FindingProvenance = {
   skillHashes: [],
   signalVersions: {},
   configHash
-}
-
-const evidence: EvidenceRecord = {
-  id: 'ev_match1',
-  kind: 'diff',
-  summary: 'Branch returns an incorrect value.',
-  source: 'scripted-fixture',
-  redactionApplied: true
 }
 
 const evalCase: EvalCase = {
@@ -89,83 +81,192 @@ const admittedFinding = (
   ...overrides
 })
 
+type RecordingJudge = {
+  readonly judge: EvalSemanticJudge
+  readonly calls: EvalSemanticJudgeInput[]
+}
+
+const recordingJudge = (
+  decide: (input: EvalSemanticJudgeInput) => boolean = () => true
+): RecordingJudge => {
+  const calls: EvalSemanticJudgeInput[] = []
+
+  return {
+    calls,
+    judge: async (input) => {
+      calls.push(input)
+
+      return {
+        match: decide(input),
+        reason: 'Both summaries describe the same defect.'
+      }
+    }
+  }
+}
+
+const throwingJudge: EvalSemanticJudge = async () => {
+  throw new Error('judge provider exploded')
+}
+
 describe('eval matcher', () => {
-  test('matches findings deterministically by path, nearby line, and semantic tokens', () => {
-    const result = matchEvalFindings({
+  test('accepts a judged match and records the judge rationale', async () => {
+    const judge = recordingJudge()
+    const result = await matchEvalFindings({
       evalCase,
-      admittedFindings: [
-        admittedFinding({
-          id: 'find_noise1',
-          title: 'Unrelated style note',
-          description: 'This comment is outside the expected finding.',
-          location: {
-            path: 'src/app.ts',
-            startLine: 31,
-            side: 'new'
-          }
-        }),
-        admittedFinding()
-      ]
+      admittedFindings: [admittedFinding()],
+      judge: judge.judge
     })
 
     expect(result.matches).toEqual([
       {
         expectedIndex: 0,
         findingId: 'find_match1',
-        semanticScore: 0.833333,
+        semanticReason: 'Both summaries describe the same defect.',
         lineOverlaps: true,
         severityMatches: true
       }
     ])
     expect(result.unmatchedExpectedIndexes).toEqual([])
-    expect(result.falsePositiveFindingIds).toEqual(['find_noise1'])
-    expect(result.noFindingZoneFalsePositiveIds).toEqual(['find_noise1'])
+    expect(result.falsePositiveFindingIds).toEqual([])
+    // The judge never sees paths, lines, source, or diffs.
+    expect(judge.calls).toEqual([
+      {
+        expectedSummary: 'incorrect return value from changed branch',
+        findingTitle: 'Incorrect return value',
+        findingDescription:
+          'The changed branch can return an incorrect value for callers.'
+      }
+    ])
   })
 
-  test('matches benchmark semantic-only Error log-level findings deterministically', () => {
-    const result = matchEvalFindings({
-      evalCase: {
-        ...evalCase,
-        expectedFindings: [
-          {
-            category: 'bug',
-            severity: 'low',
-            semanticSummary:
-              'The code uses Error log level for what appears to be debugging information. This will pollute error logs in production. Consider using Debug or Info level instead.',
-            matchMode: 'semantic-only'
-          }
-        ],
-        expectedNoFindingZones: []
-      },
+  test('records a rejected judge decision as a miss and a false positive', async () => {
+    const judge = recordingJudge(() => false)
+    const result = await matchEvalFindings({
+      evalCase,
+      admittedFindings: [admittedFinding()],
+      judge: judge.judge
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.unmatchedExpectedIndexes).toEqual([0])
+    expect(result.falsePositiveFindingIds).toEqual(['find_match1'])
+    expect(result.inconclusiveMatches).toEqual([])
+    expect(judge.calls).toHaveLength(1)
+  })
+
+  test('rejects a wrong path before calling the judge', async () => {
+    const judge = recordingJudge()
+    const result = await matchEvalFindings({
+      evalCase,
       admittedFindings: [
         admittedFinding({
-          id: 'find_go_log_level',
-          severity: 'low',
-          title: 'Error-level log records debug state after nil error check',
-          description:
-            'The code uses Error log level for debugging information after err was already checked for nil. This can pollute error logs in production; use Debug or Info unless the log represents an actual error.',
+          id: 'find_wrong_path1',
           location: {
-            path: 'pkg/services/annotations/annotationsimpl/xorm_store.go',
-            startLine: 534,
+            path: 'src/other.ts',
+            startLine: 11,
             side: 'new'
           }
         })
-      ]
+      ],
+      judge: judge.judge
+    })
+
+    expect(judge.calls).toEqual([])
+    expect(result.matches).toEqual([])
+    expect(result.unmatchedExpectedIndexes).toEqual([0])
+    expect(result.falsePositiveFindingIds).toEqual(['find_wrong_path1'])
+  })
+
+  test('rejects out-of-tolerance lines before calling the judge', async () => {
+    const judge = recordingJudge()
+    const result = await matchEvalFindings({
+      evalCase,
+      admittedFindings: [
+        admittedFinding({
+          id: 'find_line_mismatch1',
+          location: {
+            path: 'src/app.ts',
+            startLine: 50,
+            side: 'new'
+          }
+        })
+      ],
+      judge: judge.judge
+    })
+
+    expect(judge.calls).toEqual([])
+    expect(result.matches).toEqual([])
+    expect(result.unmatchedExpectedIndexes).toEqual([0])
+    expect(result.falsePositiveFindingIds).toEqual(['find_line_mismatch1'])
+  })
+
+  test('keeps a finding within the three-line tolerance eligible for judging', async () => {
+    const judge = recordingJudge()
+    const result = await matchEvalFindings({
+      evalCase,
+      admittedFindings: [
+        admittedFinding({
+          id: 'find_tolerated_line1',
+          location: {
+            path: 'src/app.ts',
+            startLine: 15,
+            side: 'new'
+          }
+        })
+      ],
+      judge: judge.judge
+    })
+
+    expect(judge.calls).toHaveLength(1)
+    expect(result.matches.map((match) => match.findingId)).toEqual([
+      'find_tolerated_line1'
+    ])
+  })
+
+  test('matches semantic-only expectations regardless of path and line', async () => {
+    const semanticOnlyCase = {
+      ...evalCase,
+      sourceProfile: 'benchmark-semantic',
+      expectedFindings: [
+        {
+          category: 'bug',
+          severity: 'high',
+          semanticSummary: 'descriptor resource is leaked after the read exits',
+          matchMode: 'semantic-only'
+        }
+      ],
+      expectedNoFindingZones: []
+    } as unknown as EvalCase
+    const result = await matchEvalFindings({
+      evalCase: semanticOnlyCase,
+      admittedFindings: [
+        admittedFinding({
+          id: 'find_semantic1',
+          title: 'File handle stays open',
+          description: 'The code never closes the opened stream after reading.',
+          location: {
+            path: 'src/other.ts',
+            startLine: 99,
+            side: 'new'
+          }
+        })
+      ],
+      judge: recordingJudge().judge
     })
 
     expect(result.matches).toEqual([
-      expect.objectContaining({
+      {
         expectedIndex: 0,
-        findingId: 'find_go_log_level',
+        findingId: 'find_semantic1',
+        semanticReason: 'Both summaries describe the same defect.',
+        lineOverlaps: false,
         severityMatches: true
-      })
+      }
     ])
-    expect(result.unmatchedExpectedIndexes).toEqual([])
-    expect(result.falsePositiveFindingIds).toEqual([])
   })
 
-  test('classifies extra same-location findings as duplicates instead of false positives', () => {
-    const result = matchEvalFindings({
+  test('classifies extra same-location findings as duplicates instead of false positives', async () => {
+    const result = await matchEvalFindings({
       evalCase,
       admittedFindings: [
         admittedFinding(),
@@ -186,253 +287,177 @@ describe('eval matcher', () => {
             }
           ]
         })
-      ]
+      ],
+      judge: recordingJudge().judge
     })
 
-    expect(result.matches).toEqual([
-      {
-        expectedIndex: 0,
-        findingId: 'find_match1',
-        semanticScore: 0.833333,
-        lineOverlaps: true,
-        severityMatches: true
-      }
+    expect(result.matches.map((match) => match.findingId)).toEqual([
+      'find_match1'
     ])
-    expect(result.unmatchedExpectedIndexes).toEqual([])
     expect(result.duplicateFindingIds).toEqual(['find_duplicate1'])
     expect(result.falsePositiveFindingIds).toEqual([])
     expect(result.noFindingZoneFalsePositiveIds).toEqual([])
   })
 
-  test('keeps line mismatches unmatched and reports the admitted finding as noise', () => {
-    const result = matchEvalFindings({
+  test('reports unmatched findings inside a no-finding zone', async () => {
+    const result = await matchEvalFindings({
       evalCase,
       admittedFindings: [
         admittedFinding({
-          id: 'find_line_mismatch1',
+          id: 'find_noise1',
+          title: 'Unrelated style note',
+          description: 'This comment is outside the expected finding.',
           location: {
             path: 'src/app.ts',
-            startLine: 50,
+            startLine: 31,
             side: 'new'
           }
-        })
-      ]
+        }),
+        admittedFinding()
+      ],
+      judge: recordingJudge().judge
     })
 
-    expect(result.matches).toHaveLength(0)
-    expect(result.unmatchedExpectedIndexes).toEqual([0])
-    expect(result.falsePositiveFindingIds).toEqual(['find_line_mismatch1'])
-  })
-
-  test('does not match findings on semantic text alone', () => {
-    const result = matchEvalFindings({
-      evalCase,
-      admittedFindings: [
-        admittedFinding({
-          id: 'find_wrong_path1',
-          location: {
-            path: 'src/other.ts',
-            startLine: 11,
-            side: 'new'
-          }
-        })
-      ]
-    })
-
-    expect(result.matches).toHaveLength(0)
-    expect(result.unmatchedExpectedIndexes).toEqual([0])
-    expect(result.falsePositiveFindingIds).toEqual(['find_wrong_path1'])
-  })
-
-  test('matches benchmark semantic-only expectations without path or line metadata', () => {
-    const result = matchEvalFindings({
-      evalCase: {
-        ...evalCase,
-        sourceProfile: 'benchmark-semantic',
-        expectedFindings: [
-          {
-            category: 'bug',
-            severity: 'high',
-            semanticSummary: 'incorrect return value from changed branch',
-            matchMode: 'semantic-only'
-          }
-        ]
-      } as unknown as EvalCase,
-      admittedFindings: [
-        admittedFinding({
-          id: 'find_semantic1',
-          location: {
-            path: 'src/other.ts',
-            startLine: 99,
-            side: 'new'
-          }
-        })
-      ]
-    })
-
-    expect(result.matches).toEqual([
-      {
-        expectedIndex: 0,
-        findingId: 'find_semantic1',
-        semanticScore: 0.833333,
-        lineOverlaps: false,
-        severityMatches: true
-      }
+    expect(result.matches.map((match) => match.findingId)).toEqual([
+      'find_match1'
     ])
-    expect(result.unmatchedExpectedIndexes).toEqual([])
-    expect(result.falsePositiveFindingIds).toEqual([])
+    expect(result.falsePositiveFindingIds).toEqual(['find_noise1'])
+    expect(result.noFindingZoneFalsePositiveIds).toEqual(['find_noise1'])
   })
 
-  test('uses an explicit semantic judge for benchmark paraphrases that deterministic tokens miss', async () => {
-    const semanticOnlyCase = {
+  test('assigns pairs deterministically by expected index then finding index', async () => {
+    const twoExpectedCase = {
       ...evalCase,
-      sourceProfile: 'benchmark-semantic',
       expectedFindings: [
         {
           category: 'bug',
           severity: 'high',
-          semanticSummary:
-            'descriptor resource is leaked after the read path exits',
+          semanticSummary: 'first expected defect',
           matchMode: 'semantic-only'
-        }
-      ]
-    } as unknown as EvalCase
-    const finding = admittedFinding({
-      id: 'find_paraphrase1',
-      title: 'File handle stays open',
-      description: 'The code never closes the opened stream after reading.',
-      location: {
-        path: 'src/other.ts',
-        startLine: 99,
-        side: 'new'
-      }
-    })
-
-    expect(
-      matchEvalFindings({
-        evalCase: semanticOnlyCase,
-        admittedFindings: [finding]
-      }).matches
-    ).toEqual([])
-
-    const judged = await matchEvalFindingsWithSemanticJudge({
-      evalCase: semanticOnlyCase,
-      admittedFindings: [finding],
-      judge: async () => ({
-        match: true,
-        reason: 'Both summaries describe a resource left open after reading.'
-      })
-    })
-
-    expect(judged.matches).toEqual([
-      {
-        expectedIndex: 0,
-        findingId: 'find_paraphrase1',
-        semanticScore: 1,
-        semanticReason: 'Both summaries describe a resource left open after reading.',
-        lineOverlaps: false,
-        severityMatches: true
-      }
-    ])
-    expect(judged.unmatchedExpectedIndexes).toEqual([])
-    expect(judged.falsePositiveFindingIds).toEqual([])
-  })
-
-  test('uses the judge for unmatched path-line paraphrases after path and line pass', async () => {
-    const lineCase = {
-      ...evalCase,
-      expectedFindings: [
-        {
-          category: 'bug',
-          severity: 'high',
-          path: 'src/app.ts',
-          lineRange: [10, 10],
-          semanticSummary: 'descriptor resource leaked after read path exits',
-          matchMode: 'path-line'
         },
         {
           category: 'bug',
           severity: 'high',
-          path: 'src/app.ts',
-          lineRange: [500, 500],
-          semanticSummary: 'unrelated paraphrase the judge would accept',
-          matchMode: 'path-line'
-        }
-      ]
-    } as unknown as EvalCase
-    const finding = admittedFinding({
-      id: 'find_line1',
-      title: 'Null check missing',
-      description: 'order may be null',
-      location: { path: 'src/app.ts', startLine: 10, side: 'new' }
-    })
-    let judgeCalls = 0
-
-    const judged = await matchEvalFindingsWithSemanticJudge({
-      evalCase: lineCase,
-      admittedFindings: [finding],
-      judge: async ({ expected }) => {
-        judgeCalls += 1
-        return expected.lineRange?.[0] === 10
-          ? { match: true, reason: 'The line-anchored paraphrase is equivalent.' }
-          : { match: true, reason: 'Wrong-line expectations are filtered earlier.' }
-      }
-    })
-
-    // expected[0] is path/line-compatible but semantically paraphrased, so the
-    // judge may rescue it. expected[1] fails the line gate before judging.
-    expect(judgeCalls).toBe(1)
-    expect(judged.matches.map((match) => match.expectedIndex)).toEqual([0])
-    expect(judged.unmatchedExpectedIndexes).toEqual([1])
-    expect(judged.matches[0]).toEqual(
-      expect.objectContaining({
-        semanticReason: 'The line-anchored paraphrase is equivalent.',
-        lineOverlaps: true
-      })
-    )
-  })
-
-  test('records a judge provider error and leaves the pair unmatched', async () => {
-    const semanticOnlyCase = {
-      ...evalCase,
-      expectedFindings: [
-        {
-          category: 'bug',
-          severity: 'high',
-          semanticSummary:
-            'descriptor resource is leaked after the read path exits',
+          semanticSummary: 'second expected defect',
           matchMode: 'semantic-only'
         }
-      ]
+      ],
+      expectedNoFindingZones: []
     } as unknown as EvalCase
-    const finding = admittedFinding({
-      id: 'find_paraphrase1',
-      title: 'File handle stays open',
-      description: 'The code never closes the opened stream after reading.',
-      location: {
-        path: 'src/other.ts',
-        startLine: 99,
-        side: 'new'
-      }
+    const admittedFindings = [
+      admittedFinding({ id: 'find_a' }),
+      admittedFinding({ id: 'find_b' })
+    ]
+    // An indiscriminate judge accepts every pair, so only the deterministic
+    // ordering decides the assignment.
+    const first = await matchEvalFindings({
+      evalCase: twoExpectedCase,
+      admittedFindings,
+      judge: recordingJudge().judge
+    })
+    const second = await matchEvalFindings({
+      evalCase: twoExpectedCase,
+      admittedFindings,
+      judge: recordingJudge().judge
     })
 
-    const judged = await matchEvalFindingsWithSemanticJudge({
-      evalCase: semanticOnlyCase,
-      admittedFindings: [finding],
-      judge: async () => {
-        throw new Error('judge provider exploded')
-      }
+    expect(first.matches.map((match) => [match.expectedIndex, match.findingId])).toEqual([
+      [0, 'find_a'],
+      [1, 'find_b']
+    ])
+    expect(second.matches).toEqual(first.matches)
+  })
+
+  test('marks a failed judge call inconclusive instead of a miss or false positive', async () => {
+    const result = await matchEvalFindings({
+      evalCase,
+      admittedFindings: [admittedFinding()],
+      judge: throwingJudge
     })
 
-    // The whole report does not reject; the pair is simply unmatched.
-    expect(judged.matches).toEqual([])
-    expect(judged.unmatchedExpectedIndexes).toEqual([0])
-    expect(judged.judgeProviderIssues).toEqual([
+    expect(result.matches).toEqual([])
+    // Neither a missed expected finding nor a false positive is fabricated.
+    expect(result.unmatchedExpectedIndexes).toEqual([])
+    expect(result.falsePositiveFindingIds).toEqual([])
+    expect(result.duplicateFindingIds).toEqual([])
+    expect(result.noFindingZoneFalsePositiveIds).toEqual([])
+    expect(result.inconclusiveExpectedIndexes).toEqual([0])
+    expect(result.inconclusiveFindingIds).toEqual(['find_match1'])
+    expect(result.inconclusiveMatches).toEqual([
+      {
+        expectedIndex: 0,
+        findingId: 'find_match1',
+        code: 'provider_error',
+        message: expect.any(String)
+      }
+    ])
+    expect(result.judgeProviderIssues).toEqual([
       expect.objectContaining({
         code: 'provider_error',
         stage: 'eval_semantic_judge',
         recovered: false
       })
     ])
+  })
+
+  test('keeps a decided expectation out of the inconclusive set', async () => {
+    let call = 0
+    const result = await matchEvalFindings({
+      evalCase,
+      admittedFindings: [
+        admittedFinding({ id: 'find_first' }),
+        admittedFinding({ id: 'find_second' })
+      ],
+      judge: async () => {
+        call += 1
+        if (call === 1) {
+          throw new Error('judge provider exploded')
+        }
+
+        return { match: true, reason: 'Same defect, different wording.' }
+      }
+    })
+
+    expect(result.matches.map((match) => match.findingId)).toEqual([
+      'find_second'
+    ])
+    // Expectation 0 was decided by the second pair, so it is not inconclusive.
+    expect(result.inconclusiveExpectedIndexes).toEqual([])
+    // The first finding stayed undecided and must not be a false positive.
+    expect(result.inconclusiveFindingIds).toEqual(['find_first'])
+    expect(result.falsePositiveFindingIds).toEqual([])
+  })
+
+  test('fails loudly when a case with expected findings has no judge', async () => {
+    await expect(
+      matchEvalFindings({
+        evalCase,
+        admittedFindings: [admittedFinding()]
+      })
+    ).rejects.toMatchObject({
+      code: 'eval_semantic_judge_missing',
+      category: 'config',
+      exitCode: 2
+    })
+  })
+
+  test('scores a case with no expected findings offline', async () => {
+    const negativeCase = {
+      ...evalCase,
+      expectedFindings: []
+    } as unknown as EvalCase
+    const result = await matchEvalFindings({
+      evalCase: negativeCase,
+      admittedFindings: [
+        admittedFinding({
+          id: 'find_noise1',
+          location: { path: 'src/app.ts', startLine: 31, side: 'new' }
+        })
+      ]
+    })
+
+    expect(result.matches).toEqual([])
+    expect(result.falsePositiveFindingIds).toEqual(['find_noise1'])
+    expect(result.noFindingZoneFalsePositiveIds).toEqual(['find_noise1'])
   })
 })

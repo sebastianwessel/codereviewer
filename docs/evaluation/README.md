@@ -94,7 +94,6 @@ noise but are not counted as false positives.
 | Metric | Description |
 | --- | --- |
 | `recallByTier` | Recall per intent tier: `runtime-critical`, `security`, `logic`, `nit`. |
-| `precisionByTier` | Precision mirrored per tier (same computation as `recallByTier`; admitted findings carry no expected-tier label so precise per-tier precision is not derivable). |
 | `productRecall` | Headline recall over `runtime-critical`, `security`, and `logic` tiers, excluding `nit`. This is the primary accuracy target. |
 | `nitRecall` | Recall over `nit`-tier findings. Reported for visibility but not gated. |
 | `duplicateFindingCount` | Total duplicate findings across all cases. |
@@ -102,6 +101,9 @@ noise but are not counted as false positives.
 | `cachedInputTokens` | Aggregate cached (prompt-cache read) input token total; a subset of `inputTokens`. |
 | `outputTokens` | Aggregate output token total. |
 | `costUnavailableCount` | Cases where cost could not be computed. |
+| `judgeAgreement` | Fraction of the committed calibration pairs the semantic judge decided as a human labeled them. Omitted when no calibration pair was scored. |
+| `judgeAgreementPairCount` | Denominator of `judgeAgreement`: calibration pairs actually scored. |
+| `inconclusiveMatchCount` | Expected/finding pairs the judge could not decide. Excluded from the recall and precision denominators. |
 
 ### Regression gate thresholds
 
@@ -160,7 +162,6 @@ derived deterministically from `category` and `severity`:
 | `productRecall` | Headline recall over `runtime-critical`, `security`, and `logic` tiers. **Primary accuracy target.** |
 | `nitRecall` | Recall over `nit`-tier findings. Reported for visibility; not gated by default. |
 | `recallByTier` | Recall per tier: `runtime-critical`, `security`, `logic`, `nit`. |
-| `precisionByTier` | Precision mirrored per tier (admitted findings carry no expected-tier label). |
 
 > **Note:** `productRecall` excludes nits because the product's low-noise scope
 > deliberately suppresses comments that belong in a linter or style guide.
@@ -221,9 +222,10 @@ reported separately from model findings so model recall remains interpretable.
 npm run eval:benchmark
 ```
 
-`eval:benchmark` forces: PR mode, thorough review depth, semantic eval judging,
-and serial provider calls (`--max-concurrent-tasks 1`) so large captured slices
-do not fail under parallel provider-call timeout pressure.
+`eval:benchmark` forces: PR mode, thorough review depth, and serial provider
+calls (`--max-concurrent-tasks 1`) so large captured slices do not fail under
+parallel provider-call timeout pressure. The configured provider also supplies
+the semantic judge; there is no separate judging flag.
 
 For ad hoc eval runs, pass the same flags explicitly when you want this posture
 without changing `.codereviewer/config.json`.
@@ -262,13 +264,12 @@ subset while tuning prompts or provider settings. These values are persisted in
 | `--max-concurrent-tasks <1-32>` | Override review task/provider-call concurrency for this eval run without changing repository config. |
 | `--review-mode <local\|ci\|pr\|full>` | Force the review mode for this run without editing config. |
 | `--review-depth <fast\|balanced\|thorough>` | Force the review depth for this run without editing config. |
-| `--semantic-judge` | Use provider-backed semantic matching (for explicit benchmark scoring only; the default matcher is deterministic and offline). |
 | `--debug` | Emit no-content stage logs. |
 | `--log-file <path>` | Write newline-delimited JSON logs to a repository-relative file. |
 
 The generated report records the fixture source, slice root, filters, selected
-case IDs, scoring mode, and grouped metrics so reports can be compared only
-after confirming they used the same case set and semantic matcher.
+case IDs, judge reliability, and grouped metrics so reports can be compared only
+after confirming they used the same case set and a comparably reliable judge.
 
 `--max-concurrent-tasks` is useful for focused provider-backed benchmark runs
 where serial execution avoids transient provider timeout noise. The
@@ -288,8 +289,9 @@ Comparison output includes:
 
 - A selection section before metric deltas. If selected case IDs differ, a
   warning lists base-only and head-only cases.
-- A warning when semantic matcher modes differ (runs used different scoring
-  modes).
+- A warning when either report marks its judge untrustworthy, or when the two
+  reports' judge agreement differs materially (deltas may reflect judge variance
+  rather than review quality).
 - `Context Ledger Kind Deltas` when either report includes ledger entries.
 - Metric deltas for input/output token totals, provider errors, provider issues,
   and refutation quality (refutation false-positive/false-negative counts).
@@ -394,26 +396,99 @@ npm run eval:hydrate
 
 ---
 
-## Semantic judge (`--semantic-judge`)
+## Expected-finding matching
 
-The default matching mode is `deterministic` (offline token matching). Pass
-`--semantic-judge` for provider-backed semantic matching:
+Matching runs in exactly two stages.
 
-- The judge receives only the expected semantic summary and admitted finding
-  title/description. Source snippets, unified diffs, prompts, secrets, tool
-  output, and repository files are not sent.
-- Judge output is a boolean match decision plus a short rationale.
-- Accepted judge-backed matches receive a deterministic full semantic score
-  instead of a provider-generated confidence.
+**1. Deterministic gates.** `matchMode` derives from the expectation's `path` and
+`lineRange`. For `path-line` and `path-semantic` the admitted finding's path must
+equal the expected path; for `path-line` the line ranges must overlap within a
+tolerance of three lines. These checks are exact and always run before any model
+call, so a judge can never move a finding to another file or line.
+
+**2. Semantic identity.** Whether two natural-language defect descriptions denote
+the same defect is decided only by the semantic judge. There is no lexical or
+token-similarity scoring and no similarity threshold: vocabulary overlap measures
+shared topic, not identity of defect, and ranks true matches below false ones.
+
+A match therefore carries a boolean decision plus the judge's report-safe reason.
+There is no numeric similarity score.
+
+Pair assignment is deterministic: expected findings ascending, then admitted
+findings ascending; the first judge-accepted admitted finding claims the
+expectation, and one admitted finding matches at most one expectation.
+
+### The judge
+
+- The judge is constructed whenever a provider is configured. It is not a mode
+  flag and cannot be turned off for a case that declares expected findings.
+- It receives only the expected semantic summary and the admitted finding's title
+  and description. Source snippets, unified diffs, prompts, secrets, tool output,
+  repository files, paths, and line numbers are structurally excluded.
+- Output is a boolean match decision plus a short rationale, never a numeric
+  confidence.
+- Calls use deterministic sampling where the provider allows it (temperature 0)
+  and are retried under the configured provider retry policy.
 - The saved JSON report stores the rationale as `semanticReason` on the matched
   finding; the Markdown summary renders a compact `Semantic Judge Matches` table
   for audit.
-- Runs started with `--semantic-judge` are marked `semantic-judge` in
-  `scoring.semanticMatcher` so benchmark metrics are not silently compared with
-  deterministic runs.
 
-`--semantic-judge` requires provider configuration and credentials from the
-process environment, `.env`, or config file.
+### Provider requirement
+
+Semantic matching runs only for cases that declare expected findings. A case with
+no expected findings needs no judge and scores offline — the default committed
+fixture set is fully negative and runs without a provider. Scoring a case that
+*does* declare expected findings without an available judge fails the run with a
+configuration error (exit code `2`); the engine never falls back to a heuristic.
+
+### Inconclusive pairs
+
+When a judge call cannot be completed (after the provider retries), that
+expected/finding pair is **inconclusive**. An inconclusive pair is excluded from
+the recall and precision denominators — it is never recorded as "no match",
+because a provider failure would otherwise fabricate both a missed expected
+finding and a false positive.
+
+Inconclusive pairs surface as:
+
+- `metrics.inconclusiveMatchCount`;
+- the case warning `eval-inconclusive-match:<count>`;
+- `caseResults[].inconclusiveMatches`, `inconclusiveExpectedIndexes`, and
+  `inconclusiveFindingIds`;
+- an `Inconclusive judge decisions` block in the Markdown summary;
+- a provider issue on the case, so the judge failure stays visible.
+
+### Judge calibration
+
+The judge is the sole semantic authority, so its reliability is measured, not
+assumed. Each run scores the judge against a committed set of human-labeled
+`(expected summary, finding title, finding description, expected match)` pairs
+covering clear matches, clear non-matches, and hard near-misses — including pairs
+whose vocabulary overlap points the wrong way, such as
+`"SQL injection in the user query builder"` vs
+`"User query builder missing null check"` (no match).
+
+- `scoring.judgeAgreement` / `metrics.judgeAgreement`: the fraction of scored
+  calibration pairs the judge decided as the human label says. Omitted when no
+  pair was scored.
+- `metrics.judgeAgreementPairCount`: the denominator. Calibration pairs whose
+  judge call failed are excluded from it, exactly like inconclusive matches.
+- `scoring.judgeTrustworthy`: `false` when agreement is below
+  `evaluation.minJudgeAgreement` (default `0.9`), or when no calibration pair
+  could be scored at all. A run with no judge at all (negative-only fixtures)
+  reports `true`, because nothing semantic was judged.
+
+`judgeTrustworthy` marks the run's quality metrics as untrustworthy; it does not
+by itself fail the regression gate. `eval compare` renders a warning before the
+metric deltas when either report is untrustworthy or when the two agreements
+differ materially.
+
+### Baseline discontinuity
+
+Removing lexical scoring changes every quality metric. Eval reports produced
+before this change are not comparable to reports produced after it, and any
+baseline recorded with the lexical matcher is void. Record a new baseline
+deliberately.
 
 ---
 

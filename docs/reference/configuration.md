@@ -336,6 +336,7 @@ See [Artifacts Reference](artifacts.md) for a description of each output file.
 | Key | Values / Type | Description |
 | --- | --- | --- |
 | `evaluation.enabled` | boolean | Enable the evaluation harness. |
+| `evaluation.minJudgeAgreement` | number 0..1 (default `0.9`) | Minimum semantic-judge agreement against the committed calibration set. Below it, a run reports `scoring.judgeTrustworthy: false`, marking its quality metrics untrustworthy. It does not by itself fail the regression gate. |
 
 > **Note:** Evaluation is a from-source dev/benchmark workflow. Regression gate
 > thresholds are set via `eval run` CLI flags (not this config schema). See

@@ -1,6 +1,8 @@
 export {
+  EVAL_INCONCLUSIVE_MATCH_WARNING_PREFIX,
   EVAL_PROVIDER_RETRY_WARNING_PREFIX,
   PROVIDER_ERROR_WARNING_PREFIX,
+  inconclusiveMatchWarnings,
   isProviderIssueWarning
 } from './eval-warnings.js'
 export {
@@ -29,9 +31,11 @@ export {
   type HydrateBenchmarkPackResult
 } from './benchmark-hydration.js'
 export {
+  EVAL_SEMANTIC_JUDGE_STAGE,
   matchEvalFindings,
-  matchEvalFindingsWithSemanticJudge,
+  missingSemanticJudgeError,
   type EvalFindingMatch,
+  type EvalInconclusiveMatch,
   type EvalMatcherResult,
   type EvalSemanticJudge,
   type EvalSemanticJudgeInput,
@@ -41,16 +45,22 @@ export {
   createModelSemanticJudge
 } from './eval-semantic-judge.js'
 export {
+  DEFAULT_MINIMUM_JUDGE_AGREEMENT,
+  EvalJudgeCalibrationPairSchema,
+  evalJudgeCalibrationSet,
+  scoreJudgeCalibration,
+  type EvalJudgeCalibrationPair,
+  type EvalJudgeCalibrationResult
+} from './eval-judge-calibration.js'
+export {
   calculateEvalMetrics,
   EvalMetricsSchema,
   severityWeight,
+  type EvalJudgeReliability,
   type EvalMetricCaseResult,
   type EvalMetrics
 } from './metrics.js'
-export {
-  runEvaluation,
-  runEvaluationWithSemanticJudge
-} from './eval-runner.js'
+export { runEvaluation } from './eval-runner.js'
 export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,

@@ -14,7 +14,6 @@ import {
   renderEvalRecallReport,
   renderEvalSummary,
   runEvaluation,
-  runEvaluationWithSemanticJudge,
 } from '../domains/evaluation/index.js'
 import { runDriftCheck } from '../domains/drift/index.js'
 import {
@@ -583,7 +582,6 @@ const runEval = async (
         max: 32
       }
     )
-    const semanticJudgeEnabled = evalArgs.includes('--semantic-judge')
     const cliConfig = {
       ...(logLevelOverride.level === undefined
         ? {}
@@ -646,18 +644,14 @@ const runEval = async (
       }))
     )
 
-    if (semanticJudgeEnabled && loadedConfig.config.provider === undefined) {
-      return usageError('eval run --semantic-judge requires provider configuration')
-    }
-
-    logger.info('Eval run started.', {
-      fixture_source: sliceRoot === undefined ? 'default' : 'slice-root',
-      selected_case_count: evalCases.length,
-      semantic_judge_enabled: semanticJudgeEnabled
-    })
+    // The semantic judge is the only matcher. It is constructed whenever a
+    // provider is available; scoring a case with expected findings without it
+    // fails loudly inside the eval runner instead of falling back to a
+    // heuristic.
     const semanticJudge =
-      semanticJudgeEnabled && loadedConfig.config.provider !== undefined
-        ? createModelSemanticJudge({
+      loadedConfig.config.provider === undefined
+        ? undefined
+        : createModelSemanticJudge({
             modelAlias: (
               await resolveProviderModelAlias({
                 provider: loadedConfig.config.provider,
@@ -669,7 +663,12 @@ const runEval = async (
               })
             ).modelAlias
           })
-        : undefined
+
+    logger.info('Eval run started.', {
+      fixture_source: sliceRoot === undefined ? 'default' : 'slice-root',
+      selected_case_count: evalCases.length,
+      semantic_judge_available: semanticJudge !== undefined
+    })
 
     const evalArtifactRoot = path.posix.join('.codereviewer', 'eval')
     const evalDirectory = await resolveArtifactWritePath(options.cwd, evalArtifactRoot)
@@ -694,6 +693,8 @@ const runEval = async (
     const evaluationInput = {
       cases: evalCases,
       outputs,
+      ...(semanticJudge === undefined ? {} : { judge: semanticJudge }),
+      judgeAgreementMinimum: loadedConfig.config.evaluation.minJudgeAgreement,
       selection: {
         fixtureSource:
           sliceRoot === undefined
@@ -711,13 +712,7 @@ const runEval = async (
       },
       generatedAt: '2026-06-20T00:00:02.000Z'
     }
-    const result =
-      semanticJudge === undefined
-        ? runEvaluation(evaluationInput)
-        : await runEvaluationWithSemanticJudge({
-            ...evaluationInput,
-            judge: semanticJudge
-          })
+    const result = await runEvaluation(evaluationInput)
 
     const evalRunArchiveRoot = path.posix.join(
       evalArtifactRoot,
