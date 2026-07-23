@@ -110,7 +110,9 @@ every major block. Unknown keys are rejected — use only documented keys (see t
 
   // ── Report formats ────────────────────────────────────────────────────────
   "reporting": {
-    "formats": ["json", "markdown", "sarif", "github-review-comments"]
+    "formats": ["json", "markdown", "sarif"],
+    // Platform-neutral inline review-comment drafts (local artifacts only).
+    "reviewComments": { "enabled": true, "platform": "auto" }
   },
 
   // ── Security constraints ──────────────────────────────────────────────────

@@ -193,14 +193,17 @@ The gathered context is redacted and cannot change findings, severity, or gates.
 
 ## Report Formats In CI
 
-Add `"github-review-comments"` to `reporting.formats` to generate inline PR comment
-drafts (`github-review-comments.json`) alongside JSON, Markdown, and SARIF. The file
-contains path, line, body, severity, category, and an optional `suggestion` block for
-findings whose line range was validated during admission and overlaps a changed new-side
-diff hunk.
+Set `reporting.reviewComments.enabled` to `true` to generate inline review-comment
+drafts alongside JSON, Markdown, and SARIF. The run writes a platform-neutral
+`review-comments.json` plus a rendered `review-comments.<platform>.json`. Each neutral
+entry contains path, `targetRange`, body, severity, category, and an optional structured
+`suggestion` for findings whose line range was validated during admission and overlaps a
+changed new-side diff hunk. The platform is chosen by `reporting.reviewComments.platform`;
+with the default `auto` it is detected from the CI environment (`GITHUB_ACTIONS`,
+`GITLAB_CI`, `BITBUCKET_*`), then the git remote host, then `generic`.
 
-> **Note:** The CLI does not publish comments; upload the artifact for
-> downstream tooling.
+> **Note:** The CLI does not publish comments and makes no network call; upload the
+> artifact for downstream tooling.
 
 ---
 

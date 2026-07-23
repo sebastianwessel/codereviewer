@@ -27,7 +27,8 @@ Written to:
 | `report.json` | Full structured report. |
 | `report.md` | Human-readable report. |
 | `report.sarif` | SARIF report. |
-| `github-review-comments.json` | Local GitHub PR review-comment draft array, when enabled. |
+| `review-comments.json` | Local platform-neutral inline review-comment draft array, when `reporting.reviewComments.enabled` is true. |
+| `review-comments.<platform>.json` | The drafts rendered for the resolved platform (for example `review-comments.github.json`), when review comments are enabled. |
 | `run-summary.json` | Run metadata, including `baseRef`, `headRef`, and the `mergeBaseRef` the diff was actually taken against. |
 | `context-ledger.json` | Redacted ledger of context items considered and included source chunks. |
 | `shared-context.json` | Run snapshot with compact shared entries, exact `taskEvents`, derived `currentTasks`, evidence, internal candidates, and admission decisions. |
@@ -141,18 +142,27 @@ creating code alerts. SARIF also excludes artifact-only findings from
 diagnostic results and rule definitions; use JSON or Markdown for those audit
 diagnostics.
 
-### `github-review-comments.json`
+### `review-comments.json` and `review-comments.<platform>.json`
 
-A local artifact only — it does not publish comments. Each entry contains:
+Local artifacts only — they do not publish comments and perform no network call.
+The neutral `review-comments.json` is the source of truth; each entry contains:
 
 - Repository-relative path
-- New-side line anchor
-- Redacted body
+- New-side `targetRange` (`startLine`, `endLine`)
+- Redacted, Markdown-escaped body
+- Optional structured `suggestion` (`{ replacement }`, never a pre-rendered
+  fenced block) when a single safe fix edit maps exactly to `targetRange`
 - Source finding ID
 - Severity
 - Category
-- Optional GitHub suggestion block (when a single safe fix edit maps to the
-  same line range)
+
+`review-comments.<platform>.json` renders those drafts for the resolved platform
+(`github`, `gitlab`, `bitbucket`, or `generic`): GitHub uses a `side: RIGHT`
+` ```suggestion ` block with absolute anchors, GitLab an offset-anchored
+` ```suggestion:-x+y ` block, Bitbucket a plain fenced block (no one-click
+apply), and generic a plain fenced block. The platform is chosen by
+`reporting.reviewComments.platform`, or by detection (CI env, then git remote
+host, then `generic`) when set to `auto`.
 
 Review-comment drafts are emitted only for findings whose new-side line range
 was validated against reviewed source content during admission and, for
@@ -183,8 +193,9 @@ again from scratch.
 
 ### Cross-run notes
 
-- Markdown, SARIF, and GitHub review-comment drafts are written only when
-  enabled in `reporting.formats`.
+- Markdown and SARIF reports are written only when enabled in
+  `reporting.formats`; review-comment drafts are written only when
+  `reporting.reviewComments.enabled` is true.
 - Refuted, needs-more-evidence, or provider-error model output is visible to
   humans but is not included in quality-gate counts or review-comment drafts
   unless admitted as actionable.

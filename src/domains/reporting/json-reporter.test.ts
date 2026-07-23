@@ -67,22 +67,40 @@ describe('JSON reporter', () => {
     })
   })
 
-  test('writes GitHub review comment artifact when enabled', async () => {
+  test('writes neutral and rendered review-comment artifacts when enabled', async () => {
     const writes = new Map<string, string>()
     const artifacts = await writeReportingArtifacts({
       report: createReportFixture(),
-      formats: ['json', 'github-review-comments'],
+      formats: ['json'],
+      reviewComments: { platform: 'github' },
       writer: async (artifactPath, content) => {
         writes.set(artifactPath, content)
       }
     })
 
+    // Both review-comment files record under the `json` report format.
     expect(artifacts.map((artifact) => artifact.artifact.format)).toEqual([
       'json',
-      'github-review-comments'
+      'json',
+      'json'
     ])
-    expect(writes.has('github-review-comments.json')).toBe(true)
-    expect(JSON.parse(writes.get('github-review-comments.json') ?? '[]')).toEqual([
+    expect(artifacts.map((artifact) => artifact.artifact.path)).toEqual([
+      'report.json',
+      'review-comments.json',
+      'review-comments.github.json'
+    ])
+
+    expect(writes.has('review-comments.json')).toBe(true)
+    expect(JSON.parse(writes.get('review-comments.json') ?? '[]')).toEqual([
+      expect.objectContaining({
+        path: 'src/app.ts',
+        targetRange: { startLine: 4, endLine: 4 },
+        findingId: 'find_abc123',
+        suggestion: { replacement: 'return computedValue' }
+      })
+    ])
+
+    expect(JSON.parse(writes.get('review-comments.github.json') ?? '[]')).toEqual([
       expect.objectContaining({
         path: 'src/app.ts',
         line: 4,

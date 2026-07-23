@@ -10,11 +10,21 @@ export {
   type SarifRenderOptions
 } from './sarif-reporter.js'
 export {
-  buildGithubReviewComments,
-  GithubReviewCommentDraftSchema,
-  renderGithubReviewComments,
-  type GithubReviewCommentDraft
-} from './github-review-comments.js'
+  buildReviewCommentDrafts,
+  maxCommentBodyLength
+} from './review-comments.js'
+export {
+  detectPlatformTarget,
+  readOriginRemoteUrl,
+  remoteHostFromUrl,
+  type PlatformDetectionInput,
+  type PlatformDetectionSource,
+  type ResolvedPlatform
+} from './review-comment-platform.js'
+export {
+  renderReviewComments,
+  type RenderedReviewComment
+} from './review-comment-renderers.js'
 export { renderRunSummaryJson } from './run-summary.js'
 export {
   emptyRunIndex,

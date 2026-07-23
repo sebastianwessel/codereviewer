@@ -5,8 +5,18 @@ export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'info
 export const ReportFormatSchema = z.enum([
   'json',
   'markdown',
-  'sarif',
-  'github-review-comments'
+  'sarif'
+])
+
+// Renderer selection for platform-neutral review comments. `auto` runs platform
+// detection (CI env, then git remote host, then `generic`); the other values
+// pin a specific renderer and skip detection (spec 13).
+export const ReviewCommentPlatformSchema = z.enum([
+  'github',
+  'gitlab',
+  'bitbucket',
+  'generic',
+  'auto'
 ])
 
 export const RepositoryRelativePathSchema = z
@@ -263,6 +273,14 @@ export const SarifReportingConfigSchema = z.strictObject({
   redact: z.boolean().default(true)
 })
 
+// Platform-neutral inline review comments (spec 13). Disabled by default. When
+// enabled, the run writes a neutral `review-comments.json` plus a rendered
+// `review-comments.<platform>.json`; it performs no network publishing.
+export const ReviewCommentsConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  platform: ReviewCommentPlatformSchema.default('auto')
+})
+
 export const ReportingConfigSchema = z.strictObject({
   formats: z.array(ReportFormatSchema).default(['json', 'markdown', 'sarif']),
   sarif: SarifReportingConfigSchema.default({
@@ -270,6 +288,10 @@ export const ReportingConfigSchema = z.strictObject({
     category: 'codereviewer',
     maxResults: 5000,
     redact: true
+  }),
+  reviewComments: ReviewCommentsConfigSchema.default({
+    enabled: false,
+    platform: 'auto'
   })
 })
 
@@ -390,6 +412,10 @@ export const CodeReviewerConfigSchema = z.strictObject({
       category: 'codereviewer',
       maxResults: 5000,
       redact: true
+    },
+    reviewComments: {
+      enabled: false,
+      platform: 'auto'
     }
   }),
   evaluation: EvaluationConfigSchema.default({
@@ -437,6 +463,8 @@ export type SecurityConfig = z.infer<typeof SecurityConfigSchema>
 export type DriftCategory = z.infer<typeof DriftCategorySchema>
 export type DriftConfig = z.infer<typeof DriftConfigSchema>
 export type ReportingConfig = z.infer<typeof ReportingConfigSchema>
+export type ReviewCommentPlatform = z.infer<typeof ReviewCommentPlatformSchema>
+export type ReviewCommentsConfig = z.infer<typeof ReviewCommentsConfigSchema>
 export type EvaluationConfig = z.infer<typeof EvaluationConfigSchema>
 export type OpenTelemetryConfig = z.infer<typeof OpenTelemetryConfigSchema>
 export type LoggingConfig = z.infer<typeof LoggingConfigSchema>

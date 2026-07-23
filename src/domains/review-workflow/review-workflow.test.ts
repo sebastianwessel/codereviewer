@@ -21,7 +21,7 @@ import {
   isReviewRunFailedError,
   runReview
 } from './run/review-runner.js'
-import { renderGithubReviewComments } from '../reporting/github-review-comments.js'
+import { buildReviewCommentDrafts } from '../reporting/review-comments.js'
 import { parseGitDiffMaps } from '../repository-intake/index.js'
 
 const configHash =
@@ -2812,8 +2812,7 @@ describe('review workflow', () => {
       })
     ])
     expect(
-      JSON.parse(
-        renderGithubReviewComments({
+      buildReviewCommentDrafts({
           schemaVersion: '1.0',
           run: {
             runId: 'test-run',
@@ -2854,7 +2853,6 @@ describe('review workflow', () => {
           skippedFiles: [],
           artifacts: []
         })
-      )
     ).toEqual([])
 
     await harness.shutdown()

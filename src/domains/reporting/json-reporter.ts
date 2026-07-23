@@ -9,8 +9,10 @@ import type {
 } from '../../shared/contracts/index.js'
 import { redactText } from '../../shared/redaction/redactor.js'
 import type { JsonValue } from '../../shared/json/json-value.js'
+import type { PlatformTarget } from '../../shared/contracts/index.js'
 import { createReportArtifact, validateReviewReport } from './reporting-utils.js'
-import { renderGithubReviewComments } from './github-review-comments.js'
+import { buildReviewCommentDrafts } from './review-comments.js'
+import { renderReviewComments } from './review-comment-renderers.js'
 import { renderMarkdownReport } from './markdown-reporter.js'
 import { renderSarifReport, type SarifRenderOptions } from './sarif-reporter.js'
 
@@ -24,9 +26,16 @@ export type WrittenReportArtifact = {
   readonly content: string
 }
 
+// Resolved review-comment rendering request. Presence means the feature is
+// enabled; `platform` is already resolved (no `auto`) by the caller's detection.
+export type ReviewCommentsRenderRequest = {
+  readonly platform: PlatformTarget
+}
+
 export type WriteReportingArtifactsOptions = {
   readonly formats?: readonly ReportFormat[]
   readonly sarif?: SarifRenderOptions
+  readonly reviewComments?: ReviewCommentsRenderRequest
 }
 
 const stableStringify = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
@@ -71,6 +80,7 @@ export const writeReportingArtifacts = async (
     readonly writer: ReportArtifactWriter
     readonly formats?: readonly ReportFormat[]
     readonly sarif?: SarifRenderOptions
+    readonly reviewComments?: ReviewCommentsRenderRequest
   }
 ): Promise<readonly WrittenReportArtifact[]> => {
   const report = validateReviewReport(input.report)
@@ -98,15 +108,25 @@ export const writeReportingArtifacts = async (
     })
   }
 
-  if (formats.has('github-review-comments')) {
-    const githubReviewComments = renderGithubReviewComments(report)
+  if (input.reviewComments !== undefined) {
+    const drafts = buildReviewCommentDrafts(report)
+    const neutral = stableStringify(drafts)
+    // Neutral drafts are the source of truth; the JSON artifact `format` field is
+    // the closed `ReportFormat` enum, so review-comment files record as `json`.
+    nonJsonArtifacts.push({
+      artifact: createReportArtifact('json', 'review-comments.json', neutral),
+      content: neutral
+    })
+
+    const { platform } = input.reviewComments
+    const rendered = stableStringify(renderReviewComments(drafts, platform))
     nonJsonArtifacts.push({
       artifact: createReportArtifact(
-        'github-review-comments',
-        'github-review-comments.json',
-        githubReviewComments
+        'json',
+        `review-comments.${platform}.json`,
+        rendered
       ),
-      content: githubReviewComments
+      content: rendered
     })
   }
 

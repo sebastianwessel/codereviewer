@@ -51,7 +51,7 @@ Artifacts are written under:
 | `report.json` | Machine-readable review report. |
 | `report.md` | Human-readable summary with the candidate/refutation evidence chain. |
 | `report.sarif` | SARIF output for security and code-scanning tools. |
-| `github-review-comments.json` | Inline PR comment drafts (written when `github-review-comments` is in `reporting.formats`). |
+| `review-comments.json` / `review-comments.<platform>.json` | Platform-neutral inline review-comment drafts and their rendered form (written when `reporting.reviewComments.enabled` is true). |
 | `run-summary.json` | Run metadata used by automation and status checks. |
 | `context-ledger.json` | Redacted context budget and inclusion audit. |
 | `shared-context.json` | Compact shared entries, task events, current task state, and admission trace. |

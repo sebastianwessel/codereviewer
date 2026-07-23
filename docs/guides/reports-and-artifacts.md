@@ -19,7 +19,8 @@ Default artifact directory:
 | `report.json` | JSON | Automation, dashboards, regression checks. |
 | `report.md` | Markdown | Humans reading local or CI artifacts. |
 | `report.sarif` | SARIF | Code-scanning integrations. |
-| `github-review-comments.json` | JSON | Local PR review-comment drafts (when enabled). |
+| `review-comments.json` | JSON | Local platform-neutral inline review-comment drafts (when enabled). |
+| `review-comments.<platform>.json` | JSON | The drafts rendered for the resolved platform (when enabled). |
 | `run-summary.json` | JSON | Run metadata and status checks. |
 | `context-ledger.json` | JSON | Redacted context coverage and inclusion audit. |
 | `shared-context.json` | JSON | Compact shared entries, exact `taskEvents`, derived `currentTasks`, evidence references, internal candidates, and admission decisions. |
@@ -82,23 +83,31 @@ properties as redacted metadata, so provider degradation is visible without
 creating code-scanning alerts. Artifact-only findings remain in JSON and
 Markdown audit sections but are not rendered as SARIF results or rules.
 
-### `github-review-comments.json`
+### `review-comments.json` and `review-comments.<platform>.json`
 
-Rendered only when `reporting.formats` includes `"github-review-comments"`.
-Contains local PR review-comment drafts for admitted inline findings on
-new-side lines.
+Written only when `reporting.reviewComments.enabled` is true. The core writes
+the neutral `review-comments.json` (source of truth) plus
+`review-comments.<platform>.json` rendered for the resolved platform. Both are
+local artifacts; the core performs no network call and publishes nothing.
 
 Eligibility rules:
 
 - Severity must be at or above `review.inlineSeverityThreshold` (default `high`).
 - Admission validates line ranges against reviewed source content before the
-  renderer creates drafts.
+  builder creates drafts.
 - For diff-backed runs, the finding line must overlap a changed new-side diff
   hunk.
 
-Each entry includes path, new-side line anchor, redacted body, finding ID,
-severity, and category. A `suggestion` block is included when a single
-structured fix edit maps exactly to the rendered comment range.
+Each neutral entry includes path, new-side `targetRange`, redacted
+Markdown-escaped body, finding ID, severity, and category. A structured
+`suggestion` (`{ replacement }`) is included when a single fix edit maps exactly
+to `targetRange`, carries no code fence, and fits the body cap.
+
+The platform is selected by `reporting.reviewComments.platform`. With `auto`
+(the default) it resolves from the CI environment, then the git remote host,
+then `generic`. GitHub renders a native ` ```suggestion ` block, GitLab an
+offset-anchored ` ```suggestion:-x+y ` block, Bitbucket a plain fenced block (no
+one-click apply), and generic a plain fenced block.
 
 > **Note:** The CLI does not publish these comments or perform network requests.
 > Your CI pipeline is responsible for posting them.

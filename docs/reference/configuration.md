@@ -106,7 +106,6 @@ carry no semantic logic to review, lowering token cost and noise):
 - Minified bundles: `**/*.min.js`, `**/*.min.css`
 - Source maps: `**/*.map`
 - Test snapshots: `**/*.snap`
-- Test snapshots: `**/*.snap`
 
 Add app-specific data files (e.g. locale bundles) via `paths.exclude` as
 needed.
@@ -291,11 +290,13 @@ Controls which report formats are written.
 
 | Key | Values / Type | Description |
 | --- | --- | --- |
-| `reporting.formats` | `json`, `markdown`, `sarif`, `github-review-comments` | Report formats to emit. |
+| `reporting.formats` | `json`, `markdown`, `sarif` | Report formats to emit. |
 | `reporting.sarif.target` | `generic`, `github` | SARIF dialect to emit (default `generic`). |
 | `reporting.sarif.category` | string | SARIF run category / tool name (default `codereviewer`). |
 | `reporting.sarif.maxResults` | integer 1–25000 | Cap on SARIF diagnostic results (default `5000`). |
 | `reporting.sarif.redact` | boolean | Redact snippets in SARIF output (default `true`). |
+| `reporting.reviewComments.enabled` | boolean | Write platform-neutral inline review-comment drafts as local artifacts (default `false`). |
+| `reporting.reviewComments.platform` | `github`, `gitlab`, `bitbucket`, `generic`, `auto` | Renderer for the drafts; `auto` detects from CI env, then git remote host, then `generic` (default `auto`). |
 
 See [Artifacts Reference](artifacts.md) for a description of each output file.
 

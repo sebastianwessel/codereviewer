@@ -1249,8 +1249,7 @@
             "enum": [
               "json",
               "markdown",
-              "sarif",
-              "github-review-comments"
+              "sarif"
             ]
           },
           "path": {

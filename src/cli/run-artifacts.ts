@@ -9,7 +9,9 @@ import {
   resolveWritePathInsideRoot
 } from '../platform/path-service.js'
 import {
+  detectPlatformTarget,
   parseRunIndex,
+  readOriginRemoteUrl,
   renderRunIndexJson,
   renderRunSummaryJson,
   runIndexFileName,
@@ -113,10 +115,23 @@ export const writeReviewArtifacts = async (
     input.artifactRoot
   )
   await ensureDirectory(runDirectory)
+  const reviewCommentsConfig = input.config.reporting.reviewComments
+  // Platform detection reads env + the git origin remote only (no network). A
+  // missing remote resolves to `generic`, which is normal, not an error.
+  const reviewComments = reviewCommentsConfig.enabled
+    ? {
+        platform: detectPlatformTarget({
+          configured: reviewCommentsConfig.platform,
+          env: process.env,
+          originRemoteUrl: await readOriginRemoteUrl(input.repositoryRoot)
+        }).platform
+      }
+    : undefined
   await writeReportingArtifacts({
     report: input.report,
     formats: input.config.reporting.formats,
     sarif: input.config.reporting.sarif,
+    ...(reviewComments === undefined ? {} : { reviewComments }),
     writer: (artifactPath, content) =>
       writeRunArtifact(
         input.repositoryRoot,

@@ -1,0 +1,53 @@
+import { z } from 'zod'
+import { RepositoryRelativePathSchema, SeveritySchema } from '../config/config.schema.js'
+import { ContractIdSchema, FindingCategorySchema } from '../findings/finding.schema.js'
+
+// Concrete platform a review-comment draft can be rendered for. Distinct from the
+// `reporting.reviewComments.platform` config value, which additionally accepts
+// `auto` (resolved to one of these targets by platform detection).
+export const PlatformTargetSchema = z.enum([
+  'github',
+  'gitlab',
+  'bitbucket',
+  'generic'
+])
+
+// New-side line range a review comment anchors to.
+export const ReviewCommentTargetRangeSchema = z
+  .strictObject({
+    startLine: z.int().min(1),
+    endLine: z.int().min(1)
+  })
+  .refine((range) => range.endLine >= range.startLine, {
+    path: ['endLine'],
+    message: 'endLine must be greater than or equal to startLine.'
+  })
+
+// Structured suggested replacement for `targetRange`. This is deliberately NOT a
+// pre-rendered fenced block: platform renderers turn it into native suggestion
+// syntax. The replacement is already redacted and fence-free by construction.
+export const ReviewCommentSuggestionSchema = z.strictObject({
+  replacement: z.string().min(1).max(4000)
+})
+
+// Platform-neutral inline review-comment draft rendered from an admitted finding.
+// The `body` is redacted and Markdown-escaped; the optional `suggestion` carries
+// the structured replacement for `targetRange`.
+export const ReviewCommentDraftSchema = z.strictObject({
+  path: RepositoryRelativePathSchema,
+  targetRange: ReviewCommentTargetRangeSchema,
+  body: z.string().min(1).max(3000),
+  suggestion: ReviewCommentSuggestionSchema.optional(),
+  findingId: ContractIdSchema,
+  severity: SeveritySchema,
+  category: FindingCategorySchema
+})
+
+export type PlatformTarget = z.infer<typeof PlatformTargetSchema>
+export type ReviewCommentTargetRange = z.infer<
+  typeof ReviewCommentTargetRangeSchema
+>
+export type ReviewCommentSuggestion = z.infer<
+  typeof ReviewCommentSuggestionSchema
+>
+export type ReviewCommentDraft = z.infer<typeof ReviewCommentDraftSchema>

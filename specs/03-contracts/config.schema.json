@@ -731,6 +731,10 @@
           "category": "codereviewer",
           "maxResults": 5000,
           "redact": true
+        },
+        "reviewComments": {
+          "enabled": false,
+          "platform": "auto"
         }
       },
       "type": "object",
@@ -747,8 +751,7 @@
             "enum": [
               "json",
               "markdown",
-              "sarif",
-              "github-review-comments"
+              "sarif"
             ]
           }
         },
@@ -792,11 +795,41 @@
             "redact"
           ],
           "additionalProperties": false
+        },
+        "reviewComments": {
+          "default": {
+            "enabled": false,
+            "platform": "auto"
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "platform": {
+              "default": "auto",
+              "type": "string",
+              "enum": [
+                "github",
+                "gitlab",
+                "bitbucket",
+                "generic",
+                "auto"
+              ]
+            }
+          },
+          "required": [
+            "enabled",
+            "platform"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "formats",
-        "sarif"
+        "sarif",
+        "reviewComments"
       ],
       "additionalProperties": false
     },
