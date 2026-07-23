@@ -24,6 +24,7 @@ quality gates round it out.
 | --- | --- |
 | **Holistic discovery + refutation** | A whole-file review enumerates candidate defects, then an independent per-candidate refutation pass verifies or discards each one before admission — recall first, precision enforced. |
 | **Deterministic support signals** | Local AST-based anchors, symbol spans, import/test/config hints, and contradiction signals improve clustering and context and reject weak claims without a provider call. |
+| **Change-intent context (opt-in)** | Optionally summarizes PR/ticket/changed-doc context into a bounded, redacted brief injected before review as untrusted, informational context — orientation, never authorization. Off by default. |
 | **Provider-optional** | Runs deterministic-only with no model provider configured; add a provider for full model-backed review. |
 | **Modular providers** | OpenAI, OpenAI-compatible, AWS Bedrock, and Azure are optional peer packages — install only the one you use. |
 | **Severity floor** | A configurable actionable-severity threshold keeps low-severity nits out of the actionable surface so the report stays low-noise. |

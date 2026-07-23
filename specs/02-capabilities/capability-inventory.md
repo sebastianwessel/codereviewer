@@ -29,9 +29,8 @@ whole-file review and a per-candidate refutation pass.
 | CAP-REP-004 | GitHub PR review-comment artifact | ACT-DEV, ACT-CI, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `06-evaluation-and-quality-gates.md` |
 | CAP-BASE-001 | Baseline matching | ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-CTX-001 | Context ledger | ACT-OPS, ACT-DEV | Yes | `05-review-workflow-and-runtime.md`, `07-security-privacy-operations.md` |
-| CAP-CTX-002 | External change-intent context ingestion | ACT-CI, ACT-DEV | Yes | `11-external-context-ingestion.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
-| CAP-CTX-003 | Platform PR/MR context adapters | ACT-CI, ACT-DEV | Yes | `11-external-context-ingestion.md`, `07-security-privacy-operations.md` |
-| CAP-CTX-004 | Pipeline context inbox and change-intent summarizer | ACT-CI, ACT-DEV | Yes | `11-external-context-ingestion.md`, `04-configuration-and-providers.md` |
+| CAP-CTX-002 | External change-intent context ingestion (inbox + changed-files providers, digest/model summarizer, change-intent injection) | ACT-CI, ACT-DEV | Yes | `11-external-context-ingestion.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
+| CAP-CTX-003 | Platform PR/MR context adapters (GitHub/GitLab/Bitbucket) | ACT-CI, ACT-DEV | No | Later phase — `11-external-context-ingestion.md` |
 | CAP-COV-001 | Review coverage certificate | ACT-DEV, ACT-CI, ACT-OPS | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-EVAL-001 | Evaluation runner | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-002 | Evaluation analysis commands | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |

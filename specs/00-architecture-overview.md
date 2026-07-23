@@ -1,7 +1,7 @@
 # 00: Architecture Overview
 
 Status: Approved
-Date: 2026-06-20
+Date: 2026-07-22
 
 ## Architecture Summary
 
@@ -16,6 +16,7 @@ CLI
   -> repository-intake
   -> deterministic-signals
   -> review-planning
+  -> context-ingestion (optional external change-intent brief)
   -> provider-resolution
   -> review-workflow
   -> holistic-discovery
