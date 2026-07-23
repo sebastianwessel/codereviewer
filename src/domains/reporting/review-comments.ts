@@ -4,6 +4,7 @@
 // inherit the guards. The neutral draft carries a STRUCTURED suggestion (the
 // replacement text + target range), never a pre-rendered fenced block.
 import {
+  REVIEW_COMMENT_BODY_MAX,
   ReviewCommentDraftSchema,
   type AdmittedFinding,
   type FixEdit,
@@ -14,9 +15,17 @@ import {
 import { redactText } from '../../shared/redaction/redactor.js'
 import { safeText, validateReviewReport } from './reporting-utils.js'
 
-// Shared body-length cap, enforced once here and inherited by every renderer so a
-// suggestion block can never be truncated mid-fence.
-export const maxCommentBodyLength = 3000
+// A suggestion block must use exactly a triple-backtick fence. Declared once here
+// so the breakout guard below and every platform renderer agree on what a fence
+// is.
+export const CODE_FENCE = '```'
+
+// Render a fenced block from an opening fence line (which may carry a platform's
+// suggestion syntax) and an already fence-free replacement.
+export const renderFencedBlock = (
+  openingFence: string,
+  replacement: string
+): string => [openingFence, replacement, CODE_FENCE].join('\n')
 
 const targetRangeFor = (finding: AdmittedFinding): ReviewCommentTargetRange => ({
   startLine: finding.location.startLine,
@@ -59,18 +68,17 @@ const suggestionFor = (
 
   const replacement = normalizedReplacement(edits[0]!)
 
-  // A ```suggestion block must use exactly a triple-backtick fence, so a
-  // replacement that itself contains a code fence cannot be represented without
-  // letting it break out of the block. Drop the suggestion in that case.
-  if (replacement.includes('```')) {
+  // A replacement that itself contains a code fence cannot be represented
+  // without letting it break out of the block. Drop the suggestion in that case.
+  if (replacement.includes(CODE_FENCE)) {
     return undefined
   }
 
   // Body-cap fit is checked against a canonical (```suggestion) rendering. A
   // replacement that cannot fit degrades to a prose-only draft.
-  const canonical = `${body}\n\n${['```suggestion', replacement, '```'].join('\n')}`
+  const canonical = `${body}\n\n${renderFencedBlock(`${CODE_FENCE}suggestion`, replacement)}`
 
-  return canonical.length <= maxCommentBodyLength ? replacement : undefined
+  return canonical.length <= REVIEW_COMMENT_BODY_MAX ? replacement : undefined
 }
 
 // Redacted, Markdown-escaped prose body: severity, category, title, description,
@@ -88,7 +96,7 @@ const bodyFor = (finding: AdmittedFinding): string => {
     lines.push('', `Suggested fix: ${safeText(finding.fixProposal.summary)}`)
   }
 
-  return lines.join('\n').slice(0, maxCommentBodyLength)
+  return lines.join('\n').slice(0, REVIEW_COMMENT_BODY_MAX)
 }
 
 const draftFor = (

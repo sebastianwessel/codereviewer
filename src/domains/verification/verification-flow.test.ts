@@ -90,7 +90,7 @@ describe('runVerificationFlow', () => {
     const { report } = await runVerificationFlow({
       ...baseFlowInput(repositoryRoot),
       providers: [staticProvider([claim])],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(report.claimCount).toBe(1)
@@ -128,7 +128,7 @@ describe('runVerificationFlow', () => {
     const { report } = await runVerificationFlow({
       ...baseFlowInput(repositoryRoot),
       providers: [staticProvider([claim])],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     const [verdict] = report.verdicts
@@ -156,7 +156,7 @@ describe('runVerificationFlow', () => {
     const { report } = await runVerificationFlow({
       ...baseFlowInput(repositoryRoot),
       providers: [staticProvider([claim])],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     const [verdict] = report.verdicts
@@ -175,7 +175,7 @@ describe('runVerificationFlow', () => {
     const { report } = await runVerificationFlow({
       ...baseFlowInput(repositoryRoot),
       providers: [staticProvider([claim])],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(report.verdicts[0]?.status).toBe('refuted')
@@ -208,7 +208,7 @@ describe('runVerificationFlow', () => {
       ...baseFlowInput(repositoryRoot),
       maxToolCallsPerClaim: 2,
       providers: [staticProvider([makeClaim()])],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(budgetErrors).toBe(1)
@@ -241,7 +241,7 @@ describe('runVerificationFlow', () => {
       ...baseFlowInput(repositoryRoot),
       maxToolCallsPerClaim: 1,
       providers: [staticProvider([makeClaim()])],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(report.verdicts[0]?.status).toBe('uncertain')
@@ -263,7 +263,7 @@ describe('runVerificationFlow', () => {
       ...baseFlowInput(repositoryRoot),
       maxBytesPerRead: 100,
       providers: [staticProvider([makeClaim()])],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(observedContentBytes).toBeLessThanOrEqual(100)
@@ -278,7 +278,7 @@ describe('runVerificationFlow', () => {
     const { report } = await runVerificationFlow({
       ...baseFlowInput(repositoryRoot),
       providers: [failingProvider('bad'), staticProvider([makeClaim()], 'good')],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(report.warnings).toContain('claim-provider-failed:bad')
@@ -299,7 +299,7 @@ describe('runVerificationFlow', () => {
     const { report, usage } = await runVerificationFlow({
       ...baseFlowInput(repositoryRoot),
       providers: [],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(called).toBe(false)
@@ -322,7 +322,7 @@ describe('runVerificationFlow', () => {
     const { report } = await runVerificationFlow({
       ...baseFlowInput(repositoryRoot),
       providers: [staticProvider([makeClaim()])],
-      verifyClaim: verify,
+      investigateClaim: verify,
       signal: AbortSignal.abort()
     })
 
@@ -346,7 +346,7 @@ describe('runVerificationFlow', () => {
           makeClaim({ id: 'claim_two' })
         ])
       ],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(usage?.inputTokens).toBe(2)
@@ -361,7 +361,7 @@ describe('runVerificationFlow', () => {
     const { report } = await runVerificationFlow({
       ...baseFlowInput(repositoryRoot),
       providers: [staticProvider([makeClaim()])],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(report.verdicts[0]?.status).toBe('uncertain')
@@ -382,7 +382,7 @@ describe('runVerificationFlow', () => {
     const { report } = await runVerificationFlow({
       ...baseFlowInput(repositoryRoot),
       providers: [staticProvider([makeClaim()])],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(report.verdicts[0]?.status).toBe('uncertain')
@@ -406,7 +406,7 @@ describe('runVerificationFlow', () => {
     await runVerificationFlow({
       ...baseFlowInput(repositoryRoot),
       providers: [staticProvider([makeClaim()])],
-      verifyClaim: verify
+      investigateClaim: verify
     })
 
     expect(rejectedReason).toMatch(/not eligible/iu)

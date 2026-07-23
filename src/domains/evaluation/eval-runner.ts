@@ -1,3 +1,4 @@
+import type { Logger } from '@purista/harness'
 import { z } from 'zod'
 import type {
   AdmittedFinding,
@@ -13,6 +14,7 @@ import {
 import {
   EvalCaseSchema,
   parseEvalCases,
+  resolveExpectedFindingMatchMode,
   resolveExpectedFindingTier,
   type EvalCase
 } from './eval-fixture.schema.js'
@@ -96,16 +98,6 @@ type NumericMetricKey = {
 }[keyof EvalMetrics]
 
 const formatMetricValue = (value: number): string => value.toString()
-
-const expectedMatchModeLabel = (
-  expected: EvalCase['expectedFindings'][number]
-): 'path-line' | 'path-semantic' | 'semantic-only' =>
-  expected.matchMode ??
-  (expected.path === undefined
-    ? 'semantic-only'
-    : expected.lineRange === undefined
-      ? 'path-semantic'
-      : 'path-line')
 
 const providerIssuesFromWarnings = (
   warnings: readonly string[]
@@ -323,7 +315,7 @@ const expectedFindingSummaries = (
       ...(expected.lineRange === undefined
         ? {}
         : { lineRange: [...expected.lineRange] }),
-      matchMode: expectedMatchModeLabel(expected),
+      matchMode: resolveExpectedFindingMatchMode(expected),
       semanticSummary: expected.semanticSummary
     })
   )
@@ -991,6 +983,9 @@ type RunEvaluationInput = {
   readonly judge?: EvalSemanticJudge
   // Agreement below which the run reports its own metrics as untrustworthy.
   readonly judgeAgreementMinimum?: number
+  // Used only to surface run-level judge-calibration provider failures, which
+  // have no per-case slot in the eval report contract.
+  readonly logger?: Logger | undefined
   readonly thresholds?: EvalRegressionThresholds
   readonly selection?: {
     readonly fixtureSource: EvalReportSelection['fixtureSource']
@@ -1136,7 +1131,8 @@ export const runEvaluation = async (
           judge: input.judge,
           ...(input.judgeAgreementMinimum === undefined
             ? {}
-            : { minimumAgreement: input.judgeAgreementMinimum })
+            : { minimumAgreement: input.judgeAgreementMinimum }),
+          ...(input.logger === undefined ? {} : { logger: input.logger })
         })
 
   return buildEvaluationResult({

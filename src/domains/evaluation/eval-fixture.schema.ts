@@ -17,6 +17,8 @@ export const EvalMatchModeSchema = z.enum([
   'semantic-only'
 ])
 
+export type EvalMatchMode = z.infer<typeof EvalMatchModeSchema>
+
 export const EvalLineRangeSchema = z
   .tuple([z.int().min(1), z.int().min(1)])
   .refine(([startLine, endLine]) => endLine >= startLine, {
@@ -39,6 +41,26 @@ export const productRecallTiers = [
   'logic'
 ] as const
 
+// Effective match mode of an expected finding. Declared once here and reused by
+// the matcher, the report assemblers, and the slice manifest so the derivation
+// can never drift between the code that scores a fixture and the code that
+// describes it.
+export type ExpectedFindingMatchModeInput = {
+  readonly path?: string | undefined
+  readonly lineRange?: readonly [number, number] | undefined
+  readonly matchMode?: EvalMatchMode | undefined
+}
+
+export const resolveExpectedFindingMatchMode = (
+  expected: ExpectedFindingMatchModeInput
+): EvalMatchMode =>
+  expected.matchMode ??
+  (expected.path === undefined
+    ? 'semantic-only'
+    : expected.lineRange === undefined
+      ? 'path-semantic'
+      : 'path-line')
+
 export const ExpectedFindingSchema = z
   .strictObject({
     category: FindingCategorySchema,
@@ -50,13 +72,7 @@ export const ExpectedFindingSchema = z
     tier: ExpectedFindingTierSchema.optional()
   })
   .superRefine((value, context) => {
-    const matchMode =
-      value.matchMode ??
-      (value.path === undefined
-        ? 'semantic-only'
-        : value.lineRange === undefined
-          ? 'path-semantic'
-          : 'path-line')
+    const matchMode = resolveExpectedFindingMatchMode(value)
 
     if (matchMode !== 'semantic-only' && value.path === undefined) {
       context.addIssue({
@@ -145,12 +161,9 @@ export const EvalSliceCaseSchema = EvalSliceCaseRawSchema.transform((value) => {
 })
 
 export type EvalLineRange = z.infer<typeof EvalLineRangeSchema>
-export type EvalSourceProfile = z.infer<typeof EvalSourceProfileSchema>
-export type EvalMatchMode = z.infer<typeof EvalMatchModeSchema>
 export type ExpectedFinding = z.infer<typeof ExpectedFindingSchema>
 export type ExpectedNoFindingZone = z.infer<typeof ExpectedNoFindingZoneSchema>
 export type EvalCase = z.infer<typeof EvalCaseSchema>
-export type EvalSliceCase = z.infer<typeof EvalSliceCaseSchema>
 
 // Resolve the measurement tier for an expected finding. An explicit `tier`
 // always wins; otherwise it is derived from category and severity so untiered

@@ -3,13 +3,13 @@ import {
   type StructuredError
 } from '../../shared/errors/error-normalizer.js'
 import type {
+  PlatformTarget,
   ReportArtifact,
   ReportFormat,
   ReviewReport
 } from '../../shared/contracts/index.js'
 import { redactText } from '../../shared/redaction/redactor.js'
 import type { JsonValue } from '../../shared/json/json-value.js'
-import type { PlatformTarget } from '../../shared/contracts/index.js'
 import { createReportArtifact, validateReviewReport } from './reporting-utils.js'
 import { buildReviewCommentDrafts } from './review-comments.js'
 import { renderReviewComments } from './review-comment-renderers.js'
@@ -30,12 +30,6 @@ export type WrittenReportArtifact = {
 // enabled; `platform` is already resolved (no `auto`) by the caller's detection.
 export type ReviewCommentsRenderRequest = {
   readonly platform: PlatformTarget
-}
-
-export type WriteReportingArtifactsOptions = {
-  readonly formats?: readonly ReportFormat[]
-  readonly sarif?: SarifRenderOptions
-  readonly reviewComments?: ReviewCommentsRenderRequest
 }
 
 const stableStringify = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`

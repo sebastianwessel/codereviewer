@@ -43,16 +43,24 @@ export type InvestigationRunResult = {
   readonly usage?: RunTokenUsage | undefined
 }
 
-export const runInvestigationFlow = async (input: {
+// Everything an investigation job needs except its claim sources. Both jobs
+// (`verification-run.ts` and `fix-run.ts`) take exactly this and forward it
+// unchanged, so per-job wiring cannot drift from the shared flow.
+export type InvestigationRunContext = {
   readonly config: CodeReviewerConfig
   readonly repositoryRoot: string
   readonly environment: Readonly<Record<string, string | undefined>>
-  readonly providers: readonly ClaimProvider[]
   readonly providerImport?: ProviderImport | undefined
   readonly logger?: Logger | undefined
   readonly signal?: AbortSignal | undefined
   readonly onObservation?: ((observation: ClaimObservation) => void) | undefined
-}): Promise<InvestigationRunResult> => {
+}
+
+export const runInvestigationFlow = async (
+  input: InvestigationRunContext & {
+    readonly providers: readonly ClaimProvider[]
+  }
+): Promise<InvestigationRunResult> => {
   if (input.providers.length === 0) {
     return { report: emptyVerificationReport(), claims: [] }
   }
@@ -103,7 +111,7 @@ export const runInvestigationFlow = async (input: {
     const { report, claims } = await runVerificationFlow({
       providers: input.providers,
       repositoryRoot: input.repositoryRoot,
-      verifyClaim: investigator.investigate,
+      investigateClaim: investigator.investigate,
       maxToolCallsPerClaim: input.config.verification.maxToolCallsPerClaim,
       maxBytesPerRead: input.config.verification.maxBytesPerRead,
       maxMatches: input.config.verification.maxMatches,

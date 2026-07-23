@@ -8,31 +8,16 @@
 // verification disabled, no configured claim providers, or an unresolved model
 // provider, it produces an empty verification report and never throws.
 
-import type { Logger } from '@purista/harness'
-import type {
-  CodeReviewerConfig,
-  VerificationClaimProviderConfig
-} from '../../shared/contracts/index.js'
-import type { RunTokenUsage } from '../costs/index.js'
-import type { ProviderImport } from '../provider-resolution/index.js'
-import type { Claim } from '../../shared/contracts/verification/verification.schema.js'
+import type { VerificationClaimProviderConfig } from '../../shared/contracts/index.js'
 import type { ClaimProvider } from './contracts.js'
 import { createClaimsFileProvider } from './claims-file-provider.js'
 import { createPriorFindingsProvider } from './prior-findings-provider.js'
-import { runInvestigationFlow } from './investigation-run.js'
 import {
-  emptyVerificationReport,
-  type ClaimObservation,
-  type VerificationReport
-} from './verification-report.js'
-
-export type VerificationRunResult = {
-  readonly report: VerificationReport
-  // Gathered claims, so the caller can corroborate confirmed verdicts against
-  // general-review findings by location.
-  readonly claims: readonly Claim[]
-  readonly usage?: RunTokenUsage | undefined
-}
+  runInvestigationFlow,
+  type InvestigationRunContext,
+  type InvestigationRunResult
+} from './investigation-run.js'
+import { emptyVerificationReport } from './verification-report.js'
 
 const createClaimProvider = (
   config: VerificationClaimProviderConfig
@@ -45,15 +30,9 @@ const createClaimProvider = (
   }
 }
 
-export const runVerificationRun = async (input: {
-  readonly config: CodeReviewerConfig
-  readonly repositoryRoot: string
-  readonly environment: Readonly<Record<string, string | undefined>>
-  readonly providerImport?: ProviderImport | undefined
-  readonly logger?: Logger | undefined
-  readonly signal?: AbortSignal | undefined
-  readonly onObservation?: ((observation: ClaimObservation) => void) | undefined
-}): Promise<VerificationRunResult> => {
+export const runVerificationRun = async (
+  input: InvestigationRunContext
+): Promise<InvestigationRunResult> => {
   const { verification } = input.config
 
   if (!verification.enabled || verification.providers.length === 0) {
@@ -61,17 +40,7 @@ export const runVerificationRun = async (input: {
   }
 
   return runInvestigationFlow({
-    config: input.config,
-    repositoryRoot: input.repositoryRoot,
-    environment: input.environment,
-    providers: verification.providers.map(createClaimProvider),
-    ...(input.providerImport === undefined
-      ? {}
-      : { providerImport: input.providerImport }),
-    ...(input.logger === undefined ? {} : { logger: input.logger }),
-    ...(input.signal === undefined ? {} : { signal: input.signal }),
-    ...(input.onObservation === undefined
-      ? {}
-      : { onObservation: input.onObservation })
+    ...input,
+    providers: verification.providers.map(createClaimProvider)
   })
 }

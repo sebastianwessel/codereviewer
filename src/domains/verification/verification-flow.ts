@@ -4,10 +4,10 @@
 // verification-lane report: verdicts, no-content observations, and non-fatal run
 // warnings. It accumulates token usage across claims.
 //
-// The agent invocation is injected as `verifyClaim` so the pure orchestration —
+// The agent invocation is injected as `investigateClaim` so the pure orchestration —
 // claim gathering, bound enforcement, verdict assembly — is unit-testable with a
 // fake runner and never reaches a real provider. Production wires the harness
-// `investigate_claim` agent through this seam (see `verification-run.ts`).
+// `investigate_claim` agent through this seam (see `investigation-run.ts`).
 
 import type { Logger } from '@purista/harness'
 import { combineRunTokenUsage, type RunTokenUsage } from '../costs/index.js'
@@ -66,7 +66,7 @@ export type ClaimAgentRunner = (input: {
 export type RunVerificationFlowInput = {
   readonly providers: readonly ClaimProvider[]
   readonly repositoryRoot: string
-  readonly verifyClaim: ClaimAgentRunner
+  readonly investigateClaim: ClaimAgentRunner
   readonly maxToolCallsPerClaim: number
   readonly maxBytesPerRead: number
   readonly maxMatches: number
@@ -215,7 +215,7 @@ export const runVerificationFlow = async (
       })
     } else {
       try {
-        const result = await input.verifyClaim({
+        const result = await input.investigateClaim({
           claim,
           tools: bounded.tools,
           ...(input.signal === undefined ? {} : { signal: input.signal })

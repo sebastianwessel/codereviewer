@@ -1,5 +1,8 @@
 import { z } from 'zod'
-import { type EvalCase } from './eval-fixture.schema.js'
+import {
+  resolveExpectedFindingMatchMode,
+  type EvalCase
+} from './eval-fixture.schema.js'
 import {
   appendMarkdownBulletSection,
   appendMarkdownTable,
@@ -10,10 +13,7 @@ import {
   formatListValue,
   formatPercent
 } from './eval-report-markdown-formatting.js'
-import {
-  expectedLocationLabel,
-  expectedMatchModeLabel
-} from './eval-report-expected-finding-labels.js'
+import { expectedLocationLabel } from './eval-report-expected-finding-labels.js'
 import {
   agenticStageLabel,
   caseStatus,
@@ -359,14 +359,11 @@ const appendEvalSummarySemanticJudgeMatches = (
   lines: string[],
   report: EvalReport
 ): void => {
+  // Every match is a judge decision, so `semanticReason` is always present.
   const semanticJudgeMatches = report.caseResults.flatMap((caseResult) =>
-    [...caseResult.matchedFindings, ...caseResult.artifactOnlyMatchedFindings]
-      .filter((match) => match.semanticReason !== undefined)
-      .map((match) => ({
-        caseResult,
-        match,
-        reason: match.semanticReason!
-      }))
+    [...caseResult.matchedFindings, ...caseResult.artifactOnlyMatchedFindings].map(
+      (match) => ({ caseResult, match, reason: match.semanticReason })
+    )
   )
 
   appendMarkdownTable(lines, {
@@ -465,7 +462,7 @@ const formatAttentionMissedExpectedBullet = (
   expectedIndex: number,
   expected: EvalSummaryExpectedFinding
 ): string =>
-  `- #${expectedIndex} ${expected.severity} ${expected.category} ${expectedLocationLabel(expected)} [${expectedMatchModeLabel(expected)}] - ${expected.semanticSummary}`
+  `- #${expectedIndex} ${expected.severity} ${expected.category} ${expectedLocationLabel(expected)} [${resolveExpectedFindingMatchMode(expected)}] - ${expected.semanticSummary}`
 
 const attentionMissedExpectedRows = (
   caseResult: z.infer<typeof EvalCaseReportSchema>,

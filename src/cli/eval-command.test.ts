@@ -777,7 +777,6 @@ describe('eval CLI', () => {
       expect(report.caseResults[0].matchedFindings[0]).toMatchObject({
         semanticReason: provider.reasonText
       })
-      expect(report.caseResults[0].matchedFindings[0].semanticScore).toBeUndefined()
       // A provider that answers "match" to everything fails the calibration set,
       // so the run must declare its own quality metrics untrustworthy.
       expect(report.scoring.judgeTrustworthy).toBe(false)

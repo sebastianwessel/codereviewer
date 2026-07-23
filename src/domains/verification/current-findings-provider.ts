@@ -61,6 +61,19 @@ export type CurrentFindingsProviderConfig = {
 }
 
 /**
+ * The admitted findings the fix lane runs on: those at or above `minSeverity`.
+ * Shared with `fix-run.ts` so the lane's early exit and the claims it gathers can
+ * never disagree about which findings are eligible.
+ */
+export const eligibleCurrentFindings = (
+  findings: readonly AdmittedFinding[],
+  minSeverity: Severity
+): readonly AdmittedFinding[] =>
+  findings.filter((finding) =>
+    severityMeetsThreshold(finding.severity, minSeverity)
+  )
+
+/**
  * Builds the `current-findings` provider over this run's admitted findings. Only
  * findings at or above `minSeverity` become claims (the fix lane runs on exactly
  * the findings that can block the pipeline by default). Gathering is synchronous
@@ -75,10 +88,7 @@ export const createCurrentFindingsProvider = (
   return {
     id: 'current-findings',
     gather: async () =>
-      config.findings
-        .filter((finding) =>
-          severityMeetsThreshold(finding.severity, config.minSeverity)
-        )
+      eligibleCurrentFindings(config.findings, config.minSeverity)
         .slice(0, MAX_CLAIMS_PER_PROVIDER)
         .map((finding) =>
           redactClaim(claimFromAdmittedFinding(finding), redactor.redact)

@@ -472,7 +472,10 @@ whose vocabulary overlap points the wrong way, such as
   calibration pairs the judge decided as the human label says. Omitted when no
   pair was scored.
 - `metrics.judgeAgreementPairCount`: the denominator. Calibration pairs whose
-  judge call failed are excluded from it, exactly like inconclusive matches.
+  judge call failed are excluded from it, exactly like inconclusive matches. A
+  failed pair is also logged as a no-content warning carrying the pair id, the
+  stage, and the normalized error code — calibration is run-level, so it has no
+  per-case provider-issue slot in the report.
 - `scoring.judgeTrustworthy`: `false` when agreement is below
   `evaluation.minJudgeAgreement` (default `0.9`), or when no calibration pair
   could be scored at all. A run with no judge at all (negative-only fixtures)

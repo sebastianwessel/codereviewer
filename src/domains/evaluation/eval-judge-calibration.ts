@@ -1,8 +1,8 @@
+import type { Logger } from '@purista/harness'
 import { z } from 'zod'
 import { normalizeError } from '../../shared/errors/error-normalizer.js'
 import {
   EVAL_SEMANTIC_JUDGE_STAGE,
-  type EvalJudgeProviderIssue,
   type EvalSemanticJudge
 } from './eval-matcher.js'
 
@@ -153,7 +153,6 @@ export type EvalJudgeCalibrationResult = {
   readonly judgeAgreement?: number
   readonly judgeAgreementPairCount: number
   readonly judgeTrustworthy: boolean
-  readonly judgeProviderIssues: readonly EvalJudgeProviderIssue[]
 }
 
 const AGREEMENT_PRECISION = 1_000_000
@@ -161,17 +160,24 @@ const AGREEMENT_PRECISION = 1_000_000
 // Score the judge against the committed calibration set. A pair the judge could
 // not decide is excluded from the denominator, exactly like an inconclusive
 // match: a provider failure must not be reported as judge disagreement.
+//
+// Calibration is a RUN-level measurement, and the eval report contract carries
+// provider issues per case only, so a failed calibration call has no report slot.
+// It is surfaced two ways instead: the reported `judgeAgreementPairCount` drops
+// below the committed pair count (and `judgeTrustworthy` goes false when nothing
+// could be scored), and the normalized error code is logged as a no-content
+// warning so the failure stays diagnosable.
 export const scoreJudgeCalibration = async (
   input: {
     readonly judge: EvalSemanticJudge
     readonly minimumAgreement?: number
     readonly pairs?: readonly EvalJudgeCalibrationPair[]
+    readonly logger?: Logger | undefined
   }
 ): Promise<EvalJudgeCalibrationResult> => {
   const minimumAgreement =
     input.minimumAgreement ?? DEFAULT_MINIMUM_JUDGE_AGREEMENT
   const pairs = input.pairs ?? evalJudgeCalibrationSet
-  const judgeProviderIssues: EvalJudgeProviderIssue[] = []
   let scoredPairCount = 0
   let agreementCount = 0
 
@@ -191,12 +197,15 @@ export const scoreJudgeCalibration = async (
         source: 'provider',
         operation: 'eval_judge_calibration'
       })
-      judgeProviderIssues.push({
-        code: normalized.code,
-        stage: EVAL_SEMANTIC_JUDGE_STAGE,
-        recovered: false,
-        message: normalized.message
-      })
+      // No-content: the pair id and the error code only. Never the pair text.
+      input.logger?.warn?.(
+        'Judge calibration pair could not be scored; it leaves the agreement denominator.',
+        {
+          pair_id: pair.id,
+          stage: EVAL_SEMANTIC_JUDGE_STAGE,
+          error_code: normalized.code
+        }
+      )
     }
   }
 
@@ -205,8 +214,7 @@ export const scoreJudgeCalibration = async (
     // reliable, so the run must not claim its metrics are trustworthy.
     return {
       judgeAgreementPairCount: 0,
-      judgeTrustworthy: false,
-      judgeProviderIssues
+      judgeTrustworthy: false
     }
   }
 
@@ -217,7 +225,6 @@ export const scoreJudgeCalibration = async (
   return {
     judgeAgreement,
     judgeAgreementPairCount: scoredPairCount,
-    judgeTrustworthy: judgeAgreement >= minimumAgreement,
-    judgeProviderIssues
+    judgeTrustworthy: judgeAgreement >= minimumAgreement
   }
 }

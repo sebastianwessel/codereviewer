@@ -1,7 +1,10 @@
+// Shared label formatting for expected findings in eval Markdown reports. These
+// helpers read the SAVED report contract, where `matchMode` is already resolved,
+// so they never re-derive it — `resolveExpectedFindingMatchMode` in
+// `eval-fixture.schema.ts` is the single derivation site.
 export type ExpectedFindingLabelInput = {
   readonly path?: string | undefined
   readonly lineRange?: readonly [number, number] | undefined
-  readonly matchMode?: 'path-line' | 'path-semantic' | 'semantic-only' | undefined
 }
 
 export const formatLineRange = (
@@ -21,13 +24,3 @@ export const expectedLocationLabel = (
   expected.path === undefined
     ? '(semantic-only)'
     : `${expected.path}${formatLineRange(expected.lineRange)}`
-
-export const expectedMatchModeLabel = (
-  expected: ExpectedFindingLabelInput
-): 'path-line' | 'path-semantic' | 'semantic-only' =>
-  expected.matchMode ??
-  (expected.path === undefined
-    ? 'semantic-only'
-    : expected.lineRange === undefined
-      ? 'path-semantic'
-      : 'path-line')

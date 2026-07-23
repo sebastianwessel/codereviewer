@@ -27,7 +27,6 @@ export type EvalJudgeReliabilityStatus = {
   readonly headTrustworthy: boolean
   readonly baseAgreement?: number
   readonly headAgreement?: number
-  readonly agreementDiffersMaterially: boolean
   readonly warnings: readonly string[]
 }
 
@@ -67,7 +66,6 @@ const judgeReliabilityStatus = (
     headTrustworthy: input.head.scoring.judgeTrustworthy,
     ...(baseAgreement === undefined ? {} : { baseAgreement }),
     ...(headAgreement === undefined ? {} : { headAgreement }),
-    agreementDiffersMaterially,
     warnings
   }
 }

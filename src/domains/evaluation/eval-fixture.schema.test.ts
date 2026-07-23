@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
   EvalSliceCaseSchema,
   productRecallTiers,
+  resolveExpectedFindingMatchMode,
   resolveExpectedFindingTier
 } from './eval-fixture.schema.js'
 
@@ -162,5 +163,28 @@ describe('resolveExpectedFindingTier', () => {
   test('excludes nit from the headline product tiers', () => {
     expect(productRecallTiers).toEqual(['runtime-critical', 'security', 'logic'])
     expect(productRecallTiers).not.toContain('nit')
+  })
+
+  test('derives the effective match mode from path and line range', () => {
+    expect(resolveExpectedFindingMatchMode({})).toBe('semantic-only')
+    expect(resolveExpectedFindingMatchMode({ path: 'src/app.ts' })).toBe(
+      'path-semantic'
+    )
+    expect(
+      resolveExpectedFindingMatchMode({
+        path: 'src/app.ts',
+        lineRange: [4, 4]
+      })
+    ).toBe('path-line')
+  })
+
+  test('an explicit match mode always wins over the derivation', () => {
+    expect(
+      resolveExpectedFindingMatchMode({
+        matchMode: 'semantic-only',
+        path: 'src/app.ts',
+        lineRange: [4, 4]
+      })
+    ).toBe('semantic-only')
   })
 })

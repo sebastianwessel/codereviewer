@@ -232,15 +232,7 @@ export type EvalJudgeReliability = {
   readonly judgeAgreementPairCount: number
 }
 
-type CalculateEvalMetrics = {
-  (
-    caseResults: readonly EvalMetricCaseResult[],
-    judgeReliability?: EvalJudgeReliability
-  ): EvalMetrics
-  readonly severityWeight: (severity: Severity) => number
-}
-
-const calculate = (
+export const calculateEvalMetrics = (
   caseResults: readonly EvalMetricCaseResult[],
   judgeReliability?: EvalJudgeReliability
 ): EvalMetrics => {
@@ -477,8 +469,3 @@ const calculate = (
     durationMs: sum(caseResults.map((result) => result.durationMs))
   })
 }
-
-export const calculateEvalMetrics: CalculateEvalMetrics = Object.assign(
-  calculate,
-  { severityWeight }
-)

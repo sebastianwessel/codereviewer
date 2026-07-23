@@ -10,7 +10,7 @@ import {
 import {
   EVAL_PROVIDER_RETRY_WARNING_PREFIX,
   calculateEvalDiffStats,
-  loadEvalCasesFromFixtures,
+  type EvalCase,
   type EvalCaseOutput
 } from '../domains/evaluation/index.js'
 import { runReview as runReviewPipeline } from '../domains/review-workflow/index.js'
@@ -19,8 +19,7 @@ import type { AdmittedFinding } from '../shared/contracts/findings/finding.schem
 import { parseGitDiffMaps } from '../domains/repository-intake/index.js'
 import { type ProviderImport } from '../domains/provider-resolution/index.js'
 import { type Logger } from '../domains/observability/index.js'
-import { loadCodeReviewerConfig } from '../domains/configuration/config-loader.js'
-import { normalizeError } from '../shared/errors/error-normalizer.js'
+import { normalizeError, type StructuredError } from '../shared/errors/error-normalizer.js'
 import type { CodeReviewerConfig } from '../shared/contracts/index.js'
 
 const countChangedLines = async (
@@ -44,7 +43,7 @@ const countChangedLines = async (
 const calculateEvalCaseSize = async (
   input: {
     readonly fixtureRoot: string
-    readonly evalCase: Awaited<ReturnType<typeof loadEvalCasesFromFixtures>>[number]
+    readonly evalCase: EvalCase
   }
 ): Promise<{ readonly changedLineCount: number; readonly diffHunkCount: number }> => {
   if (input.evalCase.diff !== undefined) {
@@ -63,7 +62,7 @@ const calculateEvalCaseSize = async (
 // Carry the failing stage (normalized as `details.operation`) onto a hard
 // provider-error output so it is not dropped before scoring.
 const stageFromNormalizedError = (
-  normalized: ReturnType<typeof normalizeError>
+  normalized: StructuredError
 ): string | undefined => {
   const operation = normalized.details.operation
 
@@ -75,11 +74,11 @@ const stageFromNormalizedError = (
 export const runEvalCase = async (
   input: {
     readonly root: string
-    readonly config: Awaited<ReturnType<typeof loadCodeReviewerConfig>>['config']
+    readonly config: CodeReviewerConfig
     readonly configWarnings: readonly string[]
     readonly baselineExplicitlyConfigured: boolean
     readonly environment: Readonly<Record<string, string | undefined>>
-    readonly evalCase: Awaited<ReturnType<typeof loadEvalCasesFromFixtures>>[number]
+    readonly evalCase: EvalCase
     readonly logger?: Logger
     readonly providerImport?: ProviderImport
   }
@@ -199,6 +198,26 @@ export const runEvalCase = async (
     }
   })
 
+  // A case that ends in a hard provider error carries no review report, so it is
+  // scored as a provider error with no ledger and no fix outcomes.
+  const providerErrorOutput = (normalized: StructuredError): EvalCaseOutput => {
+    const stage = stageFromNormalizedError(normalized)
+
+    return {
+      caseId: input.evalCase.id,
+      changedLineCount: evalCaseSize.changedLineCount,
+      diffHunkCount: evalCaseSize.diffHunkCount,
+      contextLedger: [],
+      fixOutcomes: [],
+      result: {
+        status: 'provider-error',
+        code: normalized.code,
+        ...(stage === undefined ? {} : { stage }),
+        message: normalized.message
+      }
+    }
+  }
+
   const runReviewAndFixForCase = async (
     config: CodeReviewerConfig
   ): Promise<EvalCaseOutput> => {
@@ -261,38 +280,10 @@ export const runEvalCase = async (
           throw retryError
         }
 
-        return {
-          caseId: input.evalCase.id,
-          changedLineCount: evalCaseSize.changedLineCount,
-          diffHunkCount: evalCaseSize.diffHunkCount,
-          contextLedger: [],
-          fixOutcomes: [],
-          result: {
-            status: 'provider-error',
-            code: retryNormalized.code,
-            ...(stageFromNormalizedError(retryNormalized) === undefined
-              ? {}
-              : { stage: stageFromNormalizedError(retryNormalized)! }),
-            message: retryNormalized.message
-          }
-        }
+        return providerErrorOutput(retryNormalized)
       }
     }
 
-    return {
-      caseId: input.evalCase.id,
-      changedLineCount: evalCaseSize.changedLineCount,
-      diffHunkCount: evalCaseSize.diffHunkCount,
-      contextLedger: [],
-      fixOutcomes: [],
-      result: {
-        status: 'provider-error',
-        code: normalized.code,
-        ...(stageFromNormalizedError(normalized) === undefined
-          ? {}
-          : { stage: stageFromNormalizedError(normalized)! }),
-        message: normalized.message
-      }
-    }
+    return providerErrorOutput(normalized)
   }
 }

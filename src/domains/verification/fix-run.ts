@@ -10,26 +10,28 @@
 // never changes a finding's category, severity, admission, or the quality gate.
 
 import { readFile } from 'node:fs/promises'
-import type { Logger } from '@purista/harness'
-import {
-  severityMeetsThreshold,
-  type CodeReviewerConfig,
-  type Severity
+import type {
+  CodeReviewerConfig,
+  Severity
 } from '../../shared/contracts/index.js'
 import type { AdmittedFinding } from '../../shared/contracts/findings/finding.schema.js'
 import type { RunTokenUsage } from '../costs/index.js'
-import type { ProviderImport } from '../provider-resolution/index.js'
 import { resolveExistingPathInsideRoot } from '../../platform/path-service.js'
-import { createCurrentFindingsProvider } from './current-findings-provider.js'
+import {
+  createCurrentFindingsProvider,
+  eligibleCurrentFindings
+} from './current-findings-provider.js'
 import {
   enrichFindingsWithFixes,
   type CurrentFileReader
 } from './fix-enrichment.js'
-import { runInvestigationFlow } from './investigation-run.js'
+import {
+  runInvestigationFlow,
+  type InvestigationRunContext
+} from './investigation-run.js'
 import {
   emptyVerificationReport,
   VerificationReportSchema,
-  type ClaimObservation,
   type VerificationReport
 } from './verification-report.js'
 
@@ -64,26 +66,19 @@ const currentFileReaderFor = (repositoryRoot: string): CurrentFileReader => asyn
   }
 }
 
-export const runFixRun = async (input: {
-  readonly config: CodeReviewerConfig
-  readonly repositoryRoot: string
-  readonly environment: Readonly<Record<string, string | undefined>>
-  readonly admittedFindings: readonly AdmittedFinding[]
-  readonly providerImport?: ProviderImport | undefined
-  readonly logger?: Logger | undefined
-  readonly signal?: AbortSignal | undefined
-  readonly onObservation?: ((observation: ClaimObservation) => void) | undefined
-}): Promise<FixRunResult> => {
+export const runFixRun = async (
+  input: InvestigationRunContext & {
+    readonly admittedFindings: readonly AdmittedFinding[]
+  }
+): Promise<FixRunResult> => {
   if (!input.config.fix.enabled) {
     return { report: emptyVerificationReport(), findings: input.admittedFindings }
   }
 
   const minSeverity = resolveFixMinSeverity(input.config)
-  const eligible = input.admittedFindings.filter((finding) =>
-    severityMeetsThreshold(finding.severity, minSeverity)
-  )
 
-  if (eligible.length === 0) {
+  // Early exit before any provider resolution when nothing is eligible.
+  if (eligibleCurrentFindings(input.admittedFindings, minSeverity).length === 0) {
     return { report: emptyVerificationReport(), findings: input.admittedFindings }
   }
 
@@ -93,18 +88,8 @@ export const runFixRun = async (input: {
   })
 
   const { report, usage } = await runInvestigationFlow({
-    config: input.config,
-    repositoryRoot: input.repositoryRoot,
-    environment: input.environment,
-    providers: [provider],
-    ...(input.providerImport === undefined
-      ? {}
-      : { providerImport: input.providerImport }),
-    ...(input.logger === undefined ? {} : { logger: input.logger }),
-    ...(input.signal === undefined ? {} : { signal: input.signal }),
-    ...(input.onObservation === undefined
-      ? {}
-      : { onObservation: input.onObservation })
+    ...input,
+    providers: [provider]
   })
 
   const enrichment = await enrichFindingsWithFixes({

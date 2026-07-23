@@ -11,7 +11,8 @@ export {
 } from './sarif-reporter.js'
 export {
   buildReviewCommentDrafts,
-  maxCommentBodyLength
+  CODE_FENCE,
+  renderFencedBlock
 } from './review-comments.js'
 export {
   detectPlatformTarget,

@@ -4,11 +4,12 @@ import {
   normalizeError,
   type StructuredError
 } from '../../shared/errors/error-normalizer.js'
-import type {
-  EvalCase,
-  EvalLineRange,
-  ExpectedFinding,
-  ExpectedNoFindingZone
+import {
+  resolveExpectedFindingMatchMode,
+  type EvalCase,
+  type EvalLineRange,
+  type ExpectedFinding,
+  type ExpectedNoFindingZone
 } from './eval-fixture.schema.js'
 
 export type EvalJudgeProviderIssue = {
@@ -118,16 +119,6 @@ const lineRulePasses = (
     ? true
     : rangesOverlap(expected.lineRange, findingLineRange(finding), LINE_TOLERANCE)
 
-const matchModeFor = (
-  expected: ExpectedFinding
-): 'path-line' | 'path-semantic' | 'semantic-only' =>
-  expected.matchMode ??
-  (expected.path === undefined
-    ? 'semantic-only'
-    : expected.lineRange === undefined
-      ? 'path-semantic'
-      : 'path-line')
-
 // Deterministic gates. Exact, reproducible, and always evaluated before the
 // judge is called, so the judge can never move a finding to another file or
 // line.
@@ -135,7 +126,7 @@ const gatesPass = (
   expected: ExpectedFinding,
   finding: AdmittedFinding
 ): boolean => {
-  const matchMode = matchModeFor(expected)
+  const matchMode = resolveExpectedFindingMatchMode(expected)
 
   if (matchMode !== 'semantic-only' && expected.path !== finding.location.path) {
     return false
@@ -259,7 +250,7 @@ const runJudgePass = async (
         findingIndex,
         semanticReason: judged.reason,
         lineOverlaps:
-          matchModeFor(expected) === 'path-line'
+          resolveExpectedFindingMatchMode(expected) === 'path-line'
             ? lineRulePasses(expected, finding)
             : false,
         severityMatches: expected.severity === finding.severity

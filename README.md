@@ -112,39 +112,29 @@ See [Providers](docs/guides/providers.md) for full setup instructions.
 
 ## Benchmark results
 
-These numbers come from a full [Code-Review-Bench](docs/evaluation/README.md)
-run over 59 captured-PR cases on the holistic pipeline. It is a realistic
-captured-PR benchmark — each case is a real pull request with its real changes —
-rather than a synthetic suite. Precision is strong and the severity floor keeps
-noise low; recall is the headline lever the engine is tuned to improve.
+**There is currently no published baseline.** Expected-finding matching moved to
+a judge-only semantic matcher; the lexical matcher that produced every previously
+published number has been removed, so those numbers are void and are not
+comparable to anything the engine produces today. A new baseline has to be
+recorded deliberately.
 
-**Model and settings:** OpenAI `gpt-5.3-codex`, review mode `pr`, depth
-`thorough`, one task at a time, over the 59-case `code-review-bench-style` pack
-(`npm run eval:benchmark`).
+Run the benchmark yourself over the 59-case captured-PR `code-review-bench-style`
+pack — each case is a real pull request with its real changes, not a synthetic
+suite:
 
-> **Note:** These numbers were produced by the previous lexical expected-finding
-> matcher. That matcher has been removed in favor of judge-only semantic
-> matching, so the run below is not comparable to current runs and a new
-> baseline must be recorded deliberately. See
-> [evaluation docs](docs/evaluation/README.md).
+```bash
+npm run eval:benchmark
+```
 
-| Metric | Value |
-| --- | --- |
-| **productRecall** (runtime-critical + security + logic tiers — headline accuracy target) | **39.4%** |
-| Overall recall | 33.1% |
-| Precision | 53.0% |
-| F1 | 40.7% |
-| False positives | 39 |
-| Provider errors | 0 |
-| Cost | ~$11.9 |
-| Duration | ~32 min |
+It writes `eval-report.json`, `eval-summary.md`, and `eval-recall-report.md`
+under `.codereviewer/eval/`. Read `scoring.judgeTrustworthy` first: a run whose
+judge falls below the configured calibration agreement reports its own quality
+metrics as untrustworthy. Per-case LLM variance is roughly ±2–3 points on the
+aggregate metrics, so treat small differences between runs as noise rather than
+signal. See the [evaluation docs](docs/evaluation/README.md) for the metric
+definitions, the regression gate, and how to compare two runs.
 
-Recall by tier: runtime-critical **36%**, security **50%**, logic **40%**.
-
-Per-case LLM variance is roughly ±2–3 points on these aggregate metrics, so treat
-small differences between runs as noise rather than signal.
-
-### What these numbers mean (plain English)
+### What the headline metrics mean (plain English)
 
 Think of the tool as a reviewer that reads a code change and flags problems.
 

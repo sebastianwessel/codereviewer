@@ -42,6 +42,16 @@ type SarifResult = {
       readonly summary: string
       readonly evidenceIds: readonly string[]
       readonly safety: 'manual-review'
+      // Apply-ready edits, redacted and with artifact-URI paths. Present when the
+      // finding's fix proposal carries edits (including a fix-lane enrichment,
+      // spec 12).
+      readonly edits?: readonly {
+        readonly path: string
+        readonly startLine: number
+        readonly endLine: number
+        readonly replacement: string
+        readonly description?: string
+      }[]
     }
   }
 }

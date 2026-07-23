@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest'
 import type { Severity } from '../../shared/contracts/index.js'
-import { calculateEvalMetrics, type EvalMetricCaseResult } from './metrics.js'
+import {
+  calculateEvalMetrics,
+  severityWeight,
+  type EvalMetricCaseResult
+} from './metrics.js'
 
 const caseResult = (
   overrides: Partial<EvalMetricCaseResult> = {}
@@ -231,7 +235,7 @@ describe('eval metrics', () => {
       'info'
     ]
 
-    expect(severities.map((severity) => calculateEvalMetrics.severityWeight(severity))).toEqual([
+    expect(severities.map((severity) => severityWeight(severity))).toEqual([
       5,
       4,
       3,

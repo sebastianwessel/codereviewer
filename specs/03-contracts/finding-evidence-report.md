@@ -66,16 +66,15 @@ For reviewed head-file content, admission must validate that `startLine` and
 `endLine` resolve to a known source line range before a finding can become
 inline-eligible. Candidates with `side = "new"` or `side = "file"` whose line
 range is outside the reviewed head file must be rejected with
-`location-invalid`. R1 does not create old-side GitHub review comments; old-side
-findings that otherwise pass admission must be `summary-only` or
+`location-invalid`. R1 does not create old-side review comments on any platform;
+old-side findings that otherwise pass admission must be `summary-only` or
 `artifact-only`.
 
 When a run has a `DiffMap[]`, `reporterEligibility = inline` additionally
 requires the new-side finding line range to overlap a changed new-side diff
 hunk for the same path. Findings on reviewed source lines outside changed hunks
 may still be admitted, but they must be `summary-only` or `artifact-only` so
-GitHub review-comment drafts cannot target lines the pull request API cannot
-anchor.
+review-comment drafts cannot target lines a review platform cannot anchor.
 
 Provider task and validation packets may include diff-range `changeKind`
 metadata. `changeKind = "new"` means the matching new-side hunk is introduced

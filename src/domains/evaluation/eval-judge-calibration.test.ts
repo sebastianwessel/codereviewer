@@ -1,3 +1,4 @@
+import type { Logger } from '@purista/harness'
 import { describe, expect, test } from 'vitest'
 import type { EvalSemanticJudge } from './eval-matcher.js'
 import {
@@ -6,6 +7,34 @@ import {
   scoreJudgeCalibration,
   type EvalJudgeCalibrationPair
 } from './eval-judge-calibration.js'
+
+type CapturedWarning = {
+  readonly message: string
+  readonly fields?: Record<string, unknown>
+}
+
+const createWarningLogger = (): {
+  readonly logger: Logger
+  readonly warnings: CapturedWarning[]
+} => {
+  const warnings: CapturedWarning[] = []
+  const logger: Logger = {
+    trace: () => {},
+    debug: () => {},
+    info: () => {},
+    warn: (message, fields) => {
+      warnings.push({
+        message: String(message),
+        ...(fields === undefined ? {} : { fields })
+      })
+    },
+    error: () => {},
+    fatal: () => {},
+    child: () => logger
+  }
+
+  return { logger, warnings }
+}
 
 const pairFor = (
   input: Parameters<EvalSemanticJudge>[0]
@@ -93,7 +122,6 @@ describe('eval judge calibration', () => {
     expect(result.judgeAgreement).toBe(1)
     expect(result.judgeAgreementPairCount).toBe(evalJudgeCalibrationSet.length)
     expect(result.judgeTrustworthy).toBe(true)
-    expect(result.judgeProviderIssues).toEqual([])
   })
 
   test('marks a judge that flips near-misses as untrustworthy', async () => {
@@ -114,9 +142,11 @@ describe('eval judge calibration', () => {
     expect(result.judgeTrustworthy).toBe(true)
   })
 
-  test('excludes failed judge calls from the agreement denominator', async () => {
+  test('excludes failed judge calls from the agreement denominator and logs them', async () => {
+    const { logger, warnings } = createWarningLogger()
     let call = 0
     const result = await scoreJudgeCalibration({
+      logger,
       judge: async (input) => {
         call += 1
         if (call === 1) {
@@ -131,12 +161,14 @@ describe('eval judge calibration', () => {
       evalJudgeCalibrationSet.length - 1
     )
     expect(result.judgeAgreement).toBe(1)
-    expect(result.judgeProviderIssues).toEqual([
-      expect.objectContaining({
-        code: 'provider_error',
-        stage: 'eval_semantic_judge'
-      })
-    ])
+    // Calibration has no per-case slot in the eval report, so the failure is
+    // surfaced as a no-content warning instead of being silently dropped.
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]?.fields).toEqual({
+      pair_id: evalJudgeCalibrationSet[0]!.id,
+      stage: 'eval_semantic_judge',
+      error_code: 'provider_error'
+    })
   })
 
   test('never claims trustworthiness when no pair could be scored', async () => {

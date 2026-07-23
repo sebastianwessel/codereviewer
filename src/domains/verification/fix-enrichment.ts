@@ -45,8 +45,8 @@ export type FixEnrichmentResult = {
   readonly observations: readonly ClaimObservation[]
 }
 
+// The finding id lives on `fixOutcome` only, so the two can never disagree.
 type PerClaimOutcome = {
-  readonly findingId: string
   readonly enrichedFinding?: AdmittedFinding
   readonly fixOutcome: FixOutcome
 }
@@ -91,27 +91,24 @@ const outcomeForFinding = async (input: {
     edits.length > 0 &&
     edits.every((edit) => edit.path === finding.location.path)
 
+  const notProduced = (applyCheck: ApplyCheckOutcome): PerClaimOutcome => ({
+    fixOutcome: { ...base, fixProduced: false, applyCheck }
+  })
+
   if (!isReal || !editsTargetFinding) {
     // Not a real finding, or no scoped single-file fix to check.
-    const applyCheck: ApplyCheckOutcome = 'not-attempted'
-    return { findingId: finding.id, fixOutcome: { ...base, fixProduced: false, applyCheck } }
+    return notProduced('not-attempted')
   }
 
   const content = await input.readFile(finding.location.path)
   if (content === undefined) {
-    return {
-      findingId: finding.id,
-      fixOutcome: { ...base, fixProduced: false, applyCheck: 'failed' }
-    }
+    return notProduced('failed')
   }
 
   const applied = applyFixEdits(content, edits)
   if (!applied.ok) {
     // A hallucinated line number or stale location: drop the fix (spec 12).
-    return {
-      findingId: finding.id,
-      fixOutcome: { ...base, fixProduced: false, applyCheck: 'failed' }
-    }
+    return notProduced('failed')
   }
 
   const enrichedFinding = AdmittedFindingSchema.parse({
@@ -120,7 +117,6 @@ const outcomeForFinding = async (input: {
   })
 
   return {
-    findingId: finding.id,
     enrichedFinding,
     fixOutcome: { ...base, fixProduced: true, applyCheck: 'passed' }
   }
@@ -171,7 +167,7 @@ export const enrichFindingsWithFixes = async (input: {
   // derived from the finding id).
   const outcomeByClaimId = new Map<string, FixOutcome>(
     [...outcomesByFindingId.values()].map((outcome) => [
-      currentFindingClaimId(outcome.findingId),
+      currentFindingClaimId(outcome.fixOutcome.findingId),
       outcome.fixOutcome
     ])
   )

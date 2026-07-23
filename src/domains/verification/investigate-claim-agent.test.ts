@@ -280,7 +280,7 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
           ]
         }
       ],
-      verifyClaim: verifier.investigate
+      investigateClaim: verifier.investigate
     })
 
     const byClaim = new Map(report.verdicts.map((v) => [v.claimId, v.status]))
@@ -321,7 +321,7 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
           ]
         }
       ],
-      verifyClaim: verifier.investigate
+      investigateClaim: verifier.investigate
     })
 
     // list + grep + read all ran (3 tool calls) and the read of holds.ts still
@@ -405,7 +405,7 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
           ]
         }
       ],
-      verifyClaim: verifier.investigate
+      investigateClaim: verifier.investigate
     })
 
     const [verdict] = report.verdicts
@@ -445,7 +445,7 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
           gather: async () => [injected, unrelated]
         }
       ],
-      verifyClaim: verifier.investigate
+      investigateClaim: verifier.investigate
     })
 
     const byClaim = new Map(report.verdicts.map((v) => [v.claimId, v.status]))

@@ -7,32 +7,29 @@ Date: 2026-07-23
 
 Emit inline review-comment drafts — including one-click fix suggestions — as a
 neutral artifact the core owns, then render them into platform-specific forms
-(GitHub, GitLab, Bitbucket, generic). This replaces the single GitHub-shaped
-`github-review-comments` format with a neutral model plus renderers, so the
-engine stays platform-neutral while still producing native suggestion blocks for
-whichever platform a run targets.
+(GitHub, GitLab, Bitbucket, generic). The engine stays platform-neutral while
+still producing native suggestion blocks for whichever platform a run targets.
 
 The core writes neutral files and per-platform renderings only. It performs no
 network call and publishes nothing; posting comments remains a downstream
 pipeline step (spec 07, `CAP-PR-001`).
 
-## Relationship To Current Reporting
+## Structure
 
-Today `github-review-comments.json` bakes GitHub syntax (a ` ```suggestion `
-block, `side: RIGHT`, absolute line anchors) directly into the artifact. This
-spec splits that into:
+Comment drafting is split in two:
 
 - a **neutral** `ReviewCommentDraft` that carries a structured suggestion (the
   replacement text and target range), not a pre-rendered fenced block; and
 - **platform renderers** that turn the neutral draft into GitHub, GitLab,
   Bitbucket, or generic output.
 
-Markdown and SARIF reports already render fix summaries and edits and are
-unchanged by this spec.
+Every eligibility and safety rule is enforced once in the neutral layer and
+inherited by every renderer, so a platform can only differ in syntax.
 
-This is a breaking change: the `github-review-comments` report format and its
-artifact name are removed and replaced (see Migration). Nothing is published, so
-no external consumer is affected.
+There is no platform-specific report format: the removed `github-review-comments`
+format has no replacement value in the `ReportFormat` enum, and callers configure
+`reporting.reviewComments` instead. Markdown and SARIF reports render fix
+summaries and edits independently of this spec.
 
 ## Contracts
 
@@ -119,13 +116,6 @@ Invalid configuration fails validation with exit code `2`.
   replacement appears in logs, traces, or events.
 - A run that resolves to `generic` (no platform detected) is normal, not an
   error.
-
-## Migration
-
-- Remove the `github-review-comments` value from the report-format enum and its
-  artifact. Callers configure `reporting.reviewComments` instead.
-- Update `03-contracts/finding-evidence-report.md`, `03-flows/e2e-coverage.md`,
-  the configuration reference, and the artifacts guide to the neutral model.
 
 ## Testing
 

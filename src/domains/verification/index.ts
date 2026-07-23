@@ -10,6 +10,7 @@ export { createPriorFindingsProvider } from './prior-findings-provider.js'
 export {
   createCurrentFindingsProvider,
   currentFindingClaimId,
+  eligibleCurrentFindings,
   type CurrentFindingsProviderConfig
 } from './current-findings-provider.js'
 export { applyFixEdits, type ApplyCheckResult } from './apply-check.js'
@@ -56,9 +57,10 @@ export {
 } from './investigate-claim-agent.js'
 export {
   runInvestigationFlow,
+  type InvestigationRunContext,
   type InvestigationRunResult
 } from './investigation-run.js'
-export { runVerificationRun, type VerificationRunResult } from './verification-run.js'
+export { runVerificationRun } from './verification-run.js'
 export {
   runFixRun,
   resolveFixMinSeverity,

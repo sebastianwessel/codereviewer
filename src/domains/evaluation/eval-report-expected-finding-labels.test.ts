@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
   expectedLocationLabel,
-  expectedMatchModeLabel,
   formatLineRange
 } from './eval-report-expected-finding-labels.js'
 
@@ -25,25 +24,5 @@ describe('eval report expected finding labels', () => {
         lineRange: [4, 6]
       })
     ).toBe('src/app.ts:4-6')
-  })
-
-  test('formats expected match-mode fallback labels', () => {
-    expect(expectedMatchModeLabel({})).toBe('semantic-only')
-    expect(expectedMatchModeLabel({ path: 'src/app.ts' })).toBe(
-      'path-semantic'
-    )
-    expect(
-      expectedMatchModeLabel({
-        path: 'src/app.ts',
-        lineRange: [4, 4]
-      })
-    ).toBe('path-line')
-    expect(
-      expectedMatchModeLabel({
-        matchMode: 'semantic-only',
-        path: 'src/app.ts',
-        lineRange: [4, 4]
-      })
-    ).toBe('semantic-only')
   })
 })

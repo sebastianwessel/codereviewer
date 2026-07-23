@@ -5,7 +5,8 @@ import { z } from 'zod'
 import { resolveExistingPathInsideRoot } from '../../platform/path-service.js'
 import {
   EvalSourceProfileSchema,
-  EvalSliceCaseSchema
+  EvalSliceCaseSchema,
+  resolveExpectedFindingMatchMode
 } from './eval-fixture.schema.js'
 
 const sha256HexSchema = z.string().regex(/^[a-f0-9]{64}$/u)
@@ -193,12 +194,7 @@ const createManifestCase = async (
   )
   const semanticOnlyExpectedCount = slice.expectedFindings.filter(
     (expectedFinding) =>
-      (expectedFinding.matchMode ??
-        (expectedFinding.path === undefined
-          ? 'semantic-only'
-          : expectedFinding.lineRange === undefined
-            ? 'path-semantic'
-            : 'path-line')) === 'semantic-only'
+      resolveExpectedFindingMatchMode(expectedFinding) === 'semantic-only'
   ).length
   const lineBearingExpectedCount = slice.expectedFindings.filter(
     (expectedFinding) =>

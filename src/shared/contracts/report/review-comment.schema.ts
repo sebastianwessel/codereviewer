@@ -30,13 +30,19 @@ export const ReviewCommentSuggestionSchema = z.strictObject({
   replacement: z.string().min(1).max(4000)
 })
 
+// Maximum rendered comment body length. The contract enforces the cap (so it
+// stays representable in the generated JSON Schema) and the neutral draft layer
+// and every platform renderer check against this same constant, so a suggestion
+// block can never be truncated mid-fence.
+export const REVIEW_COMMENT_BODY_MAX = 3000
+
 // Platform-neutral inline review-comment draft rendered from an admitted finding.
 // The `body` is redacted and Markdown-escaped; the optional `suggestion` carries
 // the structured replacement for `targetRange`.
 export const ReviewCommentDraftSchema = z.strictObject({
   path: RepositoryRelativePathSchema,
   targetRange: ReviewCommentTargetRangeSchema,
-  body: z.string().min(1).max(3000),
+  body: z.string().min(1).max(REVIEW_COMMENT_BODY_MAX),
   suggestion: ReviewCommentSuggestionSchema.optional(),
   findingId: ContractIdSchema,
   severity: SeveritySchema,

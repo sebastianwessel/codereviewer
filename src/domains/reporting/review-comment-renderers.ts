@@ -4,13 +4,14 @@
 // and inherited here; each renderer only turns the structured suggestion into the
 // platform's native syntax and re-checks the body cap so a fence is never
 // truncated.
-import type {
-  FindingCategory,
-  PlatformTarget,
-  ReviewCommentDraft,
-  Severity
+import {
+  REVIEW_COMMENT_BODY_MAX,
+  type FindingCategory,
+  type PlatformTarget,
+  type ReviewCommentDraft,
+  type Severity
 } from '../../shared/contracts/index.js'
-import { maxCommentBodyLength } from './review-comments.js'
+import { CODE_FENCE, renderFencedBlock } from './review-comments.js'
 
 type RenderedCommentBase = {
   readonly path: string
@@ -29,125 +30,92 @@ export type GithubRenderedComment = RenderedCommentBase & {
   readonly startSide?: 'RIGHT'
 }
 
-// GitLab / Bitbucket comments anchor to the last line of the target range.
-export type GitlabRenderedComment = RenderedCommentBase & {
-  readonly line: number
-}
-
-export type BitbucketRenderedComment = RenderedCommentBase & {
+// GitLab and Bitbucket comments anchor to the last line of the target range and
+// differ only in the fence syntax their suggestion block uses.
+export type LineAnchoredRenderedComment = RenderedCommentBase & {
   readonly line: number
 }
 
 // Generic comment keeps the full range and a plain fenced block (no apply).
-export type GenericRenderedComment = RenderedCommentBase & {
+export type RangeAnchoredRenderedComment = RenderedCommentBase & {
   readonly startLine: number
   readonly endLine: number
 }
 
 export type RenderedReviewComment =
   | GithubRenderedComment
-  | GitlabRenderedComment
-  | BitbucketRenderedComment
-  | GenericRenderedComment
+  | LineAnchoredRenderedComment
+  | RangeAnchoredRenderedComment
 
 // Append a rendered suggestion block only when the combined body still fits the
 // cap, so truncation can never cut through a code fence.
 const bodyWithBlock = (
   draft: ReviewCommentDraft,
-  block: string | undefined
+  openingFence: string
 ): string => {
-  if (block === undefined) {
+  if (draft.suggestion === undefined) {
     return draft.body
   }
 
-  const combined = `${draft.body}\n\n${block}`
+  const combined = `${draft.body}\n\n${renderFencedBlock(openingFence, draft.suggestion.replacement)}`
 
-  return combined.length <= maxCommentBodyLength ? combined : draft.body
+  return combined.length <= REVIEW_COMMENT_BODY_MAX ? combined : draft.body
 }
 
-const fencedBlock = (
-  header: string,
-  replacement: string
-): string => [header, replacement, '```'].join('\n')
+// Fields every platform carries verbatim from the neutral draft.
+const commentBase = (
+  draft: ReviewCommentDraft,
+  openingFence: string
+): RenderedCommentBase => ({
+  path: draft.path,
+  body: bodyWithBlock(draft, openingFence),
+  findingId: draft.findingId,
+  severity: draft.severity,
+  category: draft.category
+})
 
 const renderGithub = (draft: ReviewCommentDraft): GithubRenderedComment => {
-  const block =
-    draft.suggestion === undefined
-      ? undefined
-      : fencedBlock('```suggestion', draft.suggestion.replacement)
   const multiline = draft.targetRange.endLine > draft.targetRange.startLine
 
   return {
-    path: draft.path,
+    ...commentBase(draft, `${CODE_FENCE}suggestion`),
     line: draft.targetRange.endLine,
     side: 'RIGHT',
     ...(multiline
       ? { startLine: draft.targetRange.startLine, startSide: 'RIGHT' as const }
-      : {}),
-    body: bodyWithBlock(draft, block),
-    findingId: draft.findingId,
-    severity: draft.severity,
-    category: draft.category
+      : {})
   }
 }
 
-const renderGitlab = (draft: ReviewCommentDraft): GitlabRenderedComment => {
+const renderGitlab = (draft: ReviewCommentDraft): LineAnchoredRenderedComment => {
   // GitLab suggestion syntax is ```suggestion:-x+y anchored on a single line: `x`
   // lines above and `y` lines below the commented line are replaced together with
   // it. We anchor on the range's last line and extend upward, so `x` is the span
   // above and `y` is always 0.
   const above = draft.targetRange.endLine - draft.targetRange.startLine
-  const block =
-    draft.suggestion === undefined
-      ? undefined
-      : fencedBlock(`\`\`\`suggestion:-${above}+0`, draft.suggestion.replacement)
 
   return {
-    path: draft.path,
-    line: draft.targetRange.endLine,
-    body: bodyWithBlock(draft, block),
-    findingId: draft.findingId,
-    severity: draft.severity,
-    category: draft.category
+    ...commentBase(draft, `${CODE_FENCE}suggestion:-${above}+0`),
+    line: draft.targetRange.endLine
   }
 }
 
+// Bitbucket has no one-click apply, so the suggestion degrades to a readable
+// plain fenced code block on the range's last line.
 const renderBitbucket = (
   draft: ReviewCommentDraft
-): BitbucketRenderedComment => {
-  // Bitbucket has no one-click apply, so the suggestion degrades to a readable
-  // plain fenced code block on the range's last line.
-  const block =
-    draft.suggestion === undefined
-      ? undefined
-      : fencedBlock('```', draft.suggestion.replacement)
+): LineAnchoredRenderedComment => ({
+  ...commentBase(draft, CODE_FENCE),
+  line: draft.targetRange.endLine
+})
 
-  return {
-    path: draft.path,
-    line: draft.targetRange.endLine,
-    body: bodyWithBlock(draft, block),
-    findingId: draft.findingId,
-    severity: draft.severity,
-    category: draft.category
-  }
-}
-
-const renderGeneric = (draft: ReviewCommentDraft): GenericRenderedComment => {
-  const block =
-    draft.suggestion === undefined
-      ? undefined
-      : fencedBlock('```', draft.suggestion.replacement)
-
-  return {
-    path: draft.path,
-    startLine: draft.targetRange.startLine,
-    endLine: draft.targetRange.endLine,
-    body: bodyWithBlock(draft, block),
-    findingId: draft.findingId,
-    severity: draft.severity,
-    category: draft.category
-  }
-}
+const renderGeneric = (
+  draft: ReviewCommentDraft
+): RangeAnchoredRenderedComment => ({
+  ...commentBase(draft, CODE_FENCE),
+  startLine: draft.targetRange.startLine,
+  endLine: draft.targetRange.endLine
+})
 
 const renderers: Readonly<
   Record<PlatformTarget, (draft: ReviewCommentDraft) => RenderedReviewComment>

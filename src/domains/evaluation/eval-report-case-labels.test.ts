@@ -112,7 +112,7 @@ describe('eval report case labels', () => {
         providerErrored: false,
         providerIssues: [{ code: 'timeout', recovered: true }],
         unmatchedExpectedIndexes: [0],
-        warnings: ['config-file-missing', 'semantic-judge-unavailable']
+        warnings: ['config-file-missing', 'eval-inconclusive-match:1']
       })
     ).toBe(
       'provider recovered 1; missing 1; false positives 2; inconclusive 1; duplicates 1; no-finding-zone hits 1; artifact-only matched 1; artifact-only noise 1; warnings 1'
