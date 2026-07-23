@@ -1,7 +1,7 @@
 # 02: Capability Inventory
 
 Status: Approved
-Date: 2026-07-21
+Date: 2026-07-22
 
 Each capability is implementation-ready only when its linked spec sections
 define contracts, errors, permissions, observability, acceptance, and tests.
@@ -31,6 +31,7 @@ whole-file review and a per-candidate refutation pass.
 | CAP-CTX-001 | Context ledger | ACT-OPS, ACT-DEV | Yes | `05-review-workflow-and-runtime.md`, `07-security-privacy-operations.md` |
 | CAP-CTX-002 | External change-intent context ingestion (inbox + changed-files providers, digest/model summarizer, change-intent injection) | ACT-CI, ACT-DEV | Yes | `11-external-context-ingestion.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
 | CAP-CTX-003 | Platform PR/MR context adapters (GitHub/GitLab/Bitbucket) | ACT-CI, ACT-DEV | No | Later phase — `11-external-context-ingestion.md` |
+| CAP-CTX-005 | Read-only MCP context provider (e.g. JIRA) with tool-name allowlist | ACT-CI, ACT-DEV | No | Later phase — `11-external-context-ingestion.md`, `07-security-privacy-operations.md` |
 | CAP-COV-001 | Review coverage certificate | ACT-DEV, ACT-CI, ACT-OPS | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-EVAL-001 | Evaluation runner | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-002 | Evaluation analysis commands | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |

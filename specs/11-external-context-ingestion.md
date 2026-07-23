@@ -1,7 +1,7 @@
 # 11: External Change-Intent Context Ingestion
 
 Status: Approved
-Date: 2026-07-21
+Date: 2026-07-22
 
 ## Purpose
 
@@ -61,8 +61,43 @@ phase):
   and injection of the `change-intent` document.
 - **Later phases (interfaces reserved above):** the `platform` provider
   (`PlatformAdapter`, GitHub then GitLab/Bitbucket, `event` then `api`
-  transport) and an optional `agentic` provider. Config accepts a provider
-  `type` only once its provider is implemented.
+  transport), the `mcp` provider (below), and an optional `agentic` provider.
+  Config accepts a provider `type` only once its provider is implemented.
+
+## Later-Phase Provider: `mcp` (proposed, not implemented)
+
+This section specifies a proposed `mcp` context provider for issue-tracker and
+similar sources (for example JIRA). It is not implemented and its network and
+subprocess controls require the security amendment in
+`07-security-privacy-operations.md` before any implementation. The `inbox`
+provider already covers the same use case with no network and no credentials in
+the product, so `mcp` is a convenience for live, local, or interactive use — not
+a capability gap.
+
+Contract:
+
+- The provider hosts a Model Context Protocol client **inside the orchestrator**
+  and drives it **deterministically**. The review and discovery models never
+  invoke an MCP tool; there is no agentic loop. This preserves the enterprise
+  invariant that model output holds no network or tool authority.
+- Configuration provides the server connection (an operator-configured stdio
+  command or an allowlisted HTTP endpoint), a **tool-name allowlist**, and a
+  deterministic ticket-identifier pattern applied to the branch name and
+  pull-request title.
+- The provider calls **only** the allowlisted tool names, and only MCP
+  `resources` or those tools. Because MCP does not type a tool as read-only, the
+  allowlist is an operator assertion that the named tools do not mutate; the
+  product cannot prove it, so the trust boundary is operator configuration.
+- The server endpoint or launch command comes only from configuration, never
+  from repository content or model output. Credentials, when needed, are read
+  only from a configured environment variable name; a stdio server that owns its
+  own credentials keeps them out of the product entirely.
+- The MCP response is untrusted external context: it is redacted, bounded, and
+  summarized into the `change-intent` brief exactly like any other provider, and
+  it can never change admission, severity, gates, or baseline.
+- Unmatched ticket identifier, unreachable server, or a tool outside the
+  allowlist disables the provider for the run with a warning; it never fails the
+  review.
 
 ## Stage Placement
 

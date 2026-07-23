@@ -129,11 +129,17 @@ productRecall and precision — before it is ever recommended on by default.
 
 ## Phasing
 
-1. Provider spine + inbox + changed-files + model summarizer + injection +
-   prompt framing. GitHub adapter with the zero-network event-payload transport.
-2. Eval gate: measure precision/recall with the brief on.
-3. GitHub API transport; GitLab and Bitbucket adapters.
-4. Optional `AgenticContextProvider`, if justified, behind the security envelope.
+1. **Shipped:** provider spine + `inbox` + `changed-files` + digest/model
+   summarizer + injection + prompt framing. All no-network.
+2. Eval gate: measure precision/recall with the brief on before recommending
+   default-on.
+3. `platform` provider — GitHub (event payload, then read-only API), then GitLab
+   and Bitbucket. Adds network egress, so it needs the security-spec amendment.
+4. `mcp` provider — an orchestrator-hosted, deterministically-driven read-only
+   MCP client with a tool-name allowlist, for issue trackers. Adds network and a
+   subprocess (stdio server), so it shares the same security-spec amendment. The
+   inbox already covers this for CI; MCP is a live/local convenience.
+5. Optional `AgenticContextProvider`, if justified, behind the security envelope.
 
 ## Alternatives considered
 
@@ -144,5 +150,7 @@ productRecall and precision — before it is ever recommended on by default.
   default: a real summarizer produces a far sharper brief, which is the point.
 - **Integrating JIRA/Linear directly.** Rejected in favor of the inbox — no
   tracker code or credentials in our tool, and unlimited reach via the pipeline.
+  A future `mcp` provider (deterministically driven, read-only tool allowlist) is
+  a live-fetch convenience over the inbox, not a replacement for it.
 - **Injecting raw fragments unbounded.** Rejected — blows the task token budget
   and buries the source.

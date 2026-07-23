@@ -1,7 +1,7 @@
 # 07: Security, Privacy, And Operations
 
 Status: Approved
-Date: 2026-07-21
+Date: 2026-07-22
 
 ## Threat Model
 
@@ -55,7 +55,7 @@ code, not by model behavior:
 | Artifact write boundary | Writes are allowed only below the configured artifact directory after it resolves under repository root. |
 | Non-destructive git | The only allowed git commands are read-only discovery commands explicitly allowlisted in code. Mutating git commands are impossible through the product API. |
 | No shell expansion | Git and tool invocations use argument-array process APIs. Shell strings are forbidden. |
-| No implicit network | Network is denied by default. The only network path is the explicitly selected model provider endpoint after provider config validation, used by review and by the change-intent summarizer. Change-intent context providers are filesystem-only in the current phase; a network `platform-API` provider is a later phase and, when added, contacts only an explicitly configured, host-allowlisted host. No network path can be initiated by model output. |
+| No implicit network | Network is denied by default. The only network path is the explicitly selected model provider endpoint after provider config validation, used by review and by the change-intent summarizer. Change-intent context providers are filesystem-only in the current phase; later-phase network providers (`platform-API`, `mcp`) contact only explicitly configured, allowlisted endpoints and are the subject of dedicated controls below. No network path can be initiated by model output. |
 | No repository exfiltration by default | Local providerless and signal-only paths must not send repository content to any network destination. Provider-backed review sends only bounded, redacted, ledger-recorded context to the selected provider. |
 | No prompt/tool authority | Prompts, repository content, skills, and model output cannot grant filesystem, git, shell, network, publishing, or gate authority. |
 | Auditable decisions | Security-relevant allow/deny decisions produce stable, redacted events and testable error codes. |
@@ -212,7 +212,17 @@ External context source requirements (`11-external-context-ingestion.md`):
   contacts only its explicitly configured, host-allowlisted host; fetch targets
   are never derived from repository content or model output; and its credentials
   are read only from a configured environment variable name, never placed in
-  config, prompts, ledger entries, or logs.
+  config, prompts, ledger entries, or logs;
+- required controls for the later-phase `mcp` provider: the MCP client is hosted
+  in the orchestrator and driven deterministically, never by model output; its
+  server (an operator-configured stdio command or allowlisted HTTP endpoint) and
+  its tool-name allowlist come only from configuration; it invokes only
+  allowlisted tools and MCP resources; the server endpoint or launch command is
+  never derived from repository content or model output; credentials are read
+  only from a configured environment variable name, and a stdio server that owns
+  its own credentials keeps them out of the product. Launching an operator-
+  configured subprocess for a stdio MCP server is a deliberate exception to the
+  no-subprocess posture, permitted only for this explicitly configured server.
 
 Provider-backed review requirements:
 

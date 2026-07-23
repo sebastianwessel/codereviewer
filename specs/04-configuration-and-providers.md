@@ -1,7 +1,7 @@
 # 04: Configuration And Providers
 
 Status: Approved
-Date: 2026-07-21
+Date: 2026-07-22
 
 ## Configuration Files
 
@@ -371,9 +371,9 @@ Controls external change-intent context ingestion
 | `contextSources.summary.maxBytes` | integer | bounded change-intent-brief cap |
 
 Each provider object is discriminated by `type`. The initial phase accepts the
-two no-network providers; the network `platform` provider is a later phase
-(`11-external-context-ingestion.md`) and is added to this list when its adapter
-ships.
+two no-network providers; the network providers (`platform`, `mcp`) are later
+phases (`11-external-context-ingestion.md`) and are added to this list when their
+implementations and the required security controls ship.
 
 | `type` | Required keys | Purpose |
 | --- | --- | --- |
