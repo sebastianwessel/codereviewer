@@ -7,6 +7,7 @@ import {
   resolveWritePathInsideRoot
 } from '../platform/path-service.js'
 import {
+  EVAL_PROVIDER_RETRY_WARNING_PREFIX,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
   EvalReportSchema,
@@ -1010,7 +1011,7 @@ const runEvalCase = async (
               ...retryResult.report.run,
               warnings: [
                 ...retryResult.report.run.warnings,
-                `eval-provider-retry:${normalized.code}`
+                `${EVAL_PROVIDER_RETRY_WARNING_PREFIX}${normalized.code}`
               ]
             }
           }

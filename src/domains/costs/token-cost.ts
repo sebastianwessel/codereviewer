@@ -142,6 +142,11 @@ export type RunCostSummary = {
   readonly cachedInputTokens?: number
 }
 
+// Run warning emitted when a provider run's model cost could not be determined
+// (no surfaced token usage, or no provider cost and no configured prices), so
+// missing cost data is visible rather than silently reported as zero.
+export const COST_UNAVAILABLE_WARNING = 'cost-unavailable'
+
 // Summarize cost for a run. Deterministic (no-provider) runs have no model cost.
 // Provider runs without surfaced token usage, or without provider cost and
 // configured prices, emit `cost-unavailable` so missing cost data is visible
@@ -158,7 +163,7 @@ export const summarizeRunCost = (input: {
   }
 
   if (input.usage === undefined) {
-    return { warnings: ['cost-unavailable'] }
+    return { warnings: [COST_UNAVAILABLE_WARNING] }
   }
 
   const cost = calculateTokenCost({
@@ -178,7 +183,7 @@ export const summarizeRunCost = (input: {
 
   if (cost.costUsd === null) {
     return {
-      warnings: ['cost-unavailable'],
+      warnings: [COST_UNAVAILABLE_WARNING],
       inputTokens: cost.inputTokens,
       outputTokens: cost.outputTokens,
       cachedInputTokens: cost.cachedInputTokens

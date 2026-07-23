@@ -112,6 +112,17 @@ export const BaselineFingerprintRecordSchema = z.strictObject({
   )
 })
 
+// Normalize a model-authored category/severity string to a comparison key:
+// lowercase, non-alphanumerics collapsed to single dashes, no leading/trailing
+// dash. Used across the model-enum normalizers so casing/punctuation differences
+// between providers resolve to the same key.
+const slugifyModelKey = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-|-$/gu, '')
+
 const normalizeModelEnumValue = <T extends string>(
   value: unknown,
   allowedValues: readonly T[],
@@ -121,11 +132,7 @@ const normalizeModelEnumValue = <T extends string>(
     return value
   }
 
-  const key = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-|-$/gu, '')
+  const key = slugifyModelKey(value)
 
   if ((allowedValues as readonly string[]).includes(key)) {
     return key
@@ -135,11 +142,7 @@ const normalizeModelEnumValue = <T extends string>(
 }
 
 const normalizeUnknownModelCategoryFromText = (text: string): unknown => {
-  const key = text
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-|-$/gu, '')
+  const key = slugifyModelKey(text)
 
   if (key.length === 0) {
     return undefined
@@ -210,11 +213,7 @@ const normalizeModelCategoryValue = (value: unknown): unknown => {
     return exact
   }
 
-  const key = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-|-$/gu, '')
+  const key = slugifyModelKey(value)
 
   if (/(?:^|-)(?:security|vulnerability|authz|authorization)(?:-|$)/u.test(key)) {
     return 'security'

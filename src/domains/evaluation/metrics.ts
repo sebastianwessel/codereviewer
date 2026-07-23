@@ -5,6 +5,7 @@ import {
   productRecallTiers,
   type ExpectedFindingTier
 } from './eval-fixture.schema.js'
+import { isProviderIssueWarning } from './eval-warnings.js'
 
 const RATE_MIN = 0
 const RATE_MAX = 1
@@ -172,11 +173,7 @@ export const severityWeight = (severity: Severity): number =>
 const hasProviderIssue = (result: EvalMetricCaseResult): boolean =>
   result.providerErrored ||
   result.providerIssueCount > 0 ||
-  result.warnings.some(
-    (warning) =>
-      warning.startsWith('provider-error:') ||
-      warning.startsWith('eval-provider-retry:')
-  )
+  result.warnings.some(isProviderIssueWarning)
 
 type CalculateEvalMetrics = {
   (caseResults: readonly EvalMetricCaseResult[]): EvalMetrics

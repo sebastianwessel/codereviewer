@@ -1,4 +1,9 @@
 export {
+  EVAL_PROVIDER_RETRY_WARNING_PREFIX,
+  PROVIDER_ERROR_WARNING_PREFIX,
+  isProviderIssueWarning
+} from './eval-warnings.js'
+export {
   EvalCaseSchema,
   EvalCaseSetSchema,
   EvalLineRangeSchema,

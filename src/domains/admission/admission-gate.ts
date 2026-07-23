@@ -404,28 +404,47 @@ export const admitCandidate = (
 
   const candidate = parsedCandidate.data
 
+  // Every post-parse rejection carries the candidate id and its evidence ids and
+  // differs only by reason and message, so build the result through one helper.
+  const reject = (
+    reason: RejectedFinding['reason'],
+    message: string
+  ): AdmissionResult => ({
+    status: 'rejected',
+    rejectedFinding: makeRejectedFinding({
+      candidateId: candidate.id,
+      reason,
+      message,
+      evidenceIds: candidate.evidenceIds
+    })
+  })
+
+  const needsMoreEvidence = (
+    reason: RejectedFinding['reason'],
+    message: string
+  ): AdmissionResult => ({
+    status: 'needs-more-evidence',
+    rejectedFinding: makeRejectedFinding({
+      candidateId: candidate.id,
+      status: 'needs-more-evidence',
+      reason,
+      message,
+      evidenceIds: candidate.evidenceIds
+    })
+  })
+
   if (hasUnknownFixProposalEvidence(candidate)) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'schema-invalid',
-        message: 'Fix proposal references evidence outside the candidate evidence set.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'schema-invalid',
+      'Fix proposal references evidence outside the candidate evidence set.'
+    )
   }
 
   if (!isReviewedLocation(candidate.location.path, input.policy.reviewedPaths)) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'location-invalid',
-        message: 'Candidate location is not part of reviewed repository input.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'location-invalid',
+      'Candidate location is not part of reviewed repository input.'
+    )
   }
 
   const lineRangeIsValid = locationLineRangeIsValid(
@@ -438,15 +457,10 @@ export const admitCandidate = (
   )
 
   if (!lineRangeIsValid) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'location-invalid',
-        message: 'Candidate location line range is outside reviewed source input.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'location-invalid',
+      'Candidate location line range is outside reviewed source input.'
+    )
   }
 
   const evidence = selectedEvidence(candidate, input.evidence).map((record) =>
@@ -454,28 +468,17 @@ export const admitCandidate = (
   )
 
   if (evidence.length === 0) {
-    return {
-      status: 'needs-more-evidence',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        status: 'needs-more-evidence',
-        reason: 'insufficient-evidence',
-        message: 'Candidate requires at least one evidence record.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return needsMoreEvidence(
+      'insufficient-evidence',
+      'Candidate requires at least one evidence record.'
+    )
   }
 
   if (!allEvidenceRedacted(evidence)) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'unsafe-content',
-        message: 'Candidate evidence is not redacted for report-safe output.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'unsafe-content',
+      'Candidate evidence is not redacted for report-safe output.'
+    )
   }
 
   // Trusted deterministic-rule findings bypass the model severity floor; every
@@ -491,15 +494,10 @@ export const admitCandidate = (
     severityFloor !== undefined &&
     severityRank[candidate.severity] < severityRank[severityFloor]
   ) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'below-threshold',
-        message: 'Candidate severity is below configured admission threshold.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'below-threshold',
+      'Candidate severity is below configured admission threshold.'
+    )
   }
 
   const fingerprint = createFingerprint(candidate, input.resolveAnchorText)
@@ -512,15 +510,10 @@ export const admitCandidate = (
       input.existingAdmittedFindings
     )
   ) {
-    return {
-      status: 'rejected',
-      rejectedFinding: makeRejectedFinding({
-        candidateId: candidate.id,
-        reason: 'duplicate',
-        message: 'Candidate duplicates an already admitted finding.',
-        evidenceIds: candidate.evidenceIds
-      })
-    }
+    return reject(
+      'duplicate',
+      'Candidate duplicates an already admitted finding.'
+    )
   }
 
   const safeCandidate = redactedCandidate(candidate)

@@ -2,6 +2,7 @@ export {
   calculateTokenCost,
   combineRunTokenUsage,
   summarizeRunCost,
+  COST_UNAVAILABLE_WARNING,
   type RunCostSummary,
   type RunTokenUsage,
   type TokenCostInput,
