@@ -20,7 +20,8 @@ import {
   emptyTierCounts,
   EvalMetricsSchema,
   severityWeight,
-  type EvalMetricCaseResult
+  type EvalMetricCaseResult,
+  type EvalMetrics
 } from './metrics.js'
 import {
   EvalCaseOutputSchema,
@@ -73,8 +74,6 @@ type EvalCaseComputation = {
   readonly reportCase: z.infer<typeof EvalCaseReportSchema>
   readonly metricCase: EvalMetricCaseResult
 }
-
-type EvalMetrics = z.infer<typeof EvalMetricsSchema>
 
 // Threshold helpers only compare scalar metrics; per-tier record metrics are
 // excluded so a Record value never reaches a numeric comparison.

@@ -6,8 +6,7 @@ import {
   formatPercent
 } from './eval-report-markdown-formatting.js'
 import { type EvalReport } from './eval-report-contracts.js'
-
-type EvalMetrics = EvalReport['metrics']
+import { type EvalMetrics } from './metrics.js'
 
 type EvalReportPair = {
   readonly base: EvalReport

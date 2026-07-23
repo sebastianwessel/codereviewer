@@ -25,12 +25,11 @@ import {
   providerIssueLabel
 } from './eval-report-case-labels.js'
 import { EvalCaseReportSchema, type EvalReport } from './eval-report-contracts.js'
+import { type EvalMetrics } from './metrics.js'
 
 export const EVAL_REPORT_ARTIFACT_NAME = 'eval-report.json'
 export const EVAL_SUMMARY_ARTIFACT_NAME = 'eval-summary.md'
 export const EVAL_RECALL_REPORT_ARTIFACT_NAME = 'eval-recall-report.md'
-
-type EvalMetrics = EvalReport['metrics']
 
 // Cached input tokens are a subset of input tokens. Render the absolute count
 // alongside the share of input it represents so a benchmark shows prompt-cache

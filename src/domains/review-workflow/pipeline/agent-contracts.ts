@@ -4,6 +4,7 @@ import {
   ContextRequestSchema,
   EvidenceRecordSchema,
   FindingProvenanceSchema,
+  FixEditSchema,
   RejectedFindingSchema,
   RepositoryRelativePathSchema,
   ReviewReportSchema,
@@ -475,18 +476,7 @@ export const FindingRefutationResultSchema = z.strictObject({
   verdict: z.enum(['proved', 'refuted', 'needs-more-evidence']),
   rationaleSummary: z.string().min(1).max(1200),
   fixSummary: z.string().min(1).max(1200).optional(),
-  fixEdits: z
-    .array(
-      z.strictObject({
-        path: RepositoryRelativePathSchema,
-        startLine: z.int().min(1),
-        endLine: z.int().min(1),
-        replacement: z.string().min(1).max(4000),
-        description: z.string().min(1).max(500).optional()
-      })
-    )
-    .max(5)
-    .optional()
+  fixEdits: z.array(FixEditSchema).max(5).optional()
 })
 
 export const ModelFindingRefutationResultSchema = z.preprocess((value) => {
@@ -565,7 +555,6 @@ export type FindingRefutationResult = z.infer<
   typeof FindingRefutationResultSchema
 >
 export type ModelHolisticFinding = z.infer<typeof ModelHolisticFindingSchema>
-export type ProviderIssue = ReviewReport['providerIssues'][number]
 export type FindingRefutationRunner = (
   input: FindingRefutationInput,
   signal: AbortSignal | undefined
