@@ -162,16 +162,24 @@ numbers and stale-location edits without a model call. Fixes are always
 
 ## Effect On Findings, Severity, And The Gate
 
-- The flow is **advisory by default.** A `false-positive` judgment and a fix are
-  surfaced in this flow's report; neither removes a finding from the deterministic
-  defect gate, and neither changes severity. Severity remains a function of impact
-  only.
-- The `findingJudgment` is exposed as a boolean signal on the finding, mirroring
-  the corroboration confidence pattern below — a signal, never a severity or gate
-  change.
-- A future opt-in mode may let a `false-positive` judgment filter the reported
-  findings, gated on eval evidence that the judgment is trustworthy. It is out of
-  scope here and off until measured.
+The flow is **advisory**: it improves fix guidance and adds a precision signal,
+but it never changes which defects are reported, their severity, admission, or the
+quality gate. Two distinct outputs:
+
+- **Fix enrichment.** When the finding is `real` and the apply-check passes, the
+  lane adds or replaces the finding's `fixProposal` with its apply-checked edit —
+  `safety: manual-review` guidance that flows to every reporter (Markdown, SARIF,
+  and the review comments of spec 13), so the better, real-file-grounded fix is
+  the one users see. This changes only advisory fix metadata; category, severity,
+  admission, and the gate are untouched. The lane's output is non-deterministic
+  and is reached only when `fix.enabled`, so the deterministic defect set and gate
+  are unaffected.
+- **False-positive signal.** The `findingJudgment` is a separate boolean signal on
+  the finding, mirroring the corroboration confidence pattern below — advisory
+  only. It never removes a finding from the gate or changes severity in the
+  default mode. A future opt-in mode may let a `false-positive` judgment filter the
+  reported findings, gated on eval evidence that the judgment is trustworthy; that
+  is out of scope here and off until measured.
 
 ## Corroboration
 
@@ -254,6 +262,9 @@ Keys are defined in `04-configuration-and-providers.md`:
 - One model pass per finding yields both the boolean judgment and, when the
   finding is real, an apply-checked fix; there is no numeric confidence.
 - An edit that does not apply to current file bytes is dropped by code.
+- A real finding's apply-checked fix enriches its `fixProposal` and flows to the
+  Markdown, SARIF, and review-comment reporters; category, severity, admission,
+  and the gate are unchanged.
 - A `false-positive` judgment never removes a finding from the gate or changes
   severity in the default (advisory) mode.
 - A corroborated finding raises confidence, never severity.
