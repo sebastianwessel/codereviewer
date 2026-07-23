@@ -2,7 +2,11 @@ import { readFile } from 'node:fs/promises'
 import type { SkillsConfig } from '@purista/harness'
 import { resolveExistingPathInsideRoot } from '../../../../platform/path-service.js'
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
-import { createRedactor } from '../../../../shared/redaction/redactor.js'
+import { redactText } from '../../../../shared/redaction/redactor.js'
+import {
+  sliceUtf8Bytes,
+  utf8ByteLength
+} from '../../../../shared/text/utf8-bytes.js'
 import { createSkillIndex } from '../../../review-planning/index.js'
 import {
   createTextContextLedgerEntry,
@@ -22,14 +26,7 @@ export type StaticReviewContext = {
   readonly contextLedger: readonly ContextLedgerEntry[]
 }
 
-const bytesOf = (value: string): number => Buffer.byteLength(value)
-
-const sliceUtf8 = (value: string, maxBytes: number): string =>
-  Buffer.from(value).subarray(0, Math.max(0, maxBytes)).toString('utf8')
-
-const redacted = (value: string): string => createRedactor().redact(value)
-
-const maxDocumentBytesFor = (content: string): number => bytesOf(content)
+const maxDocumentBytesFor = (content: string): number => utf8ByteLength(content)
 
 const loadInstructionContexts = async (
   input: {
@@ -56,7 +53,7 @@ const loadInstructionContexts = async (
     input.ledger.push(ledgerEntry)
     instructions.push({
       path: instructionPath,
-      content: sliceUtf8(redacted(content), ledgerEntry.bytesIncluded),
+      content: sliceUtf8Bytes(redactText(content), ledgerEntry.bytesIncluded),
       allowed: true,
       ledgerEntryId: ledgerEntry.id
     })
@@ -75,7 +72,7 @@ const loadInstructionContexts = async (
     input.ledger.push(ledgerEntry)
     instructions.push({
       path: '.codereviewer/inline-instructions',
-      content: sliceUtf8(redacted(inlineContent), ledgerEntry.bytesIncluded),
+      content: sliceUtf8Bytes(redactText(inlineContent), ledgerEntry.bytesIncluded),
       allowed: true,
       ledgerEntryId: ledgerEntry.id
     })

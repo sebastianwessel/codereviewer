@@ -3,6 +3,7 @@ import type {
   AdmittedFinding,
   ReviewReport
 } from '../../shared/contracts/index.js'
+import { uniqueSorted } from '../../shared/text/unique-sorted.js'
 import {
   EvalCaseSchema,
   parseEvalCases,
@@ -144,9 +145,6 @@ const isActionableFinding = (
     (hasSuggestedFix || hasLegacySuggestedFix)
   )
 }
-
-const dedupeSorted = (values: readonly string[]): readonly string[] =>
-  [...new Set(values)].sort((left, right) => left.localeCompare(right))
 
 const findingIdsByIndex = (
   findings: readonly AdmittedFinding[],
@@ -886,7 +884,7 @@ const thresholdReasons = (
 
   return {
     reasons,
-    failingCaseIds: dedupeSorted(failingCaseIds)
+    failingCaseIds: uniqueSorted(failingCaseIds)
   }
 }
 

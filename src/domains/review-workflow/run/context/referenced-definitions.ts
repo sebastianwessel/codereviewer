@@ -2,6 +2,10 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { resolveExistingPathInsideRoot } from '../../../../platform/path-service.js'
 import {
+  sliceUtf8Bytes,
+  utf8ByteLength
+} from '../../../../shared/text/utf8-bytes.js'
+import {
   extractDeterministicSignals,
   type DeterministicSignalExtraction,
   type SupportSignalFact
@@ -44,11 +48,6 @@ export type ReferencedDefinitionDigest = {
   readonly path: string
   readonly content: string
 }
-
-const bytesOf = (value: string): number => Buffer.byteLength(value)
-
-const sliceUtf8 = (value: string, maxBytes: number): string =>
-  Buffer.from(value).subarray(0, Math.max(0, maxBytes)).toString('utf8')
 
 const isRelativeSpecifier = (moduleSpecifier: string): boolean =>
   moduleSpecifier.startsWith('./') || moduleSpecifier.startsWith('../')
@@ -186,7 +185,7 @@ const buildDefinitionDigest = (
     previousIndex = index
   }
 
-  return sliceUtf8(
+  return sliceUtf8Bytes(
     digestLines.join('\n'),
     REFERENCED_DEFINITION_FILE_BYTE_BUDGET
   )
@@ -279,7 +278,7 @@ export const collectReferencedDefinitions = async (
     }
 
     const digest = buildDefinitionDigest(dependencyPath, content)
-    const digestBytes = bytesOf(digest)
+    const digestBytes = utf8ByteLength(digest)
 
     if (digestBytes === 0) {
       continue
