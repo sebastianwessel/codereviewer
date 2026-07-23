@@ -7,6 +7,7 @@ import {
   type Claim
 } from '../../shared/contracts/verification/verification.schema.js'
 import type { ClaimProvider } from './contracts.js'
+import type { ModelVerdict } from './verification-report.js'
 import { isClaimToolCallBudgetExceededError } from './claim-tools.js'
 import {
   runVerificationFlow,
@@ -310,6 +311,27 @@ describe('runVerificationFlow', () => {
 
     expect(report.verdicts[0]?.status).toBe('uncertain')
     expect(report.observations[0]?.boundReason).toBe('agent-error')
+  })
+
+  test('a verdict that violates the contract ends the claim uncertain', async () => {
+    // Providers differ; some models return a status outside the enum. CODE is
+    // authoritative: an unparseable verdict becomes an `invalid-verdict` bound.
+    const verify: ClaimAgentRunner = async () => ({
+      verdict: {
+        status: 'definitely',
+        rationale: 'the agent invented a status',
+        citedEvidenceIds: []
+      } as unknown as ModelVerdict
+    })
+
+    const { report } = await runVerificationFlow({
+      ...baseFlowInput(repositoryRoot),
+      providers: [staticProvider([makeClaim()])],
+      verifyClaim: verify
+    })
+
+    expect(report.verdicts[0]?.status).toBe('uncertain')
+    expect(report.observations[0]?.boundReason).toBe('invalid-verdict')
   })
 
   test('the bounded tools reject an ineligible secret file', async () => {

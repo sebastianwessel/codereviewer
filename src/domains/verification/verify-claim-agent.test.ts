@@ -43,6 +43,9 @@ const INSECURE_MARKER = 'INSECURE_EVAL'
 // tool output, never from the claim.
 const PLAN_LOOP = '[[plan:loop]]'
 const PLAN_PROBE_SECRET = '[[plan:probe-secret]]'
+// Exercises the repo_list and repo_grep tool handlers (and the mediated
+// list/grep tools behind them) before the concluding read.
+const PLAN_LIST_GREP = '[[plan:list-grep]]'
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
 
@@ -72,6 +75,18 @@ const readToolCall = (id: string, filePath: string) => ({
   id,
   name: 'repo_read',
   arguments: { path: filePath }
+})
+
+const listToolCall = (id: string, dirPath: string) => ({
+  id,
+  name: 'repo_list',
+  arguments: { path: dirPath }
+})
+
+const grepToolCall = (id: string, query: string) => ({
+  id,
+  name: 'repo_grep',
+  arguments: { query }
 })
 
 // A canned provider that mirrors a well-behaved verification agent. Every call
@@ -112,6 +127,22 @@ class ScriptedVerifierProvider implements ModelProvider {
       return this.verdict(request.messages)
     }
 
+    // List/grep plan: list a directory, grep for the marker, then read the
+    // target, then conclude — exercising all three mediated tool handlers.
+    if (claim.detail.includes(PLAN_LIST_GREP)) {
+      if (toolResults.length === 0) {
+        return this.emitToolCall(listToolCall('list', '.'))
+      }
+      if (toolResults.length === 1) {
+        return this.emitToolCall(grepToolCall('grep', INSECURE_MARKER))
+      }
+      if (toolResults.length === 2) {
+        return this.toolCall('target', targetPath)
+      }
+
+      return this.verdict(request.messages)
+    }
+
     // Default inspect plan: one read of the target, then a content-driven verdict.
     if (toolResults.length === 0) {
       return this.toolCall('target', targetPath)
@@ -120,16 +151,26 @@ class ScriptedVerifierProvider implements ModelProvider {
     return this.verdict(request.messages)
   }
 
+  private emitToolCall<T extends JsonValue>(
+    call: {
+      readonly id: string
+      readonly name: string
+      readonly arguments: Record<string, string>
+    }
+  ): ObjectResponse<T> {
+    return {
+      object: null as unknown as T,
+      toolCalls: [call],
+      finishReason: 'tool_calls',
+      usage
+    }
+  }
+
   private toolCall<T extends JsonValue>(
     id: string,
     filePath: string
   ): ObjectResponse<T> {
-    return {
-      object: null as unknown as T,
-      toolCalls: [readToolCall(id, filePath)],
-      finishReason: 'tool_calls',
-      usage
-    }
+    return this.emitToolCall(readToolCall(id, filePath))
   }
 
   // The verdict is a pure function of what the tools returned: `confirmed` when a
@@ -258,6 +299,35 @@ describe('verify_claim agent (deterministic-provider integration)', () => {
       expect(observation.bytesRead).toBeGreaterThan(0)
       expect(observation.boundReason).toBeUndefined()
     }
+  })
+
+  test('drives the list and grep tool handlers before concluding', async () => {
+    const provider = new ScriptedVerifierProvider()
+    verifier = makeVerifier(provider, 6)
+
+    const { report } = await runVerificationFlow({
+      ...flowBounds,
+      maxToolCallsPerClaim: 6,
+      repositoryRoot,
+      providers: [
+        {
+          id: 'prior-findings',
+          gather: async () => [
+            priorFindingClaim({
+              id: 'claim_lg1',
+              filePath: 'holds.ts',
+              detail: `Investigate broadly. ${PLAN_LIST_GREP}`
+            })
+          ]
+        }
+      ],
+      verifyClaim: verifier.verify
+    })
+
+    // list + grep + read all ran (3 tool calls) and the read of holds.ts still
+    // showed the insecure marker, so the verdict is confirmed.
+    expect(report.observations[0]?.toolCalls).toBe(3)
+    expect(report.verdicts[0]?.status).toBe('confirmed')
   })
 
   test('records a ledger entry for every eligible read and rejects the secret file', async () => {
