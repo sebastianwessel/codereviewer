@@ -40,7 +40,7 @@ every major block. Unknown keys are rejected — use only documented keys (see t
 {
   // ── Review behaviour ──────────────────────────────────────────────────────
   "review": {
-    "mode": "ci",                       // "local" | "ci" | "pr"
+    "mode": "ci",                       // "local" | "ci" | "pr" | "full"
     "depth": "balanced",                // "fast" | "balanced" | "thorough"
     "baseRef": "main",
     "headRef": "HEAD",

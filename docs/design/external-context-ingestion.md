@@ -1,6 +1,6 @@
 # Design: External Change-Intent Context Ingestion
 
-Status: Proposed
+Status: Phase 1 shipped (provider spine + inbox + changed-files + summarizer)
 Date: 2026-07-21
 Normative spec: [`specs/11-external-context-ingestion.md`](../../specs/11-external-context-ingestion.md)
 
@@ -113,8 +113,8 @@ with none of that risk, because the fetching is done by trusted, human-authored
 pipeline scripts, not by a model reading attacker-controlled text. So the
 recommendation is:
 
-- **Now:** inbox + platform adapters + changed-files + model summarizer. No
-  model ever holds a tool.
+- **Now:** inbox + changed-files + model summarizer. No model ever holds a tool.
+  (Platform adapters are a later phase — see Phasing below.)
 - **Later, only if the inbox proves insufficient:** an `AgenticContextProvider`
   scoped to the summarizer alone (never the review/discovery model), host-
   allowlisted, sandboxed, bounded, off by default.

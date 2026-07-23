@@ -101,9 +101,11 @@ Plus the following generated/non-reviewable data files (excluded because they
 carry no semantic logic to review, lowering token cost and noise):
 
 - Dependency lock files: `**/package-lock.json`, `**/yarn.lock`,
-  `**/pnpm-lock.yaml`, `**/Cargo.lock`, `**/go.sum`
+  `**/pnpm-lock.yaml`, `**/npm-shrinkwrap.json`, `**/composer.lock`,
+  `**/Gemfile.lock`, `**/poetry.lock`, `**/Cargo.lock`, `**/go.sum`
 - Minified bundles: `**/*.min.js`, `**/*.min.css`
 - Source maps: `**/*.map`
+- Test snapshots: `**/*.snap`
 - Test snapshots: `**/*.snap`
 
 Add app-specific data files (e.g. locale bundles) via `paths.exclude` as
@@ -242,7 +244,10 @@ Controls logging and OpenTelemetry tracing.
 | Key | Values / Type | Default | Description |
 | --- | --- | --- | --- |
 | `observability.logging.level` | `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent` | `silent` | Log verbosity. Override with env `CODEREVIEWER_LOG_LEVEL`, flag `--log-level <level>`, or `--debug`. |
-| `observability.openTelemetry.enabled` | boolean | — | Enable OpenTelemetry span export. |
+| `observability.openTelemetry.enabled` | boolean | `false` | Enable OpenTelemetry span export. |
+| `observability.openTelemetry.endpoint` | URL | — | OTLP endpoint. Required when `enabled` is `true`. Override with env `CODEREVIEWER_OPENTELEMETRY_ENDPOINT`. |
+| `observability.openTelemetry.headers` | object | `{}` | Extra OTLP request headers. Override with env `CODEREVIEWER_OPENTELEMETRY_HEADERS`. |
+| `observability.openTelemetry.serviceName` | string | `codereviewer` | Service name reported on exported spans. |
 
 Operational logs are newline-delimited JSON and are sanitized to exclude source
 snippets, prompts, request/response bodies, provider headers, environment
@@ -287,6 +292,10 @@ Controls which report formats are written.
 | Key | Values / Type | Description |
 | --- | --- | --- |
 | `reporting.formats` | `json`, `markdown`, `sarif`, `github-review-comments` | Report formats to emit. |
+| `reporting.sarif.target` | `generic`, `github` | SARIF dialect to emit (default `generic`). |
+| `reporting.sarif.category` | string | SARIF run category / tool name (default `codereviewer`). |
+| `reporting.sarif.maxResults` | integer 1–25000 | Cap on SARIF diagnostic results (default `5000`). |
+| `reporting.sarif.redact` | boolean | Redact snippets in SARIF output (default `true`). |
 
 See [Artifacts Reference](artifacts.md) for a description of each output file.
 

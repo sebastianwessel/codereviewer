@@ -63,6 +63,8 @@ codereviewer review \
 | Flag | Description |
 | --- | --- |
 | `--file <path>` | Review this file instead of the git diff. Repeat for multiple files. |
+| `--files <a,b,c>` | Comma-separated list of files to review, as an alternative to repeating `--file`. |
+| `--config <path>` | Path to the config file (overrides the default `.codereviewer/config.json`). |
 | `--base-ref <ref>` | Base git ref for the diff (default from config). |
 | `--head-ref <ref>` | Head git ref for the diff (default from config). |
 | `--debug` | Emit no-content stage logs to the console while the run is active. |
@@ -133,7 +135,7 @@ source state could never match a later run.
 
 The written file contains fingerprints only — no titles, paths, or severities.
 
-Exits `2` with `baseline_source_unavailable` when no report can be resolved.
+Exits `3` with `baseline_source_unavailable` when no report can be resolved.
 
 > **Note:** `review` never writes the baseline. Generating it is always an
 > explicit step, so a review run cannot suppress its own findings.
