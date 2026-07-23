@@ -56,6 +56,7 @@ export const prepareReviewRunnerCompletionState = (
     readonly supportSignalCandidates: readonly CandidateFinding[]
     readonly providerWorkflow: ReviewRunnerProviderState['providerWorkflow']
     readonly contextIngestionUsage?: RunTokenUsage | undefined
+    readonly contextIngestionWarnings?: readonly string[] | undefined
     readonly providerTaskEventsObservedLive: boolean
     readonly reviewedPaths: readonly string[]
     readonly reviewedLineRanges: readonly ReviewedLineRange[]
@@ -117,6 +118,9 @@ export const prepareReviewRunnerCompletionState = (
       driftFindings: input.driftFindings,
       admissionWarnings: admission.warnings,
       admittedFindings: admission.admittedFindings,
+      ...(input.contextIngestionWarnings === undefined
+        ? {}
+        : { contextIngestionWarnings: input.contextIngestionWarnings }),
       ...(input.baselineFingerprints === undefined
         ? {}
         : { baselineFingerprints: input.baselineFingerprints }),

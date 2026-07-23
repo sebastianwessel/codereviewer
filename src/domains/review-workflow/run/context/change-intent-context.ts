@@ -10,6 +10,7 @@ import {
   createDigestSummarizer,
   createModelSummarizer,
   runContextIngestion,
+  type ContextIngestionResult,
   type ContextSummarizer
 } from '../../../context-ingestion/index.js'
 import {
@@ -30,7 +31,20 @@ import type { ContextAssemblyResult } from './context.js'
 export type ChangeIntentContextResult = {
   readonly assembledContext: ContextAssemblyResult
   readonly usage: RunTokenUsage | undefined
+  // Non-fatal warnings surfaced in the run report, e.g. a context provider that
+  // failed and was skipped, so degradation is visible rather than silent.
+  readonly warnings: readonly string[]
 }
+
+const warningsForFailedProviders = (
+  providerMetrics: ContextIngestionResult['providerMetrics']
+): readonly string[] =>
+  providerMetrics
+    .filter((metric) => metric.failed)
+    .map(
+      (metric) =>
+        `External change-intent provider "${metric.id}" failed and was skipped.`
+    )
 
 // Selects the summarizer for the run. `model` is used only when a provider is
 // configured and model-backed review is not disabled; otherwise the
@@ -114,7 +128,11 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
   const contextSources = input.config.contextSources
 
   if (!contextSources.enabled || contextSources.providers.length === 0) {
-    return { assembledContext: input.assembledContext, usage: undefined }
+    return {
+      assembledContext: input.assembledContext,
+      usage: undefined,
+      warnings: []
+    }
   }
 
   let usage: RunTokenUsage | undefined
@@ -159,9 +177,8 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     ...(input.signal === undefined ? {} : { signal: input.signal })
   })
 
-  const failedProviders = result.providerMetrics.filter(
-    (metric) => metric.failed
-  ).length
+  const warnings = warningsForFailedProviders(result.providerMetrics)
+  const failedProviders = warnings.length
 
   if (result.brief === undefined) {
     step.end({
@@ -173,7 +190,7 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
       fragment_count: result.fragmentCount,
       failed_providers: failedProviders
     })
-    return { assembledContext: input.assembledContext, usage }
+    return { assembledContext: input.assembledContext, usage, warnings }
   }
 
   const brief = result.brief
@@ -225,6 +242,7 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
       tasks,
       contextLedger: [...input.assembledContext.contextLedger, ledgerEntry]
     },
-    usage
+    usage,
+    warnings
   }
 }

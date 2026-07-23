@@ -239,6 +239,7 @@ export const runReview = async (
       ...(changeIntent.usage === undefined
         ? {}
         : { contextIngestionUsage: changeIntent.usage }),
+      contextIngestionWarnings: changeIntent.warnings,
       providerWorkflow,
       providerTaskEventsObservedLive,
       reviewedPaths: intake.changedFiles.map((file) => file.path),

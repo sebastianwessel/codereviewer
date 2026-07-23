@@ -188,9 +188,10 @@ standard schema validation.
   unknown provider and reports the missing field).
 - A provider that fails at run time — missing directory, unreadable file, empty
   result — is non-fatal. It is recorded as a failed provider in the
-  `context_ingestion` observability step (`failedProviders` count) and the review
-  proceeds without that provider's context. A source failure never changes the
-  review exit code.
+  `context_ingestion` observability step (`failedProviders` count) and surfaced
+  as a run warning in the report, so the degradation is visible rather than
+  silent, and the review proceeds without that provider's context. A source
+  failure never changes the review exit code.
 
 The later-phase network `platform-API` provider adds semantic configuration
 checks (host allowlist, no literal secret) that warrant a dedicated
