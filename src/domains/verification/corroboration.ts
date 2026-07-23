@@ -16,16 +16,12 @@ import type {
   Claim,
   Verdict
 } from '../../shared/contracts/verification/verification.schema.js'
+import type {
+  CorroborationMatchKind,
+  FindingCorroboration
+} from './verification-report.js'
 
-export type CorroborationMatchKind = 'fingerprint' | 'fuzzy'
-
-export type FindingCorroboration = {
-  readonly findingId: string
-  // A raised confidence signal only. There is deliberately no severity field.
-  readonly confidence: 'corroborated'
-  readonly matchKinds: readonly CorroborationMatchKind[]
-  readonly witnessClaimIds: readonly string[]
-}
+export type { CorroborationMatchKind, FindingCorroboration }
 
 export type CorroborateFindingsInput = {
   readonly findings: readonly AdmittedFinding[]

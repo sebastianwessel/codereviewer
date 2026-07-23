@@ -118,9 +118,12 @@ Written only when `verification.enabled`. Content-free beyond verdict data: an
 array of claim verdicts (`confirmed` / `refuted` / `uncertain`, with a redacted
 rationale and cited evidence IDs), per-claim no-content observations (claim kind,
 source label, tool-call count, bytes read, verdict status, duration), any
-non-fatal run warnings, and the claim count. Verdicts are a separate lane and
-never enter the quality gate. A failed claim provider also surfaces as a run
-warning in `run-summary.json`. See
+non-fatal run warnings, the claim count, and `corroborations` — general-review
+findings independently confirmed by a verdict (finding id, a `corroborated`
+confidence signal, match kinds, and witnessing claim ids). Corroboration raises
+confidence only; it never changes a finding's severity or the defect report.
+Verdicts are a separate lane and never enter the quality gate. A failed claim
+provider also surfaces as a run warning in `run-summary.json`. See
 [Agentic Verification Flow](../concepts/verification-flow.md).
 
 ### `report.md`

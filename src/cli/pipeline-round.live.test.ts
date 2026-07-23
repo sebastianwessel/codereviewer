@@ -196,6 +196,11 @@ describe.skipIf(!LIVE)('full pipeline round (LIVE provider)', () => {
           status: string
           rationale: string
         }>
+        const corroborations = (verification.corroborations ?? []) as Array<{
+          findingId: string
+          matchKinds: string[]
+          witnessClaimIds: string[]
+        }>
 
         // ---- Evaluation output (read this in the test run) ------------------
         // eslint-disable-next-line no-console
@@ -214,6 +219,13 @@ describe.skipIf(!LIVE)('full pipeline round (LIVE provider)', () => {
             verdicts
               .map((v) => `  - ${v.claimId}: ${v.status} — ${v.rationale.slice(0, 160)}`)
               .join('\n') +
+            `\ncorroborations (${corroborations.length}):\n` +
+            corroborations
+              .map(
+                (c) =>
+                  `  - finding ${c.findingId} corroborated by ${c.witnessClaimIds.join(', ')} [${c.matchKinds.join(', ')}]`
+              )
+              .join('\n') +
             `\ncost usd: ${(report.run as { costUsd?: number }).costUsd ?? 'n/a'}\n` +
             '============================================\n'
         )
@@ -231,6 +243,10 @@ describe.skipIf(!LIVE)('full pipeline round (LIVE provider)', () => {
         // confirmed by the agent after it reads the code.
         expect(verdicts[0]?.status).toBe('confirmed')
         expect(verdicts[0]?.rationale.length).toBeGreaterThan(0)
+        // The general review and CodeQL->verification independently identified the
+        // same SQL injection, so the finding is surfaced as corroborated ("strong
+        // finding"). Confidence only — the finding's severity is unchanged.
+        expect(corroborations.length).toBeGreaterThanOrEqual(1)
       } finally {
         await rm(root, { recursive: true, force: true })
       }

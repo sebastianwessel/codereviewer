@@ -227,7 +227,7 @@ describe('verify_claim agent (deterministic-provider integration)', () => {
     const provider = new ScriptedVerifierProvider()
     verifier = makeVerifier(provider, flowBounds.maxToolCallsPerClaim)
 
-    const { report } = await runVerificationFlow({
+    const { report, claims } = await runVerificationFlow({
       ...flowBounds,
       repositoryRoot,
       providers: [
@@ -246,6 +246,10 @@ describe('verify_claim agent (deterministic-provider integration)', () => {
     // The finding still present → confirmed; the fixed finding → refuted.
     expect(byClaim.get('claim_still1')).toBe('confirmed')
     expect(byClaim.get('claim_fixed1')).toBe('refuted')
+
+    // The flow exposes the gathered claims so the caller can corroborate
+    // confirmed verdicts against general-review findings by location.
+    expect(claims.map((c) => c.id).sort()).toEqual(['claim_fixed1', 'claim_still1'])
 
     // Every claim ran a bounded loop that actually read a file and concluded
     // without hitting a bound.

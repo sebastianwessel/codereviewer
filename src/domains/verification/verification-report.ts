@@ -51,14 +51,33 @@ export const ClaimObservationSchema = z.strictObject({
 
 export type ClaimObservation = z.infer<typeof ClaimObservationSchema>
 
+export const CorroborationMatchKindSchema = z.enum(['fingerprint', 'fuzzy'])
+
+// Links a general-review admitted finding to the confirming verification
+// verdict(s) that independently support it (spec 12 "Corroboration"). It raises
+// a CONFIDENCE signal only — there is deliberately no severity field, and the
+// admitted finding contract is left untouched.
+export const FindingCorroborationSchema = z.strictObject({
+  findingId: z.string().min(1),
+  confidence: z.literal('corroborated'),
+  matchKinds: z.array(CorroborationMatchKindSchema),
+  witnessClaimIds: z.array(z.string().min(1))
+})
+
 export const VerificationReportSchema = z.strictObject({
   verdicts: z.array(VerdictSchema).default([]),
   observations: z.array(ClaimObservationSchema).default([]),
   // Redacted, no-content run warnings (e.g. a claim provider that failed at run
   // time). Provider failures are non-fatal and surface here (spec 12).
   warnings: z.array(z.string()).default([]),
-  claimCount: z.int().min(0).default(0)
+  claimCount: z.int().min(0).default(0),
+  // General-review findings independently confirmed by a verification verdict.
+  // Confidence signal only; never changes a finding's severity or the report.
+  corroborations: z.array(FindingCorroborationSchema).default([])
 })
+
+export type CorroborationMatchKind = z.infer<typeof CorroborationMatchKindSchema>
+export type FindingCorroboration = z.infer<typeof FindingCorroborationSchema>
 
 export type VerificationReport = z.infer<typeof VerificationReportSchema>
 

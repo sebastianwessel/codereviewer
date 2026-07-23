@@ -129,14 +129,21 @@ The agent's only tools are the mediated repository tools from the
 
 ## Corroboration
 
-- A verdict and a general-review finding that share a fingerprint (or a fuzzy
-  match: same file, overlapping line range, compatible category/CWE) are recorded
-  as one observation with multiple witnesses.
-- Corroboration raises a `confidence` signal on the finding; it never raises
-  severity. Severity remains a function of impact only.
-- An independently `confirmed` claim may promote a general-review finding that
-  the refutation pass left as `needs-more-evidence`; a `refuted` analyzer claim
-  is recorded as a likely source false positive.
+- After the general review and the verification flow both complete, each
+  `confirmed` verdict is matched against the general-review admitted findings. A
+  match is either a shared fingerprint or, since a verdict and a finding rarely
+  share a title across lanes, a fuzzy match: the verdict's claim location and the
+  finding location cover the same file with overlapping line ranges.
+- Each matched finding yields a `FindingCorroboration` — the finding id, a
+  `confidence: corroborated` signal, the match kinds, and the witnessing claim
+  ids. This is a separate structure; the admitted finding contract is left
+  untouched.
+- Corroboration raises confidence only; it never raises severity. Severity
+  remains a function of impact only.
+- Corroborations are surfaced in the verification report (`corroborations`), so
+  the cross-lane "strong finding" signal is visible in output without changing
+  the defect report or gate. Only `confirmed` verdicts corroborate; `refuted` and
+  `uncertain` verdicts never raise confidence.
 
 ## Platform Neutrality
 

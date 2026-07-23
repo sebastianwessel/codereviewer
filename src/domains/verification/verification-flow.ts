@@ -76,6 +76,10 @@ export type RunVerificationFlowInput = {
 
 export type VerificationFlowResult = {
   readonly report: VerificationReport
+  // The gathered claims, exposed so the caller can corroborate confirmed verdicts
+  // against general-review findings by location (a verdict carries fingerprints
+  // but not a location).
+  readonly claims: readonly Claim[]
   readonly usage?: RunTokenUsage | undefined
 }
 
@@ -271,6 +275,7 @@ export const runVerificationFlow = async (
 
   return {
     report,
+    claims,
     ...(usage === undefined ? {} : { usage })
   }
 }

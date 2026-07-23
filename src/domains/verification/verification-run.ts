@@ -22,6 +22,7 @@ import {
   type ProviderImport
 } from '../provider-resolution/index.js'
 import type { ContextRetrievalEligibilityConfig } from '../context-retrieval/index.js'
+import type { Claim } from '../../shared/contracts/verification/verification.schema.js'
 import type { ClaimProvider } from './contracts.js'
 import { createClaimsFileProvider } from './claims-file-provider.js'
 import { createPriorFindingsProvider } from './prior-findings-provider.js'
@@ -35,6 +36,9 @@ import {
 
 export type VerificationRunResult = {
   readonly report: VerificationReport
+  // Gathered claims, so the caller can corroborate confirmed verdicts against
+  // general-review findings by location.
+  readonly claims: readonly Claim[]
   readonly usage?: RunTokenUsage | undefined
 }
 
@@ -61,7 +65,7 @@ export const runVerificationRun = async (input: {
   const { verification } = input.config
 
   if (!verification.enabled || verification.providers.length === 0) {
-    return { report: emptyVerificationReport() }
+    return { report: emptyVerificationReport(), claims: [] }
   }
 
   if (input.config.provider === undefined) {
@@ -69,7 +73,7 @@ export const runVerificationRun = async (input: {
       'Verification is enabled but no model provider is configured; producing an empty verification report.'
     )
 
-    return { report: emptyVerificationReport() }
+    return { report: emptyVerificationReport(), claims: [] }
   }
 
   let modelAlias
@@ -91,7 +95,7 @@ export const runVerificationRun = async (input: {
       { error_name: error instanceof Error ? error.name : 'unknown' }
     )
 
-    return { report: emptyVerificationReport() }
+    return { report: emptyVerificationReport(), claims: [] }
   }
 
   const usageRecorder = createProviderUsageRecorder(modelAlias)
@@ -106,7 +110,7 @@ export const runVerificationRun = async (input: {
   }
 
   try {
-    const { report } = await runVerificationFlow({
+    const { report, claims } = await runVerificationFlow({
       providers: verification.providers.map(createClaimProvider),
       repositoryRoot: input.repositoryRoot,
       verifyClaim: verifier.verify,
@@ -122,7 +126,7 @@ export const runVerificationRun = async (input: {
     })
     const usage = usageRecorder.usage()
 
-    return { report, usage }
+    return { report, claims, usage }
   } finally {
     await verifier.shutdown()
   }

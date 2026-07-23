@@ -54,6 +54,7 @@ import {
   renderBaselineJson
 } from '../domains/admission/index.js'
 import {
+  corroborateFindings,
   runVerificationRun,
   runWarningsForVerificationReport,
   type VerificationReport
@@ -67,7 +68,10 @@ import {
   normalizeError,
   type ErrorSource
 } from '../shared/errors/error-normalizer.js'
-import type { CodeReviewerConfig } from '../shared/contracts/index.js'
+import type {
+  AdmittedFinding,
+  CodeReviewerConfig
+} from '../shared/contracts/index.js'
 
 export type CliResult = {
   readonly exitCode: number
@@ -574,6 +578,7 @@ const runVerificationForReview = async (
     readonly options: CliRunOptions
     readonly config: CodeReviewerConfig
     readonly environment: Readonly<Record<string, string | undefined>>
+    readonly admittedFindings: readonly AdmittedFinding[]
     readonly logger: Logger
   }
 ): Promise<VerificationReport | undefined> => {
@@ -581,7 +586,7 @@ const runVerificationForReview = async (
     return undefined
   }
 
-  const { report } = await runVerificationRun({
+  const { report, claims } = await runVerificationRun({
     config: input.config,
     repositoryRoot: input.options.cwd,
     environment: input.environment,
@@ -591,7 +596,16 @@ const runVerificationForReview = async (
       : { providerImport: input.options.providerImport })
   })
 
-  return report
+  // Cross-witness: a confirmed verdict that lands on a general-review finding
+  // raises that finding's confidence (never its severity). Surfaced in the
+  // verification report so the "strong finding" signal is visible in output.
+  const corroborations = corroborateFindings({
+    findings: input.admittedFindings,
+    verdicts: report.verdicts,
+    claims
+  })
+
+  return { ...report, corroborations: [...corroborations] }
 }
 
 const runReview = async (
@@ -653,6 +667,7 @@ const runReview = async (
       options,
       config: loadedConfig.config,
       environment: loadedConfig.environment,
+      admittedFindings: result.report.admittedFindings,
       logger
     })
     const verificationRunWarnings =
