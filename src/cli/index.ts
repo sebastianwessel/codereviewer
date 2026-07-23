@@ -1,10 +1,9 @@
 import { appendFileSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   resolveExistingPathInsideRoot,
-  resolvePathInsideRoot,
-  resolveWritePathInsideRoot
+  resolvePathInsideRoot
 } from '../platform/path-service.js'
 import {
   EVAL_PROVIDER_RETRY_WARNING_PREFIX,
@@ -41,13 +40,7 @@ import {
 } from '../domains/observability/index.js'
 import {
   latestRunWithReport,
-  parseRunIndex,
-  renderRunIndexJson,
-  renderRunSummaryJson,
-  runIndexFileName,
-  upsertRunIndexEntry,
-  writeReportingArtifacts,
-  type RunIndexEntry
+  parseRunIndex
 } from '../domains/reporting/index.js'
 import {
   buildBaselineEntries,
@@ -82,6 +75,16 @@ import {
   parseOptionValue,
   parseOptionValues
 } from './args.js'
+import {
+  ensureDirectory,
+  jsonResult,
+  readRunIndex,
+  recordRunInIndex,
+  resolveArtifactWritePath,
+  writePartialReviewArtifacts,
+  writeReviewArtifacts,
+  writeRunArtifact
+} from './run-artifacts.js'
 
 export type CliResult = {
   readonly exitCode: number
@@ -101,8 +104,6 @@ const usageError = (message: string): CliResult => ({
   stdout: '',
   stderr: JSON.stringify({ code: 'usage_error', message })
 })
-
-const jsonResult = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
 
 const runConfigValidate = async (
   args: readonly string[],
@@ -133,15 +134,6 @@ const runConfigValidate = async (
     }
   }
 }
-
-const ensureDirectory = async (directory: string): Promise<void> => {
-  await mkdir(directory, { recursive: true })
-}
-
-const resolveArtifactWritePath = (
-  repositoryRoot: string,
-  artifactPath: string
-): Promise<string> => resolveWritePathInsideRoot(repositoryRoot, artifactPath)
 
 const createEvalRunArchiveId = (): string => {
   const now = new Date()
@@ -221,170 +213,6 @@ const resolveLogSink = async (
       appendFileSync(logPath, chunk, 'utf8')
     }
   }
-}
-
-const writeRunArtifact = async (
-  repositoryRoot: string,
-  artifactRoot: string,
-  name: string,
-  content: string
-): Promise<void> => {
-  await writeFile(
-    await resolveArtifactWritePath(
-      repositoryRoot,
-      path.posix.join(artifactRoot, name)
-    ),
-    content
-  )
-}
-
-const readRunIndex = async (
-  repositoryRoot: string,
-  artifactDir: string
-): Promise<string | undefined> => {
-  try {
-    return await readFile(
-      await resolveExistingPathInsideRoot(
-        repositoryRoot,
-        path.posix.join(artifactDir, runIndexFileName)
-      ),
-      'utf8'
-    )
-  } catch {
-    return undefined
-  }
-}
-
-// Run directories are otherwise opaque and unenumerated, so nothing downstream
-// can find the newest report. The index is bookkeeping: a failure to record a
-// run must never fail a review that already produced its artifacts.
-const recordRunInIndex = async (
-  input: {
-    readonly repositoryRoot: string
-    readonly artifactDir: string
-    readonly entry: RunIndexEntry
-  }
-): Promise<void> => {
-  try {
-    const index = parseRunIndex(
-      await readRunIndex(input.repositoryRoot, input.artifactDir)
-    )
-    const indexPath = await resolveArtifactWritePath(
-      input.repositoryRoot,
-      path.posix.join(input.artifactDir, runIndexFileName)
-    )
-
-    await ensureDirectory(path.dirname(indexPath))
-    await writeFile(
-      indexPath,
-      renderRunIndexJson(upsertRunIndexEntry(index, input.entry))
-    )
-  } catch {
-    // Bookkeeping only; the run's own artifacts are already durable.
-  }
-}
-
-const writeReviewArtifacts = async (
-  input: {
-    readonly repositoryRoot: string
-    readonly artifactRoot: string
-    readonly report: Awaited<ReturnType<typeof runReviewPipeline>>['report']
-    readonly contextLedger: Awaited<ReturnType<typeof runReviewPipeline>>['contextLedger']
-    readonly sharedContext: Awaited<ReturnType<typeof runReviewPipeline>>['sharedContext']
-    readonly observability: Awaited<ReturnType<typeof runReviewPipeline>>['observability']
-    readonly config: CodeReviewerConfig
-  }
-): Promise<void> => {
-  const runDirectory = await resolveArtifactWritePath(
-    input.repositoryRoot,
-    input.artifactRoot
-  )
-  await ensureDirectory(runDirectory)
-  await writeReportingArtifacts({
-    report: input.report,
-    formats: input.config.reporting.formats,
-    sarif: input.config.reporting.sarif,
-    writer: (artifactPath, content) =>
-      writeRunArtifact(
-        input.repositoryRoot,
-        input.artifactRoot,
-        artifactPath,
-        content
-      )
-  })
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'run-summary.json',
-    renderRunSummaryJson(input.report.run)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'context-ledger.json',
-    jsonResult(input.contextLedger)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'shared-context.json',
-    jsonResult(input.sharedContext)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'observability.json',
-    jsonResult(input.observability)
-  )
-}
-
-const writePartialReviewArtifacts = async (
-  input: {
-    readonly repositoryRoot: string
-    readonly artifactRoot: string
-    readonly partialState: PartialReviewRunState
-  }
-): Promise<void> => {
-  const runDirectory = await resolveArtifactWritePath(
-    input.repositoryRoot,
-    input.artifactRoot
-  )
-  await ensureDirectory(runDirectory)
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'run-summary.json',
-    renderRunSummaryJson(input.partialState.runSummary)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'context-ledger.json',
-    jsonResult(input.partialState.contextLedger)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'shared-context.json',
-    jsonResult(input.partialState.sharedContext)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'observability.json',
-    jsonResult(input.partialState.observability)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'error.json',
-    jsonResult({
-      code: input.partialState.error.code,
-      message: input.partialState.error.message,
-      category: input.partialState.error.category,
-      recoverable: input.partialState.error.recoverable
-    })
-  )
 }
 
 // Runs the agentic verification flow after the general review when it is enabled
