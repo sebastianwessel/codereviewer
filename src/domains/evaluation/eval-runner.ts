@@ -52,10 +52,10 @@ import {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
-  renderEvalComparison,
-  renderEvalRecallReport,
   renderEvalSummary
-} from './eval-report-rendering.js'
+} from './eval-summary-report-rendering.js'
+import { renderEvalComparison } from './eval-comparison-report-rendering.js'
+import { renderEvalRecallReport } from './eval-recall-report-rendering.js'
 
 export {
   EvalRegressionThresholdsSchema,
@@ -71,10 +71,10 @@ export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
-  renderEvalComparison,
-  renderEvalRecallReport,
   renderEvalSummary
-} from './eval-report-rendering.js'
+} from './eval-summary-report-rendering.js'
+export { renderEvalComparison } from './eval-comparison-report-rendering.js'
+export { renderEvalRecallReport } from './eval-recall-report-rendering.js'
 
 type EvalCaseComputation = {
   readonly reportCase: z.infer<typeof EvalCaseReportSchema>

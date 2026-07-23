@@ -375,7 +375,7 @@ availability from the review report:
 | `artifactOnlyFalsePositiveFindings` | object[] | Sanitized artifact-only noise summaries with ID, severity, category, path, line, and title. |
 | `matchedFindings[].semanticReason` | string or omitted | Concise report-safe rationale from the optional semantic judge when that judge accepted the match. Omitted for deterministic matches. |
 | `artifactOnlyMatchedFindings[].semanticReason` | string or omitted | Same rationale field for artifact-only semantic judge matches. |
-| `contextLedger` | object[] | Report-safe context ledger summaries for the case. Each entry includes `kind`, `consideredForModelContext`, and `truncated`; legacy eval inputs without `kind` are reported as `unknown`. |
+| `contextLedger` | object[] | Report-safe context ledger summaries for the case. Each entry includes `kind` (one of the eight context-ledger kinds), `consideredForModelContext`, and `truncated`. |
 | `providerIssues` | object[] | Provider instability observed for the case, including unrecovered provider errors, recovered eval retries, refutation provider issues, and budget/timeouts. Each entry includes `code`, `stage`, and `recovered`. |
 | `refutationResults` | object[] | Sanitized refutation summaries with ID, refuted candidate ID, verdict, and reason code. |
 | `inputTokens` | integer >= 0 | Total input tokens surfaced by the review report for this case, or `0` when unavailable. |
@@ -695,15 +695,12 @@ match-mode fallback rules.
 Eval report case-result labels must live in a focused helper module so summary
 case, provider issue, context ledger, and note rows share one
 status and fallback policy.
-Eval recall report rendering must live in a focused renderer module while the
-public evaluation rendering entrypoint keeps exporting the recall renderer for
-backward-compatible callers.
-Eval summary report rendering must live in a focused renderer module while the
-public evaluation rendering entrypoint keeps exporting the summary renderer for
-backward-compatible callers.
-Eval comparison report rendering must live in a focused renderer module while
-the public evaluation rendering entrypoint keeps exporting the comparison
-renderer for backward-compatible callers.
+Eval recall report rendering must live in a focused renderer module that the
+evaluation package re-exports.
+Eval summary report rendering must live in a focused renderer module that the
+evaluation package re-exports.
+Eval comparison report rendering must live in a focused renderer module that the
+evaluation package re-exports.
 Eval comparison gate and selection rendering must live in a focused helper
 module so dataset-compatibility warnings and selection status rows are owned by
 one tested component.

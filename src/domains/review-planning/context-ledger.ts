@@ -3,15 +3,18 @@ import { normalizeRepositoryRelativePath } from '../../platform/repository-path.
 import { ContextLedgerIdSchema } from '../../shared/contracts/index.js'
 import { sha256 } from '../../shared/hash/hash.js'
 
-export type ContextLedgerKind =
-  | 'file'
-  | 'diff'
-  | 'symbol'
-  | 'instruction'
-  | 'skill'
-  | 'support-signal-output'
-  | 'tool-result'
-  | 'prior-artifact'
+export const ContextLedgerKindSchema = z.enum([
+  'file',
+  'diff',
+  'symbol',
+  'instruction',
+  'skill',
+  'support-signal-output',
+  'tool-result',
+  'prior-artifact'
+])
+
+export type ContextLedgerKind = z.infer<typeof ContextLedgerKindSchema>
 
 export type ContextLedgerDecision =
   | 'included'
@@ -34,16 +37,7 @@ export type ContextLedgerEntry = {
 
 export const ContextLedgerEntrySchema = z.strictObject({
   id: ContextLedgerIdSchema,
-  kind: z.enum([
-    'file',
-    'diff',
-    'symbol',
-    'instruction',
-    'skill',
-    'support-signal-output',
-    'tool-result',
-    'prior-artifact'
-  ]),
+  kind: ContextLedgerKindSchema,
   path: z.string().min(1).optional(),
   taskId: z.string().min(1).optional(),
   sourceLedgerEntryId: z.string().min(1).optional(),
