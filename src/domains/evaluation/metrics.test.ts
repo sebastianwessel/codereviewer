@@ -28,6 +28,14 @@ const caseResult = (
   trustedDeterministicFindingCount: 1,
   provedRefutationCount: 0,
   rejectedFindingCount: 0,
+  fixJudgmentAgreementCount: 0,
+  fixJudgedLabeledCount: 0,
+  fixFalsePositiveDetectedCount: 0,
+  fixGroundTruthFalsePositiveCount: 0,
+  fixProducedForRealCount: 0,
+  fixRealFindingCount: 0,
+  fixApplyFailedCount: 0,
+  fixApplyAttemptedCount: 0,
   tierCounts: {
     'runtime-critical': { expected: 1, matched: 1 },
     security: { expected: 0, matched: 0 },
@@ -271,5 +279,65 @@ describe('eval metrics', () => {
 
     // 3 proved refutations, only 1 matched: 2 unmatched proved refutations.
     expect(metrics.refutationFalsePositiveCount).toBe(2)
+  })
+
+  test('reports zero for every fix-lane metric when the lane never ran', () => {
+    // Divide-by-zero guard: all fix denominators are 0, so each rate is 0 (not
+    // the 1 recall/precision use for "nothing expected"), and counts are 0.
+    const metrics = calculateEvalMetrics([caseResult()])
+
+    expect(metrics).toMatchObject({
+      fixJudgmentAccuracy: 0,
+      fixFalsePositiveDetectionRate: 0,
+      fixProduceRate: 0,
+      fixApplyFailureRate: 0,
+      fixJudgedFindingCount: 0,
+      fixGroundTruthFalsePositiveCount: 0,
+      fixRealFindingCount: 0,
+      fixAttemptedCount: 0
+    })
+  })
+
+  test('computes fix-lane accuracy over mixed real and false-positive judgments', () => {
+    // Case A: two judged-and-labeled findings, one agreeing (real->real) and one
+    // disagreeing (a false positive the lane called real). One GT false positive
+    // was caught. One real finding got an apply-checked fix; one apply attempt
+    // failed.
+    const metrics = calculateEvalMetrics([
+      caseResult({
+        fixJudgmentAgreementCount: 1,
+        fixJudgedLabeledCount: 2,
+        fixFalsePositiveDetectedCount: 1,
+        fixGroundTruthFalsePositiveCount: 2,
+        fixProducedForRealCount: 1,
+        fixRealFindingCount: 2,
+        fixApplyFailedCount: 1,
+        fixApplyAttemptedCount: 2
+      }),
+      // Case B: one perfectly-judged real finding with a produced fix, no failures.
+      caseResult({
+        fixJudgmentAgreementCount: 1,
+        fixJudgedLabeledCount: 1,
+        fixFalsePositiveDetectedCount: 0,
+        fixGroundTruthFalsePositiveCount: 0,
+        fixProducedForRealCount: 1,
+        fixRealFindingCount: 1,
+        fixApplyFailedCount: 0,
+        fixApplyAttemptedCount: 1
+      })
+    ])
+
+    // Judgment accuracy: (1 + 1) agreements / (2 + 1) judged-labeled = 2/3.
+    expect(metrics.fixJudgmentAccuracy).toBe(0.666667)
+    expect(metrics.fixJudgedFindingCount).toBe(3)
+    // False-positive detection: 1 caught / 2 ground-truth false positives = 0.5.
+    expect(metrics.fixFalsePositiveDetectionRate).toBe(0.5)
+    expect(metrics.fixGroundTruthFalsePositiveCount).toBe(2)
+    // Produce rate: (1 + 1) produced / (2 + 1) real findings = 2/3.
+    expect(metrics.fixProduceRate).toBe(0.666667)
+    expect(metrics.fixRealFindingCount).toBe(3)
+    // Apply failure: 1 failed / (2 + 1) attempted = 1/3.
+    expect(metrics.fixApplyFailureRate).toBe(0.333333)
+    expect(metrics.fixAttemptedCount).toBe(3)
   })
 })

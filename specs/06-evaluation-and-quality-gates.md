@@ -190,6 +190,14 @@ Normalization rules:
 | `trustedDeterministicFindingCount` | Count of actionable findings seeded by trusted deterministic-rule evidence rather than model review. |
 | `refutationFalseNegativeCount` | Expected findings with a matching candidate finding that was refuted or demoted. |
 | `refutationFalsePositiveCount` | Refutation results marked `proved` whose admitted finding is unmatched. |
+| `fixJudgmentAccuracy` | Fix lane (spec 12) accuracy over admitted findings the lane judged (`findingJudgment` present) that also carry a ground-truth label: the fraction whose judgment agrees with the match result — a matched finding is `real`, a false-positive finding is `false-positive`. Empty value is `0`. Interpreted with `fixJudgedFindingCount` (the denominator). |
+| `fixFalsePositiveDetectionRate` | Of ground-truth false-positive findings (unmatched actionable admitted findings), the fraction the fix lane judged `false-positive`. Recall on catching false positives. Empty value is `0`. Interpreted with `fixGroundTruthFalsePositiveCount`. |
+| `fixProduceRate` | Of real (matched) findings, the fraction that received an apply-checked fix (`applyCheck = "passed"`). Empty value is `0`. Interpreted with `fixRealFindingCount`. |
+| `fixApplyFailureRate` | Of fixes the lane attempted (`applyCheck` `passed` or `failed`), the fraction that FAILED the deterministic apply-check — hallucinated or stale edits caught by code. Empty value is `0`. Interpreted with `fixAttemptedCount`. |
+| `fixJudgedFindingCount` | Denominator of `fixJudgmentAccuracy`: judged findings that carry a ground-truth label. |
+| `fixGroundTruthFalsePositiveCount` | Denominator of `fixFalsePositiveDetectionRate`: ground-truth false-positive findings. |
+| `fixRealFindingCount` | Denominator of `fixProduceRate`: real (matched) findings. |
+| `fixAttemptedCount` | Denominator of `fixApplyFailureRate`: fixes the lane attempted. |
 | `actionableRate` | Actionable admitted findings with resolvable location, impact, evidence, and a concrete remediation direction divided by actionable admitted findings. |
 | `commentsPerKloc` | Actionable admitted findings per thousand changed lines. |
 | `commentsPerDiffHunk` | Actionable admitted findings per changed diff hunk. |
@@ -197,6 +205,29 @@ Normalization rules:
 | `contextMutationRate` | Context ledger entries with budget-driven mutation divided by entries considered for model context. The release target is `0`. |
 | `costUsd` | Provider-reported or estimated cost. |
 | `durationMs` | Wall-clock run duration. |
+
+### Fix Lane Measurement
+
+When `fix.enabled` (spec 12), eval case execution runs the finding
+investigation-and-fix lane on the review's admitted findings after the review
+and before scoring, capturing each `FixOutcome` (`findingId`,
+`findingJudgment`, `fixProduced`, `applyCheck`) into the case output. The lane
+is off by default, so existing eval runs and their cost are unchanged; the lane
+is exercised only when a caller enables `fix` and configures a provider. The
+lane is advisory and non-fatal in eval: a lane failure is logged and the case is
+scored without fix outcomes rather than failing the run.
+
+Each `FixOutcome` is joined to its finding by `findingId` and scored against the
+match result as ground truth — a matched finding is a real defect, an unmatched
+actionable admitted finding is a false positive — to compute
+`fixJudgmentAccuracy`, `fixFalsePositiveDetectionRate`, `fixProduceRate`, and
+`fixApplyFailureRate` (and their denominator counts). All four rates use an
+empty value of `0`, unlike recall/precision. The lane never changes admission,
+severity, or the quality gate; these metrics are advisory precision/fix-quality
+signals only. The fix lane also appears as a `fix` entry in each case's
+`agenticStages` (active with its outcome count, or skipped) alongside
+`refutation` and `provider-recovery`, and each `caseResults[]` entry preserves
+its `fixOutcomes[]` so saved reports are self-contained for fix-lane analysis.
 
 ## Human Output
 

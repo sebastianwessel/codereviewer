@@ -23,11 +23,27 @@ const SuccessfulEvalOutputSchema = z.strictObject({
   reviewReport: ReviewReportSchema
 })
 
+// Per-finding outcome of the finding investigation-and-fix lane (spec 12),
+// mirrored into the eval contract so the runner can score the lane's judgment
+// and fix quality against the match result. The eval domain owns this mirror
+// (as it mirrors provider-issue and refutation shapes) rather than importing the
+// verification domain's internal contract.
+export const EvalFixOutcomeReportSchema = z.strictObject({
+  findingId: z.string().min(1),
+  findingJudgment: z.enum(['real', 'false-positive']).optional(),
+  fixProduced: z.boolean(),
+  applyCheck: z.enum(['passed', 'failed', 'not-attempted'])
+})
+
 export const EvalCaseOutputSchema = z.strictObject({
   caseId: z.string().min(1),
   changedLineCount: z.int().min(0),
   diffHunkCount: z.int().min(0),
   contextLedger: z.array(EvalContextLedgerEntrySchema).default([]),
+  // Fix-lane outcomes captured when the eval case ran with `fix.enabled`.
+  // Empty when the lane was disabled, ran on no eligible finding, or could not
+  // resolve a provider — all non-fatal (spec 12).
+  fixOutcomes: z.array(EvalFixOutcomeReportSchema).default([]),
   result: z.discriminatedUnion('status', [
     SuccessfulEvalOutputSchema,
     ProviderErrorSchema
@@ -76,7 +92,7 @@ export const EvalProviderIssueReportSchema = z.strictObject({
 })
 
 export const EvalAgenticStageReportSchema = z.strictObject({
-  stage: z.enum(['refutation', 'provider-recovery']),
+  stage: z.enum(['refutation', 'fix', 'provider-recovery']),
   status: z.enum(['active', 'skipped', 'recovered', 'error']),
   count: z.int().min(0)
 })
@@ -119,6 +135,9 @@ export const EvalCaseReportSchema = z.strictObject({
     .array(EvalFalsePositiveFindingReportSchema)
     .default([]),
   refutationResults: z.array(EvalRefutationResultReportSchema).default([]),
+  // Per-finding fix-lane outcomes for this case (spec 12), preserved so saved
+  // reports are self-contained for fix-lane analysis.
+  fixOutcomes: z.array(EvalFixOutcomeReportSchema).default([]),
   inlineFindingCount: z.int().min(0).default(0),
   warnings: z.array(z.string()),
   durationMs: z.int().min(0),

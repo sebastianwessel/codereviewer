@@ -88,6 +88,33 @@ export const EvalMetricsSchema = z.strictObject({
   trustedDeterministicFindingCount: z.int().min(0).default(0),
   refutationFalseNegativeCount: z.int().min(0).default(0),
   refutationFalsePositiveCount: z.int().min(0).default(0),
+  // Fix-lane accuracy metrics (spec 12). All are measured over REAL runs of the
+  // finding investigation-and-fix lane and are scored against the eval match
+  // result as ground truth: a matched finding is a real defect, a false-positive
+  // finding is a non-defect. Unlike recall/precision (whose empty value is 1),
+  // every fix-lane rate uses an empty value of 0 so an eval that never exercised
+  // the lane reports 0, not a misleading "perfect", and the paired count fields
+  // (denominators) make each rate interpretable.
+  //
+  // fixJudgmentAccuracy: over findings the lane judged (findingJudgment present)
+  // that also carry a ground-truth label, the fraction whose judgment agrees
+  // with ground truth (matched -> 'real', false-positive -> 'false-positive').
+  fixJudgmentAccuracy: RateSchema.default(0),
+  // fixFalsePositiveDetectionRate: of ground-truth false-positive findings, the
+  // fraction the lane judged 'false-positive' (recall on catching false positives).
+  fixFalsePositiveDetectionRate: RateSchema.default(0),
+  // fixProduceRate: of real (matched) findings, the fraction that received an
+  // apply-checked fix (applyCheck 'passed').
+  fixProduceRate: RateSchema.default(0),
+  // fixApplyFailureRate: of fixes the lane attempted (applyCheck 'passed' or
+  // 'failed'), the fraction that FAILED the deterministic apply-check
+  // (hallucinated / stale edits caught by code).
+  fixApplyFailureRate: RateSchema.default(0),
+  // Denominators, surfaced so the rates above are interpretable.
+  fixJudgedFindingCount: z.int().min(0).default(0),
+  fixGroundTruthFalsePositiveCount: z.int().min(0).default(0),
+  fixRealFindingCount: z.int().min(0).default(0),
+  fixAttemptedCount: z.int().min(0).default(0),
   recallByTier: TierRateSchema,
   // precisionByTier mirrors recallByTier rather than computing a finding-side
   // tier. Admitted findings carry no expected-tier label, so a precise
@@ -135,6 +162,20 @@ export type EvalMetricCaseResult = {
   // Rejected/demoted candidates. Used to derive the refutation false-negative
   // count (expected findings demoted without a matching admitted finding).
   readonly rejectedFindingCount: number
+  // Fix-lane (spec 12) per-case tallies, all derived from real fix-lane outcomes
+  // joined to the match result. See EvalMetricsSchema for the aggregate formulas.
+  // Numerator/denominator of fixJudgmentAccuracy.
+  readonly fixJudgmentAgreementCount: number
+  readonly fixJudgedLabeledCount: number
+  // Numerator/denominator of fixFalsePositiveDetectionRate.
+  readonly fixFalsePositiveDetectedCount: number
+  readonly fixGroundTruthFalsePositiveCount: number
+  // Numerator/denominator of fixProduceRate.
+  readonly fixProducedForRealCount: number
+  readonly fixRealFindingCount: number
+  // Numerator/denominator of fixApplyFailureRate.
+  readonly fixApplyFailedCount: number
+  readonly fixApplyAttemptedCount: number
   readonly tierCounts: Record<ExpectedFindingTier, TierFindingCounts>
   readonly noFindingZoneFalsePositiveCount: number
   readonly changedLineCount: number
@@ -362,6 +403,41 @@ const calculate = (
       caseResults.map((result) =>
         Math.max(0, result.provedRefutationCount - result.matchedFindingCount)
       )
+    ),
+    // Fix-lane accuracy (spec 12). Every rate uses an empty value of 0: a run
+    // that never exercised the lane has zero denominators and must report 0, not
+    // the 1 that recall/precision use for "nothing expected".
+    fixJudgmentAccuracy: ratio(
+      sum(caseResults.map((result) => result.fixJudgmentAgreementCount)),
+      sum(caseResults.map((result) => result.fixJudgedLabeledCount)),
+      0
+    ),
+    fixFalsePositiveDetectionRate: ratio(
+      sum(caseResults.map((result) => result.fixFalsePositiveDetectedCount)),
+      sum(caseResults.map((result) => result.fixGroundTruthFalsePositiveCount)),
+      0
+    ),
+    fixProduceRate: ratio(
+      sum(caseResults.map((result) => result.fixProducedForRealCount)),
+      sum(caseResults.map((result) => result.fixRealFindingCount)),
+      0
+    ),
+    fixApplyFailureRate: ratio(
+      sum(caseResults.map((result) => result.fixApplyFailedCount)),
+      sum(caseResults.map((result) => result.fixApplyAttemptedCount)),
+      0
+    ),
+    fixJudgedFindingCount: sum(
+      caseResults.map((result) => result.fixJudgedLabeledCount)
+    ),
+    fixGroundTruthFalsePositiveCount: sum(
+      caseResults.map((result) => result.fixGroundTruthFalsePositiveCount)
+    ),
+    fixRealFindingCount: sum(
+      caseResults.map((result) => result.fixRealFindingCount)
+    ),
+    fixAttemptedCount: sum(
+      caseResults.map((result) => result.fixApplyAttemptedCount)
     ),
     recallByTier,
     precisionByTier,

@@ -1146,6 +1146,95 @@ describe('eval runner', () => {
     )
   })
 
+  test('scores the fix lane over real and false-positive findings and shows the fix stage', () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const noiseFinding = admittedFinding({
+      id: 'find_noise1',
+      title: 'Unused import statement',
+      description: 'The imported symbol is never referenced in this module.',
+      location: {
+        path: 'src/app.ts',
+        startLine: 50,
+        side: 'new'
+      },
+      fingerprints: [{ algorithm: 'test', value: 'noise1' }]
+    })
+    const result = runEvaluation({
+      cases,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          // The fix lane judged the matched finding real and produced an
+          // apply-checked fix; it judged the unmatched noise finding a false
+          // positive with no fix.
+          fixOutcomes: [
+            {
+              findingId: 'find_eval1',
+              findingJudgment: 'real',
+              fixProduced: true,
+              applyCheck: 'passed'
+            },
+            {
+              findingId: 'find_noise1',
+              findingJudgment: 'false-positive',
+              fixProduced: false,
+              applyCheck: 'not-attempted'
+            }
+          ],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding(), noiseFinding])
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    // find_eval1 is ground-truth real (matched), find_noise1 is ground-truth
+    // false positive (unmatched, unique location).
+    expect(result.report.caseResults[0]?.matchedFindings).toEqual([
+      expect.objectContaining({ expectedIndex: 0, findingId: 'find_eval1' })
+    ])
+    expect(result.report.caseResults[0]?.falsePositiveFindingIds).toEqual([
+      'find_noise1'
+    ])
+
+    expect(result.report.metrics).toMatchObject({
+      // Both judgments agree with ground truth: 2/2.
+      fixJudgmentAccuracy: 1,
+      fixJudgedFindingCount: 2,
+      // The single ground-truth false positive was caught: 1/1.
+      fixFalsePositiveDetectionRate: 1,
+      fixGroundTruthFalsePositiveCount: 1,
+      // The single real finding received an apply-checked fix: 1/1.
+      fixProduceRate: 1,
+      fixRealFindingCount: 1,
+      // One fix attempted (passed), none failed: 0/1.
+      fixApplyFailureRate: 0,
+      fixAttemptedCount: 1
+    })
+
+    expect(result.report.caseResults[0]?.fixOutcomes).toHaveLength(2)
+    expect(
+      result.report.caseResults[0]?.agenticStages.find(
+        (stage) => stage.stage === 'fix'
+      )
+    ).toEqual({ stage: 'fix', status: 'active', count: 2 })
+
+    const summary = renderEvalSummary({ cases, report: result.report })
+    expect(summary).toContain('| Fix judgment accuracy | 100.0% (2 judged) |')
+    expect(summary).toContain(
+      '| Fix false-positive detection rate | 100.0% (1 false positives) |'
+    )
+    expect(summary).toContain('| Fix produce rate | 100.0% (1 real) |')
+    expect(summary).toContain('| Fix apply failure rate | 0.0% (1 attempted) |')
+    expect(summary).toContain('## Agentic Stage Coverage')
+    expect(summary).toContain('| Case | Refutation | Fix | Provider recovery |')
+  })
+
   test('fails the gate when product recall is below threshold', () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
     const result = runEvaluation({

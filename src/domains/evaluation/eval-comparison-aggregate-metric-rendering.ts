@@ -181,6 +181,26 @@ export const appendEvalComparisonMetricDeltas = (
         base: input.base.metrics.refutationFalsePositiveCount,
         head: input.head.metrics.refutationFalsePositiveCount
       }),
+      formatEvalComparisonPercentMetricDeltaRow({
+        metric: 'Fix judgment accuracy',
+        base: input.base.metrics.fixJudgmentAccuracy,
+        head: input.head.metrics.fixJudgmentAccuracy
+      }),
+      formatEvalComparisonPercentMetricDeltaRow({
+        metric: 'Fix false-positive detection rate',
+        base: input.base.metrics.fixFalsePositiveDetectionRate,
+        head: input.head.metrics.fixFalsePositiveDetectionRate
+      }),
+      formatEvalComparisonPercentMetricDeltaRow({
+        metric: 'Fix produce rate',
+        base: input.base.metrics.fixProduceRate,
+        head: input.head.metrics.fixProduceRate
+      }),
+      formatEvalComparisonPercentMetricDeltaRow({
+        metric: 'Fix apply failure rate',
+        base: input.base.metrics.fixApplyFailureRate,
+        head: input.head.metrics.fixApplyFailureRate
+      }),
       formatEvalComparisonDurationMetricDeltaRow({
         metric: 'Duration',
         baseMs: input.base.metrics.durationMs,

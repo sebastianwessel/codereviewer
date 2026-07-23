@@ -210,13 +210,18 @@ const stageStatusForCount = (
   count > 0 ? 'active' : 'skipped'
 
 const agenticStagesForReport = (
-  report: ReviewReport
+  report: ReviewReport,
+  // Count of fix-lane outcomes the case produced. The lane is a real agentic
+  // step (spec 12), so it appears here as active/skipped with its count, matching
+  // the refutation and provider-recovery stages for the per-step comparison view.
+  fixOutcomeCount: number
 ): readonly z.infer<typeof EvalAgenticStageReportSchema>[] => {
   const recoveredProviderIssues = providerIssuesFromReport(report).filter(
     (issue) => issue.recovered
   ).length
   const stageCounts = [
-    ['refutation', report.refutationResults.length]
+    ['refutation', report.refutationResults.length],
+    ['fix', fixOutcomeCount]
   ] as const
 
   return [
@@ -235,7 +240,7 @@ const agenticStagesForReport = (
   ]
 }
 
-const providerErrorStageNames = ['refutation'] as const
+const providerErrorStageNames = ['refutation', 'fix'] as const
 
 type ProviderErrorStageName = (typeof providerErrorStageNames)[number]
 
@@ -336,6 +341,81 @@ const tierCountsForCase = (
   return counts
 }
 
+type FixLaneCaseTallies = {
+  readonly fixJudgmentAgreementCount: number
+  readonly fixJudgedLabeledCount: number
+  readonly fixFalsePositiveDetectedCount: number
+  readonly fixGroundTruthFalsePositiveCount: number
+  readonly fixProducedForRealCount: number
+  readonly fixRealFindingCount: number
+  readonly fixApplyFailedCount: number
+  readonly fixApplyAttemptedCount: number
+}
+
+// Join the fix lane's per-finding outcomes to the match result (ground truth):
+// a matched finding is a real defect, a false-positive finding is a non-defect.
+// Every fix-lane accuracy metric (spec 12) is derived from these tallies.
+const fixLaneCaseTallies = (
+  input: {
+    readonly fixOutcomes: EvalCaseOutput['fixOutcomes']
+    readonly matchResult: EvalMatcherResult
+  }
+): FixLaneCaseTallies => {
+  const matchedFindingIds = new Set(
+    input.matchResult.matches.map((match) => match.findingId)
+  )
+  const falsePositiveFindingIds = new Set(
+    input.matchResult.falsePositiveFindingIds
+  )
+  const outcomeByFindingId = new Map(
+    input.fixOutcomes.map((outcome) => [outcome.findingId, outcome])
+  )
+
+  let fixJudgmentAgreementCount = 0
+  let fixJudgedLabeledCount = 0
+  let fixApplyFailedCount = 0
+  let fixApplyAttemptedCount = 0
+
+  for (const outcome of input.fixOutcomes) {
+    const isReal = matchedFindingIds.has(outcome.findingId)
+    const isFalsePositive = falsePositiveFindingIds.has(outcome.findingId)
+
+    if (outcome.findingJudgment !== undefined && (isReal || isFalsePositive)) {
+      fixJudgedLabeledCount += 1
+      const groundTruth = isReal ? 'real' : 'false-positive'
+      if (outcome.findingJudgment === groundTruth) {
+        fixJudgmentAgreementCount += 1
+      }
+    }
+
+    if (outcome.applyCheck === 'passed' || outcome.applyCheck === 'failed') {
+      fixApplyAttemptedCount += 1
+      if (outcome.applyCheck === 'failed') {
+        fixApplyFailedCount += 1
+      }
+    }
+  }
+
+  const fixFalsePositiveDetectedCount = [...falsePositiveFindingIds].filter(
+    (findingId) =>
+      outcomeByFindingId.get(findingId)?.findingJudgment === 'false-positive'
+  ).length
+  const fixProducedForRealCount = [...matchedFindingIds].filter(
+    (findingId) => outcomeByFindingId.get(findingId)?.applyCheck === 'passed'
+  ).length
+
+  return {
+    fixJudgmentAgreementCount,
+    fixJudgedLabeledCount,
+    fixFalsePositiveDetectedCount,
+    fixGroundTruthFalsePositiveCount: falsePositiveFindingIds.size,
+    fixProducedForRealCount,
+    fixRealFindingCount: matchedFindingIds.size,
+    fixApplyFailedCount,
+    fixApplyAttemptedCount
+  }
+}
+
 const buildMetricCase = (
   input: {
     readonly evalCase: EvalCase
@@ -421,6 +501,10 @@ const buildMetricCase = (
       (refutation) => refutation.verdict === 'proved'
     ).length,
     rejectedFindingCount: rejectedFindings.length,
+    ...fixLaneCaseTallies({
+      fixOutcomes: input.output.fixOutcomes,
+      matchResult: input.matchResult
+    }),
     tierCounts: tierCountsForCase(input.evalCase, input.matchResult),
     noFindingZoneFalsePositiveCount:
       input.matchResult.noFindingZoneFalsePositiveIds.length,
@@ -465,7 +549,10 @@ const buildReportCase = (
   parseValid: true,
   providerErrored: false,
   contextLedger: [...input.output.contextLedger],
-  agenticStages: [...agenticStagesForReport(input.reviewReport)],
+  agenticStages: [
+    ...agenticStagesForReport(input.reviewReport, input.output.fixOutcomes.length)
+  ],
+  fixOutcomes: [...input.output.fixOutcomes],
   expectedFindings: [...expectedFindingSummaries(input.evalCase)],
   matchedFindings: [...input.matchResult.matches],
   unmatchedExpectedIndexes: [...input.matchResult.unmatchedExpectedIndexes],
@@ -542,6 +629,7 @@ const computeCaseResult = (
         agenticStages: [
           ...agenticStagesForProviderError(output.result.stage)
         ],
+        fixOutcomes: [],
         contextLedger: [...output.contextLedger],
         expectedFindings: [...expectedFindingSummaries(evalCase)],
         matchedFindings: [],
@@ -885,7 +973,10 @@ const thresholdReasons = (
 
 type RunEvaluationInput = {
   readonly cases: unknown
-  readonly outputs: readonly EvalCaseOutput[]
+  // Pre-parse case outputs. `runEvaluation` re-validates them through
+  // `EvalCaseOutputSchema`, so callers may omit fields that carry a schema
+  // default (e.g. `fixOutcomes`, `contextLedger`).
+  readonly outputs: readonly z.input<typeof EvalCaseOutputSchema>[]
   readonly thresholds?: EvalRegressionThresholds
   readonly selection?: {
     readonly fixtureSource: EvalReportSelection['fixtureSource']

@@ -120,6 +120,10 @@ const appendEvalSummaryMetrics = (
       `| Trusted deterministic findings | ${report.metrics.trustedDeterministicFindingCount} |`,
       `| Refutation false negatives | ${report.metrics.refutationFalseNegativeCount} |`,
       `| Refutation false positives | ${report.metrics.refutationFalsePositiveCount} |`,
+      `| Fix judgment accuracy | ${formatPercent(report.metrics.fixJudgmentAccuracy)} (${report.metrics.fixJudgedFindingCount} judged) |`,
+      `| Fix false-positive detection rate | ${formatPercent(report.metrics.fixFalsePositiveDetectionRate)} (${report.metrics.fixGroundTruthFalsePositiveCount} false positives) |`,
+      `| Fix produce rate | ${formatPercent(report.metrics.fixProduceRate)} (${report.metrics.fixRealFindingCount} real) |`,
+      `| Fix apply failure rate | ${formatPercent(report.metrics.fixApplyFailureRate)} (${report.metrics.fixAttemptedCount} attempted) |`,
       `| Duplicate findings | ${report.metrics.duplicateFindingCount} |`,
       `| No-finding-zone hits | ${report.metrics.noFindingZoneFalsePositiveCount} |`,
       `| Actionable rate | ${formatPercent(report.metrics.actionableRate)} |`,
@@ -245,6 +249,8 @@ const formatEvalSummaryAgenticStageRow = (
     '|',
     agenticStageLabel(caseResult, 'refutation'),
     '|',
+    agenticStageLabel(caseResult, 'fix'),
+    '|',
     agenticStageLabel(caseResult, 'provider-recovery'),
     '|'
   ].join(' ')
@@ -263,8 +269,8 @@ const appendEvalSummaryAgenticStageCoverage = (
 
   lines.push('## Agentic Stage Coverage')
   lines.push('')
-  lines.push('| Case | Refutation | Provider recovery |')
-  lines.push('| --- | --- | --- |')
+  lines.push('| Case | Refutation | Fix | Provider recovery |')
+  lines.push('| --- | --- | --- | --- |')
   for (const caseResult of stageCoverageCases) {
     lines.push(formatEvalSummaryAgenticStageRow(caseResult))
   }

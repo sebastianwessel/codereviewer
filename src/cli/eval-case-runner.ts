@@ -14,6 +14,8 @@ import {
   type EvalCaseOutput
 } from '../domains/evaluation/index.js'
 import { runReview as runReviewPipeline } from '../domains/review-workflow/index.js'
+import { runFixRun } from '../domains/verification/index.js'
+import type { AdmittedFinding } from '../shared/contracts/findings/finding.schema.js'
 import { parseGitDiffMaps } from '../domains/repository-intake/index.js'
 import { type ProviderImport } from '../domains/provider-resolution/index.js'
 import { type Logger } from '../domains/observability/index.js'
@@ -119,6 +121,52 @@ export const runEvalCase = async (
         : { providerImport: input.providerImport })
     })
 
+  // Run the finding investigation-and-fix lane (spec 12) in the eval path so its
+  // real outcomes can be scored. It is gated internally on `config.fix.enabled`
+  // (default off), so an eval run with fix disabled captures no outcomes and is
+  // unchanged. The lane is advisory and non-fatal: any failure is swallowed and
+  // the case is scored without fix outcomes rather than failing the eval.
+  const runFixOutcomesForCase = async (
+    config: CodeReviewerConfig,
+    admittedFindings: readonly AdmittedFinding[]
+  ): Promise<EvalCaseOutput['fixOutcomes']> => {
+    if (!config.fix.enabled) {
+      return []
+    }
+
+    try {
+      const { report } = await runFixRun({
+        config,
+        repositoryRoot: fixtureRoot,
+        environment: input.environment,
+        admittedFindings,
+        ...(input.logger === undefined ? {} : { logger: input.logger }),
+        ...(input.providerImport === undefined
+          ? {}
+          : { providerImport: input.providerImport })
+      })
+
+      return report.fixOutcomes.map((outcome) => ({
+        findingId: outcome.findingId,
+        ...(outcome.findingJudgment === undefined
+          ? {}
+          : { findingJudgment: outcome.findingJudgment }),
+        fixProduced: outcome.fixProduced,
+        applyCheck: outcome.applyCheck
+      }))
+    } catch (error) {
+      input.logger?.warn(
+        'Eval fix lane failed; scoring the case without fix outcomes.',
+        {
+          eval_case_id: input.evalCase.id,
+          error_name: error instanceof Error ? error.name : 'unknown'
+        }
+      )
+
+      return []
+    }
+  }
+
   const retryConfigForTransientProviderError = (): CodeReviewerConfig => ({
     ...input.config,
     review: {
@@ -133,7 +181,8 @@ export const runEvalCase = async (
   ])
 
   const resultForReviewReport = (
-    reviewResult: Awaited<ReturnType<typeof runReviewPipeline>>
+    reviewResult: Awaited<ReturnType<typeof runReviewPipeline>>,
+    fixOutcomes: EvalCaseOutput['fixOutcomes']
   ): EvalCaseOutput => ({
     caseId: input.evalCase.id,
     changedLineCount: evalCaseSize.changedLineCount,
@@ -143,14 +192,27 @@ export const runEvalCase = async (
       consideredForModelContext: entry.decision === 'included' || entry.decision === 'truncated',
       truncated: entry.decision === 'truncated'
     })),
+    fixOutcomes,
     result: {
       status: 'ok',
       reviewReport: reviewResult.report
     }
   })
 
+  const runReviewAndFixForCase = async (
+    config: CodeReviewerConfig
+  ): Promise<EvalCaseOutput> => {
+    const reviewResult = await runReviewForCase(config)
+    const fixOutcomes = await runFixOutcomesForCase(
+      config,
+      reviewResult.report.admittedFindings
+    )
+
+    return resultForReviewReport(reviewResult, fixOutcomes)
+  }
+
   try {
-    return resultForReviewReport(await runReviewForCase(input.config))
+    return await runReviewAndFixForCase(input.config)
   } catch (error) {
     const normalized = normalizeError(error, { source: 'provider' })
 
@@ -169,11 +231,9 @@ export const runEvalCase = async (
       })
 
       try {
-        const retryResult = await runReviewForCase(
-          retryConfigForTransientProviderError()
-        )
-
-        return resultForReviewReport({
+        const retryConfig = retryConfigForTransientProviderError()
+        const retryResult = await runReviewForCase(retryConfig)
+        const retryReviewResult = {
           ...retryResult,
           report: {
             ...retryResult.report,
@@ -185,7 +245,13 @@ export const runEvalCase = async (
               ]
             }
           }
-        })
+        }
+        const retryFixOutcomes = await runFixOutcomesForCase(
+          retryConfig,
+          retryReviewResult.report.admittedFindings
+        )
+
+        return resultForReviewReport(retryReviewResult, retryFixOutcomes)
       } catch (retryError) {
         const retryNormalized = normalizeError(retryError, {
           source: 'provider'
@@ -200,6 +266,7 @@ export const runEvalCase = async (
           changedLineCount: evalCaseSize.changedLineCount,
           diffHunkCount: evalCaseSize.diffHunkCount,
           contextLedger: [],
+          fixOutcomes: [],
           result: {
             status: 'provider-error',
             code: retryNormalized.code,
@@ -217,6 +284,7 @@ export const runEvalCase = async (
       changedLineCount: evalCaseSize.changedLineCount,
       diffHunkCount: evalCaseSize.diffHunkCount,
       contextLedger: [],
+      fixOutcomes: [],
       result: {
         status: 'provider-error',
         code: normalized.code,
