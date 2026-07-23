@@ -176,6 +176,30 @@ describe('drift checker', () => {
     }
   })
 
+  test('does not read a review-prefixed identifier as the obsolete artifact root', async () => {
+    const root = await createRoot()
+
+    try {
+      await writeFile(
+        join(root, 'README.md'),
+        'Configure `reporting.reviewComments.platform` to pick the renderer.\n'
+      )
+
+      const result = await runDriftCheck({
+        repositoryRoot: root,
+        config: CodeReviewerConfigSchema.parse({})
+      })
+
+      expect(
+        result.findings.filter(
+          (finding) => finding.category === 'security-drift'
+        )
+      ).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('still flags a genuine stale spec root reference', async () => {
     const root = await createRoot()
 

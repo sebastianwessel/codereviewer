@@ -210,20 +210,24 @@ whole-file review and a per-candidate refutation pass.
 - Verification: SARIF schema validation, GitHub-target subset validation when
   configured, and redaction snapshot tests.
 
-### CAP-REP-004 GitHub PR Review-Comment Artifact
+### CAP-REP-004 Platform-Neutral Review-Comment Artifacts
 
-- Trigger: review completion when `reporting.formats` includes
-  `github-review-comments`.
-- Contract: renders a deterministic local JSON array of GitHub review-comment
-  drafts from actionable admitted findings only.
+- Trigger: review completion when `reporting.reviewComments.enabled` is `true`
+  (`13-review-comments-and-suggestions.md`).
+- Contract: renders a deterministic neutral `review-comments.json` and a
+  platform-rendered `review-comments.<platform>.json` from actionable admitted
+  findings only. The platform is resolved from config, then CI environment, then
+  the git remote host, then `generic`.
 - Preconditions: admitted finding has `reporterEligibility = inline`, a
   resolvable new-side diff location, a `proved` refutation result, and severity
   at or above the configured inline threshold.
-- Side effects: writes `github-review-comments.json` in the run artifact
-  directory only. It performs no network IO and does not publish comments.
-- Final state: each comment draft carries repository-relative path, line or
-  start-line range, side, redacted body, source finding ID, and optional manual
-  suggestion block when safe.
+- Side effects: writes the artifacts in the run artifact directory only. It
+  reads environment variables and the git remote for detection, performs no
+  network IO, and does not publish comments.
+- Final state: each neutral draft carries repository-relative path, new-side
+  target range, redacted body, source finding ID, and a structured suggestion
+  when a single safe fix edit maps to the range; renderers add per-platform
+  syntax.
 - Verification: renderer tests for actionable, artifact-only, refuted,
   ineligible, old-side, and unsafe multi-edit fix cases.
 

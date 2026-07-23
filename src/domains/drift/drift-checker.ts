@@ -187,8 +187,11 @@ const checkStalePathReferences = (
 
     const obsoleteArtifactRoot = `.${'review'}`
 
+    // Match the obsolete `.review` artifact root only at a segment boundary, so a
+    // config identifier that merely begins with "review" (for example
+    // `reporting.reviewComments`) is not mistaken for the old artifact directory.
     if (
-      new RegExp(`\\${obsoleteArtifactRoot}`, 'u').test(
+      new RegExp(`\\${obsoleteArtifactRoot}(?![A-Za-z])`, 'u').test(
         contentForLegacyArtifactScan
       )
     ) {

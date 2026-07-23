@@ -95,7 +95,8 @@ provider-specific object as passthrough.
 | `aiReview` | no | object | holistic discovery + refutation defaults |
 | `promotionPolicy` | no | object | non-actionable model output disposition |
 | `contextSources` | no | object | external change-intent context disabled |
-| `verification` | no | object | agentic verification flow disabled |
+| `verification` | no | object | agentic claim verification disabled |
+| `fix` | no | object | agentic finding investigation and fix disabled |
 
 ## Review Config
 
@@ -425,6 +426,28 @@ Rules:
 - the later-phase `analyzer` (SARIF) and `comment` claim providers are added to
   this list when their adapters ship.
 
+## Fix
+
+Controls the agentic finding investigation-and-fix job (`12-verification-flow.md`).
+Disabled by default. Reuses the same agent, tools, and bounds as `verification`.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `fix.enabled` | boolean | `false` |
+| `fix.minSeverity` | `Severity` | value of `aiReview.actionableSeverityThreshold` (default `medium`) |
+
+Rules:
+
+- `enabled` is the single switch for the whole single pass — judgment and fix
+  together; a disabled block yields no investigation and an unchanged general
+  review and gate;
+- the lane runs only on admitted findings at or above `minSeverity`; the default
+  tracks the pipeline's blocking severity so out of the box it runs on findings
+  that can block, not on nits;
+- outputs are advisory: a `false-positive` judgment or a fix never changes
+  admission, severity, or the gate;
+- per-claim bounds are shared with `verification`.
+
 ## Reporting
 
 | Key | Type | Default |
@@ -434,12 +457,18 @@ Rules:
 | `sarif.category` | string | `"codereviewer"` |
 | `sarif.maxResults` | integer 1..25000 | `5000` |
 | `sarif.redact` | boolean | `true` |
+| `reviewComments.enabled` | boolean | `false` |
+| `reviewComments.platform` | `"github" | "gitlab" | "bitbucket" | "generic" | "auto"` | `"auto"` |
 
 JSON is always generated even if omitted from `formats`, because it is the
-canonical machine-readable artifact. Markdown, SARIF, and GitHub review-comment
-artifact rendering can be disabled only when their format is absent from
-`formats`. The `github-review-comments` format writes local PR review-comment
-draft JSON only and performs no network publishing.
+canonical machine-readable artifact. Markdown and SARIF rendering can be disabled
+only when their format is absent from `formats`.
+
+`reviewComments` writes platform-neutral inline review-comment drafts, including
+one-click fix suggestions, as local artifacts only — it performs no network
+publishing (`13-review-comments-and-suggestions.md`). `platform` selects the
+renderer; `auto` resolves it from CI environment, then the git remote host, then
+`generic`. An explicit value overrides detection.
 
 ## Observability Config
 

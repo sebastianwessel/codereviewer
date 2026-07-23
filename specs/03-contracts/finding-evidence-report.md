@@ -33,7 +33,7 @@ EvidenceKind = "diff" | "file" | "symbol" | "diagnostic" | "command" | "model-ra
 AdmissionStatus = "admitted" | "rejected" | "needs-more-evidence"
 RejectReason = "schema-invalid" | "location-invalid" | "not-in-scope" | "insufficient-evidence" | "duplicate" | "below-threshold" | "unsafe-content" | "provider-error" | "refuted"
 ReporterEligibility = "inline" | "summary-only" | "artifact-only"
-ReportFormat = "json" | "markdown" | "sarif" | "github-review-comments"
+ReportFormat = "json" | "markdown" | "sarif"
 BaselineStatus = "new" | "existing" | "resolved" | "unknown"
 RefutationVerdict = "proved" | "refuted" | "needs-more-evidence" | "provider-error"
 ```
@@ -237,8 +237,7 @@ artifact-only output according to promotion policy.
 | `location` | yes | `CodeLocation` | Candidate location. |
 | `evidenceIds` | yes | string[] | References existing evidence when the candidate cites exact task evidence; may be empty before validation. |
 | `proposedBy` | yes | string | Agent or deterministic signal source ID. |
-| `suggestedFix` | no | string <= 1200 | Text only in R1; no patch application. |
-| `fixProposal` | no | `FixProposal` | Evidence-linked manual fix proposal. Preferred over `suggestedFix` for structured output. |
+| `fixProposal` | no | `FixProposal` | Evidence-linked manual fix proposal (summary and optional edits). The single fix contract. |
 
 Model-origin candidates come directly from the holistic whole-file review. Task
 evidence and deterministic signals are optional corroborating inputs and must be
@@ -459,22 +458,22 @@ and the artifact is not written.
 SARIF upload, code scanning alert management, and PR annotation publication are
 out of scope for R1. R1 only writes the local artifact.
 
-## GitHub PR Review-Comment Artifact
+## Review-Comment Artifacts
 
-R1 may render a local `github-review-comments.json` artifact from the canonical
-`ReviewReport`. Rendering this artifact is not publication and must not perform
-network IO.
+The engine renders platform-neutral inline review-comment drafts from the
+canonical `ReviewReport`, then renders them for a resolved platform. Rendering is
+not publication and must not perform network IO. The full model, detection order,
+and per-platform rendering are defined in `13-review-comments-and-suggestions.md`;
+the neutral contract is summarized here.
 
-`GitHubReviewCommentDraft` fields:
+`ReviewCommentDraft` fields:
 
 | Field | Required | Type | Semantics |
 | --- | --- | --- | --- |
-| `path` | yes | repositoryRelativePath | File path for the PR review comment. |
-| `line` | yes | integer >= 1 | New-side line for the comment anchor. |
-| `side` | yes | `"RIGHT"` | R1 emits new-side review comments only. |
-| `startLine` | no | integer >= 1 | Start line for a multi-line comment. Omitted for single-line comments. |
-| `startSide` | conditional | `"RIGHT"` | Required when `startLine` is present. |
-| `body` | yes | string 1..3000 | Redacted Markdown comment body. |
+| `path` | yes | repositoryRelativePath | File path for the comment. |
+| `targetRange` | yes | `{ startLine, endLine }` integers >= 1 | New-side line range the comment anchors to. |
+| `body` | yes | string 1..3000 | Redacted, Markdown-escaped comment body. |
+| `suggestion` | no | `{ replacement }` | Structured replacement for `targetRange`; never a pre-rendered fenced block. |
 | `findingId` | yes | findingId | Source admitted finding. |
 | `severity` | yes | Severity | Source severity for downstream filtering. |
 | `category` | yes | FindingCategory | Source category for downstream filtering. |
@@ -482,31 +481,31 @@ network IO.
 Comment eligibility rules:
 
 - only admitted findings with `reporterEligibility = inline` are rendered;
-- only `location.side = "new"` is rendered in R1;
-- `line` is `location.endLine` when present, otherwise `location.startLine`;
-- `startLine` is emitted only when `location.endLine` is present and greater
-  than `location.startLine`;
-- the body includes severity, category, title, description, finding ID, and
-  fix summary when present;
+- only `location.side = "new"` is rendered;
+- `targetRange.endLine` is `location.endLine` when present, otherwise
+  `location.startLine`; `targetRange.startLine` is `location.startLine`;
+- the body includes severity, category, title, description, finding ID, and fix
+  summary when present;
 - body text must pass the same redaction policy as Markdown and JSON reports;
 - raw source snippets, prompt text, provider IDs, tokens, absolute paths, and
   command output are forbidden.
 
-GitHub suggestion block rules:
+Suggestion eligibility rules (enforced once in the neutral layer, inherited by
+every platform renderer):
 
-- emit a suggestion block only when `fixProposal.safety = "manual-review"`;
+- a `suggestion` is emitted only when `fixProposal.safety = "manual-review"`;
 - exactly one `FixEdit` is present;
-- edit path equals the finding location path;
-- edit range is contiguous and equals the comment range, or for a single-line
-  finding the edit range is that same single line;
-- replacement length is within `FixEdit.replacement` limits after redaction;
-- no suggestion block is emitted for multi-file edits, multiple edits,
-  old-side findings, summary-only findings, artifact-only findings, or edit
-  ranges that do not map to the rendered comment range.
+- the edit path equals the finding location path and its range equals
+  `targetRange`;
+- the replacement contains no triple-backtick fence and fits the body cap after
+  redaction;
+- no suggestion is emitted for multi-file edits, multiple edits, old-side
+  findings, summary-only findings, artifact-only findings, or edit ranges that do
+  not map to `targetRange`.
 
-The artifact writer records `github-review-comments` in
-`ReviewReport.artifacts` using the same artifact metadata contract as other
-non-JSON formats.
+The artifact writer records the neutral `review-comments.json` and the resolved
+`review-comments.<platform>.json` in `ReviewReport.artifacts` using the same
+artifact metadata contract as other non-JSON formats.
 
 ## Compatibility
 
