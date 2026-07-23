@@ -681,6 +681,32 @@
       ],
       "additionalProperties": false
     },
+    "fix": {
+      "default": {
+        "enabled": false
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "minSeverity": {
+          "type": "string",
+          "enum": [
+            "critical",
+            "high",
+            "medium",
+            "low",
+            "info"
+          ]
+        }
+      },
+      "required": [
+        "enabled"
+      ],
+      "additionalProperties": false
+    },
     "security": {
       "default": {
         "allowShell": false,
@@ -1021,6 +1047,7 @@
     "promotionPolicy",
     "contextSources",
     "verification",
+    "fix",
     "security",
     "reporting",
     "evaluation",

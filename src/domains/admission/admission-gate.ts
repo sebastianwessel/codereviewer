@@ -37,7 +37,6 @@ export const CandidateFindingSchema = z.strictObject({
   location: CodeLocationSchema,
   evidenceIds: z.array(ContractIdSchema),
   proposedBy: z.string().min(1),
-  suggestedFix: z.string().max(1200).optional(),
   fixProposal: FixProposalSchema.optional()
 })
 
@@ -335,14 +334,6 @@ const redactedCandidate = (candidate: CandidateFinding): CandidateFinding => ({
     candidate.description,
     CandidateFindingSchema.shape.description
   ),
-  ...(candidate.suggestedFix === undefined
-    ? {}
-    : {
-        suggestedFix: redactCandidateField(
-          candidate.suggestedFix,
-          CandidateFindingSchema.shape.suggestedFix
-        )
-      }),
   ...(candidate.fixProposal === undefined
     ? {}
     : {

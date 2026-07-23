@@ -2,6 +2,22 @@ import { z } from 'zod'
 
 export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'info'])
 
+// Ordinal ranking of severities, low to high. Exported so severity-floor checks
+// (admission threshold, the fix lane's `minSeverity` gate) share one ordering
+// instead of re-deriving it.
+const severityOrder: Readonly<Record<z.infer<typeof SeveritySchema>, number>> = {
+  info: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4
+}
+
+export const severityMeetsThreshold = (
+  severity: z.infer<typeof SeveritySchema>,
+  threshold: z.infer<typeof SeveritySchema>
+): boolean => severityOrder[severity] >= severityOrder[threshold]
+
 export const ReportFormatSchema = z.enum([
   'json',
   'markdown',
@@ -236,7 +252,7 @@ export const VerificationClaimProviderConfigSchema = z.discriminatedUnion('type'
 export const VerificationConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
   providers: z.array(VerificationClaimProviderConfigSchema).default([]),
-  // Deterministic bound on the verify_claim agent loop: exceeding it ends the
+  // Deterministic bound on the investigate_claim agent loop: exceeding it ends the
   // claim with an `uncertain` verdict rather than looping unboundedly.
   maxToolCallsPerClaim: z.int().min(1).max(50).default(12),
   // Mirrors the context-retrieval domain's read/search budget defaults so the
@@ -244,6 +260,20 @@ export const VerificationConfigSchema = z.strictObject({
   // reads.
   maxBytesPerRead: z.int().min(1).default(20000),
   maxMatches: z.int().min(1).default(20)
+})
+
+// Agentic finding investigation-and-fix job (spec 12). Off by default. Reuses the
+// same investigation agent, mediated tools, and per-claim bounds as
+// `verification`; `enabled` is the single switch for the whole single pass
+// (judgment and fix together). `minSeverity` gates which admitted findings the
+// lane runs on. It is left optional here and resolved at runtime to
+// `aiReview.actionableSeverityThreshold` (default `medium`) when unset, so out of
+// the box the lane runs on exactly the findings that can block the pipeline, not
+// on nits. Set it explicitly to `info` to cover every finding or `critical` for
+// blockers only.
+export const FixConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  minSeverity: SeveritySchema.optional()
 })
 
 export const DriftCategorySchema = z.enum([
@@ -399,6 +429,9 @@ export const CodeReviewerConfigSchema = z.strictObject({
     maxBytesPerRead: 20000,
     maxMatches: 20
   }),
+  fix: FixConfigSchema.default({
+    enabled: false
+  }),
   security: SecurityConfigSchema.default({
     allowShell: false,
     allowNetwork: false,
@@ -459,6 +492,7 @@ export type VerificationConfig = z.infer<typeof VerificationConfigSchema>
 export type VerificationClaimProviderConfig = z.infer<
   typeof VerificationClaimProviderConfigSchema
 >
+export type FixConfig = z.infer<typeof FixConfigSchema>
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>
 export type DriftCategory = z.infer<typeof DriftCategorySchema>
 export type DriftConfig = z.infer<typeof DriftConfigSchema>

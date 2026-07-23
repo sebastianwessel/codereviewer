@@ -232,7 +232,6 @@ export const AdmittedFindingSchema = z.strictObject({
   location: CodeLocationSchema,
   evidenceIds: z.array(ContractIdSchema).min(1),
   proposedBy: z.string().min(1),
-  suggestedFix: z.string().max(1200).optional(),
   fixProposal: FixProposalSchema.optional(),
   admissionStatus: z.literal('admitted'),
   admittedAt: z.iso.datetime(),

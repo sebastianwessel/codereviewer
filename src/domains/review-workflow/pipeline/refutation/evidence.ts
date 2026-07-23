@@ -85,7 +85,6 @@ export const enrichProvedCandidate = (
             summary: redactor
               .redact(
                   input.refutation.fixSummary ??
-                  input.candidate.suggestedFix ??
                   input.candidate.fixProposal?.summary ??
                   'Apply the proved manual fix.'
               )

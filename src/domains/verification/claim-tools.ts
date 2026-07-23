@@ -1,4 +1,4 @@
-// Per-claim bounded tool surface for the `verify_claim` agent (spec 12). The
+// Per-claim bounded tool surface for the `investigate_claim` agent (spec 12). The
 // agent's only tools are the mediated `read`/`list`/`grep` from the
 // context-retrieval domain, reused as-is. This wrapper adds the deterministic
 // per-claim loop bound that CODE (never the model) enforces: the total number of

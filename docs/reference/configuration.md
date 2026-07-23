@@ -224,6 +224,35 @@ Each provider object is discriminated by `type`:
 
 ---
 
+## `fix`
+
+The agentic finding investigation-and-fix lane — the second job of the same
+bounded investigation agent used by `verification` (no separate agent loop). When
+enabled, it turns this run's admitted findings at or above `minSeverity` into
+claims, judges each one real vs false positive against the real file, and — for a
+`real` finding whose proposed edits pass a deterministic apply-check — enriches
+that finding's `fixProposal` with the apply-checked, `manual-review` edit so the
+better fix flows to the Markdown, SARIF, and review-comment reporters. It writes
+`fix-report.json` (judgments and fix outcomes) into the run directory. Disabled by
+default; when disabled the general review and gate are unchanged. See
+[Agentic Verification Flow](../concepts/verification-flow.md).
+
+| Key | Allowed Values | Default | Description |
+| --- | --- | --- | --- |
+| `fix.enabled` | boolean | `false` | Master switch for the whole single pass (judgment and fix together). |
+| `fix.minSeverity` | severity | value of `aiReview.actionableSeverityThreshold` (default `medium`) | Findings at or above this severity are investigated. Set `info` to cover every finding, `critical` for blockers only. |
+
+The per-claim bounds (`maxToolCallsPerClaim`, `maxBytesPerRead`, `maxMatches`) are
+shared with `verification`.
+
+> **Note:** The lane is advisory. A `false-positive` judgment is surfaced only as
+> a signal in `fix-report.json`; it never removes a finding, and no fix ever
+> changes a finding's category, severity, admission, or the quality gate. A model
+> provider must be configured for the lane to run. Findings and tool output are
+> untrusted and can never change the gate or an unrelated finding.
+
+---
+
 ## `costs`
 
 Overrides the bundled pricing snapshot for cost estimation.

@@ -4,18 +4,26 @@
 // model-authored verdict cannot smuggle untyped data downstream.
 
 import { z } from 'zod'
+import { FixEditSchema } from '../../shared/contracts/findings/finding.schema.js'
 import {
   ClaimIdSchema,
   ClaimKindSchema,
+  FindingJudgmentSchema,
+  VerdictStatusSchema,
   VerdictSchema,
-  VerdictStatusSchema
+  VERDICT_FIX_EDITS_MAX
 } from '../../shared/contracts/verification/verification.schema.js'
 
-// The verdict shape the `verify_claim` agent authors. It answers the claim's
+// The outcome shape the `investigate_claim` agent authors. It answers the claim's
 // question; `claimId` and `fingerprints` are supplied by CODE (from the claim)
 // rather than trusted from the model, so this model-facing schema omits them.
+// `findingJudgment` and `fixEdits` are populated only when investigating one of
+// this run's admitted findings (a `current-finding` claim); the flow ignores them
+// for other claim kinds.
 export const ModelVerdictSchema = z.strictObject({
   status: VerdictStatusSchema,
+  findingJudgment: FindingJudgmentSchema.optional(),
+  fixEdits: z.array(FixEditSchema).max(VERDICT_FIX_EDITS_MAX).optional(),
   rationale: z.string().min(1),
   citedEvidenceIds: z.array(z.string()).default([])
 })
@@ -36,13 +44,21 @@ export const VerificationBoundReasonSchema = z.enum([
 export type VerificationBoundReason = z.infer<typeof VerificationBoundReasonSchema>
 
 // No-content per-claim observation (spec 12 "Observability And Errors"): claim
-// kind, source label, tool-call count, bytes read, verdict status, and duration.
-// It carries no source, claim text, or tool output.
+// kind, source label, tool-call count, bytes read, verdict status, the finding
+// judgment (or absent), whether a fix was produced, the apply-check outcome, and
+// duration. It carries no source, claim/finding text, fix text, or tool output.
+export const ApplyCheckOutcomeSchema = z.enum(['passed', 'failed', 'not-attempted'])
+
+export type ApplyCheckOutcome = z.infer<typeof ApplyCheckOutcomeSchema>
+
 export const ClaimObservationSchema = z.strictObject({
   claimId: ClaimIdSchema,
   claimKind: ClaimKindSchema,
   source: z.string(),
   status: VerdictStatusSchema,
+  findingJudgment: FindingJudgmentSchema.optional(),
+  fixProduced: z.boolean().optional(),
+  applyCheck: ApplyCheckOutcomeSchema.optional(),
   toolCalls: z.int().min(0),
   bytesRead: z.int().min(0),
   durationMs: z.int().min(0),
@@ -63,6 +79,21 @@ export const FindingCorroborationSchema = z.strictObject({
   matchKinds: z.array(CorroborationMatchKindSchema),
   witnessClaimIds: z.array(z.string().min(1))
 })
+
+// Per-finding advisory result of the fix lane (spec 12 "Effect On Findings").
+// `findingJudgment` is the boolean precision signal (absent when the agent
+// established neither); `fixProduced` records whether an apply-checked fix
+// enriched the finding's `fixProposal`; `applyCheck` records how the
+// deterministic apply-check went. It is a separate structure — the admitted
+// finding contract, its severity, admission, and the gate are all left untouched.
+export const FixOutcomeSchema = z.strictObject({
+  findingId: z.string().min(1),
+  findingJudgment: FindingJudgmentSchema.optional(),
+  fixProduced: z.boolean(),
+  applyCheck: ApplyCheckOutcomeSchema
+})
+
+export type FixOutcome = z.infer<typeof FixOutcomeSchema>
 
 // Token usage and cost for the verification model calls. The flow runs after the
 // general review's report is finalized, so its spend is accounted here (in its own
@@ -85,6 +116,9 @@ export const VerificationReportSchema = z.strictObject({
   // General-review findings independently confirmed by a verification verdict.
   // Confidence signal only; never changes a finding's severity or the report.
   corroborations: z.array(FindingCorroborationSchema).default([]),
+  // Advisory per-finding results of the fix lane (judgment + fix outcome). A
+  // signal only; it never changes a finding's severity, admission, or the gate.
+  fixOutcomes: z.array(FixOutcomeSchema).default([]),
   // Token usage and cost of the verification model calls, when a provider ran.
   usage: VerificationUsageSchema.optional()
 })

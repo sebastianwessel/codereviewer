@@ -93,7 +93,11 @@ const admittedFinding = (
   },
   evidenceIds: ['ev_eval1'],
   proposedBy: 'scripted-reviewer',
-  suggestedFix: 'Return the computed value from the changed branch.',
+  fixProposal: {
+    summary: 'Return the computed value from the changed branch.',
+    evidenceIds: ['ev_eval1'],
+    safety: 'manual-review'
+  },
   admissionStatus: 'admitted',
   admittedAt: '2026-06-20T00:00:00.000Z',
   admissionEvidenceIds: ['ev_eval1'],

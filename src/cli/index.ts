@@ -40,6 +40,7 @@ import {
 } from '../domains/admission/index.js'
 import {
   corroborateFindings,
+  runFixRun,
   runVerificationRun,
   runWarningsForVerificationReport,
   type VerificationReport
@@ -248,6 +249,42 @@ const runVerificationForReview = async (
   return { ...report, corroborations: [...corroborations] }
 }
 
+// Runs the agentic finding investigation-and-fix lane after the general review
+// when it is enabled (spec 12). It reuses the same investigation agent as
+// verification. With the lane disabled (or no eligible finding / unresolved
+// provider) it returns the findings unchanged and no report. It is advisory: it
+// only enriches advisory `fixProposal` metadata on `real` findings whose
+// apply-check passes, and never changes category, severity, admission, or the gate.
+const runFixForReview = async (
+  input: {
+    readonly options: CliRunOptions
+    readonly config: CodeReviewerConfig
+    readonly environment: Readonly<Record<string, string | undefined>>
+    readonly admittedFindings: readonly AdmittedFinding[]
+    readonly logger: Logger
+  }
+): Promise<{
+  readonly report: VerificationReport | undefined
+  readonly findings: readonly AdmittedFinding[]
+}> => {
+  if (!input.config.fix.enabled) {
+    return { report: undefined, findings: input.admittedFindings }
+  }
+
+  const { report, findings } = await runFixRun({
+    config: input.config,
+    repositoryRoot: input.options.cwd,
+    environment: input.environment,
+    admittedFindings: input.admittedFindings,
+    logger: input.logger,
+    ...(input.options.providerImport === undefined
+      ? {}
+      : { providerImport: input.options.providerImport })
+  })
+
+  return { report, findings }
+}
+
 const runReview = async (
   args: readonly string[],
   options: CliRunOptions
@@ -300,6 +337,24 @@ const runReview = async (
       loadedConfig.config.paths.artifactDir,
       result.report.run.runId
     )
+    // The fix lane (spec 12) runs after admission and BEFORE the reporters render,
+    // so its apply-checked fixes enrich the admitted findings' `fixProposal` in the
+    // report object that every reporter renders. It is advisory: it never changes
+    // category, severity, admission, or the quality gate.
+    const fixLane = await runFixForReview({
+      options,
+      config: loadedConfig.config,
+      environment: loadedConfig.environment,
+      admittedFindings: result.report.admittedFindings,
+      logger
+    })
+    const reportAfterFix =
+      fixLane.report === undefined
+        ? result.report
+        : {
+            ...result.report,
+            admittedFindings: [...fixLane.findings]
+          }
     // The verification flow (spec 12) runs after the general review, in its own
     // lane. Its non-fatal warnings (e.g. a skipped claim provider) are surfaced
     // as run warnings, mirroring the change-intent provider-failure warning.
@@ -307,7 +362,7 @@ const runReview = async (
       options,
       config: loadedConfig.config,
       environment: loadedConfig.environment,
-      admittedFindings: result.report.admittedFindings,
+      admittedFindings: reportAfterFix.admittedFindings,
       logger
     })
     const verificationRunWarnings =
@@ -316,13 +371,13 @@ const runReview = async (
         : runWarningsForVerificationReport(verificationReport)
     const report =
       verificationRunWarnings.length === 0
-        ? result.report
+        ? reportAfterFix
         : {
-            ...result.report,
+            ...reportAfterFix,
             run: {
-              ...result.report.run,
+              ...reportAfterFix.run,
               warnings: [
-                ...result.report.run.warnings,
+                ...reportAfterFix.run.warnings,
                 ...verificationRunWarnings
               ]
             }
@@ -337,6 +392,14 @@ const runReview = async (
       observability: result.observability,
       config: loadedConfig.config
     })
+    if (fixLane.report !== undefined) {
+      await writeRunArtifact(
+        options.cwd,
+        runArtifactRoot,
+        'fix-report.json',
+        jsonResult(fixLane.report)
+      )
+    }
     if (verificationReport !== undefined) {
       await writeRunArtifact(
         options.cwd,

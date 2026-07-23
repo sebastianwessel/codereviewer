@@ -111,6 +111,61 @@ describe('runVerificationFlow', () => {
     expect(observation?.boundReason).toBeUndefined()
   })
 
+  test('carries findingJudgment and fixEdits for a current-finding claim', async () => {
+    const claim = makeClaim({ id: 'claim_cf1', kind: 'current-finding' })
+    const verify: ClaimAgentRunner = async () => ({
+      verdict: {
+        status: 'uncertain',
+        findingJudgment: 'real',
+        fixEdits: [
+          { path: 'app.ts', startLine: 1, endLine: 1, replacement: 'export const marker = 2' }
+        ],
+        rationale: 'the marker is a genuine defect',
+        citedEvidenceIds: []
+      }
+    })
+
+    const { report } = await runVerificationFlow({
+      ...baseFlowInput(repositoryRoot),
+      providers: [staticProvider([claim])],
+      verifyClaim: verify
+    })
+
+    const [verdict] = report.verdicts
+    expect(verdict?.findingJudgment).toBe('real')
+    expect(verdict?.fixEdits).toHaveLength(1)
+    expect(report.observations[0]?.findingJudgment).toBe('real')
+  })
+
+  test('ignores findingJudgment and fixEdits for a non current-finding claim', async () => {
+    // The same model output on a verification (prior-finding) claim must never
+    // carry the fix-lane fields: they are gated on claim kind in CODE.
+    const claim = makeClaim({ id: 'claim_pf1', kind: 'prior-finding' })
+    const verify: ClaimAgentRunner = async () => ({
+      verdict: {
+        status: 'confirmed',
+        findingJudgment: 'real',
+        fixEdits: [
+          { path: 'app.ts', startLine: 1, endLine: 1, replacement: 'export const marker = 2' }
+        ],
+        rationale: 'the marker is present',
+        citedEvidenceIds: []
+      }
+    })
+
+    const { report } = await runVerificationFlow({
+      ...baseFlowInput(repositoryRoot),
+      providers: [staticProvider([claim])],
+      verifyClaim: verify
+    })
+
+    const [verdict] = report.verdicts
+    expect(verdict?.status).toBe('confirmed')
+    expect(verdict?.findingJudgment).toBeUndefined()
+    expect(verdict?.fixEdits).toBeUndefined()
+    expect(report.observations[0]?.findingJudgment).toBeUndefined()
+  })
+
   test('synthesizes a fingerprint when the claim carries none', async () => {
     const claim = makeClaim()
     const verify: ClaimAgentRunner = async () => ({

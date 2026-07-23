@@ -2492,18 +2492,22 @@ describe('review workflow', () => {
     })
 
     expect(provider.requests).toHaveLength(2)
+    // The legacy `suggestedFix` candidate field has been removed end-to-end: a
+    // model that emits a suggestion alias is still parsed without error, but the
+    // discovery candidate no longer carries a free-text fix. Fix guidance now flows
+    // only through `fixProposal` (refutation and the spec-12 fix lane).
     expect(result.candidateFindings).toEqual([
       expect.objectContaining({
         category: 'bug',
         severity: 'high',
         title: 'Aliased suggestion should survive parsing',
-        suggestedFix: 'Normalize model suggestion aliases before admission.',
         location: expect.objectContaining({
           path: 'src/app.ts',
           startLine: 1
         })
       })
     ])
+    expect(result.candidateFindings[0]).not.toHaveProperty('suggestedFix')
     expect(result.admittedFindings).toHaveLength(1)
 
     await harness.shutdown()

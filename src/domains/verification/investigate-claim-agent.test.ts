@@ -1,6 +1,6 @@
 // Deterministic-provider integration test for the agentic verification flow
-// (spec 12 "Testing"). It drives the real `verify_claim` harness agent — not the
-// injected fake runner the flow unit tests use — through a bounded tool loop
+// (spec 12 "Testing"). It drives the real `investigate_claim` harness agent — not
+// the injected fake runner the flow unit tests use — through a bounded tool loop
 // against a fixture repository, using a canned `modelAlias.provider` whose
 // `object` returns a scripted tool-call-then-verdict sequence (the same hermetic
 // pattern the general review's provider tests use).
@@ -30,9 +30,9 @@ import { type ContextLedgerEntry } from '../review-planning/index.js'
 import { createBoundedClaimTools } from './claim-tools.js'
 import { runVerificationFlow } from './verification-flow.js'
 import {
-  createHarnessClaimVerifier,
-  type HarnessClaimVerifier
-} from './verify-claim-agent.js'
+  createHarnessClaimInvestigator,
+  type HarnessClaimInvestigator
+} from './investigate-claim-agent.js'
 
 // Sentinel the fixtures use to mark an insecure call. A file that still contains
 // it means the prior finding still holds; a file without it has been fixed.
@@ -215,7 +215,7 @@ const priorFindingClaim = (input: {
   })
 
 const makeVerifier = (provider: ModelProvider, maxToolCallsPerClaim: number) =>
-  createHarnessClaimVerifier({
+  createHarnessClaimInvestigator({
     modelAlias: {
       provider,
       model: 'scripted',
@@ -230,9 +230,9 @@ const flowBounds = {
   maxMatches: 20
 }
 
-describe('verify_claim agent (deterministic-provider integration)', () => {
+describe('investigate_claim agent (deterministic-provider integration)', () => {
   let repositoryRoot: string
-  let verifier: HarnessClaimVerifier | undefined
+  let verifier: HarnessClaimInvestigator | undefined
 
   beforeEach(async () => {
     repositoryRoot = await mkdtemp(path.join(tmpdir(), 'verify-agent-'))
@@ -280,7 +280,7 @@ describe('verify_claim agent (deterministic-provider integration)', () => {
           ]
         }
       ],
-      verifyClaim: verifier.verify
+      verifyClaim: verifier.investigate
     })
 
     const byClaim = new Map(report.verdicts.map((v) => [v.claimId, v.status]))
@@ -321,7 +321,7 @@ describe('verify_claim agent (deterministic-provider integration)', () => {
           ]
         }
       ],
-      verifyClaim: verifier.verify
+      verifyClaim: verifier.investigate
     })
 
     // list + grep + read all ran (3 tool calls) and the read of holds.ts still
@@ -350,7 +350,7 @@ describe('verify_claim agent (deterministic-provider integration)', () => {
       detail: `Probe eligibility. ${PLAN_PROBE_SECRET}`
     })
 
-    const { verdict } = await verifier.verify({ claim, tools: bounded.tools })
+    const { verdict } = await verifier.investigate({ claim, tools: bounded.tools })
 
     // The agent attempted two reads: the ineligible `.env` and the eligible
     // `fixed.ts`. Both count as tool calls, but only the eligible read produced a
@@ -405,7 +405,7 @@ describe('verify_claim agent (deterministic-provider integration)', () => {
           ]
         }
       ],
-      verifyClaim: verifier.verify
+      verifyClaim: verifier.investigate
     })
 
     const [verdict] = report.verdicts
@@ -445,7 +445,7 @@ describe('verify_claim agent (deterministic-provider integration)', () => {
           gather: async () => [injected, unrelated]
         }
       ],
-      verifyClaim: verifier.verify
+      verifyClaim: verifier.investigate
     })
 
     const byClaim = new Map(report.verdicts.map((v) => [v.claimId, v.status]))

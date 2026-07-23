@@ -230,10 +230,7 @@ const candidateFromFinding = (
       side: 'file'
     },
     evidenceIds: [],
-    proposedBy: 'review-agent',
-    ...(finding.fixSummary === undefined
-      ? {}
-      : { suggestedFix: finding.fixSummary })
+    proposedBy: 'review-agent'
   })
 }
 

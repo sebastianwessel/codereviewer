@@ -1,5 +1,5 @@
 // The agentic verification flow runner (spec 12). For every claim gathered from
-// the configured providers it runs the `verify_claim` agent in a bounded loop,
+// the configured providers it runs the `investigate_claim` agent in a bounded loop,
 // enforces the per-claim bounds in CODE (never the model), and produces the
 // verification-lane report: verdicts, no-content observations, and non-fatal run
 // warnings. It accumulates token usage across claims.
@@ -7,13 +7,15 @@
 // The agent invocation is injected as `verifyClaim` so the pure orchestration —
 // claim gathering, bound enforcement, verdict assembly — is unit-testable with a
 // fake runner and never reaches a real provider. Production wires the harness
-// `verify_claim` agent through this seam (see `verification-run.ts`).
+// `investigate_claim` agent through this seam (see `verification-run.ts`).
 
 import type { Logger } from '@purista/harness'
 import { combineRunTokenUsage, type RunTokenUsage } from '../costs/index.js'
 import {
   ContractIdSchema,
   type Claim,
+  type FindingJudgment,
+  type FixEdit,
   type Verdict
 } from '../../shared/contracts/index.js'
 import {
@@ -120,14 +122,30 @@ const buildVerdict = (input: {
   readonly status: Verdict['status']
   readonly rationale: string
   readonly citedEvidenceIds: readonly string[]
-}): Verdict =>
-  VerdictSchema.parse({
+  // Populated only for `current-finding` claims (the fix lane): the agent's
+  // real/false-positive judgment and its proposed apply-ready edits. Ignored for
+  // every other claim kind so a verification claim can never carry them.
+  readonly findingJudgment?: FindingJudgment | undefined
+  readonly fixEdits?: readonly FixEdit[] | undefined
+}): Verdict => {
+  const isCurrentFinding = input.claim.kind === 'current-finding'
+
+  return VerdictSchema.parse({
     claimId: input.claim.id,
     status: input.status,
+    ...(isCurrentFinding && input.findingJudgment !== undefined
+      ? { findingJudgment: input.findingJudgment }
+      : {}),
+    ...(isCurrentFinding &&
+    input.fixEdits !== undefined &&
+    input.fixEdits.length > 0
+      ? { fixEdits: [...input.fixEdits] }
+      : {}),
     rationale: truncateForContract(input.rationale, VERDICT_RATIONALE_MAX),
     citedEvidenceIds: dedupeCitedEvidence(input.citedEvidenceIds),
     fingerprints: fingerprintsForClaim(input.claim)
   })
+}
 
 const gatherClaims = async (
   input: RunVerificationFlowInput,
@@ -229,7 +247,13 @@ export const runVerificationFlow = async (
             claim,
             status: parsedVerdict.data.status,
             rationale: parsedVerdict.data.rationale,
-            citedEvidenceIds: bounded.citedEvidenceIds()
+            citedEvidenceIds: bounded.citedEvidenceIds(),
+            ...(parsedVerdict.data.findingJudgment === undefined
+              ? {}
+              : { findingJudgment: parsedVerdict.data.findingJudgment }),
+            ...(parsedVerdict.data.fixEdits === undefined
+              ? {}
+              : { fixEdits: parsedVerdict.data.fixEdits })
           })
         }
       } catch (error) {
@@ -256,6 +280,9 @@ export const runVerificationFlow = async (
       claimKind: claim.kind,
       source: claim.source,
       status: verdict.status,
+      ...(verdict.findingJudgment === undefined
+        ? {}
+        : { findingJudgment: verdict.findingJudgment }),
       toolCalls: bounded.toolCallCount(),
       bytesRead: bounded.bytesRead(),
       durationMs: Math.max(0, Date.now() - startedAt),

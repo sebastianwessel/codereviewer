@@ -21,6 +21,6 @@ export type ClaimProvider = {
 
 // Bound on the number of claims a single provider contributes per run. Keeps a
 // large claims file or a report with many admitted findings from turning into an
-// unbounded number of costly `verify_claim` agent runs (the loop bound per claim
+// unbounded number of costly `investigate_claim` agent runs (the loop bound per claim
 // is separately enforced by `verification.maxToolCallsPerClaim`).
 export const MAX_CLAIMS_PER_PROVIDER = 200

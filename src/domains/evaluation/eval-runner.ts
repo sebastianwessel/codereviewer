@@ -133,21 +133,18 @@ const isActionableFinding = (
     reviewReport.evidence.some((evidence) => evidence.id === evidenceId)
   )
 
-  const hasSuggestedFix =
+  const hasFixProposal =
     finding.fixProposal !== undefined &&
     finding.fixProposal.evidenceIds.some((evidenceId) =>
       finding.evidenceIds.includes(evidenceId)
     ) &&
     finding.fixProposal.summary.trim().length > 0
-  const hasLegacySuggestedFix =
-    finding.suggestedFix !== undefined &&
-    finding.suggestedFix.trim().length > 0
 
   return (
     hasLocation &&
     hasEvidence &&
     finding.description.trim().length > 0 &&
-    (hasSuggestedFix || hasLegacySuggestedFix)
+    hasFixProposal
   )
 }
 

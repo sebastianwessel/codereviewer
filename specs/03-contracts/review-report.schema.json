@@ -311,10 +311,6 @@
             "type": "string",
             "minLength": 1
           },
-          "suggestedFix": {
-            "type": "string",
-            "maxLength": 1200
-          },
           "fixProposal": {
             "type": "object",
             "properties": {

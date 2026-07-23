@@ -34,6 +34,7 @@ Written to:
 | `shared-context.json` | Run snapshot with compact shared entries, exact `taskEvents`, derived `currentTasks`, evidence, internal candidates, and admission decisions. |
 | `observability.json` | No-content event trace with run steps and task events. |
 | `verification-report.json` | Claim verdicts from the agentic verification flow, when `verification.enabled`. |
+| `fix-report.json` | Per-finding judgments (real vs false positive) and fix outcomes from the agentic fix lane, when `fix.enabled`. |
 | `error.json` | Redacted normalized error for partial failed runs. |
 
 ---
@@ -128,6 +129,19 @@ lane runs after the run cost is finalized, so its spend is accounted here).
 Verdicts are a separate lane and never enter the quality gate. A failed claim
 provider also surfaces as a run warning in `run-summary.json`. See
 [Agentic Verification Flow](../concepts/verification-flow.md).
+
+### `fix-report.json`
+
+Written only when `fix.enabled`. Same shape as `verification-report.json`, with
+per-finding `fixOutcomes` — the finding id, the `real` / `false-positive`
+judgment (absent when the agent established neither), whether an apply-checked fix
+was produced, and the deterministic apply-check result. The per-claim
+observations additionally record the finding judgment, whether a fix was produced,
+and the apply-check outcome. The lane is advisory: a produced fix enriches the
+matching finding's `fixProposal` in the defect report (so the better fix flows to
+every reporter), and a `false-positive` judgment is a signal only — nothing here
+changes a finding's category, severity, admission, or the quality gate. See
+[Agentic Verification And Fix Flow](../concepts/verification-flow.md).
 
 ### `report.md`
 
