@@ -121,7 +121,9 @@ source label, tool-call count, bytes read, verdict status, duration), any
 non-fatal run warnings, the claim count, and `corroborations` — general-review
 findings independently confirmed by a verdict (finding id, a `corroborated`
 confidence signal, match kinds, and witnessing claim ids). Corroboration raises
-confidence only; it never changes a finding's severity or the defect report.
+confidence only; it never changes a finding's severity or the defect report. It
+also carries `usage` — the verification lane's own token counts and cost (this
+lane runs after the run cost is finalized, so its spend is accounted here).
 Verdicts are a separate lane and never enter the quality gate. A failed claim
 provider also surfaces as a run warning in `run-summary.json`. See
 [Agentic Verification Flow](../concepts/verification-flow.md).

@@ -88,8 +88,11 @@ spec 11.
 
 - A dedicated harness agent (`verify_claim`) runs one claim at a time in a
   **bounded** loop: it may call the read/list/grep tools, then must return a
-  `Verdict`. It reuses the model-backed harness, provider resolution, and usage
-  accounting used by the general review.
+  `Verdict`. It reuses the model-backed harness and provider resolution used by
+  the general review. Because this lane runs after the review's run cost is
+  finalized, its own token usage and cost are accounted in the verification
+  report (`usage`) rather than the run summary, so verification spend is never
+  dropped.
 - Bounds are deterministic and enforced by code, not the model: a maximum tool
   call count per claim, the context-retrieval byte/match budgets, a per-claim
   token budget, and the run timeout. Exceeding a bound ends the claim with an

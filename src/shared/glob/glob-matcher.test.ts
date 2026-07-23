@@ -32,6 +32,16 @@ describe('glob matcher', () => {
     expect(matcher.test('bundle.js')).toBe(false)
   })
 
+  test('a trailing ** after a literal matches the bare literal and its contents', () => {
+    const matcher = globToRegExp('dist/**')
+
+    expect(matcher.test('dist')).toBe(true)
+    expect(matcher.test('dist/')).toBe(true)
+    expect(matcher.test('dist/bundle.js')).toBe(true)
+    expect(matcher.test('dist/nested/bundle.js')).toBe(true)
+    expect(matcher.test('distant')).toBe(false)
+  })
+
   test('a leading ** combined with an exact name matches it at the root', () => {
     const matcher = globToRegExp('**/package-lock.json')
 

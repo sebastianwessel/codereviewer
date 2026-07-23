@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from 'node:fs/promises'
+import { readdir, readFile, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
 import { resolveExistingPathInsideRoot } from '../../platform/path-service.js'
@@ -130,13 +130,12 @@ const resolveEligibleExistingPath = async (options: {
     throw notEligibleError(portablePath, eligibility.reason)
   }
 
+  let absolutePath: string
   try {
-    const absolutePath = await resolveExistingPathInsideRoot(
+    absolutePath = await resolveExistingPathInsideRoot(
       options.repositoryRoot,
       portablePath
     )
-
-    return { portablePath, absolutePath }
   } catch (error) {
     if (isPathContainmentError(error)) {
       throw error
@@ -144,6 +143,35 @@ const resolveEligibleExistingPath = async (options: {
 
     throw notFoundError(portablePath)
   }
+
+  // Re-evaluate eligibility against the REAL target. `resolveExistingPathInsideRoot`
+  // confirms the realpath is *contained* in the root but returns the requested
+  // (symlink) path, and eligibility was only checked on the requested name. Without
+  // this, an in-repo symlink whose name is eligible but whose realpath is an
+  // excluded/secret file (e.g. `notes.txt -> .env`, `-> .git/config`, `-> node_modules/x`)
+  // would be read/listed/searched, defeating the hard floor. The write path rejects
+  // symlinks outright; the read path follows to the true target and re-checks it.
+  const realRoot = await realpath(options.repositoryRoot)
+  const realTarget = await realpath(absolutePath)
+  const realRelative = path.relative(realRoot, realTarget)
+  // Empty means the target is the repository root itself (e.g. list/grep of `.`);
+  // equal means no symlink indirection changed the path. Otherwise re-check.
+  if (realRelative.length > 0 && realRelative !== portablePath) {
+    const realPortable = normalizeRepositoryRelativePath(realRelative)
+    const targetEligibility = evaluatePathEligibility(
+      realPortable,
+      options.compiledEligibility
+    )
+
+    if (!targetEligibility.eligible) {
+      throw notEligibleError(
+        portablePath,
+        `resolves to an ineligible target (${targetEligibility.reason})`
+      )
+    }
+  }
+
+  return { portablePath, absolutePath }
 }
 
 export const createContextRetriever = (input: {

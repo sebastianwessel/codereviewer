@@ -81,4 +81,17 @@ describe('context retrieval eligibility', () => {
       eligible: false
     })
   })
+
+  test('rejects the hard-floor directories regardless of segment casing', () => {
+    const compiled = compileEligibilityConfig()
+
+    // On a case-insensitive filesystem `NODE_MODULES`/`Dist` resolve to the real
+    // excluded directories, so the case-folded hard floor must reject them.
+    expect(
+      evaluatePathEligibility('NODE_MODULES/pkg/index.js', compiled)
+    ).toMatchObject({ eligible: false })
+    expect(evaluatePathEligibility('Dist/bundle.js', compiled)).toMatchObject({
+      eligible: false
+    })
+  })
 })

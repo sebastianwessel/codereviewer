@@ -15,6 +15,7 @@ import type {
 } from '../../shared/contracts/index.js'
 import {
   createProviderUsageRecorder,
+  summarizeRunCost,
   type RunTokenUsage
 } from '../costs/index.js'
 import {
@@ -125,8 +126,31 @@ export const runVerificationRun = async (input: {
         : { onObservation: input.onObservation })
     })
     const usage = usageRecorder.usage()
+    // Account the verification model spend in the verification report so it is
+    // not silently dropped (the run cost is finalized before this lane runs).
+    const cost = summarizeRunCost({
+      providerConfigured: true,
+      providerId: input.config.provider.id,
+      modelName: input.config.provider.model,
+      prices: input.config.costs,
+      usage
+    })
+    const reportWithUsage: VerificationReport = {
+      ...report,
+      usage: {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        ...(usage.cachedInputTokens === undefined
+          ? {}
+          : { cachedInputTokens: usage.cachedInputTokens }),
+        ...(usage.reasoningTokens === undefined
+          ? {}
+          : { reasoningTokens: usage.reasoningTokens }),
+        ...(cost.costUsd === undefined ? {} : { costUsd: cost.costUsd })
+      }
+    }
 
-    return { report, claims, usage }
+    return { report: reportWithUsage, claims, usage }
   } finally {
     await verifier.shutdown()
   }

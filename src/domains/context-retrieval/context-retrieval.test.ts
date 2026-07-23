@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
@@ -42,6 +42,27 @@ const createEligibilityFixtureRepo = async (): Promise<string> => {
 }
 
 describe('context retrieval', () => {
+  test('rejects an in-repo symlink whose real target is an excluded/secret file', async () => {
+    const root = await createEligibilityFixtureRepo()
+
+    try {
+      // `notes.txt` is an eligible name, but it points at the hard-floor `.env`.
+      // Following it would leak the secret; eligibility must re-check the target.
+      await symlink(join(root, '.env'), join(root, 'notes.txt'))
+      const retriever = createContextRetriever({ repositoryRoot: root })
+
+      await expect(
+        retriever.readRepositoryFile({ path: 'notes.txt' })
+      ).rejects.toThrow(/ineligible target/u)
+      // The eligible sibling is still readable, proving the guard is precise.
+      await expect(
+        retriever.readRepositoryFile({ path: 'src/level1/level2/level3/deep.ts' })
+      ).resolves.toMatchObject({ tool: 'read' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('reads repository files through path containment and records redacted ledger evidence', async () => {
     const root = await createTempRepo()
     const ledgerEntries: ContextLedgerEntry[] = []

@@ -80,7 +80,9 @@ export const globToRegExp = (pattern: string): RegExp => {
     } else if (isFirst) {
       source += '(?:.*/)?'
     } else if (isLast) {
-      source += '/.*'
+      // Zero-or-more trailing segments: `dist/**` matches `dist`, `dist/`, and
+      // `dist/x` (the connecting `/` is part of the optional group).
+      source += '(?:/.*)?'
     } else {
       source += '/(?:.*/)?'
     }

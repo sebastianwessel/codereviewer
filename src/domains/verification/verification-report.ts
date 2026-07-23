@@ -64,6 +64,17 @@ export const FindingCorroborationSchema = z.strictObject({
   witnessClaimIds: z.array(z.string().min(1))
 })
 
+// Token usage and cost for the verification model calls. The flow runs after the
+// general review's report is finalized, so its spend is accounted here (in its own
+// lane) rather than silently dropped from the run cost.
+export const VerificationUsageSchema = z.strictObject({
+  inputTokens: z.int().min(0),
+  outputTokens: z.int().min(0),
+  cachedInputTokens: z.int().min(0).optional(),
+  reasoningTokens: z.int().min(0).optional(),
+  costUsd: z.number().min(0).optional()
+})
+
 export const VerificationReportSchema = z.strictObject({
   verdicts: z.array(VerdictSchema).default([]),
   observations: z.array(ClaimObservationSchema).default([]),
@@ -73,7 +84,9 @@ export const VerificationReportSchema = z.strictObject({
   claimCount: z.int().min(0).default(0),
   // General-review findings independently confirmed by a verification verdict.
   // Confidence signal only; never changes a finding's severity or the report.
-  corroborations: z.array(FindingCorroborationSchema).default([])
+  corroborations: z.array(FindingCorroborationSchema).default([]),
+  // Token usage and cost of the verification model calls, when a provider ran.
+  usage: VerificationUsageSchema.optional()
 })
 
 export type CorroborationMatchKind = z.infer<typeof CorroborationMatchKindSchema>

@@ -39,7 +39,10 @@ const hardExclusionReason = (
   pathSegments: readonly string[]
 ): string | undefined => {
   for (const segment of pathSegments) {
-    if (alwaysExcludedDirectorySegments.has(segment)) {
+    // Case-fold the segment: on case-insensitive filesystems (macOS/Windows)
+    // `NODE_MODULES` resolves to `node_modules`, so a re-cased segment must not
+    // slip past this floor that no configuration can widen.
+    if (alwaysExcludedDirectorySegments.has(segment.toLowerCase())) {
       return `path contains the always-excluded directory "${segment}"`
     }
 
