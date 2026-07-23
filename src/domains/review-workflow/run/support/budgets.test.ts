@@ -112,7 +112,8 @@ describe('review runner budgets', () => {
         maxSearches: 100,
         usedSearches: 0,
         maxBytesPerRead: 60000,
-        maxMatches: 50
+        maxMatches: 50,
+        maxDepth: 4
       }
     })
     expect(balancedBudget).toEqual({
@@ -122,7 +123,8 @@ describe('review runner budgets', () => {
         maxSearches: 600,
         usedSearches: 0,
         maxBytesPerRead: 120000,
-        maxMatches: 150
+        maxMatches: 150,
+        maxDepth: 8
       }
     })
     expect(thoroughBudget).toEqual({
@@ -132,7 +134,8 @@ describe('review runner budgets', () => {
         maxSearches: 2400,
         usedSearches: 0,
         maxBytesPerRead: 240000,
-        maxMatches: 320
+        maxMatches: 320,
+        maxDepth: 12
       }
     })
     // explicit contextMaxBytes caps maxBytesPerRead at balanced depth (default)
@@ -143,7 +146,8 @@ describe('review runner budgets', () => {
         maxSearches: 600,
         usedSearches: 0,
         maxBytesPerRead: 10000,
-        maxMatches: 150
+        maxMatches: 150,
+        maxDepth: 8
       }
     })
     expect(fastBudget).not.toHaveProperty('maxSuspicionsPerTask')

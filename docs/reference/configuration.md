@@ -191,6 +191,38 @@ Each provider object is discriminated by `type`:
 
 ---
 
+## `verification`
+
+The agentic verification flow — a second, independent lane that verifies a
+specific claim against the code with bounded `read`/`list`/`grep` tools and
+returns a verdict. Disabled by default; when disabled the general review is
+unchanged. It runs as part of the `review` command and writes
+`verification-report.json` into the run directory. See
+[Agentic Verification Flow](../concepts/verification-flow.md).
+
+| Key | Allowed Values | Default | Description |
+| --- | --- | --- | --- |
+| `verification.enabled` | boolean | `false` | Master switch. When `false`, no verification runs. |
+| `verification.providers` | array | `[]` | Claim providers to run (see below). |
+| `verification.maxToolCallsPerClaim` | `1`–`50` | `12` | Per-claim tool-call budget. Exceeding it ends the claim with an `uncertain` verdict rather than looping. |
+| `verification.maxBytesPerRead` | integer ≥ 1 | `20000` | Byte cap on each mediated read. |
+| `verification.maxMatches` | integer ≥ 1 | `20` | Match cap on each mediated grep. |
+
+Each provider object is discriminated by `type`:
+
+| `type` | Keys | Description |
+| --- | --- | --- |
+| `claims-file` | `path` (repository-relative) | Reads a neutral JSON array of claims a pipeline wrote before the run. A missing file yields no claims; a non-array file is a non-fatal provider failure. No network. |
+| `prior-findings` | `report` (repository-relative) | Derives "still holds / fixed?" claims from a previous run's `report.json`. No network. |
+
+> **Note:** A model provider must be configured (`provider`) for verification to
+> run; without one the flow produces an empty report. A claim provider that
+> fails at run time is non-fatal and surfaces as a run warning. Claims and tool
+> output are untrusted and can never change findings, severity, gates, or
+> baseline status.
+
+---
+
 ## `costs`
 
 Overrides the bundled pricing snapshot for cost estimation.

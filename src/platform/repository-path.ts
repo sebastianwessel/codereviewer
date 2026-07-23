@@ -31,7 +31,12 @@ export const normalizeRepositoryRelativePath = (
   const virtualRoot = virtualRootByFlavor[flavor]
   const resolvedPath = resolvePathInsideRoot(virtualRoot, value, { flavor })
   const relativePath = pathApi.relative(virtualRoot, resolvedPath)
-  const portablePath = toPortablePath(relativePath, { flavor })
+  // `path.relative` returns '' when the resolved path is the root itself (for
+  // example a bare `.`, `./`, or `""` input). Represent the repository root as
+  // the conventional `.` rather than failing the empty-string validation below.
+  const portablePath = toPortablePath(relativePath === '' ? '.' : relativePath, {
+    flavor
+  })
 
   return RepositoryRelativePathSchema.parse(portablePath)
 }

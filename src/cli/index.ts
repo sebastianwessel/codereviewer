@@ -53,6 +53,11 @@ import {
   buildBaselineEntries,
   renderBaselineJson
 } from '../domains/admission/index.js'
+import {
+  runVerificationRun,
+  runWarningsForVerificationReport,
+  type VerificationReport
+} from '../domains/verification/index.js'
 import { loadCodeReviewerConfig } from '../domains/configuration/config-loader.js'
 import { createRedactedConfigSummary } from '../domains/configuration/config-summary.js'
 import {
@@ -559,6 +564,36 @@ const writePartialReviewArtifacts = async (
   )
 }
 
+// Runs the agentic verification flow after the general review when it is enabled
+// (spec 12). It is a separate lane: with verification disabled this returns
+// `undefined` and the general review is byte-for-byte unchanged. The flow is
+// non-fatal by construction — a missing provider or a failed claim provider
+// yields a report (empty, or carrying warnings) rather than throwing.
+const runVerificationForReview = async (
+  input: {
+    readonly options: CliRunOptions
+    readonly config: CodeReviewerConfig
+    readonly environment: Readonly<Record<string, string | undefined>>
+    readonly logger: Logger
+  }
+): Promise<VerificationReport | undefined> => {
+  if (!input.config.verification.enabled) {
+    return undefined
+  }
+
+  const { report } = await runVerificationRun({
+    config: input.config,
+    repositoryRoot: input.options.cwd,
+    environment: input.environment,
+    logger: input.logger,
+    ...(input.options.providerImport === undefined
+      ? {}
+      : { providerImport: input.options.providerImport })
+  })
+
+  return report
+}
+
 const runReview = async (
   args: readonly string[],
   options: CliRunOptions
@@ -611,23 +646,57 @@ const runReview = async (
       loadedConfig.config.paths.artifactDir,
       result.report.run.runId
     )
+    // The verification flow (spec 12) runs after the general review, in its own
+    // lane. Its non-fatal warnings (e.g. a skipped claim provider) are surfaced
+    // as run warnings, mirroring the change-intent provider-failure warning.
+    const verificationReport = await runVerificationForReview({
+      options,
+      config: loadedConfig.config,
+      environment: loadedConfig.environment,
+      logger
+    })
+    const verificationRunWarnings =
+      verificationReport === undefined
+        ? []
+        : runWarningsForVerificationReport(verificationReport)
+    const report =
+      verificationRunWarnings.length === 0
+        ? result.report
+        : {
+            ...result.report,
+            run: {
+              ...result.report.run,
+              warnings: [
+                ...result.report.run.warnings,
+                ...verificationRunWarnings
+              ]
+            }
+          }
 
     await writeReviewArtifacts({
       repositoryRoot: options.cwd,
       artifactRoot: runArtifactRoot,
-      report: result.report,
+      report,
       contextLedger: result.contextLedger,
       sharedContext: result.sharedContext,
       observability: result.observability,
       config: loadedConfig.config
     })
+    if (verificationReport !== undefined) {
+      await writeRunArtifact(
+        options.cwd,
+        runArtifactRoot,
+        'verification-report.json',
+        jsonResult(verificationReport)
+      )
+    }
     await recordRunInIndex({
       repositoryRoot: options.cwd,
       artifactDir: loadedConfig.config.paths.artifactDir,
       entry: {
-        runId: result.report.run.runId,
-        startedAt: result.report.run.startedAt,
-        completedAt: result.report.run.completedAt,
+        runId: report.run.runId,
+        startedAt: report.run.startedAt,
+        completedAt: report.run.completedAt,
         status: 'completed',
         reportPath: path.posix.join(runArtifactRoot, 'report.json')
       }
@@ -635,12 +704,12 @@ const runReview = async (
 
     return {
       exitCode:
-        result.report.qualityGate?.passed === false
+        report.qualityGate?.passed === false
           ? 1
           : 0,
       stdout: jsonResult({
-        runId: result.report.run.runId,
-        qualityGatePassed: result.report.qualityGate?.passed ?? true,
+        runId: report.run.runId,
+        qualityGatePassed: report.qualityGate?.passed ?? true,
         artifactDir: runArtifactRoot
       }),
       stderr: ''

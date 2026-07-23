@@ -20,6 +20,27 @@ const createTempRepo = async (): Promise<string> => {
   return root
 }
 
+// A repository with content nested several directories deep, plus dotfile,
+// node_modules, and configured-exclude fixtures the eligibility gate must
+// reject.
+const createEligibilityFixtureRepo = async (): Promise<string> => {
+  const root = join(tmpdir(), `codereviewer-context-eligibility-${crypto.randomUUID()}`)
+  const nestedDir = join(root, 'src', 'level1', 'level2', 'level3')
+
+  await mkdir(nestedDir, { recursive: true })
+  await writeFile(join(nestedDir, 'deep.ts'), 'export const needle = "found-me"\n')
+  await writeFile(join(root, '.env'), 'API_SECRET=needle-in-secret\n')
+  await mkdir(join(root, 'node_modules', 'pkg'), { recursive: true })
+  await writeFile(
+    join(root, 'node_modules', 'pkg', 'index.js'),
+    'module.exports = "needle-in-dependency"\n'
+  )
+  await mkdir(join(root, 'secrets'), { recursive: true })
+  await writeFile(join(root, 'secrets', 'token.txt'), 'needle-in-secrets-dir\n')
+
+  return root
+}
+
 describe('context retrieval', () => {
   test('reads repository files through path containment and records redacted ledger evidence', async () => {
     const root = await createTempRepo()
@@ -124,6 +145,176 @@ describe('context retrieval', () => {
       await expect(
         retriever.grepRepository({ query: 'value', paths: ['src/app.ts'] })
       ).rejects.toThrow(/search budget exceeded/iu)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('grep recursively finds matches in nested directories', async () => {
+    const root = await createEligibilityFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const result = await retriever.grepRepository({
+        query: 'found-me',
+        paths: ['src']
+      })
+
+      expect(result.content).toBe('src/level1/level2/level3/deep.ts:1')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('grep defaults to the repository root and still finds nested matches', async () => {
+    const root = await createEligibilityFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      // No `paths` supplied: exercises the default search root ('.').
+      const result = await retriever.grepRepository({ query: 'found-me' })
+
+      expect(result.content).toBe('src/level1/level2/level3/deep.ts:1')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('grep traversal is bounded by maxDepth', async () => {
+    const root = await createEligibilityFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxDepth: 1 }
+      })
+      const result = await retriever.grepRepository({
+        query: 'found-me',
+        paths: ['src']
+      })
+
+      expect(result.content).toBe('')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('grep silently prunes ineligible files during traversal instead of erroring', async () => {
+    const root = await createEligibilityFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const result = await retriever.grepRepository({ query: 'needle' })
+      const matchedPaths = result.content
+        .split('\n')
+        .map((line) => line.split(':')[0])
+
+      // The always-excluded dotfile (.env) and node_modules dependency are
+      // pruned during traversal without raising an error; the eligible
+      // nested source file and an ordinary top-level directory both match.
+      expect(matchedPaths).not.toContain('.env')
+      expect(matchedPaths).not.toContain('node_modules/pkg/index.js')
+      expect(matchedPaths).toContain('src/level1/level2/level3/deep.ts')
+      expect(matchedPaths).toContain('secrets/token.txt')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('eligibility rejects an explicit request for a dotfile such as .env', async () => {
+    const root = await createEligibilityFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+
+      await expect(
+        retriever.readRepositoryFile({ path: '.env' })
+      ).rejects.toThrow(/not eligible/iu)
+      await expect(
+        retriever.listRepositoryDirectory({ path: '.env' })
+      ).rejects.toThrow(/not eligible/iu)
+      await expect(
+        retriever.grepRepository({ query: 'needle', paths: ['.env'] })
+      ).rejects.toThrow(/not eligible/iu)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('eligibility rejects a path matched by a configured exclude glob', async () => {
+    const root = await createEligibilityFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        paths: { exclude: ['secrets/**'] }
+      })
+
+      await expect(
+        retriever.readRepositoryFile({ path: 'secrets/token.txt' })
+      ).rejects.toThrow(/not eligible/iu)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('eligibility rejects a path excluded by node_modules, without needing configuration', async () => {
+    const root = await createEligibilityFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+
+      await expect(
+        retriever.readRepositoryFile({ path: 'node_modules/pkg/index.js' })
+      ).rejects.toThrow(/not eligible/iu)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('directory listings never reveal ineligible children', async () => {
+    const root = await createEligibilityFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const result = await retriever.listRepositoryDirectory({ path: '.' })
+
+      expect(result.content).not.toMatch(/\.env/u)
+      expect(result.content).not.toMatch(/node_modules/u)
+      expect(result.content).toContain('dir src')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects a path that does not exist with an actionable not-found error', async () => {
+    const root = await createTempRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+
+      await expect(
+        retriever.readRepositoryFile({ path: 'src/missing.ts' })
+      ).rejects.toThrow(/was not found in the repository/iu)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('normalizes liberal path input: leading "./" and backslash separators', async () => {
+    const root = await createTempRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const fromDotSlash = await retriever.readRepositoryFile({
+        path: './src/app.ts'
+      })
+      const fromBackslash = await retriever.readRepositoryFile({
+        path: 'src\\other.ts'
+      })
+
+      expect(fromDotSlash.path).toBe('src/app.ts')
+      expect(fromBackslash.path).toBe('src/other.ts')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

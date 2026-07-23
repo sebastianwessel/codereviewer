@@ -33,9 +33,9 @@ const defaultProviderTaskInputMaxBytes = 360_000
 // investigation loop, but the workflow still exposes a bounded context retriever;
 // these caps keep that retrieval bounded per depth.
 const defaultContextRetrievalCapsByDepth = {
-  fast: { maxReads: 200, maxSearches: 100, maxMatches: 50 },
-  balanced: { maxReads: 1200, maxSearches: 600, maxMatches: 150 },
-  thorough: { maxReads: 4800, maxSearches: 2400, maxMatches: 320 }
+  fast: { maxReads: 200, maxSearches: 100, maxMatches: 50, maxDepth: 4 },
+  balanced: { maxReads: 1200, maxSearches: 600, maxMatches: 150, maxDepth: 8 },
+  thorough: { maxReads: 4800, maxSearches: 2400, maxMatches: 320, maxDepth: 12 }
 } as const
 
 export type AiReviewRuntimeBudget = {
@@ -81,7 +81,8 @@ export const aiReviewBudgetFor = (
       maxSearches: caps.maxSearches,
       usedSearches: 0,
       maxBytesPerRead,
-      maxMatches: caps.maxMatches
+      maxMatches: caps.maxMatches,
+      maxDepth: caps.maxDepth
     }
   }
 }

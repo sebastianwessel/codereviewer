@@ -14,6 +14,12 @@ import {
   createContextLedgerEntry,
   type ContextLedgerEntry
 } from '../review-planning/index.js'
+import {
+  compileEligibilityConfig,
+  evaluatePathEligibility,
+  type CompiledEligibilityConfig,
+  type ContextRetrievalEligibilityConfig
+} from './eligibility.js'
 
 export const ContextRetrievalBudgetSchema = z.strictObject({
   maxReads: z.int().min(0).default(4),
@@ -21,7 +27,13 @@ export const ContextRetrievalBudgetSchema = z.strictObject({
   maxSearches: z.int().min(0).default(2),
   usedSearches: z.int().min(0).default(0),
   maxBytesPerRead: z.int().min(1).default(20000),
-  maxMatches: z.int().min(1).default(20)
+  maxMatches: z.int().min(1).default(20),
+  // Caps how many directory levels a recursive `grep` traversal descends from
+  // each requested search root. Depth 0 is the requested root directory
+  // itself, so a directory whose depth exceeds this value is not descended
+  // into. Bounds traversal cost independently of `maxMatches`, which only
+  // bounds match count once a (potentially huge) directory is being scanned.
+  maxDepth: z.int().min(0).default(6)
 })
 
 export type ContextRetrievalBudget = z.infer<typeof ContextRetrievalBudgetSchema>
@@ -53,11 +65,38 @@ export type ContextRetriever = {
   }) => Promise<ContextRetrievalResult>
 }
 
+export type {
+  ContextRetrievalEligibilityConfig,
+  EligibilityResult
+} from './eligibility.js'
+
 const evidenceIdFor = (value: string): string =>
   `ev_${sha256(value).slice(0, 24)}`
 
 const budgetExceeded = (kind: 'read' | 'search'): TypeError =>
   new TypeError(`Context retrieval ${kind} budget exceeded.`)
+
+// Thrown for a path that resolved and passed containment, but that the
+// eligibility gate (dotfiles, node_modules/.git/dist/.codereviewer,
+// configured paths.include/exclude) rejects. Distinct from a budget or
+// not-found failure so a calling agent can react to each differently.
+const notEligibleError = (portablePath: string, reason: string): TypeError =>
+  new TypeError(
+    `Path "${portablePath}" is not eligible for context retrieval: ${reason}.`
+  )
+
+// Thrown when a requested path does not exist inside the repository. Reports
+// only the portable (repository-relative) path, never the resolved absolute
+// filesystem path, so the error stays safe to surface to a model.
+const notFoundError = (portablePath: string): TypeError =>
+  new TypeError(`Path "${portablePath}" was not found in the repository.`)
+
+// `resolveExistingPathInsideRoot` throws its own TypeError when a path (or a
+// symlink target) escapes the repository root. That message is already
+// actionable, so it is left to propagate as-is rather than being folded into
+// the generic not-found error below.
+const isPathContainmentError = (error: unknown): error is TypeError =>
+  error instanceof TypeError && /resolve inside the root/iu.test(error.message)
 
 const portableChildPath = (directory: string, childName: string): string =>
   normalizeRepositoryRelativePath(path.posix.join(directory, childName))
@@ -69,14 +108,61 @@ const linePreview = (content: string, maxLines = 12): string =>
     .map((line, index) => `${index + 1}: ${line}`)
     .join('\n')
 
+// Normalizes a caller-supplied path (liberal about leading `./`, `\`
+// separators, and repeated slashes — see `repository-path.ts`), confirms it
+// is eligible, then confirms it exists inside the repository root. Any of the
+// three failure modes produces a clear, actionable error rather than an
+// opaque one.
+const resolveEligibleExistingPath = async (options: {
+  readonly repositoryRoot: string
+  readonly requestedPath: string
+  readonly compiledEligibility: CompiledEligibilityConfig
+}): Promise<{ readonly portablePath: string; readonly absolutePath: string }> => {
+  const portablePath = RepositoryRelativePathSchema.parse(
+    normalizeRepositoryRelativePath(options.requestedPath)
+  )
+  const eligibility = evaluatePathEligibility(
+    portablePath,
+    options.compiledEligibility
+  )
+
+  if (!eligibility.eligible) {
+    throw notEligibleError(portablePath, eligibility.reason)
+  }
+
+  try {
+    const absolutePath = await resolveExistingPathInsideRoot(
+      options.repositoryRoot,
+      portablePath
+    )
+
+    return { portablePath, absolutePath }
+  } catch (error) {
+    if (isPathContainmentError(error)) {
+      throw error
+    }
+
+    throw notFoundError(portablePath)
+  }
+}
+
 export const createContextRetriever = (input: {
   readonly repositoryRoot: string
   readonly budget?: Partial<ContextRetrievalBudget>
   readonly ledgerEntries?: ContextLedgerEntry[]
+  readonly paths?: ContextRetrievalEligibilityConfig
 }): ContextRetriever => {
   const redactor = createRedactor()
   const budget = ContextRetrievalBudgetSchema.parse(input.budget ?? {})
   const ledgerEntries = input.ledgerEntries
+  const compiledEligibility = compileEligibilityConfig(input.paths)
+
+  const resolveEligibleExisting = (requestedPath: string) =>
+    resolveEligibleExistingPath({
+      repositoryRoot: input.repositoryRoot,
+      requestedPath,
+      compiledEligibility
+    })
 
   const recordResult = (record: {
     readonly tool: ContextRetrievalResult['tool']
@@ -139,13 +225,10 @@ export const createContextRetriever = (input: {
   return {
     budget: () => ({ ...budget }),
     readRepositoryFile: async ({ path: requestedPath, taskId }) => {
-      const portablePath = RepositoryRelativePathSchema.parse(
-        normalizeRepositoryRelativePath(requestedPath)
+      const { portablePath, absolutePath } = await resolveEligibleExisting(
+        requestedPath
       )
-      const absolutePath = await resolveExistingPathInsideRoot(
-        input.repositoryRoot,
-        portablePath
-      )
+
       if (budget.usedReads >= budget.maxReads) {
         throw budgetExceeded('read')
       }
@@ -170,26 +253,32 @@ export const createContextRetriever = (input: {
       })
     },
     listRepositoryDirectory: async ({ path: requestedPath, taskId }) => {
-      const portablePath = RepositoryRelativePathSchema.parse(
-        normalizeRepositoryRelativePath(requestedPath)
+      const { portablePath, absolutePath } = await resolveEligibleExisting(
+        requestedPath
       )
-      const absolutePath = await resolveExistingPathInsideRoot(
-        input.repositoryRoot,
-        portablePath
-      )
+
       if (budget.usedReads >= budget.maxReads) {
         throw budgetExceeded('read')
       }
       budget.usedReads += 1
-      const entries = await readdir(absolutePath)
+      const entryNames = await readdir(absolutePath)
+      // Entries the eligibility gate rejects (dotfiles, excluded globs, ...)
+      // are dropped before they are ever stat'd or surfaced, so a directory
+      // listing cannot reveal the presence of a secret or excluded file.
+      const eligibleEntryNames = entryNames.filter((entryName) =>
+        evaluatePathEligibility(
+          portableChildPath(portablePath, entryName),
+          compiledEligibility
+        ).eligible
+      )
       const childSummaries = await Promise.all(
-        entries.slice(0, budget.maxMatches).map(async (entry) => {
-          const childAbsolutePath = path.join(absolutePath, entry)
+        eligibleEntryNames.slice(0, budget.maxMatches).map(async (entryName) => {
+          const childAbsolutePath = path.join(absolutePath, entryName)
           const childStat = await stat(childAbsolutePath)
 
           return `${childStat.isDirectory() ? 'dir' : 'file'} ${portableChildPath(
             portablePath,
-            entry
+            entryName
           )}`
         })
       )
@@ -219,32 +308,103 @@ export const createContextRetriever = (input: {
         paths === undefined || paths.length === 0 ? ['.'] : [...paths]
       const matches: string[] = []
 
-      for (const requestedPath of searchPaths) {
+      const collectFileMatches = async (
+        portablePath: string,
+        absolutePath: string
+      ): Promise<void> => {
         if (matches.length >= budget.maxMatches) {
-          break
+          return
         }
-        const portablePath = RepositoryRelativePathSchema.parse(
-          normalizeRepositoryRelativePath(requestedPath)
-        )
-        const absolutePath = await resolveExistingPathInsideRoot(
-          input.repositoryRoot,
-          portablePath
-        )
-        const fileStat = await stat(absolutePath)
 
-        if (fileStat.isDirectory()) {
-          continue
+        let content: string
+
+        try {
+          content = await readFile(absolutePath, 'utf8')
+        } catch {
+          // Unreadable (permission error, race with a concurrent delete, a
+          // device file, ...): skip it rather than failing the whole search.
+          return
         }
-        const content = await readFile(absolutePath, 'utf8')
         const lines = content.split(/\r\n|\n|\r/u)
 
         for (const [index, line] of lines.entries()) {
           if (matches.length >= budget.maxMatches) {
-            break
+            return
           }
           if (line.includes(query)) {
             matches.push(`${portablePath}:${index + 1}`)
           }
+        }
+      }
+
+      const readEligibleDirectoryEntries = async (absolutePath: string) => {
+        try {
+          return await readdir(absolutePath, { withFileTypes: true })
+        } catch {
+          return undefined
+        }
+      }
+
+      // In-process recursive traversal (never a shell). Bounded by
+      // `maxDepth` (directory levels descended) and `maxMatches` (checked
+      // before every directory read and every line), and pruned by the
+      // eligibility gate: an ineligible directory is never descended into,
+      // so excluded/secret content is never read during a search either.
+      // Non-regular entries (symlinks, sockets, ...) are silently skipped —
+      // the traversal never follows a symlink out of the mediated view.
+      const walkDirectory = async (
+        portablePath: string,
+        absolutePath: string,
+        depth: number
+      ): Promise<void> => {
+        if (matches.length >= budget.maxMatches || depth > budget.maxDepth) {
+          return
+        }
+
+        const entries = await readEligibleDirectoryEntries(absolutePath)
+
+        if (entries === undefined) {
+          return
+        }
+
+        for (const entry of entries) {
+          if (matches.length >= budget.maxMatches) {
+            return
+          }
+
+          const childPortablePath = portableChildPath(portablePath, entry.name)
+
+          if (
+            !evaluatePathEligibility(childPortablePath, compiledEligibility)
+              .eligible
+          ) {
+            continue
+          }
+
+          const childAbsolutePath = path.join(absolutePath, entry.name)
+
+          if (entry.isDirectory()) {
+            await walkDirectory(childPortablePath, childAbsolutePath, depth + 1)
+          } else if (entry.isFile()) {
+            await collectFileMatches(childPortablePath, childAbsolutePath)
+          }
+        }
+      }
+
+      for (const requestedPath of searchPaths) {
+        if (matches.length >= budget.maxMatches) {
+          break
+        }
+
+        const { portablePath, absolutePath } = await resolveEligibleExisting(
+          requestedPath
+        )
+        const entryStat = await stat(absolutePath)
+
+        if (entryStat.isDirectory()) {
+          await walkDirectory(portablePath, absolutePath, 0)
+        } else {
+          await collectFileMatches(portablePath, absolutePath)
         }
       }
 
