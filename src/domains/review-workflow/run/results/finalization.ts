@@ -21,6 +21,7 @@ export const prepareReviewRunFinalization = (
     readonly configWarnings?: readonly string[] | undefined
     readonly driftFindings: readonly DriftFinding[]
     readonly admissionWarnings: readonly string[]
+    readonly contextIngestionWarnings?: readonly string[] | undefined
     readonly admittedFindings: readonly AdmittedFinding[]
     readonly baselineFingerprints?: readonly BaselineFingerprintRecord[] | undefined
     readonly providerUsage?: RunTokenUsage | undefined
@@ -51,6 +52,7 @@ export const prepareReviewRunFinalization = (
     ...(input.configWarnings ?? []),
     ...driftWarningsFor(input.driftFindings),
     ...input.admissionWarnings,
+    ...(input.contextIngestionWarnings ?? []),
     ...runCost.warnings
   ]
 

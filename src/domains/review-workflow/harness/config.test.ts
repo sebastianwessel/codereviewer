@@ -5,8 +5,7 @@ import {
   maxChildAgentCallsForReview,
   modelReviewWorkflowDelegation,
   reviewAgentOptionsForRole,
-  reviewSkillAgentOptions,
-  reviewWorkflowDelegation
+  reviewSkillAgentOptions
 } from './config.js'
 
 describe('workflow harness config', () => {
@@ -24,12 +23,6 @@ describe('workflow harness config', () => {
       delegation: {
         maxParallelChildAgentCalls: 3
       }
-    })
-    expect(reviewWorkflowDelegation(2)).toEqual({
-      agents: ['propose_candidates'],
-      modelAliases: ['reviewer'],
-      maxChildAgentCalls: 16,
-      maxParallelChildAgentCalls: 2
     })
     expect(modelReviewWorkflowDelegation(2)).toEqual({
       agents: ['holistic_review', 'refute_finding'],

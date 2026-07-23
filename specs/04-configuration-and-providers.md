@@ -1,7 +1,7 @@
 # 04: Configuration And Providers
 
 Status: Approved
-Date: 2026-06-19
+Date: 2026-07-22
 
 ## Configuration Files
 
@@ -94,6 +94,8 @@ provider-specific object as passthrough.
 | `costs` | no | object | detailed token/cost tracking enabled with no prices |
 | `aiReview` | no | object | holistic discovery + refutation defaults |
 | `promotionPolicy` | no | object | non-actionable model output disposition |
+| `contextSources` | no | object | external change-intent context disabled |
+| `verification` | no | object | agentic verification flow disabled |
 
 ## Review Config
 
@@ -356,6 +358,72 @@ Rules:
   production relies on adjacent CodeQL/linter/formatter/test/build pipelines.
   Trusted allowlisted deterministic rules are separate from generic signal-only
   output and may seed actionable evidence-backed candidates directly.
+
+## Context Sources
+
+Controls external change-intent context ingestion
+(`11-external-context-ingestion.md`). Disabled by default.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `contextSources.enabled` | boolean | `false` |
+| `contextSources.providers` | array of provider objects | `[]` |
+| `contextSources.summary.mode` | `"model" \| "digest"` | `"model"` when a provider is configured, else `"digest"` |
+| `contextSources.summary.maxBytes` | integer | bounded change-intent-brief cap |
+
+Each provider object is discriminated by `type`. The initial phase accepts the
+two no-network providers; the network providers (`platform`, `mcp`) are later
+phases (`11-external-context-ingestion.md`) and are added to this list when their
+implementations and the required security controls ship.
+
+| `type` | Required keys | Purpose |
+| --- | --- | --- |
+| `inbox` | `dir` | Read frontmatter-markdown context files a pipeline wrote before the run. No network. |
+| `changed-files` | `include` | Surface PR-changed repository files matching globs as intent context. No network. |
+
+Rules:
+
+- the block is off unless `enabled` is `true`; a disabled block yields a review
+  identical to one with no external context;
+- `inbox.dir` resolves under the repository root (default `.codereviewer/context`)
+  and is bounded by file-count and per-file byte caps;
+- `changed-files.include` selects PR-changed files by glob (for example
+  `specs/**`, `docs/**`, `**/*.md`), bounded by file-count and byte caps;
+- `summary.mode` defaults to `model` when a provider is configured and `digest`
+  otherwise; `model` distills through a dedicated provider call and falls back to
+  `digest` if that call fails;
+- an unknown `type` or a missing required key fails `config validate` with exit
+  code 2.
+
+## Verification
+
+Controls the agentic verification flow (`12-verification-flow.md`). Disabled by
+default.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `verification.enabled` | boolean | `false` |
+| `verification.providers` | array of claim-provider objects | `[]` |
+| `verification.maxToolCallsPerClaim` | integer | bounded default |
+| `verification.maxBytesPerRead` | integer | bounded default |
+| `verification.maxMatches` | integer | bounded default |
+
+Claim-provider objects are discriminated by `type`:
+
+| `type` | Keys | Purpose |
+| --- | --- | --- |
+| `claims-file` | `path` | Read a neutral claims file a pipeline wrote before the run. No network. |
+| `prior-findings` | `report` | Derive claims from a previous run report or the baseline. |
+
+Rules:
+
+- the block is off unless `enabled` is `true`; a disabled block yields no
+  verification flow and an unchanged general review;
+- claim inputs are untrusted and cannot change admission, severity, gates, or
+  baseline;
+- an unknown `type` or a missing required key fails config validation (exit 2);
+- the later-phase `analyzer` (SARIF) and `comment` claim providers are added to
+  this list when their adapters ship.
 
 ## Reporting
 

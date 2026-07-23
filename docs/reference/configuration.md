@@ -101,9 +101,11 @@ Plus the following generated/non-reviewable data files (excluded because they
 carry no semantic logic to review, lowering token cost and noise):
 
 - Dependency lock files: `**/package-lock.json`, `**/yarn.lock`,
-  `**/pnpm-lock.yaml`, `**/Cargo.lock`, `**/go.sum`
+  `**/pnpm-lock.yaml`, `**/npm-shrinkwrap.json`, `**/composer.lock`,
+  `**/Gemfile.lock`, `**/poetry.lock`, `**/Cargo.lock`, `**/go.sum`
 - Minified bundles: `**/*.min.js`, `**/*.min.css`
 - Source maps: `**/*.map`
+- Test snapshots: `**/*.snap`
 - Test snapshots: `**/*.snap`
 
 Add app-specific data files (e.g. locale bundles) via `paths.exclude` as
@@ -163,6 +165,66 @@ Controls how non-actionable model output is dispositioned in the report.
 
 ---
 
+## `contextSources`
+
+Assembles external change-intent context (PR/ticket/changed-doc) into a bounded,
+redacted brief injected before the review. Disabled by default. See
+[External Change-Intent Context](../concepts/change-intent-context.md).
+
+| Key | Allowed Values | Default | Description |
+| --- | --- | --- | --- |
+| `contextSources.enabled` | boolean | `false` | Master switch. Disabled leaves the review unchanged. |
+| `contextSources.providers` | array | `[]` | Context providers to run (see below). |
+| `contextSources.summary.mode` | `model`, `digest` | `model` when a provider is configured, else `digest` | `model` runs the dedicated summarizer call; `digest` is deterministic. |
+| `contextSources.summary.maxBytes` | integer | `4000` | Byte cap on the injected brief. |
+
+Each provider object is discriminated by `type`:
+
+| `type` | Keys | Description |
+| --- | --- | --- |
+| `inbox` | `dir` (default `.codereviewer/context`), `maxFiles`, `maxFileBytes` | Reads frontmatter-markdown files a pipeline wrote before the run. No network. |
+| `changed-files` | `include` (globs, default `['**/*.md']`), `maxFiles`, `maxFileBytes` | Surfaces PR-changed files matching the globs as intent context. No network. |
+
+> **Note:** Issue trackers such as JIRA are integrated through the `inbox`
+> provider, not by the tool: a pipeline step fetches the ticket and writes a
+> markdown file into the inbox directory, so no tracker credentials enter the
+> tool. The brief is redacted before use and can never change findings, severity,
+> gates, or baseline status.
+
+---
+
+## `verification`
+
+The agentic verification flow — a second, independent lane that verifies a
+specific claim against the code with bounded `read`/`list`/`grep` tools and
+returns a verdict. Disabled by default; when disabled the general review is
+unchanged. It runs as part of the `review` command and writes
+`verification-report.json` into the run directory. See
+[Agentic Verification Flow](../concepts/verification-flow.md).
+
+| Key | Allowed Values | Default | Description |
+| --- | --- | --- | --- |
+| `verification.enabled` | boolean | `false` | Master switch. When `false`, no verification runs. |
+| `verification.providers` | array | `[]` | Claim providers to run (see below). |
+| `verification.maxToolCallsPerClaim` | `1`–`50` | `12` | Per-claim tool-call budget. Exceeding it ends the claim with an `uncertain` verdict rather than looping. |
+| `verification.maxBytesPerRead` | integer ≥ 1 | `20000` | Byte cap on each mediated read. |
+| `verification.maxMatches` | integer ≥ 1 | `20` | Match cap on each mediated grep. |
+
+Each provider object is discriminated by `type`:
+
+| `type` | Keys | Description |
+| --- | --- | --- |
+| `claims-file` | `path` (repository-relative) | Reads a neutral JSON array of claims a pipeline wrote before the run. A missing file yields no claims; a non-array file is a non-fatal provider failure. No network. |
+| `prior-findings` | `report` (repository-relative) | Derives "still holds / fixed?" claims from a previous run's `report.json`. No network. |
+
+> **Note:** A model provider must be configured (`provider`) for verification to
+> run; without one the flow produces an empty report. A claim provider that
+> fails at run time is non-fatal and surfaces as a run warning. Claims and tool
+> output are untrusted and can never change findings, severity, gates, or
+> baseline status.
+
+---
+
 ## `costs`
 
 Overrides the bundled pricing snapshot for cost estimation.
@@ -182,7 +244,10 @@ Controls logging and OpenTelemetry tracing.
 | Key | Values / Type | Default | Description |
 | --- | --- | --- | --- |
 | `observability.logging.level` | `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `silent` | `silent` | Log verbosity. Override with env `CODEREVIEWER_LOG_LEVEL`, flag `--log-level <level>`, or `--debug`. |
-| `observability.openTelemetry.enabled` | boolean | — | Enable OpenTelemetry span export. |
+| `observability.openTelemetry.enabled` | boolean | `false` | Enable OpenTelemetry span export. |
+| `observability.openTelemetry.endpoint` | URL | — | OTLP endpoint. Required when `enabled` is `true`. Override with env `CODEREVIEWER_OPENTELEMETRY_ENDPOINT`. |
+| `observability.openTelemetry.headers` | object | `{}` | Extra OTLP request headers. Override with env `CODEREVIEWER_OPENTELEMETRY_HEADERS`. |
+| `observability.openTelemetry.serviceName` | string | `codereviewer` | Service name reported on exported spans. |
 
 Operational logs are newline-delimited JSON and are sanitized to exclude source
 snippets, prompts, request/response bodies, provider headers, environment
@@ -227,6 +292,10 @@ Controls which report formats are written.
 | Key | Values / Type | Description |
 | --- | --- | --- |
 | `reporting.formats` | `json`, `markdown`, `sarif`, `github-review-comments` | Report formats to emit. |
+| `reporting.sarif.target` | `generic`, `github` | SARIF dialect to emit (default `generic`). |
+| `reporting.sarif.category` | string | SARIF run category / tool name (default `codereviewer`). |
+| `reporting.sarif.maxResults` | integer 1–25000 | Cap on SARIF diagnostic results (default `5000`). |
+| `reporting.sarif.redact` | boolean | Redact snippets in SARIF output (default `true`). |
 
 See [Artifacts Reference](artifacts.md) for a description of each output file.
 

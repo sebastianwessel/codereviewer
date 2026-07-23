@@ -155,16 +155,9 @@ type SarifRule = {
   }
 }
 
-type SarifProviderIssue = {
-  readonly code: string
-  readonly stage?: string
-  readonly recovered?: boolean
-  readonly message?: string
-}
-
 const renderProviderIssue = (
   issue: ReviewReport['providerIssues'][number]
-): SarifProviderIssue => ({
+): ReviewReport['providerIssues'][number] => ({
   code: safeRedactedText(issue.code),
   ...(issue.stage === undefined
     ? {}

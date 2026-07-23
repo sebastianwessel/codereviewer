@@ -98,18 +98,3 @@ export const readReviewRunnerSourceInput = async (
     }
   }
 }
-
-export const prepareReviewRunnerRepositoryInput = async (
-  options: ReviewRunnerRepositoryInputOptions
-): Promise<ReviewRunnerRepositoryInputState> => {
-  const intakeState = await collectReviewRunnerRepositoryIntake(options)
-  const sourceState = await readReviewRunnerSourceInput({
-    repositoryRoot: options.repositoryRoot,
-    intake: intakeState.intake
-  })
-
-  return {
-    ...intakeState,
-    ...sourceState
-  }
-}

@@ -40,7 +40,7 @@ every major block. Unknown keys are rejected — use only documented keys (see t
 {
   // ── Review behaviour ──────────────────────────────────────────────────────
   "review": {
-    "mode": "ci",                       // "local" | "ci" | "pr"
+    "mode": "ci",                       // "local" | "ci" | "pr" | "full"
     "depth": "balanced",                // "fast" | "balanced" | "thorough"
     "baseRef": "main",
     "headRef": "HEAD",
@@ -90,6 +90,15 @@ every major block. Unknown keys are rejected — use only documented keys (see t
   "baseline": {
     "enabled": true,
     "failOnNewOnly": true
+  },
+
+  // ── External change-intent context (off by default) ───────────────────────
+  "contextSources": {
+    "enabled": true,
+    "providers": [
+      { "type": "inbox", "dir": ".codereviewer/context" },
+      { "type": "changed-files", "include": ["specs/**", "docs/**"] }
+    ]
   },
 
   // ── Quality gate ──────────────────────────────────────────────────────────

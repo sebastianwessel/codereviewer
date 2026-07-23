@@ -102,6 +102,38 @@ export type RunTokenUsage = {
   readonly providerCostUsd?: number
 }
 
+// Sum two token-usage records into one. Used to fold a dedicated model call
+// (e.g. the change-intent summarizer) into the run's provider usage so its
+// tokens are counted in run cost. `cachedInputTokens` is a subset of
+// `inputTokens`, so it sums the same way.
+export const combineRunTokenUsage = (
+  a: RunTokenUsage | undefined,
+  b: RunTokenUsage | undefined
+): RunTokenUsage | undefined => {
+  if (a === undefined) {
+    return b
+  }
+
+  if (b === undefined) {
+    return a
+  }
+
+  const cached = (a.cachedInputTokens ?? 0) + (b.cachedInputTokens ?? 0)
+  const reasoning = (a.reasoningTokens ?? 0) + (b.reasoningTokens ?? 0)
+  const providerCost =
+    a.providerCostUsd === undefined && b.providerCostUsd === undefined
+      ? undefined
+      : (a.providerCostUsd ?? 0) + (b.providerCostUsd ?? 0)
+
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    ...(cached === 0 ? {} : { cachedInputTokens: cached }),
+    ...(reasoning === 0 ? {} : { reasoningTokens: reasoning }),
+    ...(providerCost === undefined ? {} : { providerCostUsd: providerCost })
+  }
+}
+
 export type RunCostSummary = {
   readonly warnings: readonly string[]
   readonly costUsd?: number
@@ -109,6 +141,11 @@ export type RunCostSummary = {
   readonly outputTokens?: number
   readonly cachedInputTokens?: number
 }
+
+// Run warning emitted when a provider run's model cost could not be determined
+// (no surfaced token usage, or no provider cost and no configured prices), so
+// missing cost data is visible rather than silently reported as zero.
+export const COST_UNAVAILABLE_WARNING = 'cost-unavailable'
 
 // Summarize cost for a run. Deterministic (no-provider) runs have no model cost.
 // Provider runs without surfaced token usage, or without provider cost and
@@ -126,7 +163,7 @@ export const summarizeRunCost = (input: {
   }
 
   if (input.usage === undefined) {
-    return { warnings: ['cost-unavailable'] }
+    return { warnings: [COST_UNAVAILABLE_WARNING] }
   }
 
   const cost = calculateTokenCost({
@@ -146,7 +183,7 @@ export const summarizeRunCost = (input: {
 
   if (cost.costUsd === null) {
     return {
-      warnings: ['cost-unavailable'],
+      warnings: [COST_UNAVAILABLE_WARNING],
       inputTokens: cost.inputTokens,
       outputTokens: cost.outputTokens,
       cachedInputTokens: cost.cachedInputTokens

@@ -1,20 +1,14 @@
 import { appendFileSync } from 'node:fs'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import {
-  resolveExistingPathInsideRoot,
-  resolvePathInsideRoot,
-  resolveWritePathInsideRoot
-} from '../platform/path-service.js'
+import { resolveExistingPathInsideRoot } from '../platform/path-service.js'
 import {
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
   EvalReportSchema,
   assertBenchmarkSlicesHydrated,
-  calculateEvalDiffStats,
   createModelSemanticJudge,
   createEvalSliceManifest,
-  type EvalCaseOutput,
   loadEvalCasesFromFixtures,
   renderEvalComparison,
   renderEvalRecallReport,
@@ -25,10 +19,8 @@ import {
 import { runDriftCheck } from '../domains/drift/index.js'
 import {
   isReviewRunFailedError,
-  runReview as runReviewPipeline,
-  type PartialReviewRunState
+  runReview as runReviewPipeline
 } from '../domains/review-workflow/index.js'
-import { parseGitDiffMaps } from '../domains/repository-intake/index.js'
 import {
   resolveProviderModelAlias,
   type ProviderImport
@@ -36,23 +28,22 @@ import {
 import {
   createReviewLogger,
   type Logger,
-  ReviewLogLevelSchema,
   type ReviewLogSink
 } from '../domains/observability/index.js'
 import {
   latestRunWithReport,
-  parseRunIndex,
-  renderRunIndexJson,
-  renderRunSummaryJson,
-  runIndexFileName,
-  upsertRunIndexEntry,
-  writeReportingArtifacts,
-  type RunIndexEntry
+  parseRunIndex
 } from '../domains/reporting/index.js'
 import {
   buildBaselineEntries,
   renderBaselineJson
 } from '../domains/admission/index.js'
+import {
+  corroborateFindings,
+  runVerificationRun,
+  runWarningsForVerificationReport,
+  type VerificationReport
+} from '../domains/verification/index.js'
 import { loadCodeReviewerConfig } from '../domains/configuration/config-loader.js'
 import { createRedactedConfigSummary } from '../domains/configuration/config-summary.js'
 import {
@@ -62,7 +53,31 @@ import {
   normalizeError,
   type ErrorSource
 } from '../shared/errors/error-normalizer.js'
-import type { CodeReviewerConfig } from '../shared/contracts/index.js'
+import type {
+  AdmittedFinding,
+  CodeReviewerConfig
+} from '../shared/contracts/index.js'
+import {
+  parseConfigPath,
+  parseEnumOption,
+  parseExplicitFiles,
+  parseIntegerOption,
+  parseLogFileOverride,
+  parseLogLevelOverride,
+  parseOptionValue,
+  parseOptionValues
+} from './args.js'
+import {
+  ensureDirectory,
+  jsonResult,
+  readRunIndex,
+  recordRunInIndex,
+  resolveArtifactWritePath,
+  writePartialReviewArtifacts,
+  writeReviewArtifacts,
+  writeRunArtifact
+} from './run-artifacts.js'
+import { runEvalCase } from './eval-case-runner.js'
 
 export type CliResult = {
   readonly exitCode: number
@@ -82,27 +97,6 @@ const usageError = (message: string): CliResult => ({
   stdout: '',
   stderr: JSON.stringify({ code: 'usage_error', message })
 })
-
-const jsonResult = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
-
-const parseConfigPath = (args: readonly string[]): string | undefined => {
-  const configIndex = args.indexOf('--config')
-
-  if (configIndex === -1) {
-    return undefined
-  }
-
-  const configPath = args[configIndex + 1]
-  if (
-    configPath === undefined ||
-    configPath.length === 0 ||
-    configPath.startsWith('-')
-  ) {
-    throw new TypeError('--config requires a path')
-  }
-
-  return configPath
-}
 
 const runConfigValidate = async (
   args: readonly string[],
@@ -133,15 +127,6 @@ const runConfigValidate = async (
     }
   }
 }
-
-const ensureDirectory = async (directory: string): Promise<void> => {
-  await mkdir(directory, { recursive: true })
-}
-
-const resolveArtifactWritePath = (
-  repositoryRoot: string,
-  artifactPath: string
-): Promise<string> => resolveWritePathInsideRoot(repositoryRoot, artifactPath)
 
 const createEvalRunArchiveId = (): string => {
   const now = new Date()
@@ -197,152 +182,6 @@ const mapErrorResult = (
   }
 }
 
-const parseOptionValue = (
-  args: readonly string[],
-  optionName: string
-): string | undefined => {
-  const optionIndex = args.indexOf(optionName)
-
-  if (optionIndex === -1) {
-    return undefined
-  }
-
-  const value = args[optionIndex + 1]
-  if (value === undefined || value.length === 0) {
-    throw new TypeError(`${optionName} requires a value`)
-  }
-
-  return value
-}
-
-const parseOptionValues = (
-  args: readonly string[],
-  optionName: string
-): readonly string[] => {
-  const values: string[] = []
-
-  for (let index = 0; index < args.length; index += 1) {
-    if (args[index] !== optionName) {
-      continue
-    }
-
-    const value = args[index + 1]
-    if (
-      value === undefined ||
-      value.length === 0 ||
-      value.startsWith('-')
-    ) {
-      throw new TypeError(`${optionName} requires a value`)
-    }
-
-    values.push(value)
-    index += 1
-  }
-
-  return values
-}
-
-const parseIntegerOption = (
-  args: readonly string[],
-  optionName: string,
-  input: {
-    readonly min: number
-    readonly max: number
-  }
-): number | undefined => {
-  const value = parseOptionValue(args, optionName)
-
-  if (value === undefined) {
-    return undefined
-  }
-
-  if (value.startsWith('-')) {
-    throw new TypeError(`${optionName} requires a value`)
-  }
-
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed < input.min || parsed > input.max) {
-    throw new TypeError(
-      `${optionName} must be an integer from ${input.min} to ${input.max}`
-    )
-  }
-
-  return parsed
-}
-
-const parseEnumOption = <T extends string>(
-  args: readonly string[],
-  optionName: string,
-  allowedValues: readonly T[]
-): T | undefined => {
-  const value = parseOptionValue(args, optionName)
-
-  if (value === undefined) {
-    return undefined
-  }
-
-  if (value.startsWith('-') || !allowedValues.includes(value as T)) {
-    throw new TypeError(
-      `${optionName} must be one of ${allowedValues.join(', ')}`
-    )
-  }
-
-  return value as T
-}
-
-const parseLogLevelOverride = (
-  args: readonly string[]
-): { readonly level?: string; readonly args: readonly string[] } => {
-  if (args.includes('--debug')) {
-    return {
-      level: 'debug',
-      args: args.filter((arg) => arg !== '--debug')
-    }
-  }
-
-  const logLevelIndex = args.indexOf('--log-level')
-  if (logLevelIndex === -1) {
-    return {
-      args
-    }
-  }
-
-  const value = args[logLevelIndex + 1]
-  if (value === undefined || value.length === 0 || value.startsWith('-')) {
-    throw new TypeError('--log-level requires a value')
-  }
-
-  return {
-    level: ReviewLogLevelSchema.parse(value),
-    args: args.filter(
-      (_arg, index) => index !== logLevelIndex && index !== logLevelIndex + 1
-    )
-  }
-}
-
-const parseLogFileOverride = (
-  args: readonly string[]
-): { readonly logFile?: string; readonly args: readonly string[] } => {
-  const logFileIndex = args.indexOf('--log-file')
-  if (logFileIndex === -1) {
-    return {
-      args
-    }
-  }
-
-  const value = args[logFileIndex + 1]
-  if (value === undefined || value.length === 0 || value.startsWith('-')) {
-    throw new TypeError('--log-file requires a path')
-  }
-
-  return {
-    logFile: value,
-    args: args.filter(
-      (_arg, index) => index !== logFileIndex && index !== logFileIndex + 1
-    )
-  }
-}
-
 const resolveLogSink = async (
   options: CliRunOptions,
   logFile: string | undefined
@@ -369,194 +208,44 @@ const resolveLogSink = async (
   }
 }
 
-const parseExplicitFiles = (args: readonly string[]): readonly string[] | undefined => {
-  const files: string[] = []
-
-  for (const [index, value] of args.entries()) {
-    if (value === '--file') {
-      const file = args[index + 1]
-      if (file === undefined || file.length === 0) {
-        throw new TypeError('--file requires a path')
-      }
-      files.push(file)
-    }
+// Runs the agentic verification flow after the general review when it is enabled
+// (spec 12). It is a separate lane: with verification disabled this returns
+// `undefined` and the general review is byte-for-byte unchanged. The flow is
+// non-fatal by construction — a missing provider or a failed claim provider
+// yields a report (empty, or carrying warnings) rather than throwing.
+const runVerificationForReview = async (
+  input: {
+    readonly options: CliRunOptions
+    readonly config: CodeReviewerConfig
+    readonly environment: Readonly<Record<string, string | undefined>>
+    readonly admittedFindings: readonly AdmittedFinding[]
+    readonly logger: Logger
   }
-
-  const filesValue = parseOptionValue(args, '--files')
-  if (filesValue !== undefined) {
-    files.push(
-      ...filesValue
-        .split(',')
-        .map((file) => file.trim())
-        .filter((file) => file.length > 0)
-    )
-  }
-
-  return files.length === 0 ? undefined : files
-}
-
-const writeRunArtifact = async (
-  repositoryRoot: string,
-  artifactRoot: string,
-  name: string,
-  content: string
-): Promise<void> => {
-  await writeFile(
-    await resolveArtifactWritePath(
-      repositoryRoot,
-      path.posix.join(artifactRoot, name)
-    ),
-    content
-  )
-}
-
-const readRunIndex = async (
-  repositoryRoot: string,
-  artifactDir: string
-): Promise<string | undefined> => {
-  try {
-    return await readFile(
-      await resolveExistingPathInsideRoot(
-        repositoryRoot,
-        path.posix.join(artifactDir, runIndexFileName)
-      ),
-      'utf8'
-    )
-  } catch {
+): Promise<VerificationReport | undefined> => {
+  if (!input.config.verification.enabled) {
     return undefined
   }
-}
 
-// Run directories are otherwise opaque and unenumerated, so nothing downstream
-// can find the newest report. The index is bookkeeping: a failure to record a
-// run must never fail a review that already produced its artifacts.
-const recordRunInIndex = async (
-  input: {
-    readonly repositoryRoot: string
-    readonly artifactDir: string
-    readonly entry: RunIndexEntry
-  }
-): Promise<void> => {
-  try {
-    const index = parseRunIndex(
-      await readRunIndex(input.repositoryRoot, input.artifactDir)
-    )
-    const indexPath = await resolveArtifactWritePath(
-      input.repositoryRoot,
-      path.posix.join(input.artifactDir, runIndexFileName)
-    )
-
-    await ensureDirectory(path.dirname(indexPath))
-    await writeFile(
-      indexPath,
-      renderRunIndexJson(upsertRunIndexEntry(index, input.entry))
-    )
-  } catch {
-    // Bookkeeping only; the run's own artifacts are already durable.
-  }
-}
-
-const writeReviewArtifacts = async (
-  input: {
-    readonly repositoryRoot: string
-    readonly artifactRoot: string
-    readonly report: Awaited<ReturnType<typeof runReviewPipeline>>['report']
-    readonly contextLedger: Awaited<ReturnType<typeof runReviewPipeline>>['contextLedger']
-    readonly sharedContext: Awaited<ReturnType<typeof runReviewPipeline>>['sharedContext']
-    readonly observability: Awaited<ReturnType<typeof runReviewPipeline>>['observability']
-    readonly config: CodeReviewerConfig
-  }
-): Promise<void> => {
-  const runDirectory = await resolveArtifactWritePath(
-    input.repositoryRoot,
-    input.artifactRoot
-  )
-  await ensureDirectory(runDirectory)
-  await writeReportingArtifacts({
-    report: input.report,
-    formats: input.config.reporting.formats,
-    sarif: input.config.reporting.sarif,
-    writer: (artifactPath, content) =>
-      writeRunArtifact(
-        input.repositoryRoot,
-        input.artifactRoot,
-        artifactPath,
-        content
-      )
+  const { report, claims } = await runVerificationRun({
+    config: input.config,
+    repositoryRoot: input.options.cwd,
+    environment: input.environment,
+    logger: input.logger,
+    ...(input.options.providerImport === undefined
+      ? {}
+      : { providerImport: input.options.providerImport })
   })
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'run-summary.json',
-    renderRunSummaryJson(input.report.run)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'context-ledger.json',
-    jsonResult(input.contextLedger)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'shared-context.json',
-    jsonResult(input.sharedContext)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'observability.json',
-    jsonResult(input.observability)
-  )
-}
 
-const writePartialReviewArtifacts = async (
-  input: {
-    readonly repositoryRoot: string
-    readonly artifactRoot: string
-    readonly partialState: PartialReviewRunState
-  }
-): Promise<void> => {
-  const runDirectory = await resolveArtifactWritePath(
-    input.repositoryRoot,
-    input.artifactRoot
-  )
-  await ensureDirectory(runDirectory)
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'run-summary.json',
-    renderRunSummaryJson(input.partialState.runSummary)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'context-ledger.json',
-    jsonResult(input.partialState.contextLedger)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'shared-context.json',
-    jsonResult(input.partialState.sharedContext)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'observability.json',
-    jsonResult(input.partialState.observability)
-  )
-  await writeRunArtifact(
-    input.repositoryRoot,
-    input.artifactRoot,
-    'error.json',
-    jsonResult({
-      code: input.partialState.error.code,
-      message: input.partialState.error.message,
-      category: input.partialState.error.category,
-      recoverable: input.partialState.error.recoverable
-    })
-  )
+  // Cross-witness: a confirmed verdict that lands on a general-review finding
+  // raises that finding's confidence (never its severity). Surfaced in the
+  // verification report so the "strong finding" signal is visible in output.
+  const corroborations = corroborateFindings({
+    findings: input.admittedFindings,
+    verdicts: report.verdicts,
+    claims
+  })
+
+  return { ...report, corroborations: [...corroborations] }
 }
 
 const runReview = async (
@@ -611,23 +300,58 @@ const runReview = async (
       loadedConfig.config.paths.artifactDir,
       result.report.run.runId
     )
+    // The verification flow (spec 12) runs after the general review, in its own
+    // lane. Its non-fatal warnings (e.g. a skipped claim provider) are surfaced
+    // as run warnings, mirroring the change-intent provider-failure warning.
+    const verificationReport = await runVerificationForReview({
+      options,
+      config: loadedConfig.config,
+      environment: loadedConfig.environment,
+      admittedFindings: result.report.admittedFindings,
+      logger
+    })
+    const verificationRunWarnings =
+      verificationReport === undefined
+        ? []
+        : runWarningsForVerificationReport(verificationReport)
+    const report =
+      verificationRunWarnings.length === 0
+        ? result.report
+        : {
+            ...result.report,
+            run: {
+              ...result.report.run,
+              warnings: [
+                ...result.report.run.warnings,
+                ...verificationRunWarnings
+              ]
+            }
+          }
 
     await writeReviewArtifacts({
       repositoryRoot: options.cwd,
       artifactRoot: runArtifactRoot,
-      report: result.report,
+      report,
       contextLedger: result.contextLedger,
       sharedContext: result.sharedContext,
       observability: result.observability,
       config: loadedConfig.config
     })
+    if (verificationReport !== undefined) {
+      await writeRunArtifact(
+        options.cwd,
+        runArtifactRoot,
+        'verification-report.json',
+        jsonResult(verificationReport)
+      )
+    }
     await recordRunInIndex({
       repositoryRoot: options.cwd,
       artifactDir: loadedConfig.config.paths.artifactDir,
       entry: {
-        runId: result.report.run.runId,
-        startedAt: result.report.run.startedAt,
-        completedAt: result.report.run.completedAt,
+        runId: report.run.runId,
+        startedAt: report.run.startedAt,
+        completedAt: report.run.completedAt,
         status: 'completed',
         reportPath: path.posix.join(runArtifactRoot, 'report.json')
       }
@@ -635,12 +359,12 @@ const runReview = async (
 
     return {
       exitCode:
-        result.report.qualityGate?.passed === false
+        report.qualityGate?.passed === false
           ? 1
           : 0,
       stdout: jsonResult({
-        runId: result.report.run.runId,
-        qualityGatePassed: result.report.qualityGate?.passed ?? true,
+        runId: report.run.runId,
+        qualityGatePassed: report.qualityGate?.passed ?? true,
         artifactDir: runArtifactRoot
       }),
       stderr: ''
@@ -763,214 +487,6 @@ const runBaselineWrite = async (
     }
   } catch (error) {
     return mapErrorResult(error, 'repository')
-  }
-}
-
-const countChangedLines = async (
-  repositoryRoot: string,
-  changedFiles: readonly string[]
-): Promise<number> => {
-  const counts = await Promise.all(
-    changedFiles.map(async (changedFile) => {
-      const content = await readFile(
-        resolvePathInsideRoot(repositoryRoot, changedFile),
-        'utf8'
-      )
-
-      return content.split(/\r?\n/u).filter((line) => line.length > 0).length
-    })
-  )
-
-  return counts.reduce((total, count) => total + count, 0)
-}
-
-const calculateEvalCaseSize = async (
-  input: {
-    readonly fixtureRoot: string
-    readonly evalCase: Awaited<ReturnType<typeof loadEvalCasesFromFixtures>>[number]
-  }
-): Promise<{ readonly changedLineCount: number; readonly diffHunkCount: number }> => {
-  if (input.evalCase.diff !== undefined) {
-    return calculateEvalDiffStats(input.evalCase.diff)
-  }
-
-  return {
-    changedLineCount: await countChangedLines(
-      input.fixtureRoot,
-      input.evalCase.changedFiles
-    ),
-    diffHunkCount: input.evalCase.changedFiles.length
-  }
-}
-
-// Carry the failing stage (normalized as `details.operation`) onto a hard
-// provider-error output so it is not dropped before scoring.
-const stageFromNormalizedError = (
-  normalized: ReturnType<typeof normalizeError>
-): string | undefined => {
-  const operation = normalized.details.operation
-
-  return typeof operation === 'string' && operation.length > 0
-    ? operation
-    : undefined
-}
-
-const runEvalCase = async (
-  input: {
-    readonly root: string
-    readonly config: Awaited<ReturnType<typeof loadCodeReviewerConfig>>['config']
-    readonly configWarnings: readonly string[]
-    readonly baselineExplicitlyConfigured: boolean
-    readonly environment: Readonly<Record<string, string | undefined>>
-    readonly evalCase: Awaited<ReturnType<typeof loadEvalCasesFromFixtures>>[number]
-    readonly logger?: Logger
-    readonly providerImport?: ProviderImport
-  }
-): Promise<EvalCaseOutput> => {
-  const fixtureRoot = await resolveExistingPathInsideRoot(
-    input.root,
-    input.evalCase.repositoryFixture
-  )
-  const evalCaseSize = await calculateEvalCaseSize({
-    fixtureRoot,
-    evalCase: input.evalCase
-  })
-
-  const runReviewForCase = async (
-    config: CodeReviewerConfig
-  ): Promise<Awaited<ReturnType<typeof runReviewPipeline>>> =>
-    runReviewPipeline({
-      repositoryRoot: fixtureRoot,
-      config,
-      configWarnings: input.configWarnings,
-      baselineExplicitlyConfigured: input.baselineExplicitlyConfigured,
-      explicitFiles: input.evalCase.changedFiles,
-      ...(input.evalCase.diff === undefined
-        ? {}
-        : {
-            reviewDiffMaps: parseGitDiffMaps(input.evalCase.diff),
-            reviewRawDiff: input.evalCase.diff
-          }),
-      ...(input.evalCase.baseRef === undefined
-        ? {}
-        : { baseRef: input.evalCase.baseRef }),
-      ...(input.evalCase.headRef === undefined
-        ? {}
-        : { headRef: input.evalCase.headRef }),
-      environment: input.environment,
-      ...(input.logger === undefined ? {} : { logger: input.logger }),
-      ...(input.providerImport === undefined
-        ? {}
-        : { providerImport: input.providerImport })
-    })
-
-  const retryConfigForTransientProviderError = (): CodeReviewerConfig => ({
-    ...input.config,
-    review: {
-      ...input.config.review,
-      maxConcurrentTasks: 1
-    }
-  })
-
-  const retryableEvalProviderCodes = new Set([
-    'provider_error',
-    'provider_timeout'
-  ])
-
-  const resultForReviewReport = (
-    reviewResult: Awaited<ReturnType<typeof runReviewPipeline>>
-  ): EvalCaseOutput => ({
-    caseId: input.evalCase.id,
-    changedLineCount: evalCaseSize.changedLineCount,
-    diffHunkCount: evalCaseSize.diffHunkCount,
-    contextLedger: reviewResult.contextLedger.map((entry) => ({
-      kind: entry.kind,
-      consideredForModelContext: entry.decision === 'included' || entry.decision === 'truncated',
-      truncated: entry.decision === 'truncated'
-    })),
-    result: {
-      status: 'ok',
-      reviewReport: reviewResult.report
-    }
-  })
-
-  try {
-    return resultForReviewReport(await runReviewForCase(input.config))
-  } catch (error) {
-    const normalized = normalizeError(error, { source: 'provider' })
-
-    if (normalized.category !== 'provider') {
-      throw error
-    }
-
-    if (
-      retryableEvalProviderCodes.has(normalized.code) &&
-      input.config.review.maxConcurrentTasks > 1
-    ) {
-      input.logger?.info('Retrying eval case after transient provider error.', {
-        eval_case_id: input.evalCase.id,
-        code: normalized.code,
-        retry_max_concurrent_tasks: 1
-      })
-
-      try {
-        const retryResult = await runReviewForCase(
-          retryConfigForTransientProviderError()
-        )
-
-        return resultForReviewReport({
-          ...retryResult,
-          report: {
-            ...retryResult.report,
-            run: {
-              ...retryResult.report.run,
-              warnings: [
-                ...retryResult.report.run.warnings,
-                `eval-provider-retry:${normalized.code}`
-              ]
-            }
-          }
-        })
-      } catch (retryError) {
-        const retryNormalized = normalizeError(retryError, {
-          source: 'provider'
-        })
-
-        if (retryNormalized.category !== 'provider') {
-          throw retryError
-        }
-
-        return {
-          caseId: input.evalCase.id,
-          changedLineCount: evalCaseSize.changedLineCount,
-          diffHunkCount: evalCaseSize.diffHunkCount,
-          contextLedger: [],
-          result: {
-            status: 'provider-error',
-            code: retryNormalized.code,
-            ...(stageFromNormalizedError(retryNormalized) === undefined
-              ? {}
-              : { stage: stageFromNormalizedError(retryNormalized)! }),
-            message: retryNormalized.message
-          }
-        }
-      }
-    }
-
-    return {
-      caseId: input.evalCase.id,
-      changedLineCount: evalCaseSize.changedLineCount,
-      diffHunkCount: evalCaseSize.diffHunkCount,
-      contextLedger: [],
-      result: {
-        status: 'provider-error',
-        code: normalized.code,
-        ...(stageFromNormalizedError(normalized) === undefined
-          ? {}
-          : { stage: stageFromNormalizedError(normalized)! }),
-        message: normalized.message
-      }
-    }
   }
 }
 

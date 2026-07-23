@@ -3,7 +3,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { CodeReviewerConfigSchema } from '../../../../shared/contracts/index.js'
-import { prepareReviewRunnerRepositoryInput } from './repository-input.js'
+import {
+  collectReviewRunnerRepositoryIntake,
+  readReviewRunnerSourceInput
+} from './repository-input.js'
 
 const createTempDir = async (): Promise<string> => {
   const directory = join(tmpdir(), `codereviewer-runner-input-${crypto.randomUUID()}`)
@@ -32,12 +35,17 @@ describe('review runner repository input', () => {
         ]
       }
 
-      const result = await prepareReviewRunnerRepositoryInput({
+      const intakeState = await collectReviewRunnerRepositoryIntake({
         repositoryRoot,
         config: CodeReviewerConfigSchema.parse({}),
         explicitFiles: ['src/app.ts'],
         reviewDiffMaps: [diffMapOverride]
       })
+      const sourceState = await readReviewRunnerSourceInput({
+        repositoryRoot,
+        intake: intakeState.intake
+      })
+      const result = { ...intakeState, ...sourceState }
 
       expect(result.intake.changedFiles.map((file) => file.path)).toEqual([
         'src/app.ts'

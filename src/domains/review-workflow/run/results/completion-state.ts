@@ -33,6 +33,7 @@ import {
 import { recordObservedTaskEvents } from '../support/observability.js'
 import type { ReviewRunnerProviderState } from '../provider/provider-state.js'
 import type { BaselineFingerprintRecord } from '../../../admission/index.js'
+import { combineRunTokenUsage, type RunTokenUsage } from '../../../costs/index.js'
 
 export const prepareReviewRunnerCompletionState = (
   input: {
@@ -54,6 +55,8 @@ export const prepareReviewRunnerCompletionState = (
     readonly evidence: readonly EvidenceRecord[]
     readonly supportSignalCandidates: readonly CandidateFinding[]
     readonly providerWorkflow: ReviewRunnerProviderState['providerWorkflow']
+    readonly contextIngestionUsage?: RunTokenUsage | undefined
+    readonly contextIngestionWarnings?: readonly string[] | undefined
     readonly providerTaskEventsObservedLive: boolean
     readonly reviewedPaths: readonly string[]
     readonly reviewedLineRanges: readonly ReviewedLineRange[]
@@ -102,6 +105,12 @@ export const prepareReviewRunnerCompletionState = (
     sourceFiles: input.sourceFiles,
     contextLedger: effectiveContextLedger
   })
+  // Fold the dedicated summarizer's tokens into the run's provider usage so they
+  // count toward run cost.
+  const providerUsage = combineRunTokenUsage(
+    input.providerWorkflow?.usage,
+    input.contextIngestionUsage
+  )
   const { runCost, warnings, resolvedBaselineEntries } =
     prepareReviewRunFinalization({
       config: input.config,
@@ -109,12 +118,13 @@ export const prepareReviewRunnerCompletionState = (
       driftFindings: input.driftFindings,
       admissionWarnings: admission.warnings,
       admittedFindings: admission.admittedFindings,
+      ...(input.contextIngestionWarnings === undefined
+        ? {}
+        : { contextIngestionWarnings: input.contextIngestionWarnings }),
       ...(input.baselineFingerprints === undefined
         ? {}
         : { baselineFingerprints: input.baselineFingerprints }),
-      ...(input.providerWorkflow?.usage === undefined
-        ? {}
-        : { providerUsage: input.providerWorkflow.usage })
+      ...(providerUsage === undefined ? {} : { providerUsage })
     })
   if (coverage.status !== 'complete') {
     throw createReviewRunnerCoverageFailure({

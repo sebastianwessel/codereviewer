@@ -2,12 +2,29 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
+import type {
+  JsonValue,
+  ModelProvider,
+  ObjectResponse
+} from '@purista/harness'
 import { runCli } from './index.js'
 
 const createTempDir = async (): Promise<string> => {
   const directory = join(tmpdir(), `codereviewer-review-cli-${crypto.randomUUID()}`)
   await mkdir(directory, { recursive: true })
   return directory
+}
+
+// A resolvable model provider whose model methods are never expected to run in
+// these tests: the general review keeps AI review disabled and verification
+// gathers no claims (its only claim provider fails), so no request is issued.
+class UnusedModelProvider implements ModelProvider {
+  readonly id = 'unused-model-provider'
+  readonly genAiSystem = 'unused'
+
+  async object<T extends JsonValue = JsonValue>(): Promise<ObjectResponse<T>> {
+    throw new Error('UnusedModelProvider.object must not be called in this test')
+  }
 }
 
 describe('review CLI', () => {
@@ -36,6 +53,10 @@ describe('review CLI', () => {
       await expect(stat(join(root, artifactDir, 'context-ledger.json'))).resolves.toBeDefined()
       await expect(stat(join(root, artifactDir, 'shared-context.json'))).resolves.toBeDefined()
       await expect(stat(join(root, artifactDir, 'observability.json'))).resolves.toBeDefined()
+      // Verification is off by default, so its lane writes no artifact.
+      await expect(
+        stat(join(root, artifactDir, 'verification-report.json'))
+      ).rejects.toThrow()
 
       const report = JSON.parse(
         await readFile(join(root, artifactDir, 'report.json'), 'utf8')
@@ -341,6 +362,135 @@ describe('review CLI', () => {
       expect(credentialsMissing.stderr).toContain('provider_credentials_missing')
       expect(repositoryFailure.exitCode).toBe(2)
       expect(repositoryFailure.stderr).toContain('invalid_git_ref')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('writes an empty verification report when verification is enabled without a provider', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await mkdir(join(root, '.codereviewer', 'claims'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1;\n')
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          verification: {
+            enabled: true,
+            providers: [
+              { type: 'claims-file', path: '.codereviewer/claims/claims.json' }
+            ]
+          }
+        })
+      )
+
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {}
+      })
+
+      expect(result.exitCode).toBe(0)
+      const artifactDir = JSON.parse(result.stdout).artifactDir as string
+      const verification = JSON.parse(
+        await readFile(
+          join(root, artifactDir, 'verification-report.json'),
+          'utf8'
+        )
+      )
+
+      // No provider is configured, so the flow produces an empty report rather
+      // than failing the review (spec 12: off/degraded is non-fatal).
+      expect(verification).toMatchObject({
+        verdicts: [],
+        observations: [],
+        warnings: [],
+        claimCount: 0
+      })
+      const summary = JSON.parse(
+        await readFile(join(root, artifactDir, 'run-summary.json'), 'utf8')
+      )
+      expect(summary.warnings).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('surfaces a failed verification claim provider as a run warning', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await mkdir(join(root, '.codereviewer', 'claims'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1;\n')
+      // A claims file that is valid JSON but not an array is a genuine provider
+      // failure; the flow records it as a non-fatal warning and proceeds.
+      await writeFile(
+        join(root, '.codereviewer', 'claims', 'bad.json'),
+        JSON.stringify({ not: 'an-array' })
+      )
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'review-model'
+          },
+          aiReview: {
+            enabled: false
+          },
+          drift: {
+            enabled: false
+          },
+          verification: {
+            enabled: true,
+            providers: [
+              { type: 'claims-file', path: '.codereviewer/claims/bad.json' }
+            ]
+          }
+        })
+      )
+
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {
+          OPENAI_API_KEY: 'sk-test'
+        },
+        providerImport: async () => ({
+          openai: () => new UnusedModelProvider()
+        })
+      })
+
+      expect(result.exitCode).toBe(0)
+      const artifactDir = JSON.parse(result.stdout).artifactDir as string
+      const providerId = 'claims-file:.codereviewer/claims/bad.json'
+
+      const summary = JSON.parse(
+        await readFile(join(root, artifactDir, 'run-summary.json'), 'utf8')
+      )
+      expect(summary.warnings).toContain(
+        `Verification claim provider "${providerId}" failed and was skipped.`
+      )
+
+      const report = JSON.parse(
+        await readFile(join(root, artifactDir, 'report.json'), 'utf8')
+      )
+      expect(report.run.warnings).toContain(
+        `Verification claim provider "${providerId}" failed and was skipped.`
+      )
+
+      const verification = JSON.parse(
+        await readFile(
+          join(root, artifactDir, 'verification-report.json'),
+          'utf8'
+        )
+      )
+      expect(verification.warnings).toContain(
+        `claim-provider-failed:${providerId}`
+      )
+      expect(verification.verdicts).toEqual([])
+      expect(verification.claimCount).toBe(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

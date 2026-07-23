@@ -469,6 +469,218 @@
       ],
       "additionalProperties": false
     },
+    "contextSources": {
+      "default": {
+        "enabled": false,
+        "providers": [],
+        "summary": {
+          "maxBytes": 4000
+        }
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "providers": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "inbox"
+                  },
+                  "dir": {
+                    "default": ".codereviewer/context",
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "maxFiles": {
+                    "default": 20,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200
+                  },
+                  "maxFileBytes": {
+                    "default": 64000,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  }
+                },
+                "required": [
+                  "type",
+                  "dir",
+                  "maxFiles",
+                  "maxFileBytes"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "changed-files"
+                  },
+                  "include": {
+                    "default": [
+                      "**/*.md"
+                    ],
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "maxFiles": {
+                    "default": 20,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200
+                  },
+                  "maxFileBytes": {
+                    "default": 64000,
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  }
+                },
+                "required": [
+                  "type",
+                  "include",
+                  "maxFiles",
+                  "maxFileBytes"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "summary": {
+          "default": {
+            "maxBytes": 4000
+          },
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "model",
+                "digest"
+              ]
+            },
+            "maxBytes": {
+              "default": 4000,
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 20000
+            }
+          },
+          "required": [
+            "maxBytes"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "enabled",
+        "providers",
+        "summary"
+      ],
+      "additionalProperties": false
+    },
+    "verification": {
+      "default": {
+        "enabled": false,
+        "providers": [],
+        "maxToolCallsPerClaim": 12,
+        "maxBytesPerRead": 20000,
+        "maxMatches": 20
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "providers": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "claims-file"
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "prior-findings"
+                  },
+                  "report": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "type",
+                  "report"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "maxToolCallsPerClaim": {
+          "default": 12,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "maxBytesPerRead": {
+          "default": 20000,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "maxMatches": {
+          "default": 20,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "enabled",
+        "providers",
+        "maxToolCallsPerClaim",
+        "maxBytesPerRead",
+        "maxMatches"
+      ],
+      "additionalProperties": false
+    },
     "security": {
       "default": {
         "allowShell": false,
@@ -774,6 +986,8 @@
     "qualityGate",
     "aiReview",
     "promotionPolicy",
+    "contextSources",
+    "verification",
     "security",
     "reporting",
     "evaluation",

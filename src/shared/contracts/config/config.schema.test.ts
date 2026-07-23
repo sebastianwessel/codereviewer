@@ -51,6 +51,49 @@ describe('CodeReviewerConfigSchema', () => {
       includeGenerated: true
     })
     expect(parsed.reporting.formats).toEqual(['json', 'markdown', 'sarif'])
+    expect(parsed.verification).toEqual({
+      enabled: false,
+      providers: [],
+      maxToolCallsPerClaim: 12,
+      maxBytesPerRead: 20000,
+      maxMatches: 20
+    })
+  })
+
+  test('verification is disabled by default and accepts configured claim providers', () => {
+    const disabled = CodeReviewerConfigSchema.parse({})
+    expect(disabled.verification.enabled).toBe(false)
+    expect(disabled.verification.providers).toEqual([])
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      verification: {
+        enabled: true,
+        providers: [
+          { type: 'claims-file', path: '.codereviewer/claims.json' },
+          { type: 'prior-findings', report: '.codereviewer/baseline.json' }
+        ],
+        maxToolCallsPerClaim: 8
+      }
+    })
+    expect(enabled.verification.enabled).toBe(true)
+    expect(enabled.verification.providers).toEqual([
+      { type: 'claims-file', path: '.codereviewer/claims.json' },
+      { type: 'prior-findings', report: '.codereviewer/baseline.json' }
+    ])
+    expect(enabled.verification.maxToolCallsPerClaim).toBe(8)
+    expect(enabled.verification.maxBytesPerRead).toBe(20000)
+    expect(enabled.verification.maxMatches).toBe(20)
+  })
+
+  test('verification rejects an unknown claim provider type', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        verification: {
+          enabled: true,
+          providers: [{ type: 'analyzer', report: '.codereviewer/sarif.json' }]
+        }
+      })
+    ).toThrow()
   })
 
   test('accepts an openai-compatible provider only with baseUrl', () => {

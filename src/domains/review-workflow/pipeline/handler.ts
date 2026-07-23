@@ -2,13 +2,13 @@ import { type Logger } from '@purista/harness'
 import {
   type ContextDocument,
   type FindingRefutationRunner,
-  type ProviderIssue,
   type SkillContextDocument,
   type TaskReviewInput,
   type TaskReviewResult,
   type WorkflowReviewTask,
   type WorkflowTaskEvent
 } from './agent-contracts.js'
+import { type ProviderIssue } from './provider-issues.js'
 import { type CandidateFinding } from '../../admission/index.js'
 import {
   createContextRetriever,

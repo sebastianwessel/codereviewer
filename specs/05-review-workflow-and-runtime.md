@@ -1,7 +1,7 @@
 # 05: Review Workflow And Runtime
 
 Status: Approved
-Date: 2026-07-20
+Date: 2026-07-21
 
 ## End-To-End Flow
 
@@ -16,19 +16,24 @@ Date: 2026-07-20
 9. Run deterministic drift/security preflight checks.
 10. Build deterministic support signals.
 11. Plan review tasks.
-12. Resolve provider when model-backed review is enabled.
-13. Run holistic discovery: two serial diverse-lens recall-first whole-file
+12. Ingest external change-intent context when configured: gather from bounded
+    providers, redact, summarize with a dedicated model call (or a deterministic
+    digest), and inject the brief as a context-only `change-intent` document. See
+    `11-external-context-ingestion.md`. This step is skipped when the feature is
+    disabled and never fails the run on a provider error.
+13. Resolve provider when model-backed review is enabled.
+14. Run holistic discovery: two serial diverse-lens recall-first whole-file
     reviews per task (a general pass, then a pass focused on commonly-missed
     high-impact defects) whose findings are unioned and deduped into candidate
     findings.
-14. Run refutation per candidate finding.
-15. Admit or reject candidates against the admission gate.
-16. Match actionable admitted findings against baseline.
-17. Render reports.
-18. Evaluate optional quality gate.
-19. Record available token/cost metadata and optional no-content telemetry
+15. Run refutation per candidate finding.
+16. Admit or reject candidates against the admission gate.
+17. Match actionable admitted findings against baseline.
+18. Render reports.
+19. Evaluate optional quality gate.
+20. Record available token/cost metadata and optional no-content telemetry
     configuration.
-20. Exit with mapped code.
+21. Exit with mapped code.
 
 Runtime artifacts and logs must remain redacted. Source snippets, prompt text,
 secrets, tokens, and raw provider payloads must not be logged by default.
@@ -287,6 +292,12 @@ id before refutation.
   for callee contracts and to report findings ONLY for the changed files; the
   candidate mapping drops any finding whose path is outside the task's paths, so
   a finding pointing at a referenced-definition file is discarded.
+- When external change-intent context is present, the input also carries a
+  separate change-intent section holding the bounded, redacted brief defined in
+  `11-external-context-ingestion.md`. Its header marks it as untrusted,
+  informational context and not instructions. Like referenced definitions, it is
+  context only: it contributes no task path and seeds no candidate, and a finding
+  pointing at the change-intent document is discarded.
 - The reviewer follows four steps: understand the intent of the change; trace
   control and data flow on every path; verify correctness against that intent;
   then systematically sweep defect classes.

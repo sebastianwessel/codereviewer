@@ -1,7 +1,7 @@
 # 03: End-To-End Coverage
 
 Status: Approved
-Date: 2026-06-20
+Date: 2026-07-22
 
 ## Coverage Rule
 
@@ -29,6 +29,8 @@ Implementation tickets must not invent missing behavior.
 | FLOW-REPORT-SARIF | CAP-REP-003 | ACT-CI | review run step 14 | validated report object | admitted findings and rule metadata | `report.sarif` | SARIF 2.1.0 artifact | schema/subset/redaction tests |
 | FLOW-REPORT-GITHUB-COMMENTS | CAP-REP-004 | ACT-DEV, ACT-CI, ACT-REVIEWER | review run step 14 | validated report object and GitHub comment format enabled | admitted inline findings and structured fix proposals | `github-review-comments.json` | deterministic local PR comment drafts, no network publishing | renderer contract tests |
 | FLOW-CONTEXT-LEDGER | CAP-CTX-001 | ACT-OPS, ACT-DEV | review planning/context assembly/refutation | review task planning and refutation tool calls | file/diff/symbol/instruction/skill/signal/tool metadata | ledger artifact | included source chunks and context reads are traceable to task and candidate IDs | ledger snapshot tests |
+| FLOW-CONTEXT-INGESTION | CAP-CTX-002 | ACT-CI, ACT-DEV | review run change-intent stage (after context assembly) | `contextSources.enabled` with providers configured | inbox/changed-files fragments, redacted and summarized | one bounded `change-intent` context document injected per task, ledger entry `task-context-change-intent` | brief injected or (disabled/failed provider) review unchanged and non-fatal | context-ingestion unit tests and CLI enabled/disabled integration test |
+| FLOW-VERIFICATION | CAP-VERIFY-001 | ACT-CI, ACT-DEV, ACT-MODEL | verification flow (when `verification.enabled`) | claim providers configured, model provider resolvable | claims, mediated read/list/grep over eligible files, per-claim budgets | bounded agent tool calls, ledger entries, no network/write | claim verdicts (`confirmed`/`refuted`/`uncertain`) in a verification report, corroboration signal on matching findings | claim/verdict + tool-hardening unit tests and deterministic-provider integration test |
 | FLOW-COVERAGE | CAP-COV-001 | ACT-DEV, ACT-CI, ACT-OPS | report assembly | context ledger and reviewed source files | source file hashes, byte counts, task IDs | coverage object in report artifacts | completed report has `coverage.status = complete` or run fails closed | runner large-file and schema tests |
 | FLOW-EVAL | CAP-EVAL-001 | ACT-OPS | `codereviewer eval run` | fixture dataset exists | fixtures and hermetic provider fixture outputs | eval report artifacts | metrics and regressions recorded | eval runner integration test |
 | FLOW-GATE | CAP-GATE-001 | ACT-CI | review or eval completion | configured thresholds | admitted findings and metrics | process exit code | pass/fail result with reasons | threshold matrix tests |

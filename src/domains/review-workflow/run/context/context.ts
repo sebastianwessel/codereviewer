@@ -1,8 +1,10 @@
 import { readFile } from 'node:fs/promises'
 import { resolveExistingPathInsideRoot } from '../../../../platform/path-service.js'
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
-import { createRedactor } from '../../../../shared/redaction/redactor.js'
+import { redactText } from '../../../../shared/redaction/redactor.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
+import { utf8ByteLength } from '../../../../shared/text/utf8-bytes.js'
+import { uniqueSorted } from '../../../../shared/text/unique-sorted.js'
 import {
   reviewedLineRangeForContent,
   type ReviewedDiffRange,
@@ -112,13 +114,6 @@ export const reviewedDiffRangesForDiffMaps = (
       }))
   )
 
-const bytesOf = (value: string): number => Buffer.byteLength(value)
-
-const sliceUtf8 = (value: string, maxBytes: number): string =>
-  Buffer.from(value).subarray(0, Math.max(0, maxBytes)).toString('utf8')
-
-const redacted = (value: string): string => createRedactor().redact(value)
-
 export const splitTextByUtf8Bytes = (
   content: string,
   maxBytes: number
@@ -136,7 +131,7 @@ export const splitTextByUtf8Bytes = (
   let currentBytes = 0
 
   for (const character of content) {
-    const characterBytes = bytesOf(character)
+    const characterBytes = utf8ByteLength(character)
 
     if (currentBytes > 0 && currentBytes + characterBytes > maxBytes) {
       chunks.push(current)
@@ -155,11 +150,8 @@ export const splitTextByUtf8Bytes = (
   return chunks
 }
 
-const uniqueSorted = (values: readonly string[]): readonly string[] =>
-  [...new Set(values)].sort((left, right) => left.localeCompare(right))
-
 const contextBytes = (contexts: readonly ContextInput[]): number =>
-  contexts.reduce((total, context) => total + bytesOf(context.content), 0)
+  contexts.reduce((total, context) => total + utf8ByteLength(context.content), 0)
 
 const workflowTaskPaths = (
   task: ReviewTask,
@@ -207,14 +199,17 @@ export const assembleContext = async (
       ...inputContexts,
       ...referencedDefinitionContexts
     ]) {
-      const contentBytes = bytesOf(inputContext.content)
+      const contentBytes = utf8ByteLength(inputContext.content)
       const ledgerEntry = createContextLedgerEntry({
-        // The context ledger has no dedicated kinds for 'test-mapping' or
-        // 'referenced-definition'; both are recorded as support-signal-output
-        // (derived context, not a reviewed changed file).
+        // The context ledger has no dedicated kinds for 'test-mapping',
+        // 'referenced-definition', or 'change-intent'; all are recorded as
+        // support-signal-output (derived context, not a reviewed changed file).
+        // 'change-intent' is injected by a separate stage and never reaches this
+        // assembly loop, but the mapping keeps the kind union exhaustive.
         kind:
           inputContext.kind === 'test-mapping' ||
-          inputContext.kind === 'referenced-definition'
+          inputContext.kind === 'referenced-definition' ||
+          inputContext.kind === 'change-intent'
             ? 'support-signal-output'
             : inputContext.kind,
         ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
@@ -233,7 +228,7 @@ export const assembleContext = async (
       const contextDocument: ReviewContextDocument = {
         kind: inputContext.kind,
         ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
-        content: redacted(inputContext.content),
+        content: redactText(inputContext.content),
         ledgerEntryId: ledgerEntry.id
       }
 
@@ -317,7 +312,7 @@ export const assembleContext = async (
             testMappings: supportSignalTestMappings
           })
 
-    return bytesOf(supportSignalContext) === 0
+    return utf8ByteLength(supportSignalContext) === 0
       ? []
       : splitTextByUtf8Bytes(supportSignalContext, chunkBudget).map((chunk) => ({
           kind: 'support-signal-output' as const,
@@ -341,7 +336,7 @@ export const assembleContext = async (
     }
 
     for (const context of contexts) {
-      const currentBytes = bytesOf(context.content)
+      const currentBytes = utf8ByteLength(context.content)
 
       if (pending.length > 0 && pendingBytes + currentBytes > chunkBudget) {
         flush()
@@ -385,7 +380,7 @@ export const assembleContext = async (
       let packedBytes = contextBytes(packedBatch)
 
       for (const supportSignalContext of supportSignalContexts) {
-        const supportSignalBytes = bytesOf(supportSignalContext.content)
+        const supportSignalBytes = utf8ByteLength(supportSignalContext.content)
 
         if (packedBytes + supportSignalBytes <= chunkBudget) {
           packedBatch.push(supportSignalContext)

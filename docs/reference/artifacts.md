@@ -32,6 +32,7 @@ Written to:
 | `context-ledger.json` | Redacted ledger of context items considered and included source chunks. |
 | `shared-context.json` | Run snapshot with compact shared entries, exact `taskEvents`, derived `currentTasks`, evidence, internal candidates, and admission decisions. |
 | `observability.json` | No-content event trace with run steps and task events. |
+| `verification-report.json` | Claim verdicts from the agentic verification flow, when `verification.enabled`. |
 | `error.json` | Redacted normalized error for partial failed runs. |
 
 ---
@@ -110,6 +111,22 @@ No-content event trace. The `deterministic_signals` step includes safe
 support-signal attributes such as structural engine name/version, signal count,
 evidence count, supported extension count, and skipped unsupported path count.
 These fields are counts and version metadata only.
+
+### `verification-report.json`
+
+Written only when `verification.enabled`. Content-free beyond verdict data: an
+array of claim verdicts (`confirmed` / `refuted` / `uncertain`, with a redacted
+rationale and cited evidence IDs), per-claim no-content observations (claim kind,
+source label, tool-call count, bytes read, verdict status, duration), any
+non-fatal run warnings, the claim count, and `corroborations` — general-review
+findings independently confirmed by a verdict (finding id, a `corroborated`
+confidence signal, match kinds, and witnessing claim ids). Corroboration raises
+confidence only; it never changes a finding's severity or the defect report. It
+also carries `usage` — the verification lane's own token counts and cost (this
+lane runs after the run cost is finalized, so its spend is accounted here).
+Verdicts are a separate lane and never enter the quality gate. A failed claim
+provider also surfaces as a run warning in `run-summary.json`. See
+[Agentic Verification Flow](../concepts/verification-flow.md).
 
 ### `report.md`
 

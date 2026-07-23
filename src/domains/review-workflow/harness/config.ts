@@ -54,16 +54,6 @@ export const harnessDefaults = (
   }
 })
 
-export const reviewWorkflowDelegation = (
-  maxConcurrentTasks: number,
-  maxChildAgentCalls = maxChildAgentCallsForReview({ maxConcurrentTasks })
-) => ({
-  agents: ['propose_candidates'] as const,
-  modelAliases: ['reviewer'] as const,
-  maxChildAgentCalls,
-  maxParallelChildAgentCalls: maxConcurrentTasks
-})
-
 export const modelReviewWorkflowDelegation = (
   maxConcurrentTasks: number,
   maxChildAgentCalls = maxChildAgentCallsForReview({ maxConcurrentTasks })

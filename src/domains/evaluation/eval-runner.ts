@@ -3,6 +3,12 @@ import type {
   AdmittedFinding,
   ReviewReport
 } from '../../shared/contracts/index.js'
+import { uniqueSorted } from '../../shared/text/unique-sorted.js'
+import { COST_UNAVAILABLE_WARNING } from '../costs/index.js'
+import {
+  EVAL_PROVIDER_RETRY_WARNING_PREFIX,
+  PROVIDER_ERROR_WARNING_PREFIX
+} from './eval-warnings.js'
 import {
   EvalCaseSchema,
   parseEvalCases,
@@ -20,7 +26,8 @@ import {
   emptyTierCounts,
   EvalMetricsSchema,
   severityWeight,
-  type EvalMetricCaseResult
+  type EvalMetricCaseResult,
+  type EvalMetrics
 } from './metrics.js'
 import {
   EvalCaseOutputSchema,
@@ -45,10 +52,10 @@ import {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
-  renderEvalComparison,
-  renderEvalRecallReport,
   renderEvalSummary
-} from './eval-report-rendering.js'
+} from './eval-summary-report-rendering.js'
+import { renderEvalComparison } from './eval-comparison-report-rendering.js'
+import { renderEvalRecallReport } from './eval-recall-report-rendering.js'
 
 export {
   EvalRegressionThresholdsSchema,
@@ -64,17 +71,15 @@ export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
-  renderEvalComparison,
-  renderEvalRecallReport,
   renderEvalSummary
-} from './eval-report-rendering.js'
+} from './eval-summary-report-rendering.js'
+export { renderEvalComparison } from './eval-comparison-report-rendering.js'
+export { renderEvalRecallReport } from './eval-recall-report-rendering.js'
 
 type EvalCaseComputation = {
   readonly reportCase: z.infer<typeof EvalCaseReportSchema>
   readonly metricCase: EvalMetricCaseResult
 }
-
-type EvalMetrics = z.infer<typeof EvalMetricsSchema>
 
 // Threshold helpers only compare scalar metrics; per-tier record metrics are
 // excluded so a Record value never reaches a numeric comparison.
@@ -98,19 +103,19 @@ const providerIssuesFromWarnings = (
   warnings: readonly string[]
 ): readonly z.infer<typeof EvalProviderIssueReportSchema>[] =>
   warnings.flatMap((warning) => {
-    if (warning.startsWith('provider-error:')) {
+    if (warning.startsWith(PROVIDER_ERROR_WARNING_PREFIX)) {
       return [
         EvalProviderIssueReportSchema.parse({
-          code: warning.slice('provider-error:'.length),
+          code: warning.slice(PROVIDER_ERROR_WARNING_PREFIX.length),
           recovered: false
         })
       ]
     }
 
-    if (warning.startsWith('eval-provider-retry:')) {
+    if (warning.startsWith(EVAL_PROVIDER_RETRY_WARNING_PREFIX)) {
       return [
         EvalProviderIssueReportSchema.parse({
-          code: warning.slice('eval-provider-retry:'.length),
+          code: warning.slice(EVAL_PROVIDER_RETRY_WARNING_PREFIX.length),
           recovered: true
         })
       ]
@@ -145,9 +150,6 @@ const isActionableFinding = (
     (hasSuggestedFix || hasLegacySuggestedFix)
   )
 }
-
-const dedupeSorted = (values: readonly string[]): readonly string[] =>
-  [...new Set(values)].sort((left, right) => left.localeCompare(right))
 
 const findingIdsByIndex = (
   findings: readonly AdmittedFinding[],
@@ -436,12 +438,79 @@ const buildMetricCase = (
     inputTokens: input.reviewReport?.run.inputTokens ?? 0,
     cachedInputTokens: input.reviewReport?.run.cachedInputTokens ?? 0,
     outputTokens: input.reviewReport?.run.outputTokens ?? 0,
-    costUnavailable: warnings.includes('cost-unavailable'),
+    costUnavailable: warnings.includes(COST_UNAVAILABLE_WARNING),
     durationMs: input.reviewReport?.run.durationMs ?? 0,
     warnings,
     failingFindingIds: input.matchResult.falsePositiveFindingIds
   }
 }
+
+// Assemble the per-case eval report entry. The deterministic and semantic-judge
+// case computations differ only in how `providerIssues` is composed (the judge
+// path appends judge issues), so both pass the already-composed list here and
+// share this single literal.
+const buildReportCase = (
+  input: {
+    readonly evalCase: EvalCase
+    readonly output: EvalCaseOutput
+    readonly reviewReport: ReviewReport
+    readonly actionableFindings: readonly AdmittedFinding[]
+    readonly artifactOnlyFindings: readonly AdmittedFinding[]
+    readonly inlineFindingCount: number
+    readonly matchResult: EvalMatcherResult
+    readonly artifactOnlyMatchResult: EvalMatcherResult
+    readonly providerIssues: readonly z.infer<
+      typeof EvalProviderIssueReportSchema
+    >[]
+  }
+): z.infer<typeof EvalCaseReportSchema> => ({
+  caseId: input.evalCase.id,
+  parseValid: true,
+  providerErrored: false,
+  contextLedger: [...input.output.contextLedger],
+  agenticStages: [...agenticStagesForReport(input.reviewReport)],
+  expectedFindings: [...expectedFindingSummaries(input.evalCase)],
+  matchedFindings: [...input.matchResult.matches],
+  unmatchedExpectedIndexes: [...input.matchResult.unmatchedExpectedIndexes],
+  duplicateFindingIds: [...input.matchResult.duplicateFindingIds],
+  duplicateFindings: [
+    ...falsePositiveFindingSummaries(
+      input.actionableFindings,
+      input.matchResult.duplicateFindingIds
+    )
+  ],
+  falsePositiveFindingIds: [...input.matchResult.falsePositiveFindingIds],
+  falsePositiveFindings: [
+    ...falsePositiveFindingSummaries(
+      input.actionableFindings,
+      input.matchResult.falsePositiveFindingIds
+    )
+  ],
+  noFindingZoneFalsePositiveIds: [
+    ...input.matchResult.noFindingZoneFalsePositiveIds
+  ],
+  artifactOnlyFindingIds: input.artifactOnlyFindings.map((finding) => finding.id),
+  artifactOnlyMatchedFindings: [...input.artifactOnlyMatchResult.matches],
+  artifactOnlyFalsePositiveFindingIds: [
+    ...input.artifactOnlyMatchResult.falsePositiveFindingIds
+  ],
+  artifactOnlyFalsePositiveFindings: [
+    ...falsePositiveFindingSummaries(
+      input.artifactOnlyFindings,
+      input.artifactOnlyMatchResult.falsePositiveFindingIds
+    )
+  ],
+  refutationResults: [...refutationResultSummaries(input.reviewReport)],
+  inlineFindingCount: input.inlineFindingCount,
+  providerIssues: [...input.providerIssues],
+  warnings: [...input.reviewReport.run.warnings],
+  durationMs: input.reviewReport.run.durationMs,
+  inputTokens: input.reviewReport.run.inputTokens ?? 0,
+  cachedInputTokens: input.reviewReport.run.cachedInputTokens ?? 0,
+  outputTokens: input.reviewReport.run.outputTokens ?? 0,
+  costUnavailable: input.reviewReport.run.warnings.includes(COST_UNAVAILABLE_WARNING),
+  costUsd: input.reviewReport.run.costUsd ?? 0
+})
 
 const computeCaseResult = (
   evalCase: EvalCase,
@@ -491,7 +560,7 @@ const computeCaseResult = (
         artifactOnlyFalsePositiveFindings: [],
         refutationResults: [],
         inlineFindingCount: 0,
-        warnings: [`provider-error:${output.result.code}`],
+        warnings: [``],
         durationMs: 0,
         inputTokens: 0,
         cachedInputTokens: 0,
@@ -528,54 +597,17 @@ const computeCaseResult = (
   })
 
   return {
-    reportCase: {
-      caseId: evalCase.id,
-      parseValid: true,
-      providerErrored: false,
-      contextLedger: [...output.contextLedger],
-      agenticStages: [...agenticStagesForReport(reviewReport)],
-      expectedFindings: [...expectedFindingSummaries(evalCase)],
-      matchedFindings: [...matchResult.matches],
-      unmatchedExpectedIndexes: [...matchResult.unmatchedExpectedIndexes],
-      duplicateFindingIds: [...matchResult.duplicateFindingIds],
-      duplicateFindings: [
-        ...falsePositiveFindingSummaries(
-          actionableFindings,
-          matchResult.duplicateFindingIds
-        )
-      ],
-      falsePositiveFindingIds: [...matchResult.falsePositiveFindingIds],
-      falsePositiveFindings: [
-        ...falsePositiveFindingSummaries(
-          actionableFindings,
-          matchResult.falsePositiveFindingIds
-        )
-      ],
-      noFindingZoneFalsePositiveIds: [
-        ...matchResult.noFindingZoneFalsePositiveIds
-      ],
-      artifactOnlyFindingIds: artifactOnlyFindings.map((finding) => finding.id),
-      artifactOnlyMatchedFindings: [...artifactOnlyMatchResult.matches],
-      artifactOnlyFalsePositiveFindingIds: [
-        ...artifactOnlyMatchResult.falsePositiveFindingIds
-      ],
-      artifactOnlyFalsePositiveFindings: [
-        ...falsePositiveFindingSummaries(
-          artifactOnlyFindings,
-          artifactOnlyMatchResult.falsePositiveFindingIds
-        )
-      ],
-      refutationResults: [...refutationResultSummaries(reviewReport)],
+    reportCase: buildReportCase({
+      evalCase,
+      output,
+      reviewReport,
+      actionableFindings,
+      artifactOnlyFindings,
       inlineFindingCount,
-      providerIssues: [...providerIssuesFromReport(reviewReport)],
-      warnings: [...reviewReport.run.warnings],
-      durationMs: reviewReport.run.durationMs,
-      inputTokens: reviewReport.run.inputTokens ?? 0,
-      cachedInputTokens: reviewReport.run.cachedInputTokens ?? 0,
-      outputTokens: reviewReport.run.outputTokens ?? 0,
-      costUnavailable: reviewReport.run.warnings.includes('cost-unavailable'),
-      costUsd: reviewReport.run.costUsd ?? 0
-    },
+      matchResult,
+      artifactOnlyMatchResult,
+      providerIssues: providerIssuesFromReport(reviewReport)
+    }),
     metricCase: buildMetricCase({
       evalCase,
       output,
@@ -617,60 +649,23 @@ const computeCaseResultWithSemanticJudge = async (
   })
 
   return {
-    reportCase: {
-      caseId: evalCase.id,
-      parseValid: true,
-      providerErrored: false,
-      contextLedger: [...output.contextLedger],
-      agenticStages: [...agenticStagesForReport(reviewReport)],
-      expectedFindings: [...expectedFindingSummaries(evalCase)],
-      matchedFindings: [...matchResult.matches],
-      unmatchedExpectedIndexes: [...matchResult.unmatchedExpectedIndexes],
-      duplicateFindingIds: [...matchResult.duplicateFindingIds],
-      duplicateFindings: [
-        ...falsePositiveFindingSummaries(
-          actionableFindings,
-          matchResult.duplicateFindingIds
-        )
-      ],
-      falsePositiveFindingIds: [...matchResult.falsePositiveFindingIds],
-      falsePositiveFindings: [
-        ...falsePositiveFindingSummaries(
-          actionableFindings,
-          matchResult.falsePositiveFindingIds
-        )
-      ],
-      noFindingZoneFalsePositiveIds: [
-        ...matchResult.noFindingZoneFalsePositiveIds
-      ],
-      artifactOnlyFindingIds: artifactOnlyFindings.map((finding) => finding.id),
-      artifactOnlyMatchedFindings: [...artifactOnlyMatchResult.matches],
-      artifactOnlyFalsePositiveFindingIds: [
-        ...artifactOnlyMatchResult.falsePositiveFindingIds
-      ],
-      artifactOnlyFalsePositiveFindings: [
-        ...falsePositiveFindingSummaries(
-          artifactOnlyFindings,
-          artifactOnlyMatchResult.falsePositiveFindingIds
-        )
-      ],
-      refutationResults: [...refutationResultSummaries(reviewReport)],
+    reportCase: buildReportCase({
+      evalCase,
+      output,
+      reviewReport,
+      actionableFindings,
+      artifactOnlyFindings,
       inlineFindingCount,
+      matchResult,
+      artifactOnlyMatchResult,
       providerIssues: [
         ...providerIssuesFromReport(reviewReport),
         ...judgeProviderIssuesFromMatchResults([
           matchResult,
           artifactOnlyMatchResult
         ])
-      ],
-      warnings: [...reviewReport.run.warnings],
-      durationMs: reviewReport.run.durationMs,
-      inputTokens: reviewReport.run.inputTokens ?? 0,
-      cachedInputTokens: reviewReport.run.cachedInputTokens ?? 0,
-      outputTokens: reviewReport.run.outputTokens ?? 0,
-      costUnavailable: reviewReport.run.warnings.includes('cost-unavailable'),
-      costUsd: reviewReport.run.costUsd ?? 0
-    },
+      ]
+    }),
     metricCase: buildMetricCase({
       evalCase,
       output,
@@ -887,7 +882,7 @@ const thresholdReasons = (
 
   return {
     reasons,
-    failingCaseIds: dedupeSorted(failingCaseIds)
+    failingCaseIds: uniqueSorted(failingCaseIds)
   }
 }
 

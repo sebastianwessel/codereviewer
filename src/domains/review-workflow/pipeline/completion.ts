@@ -26,9 +26,9 @@ import {
 import { type ContextLedgerEntry } from '../../review-planning/index.js'
 import {
   ReviewContextDocumentSchema,
-  type ProviderIssue,
   type WorkflowTaskEvent
 } from './agent-contracts.js'
+import { type ProviderIssue } from './provider-issues.js'
 import {
   ReviewWorkflowOutputSchema,
   type ReviewWorkflowInput,

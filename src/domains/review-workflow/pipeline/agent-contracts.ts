@@ -4,6 +4,7 @@ import {
   ContextRequestSchema,
   EvidenceRecordSchema,
   FindingProvenanceSchema,
+  FixEditSchema,
   RejectedFindingSchema,
   RepositoryRelativePathSchema,
   ReviewReportSchema,
@@ -32,13 +33,16 @@ export const SkillContextDocumentSchema = z.strictObject({
 
 export const ReviewContextDocumentSchema = z.strictObject({
   // 'referenced-definition' carries a bounded digest of an UNCHANGED file that a
-  // changed file imports (R4). It is context only: findings remain restricted to
-  // task.paths and these entries are not review targets.
+  // changed file imports (R4). 'change-intent' carries the redacted, summarized
+  // brief of external change-intent context (spec 11). Both are context only:
+  // findings remain restricted to task.paths and these entries are not review
+  // targets.
   kind: z.enum([
     'file',
     'support-signal-output',
     'test-mapping',
-    'referenced-definition'
+    'referenced-definition',
+    'change-intent'
   ]),
   path: RepositoryRelativePathSchema.optional(),
   content: z.string(),
@@ -108,9 +112,16 @@ export const BaselineFingerprintRecordSchema = z.strictObject({
   )
 })
 
-export const ProposedCandidatesSchema = z.strictObject({
-  candidates: z.array(CandidateFindingSchema)
-})
+// Normalize a model-authored category/severity string to a comparison key:
+// lowercase, non-alphanumerics collapsed to single dashes, no leading/trailing
+// dash. Used across the model-enum normalizers so casing/punctuation differences
+// between providers resolve to the same key.
+const slugifyModelKey = (value: string): string =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-|-$/gu, '')
 
 const normalizeModelEnumValue = <T extends string>(
   value: unknown,
@@ -121,11 +132,7 @@ const normalizeModelEnumValue = <T extends string>(
     return value
   }
 
-  const key = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-|-$/gu, '')
+  const key = slugifyModelKey(value)
 
   if ((allowedValues as readonly string[]).includes(key)) {
     return key
@@ -135,11 +142,7 @@ const normalizeModelEnumValue = <T extends string>(
 }
 
 const normalizeUnknownModelCategoryFromText = (text: string): unknown => {
-  const key = text
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-|-$/gu, '')
+  const key = slugifyModelKey(text)
 
   if (key.length === 0) {
     return undefined
@@ -210,11 +213,7 @@ const normalizeModelCategoryValue = (value: unknown): unknown => {
     return exact
   }
 
-  const key = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, '-')
-    .replace(/^-|-$/gu, '')
+  const key = slugifyModelKey(value)
 
   if (/(?:^|-)(?:security|vulnerability|authz|authorization)(?:-|$)/u.test(key)) {
     return 'security'
@@ -476,18 +475,7 @@ export const FindingRefutationResultSchema = z.strictObject({
   verdict: z.enum(['proved', 'refuted', 'needs-more-evidence']),
   rationaleSummary: z.string().min(1).max(1200),
   fixSummary: z.string().min(1).max(1200).optional(),
-  fixEdits: z
-    .array(
-      z.strictObject({
-        path: RepositoryRelativePathSchema,
-        startLine: z.int().min(1),
-        endLine: z.int().min(1),
-        replacement: z.string().min(1).max(4000),
-        description: z.string().min(1).max(500).optional()
-      })
-    )
-    .max(5)
-    .optional()
+  fixEdits: z.array(FixEditSchema).max(5).optional()
 })
 
 export const ModelFindingRefutationResultSchema = z.preprocess((value) => {
@@ -566,7 +554,6 @@ export type FindingRefutationResult = z.infer<
   typeof FindingRefutationResultSchema
 >
 export type ModelHolisticFinding = z.infer<typeof ModelHolisticFindingSchema>
-export type ProviderIssue = ReviewReport['providerIssues'][number]
 export type FindingRefutationRunner = (
   input: FindingRefutationInput,
   signal: AbortSignal | undefined

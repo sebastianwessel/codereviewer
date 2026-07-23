@@ -36,6 +36,7 @@ import { prepareReviewRunnerRunObservability } from './support/run-observability
 import { prepareReviewRunnerSourceState } from './intake/source-state.js'
 import { prepareReviewRunnerPlanningState } from './planning/planning-state.js'
 import { prepareReviewRunnerContextAssemblyState } from './context/assembly-state.js'
+import { prepareReviewRunnerChangeIntentContext } from './context/change-intent-context.js'
 import { prepareReviewRunnerCompletionState } from './results/completion-state.js'
 
 export {
@@ -141,7 +142,24 @@ export const runReview = async (
       observability,
       logger
     })
-    const { assembledContext, instructionHashes, skillHashes } = contextState
+    const { instructionHashes, skillHashes } = contextState
+    // Ingest external change-intent context and inject the summarized brief into
+    // the tasks before the workflow input is assembled. Disabled or empty
+    // ingestion returns the assembled context unchanged.
+    const changeIntent = await prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: options.repositoryRoot,
+      config: options.config,
+      assembledContext: contextState.assembledContext,
+      sourceFiles,
+      environment: options.environment ?? {},
+      observability,
+      logger,
+      ...(options.providerImport === undefined
+        ? {}
+        : { providerImport: options.providerImport }),
+      ...(runSignal.signal === undefined ? {} : { signal: runSignal.signal })
+    })
+    const assembledContext = changeIntent.assembledContext
     const baseline = await prepareReviewRunnerBaseline({
       repositoryRoot: options.repositoryRoot,
       config: options.config,
@@ -218,6 +236,10 @@ export const runReview = async (
       contextLedger: assembledContext.contextLedger,
       evidence,
       supportSignalCandidates,
+      ...(changeIntent.usage === undefined
+        ? {}
+        : { contextIngestionUsage: changeIntent.usage }),
+      contextIngestionWarnings: changeIntent.warnings,
       providerWorkflow,
       providerTaskEventsObservedLive,
       reviewedPaths: intake.changedFiles.map((file) => file.path),

@@ -145,6 +145,52 @@ not require a separate ast-grep CLI step.
 
 ---
 
+## Supplying Change-Intent Context
+
+When [`contextSources`](../reference/configuration.md#contextsources) is enabled,
+CodeReviewer reads a short intent brief before the review. The tool integrates no
+issue trackers or platform APIs; instead, a pipeline step writes context into the
+inbox directory (`.codereviewer/context/`) before the review runs. Anything a
+pipeline step can reach becomes available, and no external credential reaches
+CodeReviewer.
+
+**Pull-request description** — already available in a `pull_request` workflow as
+`github.event.pull_request.*`, so no token or API call is needed. Pass it through
+environment variables (never interpolate the untrusted body directly into the
+shell):
+
+```yaml
+      - name: Add PR description to review context
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          mkdir -p .codereviewer/context
+          { echo "---"; echo "source: github-pr"; echo "title: ${PR_TITLE}";
+            echo "---"; echo "${PR_BODY}"; } > .codereviewer/context/pull-request.md
+```
+
+**Issue-tracker ticket** — fetched by your pipeline, so the tracker credential
+stays in the pipeline and never reaches CodeReviewer:
+
+```yaml
+      - name: Fetch ticket context
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        run: |
+          mkdir -p .codereviewer/context
+          ./scripts/fetch-jira.sh "$TICKET_ID" > .codereviewer/context/ticket.md
+      - run: codereviewer review --base-ref origin/main --head-ref HEAD
+```
+
+The gathered context is redacted and cannot change findings, severity, or gates.
+
+> **Note:** A dedicated `platform` provider that reads PR metadata directly
+> (event payload or API) is a later phase. Until then the inbox covers the same
+> need with no additional configuration.
+
+---
+
 ## Report Formats In CI
 
 Add `"github-review-comments"` to `reporting.formats` to generate inline PR comment

@@ -14,6 +14,7 @@ import {
   normalizeError
 } from '../../shared/errors/error-normalizer.js'
 import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
+import { compileGlobMatchers, matchesAnyGlob } from '../../shared/glob/glob-matcher.js'
 import { sha256 } from '../../shared/hash/hash.js'
 import { parseGitDiffMaps, type DiffMap } from './git-diff.js'
 
@@ -197,45 +198,10 @@ const isBinaryContent = (portablePath: string, content: Buffer): boolean => {
   return !(hasTextSourceExtension(portablePath) && isUtf8Text(content))
 }
 
-const maxGlobPatternLength = 4096
-
-const globToRegExp = (pattern: string): RegExp => {
-  if (pattern.length > maxGlobPatternLength) {
-    throw new TypeError('Exclude pattern exceeds the maximum supported length.')
-  }
-
-  const normalizedPattern = pattern.replaceAll('\\', '/')
-  let source = '^'
-
-  for (let index = 0; index < normalizedPattern.length; index += 1) {
-    const char = normalizedPattern[index]
-    const nextChar = normalizedPattern[index + 1]
-
-    if (char === '*' && nextChar === '*') {
-      source += '.*'
-      index += 1
-    } else if (char === '*') {
-      source += '[^/]*'
-    } else if (char === '?') {
-      source += '[^/]'
-    } else {
-      source += char?.replace(/[|\\{}()[\]^$+?.]/g, '\\$&') ?? ''
-    }
-  }
-
-  source += '$'
-
-  return new RegExp(source)
-}
-
-const compileGlobMatchers = (
-  patterns: readonly string[]
-): readonly RegExp[] => patterns.map(globToRegExp)
-
 const isExcluded = (
   portablePath: string,
   matchers: readonly RegExp[]
-): boolean => matchers.some((matcher) => matcher.test(portablePath))
+): boolean => matchesAnyGlob(portablePath, matchers)
 
 // A file is in scope when it matches an `include` glob (an empty include set
 // means "include everything", matching the `['**/*']` default). Combined with
@@ -243,8 +209,7 @@ const isExcluded = (
 const isIncluded = (
   portablePath: string,
   matchers: readonly RegExp[]
-): boolean =>
-  matchers.length === 0 || matchers.some((matcher) => matcher.test(portablePath))
+): boolean => matchers.length === 0 || matchesAnyGlob(portablePath, matchers)
 
 const statusFromGitCode = (statusCode: string): GitChangedPath['status'] => {
   const normalizedStatus = statusCode[0]

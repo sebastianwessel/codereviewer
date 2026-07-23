@@ -22,6 +22,7 @@
     "update:model-pricing:write": "tsx scripts/update-model-pricing.ts --write",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:live": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
     "lint": "npm run typecheck",
     "dev": "tsx src/index.ts",
     "cli": "node --env-file-if-exists=.env --import tsx src/cli/main.ts",

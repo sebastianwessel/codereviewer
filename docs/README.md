@@ -22,6 +22,8 @@ for your specific workflow.
 | [Architecture](concepts/architecture.md) | End-to-end pipeline — what each step does, why it exists, and how the steps interact. |
 | [Review Modes and Flows](concepts/review-modes-and-flows.md) | Local, CI, PR, full review, gates, and execution steps. |
 | [Deterministic Support Signals](concepts/deterministic-support-signals.md) | Local anchors, context hints, contradictions, and false-positive gates. |
+| [External Change-Intent Context](concepts/change-intent-context.md) | Optional pre-review context from PR/ticket/changed docs, summarized and injected. |
+| [Agentic Verification Flow](concepts/verification-flow.md) | Optional second lane that verifies a specific claim against the code with bounded tools and returns a verdict. |
 
 ---
 

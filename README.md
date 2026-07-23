@@ -24,6 +24,8 @@ quality gates round it out.
 | --- | --- |
 | **Holistic discovery + refutation** | A whole-file review enumerates candidate defects, then an independent per-candidate refutation pass verifies or discards each one before admission — recall first, precision enforced. |
 | **Deterministic support signals** | Local AST-based anchors, symbol spans, import/test/config hints, and contradiction signals improve clustering and context and reject weak claims without a provider call. |
+| **Change-intent context (opt-in)** | Optionally summarizes PR/ticket/changed-doc context into a bounded, redacted brief injected before review as untrusted, informational context — orientation, never authorization. Off by default. |
+| **Verification flow (opt-in)** | A separate agentic flow that verifies specific claims — a review comment, an analyzer alert, or whether a new commit fixed a prior finding — using bounded, mediated read/list/grep tools. Off by default. |
 | **Provider-optional** | Runs deterministic-only with no model provider configured; add a provider for full model-backed review. |
 | **Modular providers** | OpenAI, OpenAI-compatible, AWS Bedrock, and Azure are optional peer packages — install only the one you use. |
 | **Severity floor** | A configurable actionable-severity threshold keeps low-severity nits out of the actionable surface so the report stays low-noise. |
@@ -166,7 +168,7 @@ recall is the dial we keep working to raise without adding noise.
 | Section | Pages |
 | --- | --- |
 | **Getting started** | [Quick Setup](docs/getting-started/quick-setup.md) · [First Review](docs/getting-started/first-review.md) |
-| **Concepts** | [Architecture](docs/concepts/architecture.md) · [Review Modes and Flows](docs/concepts/review-modes-and-flows.md) · [Deterministic Support Signals](docs/concepts/deterministic-support-signals.md) |
+| **Concepts** | [Architecture](docs/concepts/architecture.md) · [Review Modes and Flows](docs/concepts/review-modes-and-flows.md) · [Deterministic Support Signals](docs/concepts/deterministic-support-signals.md) · [Change-Intent Context](docs/concepts/change-intent-context.md) · [Verification Flow](docs/concepts/verification-flow.md) |
 | **Guides** | [Configuration](docs/guides/configuration.md) · [Providers](docs/guides/providers.md) · [Instructions and Skills](docs/guides/instructions-and-skills.md) · [Reports and Artifacts](docs/guides/reports-and-artifacts.md) |
 | **Evaluation** | [Evaluation & Benchmarking](docs/evaluation/README.md) |
 | **Operations** | [CI/CD](docs/operations/ci-cd.md) · [Troubleshooting](docs/operations/troubleshooting.md) · [Secrets and Env](docs/security/secrets-and-env.md) · [Data Handling](docs/security/data-handling.md) |

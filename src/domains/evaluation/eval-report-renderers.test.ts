@@ -3,10 +3,10 @@ import {
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
-  renderEvalComparison,
-  renderEvalRecallReport,
   renderEvalSummary
-} from './eval-report-rendering.js'
+} from './eval-summary-report-rendering.js'
+import { renderEvalComparison } from './eval-comparison-report-rendering.js'
+import { renderEvalRecallReport } from './eval-recall-report-rendering.js'
 
 describe('eval report rendering', () => {
   test('owns eval Markdown renderer entry points and artifact names', () => {

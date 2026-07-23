@@ -1,14 +1,9 @@
-import type {
-  JsonValue,
-  Logger,
-  ModelAlias,
-  ModelProvider,
-  ObjectRequest,
-  ObjectResponse,
-  SkillsConfig
-} from '@purista/harness'
+import type { Logger, SkillsConfig } from '@purista/harness'
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
-import { type RunTokenUsage } from '../../../costs/index.js'
+import {
+  createProviderUsageRecorder,
+  type RunTokenUsage
+} from '../../../costs/index.js'
 import type { NoContentEventRecorder } from '../../../observability/index.js'
 import {
   resolveProviderModelAlias,
@@ -23,81 +18,6 @@ import {
 import { maxChildAgentCallsForReview } from '../../harness/config.js'
 
 const reviewWorkflowSessionId = 'review'
-
-type ProviderUsageRecorder = {
-  readonly modelAlias: ModelAlias
-  readonly usage: () => RunTokenUsage
-}
-
-const createProviderUsageRecorder = (
-  modelAlias: ModelAlias
-): ProviderUsageRecorder => {
-  let inputTokens = 0
-  let outputTokens = 0
-  let cachedInputTokens = 0
-  let reasoningTokens = 0
-  const provider = modelAlias.provider
-  const wrappedProvider: ModelProvider = {
-    ...provider,
-    id: provider.id,
-    genAiSystem: provider.genAiSystem,
-    ...(provider.info === undefined ? {} : { info: provider.info }),
-    ...(provider.text === undefined
-      ? {}
-      : {
-          text: async (request) => {
-            const response = await provider.text!(request)
-
-            inputTokens += response.usage.inputTokens
-            outputTokens += response.usage.outputTokens
-            cachedInputTokens += response.usage.cachedInputTokens ?? 0
-            reasoningTokens += response.usage.reasoningTokens ?? 0
-
-            return response
-          }
-        }),
-    ...(provider.object === undefined
-      ? {}
-      : {
-          object: async <T extends JsonValue = JsonValue>(
-            request: ObjectRequest<T>
-          ): Promise<ObjectResponse<T>> => {
-            const response = await provider.object!(request)
-
-            inputTokens += response.usage.inputTokens
-            outputTokens += response.usage.outputTokens
-            cachedInputTokens += response.usage.cachedInputTokens ?? 0
-            reasoningTokens += response.usage.reasoningTokens ?? 0
-
-            return response
-          }
-        }),
-    ...(provider.textStream === undefined
-      ? {}
-      : { textStream: provider.textStream.bind(provider) }),
-    ...(provider.objectStream === undefined
-      ? {}
-      : { objectStream: provider.objectStream.bind(provider) }),
-    ...(provider.embed === undefined ? {} : { embed: provider.embed.bind(provider) }),
-    ...(provider.rerank === undefined
-      ? {}
-      : { rerank: provider.rerank.bind(provider) }),
-    ...(provider.close === undefined ? {} : { close: provider.close.bind(provider) })
-  }
-
-  return {
-    modelAlias: {
-      ...modelAlias,
-      provider: wrappedProvider
-    },
-    usage: () => ({
-      inputTokens,
-      outputTokens,
-      cachedInputTokens,
-      reasoningTokens
-    })
-  }
-}
 
 export const runProviderWorkflow = async (
   input: {

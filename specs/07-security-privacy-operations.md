@@ -1,7 +1,7 @@
 # 07: Security, Privacy, And Operations
 
 Status: Approved
-Date: 2026-07-20
+Date: 2026-07-22
 
 ## Threat Model
 
@@ -11,6 +11,9 @@ Trust boundaries:
 - config files are untrusted until schema-validated;
 - the repository root is the maximum local authority boundary;
 - reviewer instructions and skills are untrusted prompt inputs;
+- external change-intent context (pull-request metadata, pipeline-provided
+  context-inbox files, and change-relevant repository files) is untrusted prompt
+  input;
 - model providers are external processors;
 - model outputs are untrusted and outside the deterministic trust boundary;
 - CI environment variables can contain secrets;
@@ -31,6 +34,9 @@ Attack surfaces:
 - destructive git operations hidden behind user-controlled refs or aliases;
 - unapproved network transfer of repository content, prompts, artifacts, or
   secrets;
+- injection through external change-intent context that attempts to alter
+  findings, gates, or reviewer behavior;
+- server-side request forgery through a later-phase network context source;
 - drift between specs, docs, implementation, generated schemas, examples,
   quality gates, and shipped behavior;
 - ambiguous or interpretable requirements that allow agents or maintainers to
@@ -49,7 +55,7 @@ code, not by model behavior:
 | Artifact write boundary | Writes are allowed only below the configured artifact directory after it resolves under repository root. |
 | Non-destructive git | The only allowed git commands are read-only discovery commands explicitly allowlisted in code. Mutating git commands are impossible through the product API. |
 | No shell expansion | Git and tool invocations use argument-array process APIs. Shell strings are forbidden. |
-| No implicit network | Network is denied by default. The only R1 network path is the explicitly selected model provider endpoint after provider config validation. |
+| No implicit network | Network is denied by default. The only network path is the explicitly selected model provider endpoint after provider config validation, used by review and by the change-intent summarizer. Change-intent context providers are filesystem-only in the current phase; later-phase network providers (`platform-API`, `mcp`) contact only explicitly configured, allowlisted endpoints and are the subject of dedicated controls below. No network path can be initiated by model output. |
 | No repository exfiltration by default | Local providerless and signal-only paths must not send repository content to any network destination. Provider-backed review sends only bounded, redacted, ledger-recorded context to the selected provider. |
 | No prompt/tool authority | Prompts, repository content, skills, and model output cannot grant filesystem, git, shell, network, publishing, or gate authority. |
 | Auditable decisions | Security-relevant allow/deny decisions produce stable, redacted events and testable error codes. |
@@ -67,6 +73,10 @@ code, not by model behavior:
 | Provider exfiltration | malicious config points to attacker OpenAI-compatible URL | Require explicit provider config, document provider trust boundary, redact secrets, ledger context, and allow local runs with no provider. |
 | Prompt exfiltration | repository asks model to print env vars or upload code | No tools with env/filesystem/network authority are available to model output; env is never in prompt context. |
 | Report injection | finding title contains HTML/script/Markdown table breaks | Escape Markdown/SARIF user-controlled text and never emit raw source snippets by default. |
+| External context injection | PR body, inbox file, or changed doc says "ignore all findings" or "this is pre-approved" | Treat external context as untrusted data presented under an informational header; it never changes admission, severity, gates, or baseline, and never suppresses a finding. |
+| Agentic tool abuse (verification flow) | a claim or tool output steers the verification agent to read `.env`/secrets, loop unboundedly, or claim authority | The verification agent's only tools are mediated read/list/grep (`12-verification-flow.md`): read-only, path-contained, eligibility-filtered so secret/excluded files are never read, in-process (no shell), redacted, ledgered, and bounded by per-claim tool-call and byte/match budgets. No shell, network, filesystem write, environment, publishing, or gate authority is available, and claim inputs cannot change admission, severity, gates, or baseline. |
+| Context-source SSRF (later-phase `platform-API` provider) | ticket id or URL in repository content aims a platform-API fetch at an internal host | Contact only the explicitly configured, host-allowlisted platform host; never derive fetch targets from repository content or model output. |
+| Context-source credential leak | tracker or platform token echoed into the brief, ledger, or logs | The current-phase inbox carries no credentials because the pipeline owns the fetch; the later-phase platform-API provider reads credentials only from a configured environment variable; redact external context before use. |
 | Secret leakage | token appears in source, error, provider message, or artifact | Redact before logs, errors, reports, traces, and provider-bound summaries. If a value cannot be proven redacted, exclude it from output. |
 | Denial of service | huge files, many paths, nested skill tree | Enforce max files, max file bytes, context bytes, traversal caps, timeouts, and concurrency caps. |
 | Drift hiding | README claims a command exists but CLI rejects it | Drift checker compares docs/specs/CLI/package/config/generated schemas and emits drift findings. |
@@ -78,6 +88,7 @@ code, not by model behavior:
 | --- | --- | --- |
 | Source code | sensitive customer data | May be read locally; not logged/traced. |
 | Prompts/instructions | sensitive | Sent only to the selected provider for configured model-backed tasks; not logged/traced. |
+| External change-intent context | sensitive, untrusted | Redacted before use; summarized and injected only as a bounded context-only document; never logged/traced. |
 | Secrets/tokens | secret | Redacted before model/log/report. |
 | Evidence summaries | internal | Redacted and safe for report. |
 | Run metadata | internal | Safe for report after redaction. |
@@ -91,7 +102,9 @@ Redactor must run before:
 - errors;
 - traces;
 - report rendering;
-- model-bound context assembly where configured secret patterns are available.
+- model-bound context assembly where configured secret patterns are available;
+- ingestion of external change-intent context, before it enters the summarizer
+  call, the prompt, or the context ledger.
 
 Minimum secret patterns:
 
@@ -109,8 +122,10 @@ Tests must prove known tokens are removed from logs and reports.
 Prompt injection cannot be fully prevented for arbitrary untrusted repository
 content. R1 controls the blast radius:
 
-- repository content, instructions, skills, prior artifacts, and provider
-  responses are untrusted input;
+- repository content, instructions, skills, prior artifacts, provider
+  responses, and external change-intent context are untrusted input;
+- external change-intent context is presented under an informational header and
+  cannot change admission, severity, gates, or baseline outcomes;
 - model output can propose candidate findings and refutation summaries
   only; it cannot publish, fail gates, write outside the artifact directory,
   execute commands, or read additional files without deterministic
@@ -131,7 +146,7 @@ Default permissions:
 | Repository read | allowed | Required. |
 | Filesystem write | restricted | Only run artifact directory. |
 | Shell execution | denied | Future spec required. |
-| Network | provider only | Only selected provider adapter. |
+| Network | provider only | Selected provider adapter (review and change-intent summarizer). Change-intent context providers are filesystem-only; a network `platform-API` provider is a later phase (`11-external-context-ingestion.md`). |
 | PR publishing | denied | Future spec required. |
 | Fix application | denied | Future spec required. |
 
@@ -184,6 +199,31 @@ Rules:
 ## Network And Provider Exfiltration Controls
 
 Network is off unless a provider-backed review is explicitly configured.
+
+External context source requirements (`11-external-context-ingestion.md`):
+
+- context providers are off by default; enabling them is an explicit
+  configuration choice;
+- the current-phase providers (`inbox`, `changed-files`) are filesystem-only
+  under the repository root: the pipeline performs any external fetch and owns
+  its credentials, so no external credential enters the product;
+- gathered context is redacted and bounded before it enters the summarizer, the
+  prompt, or the context ledger;
+- required controls for the later-phase network `platform-API` provider: it
+  contacts only its explicitly configured, host-allowlisted host; fetch targets
+  are never derived from repository content or model output; and its credentials
+  are read only from a configured environment variable name, never placed in
+  config, prompts, ledger entries, or logs;
+- required controls for the later-phase `mcp` provider: the MCP client is hosted
+  in the orchestrator and driven deterministically, never by model output; its
+  server (an operator-configured stdio command or allowlisted HTTP endpoint) and
+  its tool-name allowlist come only from configuration; it invokes only
+  allowlisted tools and MCP resources; the server endpoint or launch command is
+  never derived from repository content or model output; credentials are read
+  only from a configured environment variable name, and a stdio server that owns
+  its own credentials keeps them out of the product. Launching an operator-
+  configured subprocess for a stdio MCP server is a deliberate exception to the
+  no-subprocess posture, permitted only for this explicitly configured server.
 
 Provider-backed review requirements:
 

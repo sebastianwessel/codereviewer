@@ -25,7 +25,7 @@ Secure-by-default settings for a review run:
 | Boundary | Behavior |
 | --- | --- |
 | Repository root | Defaults to the current working directory for CLI runs. |
-| Path access | Config, docs, specs, skills, instructions, eval fixtures, explicit files, and artifacts must resolve under the repository root. |
+| Path access | Config, docs, specs, skills, instructions, eval fixtures, explicit files, change-intent context files, and artifacts must resolve under the repository root. |
 | Source writes | Review, eval, support signals, and drift checks do not modify source files. |
 | Git | Only read-only `git diff` command shapes are allowed. Destructive git actions are not exposed. |
 | Network | Disabled unless an explicit model provider is configured for a provider-backed review path. Local checks do not use network IO. |

@@ -8,6 +8,7 @@ import type {
   ReviewReport
 } from '../../shared/contracts/index.js'
 import { redactText } from '../../shared/redaction/redactor.js'
+import type { JsonValue } from '../../shared/json/json-value.js'
 import { createReportArtifact, validateReviewReport } from './reporting-utils.js'
 import { renderGithubReviewComments } from './github-review-comments.js'
 import { renderMarkdownReport } from './markdown-reporter.js'
@@ -29,9 +30,6 @@ export type WriteReportingArtifactsOptions = {
 }
 
 const stableStringify = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
-
-type JsonPrimitive = string | number | boolean | null
-type JsonValue = JsonPrimitive | readonly JsonValue[] | { readonly [key: string]: JsonValue | undefined }
 
 const redactJsonValue = (value: unknown): JsonValue | undefined => {
   if (value === undefined) {

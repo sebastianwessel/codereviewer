@@ -100,6 +100,17 @@ support`), instructions, skills metadata, and a compact shared digest. Under
 budget pressure it drops optional context before source, and records a recovered
 provider issue rather than truncating mandatory fields.
 
+### 5b. Change-intent context (optional, off by default)
+**What:** When `contextSources` is enabled, gathers external change-intent context
+(pipeline-provided inbox files, PR-changed docs), redacts it, summarizes it with a
+dedicated model call (or a deterministic digest), and injects one bounded
+`change-intent` document into every task's context. **Why:** the reviewer starts
+cold on *intent*; a ticket or PR description explains what a change is meant to do.
+**How:** it is untrusted, informational context presented as *orientation, not
+authorization* — it can never approve, excuse, or suppress a finding, and it is
+ledgered like every other context item. Disabled leaves the run unchanged. See
+[Change-Intent Context](change-intent-context.md).
+
 ### 6. Holistic discovery
 **What:** One recall-first whole-change review per task. The reviewer reads the
 unified diff plus the full line-numbered content of the changed files and emits

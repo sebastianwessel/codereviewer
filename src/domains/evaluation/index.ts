@@ -1,4 +1,9 @@
 export {
+  EVAL_PROVIDER_RETRY_WARNING_PREFIX,
+  PROVIDER_ERROR_WARNING_PREFIX,
+  isProviderIssueWarning
+} from './eval-warnings.js'
+export {
   EvalCaseSchema,
   EvalCaseSetSchema,
   EvalLineRangeSchema,
@@ -50,10 +55,10 @@ export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
-  renderEvalComparison,
-  renderEvalRecallReport,
   renderEvalSummary
-} from './eval-report-rendering.js'
+} from './eval-summary-report-rendering.js'
+export { renderEvalComparison } from './eval-comparison-report-rendering.js'
+export { renderEvalRecallReport } from './eval-recall-report-rendering.js'
 export {
   EvalRegressionThresholdsSchema,
   EvalReportSchema,

@@ -1,21 +1,10 @@
 import { z } from 'zod'
 import { ReviewReportSchema } from '../../shared/contracts/index.js'
+import { ContextLedgerKindSchema } from '../review-planning/context-ledger.js'
 import { EvalMetricsSchema } from './metrics.js'
 
 export const EvalContextLedgerEntrySchema = z.strictObject({
-  kind: z
-    .enum([
-      'file',
-      'diff',
-      'symbol',
-      'instruction',
-      'skill',
-      'support-signal-output',
-      'tool-result',
-      'prior-artifact',
-      'unknown'
-    ])
-    .default('unknown'),
+  kind: ContextLedgerKindSchema,
   consideredForModelContext: z.boolean(),
   truncated: z.boolean()
 })

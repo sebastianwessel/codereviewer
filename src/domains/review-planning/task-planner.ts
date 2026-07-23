@@ -9,6 +9,7 @@ import {
   type EvidenceRecord
 } from '../../shared/contracts/index.js'
 import { sha256 } from '../../shared/hash/hash.js'
+import { uniqueSorted } from '../../shared/text/unique-sorted.js'
 import type { CandidateFinding } from '../admission/index.js'
 import type { SupportSignalFact } from '../deterministic-signals/index.js'
 
@@ -48,9 +49,6 @@ const taskIdFor = (
   kind: z.infer<typeof ReviewTaskKindSchema>,
   paths: readonly string[]
 ): string => `task_${sha256(`${kind}:${paths.join('|')}`).slice(0, 16)}`
-
-const sortedUnique = (values: readonly string[]): readonly string[] =>
-  [...new Set(values)].sort((left, right) => left.localeCompare(right))
 
 const evidencePath = (evidence: EvidenceRecord): string | undefined =>
   evidence.location?.path
@@ -265,7 +263,7 @@ const createTask = (
     readonly candidates: readonly CandidateFinding[]
   }
 ): ReviewTask => {
-  const taskPaths = sortedUnique(input.paths)
+  const taskPaths = uniqueSorted(input.paths)
 
   return ReviewTaskSchema.parse({
     id: taskIdFor(input.kind, taskPaths),
@@ -289,7 +287,7 @@ const createTask = (
 export const planReviewTasks = (
   options: PlanReviewTasksOptions
 ): readonly ReviewTask[] => {
-  const paths = sortedUnique(options.files.map((file) => file.path))
+  const paths = uniqueSorted(options.files.map((file) => file.path))
 
   if (paths.length === 0) {
     return []
