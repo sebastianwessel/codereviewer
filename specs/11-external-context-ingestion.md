@@ -168,11 +168,10 @@ reviewer prompt and the summarizer must enforce these principles:
 
 Configuration lives under a `contextSources` block; keys are defined in
 `04-configuration-and-providers.md`. The block is disabled by default. Enabling
-it, selecting providers, choosing the summarization mode, and setting byte and
-timeout caps are explicit configuration choices. Misconfiguration (unknown
-provider type, missing required per-provider field, non-allowlisted host, a
-literal secret in configuration) fails `config validate` with
-`context_source_misconfigured` and exit code 2.
+it, selecting providers, choosing the summarization mode, and setting byte caps
+are explicit configuration choices. An invalid provider (unknown `type`, missing
+required per-provider field) fails `config validate` with exit code 2 through
+standard schema validation.
 
 ## Observability
 
@@ -182,12 +181,20 @@ literal secret in configuration) fails `config validate` with
 - The summarizer records mode, input byte count, output byte count, and whether
   truncation occurred.
 
-## Errors
+## Errors And Degradation
 
-| Code | Category | Exit | Meaning |
-| --- | --- | --- | --- |
-| `context_source_misconfigured` | config | 2 | A configured provider is invalid; raised at config validation. |
-| `context_source_unavailable` | repository | — | A provider failed at run time; recorded as a warning, non-fatal. |
+- An invalid provider configuration fails `config validate` with exit code 2
+  through standard schema validation (the discriminated `type` union rejects an
+  unknown provider and reports the missing field).
+- A provider that fails at run time — missing directory, unreadable file, empty
+  result — is non-fatal. It is recorded as a failed provider in the
+  `context_ingestion` observability step (`failedProviders` count) and the review
+  proceeds without that provider's context. A source failure never changes the
+  review exit code.
+
+The later-phase network `platform-API` provider adds semantic configuration
+checks (host allowlist, no literal secret) that warrant a dedicated
+`context_source_misconfigured` code; it is introduced with that provider.
 
 ## Acceptance
 
