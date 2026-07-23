@@ -39,6 +39,17 @@ npm test
 npm run build
 ```
 
+`npm test` is hermetic and free: it never calls a real model provider. Live
+integration tests (`*.live.test.ts`) resolve a real provider from the
+environment and cost money; they are excluded from `npm test` and run only with:
+
+```bash
+npm run test:live
+```
+
+`test:live` loads `.env` for provider credentials; each live test skips itself
+when no provider environment is present, so it is safe to run without keys.
+
 Use Node.js `>=24.15.0`.
 Run `nvm install && nvm use` before local work when nvm is available.
 
