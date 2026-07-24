@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  ModelHolisticReviewResultSchema,
   TaskReviewInputSchema,
   type ModelHolisticReviewResult,
   type WorkflowReviewTask
@@ -64,9 +65,13 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
   }
 })
 
+// Mirror the harness: the discovery agent's raw output is parsed through
+// ModelHolisticReviewResultSchema (whose item schema normalizes/drops drift) before
+// the runner returns it, so the fake runner returns already-parsed findings too.
 const holisticResultWith = (
   findings: readonly unknown[]
-): ModelHolisticReviewResult => ({ findings: [...findings] })
+): ModelHolisticReviewResult =>
+  ModelHolisticReviewResultSchema.parse({ findings: [...findings] })
 
 describe('runModelBackedHolisticTaskReview', () => {
   test('maps holistic findings in scope to candidates and drops the rest', async () => {

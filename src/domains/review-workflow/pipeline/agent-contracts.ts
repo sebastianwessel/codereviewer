@@ -424,11 +424,18 @@ export const HolisticReviewInputSchema = z.strictObject({
 
 export type HolisticReviewInput = z.infer<typeof HolisticReviewInputSchema>
 
-// Holistic discovery output. Loose (tolerates model output drift); each raw
-// finding is normalized via ModelHolisticFindingSchema and mapped to a
-// CandidateFinding downstream.
+// Holistic discovery output. The findings item schema is the described,
+// drift-tolerant ModelHolisticFindingSchema so the JSON schema the harness derives
+// via z.toJSONSchema and sends to the provider advertises the exact finding shape —
+// category and severity enums, path, startLine, title, description — instead of an
+// opaque "array of anything" (items: {}), which measurably guides the model. The
+// OpenAI adapter runs response_format json_schema with strict:false (guidance, not
+// enforcement), so the model can still drift; each item is therefore wrapped in
+// .catch so a malformed item degrades to {} (dropped downstream by
+// candidateFromFinding) instead of throwing and discarding the whole task's
+// findings. Field aliasing/normalization stays inside ModelHolisticFindingSchema.
 export const ModelHolisticReviewResultSchema = z.strictObject({
-  findings: z.array(z.unknown()).default([])
+  findings: z.array(ModelHolisticFindingSchema.catch(() => ({}))).default([])
 })
 
 export type ModelHolisticReviewResult = z.infer<
