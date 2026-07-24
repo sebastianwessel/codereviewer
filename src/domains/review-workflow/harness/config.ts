@@ -1,5 +1,8 @@
 import { type BuiltinToolName } from '@purista/harness'
-import { HOLISTIC_MAX_CANDIDATES } from '../pipeline/discovery/holistic-task-review.js'
+import {
+  HOLISTIC_MAX_CANDIDATES,
+  SECURITY_MAX_CANDIDATES
+} from '../pipeline/discovery/holistic-task-review.js'
 
 const defaultMaxConcurrentTasks = 4
 const defaultRunTimeoutMs = 0
@@ -22,6 +25,7 @@ export const maxChildAgentCallsForReview = (
   input: {
     readonly taskCount?: number
     readonly maxConcurrentTasks?: number
+    readonly securityPassEnabled?: boolean
   } = {}
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
@@ -30,9 +34,15 @@ export const maxChildAgentCallsForReview = (
   // candidate (a task can emit up to HOLISTIC_MAX_CANDIDATES), plus a concurrency
   // buffer. Reserving only one refutation call per task starves refutation once
   // discovery raises many candidates, which leaks unrefuted candidates as false
-  // positives.
-  const holisticCalls = taskCount
-  const refutationCalls = taskCount * HOLISTIC_MAX_CANDIDATES
+  // positives. When the dedicated security pass is enabled (spec 15), each task
+  // issues a SECOND discovery call and can emit up to SECURITY_MAX_CANDIDATES more
+  // candidates, so both budgets grow to keep refutation from being starved.
+  const discoveryCallsPerTask = input.securityPassEnabled === true ? 2 : 1
+  const candidatesPerTask =
+    HOLISTIC_MAX_CANDIDATES +
+    (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0)
+  const holisticCalls = taskCount * discoveryCallsPerTask
+  const refutationCalls = taskCount * candidatesPerTask
   const concurrencyBuffer = maxConcurrentTasks * 2
   const derived = holisticCalls + refutationCalls + concurrencyBuffer
 

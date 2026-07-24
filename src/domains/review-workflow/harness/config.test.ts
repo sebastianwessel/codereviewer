@@ -53,6 +53,19 @@ describe('workflow harness config', () => {
     ).toBe(2048)
   })
 
+  test('grows the budget for the dedicated security pass second call and candidates', () => {
+    // With the security pass enabled each task issues 2 discovery calls and can
+    // emit up to HOLISTIC_MAX_CANDIDATES + SECURITY_MAX_CANDIDATES (12 + 8 = 20)
+    // candidates: 8*2 + 8*20 + 2*2 = 16 + 160 + 4 = 180.
+    expect(
+      maxChildAgentCallsForReview({
+        taskCount: 8,
+        maxConcurrentTasks: 2,
+        securityPassEnabled: true
+      })
+    ).toBe(180)
+  })
+
   test('enables only read/list/grep builtins for skill-backed review agents', () => {
     expect(
       reviewSkillAgentOptions({

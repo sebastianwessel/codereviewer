@@ -451,21 +451,22 @@ Rules:
 
 ## Security
 
-Controls the security-focused review lens and deterministic security signals
-(`15-security-focused-review.md`). Disabled by default. Generic OWASP/CWE-derived
-detection only; never tuned to eval findings.
+Controls the dedicated additive security review pass and deterministic security
+signals (`15-security-focused-review.md`). Disabled by default. Generic OWASP/CWE-
+derived detection only; never tuned to eval findings.
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `security.lens.enabled` | boolean | `false` |
+| `security.dedicatedPass.enabled` | boolean | `false` |
 | `security.signals.enabled` | boolean | `false` |
 
 Rules:
 
-- with both disabled, no security lens or signal runs and the general review is
-  unchanged;
-- the lens's candidates pass the same untrusted refutation and admission as any
-  other candidate; the lens never bypasses scope, severity, baseline, or the gate;
+- with both disabled, no security pass or signal runs and the general review is
+  unchanged (the same single discovery call per task);
+- the security pass's candidates pass the same untrusted refutation and admission as
+  any other candidate and are additive (they never displace a general candidate);
+  the pass never bypasses scope, severity, baseline, or the gate;
 - security signals are model evidence by default (populating `cwe`/`dataFlow`
   evidence), not auto-admitted findings.
 

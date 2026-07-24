@@ -60,15 +60,15 @@ describe('CodeReviewerConfigSchema', () => {
     })
   })
 
-  test('security review lens and signals default to disabled', () => {
+  test('security dedicated pass and signals default to disabled', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
-    expect(disabled.security.lens.enabled).toBe(false)
+    expect(disabled.security.dedicatedPass.enabled).toBe(false)
     expect(disabled.security.signals.enabled).toBe(false)
 
     const enabled = CodeReviewerConfigSchema.parse({
-      security: { lens: { enabled: true } }
+      security: { dedicatedPass: { enabled: true } }
     })
-    expect(enabled.security.lens.enabled).toBe(true)
+    expect(enabled.security.dedicatedPass.enabled).toBe(true)
     // Signals stays disabled unless explicitly enabled; the permission literals
     // keep their secure defaults.
     expect(enabled.security.signals.enabled).toBe(false)
@@ -77,7 +77,9 @@ describe('CodeReviewerConfigSchema', () => {
 
   test('security rejects an unknown nested key', () => {
     expect(() =>
-      CodeReviewerConfigSchema.parse({ security: { lens: { on: true } } })
+      CodeReviewerConfigSchema.parse({
+        security: { dedicatedPass: { on: true } }
+      })
     ).toThrow()
   })
 

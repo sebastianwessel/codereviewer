@@ -38,7 +38,7 @@ built against.
 ## Measurement First (built before any detector)
 
 Security cannot be improved credibly without measuring it by mechanism. Before any
-detector or lens ships, the evaluation gains a **security dimension**:
+detector or security pass ships, the evaluation gains a **security dimension**:
 
 - Each security expected finding carries a **mechanism** label (see Mechanisms) and
   a **context-depth** label (`local | cross-function | callee | caller |
@@ -95,25 +95,46 @@ aligned):
 - concurrency and resource exhaustion;
 - prompt-injection resistance of the reviewer itself.
 
-## Mechanism 1: The Security Review Lens
+## Mechanism 1: The Dedicated Additive Security Pass
 
-An optional, generic **security-focused discovery lens** — the primary lever,
-because it targets the authorization-dominated real distribution and is cheap.
+An optional, generic **security-only discovery pass** — the primary lever, because
+it targets the authorization-dominated real distribution and gives the security
+classes their own dedicated model attention.
 
-- It applies a generic OWASP/CWE **checklist** across the mechanisms above to the
-  changed code, the diff, and the change-intent context, asking the model to
-  reason specifically about access-control correctness and the injection classes.
-- The checklist is generic and public-derived; it is never expanded to match a
-  fixture. It is prompt/task-level and reuses the existing model-backed discovery
-  and refutation infrastructure — a security lens is another discovery lens, not a
-  new pipeline.
+**Why a dedicated pass, not an in-prompt checklist.** An earlier realization
+appended the OWASP/CWE checklist to the *general* discovery prompt. Measurement
+(full benchmark A/B, dated 2026-07-24) showed this is not a net win: it lifted the
+ignored injection classes (SSRF 0→50%, XSS 0→33%) but *dropped* the dominant
+authorization class (41→27%), because one prompt's attention is finite and the
+checklist pulled focus away from the access-control reasoning the general prompt
+already did well. The mechanism (make the model check under-weighted classes) works;
+folding it into the shared prompt is the wrong integration. The dedicated pass fixes
+this by giving security a **separate discovery call** so it cannot compete for the
+general call's attention.
+
+- When enabled, each review task issues a **second discovery call** whose reviewText
+  is security-only: it applies the generic OWASP/CWE **checklist** across the
+  mechanisms above to the same changed code, diff, and change-intent context, and
+  instructs the model to report only concrete, evidenced security defects.
+- The pass reuses the existing model-backed holistic discovery and refutation
+  infrastructure — it is a second call of the same discovery agent with a
+  security-focused reviewText, not a new agent, role, or pipeline.
+- Its candidates are **additive**: they merge with the general pass's candidates and
+  are never substituted for them, so the pass can only *add* security findings and
+  can never reduce the general reviewer's recall (the attention tradeoff above is
+  removed by construction). A security candidate at a location the general pass
+  already flagged is dropped as a duplicate, so the merge adds no report noise.
 - Its candidates pass the **same** untrusted refutation and deterministic admission
-  as any other candidate. The lens never bypasses scope, location, baseline,
-  severity, or the gate. It raises recall on the classes the general discovery lens
-  under-weights (authorization, subtle injection); precision is protected by
-  refutation + admission, and measured.
-- Off by default. The lens is non-deterministic; it is quarantined like every other
-  model lane and never changes the general review's guarantees.
+  as any other candidate. The pass never bypasses scope, location, baseline,
+  severity, or the gate. It raises recall on the classes the general discovery pass
+  under-weights (authorization, subtle injection, and the injection classes it
+  ignores); precision is protected by refutation + admission, and measured.
+- The checklist is generic and public-derived; it is never expanded to match a
+  fixture.
+- Off by default. The pass is non-deterministic and costs a second discovery call
+  per task; it is quarantined like every other model lane and never changes the
+  general review's guarantees. It ships enabled-by-default only if a held-out A/B
+  demonstrates a net recall gain without an authorization regression.
 
 ## Mechanism 2: Deterministic Security-Signal Evidence
 
@@ -128,7 +149,7 @@ A generic, deterministic detector that produces **typed evidence**, following th
   already-defined but unused contract fields: `ruleId`, `cwe`, `helpUri`,
   `relatedLocations`, ordered `dataFlow` (source → sink steps), and
   `securitySeverity`. No contract change is required to carry this.
-- By default the signal is **evidence for the model** (the security lens judges
+- By default the signal is **evidence for the model** (the security pass judges
   reachability, intent, and sanitizers), not an auto-admitted finding — matching
   the research: the model's judgment is the precision lever. A high-precision rule
   MAY seed a candidate through the existing trusted-rule path, but only when a
@@ -144,41 +165,46 @@ cross-file authorization), a bounded agentic follow-up — reusing the spec-12
 `investigate_claim` tool seam (mediated read/list/grep, budgeted) — MAY execute a
 finding's parsed `contextRequests` or one demand-driven evidence request. This is
 deferred: it is the highest-plumbing, highest-cost, non-deterministic lever, and it
-is only justified after the lens and deterministic-evidence levers are measured. It
+is only justified after the security pass and deterministic-evidence levers are
+measured. It
 must respect the "more context reduces quality" evidence — one bounded, ranked
 follow-up, not full-repository injection.
 
 ## Configuration
 
 A `security` block, disabled by default. Keys are defined in
-`04-configuration-and-providers.md`: `lens.enabled`, `signals.enabled`, and any
-bounds. Invalid configuration fails validation with exit code 2. With the block
-disabled, no security lens or signal runs and the general review is byte-for-byte
-unchanged.
+`04-configuration-and-providers.md`: `dedicatedPass.enabled`, `signals.enabled`, and
+any bounds. Invalid configuration fails validation with exit code 2. With the block
+disabled, no security pass or signal runs and the general review is byte-for-byte
+unchanged (the same task set, the same single discovery call per task).
 
 ## Observability, Safety, Privacy
 
-- Security signals and lens steps are no-content: mechanism, rule id, CWE, counts,
-  and durations only. No source, secret value, or payload appears in logs, traces,
-  or events. Detected secret values are never emitted — only their location and
-  kind.
-- Repository content and any analyzer artifact are untrusted (spec 07). The lens
-  and signals cannot grant authority, change admission, severity, gates, or
+- Security signals and the security pass are no-content: mechanism, rule id, CWE,
+  counts, and durations only. No source, secret value, or payload appears in logs,
+  traces, or events. Detected secret values are never emitted — only their location
+  and kind.
+- Repository content and any analyzer artifact are untrusted (spec 07). The security
+  pass and signals cannot grant authority, change admission, severity, gates, or
   baseline, and are presented under the untrusted/informational framing.
-- The lens prompt is hardened against prompt injection from repository content, and
-  the reviewer's own prompt-injection resistance is a measured security mechanism.
+- The security pass prompt is hardened against prompt injection from repository
+  content, and the reviewer's own prompt-injection resistance is a measured security
+  mechanism.
 
 ## Testing
 
 - Unit: mechanism/context-depth labeling of eval cases; the per-mechanism metric
   math (recall/adjusted-precision by mechanism, obvious-vs-hard split); each
   deterministic sink/source rule against deterministic positive and
-  guard/sanitizer negative fixtures; the lens task contract.
-- Integration (hermetic, deterministic provider): the security lens produces
+  guard/sanitizer negative fixtures; the security-pass reviewText contract; the
+  additive merge (a security candidate at a general-pass location is dropped as a
+  duplicate; a security candidate at a new location is kept; the general pass's
+  candidates are never dropped by the merge).
+- Integration (hermetic, deterministic provider): the security pass produces
   candidates that pass refutation/admission; a planted authorization bug the general
-  lens misses is caught by the lens; a sanitized/guarded negative is not flagged; a
-  deterministic signal populates `cwe`/`dataFlow` evidence; an untrusted repository
-  payload cannot alter admission or the gate.
+  pass misses is caught by the security pass; a sanitized/guarded negative is not
+  flagged; a deterministic signal populates `cwe`/`dataFlow` evidence; an untrusted
+  repository payload cannot alter admission or the gate.
 - No real-provider eval runs in the test suite; security-dimension measurement runs
   are explicit, cost-gated, and separate.
 
@@ -187,16 +213,16 @@ unchanged.
 - The evaluation reports security recall and adjusted precision **per mechanism and
   context-depth**, with obvious-vs-hard tracked separately, before any detector
   ships.
-- With `security` disabled, no lens or signal runs and the general review and gate
-  are byte-for-byte unchanged.
+- With `security` disabled, no security pass or signal runs and the general review
+  and gate are byte-for-byte unchanged.
 - Every rule and checklist item cites a public OWASP/CWE/Semgrep/CodeQL source; none
   is justified by a specific eval finding; the trusted-rule map carries no
   benchmark-specific rule.
 - Security-signal detections populate the existing `cwe`/`dataFlow`/`ruleId`/
   `securitySeverity` evidence fields; by default they are model evidence, not
   auto-admitted findings.
-- The security lens's candidates pass the same untrusted refutation and admission
-  as general candidates; the lens never bypasses scope, severity, baseline, or the
-  gate.
+- The security pass's candidates pass the same untrusted refutation and admission
+  as general candidates and are additive (they never displace a general candidate);
+  the pass never bypasses scope, severity, baseline, or the gate.
 - Any security improvement is demonstrated on the held-out set under the
   anti-contamination policy, not on the set it was built against.

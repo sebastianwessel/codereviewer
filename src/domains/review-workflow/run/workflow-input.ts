@@ -104,7 +104,7 @@ export const createWorkflowInput = (
   reviewedLineRanges: input.reviewedLineRanges.map((range) => ({ ...range })),
   reviewedDiffRanges: input.reviewedDiffRanges.map((range) => ({ ...range })),
   reviewedDiffText: input.reviewedDiffText,
-  securityLensEnabled: input.config.security.lens.enabled,
+  securityPassEnabled: input.config.security.dedicatedPass.enabled,
   evidence: [
     ...input.evidence.map((record) => ({ ...record })),
     ...contextEvidenceForTasks(input.tasks)

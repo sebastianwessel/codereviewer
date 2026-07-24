@@ -5,10 +5,7 @@ import {
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import { ReviewWorkflowInputSchema } from '../contracts.js'
-import {
-  renderSecurityChecklistSection,
-  runModelBackedHolisticTaskReview
-} from './holistic-task-review.js'
+import { runModelBackedHolisticTaskReview } from './holistic-task-review.js'
 
 const configHash =
   '3333333333333333333333333333333333333333333333333333333333333333'
@@ -232,64 +229,24 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(result.candidates).toHaveLength(0)
   })
 
-  test('appends the security review checklist only when the lens is enabled', async () => {
-    const captureReviewText = async (
-      input: typeof workflowInput
-    ): Promise<string> => {
-      let captured = ''
-      await runModelBackedHolisticTaskReview({
-        workflowInput: input,
-        taskInput,
-        task,
-        runners: {
-          holisticReview: async (holisticInput) => {
-            captured = holisticInput.reviewText
-            return holisticResultWith([])
-          }
-        },
-        logger: { debug: () => {} }
-      })
-      return captured
+  const workflowInputWithSecurityPass = ReviewWorkflowInputSchema.parse({
+    runId: 'run-holistic',
+    reviewedPaths: ['src/app.ts'],
+    securityPassEnabled: true,
+    evidence: [],
+    candidates: [],
+    instructions: [],
+    skills: [],
+    provenance: {
+      reviewer: 'review-agent',
+      modelProvider: 'openai',
+      modelName: 'holistic-test',
+      signalVersions: { typescript: '6.0.3' },
+      configHash
     }
-
-    // Default workflowInput has securityLensEnabled=false (schema default).
-    const disabledText = await captureReviewText(workflowInput)
-    expect(disabledText).not.toContain('## Security review checklist')
-    expect(disabledText).not.toContain('SSRF (CWE-918)')
-
-    const enabledText = await captureReviewText(
-      ReviewWorkflowInputSchema.parse({
-        runId: 'run-holistic',
-        reviewedPaths: ['src/app.ts'],
-        securityLensEnabled: true,
-        evidence: [],
-        candidates: [],
-        instructions: [],
-        skills: [],
-        provenance: {
-          reviewer: 'review-agent',
-          modelProvider: 'openai',
-          modelName: 'holistic-test',
-          signalVersions: { typescript: '6.0.3' },
-          configHash
-        }
-      })
-    )
-    // Enabled: the checklist header and a spot-checked CWE line are present.
-    expect(enabledText).toContain('## Security review checklist')
-    expect(enabledText).toContain(
-      '- SSRF (CWE-918): a user-controlled URL or host passed to a request/fetch/open'
-    )
-    // Byte-for-byte proof: the ONLY difference the lens makes is the appended
-    // section. Everything before it is identical to the disabled prompt, and the
-    // sole appended suffix is the join separator plus the rendered checklist.
-    expect(enabledText.startsWith(disabledText)).toBe(true)
-    expect(enabledText.slice(disabledText.length)).toBe(
-      `\n${renderSecurityChecklistSection(true)}`
-    )
   })
 
-  test('runs a single discovery review per task', async () => {
+  test('runs a single general discovery call and never adds the security checklist when the pass is disabled', async () => {
     const reviewTexts: string[] = []
     await runModelBackedHolisticTaskReview({
       workflowInput,
@@ -304,9 +261,100 @@ describe('runModelBackedHolisticTaskReview', () => {
       logger: { debug: () => {} }
     })
 
-    // Discovery is single-pass: the reviewer is invoked exactly once per task.
+    // Default workflowInput has securityPassEnabled=false (schema default): the
+    // reviewer is invoked exactly once and the general prompt never carries the
+    // security checklist, so the disabled path is byte-for-byte the general review.
     expect(reviewTexts).toHaveLength(1)
-    expect(reviewTexts[0]).not.toContain('Second-pass focused re-review')
+    expect(reviewTexts[0]).not.toContain('## Security review checklist')
+    expect(reviewTexts[0]).not.toContain('SECURITY-ONLY REVIEW')
+  })
+
+  test('issues a second, security-only discovery call when the pass is enabled', async () => {
+    const reviewTexts: string[] = []
+    await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSecurityPass,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          reviewTexts.push(holisticInput.reviewText)
+          return holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // Exactly two calls: the general call (no checklist) and the security-only call
+    // (security instruction + generic checklist). The checklist is confined to the
+    // second call, so it never competes with the general reviewer's attention.
+    expect(reviewTexts).toHaveLength(2)
+    const [generalText, securityText] = reviewTexts
+    expect(generalText).not.toContain('## Security review checklist')
+    expect(generalText).not.toContain('SECURITY-ONLY REVIEW')
+    expect(securityText).toContain('SECURITY-ONLY REVIEW')
+    expect(securityText).toContain('## Security review checklist')
+    expect(securityText).toContain(
+      '- SSRF (CWE-918): a user-controlled URL or host passed to a request/fetch/open'
+    )
+    // The security call still sees the same changed-file context as the general one.
+    expect(securityText).toContain('### FILE: src/app.ts')
+  })
+
+  test('merges the security pass additively: new locations are added, general locations are never displaced', async () => {
+    const generalFinding = {
+      category: 'bug',
+      severity: 'high',
+      title: 'Unconditional cache write on error path',
+      description: 'The result is cached even when the fetch returned an error.',
+      path: 'src/app.ts',
+      startLine: 10
+    }
+    // Two security findings: one at the SAME line as the general finding (must be
+    // dropped as a duplicate location) and one at a NEW line (must be added).
+    const securityDuplicateLocation = {
+      category: 'security',
+      severity: 'high',
+      title: 'Missing authorization check',
+      description: 'A different security defect reported at the same line.',
+      path: 'src/app.ts',
+      startLine: 10
+    }
+    const securityNewLocation = {
+      category: 'security',
+      severity: 'high',
+      title: 'SSRF via user-controlled URL',
+      description: 'A user-controlled host reaches fetch without validation.',
+      path: 'src/app.ts',
+      startLine: 20
+    }
+    let call = 0
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSecurityPass,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () => {
+          call += 1
+          return call === 1
+            ? holisticResultWith([generalFinding])
+            : holisticResultWith([securityDuplicateLocation, securityNewLocation])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    const lines = result.candidates
+      .map((candidate) => candidate.location.startLine)
+      .sort((left, right) => left - right)
+    // The general finding (line 10) survives; the security finding at line 10 is
+    // dropped as a duplicate location; the security finding at line 20 is added.
+    expect(lines).toEqual([10, 20])
+    const generalCandidate = result.candidates.find(
+      (candidate) => candidate.location.startLine === 10
+    )
+    expect(generalCandidate?.title).toBe(
+      'Unconditional cache write on error path'
+    )
   })
 
   test('deduplicates identical findings and reports zero-candidate reason', async () => {

@@ -713,7 +713,7 @@
         "allowNetwork": false,
         "allowFilesystemWrite": false,
         "captureContentTelemetry": false,
-        "lens": {
+        "dedicatedPass": {
           "enabled": false
         },
         "signals": {
@@ -742,7 +742,7 @@
           "type": "boolean",
           "const": false
         },
-        "lens": {
+        "dedicatedPass": {
           "default": {
             "enabled": false
           },
@@ -780,7 +780,7 @@
         "allowNetwork",
         "allowFilesystemWrite",
         "captureContentTelemetry",
-        "lens",
+        "dedicatedPass",
         "signals"
       ],
       "additionalProperties": false

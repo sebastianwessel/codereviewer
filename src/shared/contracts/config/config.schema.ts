@@ -148,12 +148,18 @@ export const BaselineConfigSchema = z.strictObject({
   includeResolvedInReport: z.boolean().default(true)
 })
 
-// Security-focused review lens (spec 15). Off by default. When enabled, a generic
-// OWASP/CWE checklist is appended to the holistic discovery prompt so the model
-// additionally scrutinizes the security classes the general prompt under-weights.
-// Its candidates flow through the SAME refutation + admission as any other
-// candidate; the lens never bypasses scope, severity, baseline, or the gate.
-export const SecurityLensConfigSchema = z.strictObject({
+// Dedicated additive security review pass (spec 15, Mechanism 1). Off by default.
+// When enabled, each review task issues a SECOND, security-only discovery call that
+// applies a generic OWASP/CWE checklist to the changed code. Its candidates are
+// additive: they merge with the general pass's candidates and never displace them,
+// so the pass can only raise security recall and cannot reduce the general
+// reviewer's. They flow through the SAME refutation + admission as any other
+// candidate; the pass never bypasses scope, severity, baseline, or the gate. A
+// dedicated call (not an in-prompt checklist) is used because measurement showed
+// folding the checklist into the general prompt trades the dominant authorization
+// class for the injection classes (finite attention); a separate call removes that
+// tradeoff.
+export const SecurityDedicatedPassConfigSchema = z.strictObject({
   enabled: z.boolean().default(false)
 })
 
@@ -169,7 +175,7 @@ export const SecurityConfigSchema = z.strictObject({
   allowNetwork: z.literal(false).default(false),
   allowFilesystemWrite: z.literal(false).default(false),
   captureContentTelemetry: z.literal(false).default(false),
-  lens: SecurityLensConfigSchema.default({ enabled: false }),
+  dedicatedPass: SecurityDedicatedPassConfigSchema.default({ enabled: false }),
   signals: SecuritySignalsConfigSchema.default({ enabled: false })
 })
 
@@ -459,7 +465,7 @@ export const CodeReviewerConfigSchema = z.strictObject({
     allowNetwork: false,
     allowFilesystemWrite: false,
     captureContentTelemetry: false,
-    lens: { enabled: false },
+    dedicatedPass: { enabled: false },
     signals: { enabled: false }
   }),
   reporting: ReportingConfigSchema.default({
@@ -519,7 +525,9 @@ export type VerificationClaimProviderConfig = z.infer<
 >
 export type FixConfig = z.infer<typeof FixConfigSchema>
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>
-export type SecurityLensConfig = z.infer<typeof SecurityLensConfigSchema>
+export type SecurityDedicatedPassConfig = z.infer<
+  typeof SecurityDedicatedPassConfigSchema
+>
 export type SecuritySignalsConfig = z.infer<typeof SecuritySignalsConfigSchema>
 export type DriftCategory = z.infer<typeof DriftCategorySchema>
 export type DriftConfig = z.infer<typeof DriftConfigSchema>

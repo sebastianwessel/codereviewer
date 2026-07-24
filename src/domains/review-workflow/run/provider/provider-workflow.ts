@@ -76,7 +76,8 @@ export const runProviderWorkflow = async (
   const maxChildAgentCalls = maxChildAgentCallsForReview({
     taskCount:
       input.workflowInput.tasks?.length ?? input.workflowInput.reviewedPaths.length,
-    maxConcurrentTasks: input.config.review.maxConcurrentTasks
+    maxConcurrentTasks: input.config.review.maxConcurrentTasks,
+    securityPassEnabled: input.config.security.dedicatedPass.enabled
   })
   const harness = createModelBackedReviewHarness({
     modelAlias: usageRecorder.modelAlias,
