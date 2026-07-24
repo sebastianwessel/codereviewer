@@ -218,6 +218,43 @@ before this change are not comparable to reports produced after it, and any
 recorded baseline from the lexical matcher is void. A new baseline must be
 recorded deliberately after this change.
 
+## Unmatched-Finding Plausibility
+
+An admitted finding that matches no expected finding is not necessarily a false
+positive: a fixture's expected-finding list is a curated subset of the real
+defects in a change, so a precision-first reviewer routinely surfaces genuine
+defects the list omits. Counting every unmatched finding as a false positive
+measures fixture incompleteness, not reviewer precision. (Measured on the first
+judge-matched benchmark: of 48 unmatched findings, an independent judge deemed 40
+genuine defects — raw precision 44% understated adjusted precision at ~83%.)
+
+A second, independent judge — separate from the semantic-match judge — resolves
+this. For each admitted finding that matched no expected finding, the plausibility
+judge decides whether the finding is a genuine defect in the actual code:
+
+- It receives the finding (title, description, severity, category, location) and
+  the finding's new-side file content, bounded and redacted. It must see the same
+  file the reviewer saw, not a narrow window: a judge given too little context
+  under-credits real findings by answering "cannot confirm".
+- It returns a boolean `plausible` decision and a report-safe reason. No numeric
+  confidence.
+- `plausible = true` marks the finding a real-but-unlisted defect; `false` marks
+  a genuine false positive.
+
+The plausibility judge never promotes a finding into recall or changes what the
+reviewer reported. It only reclassifies the reviewer's own unmatched output for
+precision accounting.
+
+Fail-closed: a plausibility judgment that cannot be completed (provider error
+after retries) leaves the finding counted as a raw false positive and is surfaced
+as a warning. The engine never assumes an unjudged finding is real — precision is
+only ever credited by an affirmative `plausible` decision.
+
+Reliability mirrors the match judge: the plausibility judge is scored against a
+committed calibration set of findings labeled genuine or spurious against sample
+code, producing a plausibility agreement metric; a run below the configured
+minimum marks its adjusted precision untrustworthy.
+
 ## Metrics
 
 | Metric | Definition |
@@ -234,7 +271,12 @@ recorded deliberately after this change.
 | `nitRecall` | Recall over `nit`-tier expected findings only. Reported for visibility; not part of the headline target or gates. |
 | `lineAccuracy` | Fraction of matched findings with overlapping line range when expected line exists. Semantic-only benchmark expectations are excluded from the denominator. |
 | `severityAccuracy` | Fraction of matched findings with exact severity. |
-| `falsePositiveCount` | Actionable admitted findings not matched to expected findings. |
+| `falsePositiveCount` | Actionable admitted findings not matched to expected findings (raw; includes real-but-unlisted defects). |
+| `genuineFalsePositiveCount` | Unmatched admitted findings the plausibility judge deemed spurious, plus any whose plausibility judgment could not be completed (fail-closed). The trustworthy false-positive count. |
+| `unlistedRealFindingCount` | Unmatched admitted findings the plausibility judge deemed genuine defects absent from the fixture's expected list. |
+| `adjustedPrecision` | Matched findings divided by matched plus `genuineFalsePositiveCount`. Precision that does not penalise real defects the fixture omitted. The trustworthy precision figure. |
+| `plausibilityJudgeAgreement` | Fraction of plausibility-calibration findings whose judge decision matched the label. A run below the configured minimum marks `adjustedPrecision` untrustworthy. |
+| `plausibilityJudgeAgreementPairCount` | Denominator of `plausibilityJudgeAgreement`. |
 | `artifactOnlyRecall` | Expected findings matched by artifact-only findings divided by expected findings. This is diagnostic and does not satisfy the main recall gate. |
 | `artifactOnlyPrecision` | Artifact-only findings matched to expected findings divided by artifact-only matched plus artifact-only false positives. |
 | `artifactOnlyFindingCount` | Count of admitted findings marked `reporterEligibility = "artifact-only"`. |
