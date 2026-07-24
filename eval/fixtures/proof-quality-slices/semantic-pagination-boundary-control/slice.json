@@ -1,0 +1,31 @@
+{
+  "id": "semantic-pagination-boundary-control",
+  "title": "Paginate rewritten with page-count arithmetic",
+  "description": "A negative control: pagination is rewritten to derive a page count and index, which looks off-by-one but produces identical, correct pages.",
+  "source": "project-owned",
+  "capturedAt": "2026-07-24",
+  "language": "typescript",
+  "changedFiles": [
+    "src/pagination.ts"
+  ],
+  "diff": "diff --git a/src/pagination.ts b/src/pagination.ts\n--- a/src/pagination.ts\n+++ b/src/pagination.ts\n@@ -14,14 +14,15 @@ export const paginate = (\n   }\n \n   const pages: Page[] = []\n-  let pageNumber = 1\n+  const pageCount = Math.ceil(values.length / pageSize)\n+\n+  for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {\n+    const start = pageIndex * pageSize\n \n-  for (let start = 0; start < values.length; start += pageSize) {\n     pages.push({\n-      pageNumber,\n+      pageNumber: pageIndex + 1,\n       items: values.slice(start, start + pageSize)\n     })\n-    pageNumber++\n   }\n \n   return pages\n",
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "src/pagination.ts",
+      "lineRange": [
+        1,
+        29
+      ],
+      "reason": "The 1-based pageNumber (pageIndex + 1) and slice(start, start + pageSize) correctly cover the final partial page, and the pageSize < 1 guard rules out the degenerate case, so there is no off-by-one to report."
+    }
+  ],
+  "tags": [
+    "slice",
+    "project-owned",
+    "semantic",
+    "proof-quality",
+    "refutation-control",
+    "negative"
+  ]
+}

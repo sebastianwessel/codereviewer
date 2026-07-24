@@ -1,0 +1,33 @@
+{
+  "id": "semantic-file-handle-leak",
+  "title": "File handle leaked on the early-return path",
+  "description": "A project-owned semantic review case where a context-managed file read is rewritten to a manual open that leaks the handle when a match is found.",
+  "source": "project-owned",
+  "capturedAt": "2026-07-24",
+  "language": "python",
+  "changedFiles": [
+    "src/report_reader.py"
+  ],
+  "diff": "diff --git a/src/report_reader.py b/src/report_reader.py\n--- a/src/report_reader.py\n+++ b/src/report_reader.py\n@@ -1,8 +1,10 @@\n def first_matching_line(path: str, needle: str) -> str | None:\n     \"\"\"Return the first line in path containing needle, or None if absent.\"\"\"\n-    with open(path, \"r\", encoding=\"utf-8\") as handle:\n-        for line in handle:\n-            if needle in line:\n-                return line.rstrip(\"\\n\")\n+    handle = open(path, \"r\", encoding=\"utf-8\")\n \n+    for line in handle:\n+        if needle in line:\n+            return line.rstrip(\"\\n\")\n+\n+    handle.close()\n     return None\n",
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "medium",
+      "path": "src/report_reader.py",
+      "lineRange": [
+        3,
+        7
+      ],
+      "semanticSummary": "the file is opened without a context manager and the early return on a match skips handle.close(), leaking the file descriptor on the common path"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": [
+    "slice",
+    "project-owned",
+    "semantic",
+    "proof-quality",
+    "runtime",
+    "positive"
+  ]
+}

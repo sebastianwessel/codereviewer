@@ -1,0 +1,33 @@
+{
+  "id": "semantic-endpoint-null-deref",
+  "title": "Missing-key lookup dereferenced without a guard",
+  "description": "A project-owned semantic review case where the undefined guard on a record lookup is removed, leaving a possible undefined dereference.",
+  "source": "project-owned",
+  "capturedAt": "2026-07-24",
+  "language": "typescript",
+  "changedFiles": [
+    "src/config-loader.ts"
+  ],
+  "diff": "diff --git a/src/config-loader.ts b/src/config-loader.ts\n--- a/src/config-loader.ts\n+++ b/src/config-loader.ts\n@@ -9,9 +9,5 @@ export const resolveEndpoint = (\n ): string => {\n   const endpoint = config.endpoints[region]\n \n-  if (endpoint === undefined) {\n-    throw new Error(`No endpoint configured for region ${region}`)\n-  }\n-\n   return endpoint.toLowerCase()\n }\n",
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "high",
+      "path": "src/config-loader.ts",
+      "lineRange": [
+        10,
+        12
+      ],
+      "semanticSummary": "config.endpoints[region] is undefined when the region is absent, so endpoint.toLowerCase() throws a runtime TypeError; the missing-key case is unguarded"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": [
+    "slice",
+    "project-owned",
+    "semantic",
+    "proof-quality",
+    "runtime",
+    "positive"
+  ]
+}

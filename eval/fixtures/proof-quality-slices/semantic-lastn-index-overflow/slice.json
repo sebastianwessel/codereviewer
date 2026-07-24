@@ -1,0 +1,33 @@
+{
+  "id": "semantic-lastn-index-overflow",
+  "title": "Loop bound overruns the slice by one",
+  "description": "A project-owned semantic review case where a loop bound is changed from < to <=, indexing one past the end of the slice.",
+  "source": "project-owned",
+  "capturedAt": "2026-07-24",
+  "language": "go",
+  "changedFiles": [
+    "pkg/window/window.go"
+  ],
+  "diff": "diff --git a/pkg/window/window.go b/pkg/window/window.go\n--- a/pkg/window/window.go\n+++ b/pkg/window/window.go\n@@ -9,7 +9,7 @@ func LastN(values []int, n int) []int {\n \n \tstart := len(values) - n\n \tresult := make([]int, 0, n)\n-\tfor i := start; i < len(values); i++ {\n+\tfor i := start; i <= len(values); i++ {\n \t\tresult = append(result, values[i])\n \t}\n \treturn result\n",
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "high",
+      "path": "pkg/window/window.go",
+      "lineRange": [
+        12,
+        13
+      ],
+      "semanticSummary": "the loop condition i <= len(values) reads values[len(values)] on the final iteration, causing an index-out-of-range panic; the bound must be i < len(values)"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": [
+    "slice",
+    "project-owned",
+    "semantic",
+    "proof-quality",
+    "logic",
+    "positive"
+  ]
+}

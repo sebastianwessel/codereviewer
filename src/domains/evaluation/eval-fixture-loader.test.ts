@@ -27,8 +27,18 @@ describe('eval fixture loader', () => {
       'semantic-authz-cross-file',
       'semantic-authz-defensive-control',
       'semantic-billing-discount-regression',
+      'semantic-command-injection-shell',
       'semantic-dayjs-slot-boundary',
-      'semantic-go-cache-concurrency'
+      'semantic-endpoint-null-deref',
+      'semantic-file-handle-leak',
+      'semantic-go-cache-concurrency',
+      'semantic-idfor-check-then-act',
+      'semantic-lastn-index-overflow',
+      'semantic-pagination-boundary-control',
+      'semantic-parameterized-query-control',
+      'semantic-path-traversal-resolve',
+      'semantic-percentage-integer-truncation',
+      'semantic-sql-injection-concat'
     ])
     expect(
       proofQualityCases.every(
@@ -37,21 +47,31 @@ describe('eval fixture loader', () => {
     ).toBe(true)
     expect(
       proofQualityCases.filter((evalCase) => evalCase.expectedFindings.length === 0)
-    ).toHaveLength(1)
+    ).toHaveLength(3)
     expect(
       proofQualityCases.reduce(
         (total, evalCase) => total + evalCase.expectedFindings.length,
         0
       )
-    ).toBe(6)
+    ).toBe(14)
     expect(
       proofQualityCases.map((evalCase) => [evalCase.id, evalCase.diff !== undefined])
     ).toEqual([
       ['semantic-authz-cross-file', true],
       ['semantic-authz-defensive-control', true],
       ['semantic-billing-discount-regression', true],
+      ['semantic-command-injection-shell', true],
       ['semantic-dayjs-slot-boundary', true],
-      ['semantic-go-cache-concurrency', true]
+      ['semantic-endpoint-null-deref', true],
+      ['semantic-file-handle-leak', true],
+      ['semantic-go-cache-concurrency', true],
+      ['semantic-idfor-check-then-act', true],
+      ['semantic-lastn-index-overflow', true],
+      ['semantic-pagination-boundary-control', true],
+      ['semantic-parameterized-query-control', true],
+      ['semantic-path-traversal-resolve', true],
+      ['semantic-percentage-integer-truncation', true],
+      ['semantic-sql-injection-concat', true]
     ])
   })
 

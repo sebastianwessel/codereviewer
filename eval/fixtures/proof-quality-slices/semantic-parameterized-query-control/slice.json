@@ -1,0 +1,31 @@
+{
+  "id": "semantic-parameterized-query-control",
+  "title": "Status filter pushed into a parameterized query",
+  "description": "A negative control: a Python-side status filter is replaced by a SQL WHERE clause that binds the value as a parameter, so it must not be flagged as injection.",
+  "source": "project-owned",
+  "capturedAt": "2026-07-24",
+  "language": "python",
+  "changedFiles": [
+    "src/order_repository.py"
+  ],
+  "diff": "diff --git a/src/order_repository.py b/src/order_repository.py\n--- a/src/order_repository.py\n+++ b/src/order_repository.py\n@@ -5,7 +5,8 @@ def find_orders_by_status(\n     conn: sqlite3.Connection, status: str\n ) -> list[tuple[int, float]]:\n     \"\"\"Return (id, total) pairs for every order in the given status.\"\"\"\n-    cursor = conn.execute(\"SELECT id, total, status FROM orders\")\n-    return [\n-        (row[0], row[1]) for row in cursor.fetchall() if row[2] == status\n-    ]\n+    cursor = conn.execute(\n+        \"SELECT id, total FROM orders WHERE status = ?\",\n+        (status,),\n+    )\n+    return cursor.fetchall()\n",
+  "expectedFindings": [],
+  "expectedNoFindingZones": [
+    {
+      "path": "src/order_repository.py",
+      "lineRange": [
+        1,
+        12
+      ],
+      "reason": "The status value is bound via a ? placeholder parameter rather than concatenated into the SQL text, so this cannot be SQL injection and must be refuted rather than reported."
+    }
+  ],
+  "tags": [
+    "slice",
+    "project-owned",
+    "semantic",
+    "proof-quality",
+    "refutation-control",
+    "negative"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "semantic-idfor-check-then-act",
+  "title": "Cache lookup and insert split across two locks",
+  "description": "A project-owned semantic review case where a single locked critical section is split so the check and the act no longer hold the lock together.",
+  "source": "project-owned",
+  "capturedAt": "2026-07-24",
+  "language": "go",
+  "changedFiles": [
+    "pkg/counter/registry.go"
+  ],
+  "diff": "diff --git a/pkg/counter/registry.go b/pkg/counter/registry.go\n--- a/pkg/counter/registry.go\n+++ b/pkg/counter/registry.go\n@@ -16,12 +16,15 @@ func NewRegistry() *Registry {\n \n func (r *Registry) IDFor(name string) int {\n \tr.mu.Lock()\n-\tdefer r.mu.Unlock()\n+\texisting, ok := r.ids[name]\n+\tr.mu.Unlock()\n \n-\tif existing, ok := r.ids[name]; ok {\n+\tif ok {\n \t\treturn existing\n \t}\n \n+\tr.mu.Lock()\n+\tdefer r.mu.Unlock()\n \tid := r.next\n \tr.next++\n \tr.ids[name] = id\n",
+  "expectedFindings": [
+    {
+      "category": "bug",
+      "severity": "high",
+      "path": "pkg/counter/registry.go",
+      "lineRange": [
+        18,
+        26
+      ],
+      "semanticSummary": "the lock is released between reading ids[name] and inserting a new id, so two goroutines can both miss and assign different ids for the same name while incrementing next twice; hold one lock across the check and insert"
+    }
+  ],
+  "expectedNoFindingZones": [],
+  "tags": [
+    "slice",
+    "project-owned",
+    "semantic",
+    "proof-quality",
+    "concurrency",
+    "positive"
+  ]
+}
