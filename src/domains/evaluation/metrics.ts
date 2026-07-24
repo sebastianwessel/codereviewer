@@ -107,15 +107,21 @@ export const EvalMetricsSchema = z.strictObject({
   // the lane reports 0, not a misleading "perfect", and the paired count fields
   // (denominators) make each rate interpretable.
   //
-  // fixJudgmentAccuracy: over findings the lane judged (findingJudgment present)
-  // that also carry a ground-truth label, the fraction whose judgment agrees
-  // with ground truth (matched -> 'real', false-positive -> 'false-positive').
+  // All fix-lane rates are scored only over findings the lane was ELIGIBLE to act
+  // on (at or above fix.minSeverity) — the lane produces an outcome only for
+  // those, so a sub-threshold finding it never touched is neither credited nor
+  // penalised. Ground truth is corrected by the plausibility judge: a matched
+  // finding OR an unmatched-but-plausible (unlisted-real) finding is 'real'; only
+  // a genuine false positive is 'false-positive'.
+  //
+  // fixJudgmentAccuracy: over eligible findings the lane judged that carry a
+  // ground-truth label, the fraction whose judgment agrees with ground truth.
   fixJudgmentAccuracy: RateSchema.default(0),
-  // fixFalsePositiveDetectionRate: of ground-truth false-positive findings, the
-  // fraction the lane judged 'false-positive' (recall on catching false positives).
+  // fixFalsePositiveDetectionRate: of eligible genuine-false-positive findings,
+  // the fraction the lane judged 'false-positive' (recall on catching real noise).
   fixFalsePositiveDetectionRate: RateSchema.default(0),
-  // fixProduceRate: of real (matched) findings, the fraction that received an
-  // apply-checked fix (applyCheck 'passed').
+  // fixProduceRate: of eligible real findings (matched or unlisted-real), the
+  // fraction that received an apply-checked fix (applyCheck 'passed').
   fixProduceRate: RateSchema.default(0),
   // fixApplyFailureRate: of fixes the lane attempted (applyCheck 'passed' or
   // 'failed'), the fraction that FAILED the deterministic apply-check

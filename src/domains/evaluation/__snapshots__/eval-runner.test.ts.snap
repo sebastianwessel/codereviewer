@@ -182,11 +182,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "fixApplyFailureRate": 0,
         "fixAttemptedCount": 0,
         "fixFalsePositiveDetectionRate": 0,
-        "fixGroundTruthFalsePositiveCount": 1,
+        "fixGroundTruthFalsePositiveCount": 0,
         "fixJudgedFindingCount": 0,
         "fixJudgmentAccuracy": 0,
         "fixProduceRate": 0,
-        "fixRealFindingCount": 1,
+        "fixRealFindingCount": 0,
         "genuineFalsePositiveCount": 1,
         "incompleteCoverageRate": 0,
         "inconclusiveMatchCount": 0,
@@ -250,11 +250,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "fixApplyFailureRate": 0,
         "fixAttemptedCount": 0,
         "fixFalsePositiveDetectionRate": 0,
-        "fixGroundTruthFalsePositiveCount": 1,
+        "fixGroundTruthFalsePositiveCount": 0,
         "fixJudgedFindingCount": 0,
         "fixJudgmentAccuracy": 0,
         "fixProduceRate": 0,
-        "fixRealFindingCount": 1,
+        "fixRealFindingCount": 0,
         "genuineFalsePositiveCount": 1,
         "incompleteCoverageRate": 0,
         "inconclusiveMatchCount": 0,
@@ -317,7 +317,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "fixApplyFailureRate": 0,
         "fixAttemptedCount": 0,
         "fixFalsePositiveDetectionRate": 0,
-        "fixGroundTruthFalsePositiveCount": 1,
+        "fixGroundTruthFalsePositiveCount": 0,
         "fixJudgedFindingCount": 0,
         "fixJudgmentAccuracy": 0,
         "fixProduceRate": 0,
@@ -388,7 +388,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "fixJudgedFindingCount": 0,
         "fixJudgmentAccuracy": 0,
         "fixProduceRate": 0,
-        "fixRealFindingCount": 1,
+        "fixRealFindingCount": 0,
         "genuineFalsePositiveCount": 0,
         "incompleteCoverageRate": 0,
         "inconclusiveMatchCount": 0,
@@ -452,11 +452,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "fixApplyFailureRate": 0,
         "fixAttemptedCount": 0,
         "fixFalsePositiveDetectionRate": 0,
-        "fixGroundTruthFalsePositiveCount": 1,
+        "fixGroundTruthFalsePositiveCount": 0,
         "fixJudgedFindingCount": 0,
         "fixJudgmentAccuracy": 0,
         "fixProduceRate": 0,
-        "fixRealFindingCount": 1,
+        "fixRealFindingCount": 0,
         "genuineFalsePositiveCount": 1,
         "incompleteCoverageRate": 0,
         "inconclusiveMatchCount": 0,
@@ -513,11 +513,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "fixApplyFailureRate": 0,
     "fixAttemptedCount": 0,
     "fixFalsePositiveDetectionRate": 0,
-    "fixGroundTruthFalsePositiveCount": 1,
+    "fixGroundTruthFalsePositiveCount": 0,
     "fixJudgedFindingCount": 0,
     "fixJudgmentAccuracy": 0,
     "fixProduceRate": 0,
-    "fixRealFindingCount": 1,
+    "fixRealFindingCount": 0,
     "genuineFalsePositiveCount": 1,
     "incompleteCoverageRate": 0,
     "inconclusiveMatchCount": 0,
@@ -633,8 +633,8 @@ Fixtures: 2
 | Refutation false negatives | 0 |
 | Refutation false positives | 0 |
 | Fix judgment accuracy | 0.0% (0 judged) |
-| Fix false-positive detection rate | 0.0% (1 false positives) |
-| Fix produce rate | 0.0% (1 real) |
+| Fix false-positive detection rate | 0.0% (0 false positives) |
+| Fix produce rate | 0.0% (0 real) |
 | Fix apply failure rate | 0.0% (0 attempted) |
 | Duplicate findings | 0 |
 | No-finding-zone hits | 1 |

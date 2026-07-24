@@ -372,39 +372,75 @@ type FixLaneCaseTallies = {
   readonly fixApplyAttemptedCount: number
 }
 
-// Join the fix lane's per-finding outcomes to the match result (ground truth):
-// a matched finding is a real defect, a false-positive finding is a non-defect.
-// Every fix-lane accuracy metric (spec 12) is derived from these tallies.
-const fixLaneCaseTallies = (
+// Join the fix lane's per-finding outcomes to the ground truth so its accuracy
+// (spec 12) is scored the way the product actually behaves:
+//
+// - Ground truth is corrected by the plausibility judge. A matched finding OR an
+//   unmatched finding the plausibility judge deemed a real-but-unlisted defect is
+//   a real defect; only a genuine false positive is a non-defect. Raw
+//   matched/unmatched would score a correct `real` judgment on an unlisted-real
+//   finding as wrong — the same fixture-incompleteness inversion adjustedPrecision
+//   fixes (spec 06). A fail-closed (unjudged) finding stays a genuine false
+//   positive.
+// - Every denominator is restricted to fix-lane-eligible findings. The lane runs
+//   only on findings at/above `fix.minSeverity`, and only those produce an
+//   outcome — so iterating the outcomes is exactly the eligible set. A matched or
+//   false-positive finding below the floor the lane never touched is neither
+//   credited nor penalised.
+export const fixLaneCaseTallies = (
   input: {
     readonly fixOutcomes: EvalCaseOutput['fixOutcomes']
     readonly matchResult: EvalMatcherResult
+    readonly unlistedRealFindingIds: readonly string[]
   }
 ): FixLaneCaseTallies => {
   const matchedFindingIds = new Set(
     input.matchResult.matches.map((match) => match.findingId)
   )
-  const falsePositiveFindingIds = new Set(
+  const unlistedRealFindingIds = new Set(input.unlistedRealFindingIds)
+  const rawFalsePositiveFindingIds = new Set(
     input.matchResult.falsePositiveFindingIds
   )
-  const outcomeByFindingId = new Map(
-    input.fixOutcomes.map((outcome) => [outcome.findingId, outcome])
-  )
+  const isReal = (findingId: string): boolean =>
+    matchedFindingIds.has(findingId) || unlistedRealFindingIds.has(findingId)
+  // A genuine false positive is an unmatched finding the plausibility judge did
+  // not credit as real (spurious or fail-closed).
+  const isGenuineFalsePositive = (findingId: string): boolean =>
+    rawFalsePositiveFindingIds.has(findingId) &&
+    !unlistedRealFindingIds.has(findingId)
 
   let fixJudgmentAgreementCount = 0
   let fixJudgedLabeledCount = 0
   let fixApplyFailedCount = 0
   let fixApplyAttemptedCount = 0
+  let fixRealFindingCount = 0
+  let fixProducedForRealCount = 0
+  let fixGroundTruthFalsePositiveCount = 0
+  let fixFalsePositiveDetectedCount = 0
 
   for (const outcome of input.fixOutcomes) {
-    const isReal = matchedFindingIds.has(outcome.findingId)
-    const isFalsePositive = falsePositiveFindingIds.has(outcome.findingId)
+    const real = isReal(outcome.findingId)
+    const genuineFalsePositive = isGenuineFalsePositive(outcome.findingId)
 
-    if (outcome.findingJudgment !== undefined && (isReal || isFalsePositive)) {
+    if (outcome.findingJudgment !== undefined && (real || genuineFalsePositive)) {
       fixJudgedLabeledCount += 1
-      const groundTruth = isReal ? 'real' : 'false-positive'
+      const groundTruth = real ? 'real' : 'false-positive'
       if (outcome.findingJudgment === groundTruth) {
         fixJudgmentAgreementCount += 1
+      }
+    }
+
+    if (real) {
+      fixRealFindingCount += 1
+      if (outcome.applyCheck === 'passed') {
+        fixProducedForRealCount += 1
+      }
+    }
+
+    if (genuineFalsePositive) {
+      fixGroundTruthFalsePositiveCount += 1
+      if (outcome.findingJudgment === 'false-positive') {
+        fixFalsePositiveDetectedCount += 1
       }
     }
 
@@ -416,21 +452,13 @@ const fixLaneCaseTallies = (
     }
   }
 
-  const fixFalsePositiveDetectedCount = [...falsePositiveFindingIds].filter(
-    (findingId) =>
-      outcomeByFindingId.get(findingId)?.findingJudgment === 'false-positive'
-  ).length
-  const fixProducedForRealCount = [...matchedFindingIds].filter(
-    (findingId) => outcomeByFindingId.get(findingId)?.applyCheck === 'passed'
-  ).length
-
   return {
     fixJudgmentAgreementCount,
     fixJudgedLabeledCount,
     fixFalsePositiveDetectedCount,
-    fixGroundTruthFalsePositiveCount: falsePositiveFindingIds.size,
+    fixGroundTruthFalsePositiveCount,
     fixProducedForRealCount,
-    fixRealFindingCount: matchedFindingIds.size,
+    fixRealFindingCount,
     fixApplyFailedCount,
     fixApplyAttemptedCount
   }
@@ -538,7 +566,8 @@ const buildMetricCase = (
     rejectedFindingCount: rejectedFindings.length,
     ...fixLaneCaseTallies({
       fixOutcomes: input.output.fixOutcomes,
-      matchResult: input.matchResult
+      matchResult: input.matchResult,
+      unlistedRealFindingIds: input.plausibility?.unlistedRealFindingIds ?? []
     }),
     tierCounts: tierCountsForCase(input.evalCase, input.matchResult),
     noFindingZoneFalsePositiveCount:

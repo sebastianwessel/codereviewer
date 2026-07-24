@@ -285,13 +285,13 @@ minimum marks its adjusted precision untrustworthy.
 | `trustedDeterministicFindingCount` | Count of actionable findings seeded by trusted deterministic-rule evidence rather than model review. |
 | `refutationFalseNegativeCount` | Expected findings with a matching candidate finding that was refuted or demoted. |
 | `refutationFalsePositiveCount` | Refutation results marked `proved` whose admitted finding is unmatched. |
-| `fixJudgmentAccuracy` | Fix lane (spec 12) accuracy over admitted findings the lane judged (`findingJudgment` present) that also carry a ground-truth label: the fraction whose judgment agrees with the match result — a matched finding is `real`, a false-positive finding is `false-positive`. Empty value is `0`. Interpreted with `fixJudgedFindingCount` (the denominator). |
-| `fixFalsePositiveDetectionRate` | Of ground-truth false-positive findings (unmatched actionable admitted findings), the fraction the fix lane judged `false-positive`. Recall on catching false positives. Empty value is `0`. Interpreted with `fixGroundTruthFalsePositiveCount`. |
-| `fixProduceRate` | Of real (matched) findings, the fraction that received an apply-checked fix (`applyCheck = "passed"`). Empty value is `0`. Interpreted with `fixRealFindingCount`. |
+| `fixJudgmentAccuracy` | Fix lane (spec 12) accuracy over the findings it was **eligible** to act on (at or above `fix.minSeverity` — the only ones it judges) that carry a ground-truth label: the fraction whose judgment agrees with ground truth. Ground truth is corrected by the plausibility judge: a matched finding **or** an unmatched-but-plausible (unlisted-real) finding is `real`; a genuine false positive is `false-positive`. Empty value is `0`. Interpreted with `fixJudgedFindingCount`. |
+| `fixFalsePositiveDetectionRate` | Of eligible genuine-false-positive findings, the fraction the fix lane judged `false-positive`. Recall on catching real noise. Empty value is `0`. Interpreted with `fixGroundTruthFalsePositiveCount`. |
+| `fixProduceRate` | Of eligible real findings (matched or unlisted-real), the fraction that received an apply-checked fix (`applyCheck = "passed"`). Empty value is `0`. Interpreted with `fixRealFindingCount`. |
 | `fixApplyFailureRate` | Of fixes the lane attempted (`applyCheck` `passed` or `failed`), the fraction that FAILED the deterministic apply-check — hallucinated or stale edits caught by code. Empty value is `0`. Interpreted with `fixAttemptedCount`. |
 | `fixJudgedFindingCount` | Denominator of `fixJudgmentAccuracy`: judged findings that carry a ground-truth label. |
-| `fixGroundTruthFalsePositiveCount` | Denominator of `fixFalsePositiveDetectionRate`: ground-truth false-positive findings. |
-| `fixRealFindingCount` | Denominator of `fixProduceRate`: real (matched) findings. |
+| `fixGroundTruthFalsePositiveCount` | Denominator of `fixFalsePositiveDetectionRate`: eligible genuine-false-positive findings. |
+| `fixRealFindingCount` | Denominator of `fixProduceRate`: eligible real findings (matched or unlisted-real). |
 | `fixAttemptedCount` | Denominator of `fixApplyFailureRate`: fixes the lane attempted. |
 | `judgeAgreement` | Fraction of calibration pairs whose semantic-judge decision matched the human label. Reported whenever the calibration set is scored. A run below the configured minimum reports itself as untrustworthy. |
 | `judgeAgreementPairCount` | Denominator of `judgeAgreement`: calibration pairs scored. |
