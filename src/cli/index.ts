@@ -1,12 +1,16 @@
 import { appendFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { resolveExistingPathInsideRoot } from '../platform/path-service.js'
+import {
+  resolveExistingPathInsideRoot,
+  resolvePathInsideRoot
+} from '../platform/path-service.js'
 import {
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
   EvalReportSchema,
   assertBenchmarkSlicesHydrated,
+  createModelPlausibilityJudge,
   createModelSemanticJudge,
   createEvalSliceManifest,
   loadEvalCasesFromFixtures,
@@ -14,6 +18,7 @@ import {
   renderEvalRecallReport,
   renderEvalSummary,
   runEvaluation,
+  type EvalCaseFileReader,
 } from '../domains/evaluation/index.js'
 import { runDriftCheck } from '../domains/drift/index.js'
 import {
@@ -645,30 +650,59 @@ const runEval = async (
       }))
     )
 
-    // The semantic judge is the only matcher. It is constructed whenever a
-    // provider is available; scoring a case with expected findings without it
-    // fails loudly inside the eval runner instead of falling back to a
-    // heuristic.
-    const semanticJudge =
+    // The semantic judge is the only matcher, and the plausibility judge is the
+    // independent second opinion on unmatched findings. Both are constructed
+    // whenever a provider is available, from the same resolved model alias;
+    // scoring a case with expected findings without the match judge fails loudly
+    // inside the eval runner instead of falling back to a heuristic.
+    const modelAlias =
       loadedConfig.config.provider === undefined
         ? undefined
-        : createModelSemanticJudge({
-            modelAlias: (
-              await resolveProviderModelAlias({
-                provider: loadedConfig.config.provider,
-                environment: loadedConfig.environment,
-                logger,
-                ...(options.providerImport === undefined
-                  ? {}
-                  : { importProvider: options.providerImport })
-              })
-            ).modelAlias
-          })
+        : (
+            await resolveProviderModelAlias({
+              provider: loadedConfig.config.provider,
+              environment: loadedConfig.environment,
+              logger,
+              ...(options.providerImport === undefined
+                ? {}
+                : { importProvider: options.providerImport })
+            })
+          ).modelAlias
+    const semanticJudge =
+      modelAlias === undefined
+        ? undefined
+        : createModelSemanticJudge({ modelAlias })
+    const plausibilityJudge =
+      modelAlias === undefined
+        ? undefined
+        : createModelPlausibilityJudge({ modelAlias })
+    // Reads the new-side content of a finding's file from the case's fixture
+    // repo, so the plausibility judge sees the same file the reviewer saw.
+    // Returns undefined on any read failure; the judge then fails closed.
+    const readFindingSource: EvalCaseFileReader = async ({
+      evalCase,
+      path: findingPath
+    }) => {
+      try {
+        const fixtureRoot = await resolveExistingPathInsideRoot(
+          options.cwd,
+          evalCase.repositoryFixture
+        )
+
+        return await readFile(
+          resolvePathInsideRoot(fixtureRoot, findingPath),
+          'utf8'
+        )
+      } catch {
+        return undefined
+      }
+    }
 
     logger.info('Eval run started.', {
       fixture_source: sliceRoot === undefined ? 'default' : 'slice-root',
       selected_case_count: evalCases.length,
-      semantic_judge_available: semanticJudge !== undefined
+      semantic_judge_available: semanticJudge !== undefined,
+      plausibility_judge_available: plausibilityJudge !== undefined
     })
 
     const evalArtifactRoot = path.posix.join('.codereviewer', 'eval')
@@ -695,6 +729,9 @@ const runEval = async (
       cases: evalCases,
       outputs,
       ...(semanticJudge === undefined ? {} : { judge: semanticJudge }),
+      ...(plausibilityJudge === undefined
+        ? {}
+        : { plausibilityJudge, readFindingSource }),
       judgeAgreementMinimum: loadedConfig.config.evaluation.minJudgeAgreement,
       logger,
       selection: {

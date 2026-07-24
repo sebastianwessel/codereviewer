@@ -49,7 +49,8 @@ describe('eval report rendering', () => {
         },
         scoring: {
           judgeAgreement: 1,
-          judgeTrustworthy: true
+          judgeTrustworthy: true,
+          adjustedPrecisionTrustworthy: true
         },
         caseResults: [
           {
@@ -96,6 +97,9 @@ describe('eval report rendering', () => {
             duplicateFindings: [],
             falsePositiveFindingIds: [],
             falsePositiveFindings: [],
+            unlistedRealFindingIds: [],
+            unlistedRealFindings: [],
+            genuineFalsePositiveFindingIds: [],
             noFindingZoneFalsePositiveIds: [],
             artifactOnlyFindingIds: [],
             artifactOnlyMatchedFindings: [],
@@ -117,6 +121,7 @@ describe('eval report rendering', () => {
           parseValidity: 1,
           recall: 1,
           precision: 1,
+          adjustedPrecision: 1,
           f1: 1,
           severityWeightedPrecision: 1,
           severityWeightedRecall: 1,
@@ -124,6 +129,8 @@ describe('eval report rendering', () => {
           lineAccuracy: 1,
           severityAccuracy: 1,
           falsePositiveCount: 0,
+          genuineFalsePositiveCount: 0,
+          unlistedRealFindingCount: 0,
           noFindingZoneFalsePositiveCount: 0,
           actionableRate: 1,
           commentsPerKloc: 0,
@@ -158,6 +165,7 @@ describe('eval report rendering', () => {
           },
           judgeAgreement: 1,
           judgeAgreementPairCount: 12,
+          plausibilityJudgeAgreementPairCount: 0,
           inconclusiveMatchCount: 0,
           productRecall: 1,
           nitRecall: 1,

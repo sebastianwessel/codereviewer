@@ -51,6 +51,13 @@ const formatJudgeAgreement = (report: EvalReport): string =>
     ? 'not scored'
     : `${formatPercent(report.scoring.judgeAgreement)} (${report.metrics.judgeAgreementPairCount} pairs)`
 
+// Plausibility-judge agreement is omitted when no plausibility calibration pair
+// was scored (an offline run needs no judge). Render the denominator with it.
+const formatPlausibilityJudgeAgreement = (report: EvalReport): string =>
+  report.metrics.plausibilityJudgeAgreement === undefined
+    ? 'not scored'
+    : `${formatPercent(report.metrics.plausibilityJudgeAgreement)} (${report.metrics.plausibilityJudgeAgreementPairCount} pairs)`
+
 const findCase = (
   cases: readonly EvalCase[],
   caseId: string
@@ -95,7 +102,9 @@ const appendEvalSummarySelection = (
       `| Case filters | ${formatListValue(report.selection.caseFilters)} |`,
       `| Selected cases | ${formatListValue(report.selection.selectedCaseIds)} |`,
       `| Judge agreement | ${formatJudgeAgreement(report)} |`,
-      `| Judge trustworthy | ${report.scoring.judgeTrustworthy ? 'yes' : 'no'} |`
+      `| Judge trustworthy | ${report.scoring.judgeTrustworthy ? 'yes' : 'no'} |`,
+      `| Plausibility judge agreement | ${formatPlausibilityJudgeAgreement(report)} |`,
+      `| Adjusted precision trustworthy | ${report.scoring.adjustedPrecisionTrustworthy ? 'yes' : 'no'} |`
     ]
   })
 }
@@ -113,6 +122,7 @@ const appendEvalSummaryMetrics = (
       `| Product recall | ${formatPercent(report.metrics.productRecall)} |`,
       `| Nit recall | ${formatPercent(report.metrics.nitRecall)} |`,
       `| Precision | ${formatPercent(report.metrics.precision)} |`,
+      `| Adjusted precision | ${formatPercent(report.metrics.adjustedPrecision)} |`,
       `| F1 | ${formatPercent(report.metrics.f1)} |`,
       `| Severity weighted F1 | ${formatPercent(report.metrics.severityWeightedF1)} |`,
       `| Line accuracy | ${formatPercent(report.metrics.lineAccuracy)} |`,
@@ -121,6 +131,9 @@ const appendEvalSummaryMetrics = (
       `| Provider error rate | ${formatPercent(report.metrics.providerErrorRate)} |`,
       `| Provider issue rate | ${formatPercent(report.metrics.providerIssueRate)} (${report.metrics.providerIssueCount} cases) |`,
       `| False positives | ${report.metrics.falsePositiveCount} |`,
+      `| Genuine false positives | ${report.metrics.genuineFalsePositiveCount} |`,
+      `| Unlisted real findings | ${report.metrics.unlistedRealFindingCount} |`,
+      `| Plausibility judge agreement | ${formatPlausibilityJudgeAgreement(report)} |`,
       `| Inconclusive matches | ${report.metrics.inconclusiveMatchCount} |`,
       `| Artifact-only recall | ${formatPercent(report.metrics.artifactOnlyRecall)} |`,
       `| Artifact-only precision | ${formatPercent(report.metrics.artifactOnlyPrecision)} |`,
@@ -397,6 +410,7 @@ const attentionCasesForSummary = (
       caseResult.inconclusiveMatches.length > 0 ||
       caseResult.artifactOnlyMatchedFindings.length > 0 ||
       caseResult.artifactOnlyFalsePositiveFindings.length > 0 ||
+      caseResult.unlistedRealFindings.length > 0 ||
       caseResult.refutationResults.length > 0 ||
       caseResult.providerIssues.length > 0
   )
@@ -545,6 +559,13 @@ const appendEvalSummaryAttentionNeeded = (
     appendAttentionBulletSection(lines, {
       heading: 'False positive findings:',
       rows: caseResult.falsePositiveFindings.map(formatAttentionFindingBullet)
+    })
+
+    // Real-but-unlisted defects: unmatched findings the plausibility judge
+    // credited as genuine. They do not count against adjusted precision.
+    appendAttentionBulletSection(lines, {
+      heading: 'Real but unlisted findings (credited by plausibility judge):',
+      rows: caseResult.unlistedRealFindings.map(formatAttentionFindingBullet)
     })
 
     appendAttentionBulletSection(lines, {

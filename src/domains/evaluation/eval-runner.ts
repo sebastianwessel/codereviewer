@@ -9,6 +9,7 @@ import { COST_UNAVAILABLE_WARNING } from '../costs/index.js'
 import {
   EVAL_PROVIDER_RETRY_WARNING_PREFIX,
   inconclusiveMatchWarnings,
+  plausibilityFailClosedWarnings,
   PROVIDER_ERROR_WARNING_PREFIX
 } from './eval-warnings.js'
 import {
@@ -28,6 +29,16 @@ import {
   scoreJudgeCalibration,
   type EvalJudgeCalibrationResult
 } from './eval-judge-calibration.js'
+import {
+  scorePlausibilityCalibration,
+  type EvalPlausibilityCalibrationResult
+} from './eval-plausibility-calibration.js'
+import {
+  judgeUnmatchedFindingsPlausibility,
+  type EvalCaseFileReader,
+  type EvalPlausibilityJudge,
+  type EvalPlausibilityResult
+} from './eval-plausibility-judge.js'
 import {
   calculateEvalMetrics,
   emptyTierCounts,
@@ -431,6 +442,9 @@ const buildMetricCase = (
     readonly output: EvalCaseOutput
     readonly matchResult: EvalMatcherResult
     readonly artifactOnlyMatchResult: EvalMatcherResult
+    // Plausibility outcomes for the case's raw false-positive findings. Absent on
+    // a provider-error case (no findings to judge), where it defaults to empty.
+    readonly plausibility?: EvalPlausibilityResult
     readonly reviewReport?: ReviewReport
   }
 ): EvalMetricCaseResult => {
@@ -509,6 +523,8 @@ const buildMetricCase = (
             isActionableFinding(finding, input.reviewReport!)
           ).length,
     falsePositiveCount: input.matchResult.falsePositiveFindingIds.length,
+    unlistedRealFindingCount:
+      input.plausibility?.unlistedRealFindingIds.length ?? 0,
     duplicateFindingCount: input.matchResult.duplicateFindingIds.length,
     artifactOnlyFindingCount: artifactOnlyFindings.length,
     artifactOnlyMatchedFindingCount:
@@ -556,6 +572,7 @@ const buildReportCase = (
     readonly inlineFindingCount: number
     readonly matchResult: EvalMatcherResult
     readonly artifactOnlyMatchResult: EvalMatcherResult
+    readonly plausibility: EvalPlausibilityResult
     readonly providerIssues: readonly z.infer<
       typeof EvalProviderIssueReportSchema
     >[]
@@ -597,6 +614,16 @@ const buildReportCase = (
       input.matchResult.falsePositiveFindingIds
     )
   ],
+  unlistedRealFindingIds: [...input.plausibility.unlistedRealFindingIds],
+  unlistedRealFindings: [
+    ...falsePositiveFindingSummaries(
+      input.actionableFindings,
+      input.plausibility.unlistedRealFindingIds
+    )
+  ],
+  genuineFalsePositiveFindingIds: input.matchResult.falsePositiveFindingIds.filter(
+    (findingId) => !input.plausibility.unlistedRealFindingIds.includes(findingId)
+  ),
   noFindingZoneFalsePositiveIds: [
     ...input.matchResult.noFindingZoneFalsePositiveIds
   ],
@@ -619,7 +646,8 @@ const buildReportCase = (
     ...inconclusiveMatchWarnings(
       input.matchResult.inconclusiveMatches.length +
         input.artifactOnlyMatchResult.inconclusiveMatches.length
-    )
+    ),
+    ...plausibilityFailClosedWarnings(input.plausibility.failClosedFindingIds.length)
   ],
   durationMs: input.reviewReport.run.durationMs,
   inputTokens: input.reviewReport.run.inputTokens ?? 0,
@@ -633,10 +661,19 @@ const buildReportCase = (
 // without expected findings needs no judge; a case with expected findings and no
 // judge fails loudly inside the matcher.
 const computeCaseResult = async (
-  evalCase: EvalCase,
-  output: EvalCaseOutput,
-  judge: EvalSemanticJudge | undefined
+  input: {
+    readonly evalCase: EvalCase
+    readonly output: EvalCaseOutput
+    readonly judge: EvalSemanticJudge | undefined
+    // Independent plausibility judge and source reader. Both optional: an offline
+    // run has neither, and every unmatched finding then stays a genuine false
+    // positive (adjustedPrecision equals precision).
+    readonly plausibilityJudge: EvalPlausibilityJudge | undefined
+    readonly readFindingSource: EvalCaseFileReader | undefined
+  }
 ): Promise<EvalCaseComputation> => {
+  const { evalCase, output, judge } = input
+
   if (output.result.status === 'provider-error') {
     const matchResult: EvalMatcherResult = {
       matches: [],
@@ -681,6 +718,9 @@ const computeCaseResult = async (
         duplicateFindings: [],
         falsePositiveFindingIds: [],
         falsePositiveFindings: [],
+        unlistedRealFindingIds: [],
+        unlistedRealFindings: [],
+        genuineFalsePositiveFindingIds: [],
         noFindingZoneFalsePositiveIds: [],
         artifactOnlyFindingIds: [],
         artifactOnlyMatchedFindings: [],
@@ -726,6 +766,20 @@ const computeCaseResult = async (
     ...(judge === undefined ? {} : { judge })
   })
 
+  // Reclassify the raw false positives (unmatched actionable findings only) with
+  // the independent plausibility judge. This never touches recall or what the
+  // reviewer reported; it only splits the raw false positives into genuine false
+  // positives and real-but-unlisted defects for adjustedPrecision.
+  const falsePositiveFindingIdSet = new Set(matchResult.falsePositiveFindingIds)
+  const plausibility = await judgeUnmatchedFindingsPlausibility({
+    evalCase,
+    unmatchedFindings: actionableFindings.filter((finding) =>
+      falsePositiveFindingIdSet.has(finding.id)
+    ),
+    judge: input.plausibilityJudge,
+    readFileContent: input.readFindingSource
+  })
+
   return {
     reportCase: buildReportCase({
       evalCase,
@@ -736,12 +790,21 @@ const computeCaseResult = async (
       inlineFindingCount,
       matchResult,
       artifactOnlyMatchResult,
+      plausibility,
       providerIssues: [
         ...providerIssuesFromReport(reviewReport),
         ...judgeProviderIssuesFromMatchResults([
           matchResult,
           artifactOnlyMatchResult
-        ])
+        ]),
+        ...plausibility.providerIssues.map((issue) =>
+          EvalProviderIssueReportSchema.parse({
+            code: issue.code,
+            stage: issue.stage,
+            recovered: issue.recovered,
+            ...(issue.message === undefined ? {} : { message: issue.message })
+          })
+        )
       ]
     }),
     metricCase: buildMetricCase({
@@ -749,6 +812,7 @@ const computeCaseResult = async (
       output,
       matchResult,
       artifactOnlyMatchResult,
+      plausibility,
       reviewReport
     })
   }
@@ -981,6 +1045,14 @@ type RunEvaluationInput = {
   // case that declares expected findings; omitted only for fully negative
   // fixture sets, which score offline.
   readonly judge?: EvalSemanticJudge
+  // Independent plausibility judge that reclassifies unmatched findings into
+  // genuine false positives vs real-but-unlisted defects. Constructed whenever a
+  // provider is available (like the match judge); omitted for offline runs.
+  readonly plausibilityJudge?: EvalPlausibilityJudge
+  // Reads the new-side content of a finding's file from the fixture repo so the
+  // plausibility judge sees the whole file the reviewer saw. Omitted for offline
+  // runs, where every unmatched finding stays a genuine false positive.
+  readonly readFindingSource?: EvalCaseFileReader
   // Agreement below which the run reports its own metrics as untrustworthy.
   readonly judgeAgreementMinimum?: number
   // Used only to surface run-level judge-calibration provider failures, which
@@ -1117,7 +1189,13 @@ export const runEvaluation = async (
     }
 
     caseComputations.push(
-      await computeCaseResult(EvalCaseSchema.parse(evalCase), output, input.judge)
+      await computeCaseResult({
+        evalCase: EvalCaseSchema.parse(evalCase),
+        output,
+        judge: input.judge,
+        plausibilityJudge: input.plausibilityJudge,
+        readFindingSource: input.readFindingSource
+      })
     )
   }
 
@@ -1135,6 +1213,23 @@ export const runEvaluation = async (
           ...(input.logger === undefined ? {} : { logger: input.logger })
         })
 
+  // Score the plausibility judge against its own committed calibration set,
+  // once per run, whenever a plausibility judge exists. It reuses the same
+  // minimum-agreement config key: adjusted precision is only as trustworthy as
+  // the judge that produced it.
+  const plausibilityCalibration:
+    | EvalPlausibilityCalibrationResult
+    | undefined =
+    input.plausibilityJudge === undefined
+      ? undefined
+      : await scorePlausibilityCalibration({
+          judge: input.plausibilityJudge,
+          ...(input.judgeAgreementMinimum === undefined
+            ? {}
+            : { minimumAgreement: input.judgeAgreementMinimum }),
+          ...(input.logger === undefined ? {} : { logger: input.logger })
+        })
+
   return buildEvaluationResult({
     cases: prepared.cases,
     thresholds: prepared.thresholds,
@@ -1145,13 +1240,31 @@ export const runEvaluation = async (
         : { judgeAgreement: calibration.judgeAgreement }),
       // With no judge in play there is no semantic authority to distrust: such a
       // run scores only cases without expected findings, fully deterministically.
-      judgeTrustworthy: calibration?.judgeTrustworthy ?? true
+      judgeTrustworthy: calibration?.judgeTrustworthy ?? true,
+      ...(plausibilityCalibration?.plausibilityJudgeAgreement === undefined
+        ? {}
+        : {
+            plausibilityJudgeAgreement:
+              plausibilityCalibration.plausibilityJudgeAgreement
+          }),
+      // With no plausibility judge, no unmatched finding is ever credited as
+      // real, so adjustedPrecision equals precision and is as trustworthy as it.
+      adjustedPrecisionTrustworthy:
+        plausibilityCalibration?.plausibilityJudgeTrustworthy ?? true
     },
     judgeReliability: {
       ...(calibration?.judgeAgreement === undefined
         ? {}
         : { judgeAgreement: calibration.judgeAgreement }),
-      judgeAgreementPairCount: calibration?.judgeAgreementPairCount ?? 0
+      judgeAgreementPairCount: calibration?.judgeAgreementPairCount ?? 0,
+      ...(plausibilityCalibration?.plausibilityJudgeAgreement === undefined
+        ? {}
+        : {
+            plausibilityJudgeAgreement:
+              plausibilityCalibration.plausibilityJudgeAgreement
+          }),
+      plausibilityJudgeAgreementPairCount:
+        plausibilityCalibration?.plausibilityJudgeAgreementPairCount ?? 0
     },
     ...(input.generatedAt === undefined ? {} : { generatedAt: input.generatedAt }),
     caseComputations

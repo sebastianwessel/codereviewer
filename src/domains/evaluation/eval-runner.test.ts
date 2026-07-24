@@ -7,6 +7,13 @@ import type {
 } from '../../shared/contracts/index.js'
 import { parseEvalCases } from './eval-fixture.schema.js'
 import { evalJudgeCalibrationSet } from './eval-judge-calibration.js'
+import { evalPlausibilityCalibrationSet } from './eval-plausibility-calibration.js'
+import type {
+  EvalCaseFileReader,
+  EvalPlausibilityJudge,
+  EvalPlausibilityJudgeInput,
+  EvalPlausibilityJudgeResult
+} from './eval-plausibility-judge.js'
 import type { EvalSemanticJudge } from './eval-matcher.js'
 import {
   renderEvalComparison,
@@ -41,6 +48,28 @@ const rejectingJudge: EvalSemanticJudge = async (input) => {
     ? { match: false, reason: 'The summaries describe different defects.' }
     : { match: calibrationPair.expectedMatch, reason: 'Calibration pair.' }
 }
+
+// A plausibility judge that answers its own committed calibration set correctly
+// (so the run stays trustworthy) and defers every other finding to `decide`,
+// which decides the finding-under-test. Records every input it was asked about.
+const plausibilityJudgeDeciding = (
+  decide: (input: EvalPlausibilityJudgeInput) => EvalPlausibilityJudgeResult,
+  calls?: EvalPlausibilityJudgeInput[]
+): EvalPlausibilityJudge => async (input) => {
+  calls?.push(input)
+  const calibrationPair = evalPlausibilityCalibrationSet.find(
+    (pair) =>
+      pair.findingTitle === input.findingTitle &&
+      pair.findingDescription === input.findingDescription
+  )
+
+  return calibrationPair === undefined
+    ? decide(input)
+    : { plausible: calibrationPair.isGenuine, reason: 'Calibration pair.' }
+}
+
+const constantSourceReader: EvalCaseFileReader = async () =>
+  'const value = compute()\n'
 
 const inlineEvalCases = [
   {
@@ -265,7 +294,8 @@ describe('eval runner', () => {
     expect(result.artifactName).toBe('eval-report.json')
     expect(result.report.scoring).toEqual({
       judgeAgreement: 1,
-      judgeTrustworthy: true
+      judgeTrustworthy: true,
+      adjustedPrecisionTrustworthy: true
     })
     expect(result.report.caseResults[0]?.contextLedger).toEqual([
       {
@@ -814,7 +844,8 @@ describe('eval runner', () => {
     expect(judged.report.metrics.recall).toBe(1)
     expect(judged.report.scoring).toEqual({
       judgeAgreement: 1,
-      judgeTrustworthy: true
+      judgeTrustworthy: true,
+      adjustedPrecisionTrustworthy: true
     })
     expect(judged.report.metrics.judgeAgreementPairCount).toBe(
       evalJudgeCalibrationSet.length
@@ -946,8 +977,13 @@ describe('eval runner', () => {
     })
 
     expect(result.report.regressionGate.passed).toBe(true)
-    expect(result.report.scoring).toEqual({ judgeTrustworthy: true })
+    expect(result.report.scoring).toEqual({
+      judgeTrustworthy: true,
+      adjustedPrecisionTrustworthy: true
+    })
     expect(result.report.metrics.judgeAgreementPairCount).toBe(0)
+    expect(result.report.metrics.plausibilityJudgeAgreementPairCount).toBe(0)
+    expect(result.report.metrics.adjustedPrecision).toBe(1)
   })
 
   test('marks a run untrustworthy when judge agreement is below the minimum', async () => {
@@ -1476,6 +1512,159 @@ describe('eval runner', () => {
     expect(result.report.regressionGate.passed).toBe(false)
     expect(result.report.regressionGate.reasons).toContain(
       'productRecall below threshold: 0 < 0.8'
+    )
+  })
+
+  // A matched finding plus one unmatched finding: raw precision 1/2 = 0.5.
+  const positiveWithNoiseOutput = (
+    noiseTitle: string,
+    noiseDescription: string
+  ) => ({
+    caseId: 'typescript-positive' as const,
+    changedLineCount: 50,
+    diffHunkCount: 2,
+    contextLedger: [],
+    result: {
+      status: 'ok' as const,
+      reviewReport: reviewReport([
+        admittedFinding(),
+        admittedFinding({
+          id: 'find_noise1',
+          title: noiseTitle,
+          description: noiseDescription,
+          location: { path: 'src/app.ts', startLine: 40, side: 'new' },
+          fingerprints: [{ algorithm: 'test', value: 'noise1' }]
+        })
+      ])
+    }
+  })
+
+  test('reclassifies a plausible unmatched finding as unlisted-real and lifts adjusted precision', async () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const calls: EvalPlausibilityJudgeInput[] = []
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      plausibilityJudge: plausibilityJudgeDeciding(
+        () => ({ plausible: true, reason: 'A real bug the fixture omitted.' }),
+        calls
+      ),
+      readFindingSource: constantSourceReader,
+      outputs: [
+        positiveWithNoiseOutput(
+          'Unlisted genuine defect',
+          'A genuine bug the fixture did not list as expected.'
+        )
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.metrics).toMatchObject({
+      precision: 0.5,
+      adjustedPrecision: 1,
+      falsePositiveCount: 1,
+      genuineFalsePositiveCount: 0,
+      unlistedRealFindingCount: 1
+    })
+    expect(result.report.metrics.adjustedPrecision).toBeGreaterThan(
+      result.report.metrics.precision
+    )
+    expect(result.report.caseResults[0]).toMatchObject({
+      falsePositiveFindingIds: ['find_noise1'],
+      unlistedRealFindingIds: ['find_noise1'],
+      genuineFalsePositiveFindingIds: []
+    })
+    // The matched finding is never sent to the plausibility judge; the unmatched
+    // one is.
+    expect(calls.some((call) => call.findingTitle === 'Unlisted genuine defect')).toBe(
+      true
+    )
+    expect(calls.every((call) => call.findingTitle !== 'Incorrect return value')).toBe(
+      true
+    )
+    expect(result.report.scoring.adjustedPrecisionTrustworthy).toBe(true)
+    expect(result.report.metrics.plausibilityJudgeAgreement).toBe(1)
+
+    const summary = renderEvalSummary({ cases, report: result.report })
+    expect(summary).toContain('| Adjusted precision | 100.0% |')
+    expect(summary).toContain('| Genuine false positives | 0 |')
+    expect(summary).toContain('| Unlisted real findings | 1 |')
+    expect(summary).toContain(
+      'Real but unlisted findings (credited by plausibility judge):'
+    )
+  })
+
+  test('keeps a spurious unmatched finding a genuine false positive with adjusted precision equal to raw precision', async () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      plausibilityJudge: plausibilityJudgeDeciding(() => ({
+        plausible: false,
+        reason: 'The finding misreads the code.'
+      })),
+      readFindingSource: constantSourceReader,
+      outputs: [
+        positiveWithNoiseOutput(
+          'Spurious style nit',
+          'A taste preference not supported by the shown code.'
+        )
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.metrics).toMatchObject({
+      precision: 0.5,
+      adjustedPrecision: 0.5,
+      genuineFalsePositiveCount: 1,
+      unlistedRealFindingCount: 0
+    })
+    expect(result.report.caseResults[0]).toMatchObject({
+      genuineFalsePositiveFindingIds: ['find_noise1'],
+      unlistedRealFindingIds: []
+    })
+  })
+
+  test('fails closed when the plausibility judge throws: genuine false positive plus warning, never credited as real', async () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      // Throws only for the finding-under-test; calibration pairs still score, so
+      // the plausibility calibration remains measurable.
+      plausibilityJudge: plausibilityJudgeDeciding(() => {
+        throw new Error('plausibility provider exploded')
+      }),
+      readFindingSource: constantSourceReader,
+      outputs: [
+        positiveWithNoiseOutput(
+          'Undecidable finding',
+          'A finding whose plausibility judge call fails.'
+        )
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.metrics).toMatchObject({
+      precision: 0.5,
+      adjustedPrecision: 0.5,
+      genuineFalsePositiveCount: 1,
+      unlistedRealFindingCount: 0
+    })
+    expect(result.report.caseResults[0]?.unlistedRealFindingIds).toEqual([])
+    expect(result.report.caseResults[0]?.genuineFalsePositiveFindingIds).toEqual([
+      'find_noise1'
+    ])
+    expect(result.report.caseResults[0]?.warnings).toContain(
+      'eval-plausibility-fail-closed:1'
+    )
+    expect(result.report.caseResults[0]?.providerIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: 'eval_plausibility_judge',
+          recovered: false
+        })
+      ])
     )
   })
 

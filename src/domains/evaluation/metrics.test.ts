@@ -26,6 +26,7 @@ const caseResult = (
   accurateSeverityMatchCount: 1,
   actionableFindingCount: 2,
   falsePositiveCount: 2,
+  unlistedRealFindingCount: 0,
   duplicateFindingCount: 0,
   artifactOnlyFindingCount: 0,
   artifactOnlyMatchedFindingCount: 0,

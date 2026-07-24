@@ -16,6 +16,26 @@ const createTempDir = async (): Promise<string> => {
   return directory
 }
 
+// The plausibility judge (schemaName 'eval_plausibility') is a distinct object
+// call from review passes and the semantic-match judge. Scripted providers that
+// count review passes must answer it with a valid plausibility object and must
+// NOT count it as a review call.
+const isPlausibilityRequest = (request: ObjectRequest): boolean =>
+  request.schemaName === 'eval_plausibility'
+
+const plausibilityObjectResponse = <T extends JsonValue>(): ObjectResponse<T> => ({
+  object: {
+    plausible: true,
+    reason: 'The finding is present in the shown code.'
+  } as unknown as T,
+  finishReason: 'stop',
+  usage: {
+    inputTokens: 1,
+    outputTokens: 1,
+    totalTokens: 2
+  }
+})
+
 const isFindingRefutationRequest = (request: ObjectRequest): boolean => {
   const schema = request.schema
   const promptText = request.messages
@@ -260,6 +280,21 @@ class SemanticJudgeCliProvider implements ModelProvider {
       }
     }
 
+    if (request.schemaName === 'eval_plausibility') {
+      return {
+        object: {
+          plausible: true,
+          reason: 'The finding is present in the shown code.'
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: {
+          inputTokens: 1,
+          outputTokens: 1,
+          totalTokens: 2
+        }
+      }
+    }
+
     this.reviewCalls += 1
 
     if (isFindingRefutationRequest(request)) {
@@ -322,6 +357,10 @@ class FailFirstEvalReviewProvider implements ModelProvider {
   async object<T extends JsonValue = JsonValue>(
     request: ObjectRequest<T>
   ): Promise<ObjectResponse<T>> {
+    if (isPlausibilityRequest(request)) {
+      return plausibilityObjectResponse<T>()
+    }
+
     if (request.schemaName !== 'eval_semantic_match') {
       this.reviewCalls += 1
 
@@ -351,6 +390,10 @@ class ConcurrencyTrackingProvider implements ModelProvider {
   async object<T extends JsonValue = JsonValue>(
     request: ObjectRequest<T>
   ): Promise<ObjectResponse<T>> {
+    if (isPlausibilityRequest(request)) {
+      return plausibilityObjectResponse<T>()
+    }
+
     if (request.schemaName !== 'eval_semantic_match') {
       this.activeReviewCalls += 1
       this.maxActiveReviewCalls = Math.max(
@@ -381,6 +424,10 @@ class AgenticOverrideTrackingProvider implements ModelProvider {
   async object<T extends JsonValue = JsonValue>(
     request: ObjectRequest<T>
   ): Promise<ObjectResponse<T>> {
+    if (isPlausibilityRequest(request)) {
+      return plausibilityObjectResponse<T>()
+    }
+
     if (request.schemaName !== 'eval_semantic_match') {
       this.reviewCalls += 1
     }

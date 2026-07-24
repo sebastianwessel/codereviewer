@@ -63,6 +63,9 @@ export const EvalMetricsSchema = z.strictObject({
   parseValidity: RateSchema,
   recall: RateSchema,
   precision: RateSchema,
+  // Headline precision that does not penalise real defects the fixture omitted:
+  // matched / (matched + genuineFalsePositiveCount). Empty value 1 like precision.
+  adjustedPrecision: RateSchema.default(1),
   f1: RateSchema,
   severityWeightedPrecision: RateSchema,
   severityWeightedRecall: RateSchema,
@@ -70,6 +73,14 @@ export const EvalMetricsSchema = z.strictObject({
   lineAccuracy: RateSchema,
   severityAccuracy: RateSchema,
   falsePositiveCount: z.int().min(0),
+  // Trustworthy false-positive count: unmatched findings the plausibility judge
+  // deemed spurious, plus any whose plausibility judgment could not be completed
+  // (fail-closed). genuineFalsePositiveCount + unlistedRealFindingCount always
+  // equals the raw falsePositiveCount.
+  genuineFalsePositiveCount: z.int().min(0).default(0),
+  // Unmatched findings the plausibility judge deemed genuine defects absent from
+  // the fixture's expected list.
+  unlistedRealFindingCount: z.int().min(0).default(0),
   noFindingZoneFalsePositiveCount: z.int().min(0),
   actionableRate: RateSchema,
   commentsPerKloc: z.number().min(0),
@@ -120,6 +131,13 @@ export const EvalMetricsSchema = z.strictObject({
   // when no calibration pair was scored (an offline run needs no judge).
   judgeAgreement: z.number().min(0).max(1).optional(),
   judgeAgreementPairCount: z.int().min(0).default(0),
+  // Plausibility-judge reliability for the run. `plausibilityJudgeAgreement` is
+  // the fraction of human-labeled plausibility-calibration findings the judge
+  // decided correctly; it is omitted when no calibration pair was scored (an
+  // offline run needs no judge). A run below the configured minimum marks
+  // `adjustedPrecision` untrustworthy.
+  plausibilityJudgeAgreement: z.number().min(0).max(1).optional(),
+  plausibilityJudgeAgreementPairCount: z.int().min(0).default(0),
   // Expected/finding pairs the judge could not decide. Excluded from the recall
   // and precision denominators; surfaced as a run warning.
   inconclusiveMatchCount: z.int().min(0).default(0),
@@ -159,6 +177,11 @@ export type EvalMetricCaseResult = {
   readonly accurateSeverityMatchCount: number
   readonly actionableFindingCount: number
   readonly falsePositiveCount: number
+  // Unmatched findings the plausibility judge affirmatively deemed genuine but
+  // unlisted defects. genuineFalsePositiveCount is derived as
+  // falsePositiveCount - unlistedRealFindingCount, so a fail-closed (unjudged)
+  // finding is a genuine false positive by construction.
+  readonly unlistedRealFindingCount: number
   readonly duplicateFindingCount: number
   readonly artifactOnlyFindingCount: number
   readonly artifactOnlyMatchedFindingCount: number
@@ -230,6 +253,10 @@ const hasProviderIssue = (result: EvalMetricCaseResult): boolean =>
 export type EvalJudgeReliability = {
   readonly judgeAgreement?: number
   readonly judgeAgreementPairCount: number
+  // Plausibility-judge reliability, scored once per run and repeated on every
+  // metric group (one judge produced every group's numbers).
+  readonly plausibilityJudgeAgreement?: number
+  readonly plausibilityJudgeAgreementPairCount: number
 }
 
 export const calculateEvalMetrics = (
@@ -249,6 +276,13 @@ export const calculateEvalMetrics = (
   const totalFalsePositiveCount = sum(
     caseResults.map((result) => result.falsePositiveCount)
   )
+  const totalUnlistedRealFindingCount = sum(
+    caseResults.map((result) => result.unlistedRealFindingCount)
+  )
+  // Every raw false positive the plausibility judge did not affirmatively credit
+  // as a real defect — including fail-closed ones — is a genuine false positive.
+  const totalGenuineFalsePositiveCount =
+    totalFalsePositiveCount - totalUnlistedRealFindingCount
   const providerIssueCount = caseResults.filter(hasProviderIssue).length
   const totalArtifactOnlyFindingCount = sum(
     caseResults.map((result) => result.artifactOnlyFindingCount)
@@ -274,6 +308,14 @@ export const calculateEvalMetrics = (
   const precision = ratio(
     totalMatchedFindingCount,
     totalMatchedFindingCount + totalFalsePositiveCount,
+    1
+  )
+  // adjustedPrecision does not penalise real defects the fixture omitted; only
+  // genuine false positives (including fail-closed, unjudged ones) sit in its
+  // denominator. Empty value 1 like precision (0 findings -> 1).
+  const adjustedPrecision = ratio(
+    totalMatchedFindingCount,
+    totalMatchedFindingCount + totalGenuineFalsePositiveCount,
     1
   )
   const recall = ratio(totalMatchedFindingCount, totalExpectedFindingCount, 1)
@@ -323,6 +365,7 @@ export const calculateEvalMetrics = (
     ),
     recall,
     precision,
+    adjustedPrecision,
     f1: harmonicMean(precision, recall),
     severityWeightedPrecision,
     severityWeightedRecall,
@@ -340,9 +383,9 @@ export const calculateEvalMetrics = (
       sum(caseResults.map((result) => result.matchedSeverityCheckCount)),
       1
     ),
-    falsePositiveCount: sum(
-      caseResults.map((result) => result.falsePositiveCount)
-    ),
+    falsePositiveCount: totalFalsePositiveCount,
+    genuineFalsePositiveCount: totalGenuineFalsePositiveCount,
+    unlistedRealFindingCount: totalUnlistedRealFindingCount,
     noFindingZoneFalsePositiveCount: sum(
       caseResults.map((result) => result.noFindingZoneFalsePositiveCount)
     ),
@@ -454,6 +497,11 @@ export const calculateEvalMetrics = (
       ? {}
       : { judgeAgreement: judgeReliability.judgeAgreement }),
     judgeAgreementPairCount: judgeReliability?.judgeAgreementPairCount ?? 0,
+    ...(judgeReliability?.plausibilityJudgeAgreement === undefined
+      ? {}
+      : { plausibilityJudgeAgreement: judgeReliability.plausibilityJudgeAgreement }),
+    plausibilityJudgeAgreementPairCount:
+      judgeReliability?.plausibilityJudgeAgreementPairCount ?? 0,
     inconclusiveMatchCount: sum(
       caseResults.map((result) => result.inconclusiveMatchCount)
     ),

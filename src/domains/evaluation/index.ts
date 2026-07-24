@@ -1,8 +1,10 @@
 export {
   EVAL_INCONCLUSIVE_MATCH_WARNING_PREFIX,
+  EVAL_PLAUSIBILITY_FAIL_CLOSED_WARNING_PREFIX,
   EVAL_PROVIDER_RETRY_WARNING_PREFIX,
   PROVIDER_ERROR_WARNING_PREFIX,
   inconclusiveMatchWarnings,
+  plausibilityFailClosedWarnings,
   isProviderIssueWarning
 } from './eval-warnings.js'
 export {
@@ -45,6 +47,19 @@ export {
   createModelSemanticJudge
 } from './eval-semantic-judge.js'
 export {
+  createModelPlausibilityJudge,
+  judgeUnmatchedFindingsPlausibility,
+  prepareEvalPlausibilitySource,
+  EVAL_PLAUSIBILITY_JUDGE_STAGE,
+  EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP,
+  type EvalCaseFileReader,
+  type EvalPlausibilityJudge,
+  type EvalPlausibilityJudgeInput,
+  type EvalPlausibilityJudgeResult,
+  type EvalPlausibilityOutcome,
+  type EvalPlausibilityResult
+} from './eval-plausibility-judge.js'
+export {
   DEFAULT_MINIMUM_JUDGE_AGREEMENT,
   EvalJudgeCalibrationPairSchema,
   evalJudgeCalibrationSet,
@@ -52,6 +67,14 @@ export {
   type EvalJudgeCalibrationPair,
   type EvalJudgeCalibrationResult
 } from './eval-judge-calibration.js'
+export {
+  DEFAULT_MINIMUM_PLAUSIBILITY_AGREEMENT,
+  EvalPlausibilityCalibrationPairSchema,
+  evalPlausibilityCalibrationSet,
+  scorePlausibilityCalibration,
+  type EvalPlausibilityCalibrationPair,
+  type EvalPlausibilityCalibrationResult
+} from './eval-plausibility-calibration.js'
 export {
   calculateEvalMetrics,
   EvalMetricsSchema,

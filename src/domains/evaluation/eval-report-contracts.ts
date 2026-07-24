@@ -142,6 +142,15 @@ export const EvalCaseReportSchema = z.strictObject({
   duplicateFindings: z.array(EvalFalsePositiveFindingReportSchema).default([]),
   falsePositiveFindingIds: z.array(z.string().min(1)),
   falsePositiveFindings: z.array(EvalFalsePositiveFindingReportSchema),
+  // Unmatched findings the plausibility judge deemed genuine but unlisted
+  // defects; excluded from genuineFalsePositiveCount and adjustedPrecision's
+  // denominator. A subset of falsePositiveFindingIds.
+  unlistedRealFindingIds: z.array(z.string().min(1)).default([]),
+  unlistedRealFindings: z.array(EvalFalsePositiveFindingReportSchema).default([]),
+  // Unmatched findings that count against adjustedPrecision: judged spurious or
+  // fail-closed (unjudged). The complement of unlistedRealFindingIds within the
+  // raw false-positive set.
+  genuineFalsePositiveFindingIds: z.array(z.string().min(1)).default([]),
   noFindingZoneFalsePositiveIds: z.array(z.string().min(1)),
   artifactOnlyFindingIds: z.array(z.string().min(1)).default([]),
   artifactOnlyMatchedFindings: z.array(EvalFindingMatchReportSchema).default([]),
@@ -182,7 +191,13 @@ export const EvalReportSelectionSchema = z.strictObject({
 // run with no expected findings needs no judge).
 export const EvalReportScoringSchema = z.strictObject({
   judgeAgreement: z.number().min(0).max(1).optional(),
-  judgeTrustworthy: z.boolean()
+  judgeTrustworthy: z.boolean(),
+  // Plausibility-judge reliability. `plausibilityJudgeAgreement` is omitted when
+  // no plausibility calibration pair was scored (an offline run needs no judge).
+  // `adjustedPrecisionTrustworthy` is `false` when the plausibility agreement is
+  // below the configured minimum, marking `adjustedPrecision` untrustworthy.
+  plausibilityJudgeAgreement: z.number().min(0).max(1).optional(),
+  adjustedPrecisionTrustworthy: z.boolean().default(true)
 })
 
 export const EvalMetricGroupSchema = z.strictObject({

@@ -21,6 +21,21 @@ export const inconclusiveMatchWarnings = (
     ? []
     : [`${EVAL_INCONCLUSIVE_MATCH_WARNING_PREFIX}${inconclusiveMatchCount}`]
 
+// `eval-plausibility-fail-closed:` — the plausibility judge could not decide N
+// unmatched findings (provider error after retries, or an unreadable source
+// file). Those findings stay counted as genuine false positives; adjusted
+// precision never credits an unjudged finding as a real defect. The judge
+// failure itself is reported as a provider issue.
+export const EVAL_PLAUSIBILITY_FAIL_CLOSED_WARNING_PREFIX =
+  'eval-plausibility-fail-closed:'
+
+export const plausibilityFailClosedWarnings = (
+  failClosedCount: number
+): readonly string[] =>
+  failClosedCount === 0
+    ? []
+    : [`${EVAL_PLAUSIBILITY_FAIL_CLOSED_WARNING_PREFIX}${failClosedCount}`]
+
 export const isProviderIssueWarning = (warning: string): boolean =>
   warning.startsWith(PROVIDER_ERROR_WARNING_PREFIX) ||
   warning.startsWith(EVAL_PROVIDER_RETRY_WARNING_PREFIX)

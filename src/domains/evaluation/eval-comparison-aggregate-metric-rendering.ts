@@ -142,6 +142,11 @@ export const appendEvalComparisonMetricDeltas = (
         head: input.head.metrics.precision
       }),
       formatEvalComparisonPercentMetricDeltaRow({
+        metric: 'Adjusted precision',
+        base: input.base.metrics.adjustedPrecision,
+        head: input.head.metrics.adjustedPrecision
+      }),
+      formatEvalComparisonPercentMetricDeltaRow({
         metric: 'F1',
         base: input.base.metrics.f1,
         head: input.head.metrics.f1
@@ -155,6 +160,21 @@ export const appendEvalComparisonMetricDeltas = (
         metric: 'False positives',
         base: input.base.metrics.falsePositiveCount,
         head: input.head.metrics.falsePositiveCount
+      }),
+      formatEvalComparisonCountMetricDeltaRow({
+        metric: 'Genuine false positives',
+        base: input.base.metrics.genuineFalsePositiveCount,
+        head: input.head.metrics.genuineFalsePositiveCount
+      }),
+      formatEvalComparisonCountMetricDeltaRow({
+        metric: 'Unlisted real findings',
+        base: input.base.metrics.unlistedRealFindingCount,
+        head: input.head.metrics.unlistedRealFindingCount
+      }),
+      formatEvalComparisonPercentMetricDeltaRow({
+        metric: 'Plausibility judge agreement',
+        base: input.base.metrics.plausibilityJudgeAgreement ?? 0,
+        head: input.head.metrics.plausibilityJudgeAgreement ?? 0
       }),
       formatEvalComparisonPercentMetricDeltaRow({
         metric: 'Provider error rate',
