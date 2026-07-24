@@ -712,7 +712,13 @@
         "allowShell": false,
         "allowNetwork": false,
         "allowFilesystemWrite": false,
-        "captureContentTelemetry": false
+        "captureContentTelemetry": false,
+        "lens": {
+          "enabled": false
+        },
+        "signals": {
+          "enabled": false
+        }
       },
       "type": "object",
       "properties": {
@@ -735,13 +741,47 @@
           "default": false,
           "type": "boolean",
           "const": false
+        },
+        "lens": {
+          "default": {
+            "enabled": false
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "additionalProperties": false
+        },
+        "signals": {
+          "default": {
+            "enabled": false
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "enabled"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
         "allowShell",
         "allowNetwork",
         "allowFilesystemWrite",
-        "captureContentTelemetry"
+        "captureContentTelemetry",
+        "lens",
+        "signals"
       ],
       "additionalProperties": false
     },

@@ -5,7 +5,10 @@ import {
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import { ReviewWorkflowInputSchema } from '../contracts.js'
-import { runModelBackedHolisticTaskReview } from './holistic-task-review.js'
+import {
+  renderSecurityChecklistSection,
+  runModelBackedHolisticTaskReview
+} from './holistic-task-review.js'
 
 const configHash =
   '3333333333333333333333333333333333333333333333333333333333333333'
@@ -227,6 +230,63 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(captured?.reviewText).toContain('### FILE: src/app.ts')
     // Findings for the referenced-definition file are dropped (not a task path).
     expect(result.candidates).toHaveLength(0)
+  })
+
+  test('appends the security review checklist only when the lens is enabled', async () => {
+    const captureReviewText = async (
+      input: typeof workflowInput
+    ): Promise<string> => {
+      let captured = ''
+      await runModelBackedHolisticTaskReview({
+        workflowInput: input,
+        taskInput,
+        task,
+        runners: {
+          holisticReview: async (holisticInput) => {
+            captured = holisticInput.reviewText
+            return holisticResultWith([])
+          }
+        },
+        logger: { debug: () => {} }
+      })
+      return captured
+    }
+
+    // Default workflowInput has securityLensEnabled=false (schema default).
+    const disabledText = await captureReviewText(workflowInput)
+    expect(disabledText).not.toContain('## Security review checklist')
+    expect(disabledText).not.toContain('SSRF (CWE-918)')
+
+    const enabledText = await captureReviewText(
+      ReviewWorkflowInputSchema.parse({
+        runId: 'run-holistic',
+        reviewedPaths: ['src/app.ts'],
+        securityLensEnabled: true,
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'holistic-test',
+          signalVersions: { typescript: '6.0.3' },
+          configHash
+        }
+      })
+    )
+    // Enabled: the checklist header and a spot-checked CWE line are present.
+    expect(enabledText).toContain('## Security review checklist')
+    expect(enabledText).toContain(
+      '- SSRF (CWE-918): a user-controlled URL or host passed to a request/fetch/open'
+    )
+    // Byte-for-byte proof: the ONLY difference the lens makes is the appended
+    // section. Everything before it is identical to the disabled prompt, and the
+    // sole appended suffix is the join separator plus the rendered checklist.
+    expect(enabledText.startsWith(disabledText)).toBe(true)
+    expect(enabledText.slice(disabledText.length)).toBe(
+      `\n${renderSecurityChecklistSection(true)}`
+    )
   })
 
   test('runs a single discovery review per task', async () => {

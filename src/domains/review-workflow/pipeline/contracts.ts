@@ -34,6 +34,12 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   // it to the model as the authoritative "what changed" signal. Defaults to ''
   // when no diff text is supplied.
   reviewedDiffText: z.string().default(''),
+  // Security review lens (spec 15). When true, holistic discovery appends a
+  // generic OWASP/CWE security checklist to the review prompt so the model
+  // additionally scrutinizes the security classes the general prompt
+  // under-weights. Off by default: the disabled prompt is byte-for-byte
+  // unchanged. The extra candidates flow through the same refutation + admission.
+  securityLensEnabled: z.boolean().default(false),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
   instructions: z.array(ContextDocumentSchema),

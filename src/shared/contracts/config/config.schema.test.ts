@@ -60,6 +60,27 @@ describe('CodeReviewerConfigSchema', () => {
     })
   })
 
+  test('security review lens and signals default to disabled', () => {
+    const disabled = CodeReviewerConfigSchema.parse({})
+    expect(disabled.security.lens.enabled).toBe(false)
+    expect(disabled.security.signals.enabled).toBe(false)
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      security: { lens: { enabled: true } }
+    })
+    expect(enabled.security.lens.enabled).toBe(true)
+    // Signals stays disabled unless explicitly enabled; the permission literals
+    // keep their secure defaults.
+    expect(enabled.security.signals.enabled).toBe(false)
+    expect(enabled.security.captureContentTelemetry).toBe(false)
+  })
+
+  test('security rejects an unknown nested key', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ security: { lens: { on: true } } })
+    ).toThrow()
+  })
+
   test('verification is disabled by default and accepts configured claim providers', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.verification.enabled).toBe(false)

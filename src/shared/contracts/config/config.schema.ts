@@ -148,11 +148,29 @@ export const BaselineConfigSchema = z.strictObject({
   includeResolvedInReport: z.boolean().default(true)
 })
 
+// Security-focused review lens (spec 15). Off by default. When enabled, a generic
+// OWASP/CWE checklist is appended to the holistic discovery prompt so the model
+// additionally scrutinizes the security classes the general prompt under-weights.
+// Its candidates flow through the SAME refutation + admission as any other
+// candidate; the lens never bypasses scope, severity, baseline, or the gate.
+export const SecurityLensConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false)
+})
+
+// Deterministic security-signal evidence layer (spec 15, Mechanism 2). Wired now
+// as configuration only; reserved for a later signal layer and carries no behavior
+// in this phase.
+export const SecuritySignalsConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false)
+})
+
 export const SecurityConfigSchema = z.strictObject({
   allowShell: z.literal(false).default(false),
   allowNetwork: z.literal(false).default(false),
   allowFilesystemWrite: z.literal(false).default(false),
-  captureContentTelemetry: z.literal(false).default(false)
+  captureContentTelemetry: z.literal(false).default(false),
+  lens: SecurityLensConfigSchema.default({ enabled: false }),
+  signals: SecuritySignalsConfigSchema.default({ enabled: false })
 })
 
 export const QualityGateConfigSchema = z.strictObject({
@@ -440,7 +458,9 @@ export const CodeReviewerConfigSchema = z.strictObject({
     allowShell: false,
     allowNetwork: false,
     allowFilesystemWrite: false,
-    captureContentTelemetry: false
+    captureContentTelemetry: false,
+    lens: { enabled: false },
+    signals: { enabled: false }
   }),
   reporting: ReportingConfigSchema.default({
     formats: ['json', 'markdown', 'sarif'],
@@ -499,6 +519,8 @@ export type VerificationClaimProviderConfig = z.infer<
 >
 export type FixConfig = z.infer<typeof FixConfigSchema>
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>
+export type SecurityLensConfig = z.infer<typeof SecurityLensConfigSchema>
+export type SecuritySignalsConfig = z.infer<typeof SecuritySignalsConfigSchema>
 export type DriftCategory = z.infer<typeof DriftCategorySchema>
 export type DriftConfig = z.infer<typeof DriftConfigSchema>
 export type ReportingConfig = z.infer<typeof ReportingConfigSchema>

@@ -285,14 +285,16 @@ values, tokens, and secrets.
 
 ## `security`
 
-Security bounds. All values are fixed and cannot be overridden.
+Security bounds plus the security-focused review lens ([spec 15](../../specs/15-security-focused-review.md)). The permission bounds are fixed; the lens and signal switches default to disabled.
 
-| Key | Fixed value | Notes |
-| --- | --- | --- |
-| `security.allowShell` | always `false` | Shell execution is never permitted. |
-| `security.allowNetwork` | always `false` in R1 | Network access is never permitted in R1. |
-| `security.allowFilesystemWrite` | always `false` in R1 | Filesystem writes are never permitted in R1. |
-| `security.captureContentTelemetry` | always `false` | Source content is never captured in telemetry. |
+| Key | Values / Type | Default | Description |
+| --- | --- | --- | --- |
+| `security.allowShell` | always `false` | `false` | Shell execution is never permitted. |
+| `security.allowNetwork` | always `false` in R1 | `false` | Network access is never permitted in R1. |
+| `security.allowFilesystemWrite` | always `false` in R1 | `false` | Filesystem writes are never permitted in R1. |
+| `security.captureContentTelemetry` | always `false` | `false` | Source content is never captured in telemetry. |
+| `security.lens.enabled` | boolean | `false` | When enabled, a generic OWASP/CWE security checklist is appended to the holistic discovery prompt so the model additionally scrutinizes security classes the general prompt under-weights (access control, injection, SSRF, deserialization, secrets, cryptography, path traversal, misconfiguration, security-relevant concurrency). The extra candidates it yields pass the same untrusted refutation and admission as any other candidate; the lens never bypasses scope, severity, baseline, or the gate. With it disabled the general review prompt is byte-for-byte unchanged. |
+| `security.signals.enabled` | boolean | `false` | Reserved for a later deterministic security-signal evidence layer ([spec 15](../../specs/15-security-focused-review.md), Mechanism 2). Wired as configuration only; it carries no behavior in this phase. |
 
 ---
 
