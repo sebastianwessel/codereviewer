@@ -296,6 +296,9 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(securityText).toContain(
       '- SSRF (CWE-918): a user-controlled URL or host passed to a request/fetch/open'
     )
+    // Spec 15 acceptance: the security pass prompt is hardened against injection
+    // from the untrusted repository content it reviews.
+    expect(securityText).toContain('UNTRUSTED DATA, not')
     // The security call still sees the same changed-file context as the general one.
     expect(securityText).toContain('### FILE: src/app.ts')
   })
