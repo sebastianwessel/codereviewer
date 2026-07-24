@@ -1202,6 +1202,20 @@ Gate: FAIL
 Generated: 2026-06-20T00:00:02.000Z
 Fixtures: 2
 
+## Headline
+
+| Priority | Metric | Value |
+| --- | --- | ---: |
+| Findings | Product recall | 100.0% |
+| Findings | Recall (all tiers) | 100.0% |
+| Findings | Unlisted real findings | 0 |
+| False positives | Adjusted precision | 50.0% |
+| False positives | Genuine false positives | 1 |
+| False positives | Duplicate findings | 0 |
+| Priority | Severity accuracy | 100.0% |
+| Health | Provider error rate | 0.0% |
+| Health | Cost | $0.2000 |
+
 ## Selection
 
 | Field | Value |

@@ -111,6 +111,33 @@ const appendEvalSummarySelection = (
   })
 }
 
+// The headline centers the three things reviews are judged on — findings,
+// false-positives, and priority (severity) — so the primary signal is read first.
+// Per-mechanism security labels are a secondary breakdown further down; label
+// accuracy is not a headline goal. The full metric catalog stays in `## Metrics`.
+const appendEvalSummaryHeadline = (
+  lines: string[],
+  report: EvalReport
+): void => {
+  const metrics = report.metrics
+  appendMarkdownTable(lines, {
+    heading: '## Headline',
+    header: '| Priority | Metric | Value |',
+    alignment: '| --- | --- | ---: |',
+    rows: [
+      `| Findings | Product recall | ${formatPercent(metrics.productRecall)} |`,
+      `| Findings | Recall (all tiers) | ${formatPercent(metrics.recall)} |`,
+      `| Findings | Unlisted real findings | ${formatInteger(metrics.unlistedRealFindingCount)} |`,
+      `| False positives | Adjusted precision | ${formatPercent(metrics.adjustedPrecision)} |`,
+      `| False positives | Genuine false positives | ${formatInteger(metrics.genuineFalsePositiveCount)} |`,
+      `| False positives | Duplicate findings | ${formatInteger(metrics.duplicateFindingCount)} |`,
+      `| Priority | Severity accuracy | ${formatPercent(metrics.severityAccuracy)} |`,
+      `| Health | Provider error rate | ${formatPercent(metrics.providerErrorRate)} |`,
+      `| Health | Cost | ${formatCostMetric(metrics)} |`
+    ]
+  })
+}
+
 const appendEvalSummaryMetrics = (
   lines: string[],
   report: EvalReport
@@ -659,12 +686,15 @@ export const renderEvalSummary = (
   const lines: string[] = []
 
   appendEvalSummaryHeader(lines, input.report)
+  appendEvalSummaryHeadline(lines, input.report)
   appendEvalSummarySelection(lines, input.report)
   appendEvalSummaryMetrics(lines, input.report)
   appendEvalSummaryRecallByTier(lines, input.report)
+  appendEvalSummaryMetricGroups(lines, input.report)
+  // Per-mechanism security labels are a secondary breakdown (label accuracy is not
+  // a headline goal), rendered after the general aggregate metrics.
   appendEvalSummarySecurityByMechanism(lines, input.report)
   appendEvalSummarySecurityByContextDepth(lines, input.report)
-  appendEvalSummaryMetricGroups(lines, input.report)
   appendEvalSummaryCases(lines, {
     cases: input.cases,
     report: input.report
