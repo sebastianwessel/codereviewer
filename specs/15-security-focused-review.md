@@ -1,0 +1,202 @@
+# 15: Security-Focused Review And Measurement
+
+Status: Approved
+Date: 2026-07-24
+
+## Purpose
+
+Improve security-defect recall reliably and generically, and measure it honestly
+per mechanism. The engine already catches obvious self-contained sinks (SQL/command
+injection, path traversal). The gap is elsewhere, and the design follows the
+evidence, not intuition.
+
+Two evidence sources shape this spec:
+
+- **Our own data.** On the committed benchmark, security-labeled findings are
+  dominated by **authorization / access-control / credential logic (~59%)**;
+  classic injection/taint sinks are a small minority and the obvious ones are
+  already found. So a sink scanner alone would target the wrong majority.
+- **The literature.** The reproducible security lift (IRIS, RepoAudit) comes from a
+  hybrid: a deterministic engine finds candidate source→sink paths; the model
+  infers specs and **judges reachability / triages false positives** — the triage
+  stage is the dominant precision lever. Separately, PR-review research shows more
+  context *reduces* quality: the goal is high-value evidence per token, not volume.
+
+This spec therefore defines a generic security capability with two cooperating
+mechanisms and, first, the measurement that keeps any improvement honest.
+
+## Non-Negotiable: Generic, Not Eval-Specific
+
+Every rule, checklist item, and pattern in this capability derives from public,
+established security knowledge (OWASP, CWE, CodeQL/Semgrep rule catalogs) and is
+justified by a citation, never by a fixture it happens to catch. Tuning detection
+to the identities of eval findings is forbidden and is treated as a defect. The
+trusted-rule seeding map stays free of benchmark-specific rules (as it is today).
+Any improvement must be shown to generalize on a held-out set, not the set it was
+built against.
+
+## Measurement First (built before any detector)
+
+Security cannot be improved credibly without measuring it by mechanism. Before any
+detector or lens ships, the evaluation gains a **security dimension**:
+
+- Each security expected finding carries a **mechanism** label (see Mechanisms) and
+  a **context-depth** label (`local | cross-function | callee | caller |
+  implementation | cross-file | analyzer-path-dependent`).
+- The eval reports **recall and adjusted precision per mechanism and per
+  context-depth**, not only one aggregate security tier. A mechanism with a small
+  denominator is reported with its count so it is not over-read.
+- An **obvious-vs-hard** split is tracked separately, so aced trivial sinks never
+  mask the hard-class gap.
+
+Labels are applied to the existing committed security cases (a contaminated **dev**
+set — its repos are public and likely in model training data) and to a small
+**held-out** set assembled under the anti-contamination policy below. Improvements
+are decided on the held-out set; the dev set is for iteration only.
+
+### Anti-Contamination Policy
+
+Held-out security cases follow the practices the research converged on:
+
+- **Temporal cutoff** — derive held-out cases only from fixes dated after the
+  evaluated model's training cutoff; re-freshen each model generation.
+- **Chronological split**, never random (near-duplicate fixes leak across a random
+  split and inflate scores).
+- **Dedup** exact, near-duplicate (token-normalized), and derivative (same CVE in a
+  fork) cases, and against likely-public popular repos.
+- **Exclude famous/high-profile CVEs** (memorized).
+- **Hold the answer key out of the prompt** — present only the pre-fix diff and PR
+  intent; never the CVE id, advisory text, or fix commit message.
+- **Keep the held-out seed unpublished and rotate a fraction each cycle.**
+- Record source, license, and capture date per imported case; permissive upstream
+  only for any case that might be published.
+
+Candidate public sources for held-out material (dataset shapes and licenses per
+their pages; all require local verification): MoreFixes v4 and CVEfixes (CVE fix
+commits, reverse the fix to get the vulnerable diff), the Martian review-bench
+harness/methodology, with PrimeVul's chronological-split discipline and
+SEVRA-BENCH's "review an adversarial PR without being told to look for security"
+protocol as the evaluation framing.
+
+## Mechanisms
+
+Security expected findings and detectors are labeled by mechanism (OWASP/CWE
+aligned):
+
+- authorization and tenant/access-control isolation;
+- injection: SQL, command, code/expression, template;
+- SSRF and unsafe URL/host construction;
+- XSS and output encoding;
+- insecure deserialization;
+- secret and sensitive-data flow;
+- cryptography (weak primitive, misuse, predictable randomness);
+- filesystem / path traversal;
+- unsafe configuration;
+- concurrency and resource exhaustion;
+- prompt-injection resistance of the reviewer itself.
+
+## Mechanism 1: The Security Review Lens
+
+An optional, generic **security-focused discovery lens** — the primary lever,
+because it targets the authorization-dominated real distribution and is cheap.
+
+- It applies a generic OWASP/CWE **checklist** across the mechanisms above to the
+  changed code, the diff, and the change-intent context, asking the model to
+  reason specifically about access-control correctness and the injection classes.
+- The checklist is generic and public-derived; it is never expanded to match a
+  fixture. It is prompt/task-level and reuses the existing model-backed discovery
+  and refutation infrastructure — a security lens is another discovery lens, not a
+  new pipeline.
+- Its candidates pass the **same** untrusted refutation and deterministic admission
+  as any other candidate. The lens never bypasses scope, location, baseline,
+  severity, or the gate. It raises recall on the classes the general discovery lens
+  under-weights (authorization, subtle injection); precision is protected by
+  refutation + admission, and measured.
+- Off by default. The lens is non-deterministic; it is quarantined like every other
+  model lane and never changes the general review's guarantees.
+
+## Mechanism 2: Deterministic Security-Signal Evidence
+
+A generic, deterministic detector that produces **typed evidence**, following the
+"analyzers find paths; the model judges context" principle (concept spec 06.4):
+
+- Language-neutral source/sink/sanitizer detection grounded in public rule catalogs
+  (Semgrep registry, CodeQL CWE suites, OWASP dangerous-function lists), run on the
+  existing ast-grep AST (its pattern API supports the needed metavariable queries)
+  and the TypeScript AST for TS/JS.
+- Each detection emits a **support signal** and an `EvidenceRecord` populating the
+  already-defined but unused contract fields: `ruleId`, `cwe`, `helpUri`,
+  `relatedLocations`, ordered `dataFlow` (source → sink steps), and
+  `securitySeverity`. No contract change is required to carry this.
+- By default the signal is **evidence for the model** (the security lens judges
+  reachability, intent, and sanitizers), not an auto-admitted finding — matching
+  the research: the model's judgment is the precision lever. A high-precision rule
+  MAY seed a candidate through the existing trusted-rule path, but only when a
+  deterministic fixture proves its precision, and it still faces scope, location,
+  baseline, and admission.
+- Deterministic and reproducible; off by default until measured to help on the
+  held-out set without materially reducing precision.
+
+## Bounded Agentic Evidence (Later, Gated)
+
+For hard classes that need reachability confirmation (interprocedural taint,
+cross-file authorization), a bounded agentic follow-up — reusing the spec-12
+`investigate_claim` tool seam (mediated read/list/grep, budgeted) — MAY execute a
+finding's parsed `contextRequests` or one demand-driven evidence request. This is
+deferred: it is the highest-plumbing, highest-cost, non-deterministic lever, and it
+is only justified after the lens and deterministic-evidence levers are measured. It
+must respect the "more context reduces quality" evidence — one bounded, ranked
+follow-up, not full-repository injection.
+
+## Configuration
+
+A `security` block, disabled by default. Keys are defined in
+`04-configuration-and-providers.md`: `lens.enabled`, `signals.enabled`, and any
+bounds. Invalid configuration fails validation with exit code 2. With the block
+disabled, no security lens or signal runs and the general review is byte-for-byte
+unchanged.
+
+## Observability, Safety, Privacy
+
+- Security signals and lens steps are no-content: mechanism, rule id, CWE, counts,
+  and durations only. No source, secret value, or payload appears in logs, traces,
+  or events. Detected secret values are never emitted — only their location and
+  kind.
+- Repository content and any analyzer artifact are untrusted (spec 07). The lens
+  and signals cannot grant authority, change admission, severity, gates, or
+  baseline, and are presented under the untrusted/informational framing.
+- The lens prompt is hardened against prompt injection from repository content, and
+  the reviewer's own prompt-injection resistance is a measured security mechanism.
+
+## Testing
+
+- Unit: mechanism/context-depth labeling of eval cases; the per-mechanism metric
+  math (recall/adjusted-precision by mechanism, obvious-vs-hard split); each
+  deterministic sink/source rule against deterministic positive and
+  guard/sanitizer negative fixtures; the lens task contract.
+- Integration (hermetic, deterministic provider): the security lens produces
+  candidates that pass refutation/admission; a planted authorization bug the general
+  lens misses is caught by the lens; a sanitized/guarded negative is not flagged; a
+  deterministic signal populates `cwe`/`dataFlow` evidence; an untrusted repository
+  payload cannot alter admission or the gate.
+- No real-provider eval runs in the test suite; security-dimension measurement runs
+  are explicit, cost-gated, and separate.
+
+## Acceptance
+
+- The evaluation reports security recall and adjusted precision **per mechanism and
+  context-depth**, with obvious-vs-hard tracked separately, before any detector
+  ships.
+- With `security` disabled, no lens or signal runs and the general review and gate
+  are byte-for-byte unchanged.
+- Every rule and checklist item cites a public OWASP/CWE/Semgrep/CodeQL source; none
+  is justified by a specific eval finding; the trusted-rule map carries no
+  benchmark-specific rule.
+- Security-signal detections populate the existing `cwe`/`dataFlow`/`ruleId`/
+  `securitySeverity` evidence fields; by default they are model evidence, not
+  auto-admitted findings.
+- The security lens's candidates pass the same untrusted refutation and admission
+  as general candidates; the lens never bypasses scope, severity, baseline, or the
+  gate.
+- Any security improvement is demonstrated on the held-out set under the
+  anti-contamination policy, not on the set it was built against.
