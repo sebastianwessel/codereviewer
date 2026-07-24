@@ -4,9 +4,9 @@ import {
 } from '../../../admission/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
 import {
+  ModelHolisticFindingSchema,
   ModelHolisticReviewResultSchema,
   type HolisticReviewRunner,
-  type ModelHolisticFinding,
   type TaskReviewInput,
   type TaskReviewResult,
   type WorkflowReviewTask
@@ -301,9 +301,9 @@ const locationKey = (candidate: CandidateFinding): string =>
 
 // Collect candidates from one discovery call's findings into the shared map, capping
 // how many THIS call may add and skipping any at an excluded location. Returns the
-// number of findings dropped because they were incomplete or out of scope.
+// number of raw findings dropped because they failed to parse into a candidate.
 const collectCandidates = (params: {
-  readonly findings: readonly ModelHolisticFinding[]
+  readonly findings: readonly unknown[]
   readonly task: WorkflowReviewTask
   readonly into: Map<string, CandidateFinding>
   readonly maxToAdd: number
@@ -334,14 +334,18 @@ const collectCandidates = (params: {
   return dropped
 }
 
-// The finding is already parsed and drift-normalized by ModelHolisticReviewResultSchema
-// (its item schema is ModelHolisticFindingSchema). This maps a complete, in-scope
-// finding to a CandidateFinding; incomplete or out-of-scope findings (including the {}
-// a malformed item degraded to) yield undefined and are dropped by the caller.
 const candidateFromFinding = (
   task: WorkflowReviewTask,
-  finding: ModelHolisticFinding
+  raw: unknown
 ): CandidateFinding | undefined => {
+  const parsed = ModelHolisticFindingSchema.safeParse(raw)
+
+  if (!parsed.success) {
+    return undefined
+  }
+
+  const finding = parsed.data
+
   if (
     finding.category === undefined ||
     finding.severity === undefined ||
@@ -381,7 +385,7 @@ const runDiscoveryCall = async (
   task: WorkflowReviewTask,
   reviewText: string,
   signal: AbortSignal | undefined
-): Promise<readonly ModelHolisticFinding[]> => {
+): Promise<readonly unknown[]> => {
   const review = ModelHolisticReviewResultSchema.parse(
     await runner(
       {
