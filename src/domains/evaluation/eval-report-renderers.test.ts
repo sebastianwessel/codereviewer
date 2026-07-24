@@ -7,6 +7,22 @@ import {
 } from './eval-summary-report-rendering.js'
 import { renderEvalComparison } from './eval-comparison-report-rendering.js'
 import { renderEvalRecallReport } from './eval-recall-report-rendering.js'
+import {
+  emptySecurityContextDepthCounts,
+  emptySecurityMechanismCounts
+} from './metrics.js'
+import {
+  SecurityContextDepthSchema,
+  SecurityMechanismSchema
+} from './eval-fixture.schema.js'
+
+const zeroSecurityRecordByMechanism = Object.fromEntries(
+  SecurityMechanismSchema.options.map((mechanism) => [mechanism, 0])
+) as Record<(typeof SecurityMechanismSchema.options)[number], number>
+
+const zeroSecurityRecordByContextDepth = Object.fromEntries(
+  SecurityContextDepthSchema.options.map((depth) => [depth, 0])
+) as Record<(typeof SecurityContextDepthSchema.options)[number], number>
 
 describe('eval report rendering', () => {
   test('owns eval Markdown renderer entry points and artifact names', () => {
@@ -169,6 +185,14 @@ describe('eval report rendering', () => {
           inconclusiveMatchCount: 0,
           productRecall: 1,
           nitRecall: 1,
+          securityRecallByMechanism: zeroSecurityRecordByMechanism,
+          securityMechanismCounts: emptySecurityMechanismCounts(),
+          securityRecallByContextDepth: zeroSecurityRecordByContextDepth,
+          securityContextDepthCounts: emptySecurityContextDepthCounts(),
+          securityObviousRecall: 0,
+          securityHardRecall: 0,
+          securityObviousCount: 0,
+          securityHardCount: 0,
           inputTokens: 0,
           cachedInputTokens: 0,
           outputTokens: 0,

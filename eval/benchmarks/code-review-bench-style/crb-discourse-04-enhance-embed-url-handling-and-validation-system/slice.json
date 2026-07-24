@@ -23,6 +23,8 @@
       "category": "security",
       "severity": "critical",
       "semanticSummary": "SSRF vulnerability using open(url) without validation",
+      "securityMechanism": "ssrf",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "security"
     },
@@ -30,6 +32,8 @@
       "category": "security",
       "severity": "medium",
       "semanticSummary": "The current origin validation using indexOf is insufficient and can be bypassed. An attacker could use a malicious domain like evil-discourseUrl.com to pass this check.",
+      "securityMechanism": "ssrf",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "security"
     },
@@ -44,6 +48,8 @@
       "category": "security",
       "severity": "medium",
       "semanticSummary": "The code sets X-Frame-Options: ALLOWALL which completely disables clickjacking protection. The referer validation can be bypassed (referer headers are easily spoofed), and the fallback to empty string for nil referer masks validation failures.",
+      "securityMechanism": "unsafe-config",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "security"
     },
@@ -51,6 +57,8 @@
       "category": "security",
       "severity": "medium",
       "semanticSummary": "The TopicEmbed.import method is susceptible to a NoMethodError if the contents parameter is nil when attempting to append a string, and an XSS vulnerability due to unescaped url interpolation in the generated HTML.",
+      "securityMechanism": "xss",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "security"
     },

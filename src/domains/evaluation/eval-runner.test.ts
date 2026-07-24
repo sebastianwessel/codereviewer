@@ -1483,6 +1483,140 @@ describe('eval runner', () => {
     expect(summary).toContain('| Case | Refutation | Fix | Provider recovery |')
   })
 
+  test('joins security labels to the match result for per-mechanism and obvious/hard recall', async () => {
+    // Four expected findings: three labelled security (two matched, one missed)
+    // plus one non-security bug (matched). Path-line matching makes the joins
+    // deterministic without depending on judge greediness.
+    const cases = parseEvalCases([
+      {
+        id: 'security-labeled',
+        language: 'typescript',
+        repositoryFixture: 'fixtures/typescript/security',
+        changedFiles: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts'],
+        expectedFindings: [
+          {
+            category: 'security',
+            severity: 'high',
+            path: 'src/a.ts',
+            lineRange: [1, 1],
+            semanticSummary: 'permission check uses AND where it must use OR',
+            securityMechanism: 'authorization',
+            contextDepth: 'local'
+          },
+          {
+            category: 'security',
+            severity: 'high',
+            path: 'src/b.ts',
+            lineRange: [1, 1],
+            semanticSummary: 'query built by concatenating a caller value',
+            securityMechanism: 'injection',
+            contextDepth: 'local'
+          },
+          {
+            category: 'security',
+            severity: 'high',
+            path: 'src/c.ts',
+            lineRange: [1, 1],
+            semanticSummary: 'fetches a caller-supplied url without host validation',
+            securityMechanism: 'ssrf',
+            contextDepth: 'cross-file'
+          },
+          {
+            category: 'bug',
+            severity: 'high',
+            path: 'src/d.ts',
+            lineRange: [1, 1],
+            semanticSummary: 'off-by-one in the changed loop bound'
+          }
+        ],
+        expectedNoFindingZones: [],
+        tags: ['security']
+      }
+    ])
+    const findingOnPath = (
+      path: string,
+      id: string,
+      fingerprint: string
+    ): AdmittedFinding =>
+      admittedFinding({
+        id,
+        category: 'security',
+        location: { path, startLine: 1, side: 'new' },
+        fingerprints: [{ algorithm: 'test', value: fingerprint }]
+      })
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'security-labeled',
+          changedLineCount: 40,
+          diffHunkCount: 4,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            // src/c.ts (the ssrf finding) is deliberately never reported.
+            reviewReport: reviewReport([
+              findingOnPath('src/a.ts', 'find_authz', 'authz'),
+              findingOnPath('src/b.ts', 'find_injection', 'injection'),
+              admittedFinding({
+                id: 'find_bug',
+                category: 'bug',
+                location: { path: 'src/d.ts', startLine: 1, side: 'new' },
+                fingerprints: [{ algorithm: 'test', value: 'bug' }]
+              })
+            ])
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    const metrics = result.report.metrics
+    // The non-security bug is matched but never touches a security denominator:
+    // security expected total is 3, not 4.
+    expect(metrics.recallByTier.security).toBe(0.666667)
+    expect(metrics.securityMechanismCounts.authorization).toEqual({
+      expected: 1,
+      matched: 1
+    })
+    expect(metrics.securityMechanismCounts.injection).toEqual({
+      expected: 1,
+      matched: 1
+    })
+    expect(metrics.securityMechanismCounts.ssrf).toEqual({
+      expected: 1,
+      matched: 0
+    })
+    expect(metrics.securityRecallByMechanism.authorization).toBe(1)
+    expect(metrics.securityRecallByMechanism.injection).toBe(1)
+    expect(metrics.securityRecallByMechanism.ssrf).toBe(0)
+    // Two local (both matched) obvious; one cross-file (missed) hard.
+    expect(metrics.securityObviousRecall).toBe(1)
+    expect(metrics.securityObviousCount).toBe(2)
+    expect(metrics.securityHardRecall).toBe(0)
+    expect(metrics.securityHardCount).toBe(1)
+    expect(metrics.securityContextDepthCounts.local).toEqual({
+      expected: 2,
+      matched: 2
+    })
+    expect(metrics.securityContextDepthCounts['cross-file']).toEqual({
+      expected: 1,
+      matched: 0
+    })
+
+    const summary = renderEvalSummary({ cases, report: result.report })
+    expect(summary).toContain('## Security by Mechanism')
+    expect(summary).toContain('| authorization | 100.0% | 1/1 |')
+    expect(summary).toContain('| injection | 100.0% | 1/1 |')
+    expect(summary).toContain('| ssrf | 0.0% | 0/1 |')
+    expect(summary).toContain('## Security by Context Depth')
+    expect(summary).toContain('| local | 100.0% | 2/2 |')
+    expect(summary).toContain('| cross-file | 0.0% | 0/1 |')
+    expect(summary).toContain('| Security obvious recall | 100.0% (2 expected) |')
+    expect(summary).toContain('| Security hard recall | 0.0% (1 expected) |')
+  })
+
   test('fails the gate when product recall is below threshold', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
     const result = await runEvaluation({

@@ -23,6 +23,8 @@
       "category": "security",
       "severity": "high",
       "semanticSummary": "Incorrect permission check in canManage() method",
+      "securityMechanism": "authorization",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "security"
     },
@@ -30,6 +32,8 @@
       "category": "security",
       "severity": "high",
       "semanticSummary": "In getGroupIdsWithViewPermission, hasPermission is called with groupResource.getId() and the same groupResource.getId() is added to granted, but hasPermission resolves resources by name (treating the argument as a group id) and the GroupPermissionEvaluator contract says this method returns group IDs that are later used as UserModel.GROUPS and in getUsersCount group filters. This mismatch means per-group VIEW_MEMBERS/MANAGE_MEMBERS permissions may not yield the expected group IDs for filtering an",
+      "securityMechanism": "authorization",
+      "contextDepth": "cross-file",
       "matchMode": "semantic-only",
       "tier": "security"
     }

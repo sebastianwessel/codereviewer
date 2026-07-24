@@ -23,6 +23,8 @@
       "category": "security",
       "severity": "high",
       "semanticSummary": "The ContextualLoggerMiddleware methods (QueryData, CallResource, CheckHealth, CollectMetrics) panic when a nil request is received. This occurs because they directly access req.PluginContext (via the instrumentContext function) without first checking if req is nil. This is a regression, as previous middleware layers gracefully handled nil requests.",
+      "securityMechanism": "concurrency-resource",
+      "contextDepth": "callee",
       "matchMode": "semantic-only",
       "tier": "runtime-critical"
     },

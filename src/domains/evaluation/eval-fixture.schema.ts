@@ -32,6 +32,48 @@ export const ExpectedFindingTierSchema = z.enum([
   'nit'
 ])
 
+// Spec-15 security mechanisms (OWASP/CWE aligned). A security expected finding
+// MAY carry the mechanism it exercises so the eval can measure recall per
+// mechanism. Purely a ground-truth categorisation of the committed fixtures; it
+// never feeds any detector.
+export const SecurityMechanismSchema = z.enum([
+  'authorization',
+  'injection',
+  'ssrf',
+  'xss',
+  'deserialization',
+  'secret-flow',
+  'cryptography',
+  'path-traversal',
+  'unsafe-config',
+  'concurrency-resource',
+  'prompt-injection'
+])
+
+export type SecurityMechanism = z.infer<typeof SecurityMechanismSchema>
+
+// Spec-15 context-depth: how far beyond the changed lines a reviewer must reason
+// to catch the defect. `local` is the obvious, self-contained class; every other
+// depth is a hard class. Used to split obvious-vs-hard security recall so aced
+// trivial sinks never mask the hard-class gap.
+export const SecurityContextDepthSchema = z.enum([
+  'local',
+  'cross-function',
+  'callee',
+  'caller',
+  'implementation',
+  'cross-file',
+  'analyzer-path-dependent'
+])
+
+export type SecurityContextDepth = z.infer<typeof SecurityContextDepthSchema>
+
+// The obvious class is exactly the `local` context depth; everything else is a
+// hard class. Declared once so the runner and metrics never disagree.
+export const isObviousSecurityContextDepth = (
+  depth: SecurityContextDepth
+): boolean => depth === 'local'
+
 // Headline product tiers that the >80% recall goal is measured against. The
 // `nit` tier (docs, naming, typo, UI, i18n, style, maintainability, tests,
 // policy) is reported separately and intentionally excluded.
@@ -69,7 +111,11 @@ export const ExpectedFindingSchema = z
     lineRange: EvalLineRangeSchema.optional(),
     semanticSummary: z.string().min(1).max(500),
     matchMode: EvalMatchModeSchema.optional(),
-    tier: ExpectedFindingTierSchema.optional()
+    tier: ExpectedFindingTierSchema.optional(),
+    // Spec-15 security labels. Both are optional and only meaningful on
+    // security-category findings, which the measurement filters on.
+    securityMechanism: SecurityMechanismSchema.optional(),
+    contextDepth: SecurityContextDepthSchema.optional()
   })
   .superRefine((value, context) => {
     const matchMode = resolveExpectedFindingMatchMode(value)
@@ -87,6 +133,21 @@ export const ExpectedFindingSchema = z
         code: 'custom',
         path: ['lineRange'],
         message: 'lineRange requires a path-based expected finding'
+      })
+    }
+
+    // The security labels categorise security ground truth; carrying them on a
+    // non-security finding would silently pollute a per-mechanism denominator.
+    if (
+      (value.securityMechanism !== undefined ||
+        value.contextDepth !== undefined) &&
+      value.category !== 'security'
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['securityMechanism'],
+        message:
+          'securityMechanism and contextDepth are only valid on security-category findings'
       })
     }
   })

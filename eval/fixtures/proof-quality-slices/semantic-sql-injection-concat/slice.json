@@ -18,7 +18,9 @@
         12,
         14
       ],
-      "semanticSummary": "findByEmail interpolates the caller-supplied email straight into the SQL string, allowing SQL injection; use a parameterized query instead"
+      "semanticSummary": "findByEmail interpolates the caller-supplied email straight into the SQL string, allowing SQL injection; use a parameterized query instead",
+      "securityMechanism": "injection",
+      "contextDepth": "local"
     }
   ],
   "expectedNoFindingZones": [],

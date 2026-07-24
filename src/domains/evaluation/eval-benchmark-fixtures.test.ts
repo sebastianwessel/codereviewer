@@ -4,6 +4,7 @@ import { createEvalSliceManifest } from './eval-slice-manifest.js'
 
 const repositoryRoot = process.cwd()
 const benchmarkSliceRoot = 'eval/benchmarks/code-review-bench-style'
+const proofQualitySliceRoot = 'eval/fixtures/proof-quality-slices'
 
 const countBy = <T extends string>(
   values: readonly T[]
@@ -62,6 +63,72 @@ describe('code review benchmark-style fixture pack', () => {
         'null-reference'
       ])
     )
+  })
+
+  test('labels every committed security finding with a spec-15 mechanism and context depth', async () => {
+    const cases = [
+      ...(await loadEvalSliceCasesFromRoot(repositoryRoot, benchmarkSliceRoot)),
+      ...(await loadEvalSliceCasesFromRoot(repositoryRoot, proofQualitySliceRoot))
+    ]
+    const expectedFindings = cases.flatMap(
+      (evalCase) => evalCase.expectedFindings
+    )
+    const securityFindings = expectedFindings.filter(
+      (finding) => finding.category === 'security'
+    )
+
+    // Every security finding carries both labels; no non-security finding does.
+    expect(
+      securityFindings.every(
+        (finding) =>
+          finding.securityMechanism !== undefined &&
+          finding.contextDepth !== undefined
+      )
+    ).toBe(true)
+    expect(
+      expectedFindings
+        .filter((finding) => finding.category !== 'security')
+        .every(
+          (finding) =>
+            finding.securityMechanism === undefined &&
+            finding.contextDepth === undefined
+        )
+    ).toBe(true)
+
+    expect(securityFindings).toHaveLength(45)
+    expect(
+      countBy(
+        securityFindings.map((finding) => finding.securityMechanism!)
+      )
+    ).toEqual({
+      authorization: 23,
+      'concurrency-resource': 3,
+      cryptography: 1,
+      deserialization: 1,
+      injection: 2,
+      'path-traversal': 1,
+      'secret-flow': 5,
+      ssrf: 2,
+      'unsafe-config': 4,
+      xss: 3
+    })
+    expect(
+      countBy(securityFindings.map((finding) => finding.contextDepth!))
+    ).toEqual({
+      'analyzer-path-dependent': 4,
+      callee: 3,
+      caller: 1,
+      'cross-file': 6,
+      'cross-function': 5,
+      implementation: 4,
+      local: 22
+    })
+    // Obvious (local) vs hard (everything else) ground-truth split.
+    const obvious = securityFindings.filter(
+      (finding) => finding.contextDepth === 'local'
+    )
+    expect(obvious).toHaveLength(22)
+    expect(securityFindings.length - obvious.length).toBe(23)
   })
 
   test('manifest captures the benchmark pack without source text', async () => {

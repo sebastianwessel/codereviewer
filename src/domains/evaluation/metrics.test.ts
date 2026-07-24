@@ -2,6 +2,8 @@ import { describe, expect, test } from 'vitest'
 import type { Severity } from '../../shared/contracts/index.js'
 import {
   calculateEvalMetrics,
+  emptySecurityContextDepthCounts,
+  emptySecurityMechanismCounts,
   severityWeight,
   type EvalMetricCaseResult
 } from './metrics.js'
@@ -48,6 +50,8 @@ const caseResult = (
     logic: { expected: 1, matched: 0 },
     nit: { expected: 0, matched: 0 }
   },
+  securityMechanismCounts: emptySecurityMechanismCounts(),
+  securityContextDepthCounts: emptySecurityContextDepthCounts(),
   noFindingZoneFalsePositiveCount: 1,
   changedLineCount: 200,
   diffHunkCount: 4,
@@ -225,6 +229,102 @@ describe('eval metrics', () => {
     expect(metrics.recall).toBe(1)
     expect(metrics.precision).toBe(1)
     expect(metrics.commentsPerKloc).toBe(0)
+  })
+
+  test('computes security recall per mechanism, per context depth, and the obvious/hard split', () => {
+    // Five security findings, consistently labelled across the two records:
+    //   authorization/local     matched
+    //   authorization/local     matched
+    //   authorization/cross-file NOT matched
+    //   injection/cross-file    NOT matched
+    //   injection/cross-file    NOT matched
+    const mechanismCounts = emptySecurityMechanismCounts()
+    mechanismCounts.authorization = { expected: 3, matched: 2 }
+    mechanismCounts.injection = { expected: 2, matched: 0 }
+    const contextDepthCounts = emptySecurityContextDepthCounts()
+    contextDepthCounts.local = { expected: 2, matched: 2 }
+    contextDepthCounts['cross-file'] = { expected: 3, matched: 0 }
+
+    const metrics = calculateEvalMetrics([
+      caseResult({
+        securityMechanismCounts: mechanismCounts,
+        securityContextDepthCounts: contextDepthCounts
+      })
+    ])
+
+    // Per mechanism: matched / expected, with the denominators surfaced.
+    expect(metrics.securityRecallByMechanism.authorization).toBe(0.666667)
+    expect(metrics.securityMechanismCounts.authorization).toEqual({
+      expected: 3,
+      matched: 2
+    })
+    expect(metrics.securityRecallByMechanism.injection).toBe(0)
+    expect(metrics.securityMechanismCounts.injection).toEqual({
+      expected: 2,
+      matched: 0
+    })
+    // A mechanism with no expected finding: divide-by-zero -> 0 with count 0, not
+    // a misleading 100%.
+    expect(metrics.securityRecallByMechanism.ssrf).toBe(0)
+    expect(metrics.securityMechanismCounts.ssrf).toEqual({
+      expected: 0,
+      matched: 0
+    })
+
+    // Per context depth.
+    expect(metrics.securityRecallByContextDepth.local).toBe(1)
+    expect(metrics.securityRecallByContextDepth['cross-file']).toBe(0)
+    expect(
+      metrics.securityRecallByContextDepth['analyzer-path-dependent']
+    ).toBe(0)
+    expect(
+      metrics.securityContextDepthCounts['analyzer-path-dependent']
+    ).toEqual({ expected: 0, matched: 0 })
+
+    // Obvious = local (2/2), hard = everything else (0/3). The counts are the
+    // expected denominators so a small sample is not over-read.
+    expect(metrics.securityObviousRecall).toBe(1)
+    expect(metrics.securityObviousCount).toBe(2)
+    expect(metrics.securityHardRecall).toBe(0)
+    expect(metrics.securityHardCount).toBe(3)
+  })
+
+  test('reports zero security recall with zero counts when no security finding was expected', () => {
+    const metrics = calculateEvalMetrics([caseResult()])
+
+    expect(metrics.securityObviousRecall).toBe(0)
+    expect(metrics.securityHardRecall).toBe(0)
+    expect(metrics.securityObviousCount).toBe(0)
+    expect(metrics.securityHardCount).toBe(0)
+    expect(
+      Object.values(metrics.securityRecallByMechanism).every(
+        (rate) => rate === 0
+      )
+    ).toBe(true)
+    expect(
+      Object.values(metrics.securityMechanismCounts).every(
+        (counts) => counts.expected === 0 && counts.matched === 0
+      )
+    ).toBe(true)
+  })
+
+  test('aggregates security mechanism denominators across cases', () => {
+    const first = emptySecurityMechanismCounts()
+    first.authorization = { expected: 2, matched: 1 }
+    const second = emptySecurityMechanismCounts()
+    second.authorization = { expected: 1, matched: 1 }
+
+    const metrics = calculateEvalMetrics([
+      caseResult({ securityMechanismCounts: first }),
+      caseResult({ securityMechanismCounts: second })
+    ])
+
+    // (1 + 1) matched / (2 + 1) expected = 2/3.
+    expect(metrics.securityRecallByMechanism.authorization).toBe(0.666667)
+    expect(metrics.securityMechanismCounts.authorization).toEqual({
+      expected: 3,
+      matched: 2
+    })
   })
 
   test('exports one centralized severity weighting helper', () => {

@@ -18,7 +18,9 @@
         6,
         7
       ],
-      "semanticSummary": "create_archive interpolates source_dir and archive_name into a shell string run with shell=True, allowing command injection; pass an argument list without a shell instead"
+      "semanticSummary": "create_archive interpolates source_dir and archive_name into a shell string run with shell=True, allowing command injection; pass an argument list without a shell instead",
+      "securityMechanism": "injection",
+      "contextDepth": "local"
     }
   ],
   "expectedNoFindingZones": [],

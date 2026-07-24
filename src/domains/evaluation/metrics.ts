@@ -2,8 +2,13 @@ import { z } from 'zod'
 import type { Severity } from '../../shared/contracts/index.js'
 import {
   ExpectedFindingTierSchema,
+  isObviousSecurityContextDepth,
   productRecallTiers,
-  type ExpectedFindingTier
+  SecurityContextDepthSchema,
+  SecurityMechanismSchema,
+  type ExpectedFindingTier,
+  type SecurityContextDepth,
+  type SecurityMechanism
 } from './eval-fixture.schema.js'
 import { isProviderIssueWarning } from './eval-warnings.js'
 
@@ -12,8 +17,18 @@ const RATE_MAX = 1
 const METRIC_PRECISION = 1_000_000
 
 const allTiers = ExpectedFindingTierSchema.options
+const allSecurityMechanisms = SecurityMechanismSchema.options
+const allSecurityContextDepths = SecurityContextDepthSchema.options
 
 export type TierFindingCounts = {
+  readonly expected: number
+  readonly matched: number
+}
+
+// Matched/expected pair for a single security mechanism or context depth. There
+// is no precision here: an admitted finding carries no mechanism label, so only
+// recall (and its denominator) is derivable per spec 15.
+export type SecurityFindingCounts = {
   readonly expected: number
   readonly matched: number
 }
@@ -25,6 +40,25 @@ export const emptyTierCounts = (): Record<
   Object.fromEntries(
     allTiers.map((tier) => [tier, { expected: 0, matched: 0 }])
   ) as Record<ExpectedFindingTier, TierFindingCounts>
+
+export const emptySecurityMechanismCounts = (): Record<
+  SecurityMechanism,
+  SecurityFindingCounts
+> =>
+  Object.fromEntries(
+    allSecurityMechanisms.map((mechanism) => [
+      mechanism,
+      { expected: 0, matched: 0 }
+    ])
+  ) as Record<SecurityMechanism, SecurityFindingCounts>
+
+export const emptySecurityContextDepthCounts = (): Record<
+  SecurityContextDepth,
+  SecurityFindingCounts
+> =>
+  Object.fromEntries(
+    allSecurityContextDepths.map((depth) => [depth, { expected: 0, matched: 0 }])
+  ) as Record<SecurityContextDepth, SecurityFindingCounts>
 
 const clampRate = (value: unknown): unknown =>
   typeof value === 'number' && Number.isFinite(value)
@@ -50,6 +84,40 @@ const TierRateSchema = z
       number
     >
   )
+
+const SecurityFindingCountsSchema = z.strictObject({
+  expected: z.int().min(0),
+  matched: z.int().min(0)
+})
+
+// Security recall records use an empty value of 0, not the 1 recall/recallByTier
+// use for "nothing expected": a mechanism with no expected findings has NO
+// evidence of recall, and reporting 100% would be a misleading perfect. The
+// paired count records (denominators) make each rate interpretable so a
+// small-sample mechanism is never over-read.
+const SecurityMechanismRateSchema = z
+  .record(SecurityMechanismSchema, RateSchema)
+  .default(() =>
+    Object.fromEntries(
+      allSecurityMechanisms.map((mechanism) => [mechanism, 0])
+    ) as Record<SecurityMechanism, number>
+  )
+
+const SecurityMechanismCountsSchema = z
+  .record(SecurityMechanismSchema, SecurityFindingCountsSchema)
+  .default(() => emptySecurityMechanismCounts())
+
+const SecurityContextDepthRateSchema = z
+  .record(SecurityContextDepthSchema, RateSchema)
+  .default(() =>
+    Object.fromEntries(
+      allSecurityContextDepths.map((depth) => [depth, 0])
+    ) as Record<SecurityContextDepth, number>
+  )
+
+const SecurityContextDepthCountsSchema = z
+  .record(SecurityContextDepthSchema, SecurityFindingCountsSchema)
+  .default(() => emptySecurityContextDepthCounts())
 
 const severityWeights: Readonly<Record<Severity, number>> = {
   critical: 5,
@@ -150,6 +218,30 @@ export const EvalMetricsSchema = z.strictObject({
   recallByTier: TierRateSchema,
   productRecall: RateSchema.default(1),
   nitRecall: RateSchema.default(1),
+  // Security-dimension measurement (spec 15). Recall only: an admitted finding
+  // carries no mechanism label, so per-mechanism adjusted precision is NOT
+  // derivable and is deliberately absent. Every denominator is the count of
+  // security-category expected findings carrying the label, aggregated across
+  // cases like recallByTier. Non-security expected findings never touch these.
+  //
+  // securityRecallByMechanism: matched / expected security findings, per
+  // mechanism. Empty value 0 (see SecurityMechanismRateSchema).
+  securityRecallByMechanism: SecurityMechanismRateSchema,
+  // Per-mechanism {expected, matched} denominators so a small sample is not
+  // over-read and the report can show matched/expected.
+  securityMechanismCounts: SecurityMechanismCountsSchema,
+  // securityRecallByContextDepth: matched / expected security findings, per
+  // context depth (local | cross-function | callee | caller | implementation |
+  // cross-file | analyzer-path-dependent).
+  securityRecallByContextDepth: SecurityContextDepthRateSchema,
+  securityContextDepthCounts: SecurityContextDepthCountsSchema,
+  // Obvious-vs-hard split, tracked separately so aced trivial (local) sinks
+  // never mask the hard-class gap. Obvious = `local` context depth; hard = every
+  // other depth. The counts are the expected denominators. Empty value 0.
+  securityObviousRecall: RateSchema.default(0),
+  securityHardRecall: RateSchema.default(0),
+  securityObviousCount: z.int().min(0).default(0),
+  securityHardCount: z.int().min(0).default(0),
   inputTokens: z.int().min(0).default(0),
   // Cached input tokens are a SUBSET of inputTokens (already counted there).
   cachedInputTokens: z.int().min(0).default(0),
@@ -214,6 +306,18 @@ export type EvalMetricCaseResult = {
   readonly fixApplyFailedCount: number
   readonly fixApplyAttemptedCount: number
   readonly tierCounts: Record<ExpectedFindingTier, TierFindingCounts>
+  // Security-dimension tallies (spec 15): matched/expected counts for the
+  // case's security-category expected findings, bucketed by mechanism and by
+  // context depth. Derived from the match result joined to the labelled expected
+  // findings. Non-security expected findings never appear here.
+  readonly securityMechanismCounts: Record<
+    SecurityMechanism,
+    SecurityFindingCounts
+  >
+  readonly securityContextDepthCounts: Record<
+    SecurityContextDepth,
+    SecurityFindingCounts
+  >
   readonly noFindingZoneFalsePositiveCount: number
   readonly changedLineCount: number
   readonly diffHunkCount: number
@@ -352,6 +456,79 @@ export const calculateEvalMetrics = (
     1
   )
   const nitRecall = recallByTier.nit
+  // Security dimension (spec 15). Aggregate the per-case mechanism and
+  // context-depth tallies exactly like recallByTier, but with an empty value of
+  // 0 so a mechanism with no expected findings reports 0, not a misleading 100%.
+  const securityMechanismTotals = allSecurityMechanisms.map((mechanism) => ({
+    mechanism,
+    expected: sum(
+      caseResults.map(
+        (result) => result.securityMechanismCounts[mechanism].expected
+      )
+    ),
+    matched: sum(
+      caseResults.map(
+        (result) => result.securityMechanismCounts[mechanism].matched
+      )
+    )
+  }))
+  const securityRecallByMechanism = Object.fromEntries(
+    securityMechanismTotals.map(({ mechanism, expected, matched }) => [
+      mechanism,
+      ratio(matched, expected, 0)
+    ])
+  ) as Record<SecurityMechanism, number>
+  const securityMechanismCounts = Object.fromEntries(
+    securityMechanismTotals.map(({ mechanism, expected, matched }) => [
+      mechanism,
+      { expected, matched }
+    ])
+  ) as Record<SecurityMechanism, SecurityFindingCounts>
+  const securityContextDepthTotals = allSecurityContextDepths.map((depth) => ({
+    depth,
+    expected: sum(
+      caseResults.map(
+        (result) => result.securityContextDepthCounts[depth].expected
+      )
+    ),
+    matched: sum(
+      caseResults.map(
+        (result) => result.securityContextDepthCounts[depth].matched
+      )
+    )
+  }))
+  const securityRecallByContextDepth = Object.fromEntries(
+    securityContextDepthTotals.map(({ depth, expected, matched }) => [
+      depth,
+      ratio(matched, expected, 0)
+    ])
+  ) as Record<SecurityContextDepth, number>
+  const securityContextDepthCounts = Object.fromEntries(
+    securityContextDepthTotals.map(({ depth, expected, matched }) => [
+      depth,
+      { expected, matched }
+    ])
+  ) as Record<SecurityContextDepth, SecurityFindingCounts>
+  const obviousDepthTotals = securityContextDepthTotals.filter((entry) =>
+    isObviousSecurityContextDepth(entry.depth)
+  )
+  const hardDepthTotals = securityContextDepthTotals.filter(
+    (entry) => !isObviousSecurityContextDepth(entry.depth)
+  )
+  const securityObviousExpected = sum(
+    obviousDepthTotals.map((entry) => entry.expected)
+  )
+  const securityHardExpected = sum(hardDepthTotals.map((entry) => entry.expected))
+  const securityObviousRecall = ratio(
+    sum(obviousDepthTotals.map((entry) => entry.matched)),
+    securityObviousExpected,
+    0
+  )
+  const securityHardRecall = ratio(
+    sum(hardDepthTotals.map((entry) => entry.matched)),
+    securityHardExpected,
+    0
+  )
   const severityWeightedPrecision = ratio(
     totalMatchedExpectedSeverityWeight,
     totalMatchedExpectedSeverityWeight + totalFalsePositiveSeverityWeight,
@@ -514,6 +691,14 @@ export const calculateEvalMetrics = (
     recallByTier,
     productRecall,
     nitRecall,
+    securityRecallByMechanism,
+    securityMechanismCounts,
+    securityRecallByContextDepth,
+    securityContextDepthCounts,
+    securityObviousRecall,
+    securityHardRecall,
+    securityObviousCount: securityObviousExpected,
+    securityHardCount: securityHardExpected,
     inputTokens: sum(caseResults.map((result) => result.inputTokens)),
     cachedInputTokens: sum(caseResults.map((result) => result.cachedInputTokens)),
     outputTokens: sum(caseResults.map((result) => result.outputTokens)),

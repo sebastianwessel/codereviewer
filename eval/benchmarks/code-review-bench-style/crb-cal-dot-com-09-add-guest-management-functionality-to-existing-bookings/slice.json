@@ -30,6 +30,8 @@
       "category": "security",
       "severity": "critical",
       "semanticSummary": "The logic for checking team admin/owner permissions is incorrect. This condition uses AND (&&) which requires both isTeamAdmin AND isTeamOwner to be true, but it should use OR (||) since a user needs to be either an admin OR an owner to have permission.",
+      "securityMechanism": "authorization",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "security"
     },
@@ -51,6 +53,8 @@
       "category": "security",
       "severity": "low",
       "semanticSummary": "Starting with an array containing an empty string may cause validation issues. Consider starting with an empty array [] and handling the empty state in the MultiEmail component instead.",
+      "securityMechanism": "authorization",
+      "contextDepth": "local",
       "matchMode": "semantic-only",
       "tier": "logic"
     }

@@ -30,6 +30,8 @@
       "category": "security",
       "severity": "medium",
       "semanticSummary": "Anonymous authentication now fails entirely if anonDeviceService.TagDevice returns ErrDeviceLimitReached. Previously, device tagging was asynchronous and non-blocking. This change prevents anonymous users from authenticating when the device limit is reached.",
+      "securityMechanism": "authorization",
+      "contextDepth": "callee",
       "matchMode": "semantic-only",
       "tier": "logic"
     },

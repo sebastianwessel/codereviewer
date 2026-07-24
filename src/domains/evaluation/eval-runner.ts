@@ -41,6 +41,8 @@ import {
 } from './eval-plausibility-judge.js'
 import {
   calculateEvalMetrics,
+  emptySecurityContextDepthCounts,
+  emptySecurityMechanismCounts,
   emptyTierCounts,
   EvalMetricsSchema,
   severityWeight,
@@ -361,6 +363,58 @@ const tierCountsForCase = (
   return counts
 }
 
+// Join the match result to the labelled expected findings so the security
+// dimension (spec 15) is scored per mechanism and per context depth. Only
+// security-category expected findings carrying the respective label enter the
+// counts, so a non-security finding never touches a security denominator, and an
+// inconclusive expectation leaves the denominator for the same reason it leaves
+// the aggregate recall one: a failed judge call is not a miss.
+const securityCountsForCase = (
+  evalCase: EvalCase,
+  matchResult: EvalMatcherResult
+): {
+  readonly securityMechanismCounts: EvalMetricCaseResult['securityMechanismCounts']
+  readonly securityContextDepthCounts: EvalMetricCaseResult['securityContextDepthCounts']
+} => {
+  const securityMechanismCounts = emptySecurityMechanismCounts()
+  const securityContextDepthCounts = emptySecurityContextDepthCounts()
+  const matchedExpectedIndexes = new Set(
+    matchResult.matches.map((match) => match.expectedIndex)
+  )
+  const inconclusiveExpectedIndexes = new Set(
+    matchResult.inconclusiveExpectedIndexes
+  )
+
+  evalCase.expectedFindings.forEach((expected, expectedIndex) => {
+    if (
+      expected.category !== 'security' ||
+      inconclusiveExpectedIndexes.has(expectedIndex)
+    ) {
+      return
+    }
+
+    const matched = matchedExpectedIndexes.has(expectedIndex) ? 1 : 0
+
+    if (expected.securityMechanism !== undefined) {
+      const current = securityMechanismCounts[expected.securityMechanism]
+      securityMechanismCounts[expected.securityMechanism] = {
+        expected: current.expected + 1,
+        matched: current.matched + matched
+      }
+    }
+
+    if (expected.contextDepth !== undefined) {
+      const current = securityContextDepthCounts[expected.contextDepth]
+      securityContextDepthCounts[expected.contextDepth] = {
+        expected: current.expected + 1,
+        matched: current.matched + matched
+      }
+    }
+  })
+
+  return { securityMechanismCounts, securityContextDepthCounts }
+}
+
 type FixLaneCaseTallies = {
   readonly fixJudgmentAgreementCount: number
   readonly fixJudgedLabeledCount: number
@@ -570,6 +624,7 @@ const buildMetricCase = (
       unlistedRealFindingIds: input.plausibility?.unlistedRealFindingIds ?? []
     }),
     tierCounts: tierCountsForCase(input.evalCase, input.matchResult),
+    ...securityCountsForCase(input.evalCase, input.matchResult),
     noFindingZoneFalsePositiveCount:
       input.matchResult.noFindingZoneFalsePositiveIds.length,
     changedLineCount: input.output.changedLineCount,

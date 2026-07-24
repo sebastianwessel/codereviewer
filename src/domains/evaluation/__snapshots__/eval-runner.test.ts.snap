@@ -213,6 +213,108 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "securityContextDepthCounts": {
+          "analyzer-path-dependent": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "callee": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "caller": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-file": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-function": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "implementation": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "local": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityHardCount": 0,
+        "securityHardRecall": 0,
+        "securityMechanismCounts": {
+          "authorization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "prompt-injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityObviousCount": 0,
+        "securityObviousRecall": 0,
+        "securityRecallByContextDepth": {
+          "analyzer-path-dependent": 0,
+          "callee": 0,
+          "caller": 0,
+          "cross-file": 0,
+          "cross-function": 0,
+          "implementation": 0,
+          "local": 0,
+        },
+        "securityRecallByMechanism": {
+          "authorization": 0,
+          "concurrency-resource": 0,
+          "cryptography": 0,
+          "deserialization": 0,
+          "injection": 0,
+          "path-traversal": 0,
+          "prompt-injection": 0,
+          "secret-flow": 0,
+          "ssrf": 0,
+          "unsafe-config": 0,
+          "xss": 0,
+        },
         "severityAccuracy": 1,
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
@@ -281,6 +383,108 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "securityContextDepthCounts": {
+          "analyzer-path-dependent": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "callee": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "caller": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-file": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-function": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "implementation": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "local": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityHardCount": 0,
+        "securityHardRecall": 0,
+        "securityMechanismCounts": {
+          "authorization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "prompt-injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityObviousCount": 0,
+        "securityObviousRecall": 0,
+        "securityRecallByContextDepth": {
+          "analyzer-path-dependent": 0,
+          "callee": 0,
+          "caller": 0,
+          "cross-file": 0,
+          "cross-function": 0,
+          "implementation": 0,
+          "local": 0,
+        },
+        "securityRecallByMechanism": {
+          "authorization": 0,
+          "concurrency-resource": 0,
+          "cryptography": 0,
+          "deserialization": 0,
+          "injection": 0,
+          "path-traversal": 0,
+          "prompt-injection": 0,
+          "secret-flow": 0,
+          "ssrf": 0,
+          "unsafe-config": 0,
+          "xss": 0,
+        },
         "severityAccuracy": 1,
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
@@ -348,6 +552,108 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "securityContextDepthCounts": {
+          "analyzer-path-dependent": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "callee": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "caller": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-file": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-function": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "implementation": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "local": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityHardCount": 0,
+        "securityHardRecall": 0,
+        "securityMechanismCounts": {
+          "authorization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "prompt-injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityObviousCount": 0,
+        "securityObviousRecall": 0,
+        "securityRecallByContextDepth": {
+          "analyzer-path-dependent": 0,
+          "callee": 0,
+          "caller": 0,
+          "cross-file": 0,
+          "cross-function": 0,
+          "implementation": 0,
+          "local": 0,
+        },
+        "securityRecallByMechanism": {
+          "authorization": 0,
+          "concurrency-resource": 0,
+          "cryptography": 0,
+          "deserialization": 0,
+          "injection": 0,
+          "path-traversal": 0,
+          "prompt-injection": 0,
+          "secret-flow": 0,
+          "ssrf": 0,
+          "unsafe-config": 0,
+          "xss": 0,
+        },
         "severityAccuracy": 1,
         "severityWeightedF1": 0,
         "severityWeightedPrecision": 0,
@@ -415,6 +721,108 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "securityContextDepthCounts": {
+          "analyzer-path-dependent": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "callee": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "caller": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-file": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-function": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "implementation": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "local": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityHardCount": 0,
+        "securityHardRecall": 0,
+        "securityMechanismCounts": {
+          "authorization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "prompt-injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityObviousCount": 0,
+        "securityObviousRecall": 0,
+        "securityRecallByContextDepth": {
+          "analyzer-path-dependent": 0,
+          "callee": 0,
+          "caller": 0,
+          "cross-file": 0,
+          "cross-function": 0,
+          "implementation": 0,
+          "local": 0,
+        },
+        "securityRecallByMechanism": {
+          "authorization": 0,
+          "concurrency-resource": 0,
+          "cryptography": 0,
+          "deserialization": 0,
+          "injection": 0,
+          "path-traversal": 0,
+          "prompt-injection": 0,
+          "secret-flow": 0,
+          "ssrf": 0,
+          "unsafe-config": 0,
+          "xss": 0,
+        },
         "severityAccuracy": 1,
         "severityWeightedF1": 1,
         "severityWeightedPrecision": 1,
@@ -483,6 +891,108 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "securityContextDepthCounts": {
+          "analyzer-path-dependent": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "callee": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "caller": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-file": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cross-function": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "implementation": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "local": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityHardCount": 0,
+        "securityHardRecall": 0,
+        "securityMechanismCounts": {
+          "authorization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "prompt-injection": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
+        "securityObviousCount": 0,
+        "securityObviousRecall": 0,
+        "securityRecallByContextDepth": {
+          "analyzer-path-dependent": 0,
+          "callee": 0,
+          "caller": 0,
+          "cross-file": 0,
+          "cross-function": 0,
+          "implementation": 0,
+          "local": 0,
+        },
+        "securityRecallByMechanism": {
+          "authorization": 0,
+          "concurrency-resource": 0,
+          "cryptography": 0,
+          "deserialization": 0,
+          "injection": 0,
+          "path-traversal": 0,
+          "prompt-injection": 0,
+          "secret-flow": 0,
+          "ssrf": 0,
+          "unsafe-config": 0,
+          "xss": 0,
+        },
         "severityAccuracy": 1,
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
@@ -544,6 +1054,108 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     },
     "refutationFalseNegativeCount": 0,
     "refutationFalsePositiveCount": 0,
+    "securityContextDepthCounts": {
+      "analyzer-path-dependent": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "callee": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "caller": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "cross-file": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "cross-function": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "implementation": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "local": {
+        "expected": 0,
+        "matched": 0,
+      },
+    },
+    "securityHardCount": 0,
+    "securityHardRecall": 0,
+    "securityMechanismCounts": {
+      "authorization": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "concurrency-resource": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "cryptography": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "deserialization": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "injection": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "path-traversal": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "prompt-injection": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "secret-flow": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "ssrf": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "unsafe-config": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "xss": {
+        "expected": 0,
+        "matched": 0,
+      },
+    },
+    "securityObviousCount": 0,
+    "securityObviousRecall": 0,
+    "securityRecallByContextDepth": {
+      "analyzer-path-dependent": 0,
+      "callee": 0,
+      "caller": 0,
+      "cross-file": 0,
+      "cross-function": 0,
+      "implementation": 0,
+      "local": 0,
+    },
+    "securityRecallByMechanism": {
+      "authorization": 0,
+      "concurrency-resource": 0,
+      "cryptography": 0,
+      "deserialization": 0,
+      "injection": 0,
+      "path-traversal": 0,
+      "prompt-injection": 0,
+      "secret-flow": 0,
+      "ssrf": 0,
+      "unsafe-config": 0,
+      "xss": 0,
+    },
     "severityAccuracy": 1,
     "severityWeightedF1": 0.666667,
     "severityWeightedPrecision": 0.5,
@@ -610,6 +1222,8 @@ Fixtures: 2
 | Recall | 100.0% |
 | Product recall | 100.0% |
 | Nit recall | 100.0% |
+| Security obvious recall | 0.0% (0 expected) |
+| Security hard recall | 0.0% (0 expected) |
 | Precision | 50.0% |
 | Adjusted precision | 50.0% |
 | F1 | 66.7% |

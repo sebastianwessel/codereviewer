@@ -13,7 +13,9 @@
       "severity": "high",
       "path": "src/authorization.ts",
       "lineRange": [8, 10],
-      "semanticSummary": "Authorization defaults to allow when session is missing"
+      "semanticSummary": "Authorization defaults to allow when session is missing",
+      "securityMechanism": "authorization",
+      "contextDepth": "cross-file"
     }
   ],
   "expectedNoFindingZones": [],

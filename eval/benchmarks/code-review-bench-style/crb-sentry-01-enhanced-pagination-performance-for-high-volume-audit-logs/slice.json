@@ -30,6 +30,8 @@
       "category": "security",
       "severity": "high",
       "semanticSummary": "When requests are authenticated with API keys or org auth tokens (which have user_id=None), organization_context.member is None. Line 71 attempts to access organization_context.member.has_global_access without checking if member is None, causing an AttributeError crash when optimized_pagination=true is used, even though the request passed all permission checks with valid org:write scope.",
+      "securityMechanism": "authorization",
+      "contextDepth": "analyzer-path-dependent",
       "matchMode": "semantic-only",
       "tier": "runtime-critical"
     },

@@ -18,7 +18,9 @@
         15,
         16
       ],
-      "semanticSummary": "baseDir.resolve(fileName) accepts traversal sequences such as ../ with no normalization or startsWith(baseDir) check, so readUserFile can read files outside baseDir"
+      "semanticSummary": "baseDir.resolve(fileName) accepts traversal sequences such as ../ with no normalization or startsWith(baseDir) check, so readUserFile can read files outside baseDir",
+      "securityMechanism": "path-traversal",
+      "contextDepth": "local"
     }
   ],
   "expectedNoFindingZones": [],

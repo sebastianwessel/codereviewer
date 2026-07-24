@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import {
   resolveExpectedFindingMatchMode,
+  SecurityContextDepthSchema,
+  SecurityMechanismSchema,
   type EvalCase
 } from './eval-fixture.schema.js'
 import {
@@ -121,6 +123,8 @@ const appendEvalSummaryMetrics = (
       `| Recall | ${formatPercent(report.metrics.recall)} |`,
       `| Product recall | ${formatPercent(report.metrics.productRecall)} |`,
       `| Nit recall | ${formatPercent(report.metrics.nitRecall)} |`,
+      `| Security obvious recall | ${formatPercent(report.metrics.securityObviousRecall)} (${report.metrics.securityObviousCount} expected) |`,
+      `| Security hard recall | ${formatPercent(report.metrics.securityHardRecall)} (${report.metrics.securityHardCount} expected) |`,
       `| Precision | ${formatPercent(report.metrics.precision)} |`,
       `| Adjusted precision | ${formatPercent(report.metrics.adjustedPrecision)} |`,
       `| F1 | ${formatPercent(report.metrics.f1)} |`,
@@ -179,6 +183,53 @@ const appendEvalSummaryRecallByTier = (
     rows: tierDisplayOrder.map(
       (tier) => `| ${tier} | ${formatPercent(report.metrics.recallByTier[tier])} |`
     )
+  })
+}
+
+// Security by mechanism / context depth (spec 15). Recall only — an admitted
+// finding carries no mechanism label, so there is no per-mechanism precision to
+// render. Only buckets with expected findings are shown, so a report with no
+// security ground truth omits the section entirely, and matched/expected keeps
+// a small sample from being over-read.
+const appendEvalSummarySecurityByMechanism = (
+  lines: string[],
+  report: EvalReport
+): void => {
+  appendMarkdownTable(lines, {
+    heading: '## Security by Mechanism',
+    header: '| Mechanism | Recall | Matched/Expected |',
+    alignment: '| --- | ---: | ---: |',
+    rows: SecurityMechanismSchema.options.flatMap((mechanism) => {
+      const counts = report.metrics.securityMechanismCounts[mechanism]
+      if (counts === undefined || counts.expected === 0) {
+        return []
+      }
+
+      return [
+        `| ${mechanism} | ${formatPercent(report.metrics.securityRecallByMechanism[mechanism] ?? 0)} | ${counts.matched}/${counts.expected} |`
+      ]
+    })
+  })
+}
+
+const appendEvalSummarySecurityByContextDepth = (
+  lines: string[],
+  report: EvalReport
+): void => {
+  appendMarkdownTable(lines, {
+    heading: '## Security by Context Depth',
+    header: '| Context depth | Recall | Matched/Expected |',
+    alignment: '| --- | ---: | ---: |',
+    rows: SecurityContextDepthSchema.options.flatMap((depth) => {
+      const counts = report.metrics.securityContextDepthCounts[depth]
+      if (counts === undefined || counts.expected === 0) {
+        return []
+      }
+
+      return [
+        `| ${depth} | ${formatPercent(report.metrics.securityRecallByContextDepth[depth] ?? 0)} | ${counts.matched}/${counts.expected} |`
+      ]
+    })
   })
 }
 
@@ -611,6 +662,8 @@ export const renderEvalSummary = (
   appendEvalSummarySelection(lines, input.report)
   appendEvalSummaryMetrics(lines, input.report)
   appendEvalSummaryRecallByTier(lines, input.report)
+  appendEvalSummarySecurityByMechanism(lines, input.report)
+  appendEvalSummarySecurityByContextDepth(lines, input.report)
   appendEvalSummaryMetricGroups(lines, input.report)
   appendEvalSummaryCases(lines, {
     cases: input.cases,

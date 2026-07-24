@@ -177,6 +177,16 @@ export const appendEvalComparisonMetricDeltas = (
         head: input.head.metrics.plausibilityJudgeAgreement ?? 0
       }),
       formatEvalComparisonPercentMetricDeltaRow({
+        metric: 'Security obvious recall',
+        base: input.base.metrics.securityObviousRecall,
+        head: input.head.metrics.securityObviousRecall
+      }),
+      formatEvalComparisonPercentMetricDeltaRow({
+        metric: 'Security hard recall',
+        base: input.base.metrics.securityHardRecall,
+        head: input.head.metrics.securityHardRecall
+      }),
+      formatEvalComparisonPercentMetricDeltaRow({
         metric: 'Provider error rate',
         base: input.base.metrics.providerErrorRate,
         head: input.head.metrics.providerErrorRate
