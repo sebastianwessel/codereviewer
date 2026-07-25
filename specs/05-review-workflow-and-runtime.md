@@ -355,6 +355,14 @@ sharing a call must not make one candidate's verdict depend on another's.
 - Packet fields are ordered so everything shared across batches comes first and
   the per-candidate payload last, keeping the longest possible stable prompt
   prefix for provider prompt caches.
+- The rule that refutes a finding reachable only by violating a declared type,
+  signature, schema, or contract is load-bearing for precision and must not be
+  relaxed without evidence. Removing its guard-rail — by exempting values that cross
+  a trust boundary — was measured on the real-repository corpus: it admitted a
+  correct finding the rule had suppressed, but adjusted precision fell from 100% to
+  86.7% with two genuine false positives and no net recall gain, so it was reverted.
+  A future attempt needs a mechanism that separates a type violated by an attacker at
+  a boundary from one violated by a caller that cannot exist.
 - Model-origin candidates below `aiReview.actionableSeverityThreshold` (default
   `medium`) are rejected as `below-threshold` rather than admitted as actionable,
   keeping the actionable surface focused on impactful runtime/security defects.
