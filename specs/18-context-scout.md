@@ -1,6 +1,6 @@
 # 18: Context Scout
 
-Status: Approved
+Status: Approved (capability off by default; measured neutral)
 Date: 2026-07-25
 
 ## Purpose
@@ -94,6 +94,32 @@ exit code 2. Keys are defined in `04-configuration-and-providers.md`.
   discovery agent is still offered no tools and one step; a symbol the scout invents
   is not injected; with the scout disabled, no scout call is issued.
 - No real-provider run in the test suite.
+
+## Measured Outcome
+
+Measured on the sixteen-case real-repository corpus against the same-model baseline,
+single variable, with zero provider errors in both arms: recall flat at 62.5%
+(ten matched in each), **adjusted precision held at 100% with zero genuine false
+positives**, severity accuracy unchanged at 70%, cost +27%. Four cases gained and
+four lost — churn, not signal.
+
+The reason the churn is noise is visible in the engagement data: the scout resolved a
+symbol on only **three of eighteen tasks**. On thirteen of sixteen cases it added
+nothing at all, so a flip on those cases cannot be attributed to it. Where it did
+engage it stayed focused — one to three symbols, 879 to 2255 bytes — which is the
+behavior the design intends and the opposite of the 162KB single reads that
+characterised the tool-enabled reviewer.
+
+Read against `16-agentic-cross-file-discovery.md`, the comparison is informative:
+giving the reviewer tools cost recall in every measurement, while moving the same
+job into a separate selection call costs nothing and damages nothing. Separating
+selection from judgment removed the harm; it has not yet produced a gain. The
+capability therefore stays off by default.
+
+The actionable gap is engagement, not safety: either the scout is too conservative
+about asking, or these cases' evidence is not reachable by naming a symbol in an
+imported file. That is what a next iteration should attack, and a wider corpus should
+confirm, before this ships enabled.
 
 ## Acceptance
 
