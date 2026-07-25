@@ -260,6 +260,15 @@ minimum marks its adjusted precision untrustworthy.
 | Metric | Definition |
 | --- | --- |
 | `parseValidity` | Fraction of outputs validating against schemas. |
+Rates computed over MATCHED findings — `severityAccuracy`, `lineAccuracy`, and the
+severity-weighted scores — are not comparable between two runs whose recall differs.
+Their denominator is the matched set, so a change that improves recall mechanically
+moves them by adding previously-missed (typically harder) findings to that set. When
+recall differs between the runs being compared, the severity or line comparison must
+be made on the INTERSECTION of findings matched in both runs, and any headline
+movement in these rates must be reported as composition rather than as a quality
+change until that paired check is done.
+
 | `recall` | Expected findings matched by actionable admitted findings divided by expected findings. Model-origin actionable findings require a `proved` refutation verdict; trusted deterministic-rule findings are refutation-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. |
 | `precision` | Actionable admitted findings matched to expected findings divided by actionable admitted findings. Model-origin actionable findings require a `proved` refutation verdict; trusted deterministic-rule findings are refutation-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. |
 | `f1` | Harmonic mean of precision and recall. |
