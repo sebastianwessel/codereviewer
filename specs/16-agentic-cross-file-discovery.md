@@ -123,9 +123,16 @@ cases, with the per-read excerpt cap applied and verified, recall fell from 66.7
 44.4% (two cases lost, none gained) at +78% cost. Adjusted precision stayed at 100%
 with zero genuine false positives in every arm, so the loss is recall, not noise.
 
-An earlier reading credited the mechanism with flipping a cross-file security case to
-found; the nine-case run found that same case from the baseline unaided, so that
-result was run-to-run variance and is not evidence.
+A third run on the full sixteen-case corpus, eleven of whose cases carry cross-file
+evidence, reached the same conclusion: recall 68.8% to 56.3% (one case gained, three
+lost) at +71% cost, again with adjusted precision at 100% and no genuine false
+positives. Three measurements on the corpus built to favour this capability point the
+same way.
+
+Which individual case flips varies between runs — one cross-file security case was
+gained at four cases, found by the baseline unaided at nine, and lost at sixteen — so
+no single case is evidence either way. The aggregate direction is what holds, and an
+earlier reading that credited the mechanism with flipping that case is withdrawn.
 
 Re-enabling requires a changed mechanism AND a multi-seed measurement, not a
 configuration change. Two hypotheses are worth testing first: that tool-use mode
