@@ -49,7 +49,7 @@ export const maxChildAgentCallsForReview = (
   // discovery call — under-reserving would cut a task off mid-investigation.
   const crossFileCallsPerDiscoveryCall =
     input.crossFileRetrieval?.enabled === true
-      ? input.crossFileRetrieval.maxToolCallsPerTask
+      ? input.crossFileRetrieval.maxToolCallsPerTask + CROSS_FILE_STEP_HEADROOM
       : 0
   const holisticCalls =
     taskCount * discoveryCallsPerTask * (1 + crossFileCallsPerDiscoveryCall)
@@ -104,15 +104,23 @@ export const reviewSkillAgentOptions = (
 
 // Spec 16: when cross-file retrieval is enabled, the holistic discovery agent also
 // gets the mediated repository tools and enough steps to spend its tool-call budget
-// and still emit findings (budget + 1, mirroring the investigation agent). Every
-// other role, and the disabled path, is unchanged.
+// and still emit findings. The allowance is budget + CROSS_FILE_STEP_HEADROOM, not
+// budget + 1: a model that requests one more read after the budget is gone receives
+// a recoverable budget error and needs a further step to answer. Too tight a step
+// allowance makes the agent loop throw `iterations_exceeded`, which would cost the
+// task every finding it had — the opposite of an additive mode.
+const CROSS_FILE_STEP_HEADROOM = 3
+
 const crossFileDiscoveryAgentOptions = (
   base: ReturnType<typeof reviewSkillAgentOptions>,
   maxToolCallsPerTask: number
 ) => ({
   ...base,
   tools: [...REPO_TOOL_IDS],
-  maxSteps: Math.max(base.maxSteps, maxToolCallsPerTask + 1)
+  maxSteps: Math.max(
+    base.maxSteps,
+    maxToolCallsPerTask + CROSS_FILE_STEP_HEADROOM
+  )
 })
 
 export const reviewAgentOptionsForRole = (

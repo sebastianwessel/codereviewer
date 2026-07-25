@@ -54,15 +54,16 @@ describe('workflow harness config', () => {
   })
 
   test('reserves extra discovery steps for cross-file retrieval tool calls', () => {
-    // Each discovery call may spend up to maxToolCallsPerTask extra steps before it
-    // answers: 8 tasks * 1 call * (1 + 4) + 8*12 refutations + 2*2 buffer = 140.
+    // Each discovery call may spend its tool-call budget plus the step headroom
+    // before it answers: 8 tasks * 1 call * (1 + 4 + 3) + 8*12 refutations
+    // + 2*2 buffer = 64 + 96 + 4 = 164.
     expect(
       maxChildAgentCallsForReview({
         taskCount: 8,
         maxConcurrentTasks: 2,
         crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 4 }
       })
-    ).toBe(140)
+    ).toBe(164)
 
     // Disabled leaves the budget exactly as it was.
     expect(
@@ -88,11 +89,11 @@ describe('workflow harness config', () => {
       skillIds: [],
       crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 4 }
     })
-    // Enabled: the mediated repo tools plus enough steps to spend the budget and
-    // still emit findings (budget + 1).
+    // Enabled: the mediated repo tools plus enough steps to spend the budget,
+    // recover from a budget-exceeded tool result, and still emit findings.
     expect(enabled).toEqual({
       builtinTools: false,
-      maxSteps: 5,
+      maxSteps: 7,
       tools: ['repo_read', 'repo_list', 'repo_grep']
     })
 

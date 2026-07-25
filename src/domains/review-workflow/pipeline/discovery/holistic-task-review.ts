@@ -11,6 +11,7 @@ import {
   type TaskReviewResult,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
+import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
 
 // Present the changed source to the holistic reviewer as a clean, line-numbered
@@ -379,26 +380,53 @@ const candidateFromFinding = (
   })
 }
 
+// A tool-enabled discovery call (spec 16) can exhaust its agent step allowance if
+// the model keeps requesting reads instead of answering. That is a bound on the
+// model's behavior, not a run failure: letting it propagate would fail the whole
+// task and lose every finding the call had — exactly what an additive mode must
+// never do. Such a call yields no findings and is surfaced as a recovered provider
+// issue so the degradation stays visible instead of silent.
+const isAgentLoopBudgetError = (error: unknown): boolean =>
+  error instanceof Error &&
+  /agent loop budget exceeded|iterations_exceeded/iu.test(error.message)
+
+type DiscoveryCallResult = {
+  readonly findings: readonly unknown[]
+  readonly providerIssues: readonly ProviderIssue[]
+}
+
 const runDiscoveryCall = async (
   runner: HolisticReviewRunner,
   taskInput: TaskReviewInput,
   task: WorkflowReviewTask,
   reviewText: string,
-  signal: AbortSignal | undefined
-): Promise<readonly unknown[]> => {
-  const review = ModelHolisticReviewResultSchema.parse(
-    await runner(
-      {
-        runId: taskInput.runId,
-        taskId: task.id,
-        paths: [...task.paths],
-        reviewText
-      },
-      signal
+  signal: AbortSignal | undefined,
+  stage: string
+): Promise<DiscoveryCallResult> => {
+  try {
+    const review = ModelHolisticReviewResultSchema.parse(
+      await runner(
+        {
+          runId: taskInput.runId,
+          taskId: task.id,
+          paths: [...task.paths],
+          reviewText
+        },
+        signal
+      )
     )
-  )
 
-  return review.findings
+    return { findings: review.findings, providerIssues: [] }
+  } catch (error) {
+    if (!isAgentLoopBudgetError(error)) {
+      throw error
+    }
+
+    return {
+      findings: [],
+      providerIssues: [providerIssueForError({ error, stage, recovered: true })]
+    }
+  }
 }
 
 // Holistic discovery: a recall-first whole-change review per task. It reads the full
@@ -423,15 +451,17 @@ export const runModelBackedHolisticTaskReview = async (
   const candidatesById = new Map<string, CandidateFinding>()
   const rawDiff = input.workflowInput.reviewedDiffText
 
-  const generalFindings = await runDiscoveryCall(
+  const general = await runDiscoveryCall(
     input.runners.holisticReview,
     input.taskInput,
     input.task,
     buildReviewText(input.taskInput, rawDiff),
-    input.signal
+    input.signal,
+    'holistic_review'
   )
+  const providerIssues: ProviderIssue[] = [...general.providerIssues]
   let droppedCount = collectCandidates({
-    findings: generalFindings,
+    findings: general.findings,
     task: input.task,
     into: candidatesById,
     maxToAdd: HOLISTIC_MAX_CANDIDATES
@@ -443,16 +473,18 @@ export const runModelBackedHolisticTaskReview = async (
     const generalLocations = new Set(
       [...candidatesById.values()].map(locationKey)
     )
-    const securityFindings = await runDiscoveryCall(
+    const security = await runDiscoveryCall(
       input.runners.holisticReview,
       input.taskInput,
       input.task,
       buildSecurityReviewText(input.taskInput, rawDiff),
-      input.signal
+      input.signal,
+      'holistic_review_security'
     )
-    securityFindingCount = securityFindings.length
+    providerIssues.push(...security.providerIssues)
+    securityFindingCount = security.findings.length
     droppedCount += collectCandidates({
-      findings: securityFindings,
+      findings: security.findings,
       task: input.task,
       into: candidatesById,
       maxToAdd: SECURITY_MAX_CANDIDATES,
@@ -464,7 +496,7 @@ export const runModelBackedHolisticTaskReview = async (
 
   input.logger.debug('Holistic task review completed.', {
     task_id: input.task.id,
-    finding_count: generalFindings.length,
+    finding_count: general.findings.length,
     security_pass_enabled: input.workflowInput.securityPassEnabled,
     security_finding_count: securityFindingCount,
     general_candidate_count: generalCandidateCount,
@@ -476,6 +508,6 @@ export const runModelBackedHolisticTaskReview = async (
   return {
     candidates,
     evidenceRecords: [],
-    providerIssues: []
+    providerIssues
   }
 }
