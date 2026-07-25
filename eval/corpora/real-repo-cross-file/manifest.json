@@ -121,6 +121,163 @@
       ],
       "tags": ["contract", "async", "state-copy"],
       "notes": "The omission is visible only against the full Context struct and the middleware that reads c.Errors (errors.go, recovery.go, logger.go)."
+    },
+    {
+      "id": "golang-jwt-zero-exp-parsed-as-absent-claim",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/golang-jwt/jwt.git",
+      "upstreamOwner": "golang-jwt",
+      "upstreamRepo": "jwt",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "e8e5b83ca9a5c5a3f287eda52c7bca78f9a6d176",
+      "fixCommittedAt": "2026-05-26T23:30:25+02:00",
+      "parentCommit": "9a70137d962aa5105727b6f2f31519bfb6ec90b4",
+      "reviewedPaths": ["map_claims.go"],
+      "reviewIntent": "Short-circuit numeric-date claim parsing when a float claim value is zero",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "map_claims.go",
+          "lineRange": [51, 57],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "parseNumericDate returns (nil, nil) for a float64 claim value of 0, so an exp of 0 becomes indistinguishable from an absent exp claim. Validation reads a nil expiration as 'claim not set' and, because exp is optional unless expiration is explicitly required, raises no error: a token that expired at the unix epoch validates as unexpired. The json.Number branch has no such carve-out, so the same token is correctly rejected when the parser is configured to decode numbers as json.Number."
+        }
+      ],
+      "tags": ["cross-file", "security", "claims-validation"],
+      "notes": "Cross-file: map_claims.go only parses claim values. The rule that makes the zero short-circuit dangerous lives in the unchanged validator.go, whose verifyExpiresAt (lines 175-186) maps a nil expiration onto errorIfRequired(required, \"exp\") and therefore onto 'valid' while requireExp is false. Read on its own, the zero carve-out looks like harmless normalisation."
+    },
+    {
+      "id": "nats-server-msgtrace-dest-uses-client-publish-permissions-for-leaf",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nats-io/nats-server.git",
+      "upstreamOwner": "nats-io",
+      "upstreamRepo": "nats-server",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "44414a5989f4692870bf51b7a60d349e3cbd4bb0",
+      "fixCommittedAt": "2026-06-29T16:17:34+01:00",
+      "parentCommit": "4c7fa22efc570399311f9fcd2ce59cf5ba567623",
+      "reviewedPaths": ["server/msgtrace.go"],
+      "reviewIntent": "Guard the message-trace destination with the client publish-permission check for every connection kind",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "server/msgtrace.go",
+          "lineRange": [530, 535],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "allowedToPublishOnMsgTraceDest authorises the caller-supplied trace destination with c.perms.pub and pubAllowedFullCheck, which is client-connection semantics. A LEAF connection does not carry that meaning: an accepted leaf has its pub and sub permission sets swapped at connect time, and the export ACL captured for it is held separately. The guard evaluates the wrong permission set for leaf connections and lets a leaf steer trace events to subjects its own leaf permissions deny."
+        }
+      ],
+      "tags": ["cross-file", "security", "leafnode", "permissions"],
+      "notes": "Cross-file: the evidence sits in the unchanged server/leafnode.go. processLeafNodeConnect swaps c.perms.sub and c.perms.pub for a non-solicited leaf (lines 2282-2292), and leafReceiveAllowed / leafSendAllowed (lines 3393-3434) show that a leaf's send permission is taken from c.opts.Export and its receive permission from canSubscribeInternal. Nothing in msgtrace.go hints that c.perms means something different on a LEAF connection."
+    },
+    {
+      "id": "nats-server-no-auth-user-skips-connection-restrictions",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nats-io/nats-server.git",
+      "upstreamOwner": "nats-io",
+      "upstreamRepo": "nats-server",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "46d982dff6f79e223584ea4054bf71cda77e4420",
+      "fixCommittedAt": "2026-06-29T16:17:21+01:00",
+      "parentCommit": "778a0c6c7d8866f953974eb561ebbab255f960a3",
+      "reviewedPaths": ["server/parser.go"],
+      "reviewIntent": "Register the configured no-auth user when a client opens with a protocol other than CONNECT",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "server/parser.go",
+          "lineRange": [180, 192],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "The no-auth-user fast path registers the configured user and marks the connection authenticated as soon as the name exists in s.users, applying none of the restrictions the CONNECT path applies to the same user record: the user's allowed connection types are never checked, and a user that must arrive through a trusted proxy is accepted without one. A client that simply omits CONNECT is therefore admitted as a user that configuration restricts to other transports."
+        }
+      ],
+      "tags": ["cross-file", "security", "authentication-bypass"],
+      "notes": "Cross-file: the contract this fast path breaks is written in the unchanged server/auth.go, where the CONNECT path rejects a user unless c.connectionTypeAllowed(user.AllowedConnectionTypes) holds (around lines 885-950) and refuses a user whose ProxyRequired is set without a trusted proxy (around line 1164). parser.go alone shows only a registration; whether anything is missing is undecidable without auth.go."
+    },
+    {
+      "id": "caddy-sticky-cookie-hash-compared-byte-by-byte",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/caddyserver/caddy.git",
+      "upstreamOwner": "caddyserver",
+      "upstreamRepo": "caddy",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "75c988d118a057b7267cfcd455c8569996f40745",
+      "fixCommittedAt": "2026-07-10T09:16:25+10:00",
+      "parentCommit": "4e62095245005b17f290dd1e4d9afe983df180ee",
+      "reviewedPaths": ["modules/caddyhttp/reverseproxy/selectionpolicies.go"],
+      "reviewIntent": "Match the sticky-session cookie against each upstream's hashed value with a plain string comparison",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "modules/caddyhttp/reverseproxy/selectionpolicies.go",
+          "lineRange": [710, 718],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "cryptography",
+          "contextDepth": "cross-function",
+          "semanticSummary": "CookieHashSelection.Select compares the client-supplied cookie value against the digest returned by hashCookie with ==, which stops at the first differing byte. That digest is a keyed HMAC-SHA256 over the upstream dial address and is the only thing binding a client to an upstream, so the comparison time reveals how many leading hex characters of a guessed cookie are correct and lets a client recover a valid sticky-session value for a chosen upstream incrementally."
+        }
+      ],
+      "tags": ["security", "timing", "load-balancing"],
+      "notes": "Not cross-file: hashCookie in the same file (around line 782) is what shows the compared value is a keyed HMAC rather than an opaque id, which is what makes a byte-wise comparison matter. Kept for security-mechanism coverage of cryptography, which the corpus otherwise lacks."
+    },
+    {
+      "id": "caddy-reverseproxy-dial-info-in-shared-request-var",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/caddyserver/caddy.git",
+      "upstreamOwner": "caddyserver",
+      "upstreamRepo": "caddy",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "1830809afe8c95c6c554740f8719e023415f85cb",
+      "fixCommittedAt": "2026-07-10T09:37:07-06:00",
+      "parentCommit": "945d199724f17f313c7fbc90eceba70fe37f47e6",
+      "reviewedPaths": [
+        "modules/caddyhttp/reverseproxy/reverseproxy.go",
+        "modules/caddyhttp/reverseproxy/hosts.go",
+        "modules/caddyhttp/reverseproxy/healthchecks.go"
+      ],
+      "reviewIntent": "Publish the selected upstream's dial info as a request variable during upstream selection",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "modules/caddyhttp/reverseproxy/reverseproxy.go",
+          "lineRange": [663, 666],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "proxyLoopIteration publishes the selected upstream's DialInfo with SetVar into the request's shared variable map, and the transport reads it back only later, when it dials. Every handler in the same request writes that one entry, so when a second reverse-proxy handler runs inside the request (the forward-auth arrangement is the common case) its selection overwrites the outer handler's dial info before the outer round-trip starts, and the outer proxy connects to the inner handler's upstream."
+        }
+      ],
+      "tags": ["cross-file", "shared-state", "race", "proxy"],
+      "notes": "Cross-file: modules/caddyhttp/vars.go shows SetVar/GetVar writing into a single map stored once per request (around lines 440-460), and modules/caddyhttp/reverseproxy/httptransport.go shows GetDialInfo being read inside DialContext (around line 285), i.e. after a nested handler has already run and overwritten the entry. Neither fact is visible in the three reviewed files."
     }
   ]
 }
