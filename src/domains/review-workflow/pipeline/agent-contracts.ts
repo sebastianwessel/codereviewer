@@ -458,19 +458,6 @@ export const TaskReviewResultSchema = z.strictObject({
   providerIssues: ReviewReportSchema.shape.providerIssues.default([])
 })
 
-export const FindingRefutationInputSchema = z.strictObject({
-  runId: z.string().min(1),
-  candidate: CandidateFindingSchema,
-  reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
-  evidence: z.array(EvidenceRecordSchema),
-  supportSignalCandidates: z.array(CandidateFindingSchema),
-  reviewContext: z.array(ReviewContextDocumentSchema),
-  instructions: z.array(ContextDocumentSchema),
-  skills: z.array(SkillContextDocumentSchema),
-  sharedDigest: z.string(),
-  provenance: WorkflowProvenanceInputSchema
-})
-
 export const FindingRefutationResultSchema = z.strictObject({
   verdict: z.enum(['proved', 'refuted', 'needs-more-evidence']),
   rationaleSummary: z.string().min(1).max(1200),
@@ -554,7 +541,6 @@ export type ContextDocument = z.infer<typeof ContextDocumentSchema>
 export type SkillContextDocument = z.infer<typeof SkillContextDocumentSchema>
 export type TaskReviewInput = z.infer<typeof TaskReviewInputSchema>
 export type TaskReviewResult = z.infer<typeof TaskReviewResultSchema>
-export type FindingRefutationInput = z.infer<typeof FindingRefutationInputSchema>
 export type FindingRefutationResult = z.infer<
   typeof FindingRefutationResultSchema
 >
