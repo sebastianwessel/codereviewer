@@ -260,6 +260,20 @@ minimum marks its adjusted precision untrustworthy.
 | Metric | Definition |
 | --- | --- |
 | `parseValidity` | Fraction of outputs validating against schemas. |
+Model-backed evaluation is non-deterministic, so a single run does not establish a
+result. The run-to-run band must be measured before a change is judged against it.
+On the real-repository corpus, four seeds of one identical configuration produced
+recall 81.3%, 87.5%, 81.3%, and 75.0% — a mean of 81.3% with a standard deviation of
+4.4 percentage points, matched findings ranging 12 to 14, adjusted precision ranging
+92.3% to 100%, and zero to one genuine false positive. A change measured on a single
+seed must therefore move recall by more than roughly twice that deviation before it
+can be distinguished from noise, and a smaller claimed effect requires several seeds.
+
+Two consequences follow, and both are requirements rather than advice. A headline
+figure is the MEAN across seeds, never the best observed run. And a quality claim
+that rests on one seed must be reported with the band, because quoting the top of a
+range as the result overstates the engine.
+
 Rates computed over MATCHED findings — `severityAccuracy`, `lineAccuracy`, and the
 severity-weighted scores — are not comparable between two runs whose recall differs.
 Their denominator is the matched set, so a change that improves recall mechanically
