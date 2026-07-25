@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import {
@@ -247,6 +247,10 @@ export type HydrateRealRepoCorpusResult = {
   readonly repairedCaseCount: number
   readonly cachedCaseCount: number
   readonly reviewedFileCount: number
+  // Case directories removed because the manifest no longer defines them. An
+  // eval loads a slice root by DIRECTORY, so a checkout left behind by a dropped
+  // case would silently re-enter the next measurement as a case nobody curates.
+  readonly prunedCaseIds: readonly string[]
   readonly cases: readonly RealRepoCaseResult[]
 }
 
@@ -442,6 +446,25 @@ const hydrateCase = async (
 // Hydrate the committed real-repository corpus into full working-tree checkouts
 // under a gitignored output root, one slice directory per case, in the layout
 // `eval run --slice-root` already understands.
+// Remove hydrated case directories that the manifest no longer defines, and report
+// which. Returns the pruned ids sorted so the result stays deterministic.
+export const pruneUnknownCaseDirectories = async (
+  outputRoot: string,
+  knownCaseIds: ReadonlySet<string>
+): Promise<readonly string[]> => {
+  const entries = await readdir(outputRoot, { withFileTypes: true })
+  const unknownCaseIds = entries
+    .filter((entry) => entry.isDirectory() && !knownCaseIds.has(entry.name))
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right))
+
+  for (const caseId of unknownCaseIds) {
+    await rm(path.join(outputRoot, caseId), { recursive: true, force: true })
+  }
+
+  return unknownCaseIds
+}
+
 export const hydrateRealRepoCorpus = async (
   options: HydrateRealRepoCorpusOptions
 ): Promise<HydrateRealRepoCorpusResult> => {
@@ -557,6 +580,17 @@ export const hydrateRealRepoCorpus = async (
     fingerprintOwners.set(result.diffFingerprint, result.id)
   }
 
+  // Drop checkouts whose case the manifest no longer defines. Only done for a full
+  // hydration: with `--case` filters the un-selected cases are legitimately absent
+  // from this run and must not be deleted.
+  const prunedCaseIds =
+    (options.caseFilters ?? []).length > 0
+      ? []
+      : await pruneUnknownCaseDirectories(
+          outputRoot,
+          new Set(manifest.cases.map((corpusCase) => corpusCase.id))
+        )
+
   return {
     manifestPath,
     outputSliceRoot,
@@ -565,6 +599,7 @@ export const hydrateRealRepoCorpus = async (
     repairedCaseCount,
     cachedCaseCount,
     reviewedFileCount,
+    prunedCaseIds,
     cases: results
   }
 }

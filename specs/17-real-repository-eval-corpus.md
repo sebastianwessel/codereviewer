@@ -28,7 +28,11 @@ callee body, an interface, or a constructor in an unchanged file is reachable.
   the defect) and the fix commit supplies the reviewed diff.
 - Hydration is **idempotent and integrity-checked**: an already-hydrated case whose
   checkout matches its pinned commit is reused; a mismatched checkout is repaired
-  rather than silently accepted. Fetches are depth-limited to the pinned commit so a
+  rather than silently accepted; and a checkout whose case the manifest no longer
+  defines is pruned and reported. An evaluation loads a slice root by directory, so
+  a leftover checkout from a dropped case would otherwise re-enter the next
+  measurement as a case nobody curates. Pruning is skipped when case filters are in
+  effect, because the unselected cases are legitimately absent from that run. Fetches are depth-limited to the pinned commit so a
   case costs one commit, not a repository history.
 - Hydrated cases are consumed through the existing evaluation fixture contract, so
   the matcher, judges, and metrics apply unchanged.

@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -12,6 +12,7 @@ import {
   gitInitArgs,
   gitReviewedDiffArgs,
   hydrateRealRepoCorpus,
+  pruneUnknownCaseDirectories,
   realRepoHydrationSource,
   resolveCaseHydrationState,
   type CorpusGitCommandRunner
@@ -391,5 +392,25 @@ describe('real repository corpus hydration', () => {
 
     expect(forced.hydratedCaseCount).toBe(1)
     expect(forced.cachedCaseCount).toBe(0)
+  })
+})
+
+describe('pruneUnknownCaseDirectories', () => {
+  test('removes checkouts the manifest no longer defines and reports them', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'corpus-prune-'))
+    await mkdir(path.join(root, 'kept-case'), { recursive: true })
+    await mkdir(path.join(root, 'dropped-case', 'repo'), { recursive: true })
+    await writeFile(path.join(root, 'dropped-case', 'slice.json'), '{}', 'utf8')
+
+    const pruned = await pruneUnknownCaseDirectories(
+      root,
+      new Set(['kept-case'])
+    )
+
+    // A dropped case's checkout must not survive: an eval loads a slice root by
+    // directory, so a leftover would silently re-enter the next measurement.
+    expect(pruned).toEqual(['dropped-case'])
+    const remaining = await readdir(root)
+    expect(remaining).toEqual(['kept-case'])
   })
 })

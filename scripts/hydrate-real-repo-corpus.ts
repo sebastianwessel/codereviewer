@@ -27,7 +27,7 @@ const main = async (): Promise<void> => {
 
   if (!quiet) {
     console.error(
-      `Hydrated ${result.hydratedCaseCount}, repaired ${result.repairedCaseCount}, and reused ${result.cachedCaseCount} real-repository corpus checkouts in ${result.outputSliceRoot}.`
+      `Hydrated ${result.hydratedCaseCount}, repaired ${result.repairedCaseCount}, reused ${result.cachedCaseCount}, and pruned ${result.prunedCaseIds.length} real-repository corpus checkouts in ${result.outputSliceRoot}.`
     )
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
   }
