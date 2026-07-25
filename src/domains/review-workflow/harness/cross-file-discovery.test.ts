@@ -135,7 +135,11 @@ describe('agentic cross-file discovery (spec 16)', () => {
         model: 'scripted',
         capabilities: ['object', 'tool_use']
       },
-      crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 4 }
+      crossFileRetrieval: {
+        enabled: true,
+        maxToolCallsPerTask: 4,
+        maxBytesPerRead: 24000
+      }
     })
 
     const result = await runModelBackedReviewWorkflow({

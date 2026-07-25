@@ -64,7 +64,8 @@ describe('CodeReviewerConfigSchema', () => {
     const defaults = CodeReviewerConfigSchema.parse({})
     expect(defaults.review.crossFileRetrieval).toEqual({
       enabled: false,
-      maxToolCallsPerTask: 100
+      maxToolCallsPerTask: 100,
+      maxBytesPerRead: 24000
     })
 
     const enabled = CodeReviewerConfigSchema.parse({
@@ -72,8 +73,17 @@ describe('CodeReviewerConfigSchema', () => {
     })
     expect(enabled.review.crossFileRetrieval).toEqual({
       enabled: true,
-      maxToolCallsPerTask: 6
+      maxToolCallsPerTask: 6,
+      maxBytesPerRead: 24000
     })
+
+    // The per-read cap bounds how much ONE retrieved file can add to a discovery
+    // prompt; a single oversized read measurably diluted a review.
+    expect(
+      CodeReviewerConfigSchema.parse({
+        review: { crossFileRetrieval: { enabled: true, maxBytesPerRead: 8000 } }
+      }).review.crossFileRetrieval.maxBytesPerRead
+    ).toBe(8000)
 
     // The cap is a runaway-loop guard, so a generous value is valid; only an
     // absurd one (past the hard ceiling) is rejected.

@@ -619,6 +619,14 @@ Rules:
 - SARIF output must exclude `artifact-only` admitted findings from diagnostic
   results and driver rules so weak/refuted/provider-diagnostic output cannot
   become code-scanning alerts;
+- Markdown output must render `artifact-only` admitted findings as UNRESOLVED
+  items a human can decide on, carrying the severity, category, location,
+  description, and the recorded reason the candidate stayed unresolved (its
+  refutation verdict and rationale). A suspicion the engine could not settle —
+  most often because the evidence sits outside the context it could reach — is
+  reported for a human to confirm or dismiss rather than reduced to an
+  identifier. These items stay out of the quality gate and out of inline
+  comments, so surfacing them neither blocks a build nor adds review noise;
 - future automatic patch application requires a separate spec and approval.
 
 ## Shared Context

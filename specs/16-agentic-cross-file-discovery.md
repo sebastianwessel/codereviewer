@@ -74,8 +74,11 @@ findings as today.
 ## Configuration
 
 A `review.crossFileRetrieval` block, disabled by default. Keys (defined in
-`04-configuration-and-providers.md`): `enabled` (default false) and
-`maxToolCallsPerTask` (the runaway-loop guard). Invalid configuration fails
+`04-configuration-and-providers.md`): `enabled` (default false),
+`maxToolCallsPerTask` (the runaway-loop guard), and `maxBytesPerRead` (the
+per-read excerpt cap; retrieval reads whole files, and one oversized read
+measurably diluted a review, so a retrieved file is bounded to an excerpt and the
+model narrows with grep instead). Invalid configuration fails
 validation with exit code 2. With the block disabled, no discovery tool call is
 issued and the discovery agent is configured exactly as today (no tools,
 single step).

@@ -57,7 +57,11 @@ describe('workflow harness config', () => {
     const disabled = reviewAgentOptionsForRole({
       role: 'holistic_review',
       skillIds: [],
-      crossFileRetrieval: { enabled: false, maxToolCallsPerTask: 4 }
+      crossFileRetrieval: {
+        enabled: false,
+        maxToolCallsPerTask: 4,
+        maxBytesPerRead: 24000
+      }
     })
     // Disabled: single-shot discovery with no tools, byte-for-byte as before.
     expect(disabled).toEqual({ builtinTools: false, maxSteps: 1 })
@@ -65,7 +69,11 @@ describe('workflow harness config', () => {
     const enabled = reviewAgentOptionsForRole({
       role: 'holistic_review',
       skillIds: [],
-      crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 4 }
+      crossFileRetrieval: {
+        enabled: true,
+        maxToolCallsPerTask: 4,
+        maxBytesPerRead: 24000
+      }
     })
     // Enabled: the mediated repo tools plus enough steps to spend the budget,
     // recover from a budget-exceeded tool result, and still emit findings.
@@ -81,7 +89,11 @@ describe('workflow harness config', () => {
       reviewAgentOptionsForRole({
         role: 'holistic_review',
         skillIds: [],
-        crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 100 }
+        crossFileRetrieval: {
+        enabled: true,
+        maxToolCallsPerTask: 100,
+        maxBytesPerRead: 24000
+      }
       })
     ).toEqual({
       builtinTools: false,
@@ -94,7 +106,11 @@ describe('workflow harness config', () => {
       reviewAgentOptionsForRole({
         role: 'refute_finding',
         skillIds: [],
-        crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 4 }
+        crossFileRetrieval: {
+        enabled: true,
+        maxToolCallsPerTask: 4,
+        maxBytesPerRead: 24000
+      }
       })
     ).toEqual({ builtinTools: false, maxSteps: 1 })
   })

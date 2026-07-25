@@ -458,6 +458,7 @@ Disabled by default.
 | --- | --- | --- |
 | `review.crossFileRetrieval.enabled` | boolean | `false` |
 | `review.crossFileRetrieval.maxToolCallsPerTask` | integer (1-500) | `100` |
+| `review.crossFileRetrieval.maxBytesPerRead` | integer (1000-200000) | `24000` |
 
 Rules:
 

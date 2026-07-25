@@ -123,7 +123,18 @@ export const createWorkflowInput = (
   ...(taskInputBudgetFor(input.config) === undefined
     ? {}
     : { maxTaskInputBytes: taskInputBudgetFor(input.config) }),
-  contextRetrievalBudget: input.aiReviewBudget.contextRetrievalBudget,
+  // The workflow retriever backs the cross-file discovery tools (spec 16). When
+  // that mode is on, its per-read cap is tightened to the cross-file value so one
+  // large file cannot flood a discovery prompt.
+  contextRetrievalBudget: input.config.review.crossFileRetrieval.enabled
+    ? {
+        ...input.aiReviewBudget.contextRetrievalBudget,
+        maxBytesPerRead: Math.min(
+          input.aiReviewBudget.contextRetrievalBudget.maxBytesPerRead,
+          input.config.review.crossFileRetrieval.maxBytesPerRead
+        )
+      }
+    : input.aiReviewBudget.contextRetrievalBudget,
   promotionPolicy: input.config.promotionPolicy,
   provenance: {
     reviewer: 'review-agent',

@@ -107,16 +107,48 @@ export const renderMarkdownReport = (input: unknown): string => {
     )
   }
 
+  // Unresolved findings are suspicions the refuter could neither prove nor
+  // disprove from the context it had — most often because the evidence lives
+  // somewhere it could not reach. Rendering them as a bare id and title made them
+  // undecidable for a human too, which is the same as dropping them. They are
+  // reported with the location, the description, and the reason they stayed
+  // unresolved so a reviewer can confirm or dismiss each one. They deliberately
+  // stay out of the quality gate and out of inline comments: surfacing a suspicion
+  // for a human decision must not block a build or add review noise.
   if (artifactOnlyFindings.length > 0) {
-    lines.push('## Artifact-only Findings', '')
+    lines.push(
+      '## Unresolved - Needs Human Decision',
+      '',
+      'These candidates were neither proved nor disproved from the available context.',
+      'They do not affect the quality gate. Confirm or dismiss each one.',
+      ''
+    )
 
     for (const finding of artifactOnlyFindings) {
+      const refutation =
+        finding.refutationId === undefined
+          ? undefined
+          : report.refutationResults.find(
+              (result) => result.id === finding.refutationId
+            )
+
       lines.push(
-        `- ${safeText(finding.id)}: ${safeText(finding.title)} (${safeText(finding.proposedBy)})`
+        `### ${safeText(finding.severity.toUpperCase())}: ${safeText(finding.title)}`,
+        '',
+        `- ID: ${safeText(finding.id)}`,
+        `- Category: ${safeText(finding.category)}`,
+        `- Location: ${safeText(finding.location.path)}:${finding.location.startLine}`,
+        `- Proposed by: ${safeText(finding.proposedBy)}`,
+        `- Why unresolved: ${
+          refutation === undefined
+            ? 'no refutation verdict was recorded for this candidate'
+            : `${safeText(refutation.verdict)} - ${safeText(refutation.summary)}`
+        }`,
+        '',
+        safeText(finding.description),
+        ''
       )
     }
-
-    lines.push('')
   }
 
   lines.push('## Rejected Candidates', '')

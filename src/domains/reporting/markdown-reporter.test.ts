@@ -57,8 +57,12 @@ describe('Markdown reporter', () => {
     expect(rendered).toContain('Fix edits')
     expect(rendered).toContain('## Provider Issues')
     expect(rendered).toContain('provider_error')
-    expect(rendered).toContain('## Artifact-only Findings')
+    // An unresolved suspicion must reach the human with enough context to decide:
+    // the section names its purpose, and the entry carries location, description,
+    // and the reason it could not be resolved — not just an id.
+    expect(rendered).toContain('## Unresolved - Needs Human Decision')
     expect(rendered).toContain('find_artifact1')
+    expect(rendered).toContain('- Why unresolved:')
     expect(rendered).toContain('## Refutation Results')
     expect(rendered).toContain('refute_abc123')
     expect(rendered).toContain('Refutation evidence: ev_diff1')

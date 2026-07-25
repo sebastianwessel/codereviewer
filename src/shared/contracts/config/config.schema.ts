@@ -62,7 +62,13 @@ export const CrossFileRetrievalConfigSchema = z.strictObject({
   // ration context — measurement showed the model self-limits well below the cap
   // (0-7 calls when 8 were allowed, never exhausting it), so a tight cap only
   // starves the tasks that genuinely need several lookups.
-  maxToolCallsPerTask: z.int().min(1).max(500).default(100)
+  maxToolCallsPerTask: z.int().min(1).max(500).default(100),
+  // Per-read byte cap for cross-file reads specifically. Retrieval reads whole
+  // files, and a single large one measurably dilutes the review: a task that read
+  // 162KB in one call lost a finding the same task made without retrieval. This cap
+  // keeps a retrieved file to a useful excerpt; the model can grep to locate the
+  // part it needs rather than pulling an entire large file into the prompt.
+  maxBytesPerRead: z.int().min(1000).max(200000).default(24000)
 })
 
 export const ReviewConfigSchema = z.strictObject({
@@ -79,7 +85,8 @@ export const ReviewConfigSchema = z.strictObject({
   runTimeoutMs: z.int().min(10000).max(7200000).optional(),
   crossFileRetrieval: CrossFileRetrievalConfigSchema.default({
     enabled: false,
-    maxToolCallsPerTask: 100
+    maxToolCallsPerTask: 100,
+    maxBytesPerRead: 24000
   })
 })
 
@@ -431,7 +438,11 @@ export const CodeReviewerConfigSchema = z.strictObject({
     maxFiles: 500,
     maxFileBytes: 500000,
     inlineSeverityThreshold: 'high',
-    crossFileRetrieval: { enabled: false, maxToolCallsPerTask: 100 }
+    crossFileRetrieval: {
+      enabled: false,
+      maxToolCallsPerTask: 100,
+      maxBytesPerRead: 24000
+    }
   }),
   provider: ProviderConfigSchema.optional(),
   instructions: InstructionsConfigSchema.default({
