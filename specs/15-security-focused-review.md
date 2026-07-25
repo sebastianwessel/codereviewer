@@ -138,22 +138,35 @@ general call's attention.
 
 ### Measured Outcome Of The Injection Hardening
 
-Extending the guard to the general reviewer and the refuter was made for
-consistency, not for recall, and it produced the largest measured recall improvement
-of any change to date. On the sixteen-case real-repository corpus with the same
-model and identical cost, recall went from 62.5% (ten matched) to 81.3% (thirteen)
-and, on an independent replication, 87.5% (fourteen). Adjusted precision stayed at
-100% with zero genuine false positives in every run. Pre-guard runs on this corpus
-clustered between 62.5% and 68.8%, so the separation is not run-to-run churn.
+Extending the guard to the general reviewer and the refuter was made for consistency
+rather than for recall, and it does improve recall — by less than a small corpus first
+suggested.
 
-The cases it recovered include a cross-file authorization defect and a caller-depth
-secret-flow defect — precisely the classes that agentic cross-file retrieval
-(`16-agentic-cross-file-discovery.md`) and the context scout
-(`18-context-scout.md`) were built for and neither of which fixed. A large part of
-what looked like a missing-context gap was therefore not one: the reviewer already
-held the evidence and was deferring to the reviewed code's own comments and framing.
-Before building retrieval machinery to close a recall gap, test whether the reviewer
-is simply being talked out of the finding.
+On the sixteen-case real-repository corpus the change appeared to move recall from
+62.5% to 81.3% and 87.5%. That corpus was later measured to have a standard deviation
+of 4.4 percentage points across seeds of one identical configuration, so a figure
+drawn from it that large was partly its own noise, and the best observed run should
+never have been quoted as the result.
+
+The trustworthy measurement is a single-variable A/B on the fifty-nine-case benchmark,
+which carries 133 expected findings — eight times the evidence. There the guard moves
+recall from 32.3% to 36.1%, matched findings from 43 to 48, product recall from 39.4%
+to 43.3%, and plausibility-confirmed unlisted-real findings from 76 to 86, while
+genuine false positives stay identical at four and adjusted precision edges from 91.5%
+to 92.3%. So the honest effect is roughly **four percentage points of recall at no
+precision cost**, not eighteen.
+
+What makes a single seed credible here is that every metric moves the same way at once
+— recall, product recall, matched count, unlisted-real findings, precision, and
+severity accuracy — while the false-positive count does not move at all. Variance on
+this benchmark has not itself been measured, so the figure is directional.
+
+Two properties of the benchmark are worth recording alongside the result. Its answer
+key is badly incomplete: 86 unlisted-real findings against 48 matched means the engine
+finds roughly 2.8 times more genuine defects than the key lists, so its `recall`
+understates heavily and must never be compared against real-repository-corpus recall.
+And adjusted precision, at 92.3% with four genuine false positives across about 134
+real findings, is the number on this benchmark that can be trusted.
 
 ## Mechanism 2: Deterministic Security-Signal Evidence
 
