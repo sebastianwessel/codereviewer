@@ -33,6 +33,7 @@ export {
   type HydrateBenchmarkPackResult
 } from './benchmark-hydration.js'
 export {
+  answerKeyLeakIn,
   containsAnswerKey,
   isFullCommitSha,
   parseRealRepoCorpusManifest,

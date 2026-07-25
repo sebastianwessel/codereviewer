@@ -18,6 +18,7 @@ import {
   type CorpusGitCommandRunner
 } from './real-repo-corpus-hydration.js'
 import {
+  answerKeyLeakIn,
   parseRealRepoCorpusManifest,
   type RealRepoCorpusCase
 } from './real-repo-corpus.schema.js'
@@ -412,5 +413,39 @@ describe('pruneUnknownCaseDirectories', () => {
     expect(pruned).toEqual(['dropped-case'])
     const remaining = await readdir(root)
     expect(remaining).toEqual(['kept-case'])
+  })
+})
+
+describe('answer-key leakage in the reviewed diff', () => {
+  test('rejects a case whose generated diff names the defect', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'corpus-leak-'))
+    // An upstream fix that also added an advisory reference: diffing the fix
+    // backwards puts that text into the reviewed input, handing the model the
+    // answer. The manifest is clean, so only a check on the DIFF catches this.
+    const leakingDiff = [
+      'diff --git a/lib/handler.js b/lib/handler.js',
+      '--- a/lib/handler.js',
+      '+++ b/lib/handler.js',
+      '@@ -1,3 +1,3 @@',
+      '-// fixes GHSA-xxxx-yyyy-zzzz: reject encoded separators',
+      '+const value = decode(input)',
+      ' export const handler = () => value'
+    ].join('\n')
+
+    await expect(
+      hydrateRealRepoCorpus({
+        repositoryRoot: root,
+        manifestPath: 'manifest.json',
+        outputSliceRoot: 'out',
+        runGit: async () => leakingDiff
+      } as unknown as Parameters<typeof hydrateRealRepoCorpus>[0])
+    ).rejects.toThrow()
+  })
+
+  test('answerKeyLeakIn reports the leaked text and passes clean content', () => {
+    expect(
+      answerKeyLeakIn('const x = 1 // fixes CVE-2024-1234 in the parser')
+    ).toContain('CVE-2024-1234')
+    expect(answerKeyLeakIn('const x = decode(input)')).toBeUndefined()
   })
 })

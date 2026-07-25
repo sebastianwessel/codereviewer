@@ -9,6 +9,7 @@ import {
 import { materializeDiffFiles } from './benchmark-hydration.js'
 import { EvalSliceCaseSchema } from './eval-fixture.schema.js'
 import {
+  answerKeyLeakIn,
   parseRealRepoCorpusManifestJson,
   selectCorpusCases,
   tokenNormalizedDiffFingerprint,
@@ -416,6 +417,20 @@ const hydrateCase = async (
   if (changedFiles.length === 0) {
     throw new Error(
       `Corpus case "${input.corpusCase.id}": reviewed diff contains no new-side file content.`
+    )
+  }
+
+  // The manifest's own text is validated for answer-key wording, but the reviewed
+  // DIFF is generated from upstream and is what the model actually reads. An
+  // upstream fix that also added an advisory id or a comment naming the defect
+  // puts the answer inside the model's input, and a case like that measures
+  // nothing while silently inflating recall. Reject it here rather than let it
+  // score.
+  const diffLeak = answerKeyLeakIn(diff)
+
+  if (diffLeak !== undefined) {
+    throw new Error(
+      `Corpus case "${input.corpusCase.id}": the reviewed diff names the defect, so the answer key is inside the model's input ("${diffLeak}"). Drop the case or choose reviewed paths that exclude the disclosure.`
     )
   }
 

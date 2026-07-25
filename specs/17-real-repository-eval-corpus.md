@@ -61,6 +61,15 @@ manifest data, so a violation fails loading instead of silently inflating a scor
 - **Answer-key exclusion.** No field that reaches the reviewed input may carry the
   CVE id, advisory text, or fix commit message. Review intent and expected findings
   describe the pre-fix code, never the fix.
+- **Answer-key exclusion covers the generated diff, not only the manifest.** The
+  reviewed diff is produced from upstream and is what the model actually reads. An
+  upstream fix that also added an advisory reference or a comment naming the defect
+  puts the answer inside the model's input when that fix is read backwards, and such
+  a case measures nothing while silently inflating recall. Hydration therefore scans
+  the generated diff for answer-key wording and fails the case, reporting the leaked
+  text so a curator can drop the case or choose reviewed paths that exclude the
+  disclosure. Curation found this pattern in five candidate cases, one of which had
+  already entered the corpus.
 - **Dedup.** A token-normalized diff fingerprint is recorded per case so exact and
   near-duplicate captures are detectable.
 - **Provenance.** License, source, and capture date are required per case; a case

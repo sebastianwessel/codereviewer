@@ -57,6 +57,21 @@ const answerKeyPattern =
 export const containsAnswerKey = (value: string): boolean =>
   answerKeyPattern.test(value)
 
+// The first answer-key marker in a text, with a little surrounding context, or
+// undefined when there is none. The manifest schema only needs a yes/no, but a
+// curator whose CASE is rejected needs to see WHAT leaked in order to judge it.
+export const answerKeyLeakIn = (value: string): string | undefined => {
+  const match = new RegExp(answerKeyPattern.source, 'iu').exec(value)
+
+  if (match === null) {
+    return undefined
+  }
+
+  const start = Math.max(0, match.index - 40)
+
+  return value.slice(start, match.index + match[0].length + 40).replace(/\s+/gu, ' ').trim()
+}
+
 const answerKeyFreeText = (maxLength: number) =>
   z
     .string()
