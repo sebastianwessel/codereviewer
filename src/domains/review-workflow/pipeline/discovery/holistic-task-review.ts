@@ -383,15 +383,20 @@ const candidateFromFinding = (
   })
 }
 
-// A tool-enabled discovery call (spec 16) can exhaust its agent step allowance if
-// the model keeps requesting reads instead of answering. That is a bound on the
-// model's behavior, not a run failure: letting it propagate would fail the whole
-// task and lose every finding the call had — exactly what an additive mode must
-// never do. Such a call yields no findings and is surfaced as a recovered provider
-// issue so the degradation stays visible instead of silent.
-const isAgentLoopBudgetError = (error: unknown): boolean =>
+// Two ways a discovery CALL can fail without the review being broken: the agent
+// exhausts its step allowance (a tool-enabled call whose model keeps requesting
+// reads instead of answering), or the model returns output that does not validate
+// (a truncated or malformed response, which grows more likely as the packet grows).
+// Both are properties of one model response, not of the run. Letting either
+// propagate fails the whole TASK and loses every finding it had — and, in an
+// evaluation, silently drops the case from the comparison, which is how a
+// measurement starts lying. Such a call yields no findings and is surfaced as a
+// recovered provider issue so the degradation stays visible instead of silent.
+const isRecoverableDiscoveryFailure = (error: unknown): boolean =>
   error instanceof Error &&
-  /agent loop budget exceeded|iterations_exceeded/iu.test(error.message)
+  /agent loop budget exceeded|iterations_exceeded|agent output validation failed/iu.test(
+    error.message
+  )
 
 type DiscoveryCallResult = {
   readonly findings: readonly unknown[]
@@ -421,7 +426,7 @@ const runDiscoveryCall = async (
 
     return { findings: review.findings, providerIssues: [] }
   } catch (error) {
-    if (!isAgentLoopBudgetError(error)) {
+    if (!isRecoverableDiscoveryFailure(error)) {
       throw error
     }
 

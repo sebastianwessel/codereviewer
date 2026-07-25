@@ -391,3 +391,42 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(empty.candidates).toHaveLength(0)
   })
 })
+
+describe('discovery call failure tolerance', () => {
+  test('a malformed model response costs that call, not the whole task', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () => {
+          throw new Error('Agent output validation failed')
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // The task completes with no candidates and a RECOVERED provider issue, rather
+    // than throwing and taking the whole task (and, in an eval, the whole case) with
+    // it. A dropped case would silently corrupt any comparison built on the run.
+    expect(result.candidates).toEqual([])
+    expect(result.providerIssues).toHaveLength(1)
+    expect(result.providerIssues[0]?.recovered).toBe(true)
+  })
+
+  test('an unrecognised error still propagates', async () => {
+    await expect(
+      runModelBackedHolisticTaskReview({
+        workflowInput,
+        taskInput,
+        task,
+        runners: {
+          holisticReview: async () => {
+            throw new Error('connection reset by peer')
+          }
+        },
+        logger: { debug: () => {} }
+      })
+    ).rejects.toThrow(/connection reset/u)
+  })
+})
