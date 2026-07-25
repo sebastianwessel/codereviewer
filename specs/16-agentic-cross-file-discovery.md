@@ -1,6 +1,6 @@
 # 16: Agentic Cross-File Discovery
 
-Status: Approved
+Status: Approved (capability off by default; measured net negative)
 Date: 2026-07-24
 
 ## Purpose
@@ -112,6 +112,25 @@ accounted for by the existing transport-level usage recorder (no new accounting)
   requesting reads.
 - No real-provider run in the test suite; cross-file recall is measured in the
   explicit, cost-gated eval.
+
+## Measured Outcome
+
+The capability is built, bounded, and hardened, and it is **off by default because
+measurement says it does not pay for itself**. On the real-repository corpus, which
+exists precisely to give cross-file retrieval a fair test, two arms were run twice:
+at four cases the result was flat (one case gained, one lost) at 2.5x cost; at nine
+cases, with the per-read excerpt cap applied and verified, recall fell from 66.7% to
+44.4% (two cases lost, none gained) at +78% cost. Adjusted precision stayed at 100%
+with zero genuine false positives in every arm, so the loss is recall, not noise.
+
+An earlier reading credited the mechanism with flipping a cross-file security case to
+found; the nine-case run found that same case from the baseline unaided, so that
+result was run-to-run variance and is not evidence.
+
+Re-enabling requires a changed mechanism AND a multi-seed measurement, not a
+configuration change. Two hypotheses are worth testing first: that tool-use mode
+itself diverts the model's attention from the diff to retrieval, and that a truncated
+excerpt of an unfamiliar file misleads more than it informs.
 
 ## Acceptance
 
