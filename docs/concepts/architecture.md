@@ -28,7 +28,7 @@ flowchart TD
   end
   subgraph model["Model-driven (provider calls, bounded & ledgered)"]
     Discovery["6. Holistic discovery<br/>(whole-file review → candidate findings)"]
-    Refute["7. Refutation<br/>(per-candidate precision filter)"]
+    Refute["7. Refutation<br/>(batched per-task precision filter)"]
   end
   subgraph gate["Admission & output (deterministic)"]
     Admission["8. Admission<br/>(blast-radius scope + severity floor)"]
@@ -126,10 +126,15 @@ naming, formatting, documentation, and cleanup preferences are excluded.
 Candidate findings are not findings yet.
 
 ### 7. Refutation
-**What:** A per-candidate precision filter. An independent refuter tries to prove
-or disprove each candidate using only the provided context (candidate, reviewed
-diff ranges, evidence, review context, support-signal candidates, instructions,
-skills metadata, shared digest, provenance). **Why:** this is the core precision
+**What:** A precision filter that verdicts every candidate. An independent refuter
+tries to prove or disprove each candidate using only the provided context
+(candidates, reviewed diff ranges, evidence, review context, support-signal
+candidates, instructions, skills metadata, shared digest, provenance). The call is
+batched per task: one call adjudicates all of that task's candidates and returns one
+verdict per candidate, because those candidates share one review context and sending
+it once per candidate dominated the engine's input tokens. Each candidate is still
+judged on its own merits, and a candidate the model does not adjudicate is treated as
+`needs-more-evidence` rather than admitted. **Why:** this is the core precision
 mechanism. **How:** controlled by `aiReview.requireRefutation` (always on). The
 refuter returns `proved`, `refuted`, or `needs-more-evidence`. `proved` candidates
 proceed to admission; `refuted` candidates are rejected; `needs-more-evidence`

@@ -149,7 +149,7 @@ every major block. Unknown keys are rejected — use only documented keys (see t
 ### Refutation (`aiReview.requireRefutation`)
 
 Always on. Every model candidate from holistic discovery passes through an
-independent per-candidate refutation pass before admission. Only candidates the
+independent refutation pass (batched per task) before admission. Only candidates the
 refuter judges `proved` become actionable; `refuted` candidates are rejected and
 `needs-more-evidence` candidates are dispositioned by `promotionPolicy`.
 

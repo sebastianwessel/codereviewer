@@ -22,7 +22,7 @@ quality gates round it out.
 
 | Feature | Description |
 | --- | --- |
-| **Holistic discovery + refutation** | A whole-file review enumerates candidate defects, then an independent per-candidate refutation pass verifies or discards each one before admission — recall first, precision enforced. |
+| **Holistic discovery + refutation** | A whole-file review enumerates candidate defects, then an independent refutation pass — batched per task, one verdict per candidate — verifies or discards each one before admission — recall first, precision enforced. |
 | **Deterministic support signals** | Local AST-based anchors, symbol spans, import/test/config hints, and contradiction signals improve clustering and context and reject weak claims without a provider call. |
 | **Change-intent context (opt-in)** | Optionally summarizes PR/ticket/changed-doc context into a bounded, redacted brief injected before review as untrusted, informational context — orientation, never authorization. Off by default. |
 | **Verification flow (opt-in)** | A separate agentic flow that verifies specific claims — a review comment, an analyzer alert, or whether a new commit fixed a prior finding — using bounded, mediated read/list/grep tools. Off by default. |

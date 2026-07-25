@@ -72,7 +72,7 @@ flowchart TD
   Queue["Task queue"]
   Provider{"Provider configured?"}
   Discovery["Holistic discovery → candidate findings"]
-  Refutation["Refutation (per-candidate filter)"]
+  Refutation["Refutation (batched per-task filter)"]
   SignalOnly["Signal-only support path"]
   Shared["Shared context"]
   Admission["Admission and baseline"]
