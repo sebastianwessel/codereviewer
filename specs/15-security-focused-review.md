@@ -187,9 +187,13 @@ unchanged (the same task set, the same single discovery call per task).
 - Repository content and any analyzer artifact are untrusted (spec 07). The security
   pass and signals cannot grant authority, change admission, severity, gates, or
   baseline, and are presented under the untrusted/informational framing.
-- The security pass prompt is hardened against prompt injection from repository
-  content, and the reviewer's own prompt-injection resistance is a measured security
-  mechanism.
+- Every lane that ingests repository content is hardened against prompt injection
+  from it: the general reviewer, the refuter, the security pass, the context scout,
+  and the cross-file tool results each state that the content they receive is
+  untrusted data rather than instructions. The general reviewer additionally treats
+  text in reviewed code that tells it to ignore a problem as itself reportable when
+  it hides a real defect. The reviewer's own prompt-injection resistance is a
+  measured security mechanism.
 
 ## Testing
 

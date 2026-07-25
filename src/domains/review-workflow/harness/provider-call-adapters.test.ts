@@ -3,7 +3,7 @@ import { type EvidenceRecord } from '../../../shared/contracts/index.js'
 import { type CandidateFinding } from '../../admission/index.js'
 import {
   FindingRefutationBatchInputSchema,
-  ModelFindingRefutationResultSchema,
+  ModelRefutationBatchVerdictSchema,
   normalizeFindingRefutationResult,
   refutationVerdictsByCandidateId
 } from '../pipeline/agent-contracts.js'
@@ -110,7 +110,10 @@ describe('model provider call adapters', () => {
   })
 
   test('accepts common model refutation output variants before normalization', () => {
-    const parsed = ModelFindingRefutationResultSchema.parse({
+    // Exercises the LIVE batched path: providers word the verdict differently and
+    // over-run the length caps, and a batch entry must still normalize.
+    const parsed = ModelRefutationBatchVerdictSchema.parse({
+      candidateId: 'cand_0000000000000001',
       decision: 'false_positive',
       summary: 'The finding is contradicted. '.repeat(80),
       suggestedFix: 'No code change is needed. '.repeat(80)

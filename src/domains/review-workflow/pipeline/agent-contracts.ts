@@ -639,35 +639,24 @@ const refutationVerdictFields = {
   fixEdits: FindingRefutationResultSchema.shape.fixEdits.catch(undefined)
 } as const
 
-export const ModelFindingRefutationResultSchema = z.preprocess((value) => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return value
-  }
+// The adjudication fields as the model may return them, before they are hardened
+// into a `FindingRefutationResult`. Derived from the shared field map so the input
+// type cannot drift from what the batch schema actually accepts.
+type ModelRefutationVerdictFields = z.infer<
+  z.ZodObject<typeof refutationVerdictFields>
+>
 
-  const record = value as Record<string, unknown>
-
-  return {
-    verdict: record.verdict ?? record.decision ?? record.status,
-    rationaleSummary:
-      record.rationaleSummary ??
-      record.summary ??
-      record.rationale ??
-      record.reason,
-    fixSummary: record.fixSummary ?? record.fix_summary ?? record.suggestedFix,
-    fixEdits: record.fixEdits ?? record.fix_edits
-  }
-}, z.object(refutationVerdictFields))
-
-const normalizeRefutationVerdict = (
-  verdict: z.infer<typeof ModelFindingRefutationResultSchema>['verdict']
-): z.infer<typeof FindingRefutationResultSchema>['verdict'] => verdict
-
+// Picks only the adjudication fields. The batched verdict a caller holds also
+// carries the `candidateId` that binds it to its candidate, and the result schema is
+// strict, so copying the input wholesale would throw on that extra key.
 export const normalizeFindingRefutationResult = (
-  result: z.infer<typeof ModelFindingRefutationResultSchema>
+  result: ModelRefutationVerdictFields
 ): z.infer<typeof FindingRefutationResultSchema> =>
   FindingRefutationResultSchema.parse({
-    ...result,
-    verdict: normalizeRefutationVerdict(result.verdict)
+    verdict: result.verdict,
+    rationaleSummary: result.rationaleSummary,
+    ...(result.fixSummary === undefined ? {} : { fixSummary: result.fixSummary }),
+    ...(result.fixEdits === undefined ? {} : { fixEdits: result.fixEdits })
   })
 
 export type WorkflowReviewTask = z.infer<typeof WorkflowReviewTaskSchema>
@@ -765,16 +754,7 @@ export const refutationVerdictsByCandidateId = (
 
     verdicts.set(
       parsed.data.candidateId,
-      normalizeFindingRefutationResult({
-        verdict: parsed.data.verdict,
-        rationaleSummary: parsed.data.rationaleSummary,
-        ...(parsed.data.fixSummary === undefined
-          ? {}
-          : { fixSummary: parsed.data.fixSummary }),
-        ...(parsed.data.fixEdits === undefined
-          ? {}
-          : { fixEdits: parsed.data.fixEdits })
-      })
+      normalizeFindingRefutationResult(parsed.data)
     )
   }
 
