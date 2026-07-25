@@ -2,6 +2,7 @@ import { defineHarness } from '@purista/harness'
 import { createNoopReviewLogger } from '../../observability/index.js'
 import {
   crossFileRetrievalInstructions,
+  modelContextScoutInstructions,
   modelFindingRefuterInstructions,
   modelHolisticReviewerInstructions
 } from '../pipeline/agent-instructions.js'
@@ -14,8 +15,10 @@ import {
   runWithCrossFileDiscoveryTools
 } from '../pipeline/discovery/cross-file-tools.js'
 import {
+  ContextScoutInputSchema,
   FindingRefutationBatchInputSchema,
   HolisticReviewInputSchema,
+  ModelContextScoutResultSchema,
   ModelFindingRefutationBatchResultSchema,
   ModelHolisticReviewResultSchema
 } from '../pipeline/agent-contracts.js'
@@ -113,6 +116,17 @@ export const createModelBackedReviewHarness = (
           ? `${modelHolisticReviewerInstructions}\n${crossFileRetrievalInstructions}`
           : modelHolisticReviewerInstructions
       }),
+      // Spec 18: the scout only SELECTS context. It is deliberately a separate,
+      // compact agent — no tools and one step — so choosing context never competes
+      // with judging code inside one call.
+      context_scout: agent({
+        model: 'reviewer',
+        input: ContextScoutInputSchema,
+        output: ModelContextScoutResultSchema,
+        builtinTools: false,
+        maxSteps: 1,
+        instructions: modelContextScoutInstructions
+      }),
       refute_finding: agent({
         model: 'reviewer',
         input: FindingRefutationBatchInputSchema,
@@ -151,8 +165,14 @@ export const createModelBackedReviewHarness = (
                         holisticSignal === undefined
                           ? {}
                           : { signal: holisticSignal }
+                      ),
+                    contextScout: (scoutInput, scoutSignal) =>
+                      ctx.agents.context_scout(
+                        scoutInput,
+                        scoutSignal === undefined ? {} : { signal: scoutSignal }
                       )
                   },
+                  ...(contextRetriever === undefined ? {} : { contextRetriever }),
                   logger,
                   ...(signal === undefined ? {} : { signal })
                 })

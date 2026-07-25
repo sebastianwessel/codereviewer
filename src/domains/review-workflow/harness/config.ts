@@ -27,6 +27,7 @@ export const maxChildAgentCallsForReview = (
     readonly taskCount?: number
     readonly maxConcurrentTasks?: number
     readonly securityPassEnabled?: boolean
+    readonly contextScoutEnabled?: boolean
   } = {}
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
@@ -36,7 +37,10 @@ export const maxChildAgentCallsForReview = (
   // candidates in a single batched call, so it costs one call per task rather than
   // one per candidate; a batch that exceeds the input budget splits in half, so a
   // small allowance is added for those splits.
-  const discoveryCallsPerTask = input.securityPassEnabled === true ? 2 : 1
+  // Spec 18: the context scout adds one compact call per task when enabled.
+  const discoveryCallsPerTask =
+    (input.securityPassEnabled === true ? 2 : 1) +
+    (input.contextScoutEnabled === true ? 1 : 0)
   const refutationCallsPerTask = 1 + refutationBatchSplitAllowance
   // Cross-file retrieval (spec 16) needs no reservation here: a mediated tool call
   // is an agent STEP, bounded by the agent's maxSteps, and never counts against the
@@ -68,7 +72,7 @@ export const modelReviewWorkflowDelegation = (
   maxConcurrentTasks: number,
   maxChildAgentCalls = maxChildAgentCallsForReview({ maxConcurrentTasks })
 ) => ({
-  agents: ['holistic_review', 'refute_finding'] as const,
+  agents: ['holistic_review', 'context_scout', 'refute_finding'] as const,
   modelAliases: ['reviewer'] as const,
   maxChildAgentCalls,
   maxParallelChildAgentCalls: maxConcurrentTasks

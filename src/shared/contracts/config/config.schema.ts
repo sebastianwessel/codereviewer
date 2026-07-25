@@ -71,6 +71,30 @@ export const CrossFileRetrievalConfigSchema = z.strictObject({
   maxBytesPerRead: z.int().min(1000).max(200000).default(24000)
 })
 
+// Context scout (spec 18). Off by default. Separates CHOOSING context from
+// JUDGING code: a cheap scout call sees only the diff and a symbol inventory and
+// names the out-of-change symbols the changed code's correctness depends on,
+// deterministic code fetches their bodies, and the reviewer stays single-shot
+// with no tools. This exists because spec 16 — giving the REVIEWER the tools —
+// lost recall every time it was measured (68.8% to 56.3% at sixteen cases) while
+// the tool-free reviewer measured ~68% recall at 100% adjusted precision. The
+// scout only selects context; it can never influence a finding, severity, or the
+// gate, and a symbol it names is injected only if deterministic resolution finds
+// it.
+export const ContextScoutConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  // How many symbols one scout call may request. The reproducible failure mode of
+  // extra context is dilution, so this is a relevance ration rather than a loop
+  // guard: the scout must rank and spend its budget on the decisive symbols
+  // instead of dumping every callee the change touches into the packet.
+  maxSymbols: z.int().min(1).max(40).default(8),
+  // Per-symbol byte cap on an extracted body. A single large callee must not
+  // flood the referenced-definition section and push the changed files out of the
+  // packet — budget pressure sheds scout context, never changed-file source. Big
+  // enough to carry a whole ordinary function body, not a whole large file.
+  maxBytesPerSymbol: z.int().min(500).max(40000).default(4000)
+})
+
 export const ReviewConfigSchema = z.strictObject({
   mode: z.enum(['local', 'ci', 'pr', 'full']).default('local'),
   depth: z.enum(['fast', 'balanced', 'thorough']).default('balanced'),
@@ -87,6 +111,11 @@ export const ReviewConfigSchema = z.strictObject({
     enabled: false,
     maxToolCallsPerTask: 100,
     maxBytesPerRead: 24000
+  }),
+  contextScout: ContextScoutConfigSchema.default({
+    enabled: false,
+    maxSymbols: 8,
+    maxBytesPerSymbol: 4000
   })
 })
 
@@ -442,6 +471,11 @@ export const CodeReviewerConfigSchema = z.strictObject({
       enabled: false,
       maxToolCallsPerTask: 100,
       maxBytesPerRead: 24000
+    },
+    contextScout: {
+      enabled: false,
+      maxSymbols: 8,
+      maxBytesPerSymbol: 4000
     }
   }),
   provider: ProviderConfigSchema.optional(),
@@ -545,6 +579,7 @@ export type ReviewConfig = z.infer<typeof ReviewConfigSchema>
 export type CrossFileRetrievalConfig = z.infer<
   typeof CrossFileRetrievalConfigSchema
 >
+export type ContextScoutConfig = z.infer<typeof ContextScoutConfigSchema>
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 export type InstructionsConfig = z.infer<typeof InstructionsConfigSchema>
 export type SkillsConfig = z.infer<typeof SkillsConfigSchema>

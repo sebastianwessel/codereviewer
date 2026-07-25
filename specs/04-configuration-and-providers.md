@@ -460,6 +460,26 @@ Disabled by default.
 | `review.crossFileRetrieval.maxToolCallsPerTask` | integer (1-500) | `100` |
 | `review.crossFileRetrieval.maxBytesPerRead` | integer (1000-200000) | `24000` |
 
+## Context Scout
+
+Controls the context scout (`18-context-scout.md`). Disabled by default.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `review.contextScout.enabled` | boolean | `false` |
+| `review.contextScout.maxSymbols` | integer (1-40) | `8` |
+| `review.contextScout.maxBytesPerSymbol` | integer (500-40000) | `4000` |
+
+Rules:
+
+- with it disabled, no scout call is issued and the discovery packet is unchanged;
+- when enabled, one compact scout call per task names out-of-change symbols and
+  deterministic resolution injects their bodies as referenced-definition context;
+  the discovery agent itself stays single-shot and receives no tools;
+- a symbol the scout names that deterministic resolution cannot find is never
+  injected, and injected content passes the same eligibility gate, redaction, and
+  containment as any other repository access.
+
 Rules:
 
 - with it disabled, holistic discovery issues no tool call and runs as a single-shot

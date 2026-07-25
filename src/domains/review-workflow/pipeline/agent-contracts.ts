@@ -440,6 +440,142 @@ export type HolisticReviewRunner = (
   signal: AbortSignal | undefined
 ) => Promise<ModelHolisticReviewResult>
 
+// Context scout input (spec 18). The scout runs BEFORE discovery and sees only
+// the diff plus a compact inventory of the symbols the changed files reference
+// from outside themselves — both carried in `reviewText` — and no file bodies and
+// no tools. Its only product is a list of symbols to fetch.
+//
+// Field order is deliberate, for the same reason as
+// `FindingRefutationBatchInputSchema`: JSON.stringify follows declaration order,
+// so the fields shared across every scout call in a run (runId) come first and
+// the per-task payload last, giving consecutive calls the longest possible shared
+// prompt prefix for the provider's prompt cache.
+export const ContextScoutInputSchema = z.strictObject({
+  runId: z.string().min(1),
+  taskId: z.string().min(1),
+  paths: z.array(RepositoryRelativePathSchema),
+  reviewText: z.string().min(1)
+})
+
+export type ContextScoutInput = z.infer<typeof ContextScoutInputSchema>
+
+// Loose by design, exactly like `ModelHolisticReviewResultSchema`: the provider
+// receives an opaque array and the item SHAPE is specified in the instructions,
+// because sending a rich item schema was measured to make structured output fail
+// on larger responses. Each entry is normalized by
+// `ModelContextScoutRequestSchema`. Do not "improve" this into a typed array.
+export const ModelContextScoutResultSchema = z.strictObject({
+  requests: z.array(z.unknown()).default([])
+})
+
+export type ModelContextScoutResult = z.infer<
+  typeof ModelContextScoutResultSchema
+>
+
+// One requested symbol inside a scout response. Tolerant of the usual model
+// output drift (field aliases, nested casing) because a dropped request silently
+// costs the reviewer context it asked for. `path` is a HINT that helps
+// deterministic resolution disambiguate a name declared in several files; an
+// unusable path is discarded while the request itself survives, since resolution
+// can still find the symbol by name. Nothing here grants access: the resolver
+// fetches only what it can prove exists, through the normal eligibility gate.
+export const ModelContextScoutRequestSchema = z.preprocess((value) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return value
+  }
+
+  const record = value as Record<string, unknown>
+
+  return {
+    name:
+      record.name ??
+      record.symbol ??
+      record.symbolName ??
+      record.symbol_name ??
+      record.identifier,
+    path:
+      record.path ??
+      record.filePath ??
+      record.file_path ??
+      record.file ??
+      record.declaredIn ??
+      record.declared_in,
+    reason:
+      record.reason ??
+      record.why ??
+      record.rationale ??
+      record.justification
+  }
+}, z.object({
+  name: z.preprocess(
+    (value) => (typeof value === 'string' ? value.trim() : value),
+    z.string().min(1).max(200)
+  ),
+  path: RepositoryRelativePathSchema.optional().catch(undefined),
+  reason: z
+    .preprocess(
+      (value) =>
+        truncateModelString(
+          typeof value === 'string' ? value.trim() : value,
+          500
+        ),
+      z.string().min(1).max(500).optional()
+    )
+    .catch(undefined)
+}))
+
+// Declared explicitly rather than inferred: `.catch(undefined)` on the tolerant
+// fields erases key optionality in the inferred type, and callers should see a
+// plain, readonly "symbol to fetch" record.
+export type ContextScoutRequest = {
+  readonly name: string
+  readonly path?: string
+  readonly reason?: string
+}
+
+// Normalizes a scout response into the requests deterministic resolution will try
+// to fetch. Unparseable entries are dropped rather than failing the task: the
+// scout is an optional context aid, so a malformed item must cost at most that one
+// symbol. Duplicates are collapsed on the (name, path) pair — the same name in two
+// files is two distinct symbols — keeping the FIRST occurrence, because the
+// instructions require the list to be ranked most-decisive first.
+export const contextScoutRequests = (
+  result: ModelContextScoutResult
+): readonly ContextScoutRequest[] => {
+  const requests: ContextScoutRequest[] = []
+  // NUL separator so a symbol name containing spaces cannot collide with a
+  // different (name, path) pair.
+  const seen = new Set<string>()
+
+  for (const raw of result.requests) {
+    const parsed = ModelContextScoutRequestSchema.safeParse(raw)
+
+    if (!parsed.success) {
+      continue
+    }
+
+    const key = `${parsed.data.name}\u0000${parsed.data.path ?? ''}`
+
+    if (seen.has(key)) {
+      continue
+    }
+
+    seen.add(key)
+    requests.push({
+      name: parsed.data.name,
+      ...(parsed.data.path === undefined ? {} : { path: parsed.data.path }),
+      ...(parsed.data.reason === undefined ? {} : { reason: parsed.data.reason })
+    })
+  }
+
+  return requests
+}
+
+export type ContextScoutRunner = (
+  input: ContextScoutInput,
+  signal: AbortSignal | undefined
+) => Promise<ModelContextScoutResult>
+
 export const TaskReviewInputSchema = z.strictObject({
   runId: z.string().min(1),
   task: WorkflowReviewTaskSchema,

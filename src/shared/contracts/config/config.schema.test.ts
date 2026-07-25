@@ -99,6 +99,55 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
+  test('context scout defaults to disabled with bounded symbol budgets', () => {
+    const defaults = CodeReviewerConfigSchema.parse({})
+    expect(defaults.review.contextScout).toEqual({
+      enabled: false,
+      maxSymbols: 8,
+      maxBytesPerSymbol: 4000
+    })
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      review: { contextScout: { enabled: true, maxSymbols: 3 } }
+    })
+    expect(enabled.review.contextScout).toEqual({
+      enabled: true,
+      maxSymbols: 3,
+      maxBytesPerSymbol: 4000
+    })
+
+    // The per-symbol cap keeps one large callee from flooding the packet and
+    // pushing changed-file source out of it.
+    expect(
+      CodeReviewerConfigSchema.parse({
+        review: { contextScout: { enabled: true, maxBytesPerSymbol: 12000 } }
+      }).review.contextScout.maxBytesPerSymbol
+    ).toBe(12000)
+
+    // Both budgets are rations against context dilution, so out-of-range values
+    // fail validation instead of being silently clamped.
+    for (const invalid of [
+      { maxSymbols: 0 },
+      { maxSymbols: 41 },
+      { maxBytesPerSymbol: 499 },
+      { maxBytesPerSymbol: 40001 }
+    ]) {
+      expect(() =>
+        CodeReviewerConfigSchema.parse({
+          review: { contextScout: { enabled: true, ...invalid } }
+        })
+      ).toThrow()
+    }
+  })
+
+  test('context scout rejects an unknown nested key', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        review: { contextScout: { on: true } }
+      })
+    ).toThrow()
+  })
+
   test('security dedicated pass and signals default to disabled', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.security.dedicatedPass.enabled).toBe(false)

@@ -12,6 +12,9 @@ import {
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
+import { runContextScout } from './context-scout.js'
+import { type ContextRetriever } from '../../../context-retrieval/index.js'
+import { type ContextScoutRunner } from '../agent-contracts.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
 
 // Present the changed source to the holistic reviewer as a clean, line-numbered
@@ -443,7 +446,11 @@ export const runModelBackedHolisticTaskReview = async (
     readonly workflowInput: ReviewWorkflowInput
     readonly taskInput: TaskReviewInput
     readonly task: WorkflowReviewTask
-    readonly runners: { readonly holisticReview: HolisticReviewRunner }
+    readonly runners: {
+      readonly holisticReview: HolisticReviewRunner
+      readonly contextScout?: ContextScoutRunner
+    }
+    readonly contextRetriever?: ContextRetriever | undefined
     readonly logger: HolisticTaskReviewLogger
     readonly signal?: AbortSignal | undefined
   }
@@ -451,11 +458,34 @@ export const runModelBackedHolisticTaskReview = async (
   const candidatesById = new Map<string, CandidateFinding>()
   const rawDiff = input.workflowInput.reviewedDiffText
 
+  const baseReviewText = buildReviewText(input.taskInput, rawDiff)
+  // Spec 18: choose extra context BEFORE reviewing, in a separate call, so the
+  // reviewer itself stays single-shot and tool-free.
+  const scoutBounds = input.workflowInput.contextScout
+  const scout =
+    scoutBounds === undefined ||
+    input.runners.contextScout === undefined ||
+    input.contextRetriever === undefined
+      ? undefined
+      : await runContextScout({
+          taskInput: input.taskInput,
+          task: input.task,
+          reviewText: baseReviewText,
+          runScout: input.runners.contextScout,
+          retriever: input.contextRetriever,
+          bounds: scoutBounds,
+          ...(input.signal === undefined ? {} : { signal: input.signal })
+        })
+  const reviewText =
+    scout === undefined || scout.section === ''
+      ? baseReviewText
+      : `${baseReviewText}\n${scout.section}`
+
   const general = await runDiscoveryCall(
     input.runners.holisticReview,
     input.taskInput,
     input.task,
-    buildReviewText(input.taskInput, rawDiff),
+    reviewText,
     input.signal,
     'holistic_review'
   )
@@ -498,6 +528,9 @@ export const runModelBackedHolisticTaskReview = async (
     task_id: input.task.id,
     finding_count: general.findings.length,
     security_pass_enabled: input.workflowInput.securityPassEnabled,
+    scout_requested_count: scout?.requestedCount ?? 0,
+    scout_resolved_count: scout?.resolvedCount ?? 0,
+    scout_bytes_injected: scout?.bytesInjected ?? 0,
     security_finding_count: securityFindingCount,
     general_candidate_count: generalCandidateCount,
     security_candidate_count: candidates.length - generalCandidateCount,

@@ -25,7 +25,9 @@ describe('workflow harness config', () => {
       }
     })
     expect(modelReviewWorkflowDelegation(2)).toEqual({
-      agents: ['holistic_review', 'refute_finding'],
+      // The scout is delegated to as its own agent (spec 18); selection and
+      // judgment stay in separate calls.
+      agents: ['holistic_review', 'context_scout', 'refute_finding'],
       modelAliases: ['reviewer'],
       maxChildAgentCalls: 16,
       maxParallelChildAgentCalls: 2
@@ -113,6 +115,18 @@ describe('workflow harness config', () => {
       }
       })
     ).toEqual({ builtinTools: false, maxSteps: 1 })
+  })
+
+  test('reserves one extra call per task for the context scout', () => {
+    // Scout enabled: 8 tasks * (1 discovery + 1 scout) + 8*4 refutation + 2*2
+    // buffer = 16 + 32 + 4 = 52.
+    expect(
+      maxChildAgentCallsForReview({
+        taskCount: 8,
+        maxConcurrentTasks: 2,
+        contextScoutEnabled: true
+      })
+    ).toBe(52)
   })
 
   test('grows the budget for the dedicated security pass second discovery call', () => {
