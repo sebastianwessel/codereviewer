@@ -34,15 +34,15 @@ describe('workflow harness config', () => {
   })
 
   test('derives bounded child-agent call budgets from review scale', () => {
-    // taskCount holistic calls + taskCount * 12 (one refutation per emitted
-    // candidate, up to HOLISTIC_MAX_CANDIDATES) + maxConcurrentTasks * 2:
-    // 8 + 8*12 + 2*2 = 108.
+    // taskCount holistic calls + taskCount * 4 (ONE batched refutation call per task
+    // plus a small allowance for budget-driven batch splits) + maxConcurrentTasks * 2:
+    // 8 + 8*4 + 2*2 = 44.
     expect(
       maxChildAgentCallsForReview({
         taskCount: 8,
         maxConcurrentTasks: 2
       })
-    ).toBe(108)
+    ).toBe(44)
 
     // Above the cap → clamped to the maximum child-agent call budget.
     expect(
@@ -99,17 +99,17 @@ describe('workflow harness config', () => {
     ).toEqual({ builtinTools: false, maxSteps: 1 })
   })
 
-  test('grows the budget for the dedicated security pass second call and candidates', () => {
-    // With the security pass enabled each task issues 2 discovery calls and can
-    // emit up to HOLISTIC_MAX_CANDIDATES + SECURITY_MAX_CANDIDATES (12 + 8 = 20)
-    // candidates: 8*2 + 8*20 + 2*2 = 16 + 160 + 4 = 180.
+  test('grows the budget for the dedicated security pass second discovery call', () => {
+    // With the security pass enabled each task issues 2 discovery calls. Refutation
+    // stays at one batched call per task (plus the split allowance) no matter how
+    // many candidates the two passes raise: 8*2 + 8*4 + 2*2 = 16 + 32 + 4 = 52.
     expect(
       maxChildAgentCallsForReview({
         taskCount: 8,
         maxConcurrentTasks: 2,
         securityPassEnabled: true
       })
-    ).toBe(180)
+    ).toBe(52)
   })
 
   test('enables only read/list/grep builtins for skill-backed review agents', () => {

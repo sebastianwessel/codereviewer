@@ -14,9 +14,9 @@ import {
   runWithCrossFileDiscoveryTools
 } from '../pipeline/discovery/cross-file-tools.js'
 import {
-  FindingRefutationInputSchema,
+  FindingRefutationBatchInputSchema,
   HolisticReviewInputSchema,
-  ModelFindingRefutationResultSchema,
+  ModelFindingRefutationBatchResultSchema,
   ModelHolisticReviewResultSchema
 } from '../pipeline/agent-contracts.js'
 import {
@@ -115,8 +115,8 @@ export const createModelBackedReviewHarness = (
       }),
       refute_finding: agent({
         model: 'reviewer',
-        input: FindingRefutationInputSchema,
-        output: ModelFindingRefutationResultSchema,
+        input: FindingRefutationBatchInputSchema,
+        output: ModelFindingRefutationBatchResultSchema,
         ...agentOptionsForRole('refute_finding'),
         instructions: modelFindingRefuterInstructions
       })

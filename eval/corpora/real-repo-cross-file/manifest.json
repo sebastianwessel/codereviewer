@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "1.0",
+  "datasetId": "real-repo-cross-file",
+  "modelTrainingCutoff": "2026-01-01",
+  "description": "Real upstream repositories hydrated as FULL working trees at the commit before an upstream fix landed, so cross-file review defects are measurable. modelTrainingCutoff is an operator setting: re-set it to the evaluated model's cutoff each model generation, which by design invalidates held-out cases captured before it. Every commit pair below was read from upstream git objects; expected findings describe the pre-fix code that was inspected.",
+  "cases": [
+    {
+      "id": "fastify-decorator-shadows-builtin-request-properties",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/fastify/fastify.git",
+      "upstreamOwner": "fastify",
+      "upstreamRepo": "fastify",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "cc8d9a3c961d65cb1a39c4142ce63285d2de1e3c",
+      "fixCommittedAt": "2026-06-28T09:45:40+02:00",
+      "parentCommit": "6e6be153127cbe6e025f73efba78d1db7dd5788b",
+      "reviewedPaths": ["lib/decorate.js", "lib/reply.js", "lib/request.js"],
+      "reviewIntent": "Keep decorator existence checks to static props and prototype lookups",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/decorate.js",
+          "lineRange": [93, 101],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Decorator existence checks only inspect the constructor's static props list and its prototype, so properties assigned inside the Request and Reply constructor bodies (id, params, raw, query, log, body on Request; raw, request, log on Reply) are invisible. hasRequestDecorator/hasReplyDecorator report false for those built-ins and the duplicate-decorator guard does not raise FST_ERR_DEC_ALREADY_PRESENT, so decorating one silently shadows core request/reply state at runtime."
+        }
+      ],
+      "tags": ["cross-file", "api-contract", "decorators"],
+      "notes": "Cross-file by construction: the evidence is the constructor body in lib/request.js and lib/reply.js, not the changed check in lib/decorate.js. Upstream is a popular public repository, so only the post-cutoff commit date protects this case from contamination."
+    },
+    {
+      "id": "fastify-router-options-shared-mutation",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/fastify/fastify.git",
+      "upstreamOwner": "fastify",
+      "upstreamRepo": "fastify",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "b4db85b665ac99a809c633b7564d49c8a4c2c5c9",
+      "fixCommittedAt": "2026-02-20T23:08:12+01:00",
+      "parentCommit": "3653e7b92719061c6c2dfb4497d2d5b936509309",
+      "reviewedPaths": ["lib/route.js"],
+      "reviewIntent": "Reuse the caller-provided routerOptions object when building router options",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/route.js",
+          "lineRange": [616, 632],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "buildRouterOptions keeps the caller's options.routerOptions object by reference and then writes every missing router key into it. The caller's object is mutated, so a routerOptions object shared between Fastify instances (or reused across registrations) leaks the first instance's defaults into later ones instead of each instance resolving its own defaults."
+        }
+      ],
+      "tags": ["shared-state", "mutation", "configuration"],
+      "notes": "Impact requires knowing that callers pass a shared options object into buildRouterOptions; the mutation itself is local to lib/route.js."
+    },
+    {
+      "id": "gin-clientip-multi-forwarded-header",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/gin-gonic/gin.git",
+      "upstreamOwner": "gin-gonic",
+      "upstreamRepo": "gin",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "9914178584e42458ff7d23891463a880f58c9d86",
+      "fixCommittedAt": "2026-01-02T10:15:27+08:00",
+      "parentCommit": "915e4c90d28ec4cffc6eb146e208ab5a65eac772",
+      "reviewedPaths": ["context.go"],
+      "reviewIntent": "Read each forwarded IP header with a single header lookup in ClientIP",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "context.go",
+          "lineRange": [989, 996],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "ClientIP passes only the first value of each forwarded-IP header to validateHeader, because requestHeader resolves to Header.Get. With more than one X-Forwarded-For header line the proxy-appended line is dropped and only the client-controlled line is parsed; validateHeader then walks that single line right-to-left and returns its right-most entry as the trusted client IP, so a caller-supplied value becomes ClientIP and IP-based allow-listing or rate limiting can be spoofed."
+        }
+      ],
+      "tags": ["cross-file", "security", "trusted-proxy"],
+      "notes": "Cross-file: the trust decision lives in Engine.validateHeader/isTrustedProxy in gin.go, while the reviewed change is in context.go. Not a published advisory case; it was captured from ordinary upstream history."
+    },
+    {
+      "id": "gin-context-copy-drops-errors",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/gin-gonic/gin.git",
+      "upstreamOwner": "gin-gonic",
+      "upstreamRepo": "gin",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "293ad7edebb3ae30369288bd6416ca0d78474727",
+      "fixCommittedAt": "2026-06-22T19:09:26+08:00",
+      "parentCommit": "2e4d4f38962a6f15ae496d59b294f307eef95429",
+      "reviewedPaths": ["context.go"],
+      "reviewIntent": "Trim Context.Copy() to writer, keys, and params state",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "context.go",
+          "lineRange": [122, 145],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Context.Copy() rebuilds the copy field by field and never carries over Errors or Accepted. A context copied for use in a goroutine therefore starts with an empty error list and no negotiated content types, so errors already attached by earlier middleware are invisible to anything inspecting the copy, and content negotiation on the copy silently restarts."
+        }
+      ],
+      "tags": ["contract", "async", "state-copy"],
+      "notes": "The omission is visible only against the full Context struct and the middleware that reads c.Errors (errors.go, recovery.go, logger.go)."
+    }
+  ]
+}

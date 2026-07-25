@@ -1,0 +1,92 @@
+# 17: Real-Repository Evaluation Corpus
+
+Status: Approved
+Date: 2026-07-25
+
+## Purpose
+
+Make cross-file review quality measurable. The `code-review-bench-style` slices
+capture only the files a change touched, so a defect whose evidence lives in an
+unchanged file cannot be found by any reviewer, however good — the evidence is not
+on disk. Cross-file recall measured against those slices is therefore not a property
+of the engine, and cross-file retrieval (`16-agentic-cross-file-discovery.md`) cannot
+be evaluated on them at all.
+
+This spec defines a second corpus whose cases are **real upstream repositories
+checked out in full** at the commit immediately before an upstream fix landed. The
+reviewer sees the repository as a developer would, so a finding that depends on a
+callee body, an interface, or a constructor in an unchanged file is reachable.
+
+## Shape
+
+- A **manifest** is committed; **checkouts are not**. The manifest carries the case
+  definitions; working trees are produced on demand into the artifact directory,
+  which is git-ignored. A corpus of full repositories is orders of magnitude larger
+  than this repository and never enters its history.
+- Each case pins an upstream repository, the **fix commit** and its **parent**. The
+  parent is checked out as the working tree (the pre-fix state, which still contains
+  the defect) and the fix commit supplies the reviewed diff.
+- Hydration is **idempotent and integrity-checked**: an already-hydrated case whose
+  checkout matches its pinned commit is reused; a mismatched checkout is repaired
+  rather than silently accepted. Fetches are depth-limited to the pinned commit so a
+  case costs one commit, not a repository history.
+- Hydrated cases are consumed through the existing evaluation fixture contract, so
+  the matcher, judges, and metrics apply unchanged.
+
+## Case Definition
+
+Each case records: a stable id, language, upstream owner/repository and clone URL,
+license, capture date, source, fix commit, fix commit date, parent commit, the
+reviewed paths, the review intent, expected findings, and free-form tags and notes.
+
+Expected findings reuse the evaluation fixture's expected-finding contract,
+including the security mechanism and context-depth labels, so a real-repository case
+reports through the same per-mechanism and per-context-depth metrics as any other.
+
+## Anti-Contamination
+
+The corpus encodes the policy in `06-evaluation-and-quality-gates.md` as validated
+manifest data, so a violation fails loading instead of silently inflating a score:
+
+- **Temporal cutoff.** The manifest declares the evaluated model's training cutoff.
+  A `held-out` case whose fix commit predates that cutoff is rejected. The cutoff is
+  an operator setting, re-set each model generation; re-setting it invalidates
+  held-out cases captured before it, which is the intended effect.
+- **Chronological split.** Cases are labelled `dev` or `held-out`. Improvements are
+  decided on `held-out`; `dev` is for iteration.
+- **Answer-key exclusion.** No field that reaches the reviewed input may carry the
+  CVE id, advisory text, or fix commit message. Review intent and expected findings
+  describe the pre-fix code, never the fix.
+- **Dedup.** A token-normalized diff fingerprint is recorded per case so exact and
+  near-duplicate captures are detectable.
+- **Provenance.** License, source, and capture date are required per case; a case
+  whose license is not on the permissive allowlist is rejected.
+
+## Cost And Safety
+
+- Hydration performs git fetches only. It runs no model call, so refreshing or
+  extending the corpus costs no provider spend.
+- Only the pinned commit is fetched, and only for the cases selected.
+- Checked-out repository content is untrusted input like any other reviewed source
+  (spec 07); it is reviewed, never executed, and the eligibility gate and redaction
+  apply to it as they do to any repository.
+
+## Testing
+
+- Unit: manifest schema validation, including each anti-contamination rule (cutoff
+  violation, non-permissive license, answer-key leakage, malformed commit sha);
+  case selection and filtering; the diff fingerprint; and the pure helpers that
+  build the git argument vectors and check checkout integrity.
+- No test performs a network fetch, and no test runs a provider call. Hydration
+  against upstream is an explicit, operator-run step.
+
+## Acceptance
+
+- A hydrated case yields a working tree containing the repository's unchanged files,
+  not only the reviewed paths, so a cross-file defect is reachable from the review.
+- Re-running hydration for an already-hydrated, integral case performs no refetch;
+  a checkout that does not match its pinned commit is repaired.
+- Manifest data that violates the temporal cutoff, the license allowlist, or the
+  answer-key exclusion fails validation with a configuration error.
+- Cross-file recall reported on this corpus is a property of the engine: the
+  evidence for every cross-file expected finding is present in the checkout.

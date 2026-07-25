@@ -1,10 +1,6 @@
 import { type BuiltinToolName } from '@purista/harness'
 import { REPO_TOOL_IDS } from '../../context-retrieval/index.js'
 import { type CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
-import {
-  HOLISTIC_MAX_CANDIDATES,
-  SECURITY_MAX_CANDIDATES
-} from '../pipeline/discovery/holistic-task-review.js'
 
 const defaultMaxConcurrentTasks = 4
 const defaultRunTimeoutMs = 0
@@ -12,6 +8,9 @@ const defaultMaxChildAgentCalls = 16
 const maxChildAgentCallCap = 2048
 const readonlySkillTools = ['read', 'list', 'grep'] as const satisfies readonly BuiltinToolName[]
 const compactAgentMaxSteps = 1
+// Head-room for refutation batches that exceed the provider input budget and split
+// into halves. Splitting is bounded and rare, so a small constant is enough.
+const refutationBatchSplitAllowance = 3
 const contextHeavyAgentMaxSteps = 4
 
 export type ReviewAgentRole =
@@ -32,22 +31,18 @@ export const maxChildAgentCallsForReview = (
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
   const maxConcurrentTasks = effectiveMaxConcurrentTasks(input.maxConcurrentTasks)
-  // One holistic discovery call per task, plus one refutation call per emitted
-  // candidate (a task can emit up to HOLISTIC_MAX_CANDIDATES), plus a concurrency
-  // buffer. Reserving only one refutation call per task starves refutation once
-  // discovery raises many candidates, which leaks unrefuted candidates as false
-  // positives. When the dedicated security pass is enabled (spec 15), each task
-  // issues a SECOND discovery call and can emit up to SECURITY_MAX_CANDIDATES more
-  // candidates, so both budgets grow to keep refutation from being starved.
+  // One holistic discovery call per task (two when the dedicated security pass is
+  // enabled, spec 15), plus refutation. Refutation adjudicates ALL of a task's
+  // candidates in a single batched call, so it costs one call per task rather than
+  // one per candidate; a batch that exceeds the input budget splits in half, so a
+  // small allowance is added for those splits.
   const discoveryCallsPerTask = input.securityPassEnabled === true ? 2 : 1
-  const candidatesPerTask =
-    HOLISTIC_MAX_CANDIDATES +
-    (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0)
+  const refutationCallsPerTask = 1 + refutationBatchSplitAllowance
   // Cross-file retrieval (spec 16) needs no reservation here: a mediated tool call
   // is an agent STEP, bounded by the agent's maxSteps, and never counts against the
   // workflow's child-agent call budget (which counts agent invocations).
   const holisticCalls = taskCount * discoveryCallsPerTask
-  const refutationCalls = taskCount * candidatesPerTask
+  const refutationCalls = taskCount * refutationCallsPerTask
   const concurrencyBuffer = maxConcurrentTasks * 2
   const derived = holisticCalls + refutationCalls + concurrencyBuffer
 

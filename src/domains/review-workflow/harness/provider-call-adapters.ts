@@ -1,7 +1,6 @@
 import {
-  normalizeFindingRefutationResult,
-  type FindingRefutationInput,
-  type FindingRefutationResult
+  type FindingRefutationBatchInput,
+  type ModelFindingRefutationBatchResult
 } from '../pipeline/agent-contracts.js'
 
 type ProviderCallLogger = {
@@ -13,33 +12,30 @@ type ProviderCallLogger = {
 
 export const runRefutationProviderCall = async (
   input: {
-    readonly refutationInput: FindingRefutationInput
+    readonly refutationInput: FindingRefutationBatchInput
     readonly refuteFinding: (
-      input: FindingRefutationInput,
+      input: FindingRefutationBatchInput,
       signal: AbortSignal | undefined
-    ) => Promise<FindingRefutationResult>
+    ) => Promise<ModelFindingRefutationBatchResult>
     readonly logger: ProviderCallLogger
     readonly signal?: AbortSignal | undefined
   }
-): Promise<FindingRefutationResult> => {
+): Promise<ModelFindingRefutationBatchResult> => {
   input.logger.debug('Refutation check provider call started.', {
-    candidate_id: input.refutationInput.candidate.id,
-    path: input.refutationInput.candidate.location.path,
+    task_id: input.refutationInput.candidates[0]?.taskId,
+    candidate_count: input.refutationInput.candidates.length,
     evidence_count: input.refutationInput.evidence.length,
     context_count: input.refutationInput.reviewContext.length
   })
-  const refutation = await input.refuteFinding(
-    input.refutationInput,
-    input.signal
-  )
-  const normalizedRefutation = normalizeFindingRefutationResult(refutation)
+  const batch = await input.refuteFinding(input.refutationInput, input.signal)
 
   input.logger.debug('Refutation check provider call completed.', {
-    candidate_id: input.refutationInput.candidate.id,
-    verdict: normalizedRefutation.verdict
+    task_id: input.refutationInput.candidates[0]?.taskId,
+    candidate_count: input.refutationInput.candidates.length,
+    verdict_count: batch.verdicts.length
   })
 
-  return normalizedRefutation
+  return batch
 }
 
 export type { ProviderCallLogger }

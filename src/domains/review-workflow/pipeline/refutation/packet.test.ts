@@ -9,7 +9,7 @@ import {
   ReviewWorkflowInputSchema,
   type ReviewWorkflowInput
 } from '../contracts.js'
-import { findingRefutationInputForCandidate } from './packet.js'
+import { findingRefutationBatchInput } from './packet.js'
 import { isTaskPacketBudgetExceededError } from '../discovery/task-packet.js'
 
 const configHash =
@@ -29,6 +29,21 @@ const modelCandidate: CandidateFinding = {
   },
   evidenceIds: ['ev_diff1'],
   proposedBy: 'review-agent'
+}
+
+// A second model candidate raised by the SAME task. Batched refutation adjudicates
+// it in the same packet, so the packet must carry the union of the batch's evidence.
+const secondModelCandidate: CandidateFinding = {
+  ...modelCandidate,
+  id: 'cand_bug2',
+  title: 'Changed branch skips validation',
+  description: 'The changed branch can skip validation.',
+  location: {
+    path: 'src/app.ts',
+    startLine: 40,
+    side: 'new'
+  },
+  evidenceIds: ['ev_other1']
 }
 
 const supportCandidate: CandidateFinding = {
@@ -127,10 +142,10 @@ const workflowInput = (
 describe('finding refutation packet', () => {
   test('keeps candidate-scoped evidence, support signals, and task context', () => {
     const context = reviewContext()
-    const packet = findingRefutationInputForCandidate({
+    const packet = findingRefutationBatchInput({
       workflowInput: workflowInput(),
-      tasks: [task([context])],
-      candidate: modelCandidate,
+      task: task([context]),
+      candidates: [modelCandidate],
       allCandidates: [modelCandidate, supportCandidate],
       sharedDigest: '(no admitted shared context yet)'
     })
@@ -149,11 +164,34 @@ describe('finding refutation packet', () => {
     ])
   })
 
-  test('drops unrelated same-file support signals from the refutation packet', () => {
-    const packet = findingRefutationInputForCandidate({
+  // The point of the batch packet: every candidate of the task rides along with a
+  // SINGLE copy of the task context, and the evidence is the union of the batch.
+  test('carries every batched candidate and the union of their evidence once', () => {
+    const context = reviewContext()
+    const packet = findingRefutationBatchInput({
       workflowInput: workflowInput(),
-      tasks: [task([])],
-      candidate: modelCandidate,
+      task: task([context]),
+      candidates: [modelCandidate, secondModelCandidate],
+      allCandidates: [modelCandidate, secondModelCandidate, supportCandidate],
+      sharedDigest: '(no admitted shared context yet)'
+    })
+
+    expect(packet.input.candidates.map((entry) => entry.id)).toEqual([
+      'cand_bug1',
+      'cand_bug2'
+    ])
+    expect(packet.input.evidence.map((record) => record.id)).toEqual([
+      'ev_diff1',
+      'ev_other1'
+    ])
+    expect(packet.input.reviewContext).toEqual([context])
+  })
+
+  test('drops unrelated same-file support signals from the refutation packet', () => {
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput(),
+      task: task([]),
+      candidates: [modelCandidate],
       allCandidates: [
         modelCandidate,
         supportCandidate,
@@ -169,13 +207,13 @@ describe('finding refutation packet', () => {
     let thrown: unknown
 
     try {
-      findingRefutationInputForCandidate({
+      findingRefutationBatchInput({
         workflowInput: workflowInput({
           maxTaskInputBytes: 10000,
           instructions: [{ content: 'irreducible instruction '.repeat(800) }]
         }),
-        tasks: [task([])],
-        candidate: modelCandidate,
+        task: task([]),
+        candidates: [modelCandidate],
         allCandidates: [modelCandidate],
         sharedDigest: '(no admitted shared context yet)'
       })
@@ -192,12 +230,12 @@ describe('finding refutation packet', () => {
       ...supportCandidate,
       id: `cand_support${index}`
     }))
-    const packet = findingRefutationInputForCandidate({
+    const packet = findingRefutationBatchInput({
       workflowInput: workflowInput({
         maxTaskInputBytes: 10000
       }),
-      tasks: [task([context])],
-      candidate: modelCandidate,
+      task: task([context]),
+      candidates: [modelCandidate],
       allCandidates: [modelCandidate, ...supportCandidates],
       sharedDigest: 'large admitted digest '.repeat(700)
     })

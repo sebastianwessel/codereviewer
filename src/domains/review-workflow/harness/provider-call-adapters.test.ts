@@ -2,9 +2,10 @@ import { describe, expect, test } from 'vitest'
 import { type EvidenceRecord } from '../../../shared/contracts/index.js'
 import { type CandidateFinding } from '../../admission/index.js'
 import {
-  FindingRefutationInputSchema,
+  FindingRefutationBatchInputSchema,
   ModelFindingRefutationResultSchema,
-  normalizeFindingRefutationResult
+  normalizeFindingRefutationResult,
+  refutationVerdictsByCandidateId
 } from '../pipeline/agent-contracts.js'
 import { runRefutationProviderCall } from './provider-call-adapters.js'
 
@@ -71,9 +72,9 @@ const createLogger = () => {
 describe('model provider call adapters', () => {
   test('logs and normalizes refutation output', async () => {
     const { entries, logger } = createLogger()
-    const refutationInput = FindingRefutationInputSchema.parse({
+    const refutationInput = FindingRefutationBatchInputSchema.parse({
       runId: 'run-provider-adapters',
-      candidate,
+      candidates: [candidate],
       reviewedDiffRanges: [],
       evidence: [evidence],
       supportSignalCandidates: [],
@@ -86,14 +87,22 @@ describe('model provider call adapters', () => {
 
     const result = await runRefutationProviderCall({
       refutationInput,
-      refuteFinding: async () => ({
-        verdict: 'proved',
-        rationaleSummary: 'The proof is still valid.'
+      refuteFinding: async (input) => ({
+        verdicts: input.candidates.map((batched) => ({
+          candidateId: batched.id,
+          verdict: 'proved',
+          rationaleSummary: 'The proof is still valid.'
+        }))
       }),
       logger
     })
 
-    expect(result.verdict).toBe('proved')
+    // The adapter passes the batch through untouched; binding a verdict back to its
+    // candidate is the resolver's job.
+    expect(refutationVerdictsByCandidateId(result).get('cand_provider')).toEqual({
+      verdict: 'proved',
+      rationaleSummary: 'The proof is still valid.'
+    })
     expect(entries.map((entry) => entry.message)).toEqual([
       'Refutation check provider call started.',
       'Refutation check provider call completed.'

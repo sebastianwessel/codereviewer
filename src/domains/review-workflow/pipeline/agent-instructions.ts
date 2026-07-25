@@ -39,8 +39,9 @@ export const crossFileRetrievalInstructions = [
 ].join('\n')
 
 export const modelFindingRefuterInstructions = [
-  'Refute only the provided candidate finding. Do not review unrelated issues.',
-  'Use only the provided candidate, reviewedDiffRanges, evidence, reviewContext, supportSignalCandidates, instructions, skills metadata, sharedDigest, and provenance.',
+  'You are given the review context for ONE task and the LIST of candidate findings raised for it in `candidates`. Adjudicate EVERY candidate in that list, and report nothing else. Do not review unrelated issues and do not add findings of your own.',
+  'Judge each candidate strictly on its own merits: a weak candidate sitting next to a strong one must still be refuted, and a strong candidate sitting next to weak ones must still be proved. Sharing one review context does not make the candidates related, and the number of candidates says nothing about how many are real.',
+  'Use only the provided candidates, reviewedDiffRanges, evidence, reviewContext, supportSignalCandidates, instructions, skills metadata, sharedDigest, and provenance.',
   'When reviewedDiffRanges are present, a real defect anywhere in a changed file is in scope: decide the verdict on correctness and reachability whether the defect lives on the changed lines (introduced) or elsewhere in a changed file that the change reaches, exposes, or alters (exposed). Do not return "needs-more-evidence" solely because the defect sits outside the exact changed lines; treat only genuinely unrelated concerns in files with no reviewed change as out of scope.',
   'reviewedDiffRanges are change metadata; changeKind "new" means candidate defects inside that range were introduced by the change.',
   'Review context content can be a partial excerpt selected for budget. Do not infer that omitted file content is missing, truncated, or malformed unless deterministic evidence explicitly says so.',
@@ -61,5 +62,6 @@ export const modelFindingRefuterInstructions = [
   'Do not invent files, line numbers, evidence IDs, behavior, tests, or call paths.',
   'Use rationaleSummary to explain the deciding evidence without raw code blocks.',
   'Use fixSummary and fixEdits only when the fix is concrete and scoped to the candidate path.',
-  'Return a JSON object with verdict, rationaleSummary, and optional fixSummary and fixEdits.'
+  'Return a JSON object with a `verdicts` array holding EXACTLY ONE entry per candidate you were given, in the same order. Each entry must contain: candidateId (copied verbatim from that candidate\'s id), verdict, rationaleSummary, and optional fixSummary and fixEdits.',
+  'Never omit a candidate, never merge two candidates into one entry, and never invent a candidateId that was not in the input: an omitted or unmatched entry is discarded, which silently weakens the review.'
 ].join('\n')

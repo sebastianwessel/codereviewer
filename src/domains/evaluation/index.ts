@@ -33,6 +33,36 @@ export {
   type HydrateBenchmarkPackResult
 } from './benchmark-hydration.js'
 export {
+  containsAnswerKey,
+  isFullCommitSha,
+  parseRealRepoCorpusManifest,
+  parseRealRepoCorpusManifestJson,
+  selectCorpusCases,
+  tokenNormalizedDiffFingerprint,
+  CorpusSplitSchema,
+  FullCommitShaSchema,
+  PermissiveLicenseSchema,
+  RealRepoCorpusCaseSchema,
+  RealRepoCorpusManifestSchema,
+  type CorpusSplit,
+  type RealRepoCorpusCase,
+  type RealRepoCorpusManifest
+} from './real-repo-corpus.schema.js'
+export {
+  buildRealRepoSlice,
+  defaultRealRepoManifestPath,
+  defaultRealRepoOutputSliceRoot,
+  diffPathsOutsideReviewedSet,
+  hydrateRealRepoCorpus,
+  realRepoHydrationSource,
+  resolveCaseHydrationState,
+  type CaseHydrationState,
+  type CorpusGitCommandRunner,
+  type HydrateRealRepoCorpusOptions,
+  type HydrateRealRepoCorpusResult,
+  type RealRepoCaseResult
+} from './real-repo-corpus-hydration.js'
+export {
   EVAL_SEMANTIC_JUDGE_STAGE,
   matchEvalFindings,
   missingSemanticJudgeError,

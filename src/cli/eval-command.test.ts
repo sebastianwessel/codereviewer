@@ -36,21 +36,32 @@ const plausibilityObjectResponse = <T extends JsonValue>(): ObjectResponse<T> =>
   }
 })
 
+// Refutation is batched: one call adjudicates every candidate raised for a task and
+// asks for a `verdicts` array holding one entry per candidate.
 const isFindingRefutationRequest = (request: ObjectRequest): boolean => {
   const schema = request.schema
-  const promptText = request.messages
-    .map((message) => String(message.content))
-    .join('\n')
 
   return (
-    (typeof schema === 'object' &&
-      schema !== null &&
-      'properties' in schema &&
-      typeof schema.properties === 'object' &&
-      schema.properties !== null &&
-      'verdict' in schema.properties) ||
-    promptText.includes('Validate only the provided candidate finding.')
+    typeof schema === 'object' &&
+    schema !== null &&
+    'properties' in schema &&
+    typeof schema.properties === 'object' &&
+    schema.properties !== null &&
+    'verdicts' in schema.properties
   )
+}
+
+// Each verdict is bound back to its candidate by id, so a scripted refuter has to
+// echo the candidate ids it was actually sent.
+const refutationCandidateIds = (request: ObjectRequest): readonly string[] => {
+  const userMessage = request.messages.find(
+    (message) => message.role === 'user'
+  )
+  const payload = JSON.parse(String(userMessage?.content)) as {
+    readonly candidates?: readonly { readonly id: string }[]
+  }
+
+  return (payload.candidates ?? []).map((candidate) => candidate.id)
 }
 
 const writeSampleEvalCases = async (root: string): Promise<void> => {
@@ -300,20 +311,25 @@ class SemanticJudgeCliProvider implements ModelProvider {
     if (isFindingRefutationRequest(request)) {
       return {
         object: {
-          verdict: 'proved',
-          rationaleSummary:
-            'The reviewed context proves the incomplete export syntax breaks the file.',
-          changedBehavior:
-            'The changed export leaves the TypeScript file syntactically incomplete.',
-          executionOrDataPath:
-            'The evaluated slice parses src/app.ts and reaches the incomplete export statement.',
-          violatedInvariant:
-            'The file must contain valid TypeScript syntax after the review change.',
-          impact: 'The project can no longer compile the changed file.',
-          introducedByChange:
-            'The incomplete export statement is present in the reviewed slice.',
-          contradictionChecks: ['No surrounding context completes the export.'],
-          fixDirection: 'Complete or remove the malformed export statement.'
+          verdicts: refutationCandidateIds(request).map((candidateId) => ({
+            candidateId,
+            verdict: 'proved',
+            rationaleSummary:
+              'The reviewed context proves the incomplete export syntax breaks the file.',
+            changedBehavior:
+              'The changed export leaves the TypeScript file syntactically incomplete.',
+            executionOrDataPath:
+              'The evaluated slice parses src/app.ts and reaches the incomplete export statement.',
+            violatedInvariant:
+              'The file must contain valid TypeScript syntax after the review change.',
+            impact: 'The project can no longer compile the changed file.',
+            introducedByChange:
+              'The incomplete export statement is present in the reviewed slice.',
+            contradictionChecks: [
+              'No surrounding context completes the export.'
+            ],
+            fixDirection: 'Complete or remove the malformed export statement.'
+          }))
         } as unknown as T,
         finishReason: 'stop',
         usage: {

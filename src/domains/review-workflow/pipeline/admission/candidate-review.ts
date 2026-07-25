@@ -1,16 +1,13 @@
 import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
 import { type CandidateFinding } from '../../../admission/index.js'
-import {
-  type FindingRefutationRunner,
-  type WorkflowReviewTask
-} from '../agent-contracts.js'
+import { type RefutationResolution } from '../refutation/execution.js'
 import {
   candidateWithinReviewedScope,
   isModelProposedCandidate
 } from './candidate-scope.js'
 import { createRefutationEvidence } from '../refutation/evidence.js'
-import { executeAdmissionRefutation } from '../refutation/execution.js'
 import { activeRefutationResultForCandidate } from '../refutation/result.js'
+import { refutationProviderErrorOutcome } from './provider-error-outcome.js'
 import { type AdmissionCandidateOutcome } from './outcome.js'
 import {
   noRefuterAdmissionOutcome,
@@ -25,19 +22,20 @@ import {
 import { providerIssueForError } from '../provider-issues.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
 
-export const reviewCandidateForAdmission = async (
+/**
+ * Turns ONE candidate plus its already-resolved refutation verdict into an
+ * admission outcome. The model call itself happens upstream, once per task
+ * (`executeBatchRefutation`), so this stage stays pure: preflight scope checks, then
+ * the verdict-to-outcome mapping.
+ */
+export const reviewCandidateForAdmission = (
   input: {
     readonly workflowInput: ReviewWorkflowInput
-    readonly tasks: readonly WorkflowReviewTask[]
     readonly candidate: CandidateFinding
-    readonly allCandidates: readonly CandidateFinding[]
-    readonly sharedDigest: string
-    readonly reviewEvidence: readonly EvidenceRecord[]
-    readonly refuteFinding?: FindingRefutationRunner | undefined
-    readonly signal?: AbortSignal
+    readonly resolution: RefutationResolution | undefined
   }
-): Promise<AdmissionCandidateOutcome> => {
-  if (input.refuteFinding === undefined) {
+): AdmissionCandidateOutcome => {
+  if (input.resolution === undefined) {
     return noRefuterAdmissionOutcome({
       candidates: [input.candidate],
       workflowEvidence: input.workflowInput.evidence
@@ -57,23 +55,26 @@ export const reviewCandidateForAdmission = async (
     return outOfDiffScopeOutcome(input.candidate)
   }
 
-  const refutationExecution = await executeAdmissionRefutation({
-    workflowInput: input.workflowInput,
-    tasks: input.tasks,
-    candidate: input.candidate,
-    allCandidates: input.allCandidates,
-    sharedDigest: input.sharedDigest,
-    reviewEvidence: input.reviewEvidence,
-    refuteFinding: input.refuteFinding,
-    issueForError: providerIssueForError,
-    ...(input.signal === undefined ? {} : { signal: input.signal })
-  })
-
-  if (refutationExecution.status === 'provider-error') {
-    return refutationExecution.outcome
+  if (input.resolution.status === 'provider-error') {
+    return refutationProviderErrorOutcome({
+      candidate: input.candidate,
+      error: input.resolution.error,
+      stage: input.resolution.stage,
+      issueForError: providerIssueForError
+    })
   }
 
-  const refutation = refutationExecution.refutation
+  // The batch returned no verdict for this candidate. That is an absence of signal,
+  // not a judgment: treat it exactly like `needs-more-evidence` so the candidate can
+  // never be admitted as proved on a verdict the model never gave.
+  const refutation =
+    input.resolution.status === 'missing-verdict'
+      ? {
+          verdict: 'needs-more-evidence' as const,
+          rationaleSummary:
+            'The refutation batch returned no verdict for this candidate.'
+        }
+      : input.resolution.refutation
   const refutationEvidence = createRefutationEvidence({
     candidate: input.candidate,
     refutation

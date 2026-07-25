@@ -478,24 +478,10 @@ export const FindingRefutationResultSchema = z.strictObject({
   fixEdits: z.array(FixEditSchema).max(5).optional()
 })
 
-export const ModelFindingRefutationResultSchema = z.preprocess((value) => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return value
-  }
-
-  const record = value as Record<string, unknown>
-
-  return {
-    verdict: record.verdict ?? record.decision ?? record.status,
-    rationaleSummary:
-      record.rationaleSummary ??
-      record.summary ??
-      record.rationale ??
-      record.reason,
-    fixSummary: record.fixSummary ?? record.fix_summary ?? record.suggestedFix,
-    fixEdits: record.fixEdits ?? record.fix_edits
-  }
-}, z.object({
+// The adjudication fields a refuter returns for one candidate, defined once and
+// reused by the single-candidate and batched result schemas so the two can never
+// drift apart.
+const refutationVerdictFields = {
   verdict: z.preprocess(
     (value) =>
       normalizeModelEnumValue(
@@ -528,7 +514,26 @@ export const ModelFindingRefutationResultSchema = z.preprocess((value) => {
     )
     .catch(undefined),
   fixEdits: FindingRefutationResultSchema.shape.fixEdits.catch(undefined)
-}))
+} as const
+
+export const ModelFindingRefutationResultSchema = z.preprocess((value) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return value
+  }
+
+  const record = value as Record<string, unknown>
+
+  return {
+    verdict: record.verdict ?? record.decision ?? record.status,
+    rationaleSummary:
+      record.rationaleSummary ??
+      record.summary ??
+      record.rationale ??
+      record.reason,
+    fixSummary: record.fixSummary ?? record.fix_summary ?? record.suggestedFix,
+    fixEdits: record.fixEdits ?? record.fix_edits
+  }
+}, z.object(refutationVerdictFields))
 
 const normalizeRefutationVerdict = (
   verdict: z.infer<typeof ModelFindingRefutationResultSchema>['verdict']
@@ -554,7 +559,107 @@ export type FindingRefutationResult = z.infer<
   typeof FindingRefutationResultSchema
 >
 export type ModelHolisticFinding = z.infer<typeof ModelHolisticFindingSchema>
+
+// Batched refutation (spec 05). One call adjudicates EVERY candidate raised for a
+// task instead of one call per candidate. The per-candidate packet repeated the
+// task's whole `reviewContext` — the changed file itself — once per candidate, so a
+// task with 14 candidates sent that file 14 times; input tokens dominate this
+// engine's cost at roughly 23:1 over output. The shared context is now sent once.
+//
+// Field order is deliberate: everything identical across batches (run, provenance,
+// instructions, skills, digest) comes first, then per-task context, then the
+// candidates. JSON.stringify follows this declaration order, so consecutive batches
+// share the longest possible prompt prefix, which is what provider prompt caches key
+// on.
+export const FindingRefutationBatchInputSchema = z.strictObject({
+  runId: z.string().min(1),
+  provenance: WorkflowProvenanceInputSchema,
+  instructions: z.array(ContextDocumentSchema),
+  skills: z.array(SkillContextDocumentSchema),
+  sharedDigest: z.string(),
+  reviewContext: z.array(ReviewContextDocumentSchema),
+  reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
+  evidence: z.array(EvidenceRecordSchema),
+  supportSignalCandidates: z.array(CandidateFindingSchema),
+  candidates: z.array(CandidateFindingSchema).min(1)
+})
+
+// Loose by design, like holistic discovery's output: the provider receives an
+// opaque array and the SHAPE is specified in the instructions, because sending a
+// rich item schema was measured to make structured output fail on larger responses.
+// Each entry is normalized by `ModelRefutationBatchVerdictSchema`.
+export const ModelFindingRefutationBatchResultSchema = z.strictObject({
+  verdicts: z.array(z.unknown()).default([])
+})
+
+// One adjudicated candidate inside a batch response: the per-candidate refutation
+// shape plus the id that binds it back to its candidate. Reuses the existing
+// verdict/rationale/fix normalization so batched and single verdicts cannot drift.
+export const ModelRefutationBatchVerdictSchema = z.preprocess((value) => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return value
+  }
+
+  const record = value as Record<string, unknown>
+
+  return {
+    candidateId:
+      record.candidateId ?? record.candidate_id ?? record.id ?? record.candidate,
+    verdict: record.verdict ?? record.decision ?? record.status,
+    rationaleSummary:
+      record.rationaleSummary ??
+      record.summary ??
+      record.rationale ??
+      record.reason,
+    fixSummary: record.fixSummary ?? record.fix_summary ?? record.suggestedFix,
+    fixEdits: record.fixEdits ?? record.fix_edits
+  }
+}, z.object({
+  candidateId: z.string().min(1),
+  ...refutationVerdictFields
+}))
+
+export type FindingRefutationBatchInput = z.infer<
+  typeof FindingRefutationBatchInputSchema
+>
+export type ModelFindingRefutationBatchResult = z.infer<
+  typeof ModelFindingRefutationBatchResultSchema
+>
+
+// Resolves a batch response into one normalized verdict per candidate id. A
+// candidate the model did not adjudicate is absent from the map; callers treat that
+// as "no signal" (needs-more-evidence) rather than inventing a verdict.
+export const refutationVerdictsByCandidateId = (
+  result: ModelFindingRefutationBatchResult
+): ReadonlyMap<string, FindingRefutationResult> => {
+  const verdicts = new Map<string, FindingRefutationResult>()
+
+  for (const raw of result.verdicts) {
+    const parsed = ModelRefutationBatchVerdictSchema.safeParse(raw)
+
+    if (!parsed.success || verdicts.has(parsed.data.candidateId)) {
+      continue
+    }
+
+    verdicts.set(
+      parsed.data.candidateId,
+      normalizeFindingRefutationResult({
+        verdict: parsed.data.verdict,
+        rationaleSummary: parsed.data.rationaleSummary,
+        ...(parsed.data.fixSummary === undefined
+          ? {}
+          : { fixSummary: parsed.data.fixSummary }),
+        ...(parsed.data.fixEdits === undefined
+          ? {}
+          : { fixEdits: parsed.data.fixEdits })
+      })
+    )
+  }
+
+  return verdicts
+}
+
 export type FindingRefutationRunner = (
-  input: FindingRefutationInput,
+  input: FindingRefutationBatchInput,
   signal: AbortSignal | undefined
-) => Promise<FindingRefutationResult>
+) => Promise<ModelFindingRefutationBatchResult>

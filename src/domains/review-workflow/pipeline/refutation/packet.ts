@@ -1,8 +1,8 @@
 import { type CandidateFinding } from '../../../admission/index.js'
 import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
 import {
-  FindingRefutationInputSchema,
-  type FindingRefutationInput,
+  FindingRefutationBatchInputSchema,
+  type FindingRefutationBatchInput,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import {
@@ -12,7 +12,7 @@ import {
 import { type ReviewWorkflowInput } from '../contracts.js'
 
 export type FindingRefutationPacket = {
-  readonly input: FindingRefutationInput
+  readonly input: FindingRefutationBatchInput
 }
 
 const locationEndLine = (candidate: CandidateFinding): number =>
@@ -35,6 +35,8 @@ const candidatesShareEvidence = (
   return right.evidenceIds.some((evidenceId) => leftEvidenceIds.has(evidenceId))
 }
 
+// A deterministic support signal corroborates a model candidate when it sits at an
+// overlapping location in the same file or cites the same evidence.
 const supportSignalCandidateSupports = (
   candidate: CandidateFinding,
   supportCandidate: CandidateFinding
@@ -44,58 +46,64 @@ const supportSignalCandidateSupports = (
   (candidateLocationsOverlap(candidate, supportCandidate) ||
     candidatesShareEvidence(candidate, supportCandidate))
 
-const createFindingRefutationInput = (
+const createFindingRefutationBatchInput = (
   input: {
     readonly workflowInput: ReviewWorkflowInput
-    readonly tasks: readonly WorkflowReviewTask[]
-    readonly candidate: CandidateFinding
+    readonly task: WorkflowReviewTask | undefined
+    readonly candidates: readonly CandidateFinding[]
     readonly allCandidates: readonly CandidateFinding[]
     readonly sharedDigest: string
     readonly reviewEvidence?: readonly EvidenceRecord[]
-    readonly additionalEvidenceIds?: readonly string[]
   }
-): FindingRefutationInput => {
-  const candidateEvidenceIds = new Set([
-    ...input.candidate.evidenceIds,
-    ...(input.additionalEvidenceIds ?? [])
-  ])
-  const candidatePath = input.candidate.location.path
-  const reviewEvidence = input.reviewEvidence ?? input.workflowInput.evidence
-  const originatingTask = input.tasks.find(
-    (task) => task.id === input.candidate.taskId
+): FindingRefutationBatchInput => {
+  const candidatePaths = new Set(
+    input.candidates.map((candidate) => candidate.location.path)
   )
+  const candidateEvidenceIds = new Set(
+    input.candidates.flatMap((candidate) => candidate.evidenceIds)
+  )
+  const reviewEvidence = input.reviewEvidence ?? input.workflowInput.evidence
+  // The batch shares the originating task's context; without a task (a candidate
+  // supplied on the workflow input) fall back to the workflow context for the paths
+  // the batch actually covers.
   const reviewContext =
-    originatingTask !== undefined && originatingTask.reviewContext.length > 0
-      ? originatingTask.reviewContext
+    input.task !== undefined && input.task.reviewContext.length > 0
+      ? input.task.reviewContext
       : (input.workflowInput.reviewContext ?? []).filter(
-          (context) => context.path === undefined || context.path === candidatePath
+          (context) =>
+            context.path === undefined || candidatePaths.has(context.path)
         )
 
-  return FindingRefutationInputSchema.parse({
+  return FindingRefutationBatchInputSchema.parse({
     runId: input.workflowInput.runId,
-    candidate: input.candidate,
+    provenance: input.workflowInput.provenance,
+    instructions: input.workflowInput.instructions,
+    skills: input.workflowInput.skills,
+    sharedDigest: input.sharedDigest,
+    reviewContext,
     reviewedDiffRanges: (input.workflowInput.reviewedDiffRanges ?? []).filter(
-      (range) => range.path === candidatePath
+      (range) => candidatePaths.has(range.path)
     ),
     evidence: reviewEvidence.filter((evidence) =>
       candidateEvidenceIds.has(evidence.id)
     ),
-    supportSignalCandidates: input.allCandidates.filter(
-      (supportCandidate) =>
-        supportSignalCandidateSupports(input.candidate, supportCandidate)
+    supportSignalCandidates: input.allCandidates.filter((supportCandidate) =>
+      input.candidates.some((candidate) =>
+        supportSignalCandidateSupports(candidate, supportCandidate)
+      )
     ),
-    reviewContext,
-    instructions: input.workflowInput.instructions,
-    skills: input.workflowInput.skills,
-    sharedDigest: input.sharedDigest,
-    provenance: input.workflowInput.provenance
+    candidates: input.candidates
   })
 }
 
-const fitFindingRefutationInputToBudget = (
-  refutationInput: FindingRefutationInput,
+// Shed the least load-bearing context first when a batch packet exceeds the
+// provider input budget: the shared digest, then deterministic support signals,
+// then the review context. A batch that still does not fit is reported so the
+// caller can split it into smaller batches rather than losing the candidates.
+const fitFindingRefutationBatchInputToBudget = (
+  refutationInput: FindingRefutationBatchInput,
   maxTaskInputBytes: number | undefined
-): FindingRefutationInput => {
+): FindingRefutationBatchInput => {
   if (maxTaskInputBytes === undefined) {
     return refutationInput
   }
@@ -106,7 +114,7 @@ const fitFindingRefutationInputToBudget = (
     return refutationInput
   }
 
-  const withoutSharedDigest = FindingRefutationInputSchema.parse({
+  const withoutSharedDigest = FindingRefutationBatchInputSchema.parse({
     ...refutationInput,
     sharedDigest: '(shared digest omitted for refutation packet budget)'
   })
@@ -115,7 +123,7 @@ const fitFindingRefutationInputToBudget = (
     return withoutSharedDigest
   }
 
-  const withoutSupportSignals = FindingRefutationInputSchema.parse({
+  const withoutSupportSignals = FindingRefutationBatchInputSchema.parse({
     ...withoutSharedDigest,
     supportSignalCandidates: []
   })
@@ -124,7 +132,7 @@ const fitFindingRefutationInputToBudget = (
     return withoutSupportSignals
   }
 
-  const withoutReviewContext = FindingRefutationInputSchema.parse({
+  const withoutReviewContext = FindingRefutationBatchInputSchema.parse({
     ...withoutSupportSignals,
     reviewContext: []
   })
@@ -134,25 +142,24 @@ const fitFindingRefutationInputToBudget = (
   }
 
   throw createTaskPacketBudgetExceededError({
-    taskId: refutationInput.candidate.taskId,
+    taskId: refutationInput.candidates[0]?.taskId ?? 'unknown-task',
     maxTaskInputBytes,
     serializedBytes: currentBytes
   })
 }
 
-export const findingRefutationInputForCandidate = (
+export const findingRefutationBatchInput = (
   input: {
     readonly workflowInput: ReviewWorkflowInput
-    readonly tasks: readonly WorkflowReviewTask[]
-    readonly candidate: CandidateFinding
+    readonly task: WorkflowReviewTask | undefined
+    readonly candidates: readonly CandidateFinding[]
     readonly allCandidates: readonly CandidateFinding[]
     readonly sharedDigest: string
     readonly reviewEvidence?: readonly EvidenceRecord[]
-    readonly additionalEvidenceIds?: readonly string[]
   }
 ): FindingRefutationPacket => ({
-  input: fitFindingRefutationInputToBudget(
-    createFindingRefutationInput(input),
+  input: fitFindingRefutationBatchInputToBudget(
+    createFindingRefutationBatchInput(input),
     input.workflowInput.maxTaskInputBytes
   )
 })

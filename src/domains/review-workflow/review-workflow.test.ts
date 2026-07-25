@@ -188,6 +188,7 @@ class ObservedConcurrencyProvider implements ModelProvider {
   }
 }
 
+// Batched refutation asks for a `verdicts` array holding one entry per candidate.
 const isFindingRefutationRequest = (req: ObjectRequest): boolean => {
   const schema = req.schema
 
@@ -197,13 +198,12 @@ const isFindingRefutationRequest = (req: ObjectRequest): boolean => {
     'properties' in schema &&
     typeof schema.properties === 'object' &&
     schema.properties !== null &&
-    'verdict' in schema.properties &&
-    'rationaleSummary' in schema.properties
+    'verdicts' in schema.properties
   )
 }
 
 // A holistic discovery request asks for a `findings` array; a refutation request
-// asks for a `verdict`/`rationaleSummary`. Stateful scripted providers recognize
+// asks for a `verdicts` array. Stateful scripted providers recognize
 // a holistic request by its schema rather than by request ordinal.
 const isHolisticReviewRequest = (req: ObjectRequest): boolean => {
   const schema = req.schema
@@ -218,23 +218,36 @@ const isHolisticReviewRequest = (req: ObjectRequest): boolean => {
   )
 }
 
-const isFindingInvestigationRequest = (req: ObjectRequest): boolean => {
-  const schema = req.schema
+// One batched refutation call carries EVERY candidate raised for a task, and each
+// verdict is bound back to its candidate by id. Scripted providers therefore read the
+// candidate ids out of the request payload instead of answering with a bare verdict:
+// an entry whose candidateId matches nothing is discarded by the resolver.
+const refutationCandidateIds = (req: ObjectRequest): readonly string[] => {
+  const userMessage = req.messages.find((message) => message.role === 'user')
+  const payload = JSON.parse(String(userMessage?.content)) as {
+    readonly candidates?: readonly { readonly id: string }[]
+  }
 
-  return (
-    typeof schema === 'object' &&
-    schema !== null &&
-    'properties' in schema &&
-    typeof schema.properties === 'object' &&
-    schema.properties !== null &&
-    'verdict' in schema.properties &&
-    'rationaleSummary' in schema.properties &&
-    'evidenceIds' in schema.properties
-  )
+  return (payload.candidates ?? []).map((candidate) => candidate.id)
 }
 
-const isFindingRefutationCheckRequest = (req: ObjectRequest): boolean =>
-  isFindingRefutationRequest(req) && !isFindingInvestigationRequest(req)
+const refutationBatchResponse = <T extends JsonValue>(
+  req: ObjectRequest,
+  verdict: Record<string, JsonValue>
+): ObjectResponse<T> => ({
+  object: {
+    verdicts: refutationCandidateIds(req).map((candidateId) => ({
+      candidateId,
+      ...verdict
+    }))
+  } as unknown as T,
+  finishReason: 'stop',
+  usage: {
+    inputTokens: 1,
+    outputTokens: 1,
+    totalTokens: 2
+  }
+})
 
 const provedFindingEvidence = (): Record<string, JsonValue> => ({
   changedBehavior: 'The changed branch returns the wrong value.',
@@ -247,20 +260,14 @@ const provedFindingEvidence = (): Record<string, JsonValue> => ({
 })
 
 const provedFindingResponse = <T extends JsonValue>(
+  req: ObjectRequest,
   rationaleSummary = 'Refutation proved the model finding with the provided task evidence.'
-): ObjectResponse<T> => ({
-  object: {
+): ObjectResponse<T> =>
+  refutationBatchResponse<T>(req, {
     verdict: 'proved',
     rationaleSummary,
     ...provedFindingEvidence()
-  } as unknown as T,
-  finishReason: 'stop',
-  usage: {
-    inputTokens: 1,
-    outputTokens: 1,
-    totalTokens: 2
-  }
-})
+  })
 
 class RollingQueueProvider implements ModelProvider {
   readonly id = 'rolling-queue'
@@ -315,7 +322,7 @@ class SupportedFindingProvider implements ModelProvider {
     req: ObjectRequest<T>
   ): Promise<ObjectResponse<T>> {
     if (isFindingRefutationRequest(req)) {
-      return provedFindingResponse<T>()
+      return provedFindingResponse<T>(req)
     }
 
     return {
@@ -352,7 +359,7 @@ class InvalidLineFindingProvider implements ModelProvider {
     req: ObjectRequest<T>
   ): Promise<ObjectResponse<T>> {
     if (isFindingRefutationRequest(req)) {
-      return provedFindingResponse<T>()
+      return provedFindingResponse<T>(req)
     }
 
     return {
@@ -392,7 +399,7 @@ class ContextOnlyFindingProvider implements ModelProvider {
     this.requests.push(req)
 
     if (isFindingRefutationRequest(req)) {
-      return provedFindingResponse<T>()
+      return provedFindingResponse<T>(req)
     }
 
     return {
@@ -431,19 +438,11 @@ class EvidenceOptionalFindingProvider implements ModelProvider {
     this.requests.push(req)
 
     if (isFindingRefutationRequest(req)) {
-      return {
-        object: {
-          verdict: 'proved',
-          rationaleSummary:
-            'Refutation proved the finding from reviewed context even without task evidence.'
-        } as unknown as T,
-        finishReason: 'stop',
-        usage: {
-          inputTokens: 1,
-          outputTokens: 1,
-          totalTokens: 2
-        }
-      }
+      return refutationBatchResponse<T>(req, {
+        verdict: 'proved',
+        rationaleSummary:
+          'Refutation proved the finding from reviewed context even without task evidence.'
+      })
     }
 
     return {
@@ -492,6 +491,7 @@ class EvidenceCitingFindingProvider implements ModelProvider {
 
     if (isFindingRefutationRequest(req)) {
       return provedFindingResponse<T>(
+        req,
         'Refutation check confirmed the model finding from cited deterministic evidence.'
       )
     }
@@ -532,19 +532,11 @@ class UncertainRefutationProvider implements ModelProvider {
     this.requests.push(req)
 
     if (isFindingRefutationRequest(req)) {
-      return {
-        object: {
-          verdict: 'needs-more-evidence',
-          rationaleSummary:
-            'Refutation could not fully prove the finding but did not identify it as refuted.'
-        } as unknown as T,
-        finishReason: 'stop',
-        usage: {
-          inputTokens: 1,
-          outputTokens: 1,
-          totalTokens: 2
-        }
-      }
+      return refutationBatchResponse<T>(req, {
+        verdict: 'needs-more-evidence',
+        rationaleSummary:
+          'Refutation could not fully prove the finding but did not identify it as refuted.'
+      })
     }
 
     return {
@@ -582,7 +574,7 @@ class BackupCodeRaceRefutationProvider implements ModelProvider {
   ): Promise<ObjectResponse<T>> {
     this.requests.push(req)
 
-    if (isFindingRefutationCheckRequest(req)) {
+    if (isFindingRefutationRequest(req)) {
       const instructionText = req.messages
         .map((message) => String(message.content))
         .join('\n')
@@ -590,22 +582,12 @@ class BackupCodeRaceRefutationProvider implements ModelProvider {
         'Do not require proof of actual concurrent requests when reviewContext shows a non-atomic read-modify-write flow on shared mutable state.'
       )
 
-      return {
-        object: {
-          verdict: validatesReadModifyWriteRace
-            ? 'proved'
-            : 'needs-more-evidence',
-          rationaleSummary: validatesReadModifyWriteRace
-            ? 'The provided context shows backup codes are decrypted, searched, mutated in memory, and written back with prisma.user.update without an atomic conditional update.'
-            : 'The refutation check required runtime evidence of concurrent requests before proving the race.'
-        } as unknown as T,
-        finishReason: 'stop',
-        usage: {
-          inputTokens: 1,
-          outputTokens: 1,
-          totalTokens: 2
-        }
-      }
+      return refutationBatchResponse<T>(req, {
+        verdict: validatesReadModifyWriteRace ? 'proved' : 'needs-more-evidence',
+        rationaleSummary: validatesReadModifyWriteRace
+          ? 'The provided context shows backup codes are decrypted, searched, mutated in memory, and written back with prisma.user.update without an atomic conditional update.'
+          : 'The refutation check required runtime evidence of concurrent requests before proving the race.'
+      })
     }
 
     return {
@@ -644,20 +626,12 @@ class RefutedFindingProvider implements ModelProvider {
   ): Promise<ObjectResponse<T>> {
     this.requests.push(req)
 
-    if (isFindingRefutationCheckRequest(req)) {
-      return {
-        object: {
-          verdict: 'refuted',
-          rationaleSummary:
-            'Refutation judged the model finding unsupported by the provided context.'
-        } as unknown as T,
-        finishReason: 'stop',
-        usage: {
-          inputTokens: 1,
-          outputTokens: 1,
-          totalTokens: 2
-        }
-      }
+    if (isFindingRefutationRequest(req)) {
+      return refutationBatchResponse<T>(req, {
+        verdict: 'refuted',
+        rationaleSummary:
+          'Refutation judged the model finding unsupported by the provided context.'
+      })
     }
 
     return {
@@ -697,6 +671,7 @@ class MultiPathRefutationContextProvider implements ModelProvider {
 
     if (isFindingRefutationRequest(req)) {
       return provedFindingResponse<T>(
+        req,
         'Refutation proved the model finding using the full originating task context.'
       )
     }
@@ -736,7 +711,7 @@ class RefutationFailureProvider implements ModelProvider {
   ): Promise<ObjectResponse<T>> {
     this.requests.push(req)
 
-    if (isFindingRefutationCheckRequest(req)) {
+    if (isFindingRefutationRequest(req)) {
       throw new Error('Agent output refutation failed.')
     }
 
@@ -775,7 +750,7 @@ class OutsideChangedLinesProvider implements ModelProvider {
     this.requests.push(req)
 
     if (isFindingRefutationRequest(req)) {
-      return provedFindingResponse<T>()
+      return provedFindingResponse<T>(req)
     }
 
     return {
@@ -813,7 +788,7 @@ class MalformedSuggestionProvider implements ModelProvider {
     this.requests.push(req)
 
     if (isFindingRefutationRequest(req)) {
-      return provedFindingResponse<T>()
+      return provedFindingResponse<T>(req)
     }
 
     return {
@@ -859,7 +834,7 @@ class AliasedSuggestionProvider implements ModelProvider {
     this.requests.push(req)
 
     if (isFindingRefutationRequest(req)) {
-      return provedFindingResponse<T>()
+      return provedFindingResponse<T>(req)
     }
 
     return {
@@ -898,7 +873,7 @@ class NamingAliasSuggestionProvider implements ModelProvider {
     this.requests.push(req)
 
     if (isFindingRefutationRequest(req)) {
-      return provedFindingResponse<T>()
+      return provedFindingResponse<T>(req)
     }
 
     return {
@@ -943,22 +918,12 @@ class StaticContractSpeculationProvider implements ModelProvider {
         'violating declared static types, function signatures, schemas, or documented contracts'
       )
 
-      return {
-        object: {
-          verdict: rejectsStaticContractSpeculation
-            ? 'refuted'
-            : 'proved',
-          rationaleSummary: rejectsStaticContractSpeculation
-            ? 'The candidate depends on an untyped caller passing null or undefined to a TypeScript function whose declared input type is string.'
-            : 'Refutation treated the hypothetical untyped caller as enough impact evidence.'
-        } as unknown as T,
-        finishReason: 'stop',
-        usage: {
-          inputTokens: 1,
-          outputTokens: 1,
-          totalTokens: 2
-        }
-      }
+      return refutationBatchResponse<T>(req, {
+        verdict: rejectsStaticContractSpeculation ? 'refuted' : 'proved',
+        rationaleSummary: rejectsStaticContractSpeculation
+          ? 'The candidate depends on an untyped caller passing null or undefined to a TypeScript function whose declared input type is string.'
+          : 'Refutation treated the hypothetical untyped caller as enough impact evidence.'
+      })
     }
 
     return {
@@ -995,29 +960,21 @@ class StructuredFixProvider implements ModelProvider {
     req: ObjectRequest<T>
   ): Promise<ObjectResponse<T>> {
     if (isFindingRefutationRequest(req)) {
-      return {
-        object: {
-          verdict: 'proved',
-          rationaleSummary:
-            'Refutation proved the model finding with the provided task evidence.',
-          fixSummary: 'Return the expected value from the changed branch.',
-          fixEdits: [
-            {
-              path: 'src/app.ts',
-              startLine: 4,
-              endLine: 4,
-              replacement: 'return expectedValue',
-              description: 'Replace the incorrect branch return value.'
-            }
-          ]
-        } as unknown as T,
-        finishReason: 'stop',
-        usage: {
-          inputTokens: 1,
-          outputTokens: 1,
-          totalTokens: 2
-        }
-      }
+      return refutationBatchResponse<T>(req, {
+        verdict: 'proved',
+        rationaleSummary:
+          'Refutation proved the model finding with the provided task evidence.',
+        fixSummary: 'Return the expected value from the changed branch.',
+        fixEdits: [
+          {
+            path: 'src/app.ts',
+            startLine: 4,
+            endLine: 4,
+            replacement: 'return expectedValue',
+            description: 'Replace the incorrect branch return value.'
+          }
+        ]
+      })
     }
 
     return {
@@ -1082,19 +1039,11 @@ class ProofPendingModelFindingProvider implements ModelProvider {
       }
     }
 
-    return {
-      object: {
-        verdict: 'needs-more-evidence',
-        rationaleSummary:
-          'The available context does not prove the changed branch is reachable.'
-      } as unknown as T,
-      finishReason: 'stop',
-      usage: {
-        inputTokens: 1,
-        outputTokens: 1,
-        totalTokens: 2
-      }
-    }
+    return refutationBatchResponse<T>(req, {
+      verdict: 'needs-more-evidence',
+      rationaleSummary:
+        'The available context does not prove the changed branch is reachable.'
+    })
   }
 }
 
@@ -1134,43 +1083,35 @@ class ProvedModelFindingProvider implements ModelProvider {
       }
     }
 
-    return {
-      object: {
-        verdict: 'proved',
-        rationaleSummary:
-          'Refutation proved the changed branch returns the wrong value when the caller passes the reviewed input.',
-        changedBehavior:
-          'The changed branch returns actualValue instead of expectedValue.',
-        executionOrDataPath:
-          'The reviewed caller path reaches the changed return statement with the reviewed input.',
-        violatedInvariant:
-          'The branch must return expectedValue for callers of the reviewed path.',
-        impact: 'Callers receive actualValue where expectedValue is required.',
-        introducedByChange:
-          'The incorrect return statement is in the reviewed src/app.ts diff.',
-        contradictionChecks: [
-          'The reviewed context defines expectedValue before the changed return.'
-        ],
-        fixDirection: 'Return expectedValue from the changed branch.',
-        fixSummary:
-          'Return the expected value from the changed branch after validating callers.',
-        fixEdits: [
-          {
-            path: 'src/app.ts',
-            startLine: 4,
-            endLine: 4,
-            replacement: 'return expectedValue',
-            description: 'Use the value expected by callers.'
-          }
-        ]
-      } as unknown as T,
-      finishReason: 'stop',
-      usage: {
-        inputTokens: 1,
-        outputTokens: 1,
-        totalTokens: 2
-      }
-    }
+    return refutationBatchResponse<T>(req, {
+      verdict: 'proved',
+      rationaleSummary:
+        'Refutation proved the changed branch returns the wrong value when the caller passes the reviewed input.',
+      changedBehavior:
+        'The changed branch returns actualValue instead of expectedValue.',
+      executionOrDataPath:
+        'The reviewed caller path reaches the changed return statement with the reviewed input.',
+      violatedInvariant:
+        'The branch must return expectedValue for callers of the reviewed path.',
+      impact: 'Callers receive actualValue where expectedValue is required.',
+      introducedByChange:
+        'The incorrect return statement is in the reviewed src/app.ts diff.',
+      contradictionChecks: [
+        'The reviewed context defines expectedValue before the changed return.'
+      ],
+      fixDirection: 'Return expectedValue from the changed branch.',
+      fixSummary:
+        'Return the expected value from the changed branch after validating callers.',
+      fixEdits: [
+        {
+          path: 'src/app.ts',
+          startLine: 4,
+          endLine: 4,
+          replacement: 'return expectedValue',
+          description: 'Use the value expected by callers.'
+        }
+      ]
+    })
   }
 }
 
@@ -2058,7 +1999,7 @@ describe('review workflow', () => {
     })
 
     const refutationRequest = provider.requests.find(
-      isFindingRefutationCheckRequest
+      isFindingRefutationRequest
     )
     const refutationSystemMessage = refutationRequest?.messages.find(
       (message) => message.role === 'system'
@@ -2244,7 +2185,7 @@ describe('review workflow', () => {
     })
 
     const refutationRequest = provider.requests.find(
-      isFindingRefutationCheckRequest
+      isFindingRefutationRequest
     )
     const refutationUserMessage = refutationRequest?.messages.find(
       (message) => message.role === 'user'
@@ -3498,7 +3439,7 @@ describe('review workflow', () => {
         readonly reviewText: string
       }
       const refutationRequest = provider.requests.find(
-        isFindingRefutationCheckRequest
+        isFindingRefutationRequest
       )
       const refutationSystemMessage = refutationRequest?.messages.find(
         (message) => message.role === 'system'

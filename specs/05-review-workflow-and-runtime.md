@@ -26,7 +26,7 @@ Date: 2026-07-21
     reviews per task (a general pass, then a pass focused on commonly-missed
     high-impact defects) whose findings are unioned and deduped into candidate
     findings.
-15. Run refutation per candidate finding.
+15. Run refutation once per task, adjudicating every candidate that task raised.
 16. Admit or reject candidates against the admission gate.
 17. Match actionable admitted findings against baseline.
 18. Render reports.
@@ -167,7 +167,7 @@ Task limits:
   `task-context-referenced-definition`.
 - model-backed task execution is a focused review-workflow boundary. The
   ai-harness builder defines agents and injects raw agent calls, while task
-  execution owns holistic candidate-finding discovery, per-candidate refutation,
+  execution owns holistic candidate-finding discovery, batched per-task refutation,
   and task result assembly.
 - Provider-call adapters are a focused review-workflow boundary. The ai-harness
   builder keeps agent definitions, delegation, and typed `ctx.agents.*`
@@ -250,7 +250,8 @@ Task queue rules:
 - provider-backed workflows must also enforce a scale-derived total
   child-agent call cap at the Harness delegation boundary. The cap is derived
   from planned task count (with two serial holistic discovery passes per task),
-  per-candidate refutation calls, and a small concurrency buffer. It must never
+  one batched refutation call per task plus a small allowance for batches that
+  split under budget pressure, and a small concurrency buffer. It must never
   use an effectively unbounded constant. The
   R1 hard ceiling is 2048 child agent calls per run, with a minimum floor of 16
   for small reviews;
@@ -315,13 +316,26 @@ id before refutation.
 
 ## Refutation
 
-Every candidate finding passes a per-candidate precision filter run by the
-`refute_finding` agent before admission.
+Every candidate finding passes a precision filter run by the `refute_finding`
+agent before admission. The filter is **batched per task**: one call adjudicates
+every candidate raised for that task and returns one verdict per candidate.
 
-- The refuter may use only the provided candidate, `reviewedDiffRanges`,
+Batching is a token-consumption decision, not a quality one. Candidates from a
+task share one review context — the changed file — and the previous
+per-candidate packet re-sent that whole context once per candidate, so a task
+with fourteen candidates sent its file fourteen times. Input tokens dominate this
+engine's cost by roughly 23:1 over output, so the shared context is sent once.
+Each candidate is still judged on its own merits and receives its own verdict;
+sharing a call must not make one candidate's verdict depend on another's.
+
+- The refuter may use only the provided candidates, `reviewedDiffRanges`,
   evidence, review context, support-signal candidates, instructions, skill
   metadata, shared digest, and provenance. It receives no direct repository
   tools beyond the bounded mounted skill read/list/grep loop.
+- Each verdict carries the `candidateId` it belongs to. A verdict whose id
+  matches no candidate in the batch is discarded, and a candidate the model did
+  not adjudicate is treated as `needs-more-evidence`: absence of a verdict is
+  absence of signal, never an admission.
 - The refuter returns a verdict of `proved`, `refuted`, or
   `needs-more-evidence`. In admission, `proved` becomes actionable, `refuted` is
   rejected, and `needs-more-evidence` is dispositioned by
@@ -332,10 +346,15 @@ Every candidate finding passes a per-candidate precision filter run by the
   shared `maxTaskInputBytes` provider budget. Under budget pressure, it omits
   the shared digest first, then support-signal corroboration candidates, then
   ambient review context before failing the packet budget. It must preserve the
-  candidate, candidate-scoped evidence, reviewed diff ranges, instructions,
-  skill metadata, and provenance before a provider call starts. If those
-  mandatory fields still exceed the packet budget, the workflow records the
-  shared packet-budget error instead of truncating source-bearing fields.
+  candidates, candidate-scoped evidence, reviewed diff ranges, instructions,
+  skill metadata, and provenance before a provider call starts. A batch that
+  still exceeds the budget is split in half and each half retried, so an
+  oversized task costs more calls rather than losing its candidates; a single
+  candidate that cannot fit records the shared packet-budget error instead of
+  truncating source-bearing fields.
+- Packet fields are ordered so everything shared across batches comes first and
+  the per-candidate payload last, keeping the longest possible stable prompt
+  prefix for provider prompt caches.
 - Model-origin candidates below `aiReview.actionableSeverityThreshold` (default
   `medium`) are rejected as `below-threshold` rather than admitted as actionable,
   keeping the actionable surface focused on impactful runtime/security defects.

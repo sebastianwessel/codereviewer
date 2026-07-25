@@ -124,10 +124,13 @@ describe('workflow handler', () => {
           ],
           evidenceRecords: [proofEvidence]
         }),
-      refuteFinding: async () => ({
-        verdict: 'proved',
-        rationaleSummary: 'The active admission critic proved the claim.',
-        fixSummary: 'Return the freshly computed state.'
+      refuteFinding: async (refutationInput) => ({
+        verdicts: refutationInput.candidates.map((batched) => ({
+          candidateId: batched.id,
+          verdict: 'proved',
+          rationaleSummary: 'The active admission critic proved the claim.',
+          fixSummary: 'Return the freshly computed state.'
+        }))
       })
     })
 
