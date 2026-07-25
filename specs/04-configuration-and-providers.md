@@ -449,6 +449,27 @@ Rules:
   admission, severity, or the gate;
 - per-claim bounds are shared with `verification`.
 
+## Cross-File Retrieval
+
+Controls agentic cross-file discovery (`16-agentic-cross-file-discovery.md`).
+Disabled by default.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `review.crossFileRetrieval.enabled` | boolean | `false` |
+| `review.crossFileRetrieval.maxToolCallsPerTask` | integer (1-20) | `4` |
+
+Rules:
+
+- with it disabled, holistic discovery issues no tool call and runs as a single-shot
+  review with no tools;
+- when enabled, discovery may call the mediated `repo_read`/`repo_list`/`repo_grep`
+  tools, bounded by `maxToolCallsPerTask` enforced in code and by the context
+  retriever's own eligibility, redaction, and byte/match caps;
+- retrieved content is untrusted repository data: it cannot bypass scope, severity,
+  baseline, admission, or the gate, and its findings pass the same refutation and
+  admission as any other candidate.
+
 ## Security
 
 Controls the dedicated additive security review pass and deterministic security

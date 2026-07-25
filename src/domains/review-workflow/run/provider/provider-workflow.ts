@@ -77,7 +77,8 @@ export const runProviderWorkflow = async (
     taskCount:
       input.workflowInput.tasks?.length ?? input.workflowInput.reviewedPaths.length,
     maxConcurrentTasks: input.config.review.maxConcurrentTasks,
-    securityPassEnabled: input.config.security.dedicatedPass.enabled
+    securityPassEnabled: input.config.security.dedicatedPass.enabled,
+    crossFileRetrieval: input.config.review.crossFileRetrieval
   })
   const harness = createModelBackedReviewHarness({
     modelAlias: usageRecorder.modelAlias,
@@ -86,6 +87,7 @@ export const runProviderWorkflow = async (
     skillTools: input.config.skills.allowTools,
     maxConcurrentTasks: input.config.review.maxConcurrentTasks,
     maxChildAgentCalls,
+    crossFileRetrieval: input.config.review.crossFileRetrieval,
     ...(input.config.review.runTimeoutMs === undefined
       ? {}
       : { runTimeoutMs: input.config.review.runTimeoutMs }),

@@ -25,14 +25,12 @@ import {
 import { truncateForContract } from '../../shared/text/truncate.js'
 import {
   createContextRetriever,
-  type ContextRetrievalEligibilityConfig
+  type ContextRetrievalEligibilityConfig,
+  createBoundedRetrievalTools,
+  isToolCallBudgetExceededError,
+  type RetrievalTools
 } from '../context-retrieval/index.js'
 import type { ClaimProvider } from './contracts.js'
-import {
-  createBoundedClaimTools,
-  isClaimToolCallBudgetExceededError,
-  type VerificationClaimTools
-} from './claim-tools.js'
 import { fingerprintsForClaim } from './claim-fingerprints.js'
 import {
   CLAIM_PROVIDER_FAILED_WARNING_PREFIX,
@@ -59,7 +57,7 @@ export type ClaimAgentResult = {
 // budget themselves.
 export type ClaimAgentRunner = (input: {
   readonly claim: Claim
-  readonly tools: VerificationClaimTools
+  readonly tools: RetrievalTools
   readonly signal?: AbortSignal | undefined
 }) => Promise<ClaimAgentResult>
 
@@ -197,7 +195,7 @@ export const runVerificationFlow = async (
       },
       ...(input.paths === undefined ? {} : { paths: input.paths })
     })
-    const bounded = createBoundedClaimTools({
+    const bounded = createBoundedRetrievalTools({
       retriever,
       maxToolCalls: input.maxToolCallsPerClaim
     })
@@ -257,7 +255,7 @@ export const runVerificationFlow = async (
           })
         }
       } catch (error) {
-        boundReason = isClaimToolCallBudgetExceededError(error)
+        boundReason = isToolCallBudgetExceededError(error)
           ? 'tool-call-budget-exceeded'
           : isAbort(error, input.signal)
             ? 'aborted'

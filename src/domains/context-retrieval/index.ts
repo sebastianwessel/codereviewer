@@ -70,6 +70,28 @@ export type {
   EligibilityResult
 } from './eligibility.js'
 
+// The bounded tool surface and the model-facing repository-tool contract are part
+// of this domain's public API: every lane allowed to inspect the repository (the
+// verification/fix investigation agent, tool-enabled discovery) consumes them from
+// here rather than defining its own.
+export {
+  ToolCallBudgetExceededError,
+  isToolCallBudgetExceededError,
+  createBoundedRetrievalTools,
+  type BoundedRetrievalTools,
+  type RetrievalTools
+} from './bounded-tools.js'
+export {
+  RepoReadToolInputSchema,
+  RepoListToolInputSchema,
+  RepoGrepToolInputSchema,
+  RepoToolOutputSchema,
+  REPO_TOOL_DESCRIPTIONS,
+  REPO_TOOL_IDS,
+  toRepoToolOutput,
+  type RepoToolOutput
+} from './repo-tool-contracts.js'
+
 const evidenceIdFor = (value: string): string =>
   `ev_${sha256(value).slice(0, 24)}`
 

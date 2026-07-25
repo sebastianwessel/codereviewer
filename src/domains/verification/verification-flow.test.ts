@@ -8,7 +8,7 @@ import {
 } from '../../shared/contracts/verification/verification.schema.js'
 import type { ClaimProvider } from './contracts.js'
 import type { ModelVerdict } from './verification-report.js'
-import { isClaimToolCallBudgetExceededError } from './claim-tools.js'
+import { isToolCallBudgetExceededError } from '../context-retrieval/index.js'
 import {
   runVerificationFlow,
   type ClaimAgentRunner
@@ -193,7 +193,7 @@ describe('runVerificationFlow', () => {
       try {
         await tools.read({ path: 'app.ts' })
       } catch (error) {
-        if (isClaimToolCallBudgetExceededError(error)) {
+        if (isToolCallBudgetExceededError(error)) {
           budgetErrors += 1
         }
         throw error

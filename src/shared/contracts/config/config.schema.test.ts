@@ -60,6 +60,30 @@ describe('CodeReviewerConfigSchema', () => {
     })
   })
 
+  test('cross-file retrieval defaults to disabled with a small tool-call budget', () => {
+    const defaults = CodeReviewerConfigSchema.parse({})
+    expect(defaults.review.crossFileRetrieval).toEqual({
+      enabled: false,
+      maxToolCallsPerTask: 4
+    })
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      review: { crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 6 } }
+    })
+    expect(enabled.review.crossFileRetrieval).toEqual({
+      enabled: true,
+      maxToolCallsPerTask: 6
+    })
+
+    // The budget is bounded: unfocused extra context reduces review quality, so a
+    // caller cannot turn discovery into a repository crawl.
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        review: { crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 50 } }
+      })
+    ).toThrow()
+  })
+
   test('security dedicated pass and signals default to disabled', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.security.dedicatedPass.enabled).toBe(false)

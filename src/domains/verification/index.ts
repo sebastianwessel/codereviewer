@@ -20,13 +20,6 @@ export {
   type FixEnrichmentResult
 } from './fix-enrichment.js'
 export {
-  ClaimToolCallBudgetExceededError,
-  isClaimToolCallBudgetExceededError,
-  createBoundedClaimTools,
-  type BoundedClaimTools,
-  type VerificationClaimTools
-} from './claim-tools.js'
-export {
   runVerificationFlow,
   type ClaimAgentResult,
   type ClaimAgentRunner,

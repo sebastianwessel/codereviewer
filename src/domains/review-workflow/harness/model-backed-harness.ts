@@ -1,9 +1,18 @@
 import { defineHarness } from '@purista/harness'
 import { createNoopReviewLogger } from '../../observability/index.js'
 import {
+  crossFileRetrievalInstructions,
   modelFindingRefuterInstructions,
   modelHolisticReviewerInstructions
 } from '../pipeline/agent-instructions.js'
+import {
+  createBoundedRetrievalTools,
+  type ContextRetriever
+} from '../../context-retrieval/index.js'
+import {
+  crossFileDiscoveryToolDefinitions,
+  runWithCrossFileDiscoveryTools
+} from '../pipeline/discovery/cross-file-tools.js'
 import {
   FindingRefutationInputSchema,
   HolisticReviewInputSchema,
@@ -39,6 +48,40 @@ export const createModelBackedReviewHarness = (
   )
   const maxChildAgentCalls = options.maxChildAgentCalls
   const skillIds = options.skillIds ?? Object.keys(skills)
+  // Spec 16: cross-file retrieval is off unless configured on. When off, no tool is
+  // registered, the discovery agent gets no tool list, and its instructions are the
+  // unchanged single-shot prompt.
+  const crossFileRetrieval = options.crossFileRetrieval
+  const crossFileEnabled = crossFileRetrieval?.enabled === true
+
+  // Binds one task's bounded repository tools for the duration of its discovery
+  // call, so every tool call the model makes resolves that task's own budget (see
+  // `cross-file-tools.ts`). With the mode disabled, or when the workflow has no
+  // retriever (no repository root), the discovery call runs unwrapped and no tool
+  // is reachable.
+  const runDiscoveryTask = async <T>(
+    contextRetriever: ContextRetriever | undefined,
+    runTask: () => Promise<T>
+  ): Promise<T> => {
+    if (!crossFileEnabled || contextRetriever === undefined) {
+      return runTask()
+    }
+
+    const bounded = createBoundedRetrievalTools({
+      retriever: contextRetriever,
+      maxToolCalls: crossFileRetrieval.maxToolCallsPerTask
+    })
+
+    const result = await runWithCrossFileDiscoveryTools(bounded.tools, runTask)
+
+    logger.debug('Cross-file discovery retrieval completed.', {
+      tool_call_count: bounded.toolCallCount(),
+      bytes_read: bounded.bytesRead(),
+      budget_exhausted: bounded.budgetExhausted()
+    })
+
+    return result
+  }
   const agentOptionsForRole = (
     role: Parameters<typeof reviewAgentOptionsForRole>[0]['role']
   ) =>
@@ -47,7 +90,8 @@ export const createModelBackedReviewHarness = (
       skillIds,
       ...(options.skillTools === undefined
         ? {}
-        : { skillTools: options.skillTools })
+        : { skillTools: options.skillTools }),
+      ...(crossFileRetrieval === undefined ? {} : { crossFileRetrieval })
     })
 
   return defineHarness({ name: 'codereviewer-review' })
@@ -57,7 +101,7 @@ export const createModelBackedReviewHarness = (
     .models({
       reviewer: options.modelAlias
     })
-    .tools({})
+    .tools(crossFileEnabled ? crossFileDiscoveryToolDefinitions : {})
     .skills(skills)
     .agents(({ agent }) => ({
       holistic_review: agent({
@@ -65,7 +109,9 @@ export const createModelBackedReviewHarness = (
         input: HolisticReviewInputSchema,
         output: ModelHolisticReviewResultSchema,
         ...agentOptionsForRole('holistic_review'),
-        instructions: modelHolisticReviewerInstructions
+        instructions: crossFileEnabled
+          ? `${modelHolisticReviewerInstructions}\n${crossFileRetrievalInstructions}`
+          : modelHolisticReviewerInstructions
       }),
       refute_finding: agent({
         model: 'reviewer',
@@ -92,23 +138,25 @@ export const createModelBackedReviewHarness = (
             ...(options.onTaskEvent === undefined
               ? {}
               : { onTaskEvent: options.onTaskEvent }),
-            runTask: async (taskInput, task, signal) =>
-              runModelBackedHolisticTaskReview({
-                workflowInput: ctx.input,
-                taskInput,
-                task,
-                runners: {
-                  holisticReview: (holisticInput, holisticSignal) =>
-                    ctx.agents.holistic_review(
-                      holisticInput,
-                      holisticSignal === undefined
-                        ? {}
-                        : { signal: holisticSignal }
-                    )
-                },
-                logger,
-                ...(signal === undefined ? {} : { signal })
-              }),
+            runTask: async (taskInput, task, signal, contextRetriever) =>
+              runDiscoveryTask(contextRetriever, () =>
+                runModelBackedHolisticTaskReview({
+                  workflowInput: ctx.input,
+                  taskInput,
+                  task,
+                  runners: {
+                    holisticReview: (holisticInput, holisticSignal) =>
+                      ctx.agents.holistic_review(
+                        holisticInput,
+                        holisticSignal === undefined
+                          ? {}
+                          : { signal: holisticSignal }
+                      )
+                  },
+                  logger,
+                  ...(signal === undefined ? {} : { signal })
+                })
+              ),
             refuteFinding: async (refutationInput, signal) => {
               return runRefutationProviderCall({
                 refutationInput,

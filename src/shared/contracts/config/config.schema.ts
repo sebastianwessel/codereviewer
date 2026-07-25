@@ -48,6 +48,21 @@ const gitRefSchema = z
   .min(1)
   .refine((value) => !value.startsWith('-'), 'Git refs must not start with "-"')
 
+// Agentic cross-file discovery (spec 16). Off by default. When enabled, the
+// holistic discovery agent may call the mediated repo read/list/grep tools to
+// inspect code in files outside the changed set — the callee body, interface, or
+// permission definition a suspected defect depends on — bounded by a per-task
+// tool-call cap that CODE enforces. Its findings pass the SAME refutation and
+// admission as any other candidate. Disabled, discovery is single-shot with no
+// tools and the run is byte-for-byte unchanged.
+export const CrossFileRetrievalConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  // Total mediated tool calls one discovery task may make. Kept small: the
+  // research is consistent that unfocused extra context REDUCES review quality,
+  // so this buys a few targeted lookups, never a repository dump.
+  maxToolCallsPerTask: z.int().min(1).max(20).default(4)
+})
+
 export const ReviewConfigSchema = z.strictObject({
   mode: z.enum(['local', 'ci', 'pr', 'full']).default('local'),
   depth: z.enum(['fast', 'balanced', 'thorough']).default('balanced'),
@@ -59,7 +74,11 @@ export const ReviewConfigSchema = z.strictObject({
   contextMaxBytes: z.int().min(10000).max(10000000).optional(),
   inlineSeverityThreshold: SeveritySchema.default('high'),
   maxCostUsd: z.number().min(0).optional(),
-  runTimeoutMs: z.int().min(10000).max(7200000).optional()
+  runTimeoutMs: z.int().min(10000).max(7200000).optional(),
+  crossFileRetrieval: CrossFileRetrievalConfigSchema.default({
+    enabled: false,
+    maxToolCallsPerTask: 4
+  })
 })
 
 export const ProviderConfigSchema = z
@@ -409,7 +428,8 @@ export const CodeReviewerConfigSchema = z.strictObject({
     maxConcurrentTasks: 4,
     maxFiles: 500,
     maxFileBytes: 500000,
-    inlineSeverityThreshold: 'high'
+    inlineSeverityThreshold: 'high',
+    crossFileRetrieval: { enabled: false, maxToolCallsPerTask: 4 }
   }),
   provider: ProviderConfigSchema.optional(),
   instructions: InstructionsConfigSchema.default({
@@ -509,6 +529,9 @@ export type Severity = z.infer<typeof SeveritySchema>
 export type ReportFormat = z.infer<typeof ReportFormatSchema>
 export type RepositoryRelativePath = z.infer<typeof RepositoryRelativePathSchema>
 export type ReviewConfig = z.infer<typeof ReviewConfigSchema>
+export type CrossFileRetrievalConfig = z.infer<
+  typeof CrossFileRetrievalConfigSchema
+>
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 export type InstructionsConfig = z.infer<typeof InstructionsConfigSchema>
 export type SkillsConfig = z.infer<typeof SkillsConfigSchema>

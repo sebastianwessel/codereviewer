@@ -53,6 +53,59 @@ describe('workflow harness config', () => {
     ).toBe(2048)
   })
 
+  test('reserves extra discovery steps for cross-file retrieval tool calls', () => {
+    // Each discovery call may spend up to maxToolCallsPerTask extra steps before it
+    // answers: 8 tasks * 1 call * (1 + 4) + 8*12 refutations + 2*2 buffer = 140.
+    expect(
+      maxChildAgentCallsForReview({
+        taskCount: 8,
+        maxConcurrentTasks: 2,
+        crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 4 }
+      })
+    ).toBe(140)
+
+    // Disabled leaves the budget exactly as it was.
+    expect(
+      maxChildAgentCallsForReview({
+        taskCount: 8,
+        maxConcurrentTasks: 2,
+        crossFileRetrieval: { enabled: false, maxToolCallsPerTask: 4 }
+      })
+    ).toBe(108)
+  })
+
+  test('attaches repository tools to discovery only when cross-file retrieval is enabled', () => {
+    const disabled = reviewAgentOptionsForRole({
+      role: 'holistic_review',
+      skillIds: [],
+      crossFileRetrieval: { enabled: false, maxToolCallsPerTask: 4 }
+    })
+    // Disabled: single-shot discovery with no tools, byte-for-byte as before.
+    expect(disabled).toEqual({ builtinTools: false, maxSteps: 1 })
+
+    const enabled = reviewAgentOptionsForRole({
+      role: 'holistic_review',
+      skillIds: [],
+      crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 4 }
+    })
+    // Enabled: the mediated repo tools plus enough steps to spend the budget and
+    // still emit findings (budget + 1).
+    expect(enabled).toEqual({
+      builtinTools: false,
+      maxSteps: 5,
+      tools: ['repo_read', 'repo_list', 'repo_grep']
+    })
+
+    // Other roles never receive the discovery tools.
+    expect(
+      reviewAgentOptionsForRole({
+        role: 'refute_finding',
+        skillIds: [],
+        crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 4 }
+      })
+    ).toEqual({ builtinTools: false, maxSteps: 1 })
+  })
+
   test('grows the budget for the dedicated security pass second call and candidates', () => {
     // With the security pass enabled each task issues 2 discovery calls and can
     // emit up to HOLISTIC_MAX_CANDIDATES + SECURITY_MAX_CANDIDATES (12 + 8 = 20)

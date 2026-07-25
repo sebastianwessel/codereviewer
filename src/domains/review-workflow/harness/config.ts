@@ -1,4 +1,6 @@
 import { type BuiltinToolName } from '@purista/harness'
+import { REPO_TOOL_IDS } from '../../context-retrieval/index.js'
+import { type CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
 import {
   HOLISTIC_MAX_CANDIDATES,
   SECURITY_MAX_CANDIDATES
@@ -26,6 +28,7 @@ export const maxChildAgentCallsForReview = (
     readonly taskCount?: number
     readonly maxConcurrentTasks?: number
     readonly securityPassEnabled?: boolean
+    readonly crossFileRetrieval?: CrossFileRetrievalConfig
   } = {}
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
@@ -41,7 +44,15 @@ export const maxChildAgentCallsForReview = (
   const candidatesPerTask =
     HOLISTIC_MAX_CANDIDATES +
     (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0)
-  const holisticCalls = taskCount * discoveryCallsPerTask
+  // Spec 16: a tool-enabled discovery call spends up to maxToolCallsPerTask extra
+  // steps retrieving cross-file context before it answers, so reserve them per
+  // discovery call — under-reserving would cut a task off mid-investigation.
+  const crossFileCallsPerDiscoveryCall =
+    input.crossFileRetrieval?.enabled === true
+      ? input.crossFileRetrieval.maxToolCallsPerTask
+      : 0
+  const holisticCalls =
+    taskCount * discoveryCallsPerTask * (1 + crossFileCallsPerDiscoveryCall)
   const refutationCalls = taskCount * candidatesPerTask
   const concurrencyBuffer = maxConcurrentTasks * 2
   const derived = holisticCalls + refutationCalls + concurrencyBuffer
@@ -91,17 +102,39 @@ export const reviewSkillAgentOptions = (
         maxSteps: contextHeavyAgentMaxSteps
       }
 
+// Spec 16: when cross-file retrieval is enabled, the holistic discovery agent also
+// gets the mediated repository tools and enough steps to spend its tool-call budget
+// and still emit findings (budget + 1, mirroring the investigation agent). Every
+// other role, and the disabled path, is unchanged.
+const crossFileDiscoveryAgentOptions = (
+  base: ReturnType<typeof reviewSkillAgentOptions>,
+  maxToolCallsPerTask: number
+) => ({
+  ...base,
+  tools: [...REPO_TOOL_IDS],
+  maxSteps: Math.max(base.maxSteps, maxToolCallsPerTask + 1)
+})
+
 export const reviewAgentOptionsForRole = (
   input: {
     readonly role: ReviewAgentRole
     readonly skillIds: readonly string[]
     readonly skillTools?: readonly BuiltinToolName[]
+    readonly crossFileRetrieval?: CrossFileRetrievalConfig
   }
 ) => {
+  const base = reviewSkillAgentOptions(input)
+
   switch (input.role) {
     case 'holistic_review':
+      return input.crossFileRetrieval?.enabled === true
+        ? crossFileDiscoveryAgentOptions(
+            base,
+            input.crossFileRetrieval.maxToolCallsPerTask
+          )
+        : base
     case 'refute_finding':
     case 'propose_candidates':
-      return reviewSkillAgentOptions(input)
+      return base
   }
 }

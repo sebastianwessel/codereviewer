@@ -18,10 +18,17 @@ import { defineHarness, type Logger, type ModelAlias } from '@purista/harness'
 import { z } from 'zod'
 import { createNoopReviewLogger } from '../observability/index.js'
 import { ClaimSchema } from '../../shared/contracts/verification/verification.schema.js'
-import type { ContextRetrievalResult } from '../context-retrieval/index.js'
+import {
+  REPO_TOOL_DESCRIPTIONS,
+  RepoGrepToolInputSchema,
+  RepoListToolInputSchema,
+  RepoReadToolInputSchema,
+  RepoToolOutputSchema,
+  toRepoToolOutput,
+  type RetrievalTools
+} from '../context-retrieval/index.js'
 import { ModelVerdictSchema } from './verification-report.js'
 import type { ClaimAgentRunner, ClaimAgentResult } from './verification-flow.js'
-import type { VerificationClaimTools } from './claim-tools.js'
 
 export const investigateClaimInstructions = [
   'You are a careful software investigator. You are given ONE claim about a code repository and must decide whether it is true, using only the repo_read, repo_list, and repo_grep tools to inspect the repository.',
@@ -33,57 +40,17 @@ export const investigateClaimInstructions = [
   'When you judge such a finding "real" and you can propose a concrete, minimal fix, return fixEdits: an array of edits, each with the repository-relative path, the 1-based startLine and endLine of the exact lines to replace (as they appear in the current file you read), and the replacement text. Use the real line numbers from the file you read; code will re-apply your edits to the current file and silently drop any that do not fit, so never guess line numbers. Omit fixEdits when the finding is not real or you have no scoped fix.'
 ].join('\n')
 
-const ToolReadInputSchema = z.strictObject({
-  path: z.string().min(1).describe('Repository-relative path of the file to read.')
-})
-
-const ToolListInputSchema = z.strictObject({
-  path: z
-    .string()
-    .min(1)
-    .describe('Repository-relative path of the directory to list.')
-})
-
-const ToolGrepInputSchema = z.strictObject({
-  query: z.string().min(1).describe('Literal substring to search for.'),
-  paths: z
-    .array(z.string().min(1))
-    .optional()
-    .describe('Optional repository-relative paths (files or directories) to search.')
-})
-
-const ToolOutputSchema = z.strictObject({
-  summary: z.string(),
-  content: z.string()
-})
-
-// Adds 1-based line numbers so every provider receives file content in the same
-// deterministic, line-anchored shape the general review's mediated read uses.
-const withLineNumbers = (content: string): string =>
-  content
-    .split(/\r\n|\n|\r/u)
-    .map((line, index) => `${index + 1}: ${line}`)
-    .join('\n')
-
-const toToolOutput = (
-  result: ContextRetrievalResult,
-  lineNumbered: boolean
-): z.infer<typeof ToolOutputSchema> => ({
-  summary: result.summary,
-  content: lineNumbered ? withLineNumbers(result.content) : result.content
-})
-
 // Registry of the active per-claim bounded tools, keyed by session id. The
 // investigate_claim agent runs one claim per session, so each tool handler
 // resolves the bounded tools for its own session. Enforcing bounds in the shared
 // bounded-tools object (not in the handler) keeps CODE authoritative regardless
 // of provider tool-call formatting.
-type ToolsRegistry = Map<string, VerificationClaimTools>
+type ToolsRegistry = Map<string, RetrievalTools>
 
 const activeToolsFor = (
   registry: ToolsRegistry,
   sessionId: string
-): VerificationClaimTools => {
+): RetrievalTools => {
   const tools = registry.get(sessionId)
 
   if (tools === undefined) {
@@ -112,40 +79,37 @@ const buildInvestigateClaimHarness = (input: {
     // instead of these mediated, ledgered, eligibility-gated handlers.
     .tools({
       repo_read: {
-        description:
-          'Read a repository file (bounded, line-numbered). Input: { path }.',
-        input: ToolReadInputSchema,
-        output: ToolOutputSchema,
+        description: REPO_TOOL_DESCRIPTIONS.read,
+        input: RepoReadToolInputSchema,
+        output: RepoToolOutputSchema,
         handler: async (ctx, rawInput) =>
-          toToolOutput(
+          toRepoToolOutput(
             await activeToolsFor(input.registry, ctx.sessionId).read({
-              path: ToolReadInputSchema.parse(rawInput).path
+              path: RepoReadToolInputSchema.parse(rawInput).path
             }),
             true
           )
       },
       repo_list: {
-        description:
-          'List a repository directory. Input: { path }. Excluded and secret paths are never listed.',
-        input: ToolListInputSchema,
-        output: ToolOutputSchema,
+        description: REPO_TOOL_DESCRIPTIONS.list,
+        input: RepoListToolInputSchema,
+        output: RepoToolOutputSchema,
         handler: async (ctx, rawInput) =>
-          toToolOutput(
+          toRepoToolOutput(
             await activeToolsFor(input.registry, ctx.sessionId).list({
-              path: ToolListInputSchema.parse(rawInput).path
+              path: RepoListToolInputSchema.parse(rawInput).path
             }),
             false
           )
       },
       repo_grep: {
-        description:
-          'Search the repository for a literal substring (recursive, bounded). Input: { query, paths? }.',
-        input: ToolGrepInputSchema,
-        output: ToolOutputSchema,
+        description: REPO_TOOL_DESCRIPTIONS.grep,
+        input: RepoGrepToolInputSchema,
+        output: RepoToolOutputSchema,
         handler: async (ctx, rawInput) => {
-          const toolInput = ToolGrepInputSchema.parse(rawInput)
+          const toolInput = RepoGrepToolInputSchema.parse(rawInput)
 
-          return toToolOutput(
+          return toRepoToolOutput(
             await activeToolsFor(input.registry, ctx.sessionId).grep({
               query: toolInput.query,
               ...(toolInput.paths === undefined ? {} : { paths: toolInput.paths })

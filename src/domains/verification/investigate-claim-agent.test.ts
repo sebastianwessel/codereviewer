@@ -27,7 +27,7 @@ import {
 } from '../../shared/contracts/verification/verification.schema.js'
 import { createContextRetriever } from '../context-retrieval/index.js'
 import { type ContextLedgerEntry } from '../review-planning/index.js'
-import { createBoundedClaimTools } from './claim-tools.js'
+import { createBoundedRetrievalTools } from '../context-retrieval/index.js'
 import { runVerificationFlow } from './verification-flow.js'
 import {
   createHarnessClaimInvestigator,
@@ -342,7 +342,7 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
       budget: { maxReads: 5, maxSearches: 5, maxBytesPerRead: 20_000, maxMatches: 20 },
       ledgerEntries
     })
-    const bounded = createBoundedClaimTools({ retriever, maxToolCalls: 5 })
+    const bounded = createBoundedRetrievalTools({ retriever, maxToolCalls: 5 })
 
     const claim = priorFindingClaim({
       id: 'claim_probe1',
