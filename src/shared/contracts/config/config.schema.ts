@@ -57,10 +57,12 @@ const gitRefSchema = z
 // tools and the run is byte-for-byte unchanged.
 export const CrossFileRetrievalConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
-  // Total mediated tool calls one discovery task may make. Kept small: the
-  // research is consistent that unfocused extra context REDUCES review quality,
-  // so this buys a few targeted lookups, never a repository dump.
-  maxToolCallsPerTask: z.int().min(1).max(20).default(4)
+  // Runaway-loop guard: the maximum mediated tool calls one discovery task may
+  // make. It exists to bound a model that never stops requesting reads, NOT to
+  // ration context — measurement showed the model self-limits well below the cap
+  // (0-7 calls when 8 were allowed, never exhausting it), so a tight cap only
+  // starves the tasks that genuinely need several lookups.
+  maxToolCallsPerTask: z.int().min(1).max(500).default(100)
 })
 
 export const ReviewConfigSchema = z.strictObject({
@@ -77,7 +79,7 @@ export const ReviewConfigSchema = z.strictObject({
   runTimeoutMs: z.int().min(10000).max(7200000).optional(),
   crossFileRetrieval: CrossFileRetrievalConfigSchema.default({
     enabled: false,
-    maxToolCallsPerTask: 4
+    maxToolCallsPerTask: 100
   })
 })
 
@@ -429,7 +431,7 @@ export const CodeReviewerConfigSchema = z.strictObject({
     maxFiles: 500,
     maxFileBytes: 500000,
     inlineSeverityThreshold: 'high',
-    crossFileRetrieval: { enabled: false, maxToolCallsPerTask: 4 }
+    crossFileRetrieval: { enabled: false, maxToolCallsPerTask: 100 }
   }),
   provider: ProviderConfigSchema.optional(),
   instructions: InstructionsConfigSchema.default({

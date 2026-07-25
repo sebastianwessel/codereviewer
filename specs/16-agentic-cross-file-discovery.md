@@ -44,11 +44,19 @@ context (an imported callee, an interface contract, a permission definition) —
 that symbol before deciding, rather than guessing or staying silent. It then emits
 findings as today.
 
-- **Bounded.** A per-task cap on total tool calls is enforced by CODE (not the
-  model), mirroring `verification.maxToolCallsPerClaim`. The retriever's own per-call
-  byte/match caps and read/search budgets still apply. "More context reduces quality"
-  (spec 10) is respected: the budget is small and demand-driven, never a
-  whole-repository dump.
+- **Bounded by a runaway-loop guard.** A per-task cap on total tool calls is enforced
+  by CODE (not the model), mirroring `verification.maxToolCallsPerClaim`. Its purpose
+  is to stop a model that never stops requesting reads, NOT to ration context:
+  measurement shows the model self-limits well below the cap (0-7 calls when 8 were
+  allowed, never exhausting it), so a tight cap only starves the tasks that genuinely
+  need several lookups. The cap is therefore set generously; focus comes from the
+  instruction to retrieve only what a specific suspicion requires, and from the
+  retriever's own per-call byte/match caps. "More context reduces quality" (spec 10)
+  is respected by demand-driven, targeted reads, never a whole-repository dump.
+- **Steps, not delegation budget.** A mediated tool call is an agent STEP, bounded by
+  the discovery agent's step allowance (the cap plus headroom, so a model that hits
+  the cap can still answer). It never counts against the workflow's child-agent call
+  budget, which counts agent invocations.
 - **Mediated and safe.** Every read/list/grep goes through `ContextRetriever`:
   eligibility gate (no dotfiles, `node_modules`, `.git`, secrets, excluded globs),
   redaction, path containment (no escape via symlink), and repository content treated
@@ -67,19 +75,17 @@ findings as today.
 
 A `review.crossFileRetrieval` block, disabled by default. Keys (defined in
 `04-configuration-and-providers.md`): `enabled` (default false) and
-`maxToolCallsPerTask` (a small positive bound). Invalid configuration fails
+`maxToolCallsPerTask` (the runaway-loop guard). Invalid configuration fails
 validation with exit code 2. With the block disabled, no discovery tool call is
 issued and the discovery agent is configured exactly as today (no tools,
 single step).
 
 ## Budget And Cost
 
-Enabling the mode adds, per task, up to `maxToolCallsPerTask` mediated reads plus the
-extra discovery steps to consume them. The child-agent call budget
-(`harness/config.ts`) reserves these additional steps when the mode is enabled, the
-same way it reserves the dedicated security pass's second call, so retrieval is never
-starved. Cost is accounted for by the existing transport-level usage recorder (no new
-accounting).
+Enabling the mode adds, per task, the mediated reads the model actually requests (in
+practice far below the cap) plus the discovery steps to consume them. No child-agent
+call reservation is needed: tool calls are agent steps, not agent invocations. Cost is
+accounted for by the existing transport-level usage recorder (no new accounting).
 
 ## Observability, Safety, Privacy
 

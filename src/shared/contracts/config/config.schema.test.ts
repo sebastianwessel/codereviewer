@@ -60,11 +60,11 @@ describe('CodeReviewerConfigSchema', () => {
     })
   })
 
-  test('cross-file retrieval defaults to disabled with a small tool-call budget', () => {
+  test('cross-file retrieval defaults to disabled with a loop-guard tool budget', () => {
     const defaults = CodeReviewerConfigSchema.parse({})
     expect(defaults.review.crossFileRetrieval).toEqual({
       enabled: false,
-      maxToolCallsPerTask: 4
+      maxToolCallsPerTask: 100
     })
 
     const enabled = CodeReviewerConfigSchema.parse({
@@ -75,11 +75,16 @@ describe('CodeReviewerConfigSchema', () => {
       maxToolCallsPerTask: 6
     })
 
-    // The budget is bounded: unfocused extra context reduces review quality, so a
-    // caller cannot turn discovery into a repository crawl.
+    // The cap is a runaway-loop guard, so a generous value is valid; only an
+    // absurd one (past the hard ceiling) is rejected.
+    expect(
+      CodeReviewerConfigSchema.parse({
+        review: { crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 200 } }
+      }).review.crossFileRetrieval.maxToolCallsPerTask
+    ).toBe(200)
     expect(() =>
       CodeReviewerConfigSchema.parse({
-        review: { crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 50 } }
+        review: { crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 501 } }
       })
     ).toThrow()
   })

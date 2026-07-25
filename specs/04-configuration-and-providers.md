@@ -457,15 +457,16 @@ Disabled by default.
 | Key | Type | Default |
 | --- | --- | --- |
 | `review.crossFileRetrieval.enabled` | boolean | `false` |
-| `review.crossFileRetrieval.maxToolCallsPerTask` | integer (1-20) | `4` |
+| `review.crossFileRetrieval.maxToolCallsPerTask` | integer (1-500) | `100` |
 
 Rules:
 
 - with it disabled, holistic discovery issues no tool call and runs as a single-shot
   review with no tools;
 - when enabled, discovery may call the mediated `repo_read`/`repo_list`/`repo_grep`
-  tools, bounded by `maxToolCallsPerTask` enforced in code and by the context
-  retriever's own eligibility, redaction, and byte/match caps;
+  tools; `maxToolCallsPerTask` is a runaway-loop guard enforced in code, not a
+  context ration, and the context retriever's own eligibility, redaction, and
+  byte/match caps still apply;
 - retrieved content is untrusted repository data: it cannot bypass scope, severity,
   baseline, admission, or the gate, and its findings pass the same refutation and
   admission as any other candidate.

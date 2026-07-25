@@ -53,28 +53,6 @@ describe('workflow harness config', () => {
     ).toBe(2048)
   })
 
-  test('reserves extra discovery steps for cross-file retrieval tool calls', () => {
-    // Each discovery call may spend its tool-call budget plus the step headroom
-    // before it answers: 8 tasks * 1 call * (1 + 4 + 3) + 8*12 refutations
-    // + 2*2 buffer = 64 + 96 + 4 = 164.
-    expect(
-      maxChildAgentCallsForReview({
-        taskCount: 8,
-        maxConcurrentTasks: 2,
-        crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 4 }
-      })
-    ).toBe(164)
-
-    // Disabled leaves the budget exactly as it was.
-    expect(
-      maxChildAgentCallsForReview({
-        taskCount: 8,
-        maxConcurrentTasks: 2,
-        crossFileRetrieval: { enabled: false, maxToolCallsPerTask: 4 }
-      })
-    ).toBe(108)
-  })
-
   test('attaches repository tools to discovery only when cross-file retrieval is enabled', () => {
     const disabled = reviewAgentOptionsForRole({
       role: 'holistic_review',
@@ -94,6 +72,20 @@ describe('workflow harness config', () => {
     expect(enabled).toEqual({
       builtinTools: false,
       maxSteps: 7,
+      tools: ['repo_read', 'repo_list', 'repo_grep']
+    })
+
+    // A loop-guard-sized budget simply yields a loop-guard-sized step allowance;
+    // the model self-limits well below it.
+    expect(
+      reviewAgentOptionsForRole({
+        role: 'holistic_review',
+        skillIds: [],
+        crossFileRetrieval: { enabled: true, maxToolCallsPerTask: 100 }
+      })
+    ).toEqual({
+      builtinTools: false,
+      maxSteps: 103,
       tools: ['repo_read', 'repo_list', 'repo_grep']
     })
 

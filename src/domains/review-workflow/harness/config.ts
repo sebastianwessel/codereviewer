@@ -28,7 +28,6 @@ export const maxChildAgentCallsForReview = (
     readonly taskCount?: number
     readonly maxConcurrentTasks?: number
     readonly securityPassEnabled?: boolean
-    readonly crossFileRetrieval?: CrossFileRetrievalConfig
   } = {}
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
@@ -44,15 +43,10 @@ export const maxChildAgentCallsForReview = (
   const candidatesPerTask =
     HOLISTIC_MAX_CANDIDATES +
     (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0)
-  // Spec 16: a tool-enabled discovery call spends up to maxToolCallsPerTask extra
-  // steps retrieving cross-file context before it answers, so reserve them per
-  // discovery call — under-reserving would cut a task off mid-investigation.
-  const crossFileCallsPerDiscoveryCall =
-    input.crossFileRetrieval?.enabled === true
-      ? input.crossFileRetrieval.maxToolCallsPerTask + CROSS_FILE_STEP_HEADROOM
-      : 0
-  const holisticCalls =
-    taskCount * discoveryCallsPerTask * (1 + crossFileCallsPerDiscoveryCall)
+  // Cross-file retrieval (spec 16) needs no reservation here: a mediated tool call
+  // is an agent STEP, bounded by the agent's maxSteps, and never counts against the
+  // workflow's child-agent call budget (which counts agent invocations).
+  const holisticCalls = taskCount * discoveryCallsPerTask
   const refutationCalls = taskCount * candidatesPerTask
   const concurrencyBuffer = maxConcurrentTasks * 2
   const derived = holisticCalls + refutationCalls + concurrencyBuffer
