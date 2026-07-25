@@ -136,6 +136,25 @@ general call's attention.
   general review's guarantees. It ships enabled-by-default only if a held-out A/B
   demonstrates a net recall gain without an authorization regression.
 
+### Measured Outcome Of The Injection Hardening
+
+Extending the guard to the general reviewer and the refuter was made for
+consistency, not for recall, and it produced the largest measured recall improvement
+of any change to date. On the sixteen-case real-repository corpus with the same
+model and identical cost, recall went from 62.5% (ten matched) to 81.3% (thirteen)
+and, on an independent replication, 87.5% (fourteen). Adjusted precision stayed at
+100% with zero genuine false positives in every run. Pre-guard runs on this corpus
+clustered between 62.5% and 68.8%, so the separation is not run-to-run churn.
+
+The cases it recovered include a cross-file authorization defect and a caller-depth
+secret-flow defect — precisely the classes that agentic cross-file retrieval
+(`16-agentic-cross-file-discovery.md`) and the context scout
+(`18-context-scout.md`) were built for and neither of which fixed. A large part of
+what looked like a missing-context gap was therefore not one: the reviewer already
+held the evidence and was deferring to the reviewed code's own comments and framing.
+Before building retrieval machinery to close a recall gap, test whether the reviewer
+is simply being talked out of the finding.
+
 ## Mechanism 2: Deterministic Security-Signal Evidence
 
 A generic, deterministic detector that produces **typed evidence**, following the
