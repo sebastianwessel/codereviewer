@@ -216,68 +216,281 @@
       "notes": "Cross-file: the contract this fast path breaks is written in the unchanged server/auth.go, where the CONNECT path rejects a user unless c.connectionTypeAllowed(user.AllowedConnectionTypes) holds (around lines 885-950) and refuses a user whose ProxyRequired is set without a trusted proxy (around line 1164). parser.go alone shows only a registration; whether anything is missing is undecidable without auth.go."
     },
     {
-      "id": "caddy-sticky-cookie-hash-compared-byte-by-byte",
+      "id": "echo-static-handler-unescapes-path-after-routing",
       "language": "go",
       "split": "held-out",
-      "repositoryUrl": "https://github.com/caddyserver/caddy.git",
-      "upstreamOwner": "caddyserver",
-      "upstreamRepo": "caddy",
+      "repositoryUrl": "https://github.com/labstack/echo.git",
+      "upstreamOwner": "labstack",
+      "upstreamRepo": "echo",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "8d1ae9d3360a71672418856d58753af25f2c3986",
+      "fixCommittedAt": "2026-06-14T07:04:59-07:00",
+      "parentCommit": "c9477eb5b5126ae933f2729af852d1be3f5845ae",
+      "reviewedPaths": ["echo.go"],
+      "reviewIntent": "Unescape the wildcard parameter in the static directory handler before resolving the file",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "echo.go",
+          "lineRange": [588, 601],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "path-traversal",
+          "contextDepth": "cross-file",
+          "semanticSummary": "StaticDirectoryHandler percent-decodes the wildcard parameter and only then cleans it into a file name; both registration helpers pass disablePathUnescaping=false, so the decode always runs, after routing has already picked the route and its middleware. An encoded separator is not a segment boundary while the route is matched but becomes one here, so the handler resolves a file under a path the matched route never covered and middleware guarding that path is skipped."
+        }
+      ],
+      "tags": ["cross-file", "security", "static-files"],
+      "notes": "Cross-file: the decisive fact is in the unchanged router.go, whose Route() matches on req.URL.RawPath rather than the decoded req.URL.Path unless UseEscapedPathForMatching is enabled (lines 796-803). Only that file shows the encoded separator survives routing, which is what turns a decode inside the handler into a boundary the router never authorised. The same pattern also exists in middleware/static.go, which is deliberately left out of the reviewed set."
+    },
+    {
+      "id": "casbin-conditional-role-transitive-check-drops-domain",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/casbin/casbin.git",
+      "upstreamOwner": "casbin",
+      "upstreamRepo": "casbin",
       "license": "Apache-2.0",
       "source": "upstream-fix-commit",
       "capturedAt": "2026-07-25",
-      "fixCommit": "75c988d118a057b7267cfcd455c8569996f40745",
-      "fixCommittedAt": "2026-07-10T09:16:25+10:00",
-      "parentCommit": "4e62095245005b17f290dd1e4d9afe983df180ee",
-      "reviewedPaths": ["modules/caddyhttp/reverseproxy/selectionpolicies.go"],
-      "reviewIntent": "Match the sticky-session cookie against each upstream's hashed value with a plain string comparison",
+      "fixCommit": "1571e4f34fdad9106d05ab8d8ef59f5efc7fe987",
+      "fixCommittedAt": "2026-06-24T00:44:58+08:00",
+      "parentCommit": "f64a3c0bb196de76f4621fdd829298dfc1e2bba1",
+      "reviewedPaths": ["rbac/default-role-manager/role_manager.go"],
+      "reviewIntent": "Recurse into the next level of the conditional role tree with the remaining role set",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "rbac/default-role-manager/role_manager.go",
+          "lineRange": [805, 821],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "hasLinkHelper recurses without forwarding its variadic domains argument, so every hop past the first is evaluated with an empty domain list. checkLinkCondition branches on exactly that: with no domain it consults the undomained registry, misses the condition registered under a domain, leaves passLinkConditionFunc at its default true, and traverses the link unconditionally. A domain role reached through an intermediate role is granted even when its condition forbids it."
+        }
+      ],
+      "tags": ["cross-file", "security", "rbac"],
+      "notes": "Cross-file: the changed file shows only that an argument is dropped. That the empty-domain branch means 'no condition, so allow' depends on the unchanged enforcer.go, where AddNamedDomainLinkConditionFunc registers conditions under a domain key (around lines 1018-1026), and on util/builtin_operators.go, where GenerateConditionalGFunction feeds the request domain into HasLink and TimeMatchFunc is the builtin condition being skipped."
+    },
+    {
+      "id": "authlib-oidc-scope-error-redirects-to-unvalidated-uri",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/lepture/authlib.git",
+      "upstreamOwner": "lepture",
+      "upstreamRepo": "authlib",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "7b4ecd7c88ac96ba7b759187a4b6d109d9031ee0",
+      "fixCommittedAt": "2026-05-04T09:56:42+02:00",
+      "parentCommit": "c304a216512e449d1440b159960ba319f4300d2b",
+      "reviewedPaths": ["authlib/oidc/core/grants/implicit.py"],
+      "reviewIntent": "Report a missing openid scope with the request's redirect_uri attached so the client is redirected",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "authlib/oidc/core/grants/implicit.py",
+          "lineRange": [70, 77],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "validate_authorization_request raises the missing-scope error with redirect_uri taken straight from the request payload, before the super() call on the next line performs the only check that the value belongs to the client. Attaching a redirect_uri to an OAuth2Error turns the response into a 302 to that address, so an unauthenticated caller that omits the openid scope makes the authorization endpoint redirect to any address it chooses, carrying the error and state parameters with it."
+        }
+      ],
+      "tags": ["cross-file", "security", "oauth", "open-redirect"],
+      "notes": "Cross-file on two hops, neither visible in the reviewed file: authlib/oauth2/rfc6749/grants/base.py holds validate_authorization_redirect_uri (lines 117-131), the only code that calls client.check_redirect_uri and the only thing the super() call on line 77 contributes; and authlib/oauth2/base.py shows OAuth2Error.__call__ turning a set redirect_uri into 302 Location (lines 57-62). The sibling path in authorization_server.py states the intended ordering. The same shape exists in hybrid.py, deliberately excluded from the reviewed set."
+    },
+    {
+      "id": "authlib-oidc-token-hash-check-passes-on-unknown-alg",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/lepture/authlib.git",
+      "upstreamOwner": "lepture",
+      "upstreamRepo": "authlib",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "b9bb2b25bf8b7e01512d847a95c1749646eaa72b",
+      "fixCommittedAt": "2026-03-01T00:30:33+09:00",
+      "parentCommit": "1b0a1d988842bff7347c4ec0a70e45c3ba55504e",
+      "reviewedPaths": ["authlib/oidc/core/claims.py"],
+      "reviewIntent": "Treat an empty half-hash as nothing to compare when verifying at_hash and c_hash",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "authlib/oidc/core/claims.py",
+          "lineRange": [304, 308],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "cryptography",
+          "contextDepth": "cross-file",
+          "semanticSummary": "_verify_hash returns True when the computed half-hash is falsy, the fail-open direction for a binding check. The helper it calls returns nothing whenever the algorithm name does not resolve to a hash function, and that algorithm is read from the received token's own header. validate_at_hash and validate_c_hash therefore report success without comparing anything, so the binding between the id token and the access token or authorization code is never verified."
+        }
+      ],
+      "tags": ["cross-file", "security", "oidc", "fail-open"],
+      "notes": "Cross-file: the reviewed file makes the falsy branch look defensive and unreachable. The unchanged authlib/oidc/core/util.py is what proves it is reachable — create_half_hash derives a hashlib attribute name from the alg string and returns None when getattr misses (lines 7-18), so any algorithm whose name does not map, taken from the token header, lands in the fail-open branch."
+    },
+    {
+      "id": "werkzeug-if-range-accepts-weak-etag-as-validator",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/pallets/werkzeug.git",
+      "upstreamOwner": "pallets",
+      "upstreamRepo": "werkzeug",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "8e9105fbafd3b3695e7b2f1fcbd09adcd97bd351",
+      "fixCommittedAt": "2026-04-23T13:28:11-07:00",
+      "parentCommit": "cc89c44f3819295b8f34b47b3e111ef2475cc441",
+      "reviewedPaths": ["src/werkzeug/datastructures/range.py"],
+      "reviewIntent": "Drop the weakness flag when parsing an If-Range header into its entity tag",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "src/werkzeug/datastructures/range.py",
+          "lineRange": [44, 48],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "IfRange.from_header keeps only the first element of the unquote helper's (etag, weak) result, so a weak entity tag is stored as if it were the strong one: W/\"abc\" and \"abc\" become the same parsed value. If-Range requires a strong validator, and the consumer compares the parsed value against the current entity tag to decide whether the requested range is still valid, so a client holding only a weak validator gets a 206 partial response and can reassemble an inconsistent entity."
+        }
+      ],
+      "tags": ["cross-file", "http-semantics", "conditional-requests"],
+      "notes": "Cross-file: src/werkzeug/http.py shows unquote_etag returning a (etag, weak) pair and stripping the W/ prefix (lines 1016-1038), which is what makes the [0] subscript a silent loss rather than a rename; and src/werkzeug/sansio/http.py shows is_resource_modified feeding if_range.etag into the entity-tag comparison that decides the 206 (lines 71-75). The reviewed file alone shows no consequence."
+    },
+    {
+      "id": "undici-coerced-header-value-skips-validation",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nodejs/undici.git",
+      "upstreamOwner": "nodejs",
+      "upstreamRepo": "undici",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "354a151f615f03d72f6aff02f3ad18a7e99a72b5",
+      "fixCommittedAt": "2026-07-22T08:26:33+02:00",
+      "parentCommit": "d228fab8495360f8d9bafe7140cf9c44f7894d3d",
+      "reviewedPaths": ["lib/core/request.js"],
+      "reviewIntent": "Coerce non-string header values with a template literal before storing them on the request",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "lib/core/request.js",
+          "lineRange": [462, 487],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-file",
+          "semanticSummary": "processHeader validates only values that are already strings; the array-element fallback and the final else branch coerce with a template literal and store the result unchecked. The object guard at the top does not cover functions, so a value with a crafted toString or Symbol.toPrimitive yields arbitrary characters, carriage return and line feed included, which are pushed onto the request headers and later written to the socket verbatim, splitting the request."
+        }
+      ],
+      "tags": ["cross-file", "security", "http-headers"],
+      "notes": "Cross-file: lib/core/util.js is where isValidHeaderValue is defined as the CR/LF rejector (headerCharRegex, lines 773-781) — the name alone does not say the check is what keeps newlines out — and lib/dispatcher/client-h1.js is where request.headers is serialised onto the wire without a further check. Neither is in the reviewed file, so the consequence of skipping the validator is not visible there."
+    },
+    {
+      "id": "ws-close-frame-leaks-uninitialised-buffer-bytes",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/websockets/ws.git",
+      "upstreamOwner": "websockets",
+      "upstreamRepo": "ws",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "c0327ec15a54d701eb6ccefaa8bef328cfc03086",
+      "fixCommittedAt": "2026-05-12T17:42:19+02:00",
+      "parentCommit": "ce2a3d62437995a47e6056d485a33d21b6a8f867",
+      "reviewedPaths": ["lib/sender.js"],
+      "reviewIntent": "Copy the close reason into the frame buffer for any non-string payload",
       "expectedFindings": [
         {
           "category": "security",
           "severity": "medium",
-          "path": "modules/caddyhttp/reverseproxy/selectionpolicies.go",
-          "lineRange": [710, 718],
+          "path": "lib/sender.js",
+          "lineRange": [188, 206],
           "matchMode": "path-semantic",
           "tier": "security",
-          "securityMechanism": "cryptography",
-          "contextDepth": "cross-function",
-          "semanticSummary": "CookieHashSelection.Select compares the client-supplied cookie value against the digest returned by hashCookie with ==, which stops at the first differing byte. That digest is a keyed HMAC-SHA256 over the upstream dial address and is the only thing binding a client to an upstream, so the comparison time reveals how many leading hex characters of a guessed cookie are correct and lets a client recover a valid sticky-session value for a chosen upstream incrementally."
+          "securityMechanism": "secret-flow",
+          "contextDepth": "caller",
+          "semanticSummary": "Sender#close sizes an uninitialised buffer from the reason's byte length and fills it with a typed-array copy in the non-string branch. For a typed array with elements wider than one byte the two disagree: the allocation follows the byte length while the copy writes one byte per element, so the tail is never written. Those bytes are whatever the allocator returned and are transmitted to the peer inside the close frame."
         }
       ],
-      "tags": ["security", "timing", "load-balancing"],
-      "notes": "Not cross-file: hashCookie in the same file (around line 782) is what shows the compared value is a keyed HMAC rather than an opaque id, which is what makes a byte-wise comparison matter. Kept for security-mechanism coverage of cryptography, which the corpus otherwise lacks."
+      "tags": ["security", "memory-disclosure", "websocket"],
+      "notes": "The unchanged lib/websocket.js is what makes the branch reachable from public API: WebSocket#close forwards the caller's reason straight into Sender#close (around line 296) with no type check, so an application passing any typed array reaches the else branch. Labelled contextDepth caller rather than cross-file, because the sizing mismatch itself is decidable inside the reviewed file."
     },
     {
-      "id": "caddy-reverseproxy-dial-info-in-shared-request-var",
-      "language": "go",
+      "id": "slim-html-error-page-renders-title-unescaped",
+      "language": "php",
       "split": "held-out",
-      "repositoryUrl": "https://github.com/caddyserver/caddy.git",
-      "upstreamOwner": "caddyserver",
-      "upstreamRepo": "caddy",
-      "license": "Apache-2.0",
+      "repositoryUrl": "https://github.com/slimphp/Slim.git",
+      "upstreamOwner": "slimphp",
+      "upstreamRepo": "Slim",
+      "license": "MIT",
       "source": "upstream-fix-commit",
       "capturedAt": "2026-07-25",
-      "fixCommit": "1830809afe8c95c6c554740f8719e023415f85cb",
-      "fixCommittedAt": "2026-07-10T09:37:07-06:00",
-      "parentCommit": "945d199724f17f313c7fbc90eceba70fe37f47e6",
-      "reviewedPaths": [
-        "modules/caddyhttp/reverseproxy/reverseproxy.go",
-        "modules/caddyhttp/reverseproxy/hosts.go",
-        "modules/caddyhttp/reverseproxy/healthchecks.go"
-      ],
-      "reviewIntent": "Publish the selected upstream's dial info as a request variable during upstream selection",
+      "fixCommit": "f897118b1dbf157d3520aa4776ee7faa6d6de229",
+      "fixCommittedAt": "2026-05-22T08:56:22+01:00",
+      "parentCommit": "402fcbc2eed5a998bd1cf5d52dfc5572ba95a477",
+      "reviewedPaths": ["Slim/Error/Renderers/HtmlErrorRenderer.php"],
+      "reviewIntent": "Render the error title and description into the HTML error page",
       "expectedFindings": [
         {
-          "category": "bug",
+          "category": "security",
           "severity": "high",
-          "path": "modules/caddyhttp/reverseproxy/reverseproxy.go",
-          "lineRange": [663, 666],
+          "path": "Slim/Error/Renderers/HtmlErrorRenderer.php",
+          "lineRange": [25, 36],
           "matchMode": "path-semantic",
-          "tier": "runtime-critical",
-          "semanticSummary": "proxyLoopIteration publishes the selected upstream's DialInfo with SetVar into the request's shared variable map, and the transport reads it back only later, when it dials. Every handler in the same request writes that one entry, so when a second reverse-proxy handler runs inside the request (the forward-auth arrangement is the common case) its selection overwrites the outer handler's dial info before the outer round-trip starts, and the outer proxy connects to the inner handler's upstream."
+          "tier": "security",
+          "securityMechanism": "xss",
+          "contextDepth": "cross-file",
+          "semanticSummary": "The renderer interpolates the error title and description into the page unescaped, while the neighbouring detail fragment passes the exception message and trace through htmlentities. The title reaches both the document title and the heading, and the description reaches the paragraph rendered when error details are disabled, the production setting. Those two strings come from the exception, not from constants, so markup inside them is rendered as HTML."
         }
       ],
-      "tags": ["cross-file", "shared-state", "race", "proxy"],
-      "notes": "Cross-file: modules/caddyhttp/vars.go shows SetVar/GetVar writing into a single map stored once per request (around lines 440-460), and modules/caddyhttp/reverseproxy/httptransport.go shows GetDialInfo being read inside DialContext (around line 285), i.e. after a nested handler has already run and overwritten the entry. Neither fact is visible in the three reviewed files."
+      "tags": ["cross-file", "security", "error-rendering"],
+      "notes": "Cross-file and verdict-flipping: getErrorTitle and getErrorDescription are not defined in the reviewed file. The unchanged Slim/Error/AbstractErrorRenderer.php shows they return the exception's own title and description for an HttpException and only fall back to the class constants otherwise (lines 29-45), and Slim/Exception/HttpException.php shows both are settable at runtime (setTitle/setDescription). Without those files the reviewed code looks like it renders two fixed strings."
+    },
+    {
+      "id": "axum-multipart-part-name-not-escaped-in-content-disposition",
+      "language": "rust",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/tokio-rs/axum.git",
+      "upstreamOwner": "tokio-rs",
+      "upstreamRepo": "axum",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-25",
+      "fixCommit": "b90b8e02d0f761ce36a13610acd2afa60984a5e2",
+      "fixCommittedAt": "2026-06-29T11:26:47+02:00",
+      "parentCommit": "600e762b30dba5d1b9e253fabd36d0d23333e5d5",
+      "reviewedPaths": ["axum-extra/src/response/multiple.rs"],
+      "reviewIntent": "Format each multipart part's Content-Disposition line from its field name and file name",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "axum-extra/src/response/multiple.rs",
+          "lineRange": [186, 192],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-file",
+          "semanticSummary": "Part::serialize writes the field name and the file name straight into the quoted-string parameters of the Content-Disposition line, and the constructors that set them accept any string without validating it. A name containing a double quote closes the quoted string early and appends attacker-chosen parameters, and one containing a carriage return and line feed ends the header line and injects further headers into the multipart body the response sends."
+        }
+      ],
+      "tags": ["cross-file", "security", "multipart"],
+      "notes": "Cross-file: the unchanged axum-extra/src/response/content_disposition.rs already defines EscapedFilename, the wrapper that escapes backslashes and quotes for exactly this position, and its doc comment states that including an unescaped value is parameter injection. Sibling responses in attachment.rs and file_stream.rs already use it, so the crate's contract — and the fact that this call path is the one bypassing it — is only visible outside the reviewed file."
     }
   ]
 }
