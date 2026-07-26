@@ -78,8 +78,6 @@ export const runProviderWorkflow = async (
       input.workflowInput.tasks?.length ?? input.workflowInput.reviewedPaths.length,
     maxConcurrentTasks: input.config.review.maxConcurrentTasks,
     securityPassEnabled: input.config.security.dedicatedPass.enabled,
-    discoverySweepRounds: input.config.review.discoverySweep.maxAdditionalRounds,
-    discoveryLensPassEnabled: input.config.review.discoveryLensPass.enabled,
     contextScoutEnabled: input.config.review.contextScout.enabled
   })
   const harness = createModelBackedReviewHarness({

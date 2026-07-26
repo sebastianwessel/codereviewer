@@ -277,91 +277,6 @@ const buildSecurityReviewText = (
     `\n${securityReviewChecklist}`
   ].join('\n')
 
-// Spec 05, Holistic Discovery: the lens directive for the second serial pass. The
-// classes are the ones a general read most often walks past — they are visible
-// only when you go looking for them specifically, because each requires following
-// a path the happy-path reading never takes. Generic and language-neutral: it
-// names defect classes, never a language, framework, or fixture.
-const lensReviewInstruction = [
-  'FOCUSED SECOND-PASS REVIEW. A general review of this same change has already',
-  'run. Re-read the change through one specific lens: the high-impact defect',
-  'classes a general read most often misses because they hide off the success',
-  'path. Report every concrete instance you can justify from the code.',
-  '- Concurrency and atomicity: non-atomic read-modify-write on shared state,',
-  '  check-then-act races, missing or incorrect locking, state mutated without',
-  '  synchronization.',
-  '- Asynchrony: work started and never awaited, dropped promises/futures,',
-  '  fire-and-forget paths that discard errors or ordering guarantees.',
-  '- Error and failure paths: swallowed or ignored errors, cleanup skipped on the',
-  '  failure branch, work committed after a partial failure, state left',
-  '  inconsistent when an operation aborts partway.',
-  '- Resource lifetime: handles, connections, files, listeners, or buffers that',
-  '  leak, are used after release, or grow without bound.',
-  '- Interface and contract violations: caller and callee disagreeing on',
-  '  signature, nullability, return shape, or a documented invariant; one call',
-  '  site updated while a sibling is not.',
-  '- Edge cases: empty, zero, negative, boundary, absent, and maximum inputs, and',
-  '  the first and last iteration of a loop.',
-  'Apply the same standard of evidence as the general pass: name the concrete',
-  'failure and the exact path or input that triggers it. Do not report style,',
-  'naming, formatting, documentation, or cleanup preferences, and do not restate a',
-  'defect the general pass would obviously have caught on the success path.',
-  'Returning {"findings": []} is correct when this lens genuinely finds nothing.'
-].join('\n')
-
-const buildLensReviewText = (
-  taskInput: TaskReviewInput,
-  rawDiff: string
-): string =>
-  [
-    `Focused review task ${taskInput.task.id}.`,
-    lensReviewInstruction,
-    ...buildContextSections(taskInput, rawDiff)
-  ].join('\n')
-
-// The enumeration sweep prompt. A discovery call answers with the defect it is
-// most confident about and stops, so a file holding two defects yields one — the
-// instruction to report every instance does not overcome the pull of a single
-// response toward a single answer. This call states what has already been found
-// and asks only for what is left, which is a different question rather than a
-// louder version of the same one. Reporting nothing is an explicitly correct
-// answer, so a clean file cannot pressure the model into inventing a second
-// defect to justify the extra call.
-const sweepReviewInstruction = [
-  'CONTINUATION REVIEW. A previous pass over this same change already reported the',
-  'findings listed under ALREADY REPORTED below. Your job is to find what that pass',
-  'MISSED: report only ADDITIONAL, DISTINCT defects.',
-  'Do NOT restate, rephrase, split, or re-argue any already-reported finding, and do',
-  'not report a different symptom of the same underlying defect. A finding at the',
-  'same location as one already reported is a duplicate unless it is a genuinely',
-  'different fault with a different cause and a different fix.',
-  'Review the change again from the start with the same rigor and the same standard',
-  'of evidence: a defect you report must still name the concrete failure and the',
-  'exact path or input that triggers it. Do not lower the bar to produce output, and',
-  'do not report style, naming, formatting, documentation, or cleanup preferences.',
-  'Returning {"findings": []} is the correct and expected answer when the previous',
-  'pass genuinely found everything. An empty result is a successful review, not a',
-  'failed one.'
-].join('\n')
-
-// The already-reported list the sweep reasons against. Titles and locations are
-// enough to identify a finding without spending the budget to restate it.
-const buildSweepReviewText = (
-  taskInput: TaskReviewInput,
-  rawDiff: string,
-  reported: readonly CandidateFinding[]
-): string =>
-  [
-    `Continuation review task ${taskInput.task.id}.`,
-    sweepReviewInstruction,
-    ...buildContextSections(taskInput, rawDiff),
-    '\nALREADY REPORTED (do not repeat):',
-    ...reported.map(
-      (candidate) =>
-        `- ${candidate.location.path}:${candidate.location.startLine} — ${candidate.title}`
-    )
-  ].join('\n')
-
 type HolisticTaskReviewLogger = {
   readonly debug: (
     message: string,
@@ -389,23 +304,13 @@ export const SECURITY_MAX_CANDIDATES = 8
 const locationKey = (candidate: CandidateFinding): string =>
   `${candidate.location.path}:${candidate.location.startLine}`
 
-// The key the general-purpose extra passes use instead. Keying on (path, line)
-// alone assumes one line holds at most one defect, which is false: a single
-// signature line can carry both a contract violation and a resource leak. A probe
-// of the lens pass found it returning two findings that were BOTH discarded for
-// sharing a start line with the general finding, so the pass was being measured
-// while its output was thrown away. Same line AND same category is still treated
-// as a restatement; the admission gate's duplicate fingerprint is the backstop
-// for anything finer.
-const locationCategoryKey = (candidate: CandidateFinding): string =>
-  `${candidate.location.path}:${candidate.location.startLine}:${candidate.category}`
 
 // Collect candidates from one discovery call's findings into the shared map, capping
 // how many THIS call may add and skipping any at an excluded location. Reports what
 // it discarded and why: a finding that failed to parse is a different problem from
 // one suppressed as a duplicate, and counting them together hid both. The
-// suppression counts are what show whether a sweep round is finding new defects or
-// restating the ones it was given.
+// suppression counts show whether the security pass is contributing new findings
+// or restating what the general pass already reported.
 type CollectedCandidates = {
   readonly dropped: number
   readonly suppressedByLocation: number
@@ -418,10 +323,6 @@ const collectCandidates = (params: {
   readonly into: Map<string, CandidateFinding>
   readonly maxToAdd: number
   readonly excludeLocations?: ReadonlySet<string>
-  // Which identity to suppress on. Defaults to spec 15's (path, line) rule used
-  // by the security pass; the general-purpose extra passes pass the
-  // category-aware key so two different defect classes on one line both survive.
-  readonly keyOf?: (candidate: CandidateFinding) => string
 }): CollectedCandidates => {
   let dropped = 0
   let suppressedByLocation = 0
@@ -437,7 +338,7 @@ const collectCandidates = (params: {
       dropped += 1
       continue
     }
-    if (params.excludeLocations?.has((params.keyOf ?? locationKey)(candidate))) {
+    if (params.excludeLocations?.has(locationKey(candidate))) {
       suppressedByLocation += 1
       continue
     }
@@ -624,86 +525,6 @@ export const runModelBackedHolisticTaskReview = async (
   let suppressedByIdCount = collected.suppressedById
   const generalCandidateCount = candidatesById.size
 
-  // Spec 05: the second, diverse-lens pass. Serial, so it stays inside the
-  // workflow's parallel child-agent budget, and additive at locations the general
-  // pass did not claim, so it can only add.
-  let lensFindingCount = 0
-  let lensCandidateCount = 0
-  if (input.workflowInput.discoveryLensPassEnabled) {
-    const beforeLens = candidatesById.size
-    const generalLocations = new Set(
-      [...candidatesById.values()].map(locationCategoryKey)
-    )
-    const lens = await runDiscoveryCall(
-      input.runners.holisticReview,
-      input.taskInput,
-      input.task,
-      buildLensReviewText(input.taskInput, rawDiff),
-      input.signal,
-      'holistic_review_lens'
-    )
-    providerIssues.push(...lens.providerIssues)
-    lensFindingCount = lens.findings.length
-    const lensCollected = collectCandidates({
-      findings: lens.findings,
-      task: input.task,
-      into: candidatesById,
-      maxToAdd: Math.max(0, HOLISTIC_MAX_CANDIDATES - candidatesById.size),
-      excludeLocations: generalLocations,
-      keyOf: locationCategoryKey
-    })
-    droppedCount += lensCollected.dropped
-    suppressedByLocationCount += lensCollected.suppressedByLocation
-    suppressedByIdCount += lensCollected.suppressedById
-    lensCandidateCount = candidatesById.size - beforeLens
-  }
-
-  // Enumeration sweep: keep asking what the previous rounds missed until a round
-  // adds nothing or the budget runs out. Purely additive — a round can only add
-  // candidates at locations no earlier round claimed, so the sweep can never cost
-  // a finding the single call already had, and every candidate it adds still
-  // faces the same refutation and admission.
-  let sweepRoundsRun = 0
-  let sweepCandidateCount = 0
-  let sweepFindingCount = 0
-  for (let round = 0; round < input.workflowInput.discoverySweepRounds; round += 1) {
-    const remaining = HOLISTIC_MAX_CANDIDATES - candidatesById.size
-    if (remaining <= 0) {
-      break
-    }
-
-    const before = candidatesById.size
-    const known = [...candidatesById.values()]
-    const sweep = await runDiscoveryCall(
-      input.runners.holisticReview,
-      input.taskInput,
-      input.task,
-      buildSweepReviewText(input.taskInput, rawDiff, known),
-      input.signal,
-      'holistic_review_sweep'
-    )
-    providerIssues.push(...sweep.providerIssues)
-    sweepRoundsRun += 1
-    const sweepCollected = collectCandidates({
-      findings: sweep.findings,
-      task: input.task,
-      into: candidatesById,
-      maxToAdd: remaining,
-      excludeLocations: new Set(known.map(locationCategoryKey)),
-      keyOf: locationCategoryKey
-    })
-    droppedCount += sweepCollected.dropped
-    suppressedByLocationCount += sweepCollected.suppressedByLocation
-    suppressedByIdCount += sweepCollected.suppressedById
-    sweepFindingCount += sweep.findings.length
-
-    const added = candidatesById.size - before
-    sweepCandidateCount += added
-    if (added === 0) {
-      break
-    }
-  }
-
   let securityFindingCount = 0
   if (input.workflowInput.securityPassEnabled) {
     const generalLocations = new Set(
@@ -742,19 +563,9 @@ export const runModelBackedHolisticTaskReview = async (
     scout_bytes_injected: scout?.bytesInjected ?? 0,
     security_finding_count: securityFindingCount,
     general_candidate_count: generalCandidateCount,
-    lens_pass_enabled: input.workflowInput.discoveryLensPassEnabled,
-    lens_finding_count: lensFindingCount,
-    lens_candidate_count: lensCandidateCount,
-    sweep_rounds_run: sweepRoundsRun,
-    sweep_finding_count: sweepFindingCount,
-    sweep_candidate_count: sweepCandidateCount,
     suppressed_by_location_count: suppressedByLocationCount,
     suppressed_by_id_count: suppressedByIdCount,
-    security_candidate_count:
-      candidates.length -
-      generalCandidateCount -
-      sweepCandidateCount -
-      lensCandidateCount,
+    security_candidate_count: candidates.length - generalCandidateCount,
     candidate_count: candidates.length,
     dropped_count: droppedCount
   })

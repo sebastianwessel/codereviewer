@@ -95,24 +95,6 @@ export const ContextScoutConfigSchema = z.strictObject({
   maxBytesPerSymbol: z.int().min(500).max(40000).default(4000)
 })
 
-// Enumeration sweep: extra discovery calls per task, each told what has already
-// been reported and asked only for further, distinct defects. A single discovery
-// response answers with the defect it is most confident about and stops, so a
-// file holding two defects yields one; asking again is what makes the review
-// enumerate rather than answer. Rounds stop early as soon as one adds nothing.
-export const DiscoverySweepConfigSchema = z.strictObject({
-  maxAdditionalRounds: z.int().min(0).max(4).default(0)
-})
-
-// The diverse-lens second pass required by spec 05's Holistic Discovery: the same
-// change re-read through a lens aimed at defect classes a general read commonly
-// walks past. Distinct from the sweep, which asks the same question again; this
-// asks a different question, which is the point — a second look from the same
-// vantage mostly reproduces the first.
-export const DiscoveryLensPassConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false)
-})
-
 export const ReviewConfigSchema = z.strictObject({
   mode: z.enum(['local', 'ci', 'pr', 'full']).default('local'),
   depth: z.enum(['fast', 'balanced', 'thorough']).default('balanced'),
@@ -135,10 +117,6 @@ export const ReviewConfigSchema = z.strictObject({
     maxSymbols: 8,
     maxBytesPerSymbol: 4000
   }),
-  discoverySweep: DiscoverySweepConfigSchema.default({
-    maxAdditionalRounds: 0
-  }),
-  discoveryLensPass: DiscoveryLensPassConfigSchema.default({ enabled: false })
 })
 
 export const ProviderConfigSchema = z
@@ -499,10 +477,6 @@ export const CodeReviewerConfigSchema = z.strictObject({
       maxSymbols: 8,
       maxBytesPerSymbol: 4000
     },
-    discoverySweep: {
-      maxAdditionalRounds: 0
-    },
-    discoveryLensPass: { enabled: false }
   }),
   provider: ProviderConfigSchema.optional(),
   instructions: InstructionsConfigSchema.default({

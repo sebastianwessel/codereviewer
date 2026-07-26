@@ -22,9 +22,9 @@ Date: 2026-07-21
     `11-external-context-ingestion.md`. This step is skipped when the feature is
     disabled and never fails the run on a provider error.
 13. Resolve provider when model-backed review is enabled.
-14. Run holistic discovery: two serial diverse-lens recall-first whole-file
-    reviews per task (a general pass, then a pass focused on commonly-missed
-    high-impact defects) whose findings are unioned and deduped into candidate
+14. Run holistic discovery: one recall-first whole-file review per task, plus the
+    optional dedicated security pass when enabled, whose findings are deduped
+    into candidate
     findings.
 15. Run refutation once per task, adjudicating every candidate that task raised.
 16. Admit or reject candidates against the admission gate.
@@ -249,7 +249,8 @@ Task queue rules:
   calls cannot exceed the configured cap;
 - provider-backed workflows must also enforce a scale-derived total
   child-agent call cap at the Harness delegation boundary. The cap is derived
-  from planned task count (with two serial holistic discovery passes per task),
+  from planned task count (one holistic discovery call per task, plus one for
+  each enabled optional pass),
   one batched refutation call per task plus a small allowance for batches that
   split under budget pressure, and a small concurrency buffer. It must never
   use an effectively unbounded constant. The
@@ -272,20 +273,17 @@ Task queue rules:
 
 ## Holistic Discovery
 
-Provider-backed review runs two serial diverse-lens recall-first whole-file
-reviews per task. The `holistic_review` agent performs both passes and emits
-candidate findings directly; their findings are unioned and deduped by candidate
-id before refutation.
+Provider-backed review runs **one** recall-first whole-file review per task. The
+`holistic_review` agent emits candidate findings directly; they are deduped by
+candidate id before refutation.
 
-- Pass 1 is the general review (no lens). Pass 2 re-reads the same change through
-  a focused lens that hunts specifically for commonly-missed, high-impact defects
-  (concurrency and atomicity, unawaited async, error/failure-path handling,
-  security, resource leaks, interface/contract violations, and edge cases). The
-  passes run serially to stay within the workflow's parallel child-agent budget.
+This spec previously required a second, serial diverse-lens pass. That pass was
+implemented and measured, and it did not earn its cost (see the measured outcome
+below), so the requirement is withdrawn rather than left as an unmet mandate.
+
 - The review input is the task's unified-diff segment plus the full
   line-numbered changed files, alongside deterministic support signals,
-  instruction/skill metadata, and a compact safe digest. The focused pass
-  prepends its lens directive before the diff.
+  instruction/skill metadata, and a compact safe digest.
 - When referenced-definition context is present, the input also carries a
   separate "Referenced definitions (from unchanged files, for context only)"
   section holding bounded digests of unchanged dependency files the changed files
@@ -314,7 +312,7 @@ id before refutation.
   Raw candidates do not influence later workers before they pass the configured
   safe digest boundary.
 
-### Measured Outcome Of The Additional Discovery Passes
+### Measured Outcome Of The Withdrawn Second Pass
 
 Discovery emits roughly one finding per file, and that is a property of the model's
 answer rather than of the pipeline. Instrumenting a live run showed every task
@@ -324,15 +322,21 @@ defect score 16 of 24 while cases holding two score 7 of 18, and in seven of tho
 nine the review found exactly one of the two.
 
 Two additional passes were built against this and measured on that corpus, three
-seeds each: an enumeration sweep that re-asks what the previous round missed, and the
-diverse-lens pass this section describes. Baseline recall is 54.8% (50.0 / 54.8 /
-59.5, sd 4.8pp). The sweep gives 54.8% (50.0 / 52.4 / 61.9) at about +40% cost. The
-lens pass gives 54.0% (57.1 / 52.4 / 52.4) at about +47% cost. **Neither is a
-measurable improvement**, so both are off by default.
+seeds each: an enumeration sweep that re-asks what the previous round missed, and
+the diverse-lens pass this section used to require. Baseline recall is 54.8%
+(50.0 / 54.8 / 59.5, sd 4.8pp). The sweep gives 54.8% (50.0 / 52.4 / 61.9) at about
++40% cost. The lens pass gives 54.0% (57.1 / 52.4 / 52.4) at about +47% cost.
+**Neither is a measurable improvement**, so both were removed along with their
+configuration rather than kept as unproven switches.
 
-The lens pass does surface more plausibility-confirmed defects the answer key never
-listed — 7.3 per run against 5.3 — which is a real if unproven signal, since the gap
-is smaller than the corpus's own seed-to-seed spread.
+Precision about what this does and does not establish: at three seeds with a 4.8pp
+deviation the resolution is roughly ±5.5pp, so a small real effect would be
+invisible. The passes are removed as unproven and expensive, not as disproven. One
+signal ran the other way and is worth recording for anyone who revisits this: the
+lens pass surfaced more plausibility-confirmed defects the answer key never listed,
+7.3 per run against 5.3, at 100% adjusted precision in all three seeds. That is a
+real-world gain that this corpus's recall metric cannot see, and it is also inside
+the noise band. Chasing it needs a targeted experiment, not a retained switch.
 
 Two implementation lessons are worth keeping. The first lens measurement was invalid:
 the additive merge suppressed any candidate sharing a (path, line) with an earlier
@@ -342,9 +346,10 @@ so the general-purpose passes now suppress on (path, line, category). And a resp
 truncated by the output-token budget used to parse as "no findings", making an
 exhausted review indistinguishable from a clean file.
 
-**Open question for a human decision:** this section requires two serial passes per
-task, but only one is issued by default, and the measurement above gives no evidence
-that the second earns its cost. Either the default is wrong or this requirement is.
+The one-finding-per-file limit therefore remains **open and unfixed**. What is
+established is that neither re-asking the same question nor asking a differently
+framed one recovers the missed defect, so a future attempt should start somewhere
+else.
 
 ## Refutation
 

@@ -21,12 +21,6 @@
           "enabled": false,
           "maxSymbols": 8,
           "maxBytesPerSymbol": 4000
-        },
-        "discoverySweep": {
-          "maxAdditionalRounds": 0
-        },
-        "discoveryLensPass": {
-          "enabled": false
         }
       },
       "type": "object",
@@ -166,40 +160,6 @@
             "maxBytesPerSymbol"
           ],
           "additionalProperties": false
-        },
-        "discoverySweep": {
-          "default": {
-            "maxAdditionalRounds": 0
-          },
-          "type": "object",
-          "properties": {
-            "maxAdditionalRounds": {
-              "default": 0,
-              "type": "integer",
-              "minimum": 0,
-              "maximum": 4
-            }
-          },
-          "required": [
-            "maxAdditionalRounds"
-          ],
-          "additionalProperties": false
-        },
-        "discoveryLensPass": {
-          "default": {
-            "enabled": false
-          },
-          "type": "object",
-          "properties": {
-            "enabled": {
-              "default": false,
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "enabled"
-          ],
-          "additionalProperties": false
         }
       },
       "required": [
@@ -212,9 +172,7 @@
         "maxFileBytes",
         "inlineSeverityThreshold",
         "crossFileRetrieval",
-        "contextScout",
-        "discoverySweep",
-        "discoveryLensPass"
+        "contextScout"
       ],
       "additionalProperties": false
     },
