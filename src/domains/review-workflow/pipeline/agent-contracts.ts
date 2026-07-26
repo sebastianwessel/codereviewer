@@ -427,8 +427,18 @@ export type HolisticReviewInput = z.infer<typeof HolisticReviewInputSchema>
 // Holistic discovery output. Loose (tolerates model output drift); each raw
 // finding is normalized via ModelHolisticFindingSchema and mapped to a
 // CandidateFinding downstream.
+//
+// `findings` is REQUIRED, deliberately. The provider's Responses API reports a
+// response truncated by the output-token budget as `status: 'incomplete'`, which
+// the adapter does not treat as a failure, and an empty body becomes `{}`. With a
+// default, `{}` parsed to "no findings" — so a review that ran out of budget was
+// indistinguishable from a file with no defects, in the review AND in the eval
+// that scores it. Requiring the key makes that response fail validation, which
+// discovery already degrades into a recorded, recovered provider issue. The
+// reviewer is explicitly instructed to return {"findings": []} for a clean file,
+// so a well-formed empty result is still cheap to express.
 export const ModelHolisticReviewResultSchema = z.strictObject({
-  findings: z.array(z.unknown()).default([])
+  findings: z.array(z.unknown())
 })
 
 export type ModelHolisticReviewResult = z.infer<

@@ -347,16 +347,27 @@ const locationKey = (candidate: CandidateFinding): string =>
   `${candidate.location.path}:${candidate.location.startLine}`
 
 // Collect candidates from one discovery call's findings into the shared map, capping
-// how many THIS call may add and skipping any at an excluded location. Returns the
-// number of raw findings dropped because they failed to parse into a candidate.
+// how many THIS call may add and skipping any at an excluded location. Reports what
+// it discarded and why: a finding that failed to parse is a different problem from
+// one suppressed as a duplicate, and counting them together hid both. The
+// suppression counts are what show whether a sweep round is finding new defects or
+// restating the ones it was given.
+type CollectedCandidates = {
+  readonly dropped: number
+  readonly suppressedByLocation: number
+  readonly suppressedById: number
+}
+
 const collectCandidates = (params: {
   readonly findings: readonly unknown[]
   readonly task: WorkflowReviewTask
   readonly into: Map<string, CandidateFinding>
   readonly maxToAdd: number
   readonly excludeLocations?: ReadonlySet<string>
-}): number => {
+}): CollectedCandidates => {
   let dropped = 0
+  let suppressedByLocation = 0
+  let suppressedById = 0
   let added = 0
 
   for (const raw of params.findings) {
@@ -369,16 +380,18 @@ const collectCandidates = (params: {
       continue
     }
     if (params.excludeLocations?.has(locationKey(candidate))) {
+      suppressedByLocation += 1
       continue
     }
     if (params.into.has(candidate.id)) {
+      suppressedById += 1
       continue
     }
     params.into.set(candidate.id, candidate)
     added += 1
   }
 
-  return dropped
+  return { dropped, suppressedByLocation, suppressedById }
 }
 
 const candidateFromFinding = (
@@ -435,9 +448,13 @@ const candidateFromFinding = (
 // evaluation, silently drops the case from the comparison, which is how a
 // measurement starts lying. Such a call yields no findings and is surfaced as a
 // recovered provider issue so the degradation stays visible instead of silent.
+// Failures that cost this task its findings but must not take the run down with
+// them. Malformed structured-object JSON belongs here: it is what a response
+// truncated mid-array looks like, and one over-long file should degrade to a
+// recorded provider issue rather than fail an entire review or evaluation.
 const isRecoverableDiscoveryFailure = (error: unknown): boolean =>
   error instanceof Error &&
-  /agent loop budget exceeded|iterations_exceeded|agent output validation failed/iu.test(
+  /agent loop budget exceeded|iterations_exceeded|agent output validation failed|malformed structured object json/iu.test(
     error.message
   )
 
@@ -538,12 +555,15 @@ export const runModelBackedHolisticTaskReview = async (
     'holistic_review'
   )
   const providerIssues: ProviderIssue[] = [...general.providerIssues]
-  let droppedCount = collectCandidates({
+  const collected = collectCandidates({
     findings: general.findings,
     task: input.task,
     into: candidatesById,
     maxToAdd: HOLISTIC_MAX_CANDIDATES
   })
+  let droppedCount = collected.dropped
+  let suppressedByLocationCount = collected.suppressedByLocation
+  let suppressedByIdCount = collected.suppressedById
   const generalCandidateCount = candidatesById.size
 
   // Enumeration sweep: keep asking what the previous rounds missed until a round
@@ -553,6 +573,7 @@ export const runModelBackedHolisticTaskReview = async (
   // faces the same refutation and admission.
   let sweepRoundsRun = 0
   let sweepCandidateCount = 0
+  let sweepFindingCount = 0
   for (let round = 0; round < input.workflowInput.discoverySweepRounds; round += 1) {
     const remaining = HOLISTIC_MAX_CANDIDATES - candidatesById.size
     if (remaining <= 0) {
@@ -571,13 +592,17 @@ export const runModelBackedHolisticTaskReview = async (
     )
     providerIssues.push(...sweep.providerIssues)
     sweepRoundsRun += 1
-    droppedCount += collectCandidates({
+    const sweepCollected = collectCandidates({
       findings: sweep.findings,
       task: input.task,
       into: candidatesById,
       maxToAdd: remaining,
       excludeLocations: new Set(known.map(locationKey))
     })
+    droppedCount += sweepCollected.dropped
+    suppressedByLocationCount += sweepCollected.suppressedByLocation
+    suppressedByIdCount += sweepCollected.suppressedById
+    sweepFindingCount += sweep.findings.length
 
     const added = candidatesById.size - before
     sweepCandidateCount += added
@@ -601,13 +626,16 @@ export const runModelBackedHolisticTaskReview = async (
     )
     providerIssues.push(...security.providerIssues)
     securityFindingCount = security.findings.length
-    droppedCount += collectCandidates({
+    const securityCollected = collectCandidates({
       findings: security.findings,
       task: input.task,
       into: candidatesById,
       maxToAdd: SECURITY_MAX_CANDIDATES,
       excludeLocations: generalLocations
     })
+    droppedCount += securityCollected.dropped
+    suppressedByLocationCount += securityCollected.suppressedByLocation
+    suppressedByIdCount += securityCollected.suppressedById
   }
 
   const candidates = [...candidatesById.values()]
@@ -622,7 +650,10 @@ export const runModelBackedHolisticTaskReview = async (
     security_finding_count: securityFindingCount,
     general_candidate_count: generalCandidateCount,
     sweep_rounds_run: sweepRoundsRun,
+    sweep_finding_count: sweepFindingCount,
     sweep_candidate_count: sweepCandidateCount,
+    suppressed_by_location_count: suppressedByLocationCount,
+    suppressed_by_id_count: suppressedByIdCount,
     security_candidate_count:
       candidates.length - generalCandidateCount - sweepCandidateCount,
     candidate_count: candidates.length,

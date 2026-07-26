@@ -1,8 +1,24 @@
 import { describe, expect, test } from 'vitest'
 import {
   ModelContextScoutResultSchema,
+  ModelHolisticReviewResultSchema,
   contextScoutRequests
 } from './agent-contracts.js'
+
+describe('ModelHolisticReviewResultSchema', () => {
+  // A response truncated by the output-token budget arrives as an empty body and
+  // becomes {}. Accepting that as "no findings" made an exhausted review look
+  // exactly like a clean file, in the review and in the eval scoring it.
+  test('rejects an empty object rather than reading it as no findings', () => {
+    expect(ModelHolisticReviewResultSchema.safeParse({}).success).toBe(false)
+  })
+
+  test('accepts an explicitly empty finding list', () => {
+    expect(
+      ModelHolisticReviewResultSchema.parse({ findings: [] }).findings
+    ).toEqual([])
+  })
+})
 
 describe('contextScoutRequests', () => {
   test('returns nothing for an absent or empty request list', () => {
