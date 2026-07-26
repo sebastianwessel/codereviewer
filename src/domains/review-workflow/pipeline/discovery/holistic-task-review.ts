@@ -277,6 +277,49 @@ const buildSecurityReviewText = (
     `\n${securityReviewChecklist}`
   ].join('\n')
 
+// The enumeration sweep prompt. A discovery call answers with the defect it is
+// most confident about and stops, so a file holding two defects yields one — the
+// instruction to report every instance does not overcome the pull of a single
+// response toward a single answer. This call states what has already been found
+// and asks only for what is left, which is a different question rather than a
+// louder version of the same one. Reporting nothing is an explicitly correct
+// answer, so a clean file cannot pressure the model into inventing a second
+// defect to justify the extra call.
+const sweepReviewInstruction = [
+  'CONTINUATION REVIEW. A previous pass over this same change already reported the',
+  'findings listed under ALREADY REPORTED below. Your job is to find what that pass',
+  'MISSED: report only ADDITIONAL, DISTINCT defects.',
+  'Do NOT restate, rephrase, split, or re-argue any already-reported finding, and do',
+  'not report a different symptom of the same underlying defect. A finding at the',
+  'same location as one already reported is a duplicate unless it is a genuinely',
+  'different fault with a different cause and a different fix.',
+  'Review the change again from the start with the same rigor and the same standard',
+  'of evidence: a defect you report must still name the concrete failure and the',
+  'exact path or input that triggers it. Do not lower the bar to produce output, and',
+  'do not report style, naming, formatting, documentation, or cleanup preferences.',
+  'Returning {"findings": []} is the correct and expected answer when the previous',
+  'pass genuinely found everything. An empty result is a successful review, not a',
+  'failed one.'
+].join('\n')
+
+// The already-reported list the sweep reasons against. Titles and locations are
+// enough to identify a finding without spending the budget to restate it.
+const buildSweepReviewText = (
+  taskInput: TaskReviewInput,
+  rawDiff: string,
+  reported: readonly CandidateFinding[]
+): string =>
+  [
+    `Continuation review task ${taskInput.task.id}.`,
+    sweepReviewInstruction,
+    ...buildContextSections(taskInput, rawDiff),
+    '\nALREADY REPORTED (do not repeat):',
+    ...reported.map(
+      (candidate) =>
+        `- ${candidate.location.path}:${candidate.location.startLine} — ${candidate.title}`
+    )
+  ].join('\n')
+
 type HolisticTaskReviewLogger = {
   readonly debug: (
     message: string,
@@ -503,6 +546,46 @@ export const runModelBackedHolisticTaskReview = async (
   })
   const generalCandidateCount = candidatesById.size
 
+  // Enumeration sweep: keep asking what the previous rounds missed until a round
+  // adds nothing or the budget runs out. Purely additive — a round can only add
+  // candidates at locations no earlier round claimed, so the sweep can never cost
+  // a finding the single call already had, and every candidate it adds still
+  // faces the same refutation and admission.
+  let sweepRoundsRun = 0
+  let sweepCandidateCount = 0
+  for (let round = 0; round < input.workflowInput.discoverySweepRounds; round += 1) {
+    const remaining = HOLISTIC_MAX_CANDIDATES - candidatesById.size
+    if (remaining <= 0) {
+      break
+    }
+
+    const before = candidatesById.size
+    const known = [...candidatesById.values()]
+    const sweep = await runDiscoveryCall(
+      input.runners.holisticReview,
+      input.taskInput,
+      input.task,
+      buildSweepReviewText(input.taskInput, rawDiff, known),
+      input.signal,
+      'holistic_review_sweep'
+    )
+    providerIssues.push(...sweep.providerIssues)
+    sweepRoundsRun += 1
+    droppedCount += collectCandidates({
+      findings: sweep.findings,
+      task: input.task,
+      into: candidatesById,
+      maxToAdd: remaining,
+      excludeLocations: new Set(known.map(locationKey))
+    })
+
+    const added = candidatesById.size - before
+    sweepCandidateCount += added
+    if (added === 0) {
+      break
+    }
+  }
+
   let securityFindingCount = 0
   if (input.workflowInput.securityPassEnabled) {
     const generalLocations = new Set(
@@ -538,7 +621,10 @@ export const runModelBackedHolisticTaskReview = async (
     scout_bytes_injected: scout?.bytesInjected ?? 0,
     security_finding_count: securityFindingCount,
     general_candidate_count: generalCandidateCount,
-    security_candidate_count: candidates.length - generalCandidateCount,
+    sweep_rounds_run: sweepRoundsRun,
+    sweep_candidate_count: sweepCandidateCount,
+    security_candidate_count:
+      candidates.length - generalCandidateCount - sweepCandidateCount,
     candidate_count: candidates.length,
     dropped_count: droppedCount
   })

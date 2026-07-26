@@ -27,6 +27,7 @@ export const maxChildAgentCallsForReview = (
     readonly taskCount?: number
     readonly maxConcurrentTasks?: number
     readonly securityPassEnabled?: boolean
+    readonly discoverySweepRounds?: number
     readonly contextScoutEnabled?: boolean
   } = {}
 ): number => {
@@ -38,9 +39,13 @@ export const maxChildAgentCallsForReview = (
   // one per candidate; a batch that exceeds the input budget splits in half, so a
   // small allowance is added for those splits.
   // Spec 18: the context scout adds one compact call per task when enabled.
+  // The enumeration sweep adds up to one call per additional round. Reserve them
+  // all: a sweep that runs out of budget would starve refutation, and unrefuted
+  // candidates are exactly what the precision guarantee depends on.
   const discoveryCallsPerTask =
     (input.securityPassEnabled === true ? 2 : 1) +
-    (input.contextScoutEnabled === true ? 1 : 0)
+    (input.contextScoutEnabled === true ? 1 : 0) +
+    Math.max(0, input.discoverySweepRounds ?? 0)
   const refutationCallsPerTask = 1 + refutationBatchSplitAllowance
   // Cross-file retrieval (spec 16) needs no reservation here: a mediated tool call
   // is an agent STEP, bounded by the agent's maxSteps, and never counts against the

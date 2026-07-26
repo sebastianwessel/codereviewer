@@ -105,6 +105,7 @@ export const createWorkflowInput = (
   reviewedDiffRanges: input.reviewedDiffRanges.map((range) => ({ ...range })),
   reviewedDiffText: input.reviewedDiffText,
   securityPassEnabled: input.config.security.dedicatedPass.enabled,
+    discoverySweepRounds: input.config.review.discoverySweep.maxAdditionalRounds,
   ...(input.config.review.contextScout.enabled
     ? {
         contextScout: {

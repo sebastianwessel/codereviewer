@@ -246,6 +246,124 @@ describe('runModelBackedHolisticTaskReview', () => {
     }
   })
 
+  const workflowInputWithSweep = ReviewWorkflowInputSchema.parse({
+    runId: 'run-holistic',
+    reviewedPaths: ['src/app.ts'],
+    discoverySweepRounds: 2,
+    evidence: [],
+    candidates: [],
+    instructions: [],
+    skills: [],
+    provenance: {
+      reviewer: 'review-agent',
+      modelProvider: 'openai',
+      modelName: 'holistic-test',
+      signalVersions: { typescript: '6.0.3' },
+      configHash
+    }
+  })
+
+  const findingAt = (startLine: number, title: string) => ({
+    category: 'bug',
+    severity: 'high',
+    title,
+    description: `A concrete defect at line ${startLine}.`,
+    path: 'src/app.ts',
+    startLine
+  })
+
+  // The measured behaviour this exists to fix: one discovery call reports the
+  // single most salient defect, so a file holding two yields one.
+  test('asks again for what the first call missed and keeps both findings', async () => {
+    const reviewTexts: string[] = []
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSweep,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          reviewTexts.push(holisticInput.reviewText)
+          return holisticResultWith([
+            reviewTexts.length === 1
+              ? findingAt(1, 'First defect')
+              : findingAt(2, 'Second defect')
+          ])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(2)
+    expect(result.candidates.map((candidate) => candidate.title)).toEqual([
+      'First defect',
+      'Second defect'
+    ])
+    // The continuation call states what is already known, so the model is asked a
+    // different question rather than the same one again.
+    expect(reviewTexts[1]).toContain('CONTINUATION REVIEW')
+    expect(reviewTexts[1]).toContain('ALREADY REPORTED (do not repeat)')
+    expect(reviewTexts[1]).toContain('src/app.ts:1 — First defect')
+    expect(reviewTexts[0]).not.toContain('CONTINUATION REVIEW')
+  })
+
+  test('stops sweeping as soon as a round finds nothing new', async () => {
+    const reviewTexts: string[] = []
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSweep,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          reviewTexts.push(holisticInput.reviewText)
+          return holisticResultWith(
+            reviewTexts.length === 1 ? [findingAt(1, 'Only defect')] : []
+          )
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // Two rounds are allowed but the first sweep is empty, so the second never
+    // runs: an exhausted file costs one extra call, not the configured maximum.
+    expect(reviewTexts).toHaveLength(2)
+    expect(result.candidates).toHaveLength(1)
+  })
+
+  test('drops a swept finding that repeats a location already reported', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSweep,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([findingAt(1, 'Restated defect')])
+      },
+      logger: { debug: () => {} }
+    })
+
+    // Every round returns the same location, so the sweep adds nothing and the
+    // review cannot inflate its own finding count by rephrasing itself.
+    expect(result.candidates).toHaveLength(1)
+  })
+
+  test('never sweeps when no additional rounds are configured', async () => {
+    const reviewTexts: string[] = []
+    await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          reviewTexts.push(holisticInput.reviewText)
+          return holisticResultWith([findingAt(1, 'Only defect')])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(reviewTexts).toHaveLength(1)
+  })
+
   test('runs a single general discovery call and never adds the security checklist when the pass is disabled', async () => {
     const reviewTexts: string[] = []
     await runModelBackedHolisticTaskReview({

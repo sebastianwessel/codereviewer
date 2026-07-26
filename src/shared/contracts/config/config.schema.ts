@@ -95,6 +95,15 @@ export const ContextScoutConfigSchema = z.strictObject({
   maxBytesPerSymbol: z.int().min(500).max(40000).default(4000)
 })
 
+// Enumeration sweep: extra discovery calls per task, each told what has already
+// been reported and asked only for further, distinct defects. A single discovery
+// response answers with the defect it is most confident about and stops, so a
+// file holding two defects yields one; asking again is what makes the review
+// enumerate rather than answer. Rounds stop early as soon as one adds nothing.
+export const DiscoverySweepConfigSchema = z.strictObject({
+  maxAdditionalRounds: z.int().min(0).max(4).default(0)
+})
+
 export const ReviewConfigSchema = z.strictObject({
   mode: z.enum(['local', 'ci', 'pr', 'full']).default('local'),
   depth: z.enum(['fast', 'balanced', 'thorough']).default('balanced'),
@@ -116,6 +125,9 @@ export const ReviewConfigSchema = z.strictObject({
     enabled: false,
     maxSymbols: 8,
     maxBytesPerSymbol: 4000
+  }),
+  discoverySweep: DiscoverySweepConfigSchema.default({
+    maxAdditionalRounds: 0
   })
 })
 
@@ -476,6 +488,9 @@ export const CodeReviewerConfigSchema = z.strictObject({
       enabled: false,
       maxSymbols: 8,
       maxBytesPerSymbol: 4000
+    },
+    discoverySweep: {
+      maxAdditionalRounds: 0
     }
   }),
   provider: ProviderConfigSchema.optional(),
