@@ -61,12 +61,12 @@ export const collectArmOutcomes = (
     )
   }
 
-  // Same refusal, one layer down: a shared metrics version only proves every
-  // report computed its numbers the same WAY. Pooling reports scored against
-  // DIFFERENT answer keys would silently average together runs that were never
-  // measuring the same thing -- the same failure mode `metricsVersion`
-  // mismatches already guard against, reusing that pattern rather than a
-  // second one.
+  // Stricter than the comparison renderer, deliberately. Comparing two runs with
+  // different case selections is ordinary work and only warrants a warning, but
+  // POOLING them is never right: the runs form one arm whose per-expectation hit
+  // rates share a denominator, so mixing selections silently computes a rate over
+  // a population that never existed. An arm must be homogeneous, so the aggregate
+  // digest is the correct test here even though it is too blunt for comparison.
   const answerKeyDigests = [
     ...new Set(reports.map((report) => report.provenance.answerKeyDigest))
   ]

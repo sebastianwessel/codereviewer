@@ -1,3 +1,4 @@
+import { casesWithDivergedAnswerKeys } from './eval-report-provenance.js'
 import {
   appendEvalComparisonGate,
   appendEvalComparisonSelection,
@@ -56,9 +57,22 @@ export const renderEvalComparison = (
   // changed underneath it -- the exact class of failure this guards against,
   // reusing the metricsVersion guard above rather than inventing a second
   // comparability check.
-  if (input.base.provenance.answerKeyDigest !== input.head.provenance.answerKeyDigest) {
+  // Refuse only when the cases BOTH runs scored were scored against different
+  // expectations. A different case selection also changes the aggregate digest,
+  // but comparing a filtered run against a full one is ordinary work that this
+  // report already warns about further down -- refusing it too would make the
+  // guard blunt enough that someone would reasonably delete it. What must never
+  // pass silently is the shared cases having moved underneath the comparison,
+  // which is what produced an archived run still advertising 78.8% recall
+  // against an answer key that had since changed.
+  const divergedCases = casesWithDivergedAnswerKeys(
+    input.base.provenance.answerKeyDigestByCase,
+    input.head.provenance.answerKeyDigestByCase
+  )
+
+  if (divergedCases.length > 0) {
     throw new Error(
-      `Refusing to compare evaluation runs scored against different answer keys: ${baseLabel} used answer-key digest "${input.base.provenance.answerKeyDigest}" and ${headLabel} used "${input.head.provenance.answerKeyDigest}". Re-run both sides against the same fixture selection before comparing.`
+      `Refusing to compare evaluation runs whose shared cases were scored against different expectations: ${divergedCases.join(', ')}. Re-run both sides against the current answer key before comparing.`
     )
   }
   const baseStatus = caseStatusById(input.base)

@@ -58,7 +58,28 @@ Both flags are required; omitting either is a usage error (exit `2`). Output is
 Markdown on stdout. **The command exits `0` even when it renders warnings**, so
 you can inspect partial overlap and new/removed cases.
 
-Rendered, in order:
+### Hard refusals (the command throws, exit `2` — not a warning)
+
+Before rendering anything, the command refuses outright when either check below
+fails, because a delta across either boundary reports a change in the RULER or
+in the ANSWER KEY, not in the engine, and it is indistinguishable from a real
+regression or win:
+
+- **`metricsVersion` differs between the two reports** — they computed metrics
+  under different rules.
+- **`provenance.answerKeyDigest` differs between the two reports** — they were
+  scored against different expected-finding content, even if `metricsVersion`
+  matches. This is unconditional: it fires whenever the digests differ,
+  including when the two reports also select different cases (a differing
+  selection almost always changes the digest too). This is the exact failure
+  this repository already hit once — an archived run reported 78.8% recall
+  after its answer key had since changed underneath it, with nothing in the
+  saved report revealing that.
+
+Re-run both sides with the current build, against the same fixture selection,
+before comparing. Neither check can be bypassed with a flag.
+
+Rendered, in order (once both checks above pass):
 
 | Section | Contents |
 | --- | --- |
@@ -82,6 +103,11 @@ same-dataset comparable:
   reflect judge variance rather than review quality.
 
 Treat any of these as a stop sign, not a footnote.
+
+> A differing case selection is a warning, not a refusal. The hard refusal fires
+> only when a case BOTH runs scored was scored against different expectations,
+> and it names those cases. Comparing a filtered run against a fuller one is
+> ordinary work; the shared cases changing underneath you is not.
 
 > Comparing gate status is not useful in practice: with the
 > [hard-coded thresholds](running-an-evaluation.md#the-hard-coded-gate), both

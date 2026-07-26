@@ -65,7 +65,8 @@ describe('eval report rendering', () => {
           selectedCaseIds: ['semantic-case']
         },
         provenance: {
-          answerKeyDigest: 'test-answer-key-digest',
+          answerKeyDigestByCase: {},
+      answerKeyDigest: 'test-answer-key-digest',
           configHash: 'test-config-hash'
         },
         scoring: {

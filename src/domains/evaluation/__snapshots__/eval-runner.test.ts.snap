@@ -1246,6 +1246,10 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
   "metricsVersion": "2026-07-26.max-cardinality-matching",
   "provenance": {
     "answerKeyDigest": "8a0f6c4247b62cb5ae0d182f93ca56547fb831d783599d2c4d19626a6452d8e2",
+    "answerKeyDigestByCase": {
+      "typescript-negative": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "typescript-positive": "84bbdb14b451f6f31220f6aa92c329c206251bd89767aaec60dbfe4ad5ef8a01",
+    },
     "configHash": "unspecified",
   },
   "regressionGate": {

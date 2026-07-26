@@ -225,6 +225,12 @@ export const EvalReportProvenanceSchema = z.strictObject({
   // IDENTICAL answer key; comparison and the significance module refuse to
   // diff across a mismatch here, exactly like a `metricsVersion` mismatch.
   answerKeyDigest: z.string().min(1),
+  // Per case, so a comparison can tell a deliberately different case selection
+  // (legitimate, and already warned about) from the shared cases having been
+  // scored against different expectations (the stale-answer-key incident).
+  // Defaulted empty so a report predating it still parses; such a report simply
+  // cannot answer the per-case question.
+  answerKeyDigestByCase: z.record(z.string(), z.string()).default({}),
   // sha256 digest over the effective (file + environment + CLI-override
   // merged) configuration the run used. Comparison does NOT refuse across a
   // config-hash mismatch the way it does for `answerKeyDigest`: a maintainer
@@ -279,6 +285,7 @@ export const EvalReportSchema = z.strictObject({
   // digest, exactly mirroring how `metricsVersion`'s own sentinel behaves.
   provenance: EvalReportProvenanceSchema.default({
     answerKeyDigest: 'pre-2026-07-26.provenance',
+    answerKeyDigestByCase: {},
     configHash: 'pre-2026-07-26.provenance'
   }),
   // Required: the producer always writes scoring. Defaulting it would let a

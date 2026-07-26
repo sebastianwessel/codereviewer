@@ -74,7 +74,10 @@ import {
   type EvalReportScoring,
   type EvalReportSelection
 } from './eval-report-contracts.js'
-import { computeAnswerKeyDigest } from './eval-report-provenance.js'
+import {
+  computeAnswerKeyDigest,
+  computeAnswerKeyDigestByCase
+} from './eval-report-provenance.js'
 import { EVAL_REPORT_ARTIFACT_NAME } from './eval-summary-report-rendering.js'
 
 export {
@@ -88,7 +91,12 @@ export {
   type EvalReportScoring,
   type EvalReportSelection
 } from './eval-report-contracts.js'
-export { computeAnswerKeyDigest, stableJsonDigest } from './eval-report-provenance.js'
+export {
+  casesWithDivergedAnswerKeys,
+  computeAnswerKeyDigest,
+  computeAnswerKeyDigestByCase,
+  stableJsonDigest
+} from './eval-report-provenance.js'
 export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
@@ -1544,6 +1552,7 @@ export const runEvaluation = async (
     // domain's merged config.
     provenance: {
       answerKeyDigest: computeAnswerKeyDigest(prepared.cases),
+      answerKeyDigestByCase: computeAnswerKeyDigestByCase(prepared.cases),
       configHash: input.provenance?.configHash ?? 'unspecified',
       ...(input.provenance?.providerId === undefined
         ? {}

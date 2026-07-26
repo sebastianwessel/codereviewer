@@ -270,6 +270,36 @@ regression or win. Failing loudly is the only safe behaviour here: this project 
 already published a recall figure that was scored against a stale answer key, and
 nothing in the artifact revealed it.
 
+## Provenance
+
+`metricsVersion` proves the numbers in a report were computed under known rules.
+It proves nothing about WHAT was scored or under WHAT configuration — and this
+project has already published a recall figure (78.8%) that was silently scored
+against an answer key that had since changed underneath it, with nothing in the
+artifact revealing that. Every report also records `provenance`:
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `provenance.answerKeyDigest` | sha256-family digest string | A stable digest over the expected-finding CONTENT (category, severity, path, effective match mode, declared `lineRange`, semantic summary) of every case in `selection.selectedCaseIds`. Deliberately scoped to expected-finding content only — it excludes `expectedNoFindingZones`, `changedFiles`, `tags`, and other case metadata, none of which change what recall or precision are scored against. Computed by the eval domain itself from the cases it actually scored; a caller cannot supply or override it. Cases are sorted by id before hashing (order-insensitive across cases, since selection order carries no meaning), but expected findings keep their original order WITHIN a case (order-sensitive, since `expectedIndex` is part of the matching contract). Reports saved before this field existed default to a fixed sentinel digest, mirroring how `metricsVersion` itself defaults for old reports. |
+| `provenance.configHash` | digest string | A digest over the effective (file + environment + CLI-override merged) configuration the run used, supplied by the CLI. Comparison does NOT refuse across a `configHash` mismatch: a maintainer legitimately compares two runs under different configurations to measure the effect of changing one. The hash exists so an archived run can be read back and its configuration identity checked, not to gate diffing. Defaults to `"unspecified"` when the caller does not supply one (e.g. a direct unit-test call to the eval runner). |
+| `provenance.providerId` | string, omitted when no provider | The provider identity (`ProviderConfig.id`) the run's semantic judge was built from. Omitted for a fully offline run (no expected findings, no judge needed). |
+| `provenance.modelName` | string, omitted when no provider | The model name (`ProviderConfig.model`) the run's semantic judge was built from. Omitted under the same condition as `providerId`. |
+
+`eval compare` refuses to diff two reports when any case they BOTH scored was
+scored against different expectations, named individually in the error. It uses
+`provenance.answerKeyDigestByCase` for this rather than the aggregate digest,
+because the two situations deserve opposite treatment. Comparing a filtered run
+against a fuller one changes the aggregate digest and is ordinary work, already
+covered by the differing-selection warning below; the shared cases having moved
+underneath the comparison is the stale-answer-key incident, which looks exactly
+like a real regression or win. A guard blunt enough to block the first would
+reasonably be deleted, and would take the second with it.
+
+The significance module is deliberately stricter and refuses on the aggregate
+digest: its reports form one arm whose per-expectation hit rates share a
+denominator, so pooling different selections computes a rate over a population
+that never existed. Comparison tolerates a difference that pooling cannot.
+
 ## Metrics
 
 | Metric | Definition |
@@ -323,6 +353,9 @@ change until that paired check is done.
 | `artifactOnlyMatchedFindingCount` | Count of artifact-only findings matched to expected findings. |
 | `artifactOnlyFalsePositiveCount` | Count of artifact-only findings that neither match expected findings nor duplicate matched artifact-only findings. |
 | `trustedDeterministicFindingCount` | Count of actionable findings seeded by trusted deterministic-rule evidence rather than model review. |
+| `rejectionReasonCounts` | Rejected/demoted candidates tallied by `RejectReason`, aggregated across cases. Shows what the admission gate discarded before anything downstream could see it. |
+| `rejectionSeverityCounts` | The same rejected candidates tallied by the candidate's OWN severity instead of by reason. Without this, "is the model over-calling severity" is confounded by the admission floor deleting every model-origin `low` candidate before anyone downstream can observe it — the floor and the question it is suspected of confounding would otherwise share exactly one blind spot. A rejection whose candidate severity could not be recovered (currently: refutation-stage rejections, whose contract does not yet thread severity through) is bucketed under `unknown` rather than silently dropped, so these counts always sum to the case's rejected-candidate count. |
+| `rejectionReasonBySeverityCounts` | `rejectionReasonCounts` cross-tabulated by severity: `{ [reason]: { [severity]: count } }`. Lets a spike in one rejection reason be attributed to a severity band instead of only read in aggregate. |
 | `refutationFalseNegativeCount` | **Upper bound, not a measurement.** Expected findings left unmatched in a case that also rejected at least one candidate, bounded by the unmatched-expected count. Whether the rejected candidate was actually the missing expectation is not established, because doing so would mean judging every rejected candidate against every expectation and the evaluation does not spend those provider calls. Rendered with its upper-bound label so it is not read as a count of proven refuter mistakes. |
 | `refutationFalsePositiveCount` | Candidates the refuter marked `proved` that were not real defects: unmatched findings the plausibility judge deemed spurious, bounded by the case's proved refutations so a refutation-exempt trusted deterministic finding is never charged to the refuter. Counting every unmatched proved finding instead — as this metric originally did — charges the refuter for the genuine defects the fixture never listed, which is exactly what the plausibility judge exists to exonerate, and made the metric numerically identical to `unlistedRealFindingCount` on a clean run. |
 | `fixJudgmentAccuracy` | Fix lane (spec 12) accuracy over the findings it was **eligible** to act on (at or above `fix.minSeverity` — the only ones it judges) that carry a ground-truth label: the fraction whose judgment agrees with ground truth. Ground truth is corrected by the plausibility judge: a matched finding **or** an unmatched-but-plausible (unlisted-real) finding is `real`; a genuine false positive is `false-positive`. Empty value is `0`. Interpreted with `fixJudgedFindingCount`. |
@@ -398,11 +431,16 @@ for automation.
 
 `codereviewer eval compare --base <report.json> --head <report.json>` compares
 two eval reports and prints gate status, selection status, metric deltas, and
-case transitions. Selection status must identify whether
-`selection.selectedCaseIds` are identical and whether fixture source/slice root
-metadata match. When selected case sets differ, the comparison must render a
-warning before metric deltas because aggregate numbers are not same-dataset
-comparable. When either report has `scoring.judgeTrustworthy = false`, or the two
+case transitions. Before any of that, the command refuses outright (throws
+rather than rendering) when the two reports' `metricsVersion` differ, or when
+their `provenance.answerKeyDigest` differ — see "Provenance" above. Both
+refusals fire unconditionally; the answer-key refusal is not limited to cases
+where `selection.selectedCaseIds` also differ, and in practice a differing case
+selection almost always produces a differing digest too. Selection status must
+identify whether `selection.selectedCaseIds` are identical and whether fixture
+source/slice root metadata match. When selected case sets differ, the comparison
+must render a warning before metric deltas because aggregate numbers are not
+same-dataset comparable. When either report has `scoring.judgeTrustworthy = false`, or the two
 reports' `scoring.judgeAgreement` values differ materially, the comparison must
 render a warning before metric deltas because the deltas may reflect judge
 variance rather than review quality. The command may still exit `0` after
@@ -484,6 +522,12 @@ matching strategy produced the run:
 | --- | --- | --- |
 | `scoring.judgeAgreement` | number or omitted | Measured semantic-judge agreement against the calibration set for this run. Omitted when no pair was judged. |
 | `scoring.judgeTrustworthy` | boolean | `false` when `judgeAgreement` is below the configured minimum, marking the run's quality metrics untrustworthy. |
+
+`eval-report.json` must also include a `provenance` object proving WHAT was
+scored and under WHAT configuration, distinct from `scoring` above (which
+proves which semantic judge scored it) and from `metricsVersion` (which proves
+which rules scored it). See "Provenance" above for the full field table and the
+comparison/significance refusal rules it drives.
 
 `codereviewer eval run` may override review posture for one run without editing
 repository config. Supported eval-only overrides are `--review-mode

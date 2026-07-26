@@ -140,6 +140,8 @@ with an explicit denominator count, and the renderer prints
 | `severityCheckCount` | — | — | Denominator of the above. |
 | `lineAccuracy` | Matches whose `lineOverlaps` flag is true | `lineCheckCount` | **See the note below.** |
 | `lineCheckCount` | Matched findings whose expected finding is `path-line` **and** declares a `lineRange` | — | Denominator of the above. |
+| `linePlacementRate` | Matches whose produced `startLine` falls within the expected `lineRange` (same 3-line tolerance `lineAccuracy` uses) | `linePlacementCheckCount` | **Diagnostic only — never gates.** See "linePlacementRate is a different, broader measurement" below. |
+| `linePlacementCheckCount` | Matched findings whose expected finding declares a `lineRange`, **regardless of match mode** | — | Denominator of the above. |
 
 > ### `lineAccuracy` only measures `path-line` expectations
 >
@@ -160,16 +162,39 @@ with an explicit denominator count, and the renderer prints
 > honest reading: the metric is undefined there, not failing.
 >
 > **The real-repository corpus is one of those corpora.** All 42 of its expected
-> findings are `path-semantic`, so it reports `n/a (0 checked)` and line
-> placement on real code is currently unmeasured. Do not read that as a result
-> in either direction. `lineAccuracy` is only a measurement on corpora built
-> from `path-line` expectations, such as the proof-quality slices.
+> findings are `path-semantic`, so `lineAccuracy` itself still reports
+> `n/a (0 checked)` there. `lineAccuracy` is only a measurement on corpora built
+> from `path-line` expectations, such as the proof-quality slices; that has not
+> changed. `linePlacementRate` (below) is the metric that measures line
+> placement on `path-semantic` corpora instead.
 >
 > Before 2026-07-26 the denominator admitted any expectation carrying a
 > `lineRange` regardless of match mode, while only `path-line` could be
 > credited. A 30-case real-repository run reported `0.0% (23 checked)` — a
 > number that read as total failure of line placement and carried no
 > information. Discount that figure and any earlier one like it.
+
+> ### `linePlacementRate` is a different, broader measurement — not a replacement
+>
+> `linePlacementRate` answers a genuinely different question from
+> `lineAccuracy`: "roughly how close are reported line numbers to the expected
+> location, across every match mode that declares one", as opposed to
+> `lineAccuracy`'s strict "did this `path-line` match land in an overlapping
+> range". Do not conflate the two or read one as a refinement of the other:
+>
+> - Its denominator is every MATCHED expectation that declares a `lineRange`,
+>   regardless of `matchMode` — chiefly `path-semantic`, which is the entire
+>   primary real-repository corpus and which `lineAccuracy` structurally cannot
+>   score at all.
+> - It reuses `lineAccuracy`'s exact 3-line overlap tolerance, applied to the
+>   matched finding's produced `startLine` against the expected `lineRange`.
+> - It is **diagnostic only**. It does not gate the regression gate, does not
+>   feed `f1` or any composite score, and answers a measurement question rather
+>   than a pass/fail one. Before this metric existed, "are reported line
+>   numbers right on real code" had no answer in either direction for any
+>   `path-semantic` corpus — `lineOverlaps` was simply `false` for every such
+>   match, which is not the same as "unmeasured" but reads that way if you do
+>   not also check the match mode.
 
 ---
 
@@ -243,6 +268,9 @@ actionability gains.
 
 | Metric | What it counts | Denominator / note |
 | --- | --- | --- |
+| `rejectionReasonCounts` | Rejected/demoted candidates tallied by `RejectReason`, aggregated across cases | — | Shows what the admission gate discarded before anything downstream could see it. |
+| `rejectionSeverityCounts` | The same rejected candidates tallied by the candidate's OWN severity instead of by reason | — | Without this, "is the model over-calling severity" is confounded by the admission floor deleting every model-origin `low` candidate before anyone downstream can observe it. A rejection whose candidate severity could not be recovered (currently: refutation-stage rejections) is bucketed under `unknown` rather than dropped, so these counts always sum to the case's rejected-candidate count. |
+| `rejectionReasonBySeverityCounts` | `rejectionReasonCounts` cross-tabulated by severity: `{ [reason]: { [severity]: count } }` | — | Attributes a spike in one rejection reason to a severity band instead of only reading it in aggregate. |
 | `refutationFalseNegativeCount` | Per case, `min(rejectedFindings, unmatchedExpected)` | Expectations that were plausibly demoted away. Bounded so a case that rejected many duplicates of an otherwise-matched expectation is not penalised. |
 | `refutationFalsePositiveCount` | Per case, `max(0, provedRefutations − matched)` | `proved` verdicts whose finding never matched. |
 | `fixJudgmentAccuracy` | Fix-lane judgments agreeing with ground truth | `fixJudgedFindingCount` |

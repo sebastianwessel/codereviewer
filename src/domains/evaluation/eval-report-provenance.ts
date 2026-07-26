@@ -85,3 +85,44 @@ export const computeAnswerKeyDigest = (
         }))
       }))
   )
+
+// The same content, keyed per case, so a comparison can ask the question that
+// actually matters: did the expectations for a case present in BOTH runs change
+// underneath them?
+//
+// The aggregate digest above cannot distinguish that from a deliberately
+// different case selection, and those deserve opposite treatment. Comparing a
+// filtered run against a full one is a legitimate thing to do and the report
+// already warns about it; comparing two runs whose SHARED cases were scored
+// against different expectations is the incident that produced an archived
+// 78.8% recall figure nobody could see was stale. Refusing both would make the
+// guard so blunt it blocks ordinary work, which is how guards end up removed.
+export const computeAnswerKeyDigestByCase = (
+  cases: readonly EvalCase[]
+): Readonly<Record<string, string>> =>
+  Object.fromEntries(
+    cases.map((evalCase) => [
+      evalCase.id,
+      stableJsonDigest(
+        evalCase.expectedFindings.map((expected) => ({
+          category: expected.category,
+          severity: expected.severity,
+          path: expected.path ?? null,
+          lineRange: expected.lineRange ?? null,
+          matchMode: resolveExpectedFindingMatchMode(expected),
+          semanticSummary: expected.semanticSummary
+        }))
+      )
+    ])
+  )
+
+// Cases both runs scored, whose expectations differ between them. An empty list
+// means every shared case was scored against the same answer key, whatever else
+// differs about the two runs.
+export const casesWithDivergedAnswerKeys = (
+  base: Readonly<Record<string, string>>,
+  head: Readonly<Record<string, string>>
+): readonly string[] =>
+  Object.keys(base)
+    .filter((caseId) => head[caseId] !== undefined && head[caseId] !== base[caseId])
+    .sort((left, right) => left.localeCompare(right))
