@@ -1,0 +1,20 @@
+{
+  // Build-only configuration. `tsconfig.json` deliberately covers tests and
+  // `vitest.config.ts` so `typecheck` checks them too, but including a file
+  // outside `src/` widens the inferred common root to the repository root: every
+  // emitted file moved down into `dist/src/`, which did not match the `bin` and
+  // `exports` paths in package.json, and a compiled `vitest.config.js` shipped in
+  // the build output alongside 153 compiled test files.
+  //
+  // `types` is explicit because the Node ambient types were reaching the program
+  // only through `vitest.config.ts` importing `vitest/config`. Dropping that file
+  // from the build silently removed `Buffer` and the `node:*` modules, so the
+  // build was depending on a test configuration for its platform types.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

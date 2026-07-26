@@ -40,14 +40,15 @@ npm --prefix "$ENGINE_DIR" run build
 ```
 
 ```bash
-cd "$TARGET_DIR" && node "$ENGINE_DIR/dist/src/cli/main.js" review --base-ref origin/main --head-ref HEAD
+cd "$TARGET_DIR" && node "$ENGINE_DIR/dist/cli/main.js" review --base-ref origin/main --head-ref HEAD
 ```
 
 Artifacts land under `<target>/.codereviewer/runs/<runId>/`, because that is
 where the working directory points.
 
-> The `bin` entry in `package.json` points at `./dist/cli/main.js`, while
-> `tsc` emits `dist/src/cli/main.js`. Use the emitted path shown above.
+> The build emits `dist/cli/main.js`, matching the `bin` entry in
+> `package.json`. Invoking that file directly is what a published install would
+> run, so this shape stays valid once the package ships.
 
 ---
 

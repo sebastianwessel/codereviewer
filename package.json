@@ -15,7 +15,7 @@
     "node": ">=24.15.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "generate:schemas": "tsx scripts/generate-schemas.mjs",
     "generate:schemas:check": "tsx scripts/generate-schemas.mjs --check",
     "update:model-pricing": "tsx scripts/update-model-pricing.ts",

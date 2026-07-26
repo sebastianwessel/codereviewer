@@ -101,10 +101,12 @@ requires tracked build artifacts:
 rm -rf dist
 ```
 
-> `tsc` emits to `dist/src/...` because `tsconfig.json` includes
-> `vitest.config.ts` alongside `src/`, which widens the inferred root. The
-> `bin` entry in `package.json` points at `./dist/cli/main.js`; the file
-> actually emitted is `dist/src/cli/main.js`.
+> The build uses `tsconfig.build.json`, not `tsconfig.json`. It pins
+> `rootDir` to `src` and excludes tests, so the emitted layout is
+> `dist/cli/main.js` and `dist/index.js` — the paths `package.json` declares in
+> `bin` and `exports`. `tsconfig.json` stays broader on purpose: `typecheck`
+> covers the tests and `vitest.config.ts` as well, which the build must not
+> emit.
 
 ---
 
