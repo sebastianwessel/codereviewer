@@ -138,8 +138,15 @@ export const EvalMetricsSchema = z.strictObject({
   severityWeightedPrecision: RateSchema,
   severityWeightedRecall: RateSchema,
   severityWeightedF1: RateSchema,
+  // Both rates are computed over MATCHED findings, so their denominator is empty
+  // whenever nothing matched, and lineAccuracy's is empty on any corpus whose
+  // expected findings all match semantically and declare no line to check. The
+  // counts travel with the rates so a report can say "undefined" instead of
+  // rendering an empty denominator as 0.0%, which reads as total failure.
   lineAccuracy: RateSchema,
+  lineCheckCount: z.int().min(0).default(0),
   severityAccuracy: RateSchema,
+  severityCheckCount: z.int().min(0).default(0),
   falsePositiveCount: z.int().min(0),
   // Trustworthy false-positive count: unmatched findings the plausibility judge
   // deemed spurious, plus any whose plausibility judgment could not be completed
@@ -555,6 +562,12 @@ export const calculateEvalMetrics = (
     severityWeightedF1: harmonicMean(
       severityWeightedPrecision,
       severityWeightedRecall
+    ),
+    lineCheckCount: sum(
+      caseResults.map((result) => result.matchedLineCheckCount)
+    ),
+    severityCheckCount: sum(
+      caseResults.map((result) => result.matchedSeverityCheckCount)
     ),
     lineAccuracy: ratio(
       sum(caseResults.map((result) => result.accurateLineMatchCount)),

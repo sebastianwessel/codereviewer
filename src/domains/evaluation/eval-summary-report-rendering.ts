@@ -13,7 +13,8 @@ import {
   formatDuration,
   formatInteger,
   formatListValue,
-  formatPercent
+  formatPercent,
+  formatRateOverCount
 } from './eval-report-markdown-formatting.js'
 import { expectedLocationLabel } from './eval-report-expected-finding-labels.js'
 import {
@@ -131,7 +132,7 @@ const appendEvalSummaryHeadline = (
       `| False positives | Adjusted precision | ${formatPercent(metrics.adjustedPrecision)} |`,
       `| False positives | Genuine false positives | ${formatInteger(metrics.genuineFalsePositiveCount)} |`,
       `| False positives | Duplicate findings | ${formatInteger(metrics.duplicateFindingCount)} |`,
-      `| Priority | Severity accuracy | ${formatPercent(metrics.severityAccuracy)} |`,
+      `| Priority | Severity accuracy | ${formatRateOverCount(metrics.severityAccuracy, metrics.severityCheckCount)} |`,
       `| Health | Provider error rate | ${formatPercent(metrics.providerErrorRate)} |`,
       `| Health | Cost | ${formatCostMetric(metrics)} |`
     ]
@@ -156,8 +157,8 @@ const appendEvalSummaryMetrics = (
       `| Adjusted precision | ${formatPercent(report.metrics.adjustedPrecision)} |`,
       `| F1 | ${formatPercent(report.metrics.f1)} |`,
       `| Severity weighted F1 | ${formatPercent(report.metrics.severityWeightedF1)} |`,
-      `| Line accuracy | ${formatPercent(report.metrics.lineAccuracy)} |`,
-      `| Severity accuracy | ${formatPercent(report.metrics.severityAccuracy)} |`,
+      `| Line accuracy | ${formatRateOverCount(report.metrics.lineAccuracy, report.metrics.lineCheckCount)} |`,
+      `| Severity accuracy | ${formatRateOverCount(report.metrics.severityAccuracy, report.metrics.severityCheckCount)} |`,
       `| Parse validity | ${formatPercent(report.metrics.parseValidity)} |`,
       `| Provider error rate | ${formatPercent(report.metrics.providerErrorRate)} |`,
       `| Provider issue rate | ${formatPercent(report.metrics.providerIssueRate)} (${report.metrics.providerIssueCount} cases) |`,
@@ -265,7 +266,7 @@ type EvalSummaryMetricGroup = EvalReport['metricGroups'][number]
 const formatEvalSummaryMetricGroupRow = (
   group: EvalSummaryMetricGroup
 ): string =>
-  `| ${group.groupBy} | ${escapeMarkdownCell(group.key)} | ${group.fixtureCount} | ${formatPercent(group.metrics.recall)} | ${formatPercent(group.metrics.precision)} | ${formatPercent(group.metrics.f1)} | ${formatPercent(group.metrics.lineAccuracy)} | ${group.metrics.falsePositiveCount} |`
+  `| ${group.groupBy} | ${escapeMarkdownCell(group.key)} | ${group.fixtureCount} | ${formatPercent(group.metrics.recall)} | ${formatPercent(group.metrics.precision)} | ${formatPercent(group.metrics.f1)} | ${formatRateOverCount(group.metrics.lineAccuracy, group.metrics.lineCheckCount)} | ${group.metrics.falsePositiveCount} |`
 
 const appendEvalSummaryMetricGroups = (
   lines: string[],

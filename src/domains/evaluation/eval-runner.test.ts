@@ -765,8 +765,8 @@ describe('eval runner', () => {
     expect(summary).toContain('| Fixture source | slice-root |')
     expect(summary).toContain('| Slice root | eval/benchmarks/crb |')
     expect(summary).toContain('## Metric Groups')
-    expect(summary).toContain('| sourceProfile | benchmark-semantic | 1 | 100.0% | 100.0% | 100.0% | 100.0% | 0 |')
-    expect(summary).toContain('| language | typescript | 2 | 100.0% | 100.0% | 100.0% | 100.0% | 0 |')
+    expect(summary).toContain('| sourceProfile | benchmark-semantic | 1 | 100.0% | 100.0% | 100.0% | n/a (0 checked) | 0 |')
+    expect(summary).toContain('| language | typescript | 2 | 100.0% | 100.0% | 100.0% | 100.0% (1 checked) | 0 |')
   })
 
   test('scores semantic-only paraphrases through the judge and records its reason', async () => {

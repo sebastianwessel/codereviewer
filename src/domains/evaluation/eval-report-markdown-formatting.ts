@@ -6,6 +6,18 @@ export type EvalCostMetricInput = {
 export const formatPercent = (value: number): string =>
   `${(value * 100).toFixed(1)}%`
 
+// A rate computed over an empty denominator is undefined, not zero. Rendering it
+// as 0.0% reads as total failure and has been misread that way: lineAccuracy
+// shows an empty denominator on any corpus whose expected findings all match
+// semantically and declare no line to check.
+export const formatRateOverCount = (
+  value: number,
+  checkedCount: number
+): string =>
+  checkedCount === 0
+    ? 'n/a (0 checked)'
+    : `${formatPercent(value)} (${checkedCount} checked)`
+
 export const formatDuration = (durationMs: number): string =>
   durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`
 
