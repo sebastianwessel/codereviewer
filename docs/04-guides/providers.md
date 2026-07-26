@@ -5,7 +5,7 @@ base dependencies: each adapter is an optional peer package you install only if
 you use it.
 
 Full key/type/range tables live in the
-[configuration reference](../06-reference/configuration/) and
+[configuration reference](../06-reference/configuration/README.md) and
 [environment.md](../06-reference/environment.md).
 
 ---

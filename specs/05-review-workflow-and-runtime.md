@@ -314,6 +314,38 @@ id before refutation.
   Raw candidates do not influence later workers before they pass the configured
   safe digest boundary.
 
+### Measured Outcome Of The Additional Discovery Passes
+
+Discovery emits roughly one finding per file, and that is a property of the model's
+answer rather than of the pipeline. Instrumenting a live run showed every task
+producing one finding, keeping one candidate, and dropping none, while refutation
+proved nearly all of them. On the real-repository corpus, cases holding one expected
+defect score 16 of 24 while cases holding two score 7 of 18, and in seven of those
+nine the review found exactly one of the two.
+
+Two additional passes were built against this and measured on that corpus, three
+seeds each: an enumeration sweep that re-asks what the previous round missed, and the
+diverse-lens pass this section describes. Baseline recall is 54.8% (50.0 / 54.8 /
+59.5, sd 4.8pp). The sweep gives 54.8% (50.0 / 52.4 / 61.9) at about +40% cost. The
+lens pass gives 54.0% (57.1 / 52.4 / 52.4) at about +47% cost. **Neither is a
+measurable improvement**, so both are off by default.
+
+The lens pass does surface more plausibility-confirmed defects the answer key never
+listed — 7.3 per run against 5.3 — which is a real if unproven signal, since the gap
+is smaller than the corpus's own seed-to-seed spread.
+
+Two implementation lessons are worth keeping. The first lens measurement was invalid:
+the additive merge suppressed any candidate sharing a (path, line) with an earlier
+one, and a probe caught the pass returning two findings that were both discarded for
+sharing a start line with the general finding. A line can hold more than one defect,
+so the general-purpose passes now suppress on (path, line, category). And a response
+truncated by the output-token budget used to parse as "no findings", making an
+exhausted review indistinguishable from a clean file.
+
+**Open question for a human decision:** this section requires two serial passes per
+task, but only one is issued by default, and the measurement above gives no evidence
+that the second earns its cost. Either the default is wrong or this requirement is.
+
 ## Refutation
 
 Every candidate finding passes a precision filter run by the `refute_finding`

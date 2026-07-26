@@ -162,7 +162,8 @@ Things the checker actually looks for today, so you do not trip them by
 accident:
 
 - Local Markdown links in `README.md`, `docs/` and `specs/` must resolve.
-- Use `specs/` as the spec root; a `spec/` reference is spec-drift.
+- Use `specs/` as the canonical spec root. Referring to a singular `spec`
+  directory instead is spec-drift.
 - Use `.codereviewer` paths; the obsolete artifact root is security-drift.
 - A documented CLI command must be one of `config`, `review`, `baseline`,
   `eval`, `drift`.

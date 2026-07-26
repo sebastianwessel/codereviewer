@@ -121,9 +121,14 @@ behaviour rather than a discovery gap — the review reports the most salient de
 in a file and moves on. A corpus of one-finding cases cannot see this at all,
 which is why expected findings per case is itself a property worth curating.
 
-`lineAccuracy` reads 0.0% on this corpus because every expected finding uses
-`path-semantic` matching and declares no line check, leaving the denominator
-empty. The metric is undefined here, not failing.
+`lineAccuracy` read 0.0% on this corpus, and the reason recorded here first — an
+empty denominator — was wrong. Every expected finding declares a `lineRange`, so
+all matched ones entered the denominator; the numerator was unreachable because
+the matcher credits a line overlap only for `path-line` matching, and every
+expectation here is `path-semantic`. The metric could not pass, and was displayed
+as though it had failed. Both sides are now gated on `path-line`, so the corpus
+reports `n/a (0 checked)`. The consequence to remember is that **line placement on
+real code is unmeasured here**, in either direction.
 
 ## Acceptance
 

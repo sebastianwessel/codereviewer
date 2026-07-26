@@ -4,7 +4,7 @@ Task-oriented recipes for `.codereviewer/config.json`. Each recipe shows the
 smallest configuration that achieves one goal.
 
 For the exhaustive list of keys, types, ranges and defaults, see the
-[configuration reference](../06-reference/configuration/). For environment
+[configuration reference](../06-reference/configuration/README.md). For environment
 variables, see [environment.md](../06-reference/environment.md).
 
 ---

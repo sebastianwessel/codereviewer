@@ -12,7 +12,7 @@ proposes and how much the admission side lets through.
 
 Change **one dial at a time** and measure. Per-case model variance is real, so
 a small difference between two runs is noise, not a result. See the
-[quality docs](../05-quality/) for how to measure a change honestly.
+[quality docs](../05-quality/README.md) for how to measure a change honestly.
 
 ---
 

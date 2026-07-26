@@ -138,35 +138,38 @@ with an explicit denominator count, and the renderer prints
 | --- | --- | --- | --- |
 | `severityAccuracy` | Matches where the finding's severity equals the expected severity exactly | `severityCheckCount` = every matched finding | Exact equality — no partial credit for being one level off. |
 | `severityCheckCount` | — | — | Denominator of the above. |
-| `lineAccuracy` | Matches whose `lineOverlaps` flag is true | `lineCheckCount` | **See the warning below.** |
-| `lineCheckCount` | Matched findings whose expected finding declares a `lineRange` | — | Denominator of the above. |
+| `lineAccuracy` | Matches whose `lineOverlaps` flag is true | `lineCheckCount` | **See the note below.** |
+| `lineCheckCount` | Matched findings whose expected finding is `path-line` **and** declares a `lineRange` | — | Denominator of the above. |
 
-> ### `lineAccuracy` is only meaningful for `path-line` expectations
+> ### `lineAccuracy` only measures `path-line` expectations
 >
-> The two sides of this ratio are gated on different conditions, and the
-> mismatch is load-bearing:
+> Line overlap is scored for one match mode. Both sides of the ratio are gated
+> on the same condition: the expectation's effective `matchMode` is `path-line`
+> and it declares a `lineRange`.
 >
-> - `lineCheckCount` counts a matched finding whenever its expected finding
->   declares a `lineRange` — **regardless of `matchMode`**.
-> - `lineOverlaps` (the numerator) is only ever set true for expectations whose
->   effective `matchMode` is `path-line`. For `path-semantic` and `semantic-only`
->   it is hard-coded to `false`.
+> - `path-semantic` and `semantic-only` expectations are never scored for line
+>   overlap, so they never enter the denominator — **even when they declare a
+>   `lineRange`**. On `path-semantic` the range documents where the defect sits,
+>   for a human reader and for the recall report's location labels; it is not a
+>   line check.
+> - An expectation that is explicitly `path-line` but declares no `lineRange` is
+>   excluded too. It asserts no line, and the overlap rule would otherwise
+>   credit it unconditionally.
 >
-> Consequence: a corpus whose expectations are `path-semantic` **but still carry
-> a `lineRange`** produces `lineAccuracy` `0.0%` over a non-empty denominator.
-> That is exactly what the real-repository corpus does — a recent 30-case run
-> reported `0.0% (23 checked)`. The metric carries no information there; it is
-> not a measurement of the engine's line placement.
+> A corpus with no scored expectation reports `n/a (0 checked)`. That is the
+> honest reading: the metric is undefined there, not failing.
 >
-> `n/a (0 checked)` — the genuinely undefined case — appears only when no matched
-> expectation declares a `lineRange` at all, as on the `semantic-only`
-> Code Review Bench-style pack.
+> **The real-repository corpus is one of those corpora.** All 42 of its expected
+> findings are `path-semantic`, so it reports `n/a (0 checked)` and line
+> placement on real code is currently unmeasured. Do not read that as a result
+> in either direction. `lineAccuracy` is only a measurement on corpora built
+> from `path-line` expectations, such as the proof-quality slices.
 >
-> **Rule: only quote `lineAccuracy` for corpora built from `path-line`
-> expectations**, such as the proof-quality slices.
->
-> (`specs/17-real-repository-eval-corpus.md` attributes the 0.0% to an empty
-> denominator. The code above is the accurate account.)
+> Before 2026-07-26 the denominator admitted any expectation carrying a
+> `lineRange` regardless of match mode, while only `path-line` could be
+> credited. A 30-case real-repository run reported `0.0% (23 checked)` — a
+> number that read as total failure of line placement and carried no
+> information. Discount that figure and any earlier one like it.
 
 ---
 

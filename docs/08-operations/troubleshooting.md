@@ -59,7 +59,7 @@ the submitted value.
 
 | Symptom | Cause |
 | --- | --- |
-| `Unrecognized key` | Every config object is strict. Check spelling and nesting; the [configuration reference](../06-reference/configuration/) has the exact shape. |
+| `Unrecognized key` | Every config object is strict. Check spelling and nesting; the [configuration reference](../06-reference/configuration/README.md) has the exact shape. |
 | A `security.*` key "must be false" | `allowShell`, `allowNetwork`, `allowFilesystemWrite` and `captureContentTelemetry` accept the literal `false` only. There is no override. |
 | `aiReview.requireRefutation` rejected | It accepts the literal `true` only. Refutation cannot be disabled. |
 | `Path must be repository-relative` / `must not traverse above root` | A configured path escapes the repository root. |
@@ -267,7 +267,7 @@ reports what was spent rather than stopping it. See
 | Misses races, error paths, resource leaks | `review.discoveryLensPass.enabled: true` |
 | Misses security issues specifically | `security.dedicatedPass.enabled: true` |
 | Misses defects that depend on unchanged code | `review.contextScout.enabled: true` |
-| Two runs disagree | Expected. Model output is non-deterministic; a small difference between runs is noise. Measure on a corpus, not on one run — see the [quality docs](../05-quality/) |
+| Two runs disagree | Expected. Model output is non-deterministic; a small difference between runs is noise. Measure on a corpus, not on one run — see the [quality docs](../05-quality/README.md) |
 
 Depth guidance and the full dial list: [tuning-noise-and-recall.md](../04-guides/tuning-noise-and-recall.md).
 

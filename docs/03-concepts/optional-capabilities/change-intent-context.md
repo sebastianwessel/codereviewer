@@ -5,7 +5,6 @@
 > text to hand; do not expect a measured recall number.
 
 Spec: [`specs/11-external-context-ingestion.md`](../../../specs/11-external-context-ingestion.md), 2026-07-22.
-Design rationale: [`docs/design/external-context-ingestion.md`](../../design/external-context-ingestion.md).
 
 ## The problem it addresses
 
