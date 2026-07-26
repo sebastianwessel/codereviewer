@@ -57,8 +57,11 @@ run time is non-fatal and surfaces as a run warning.
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `evaluation.enabled` | boolean | `false` | Present in the schema; the CLI eval path does not read it — case selection is driven by `eval run` flags instead. |
 | `evaluation.minJudgeAgreement` | number 0–1 | `0.9` | Minimum semantic-judge agreement against the committed calibration set. The judge is the sole authority for every eval quality metric, so a run below this bar reports `scoring.judgeTrustworthy = false`. It marks metrics untrustworthy — **it does not fail the regression gate**. |
+
+There is deliberately no `evaluation.enabled` key: case selection is driven by
+`eval run` CLI flags, not config, so an `enabled` flag would have been accepted
+and then silently ignored.
 
 ### The `eval run` regression gate is not configurable
 

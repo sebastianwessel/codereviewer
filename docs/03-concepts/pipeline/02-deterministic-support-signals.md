@@ -93,6 +93,9 @@ checks, tests, and SAST, and it does not try to duplicate them.
 | Key | Default | Effect |
 | --- | --- | --- |
 | `aiReview.deterministicSignalMode` | `support` | `support` injects facts, test mappings, and referenced definitions into task packets; `disabled` keeps clustering but sends none of it to the model |
-| `security.signals.enabled` | `false` | Reserved for a future deterministic security-signal layer; carries no behaviour today |
+
+There is no `security.signals.enabled` key today. The deterministic security-signal
+evidence layer it would have gated (spec 15, Mechanism 2) has no implementation yet;
+a config key is introduced alongside the layer, not ahead of it.
 
 See also: [Trust model](../trust-model.md).

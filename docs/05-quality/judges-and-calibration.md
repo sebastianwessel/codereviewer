@@ -114,11 +114,17 @@ it must not infer from missing source code.
 **Output contract.** A strict object: `{ match: boolean, reason: string }`,
 1–1000 characters of reason. No confidence number.
 
-**Determinism.** Assignment order is fully deterministic — expected findings
-ascending, then admitted findings ascending. The first judge-accepted finding
-claims the expectation and is removed from the pool, so one admitted finding
-matches at most one expected finding, and repeated runs over the same inputs
-assign the same pairs. Cases are scored sequentially so judge calls stay ordered.
+**Assignment.** The matcher maximises how many expectations get matched, rather
+than taking the first acceptable pairing. Taking the first one lets a loose accept
+for an earlier expectation swallow the only finding a later expectation could have
+matched, scoring that later expectation as a miss the reviewer never made — a bias
+pointing the same way as the multi-defect gap this corpus is meant to measure.
+
+**Determinism.** Expectations are served in ascending order and each prefers the
+lowest available finding index, including when it is displaced and re-seated, so
+one admitted finding matches at most one expected finding and repeated runs over
+the same inputs assign the same pairs. Every pair is judged at most once, so
+maximising the matching costs no extra judge calls. Cases are scored sequentially so judge calls stay ordered.
 Temperature is pinned to `0` **only when the model alias already carries a
 temperature**, so reasoning models that reject the parameter keep their defaults.
 Transient provider errors are retried under the configured retry policy.

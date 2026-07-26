@@ -74,11 +74,9 @@ flowchart TD
 | Key | Type | Default |
 | --- | --- | --- |
 | `security.dedicatedPass.enabled` | boolean | `false` |
-| `security.signals.enabled` | boolean | `false` |
 
-With both disabled, no security pass or signal runs and the general review is
-byte-for-byte unchanged (the same task set, the same single discovery call per
-task).
+With it disabled, no security pass runs and the general review is byte-for-byte
+unchanged (the same task set, the same single discovery call per task).
 
 ## Measured evidence
 
@@ -123,8 +121,11 @@ If you enable it, enable it for the general recall — and budget for it.
 
 ## Mechanism 2: deterministic security signals (not yet implemented)
 
-`security.signals.enabled` is wired as configuration only and **carries no behavior
-in this phase**. The specified design: language-neutral source/sink/sanitizer
+This mechanism has no implementation and no config key today — a `security.signals`
+key that shipped ahead of the mechanism would be a toggle with no behavior behind
+it, so it was left out until there is something for it to switch. It will be added
+in the same change that implements the layer. The specified design: language-neutral
+source/sink/sanitizer
 detection grounded in public rule catalogs, emitting typed `EvidenceRecord`s that
 populate the already-defined `ruleId` / `cwe` / `helpUri` / `relatedLocations` /
 `dataFlow` / `securitySeverity` fields. By default those would be **evidence for the

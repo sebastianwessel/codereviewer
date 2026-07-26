@@ -63,20 +63,12 @@ import {
   EvalReportSchema,
   EvalReportSelectionSchema,
   type EvalCaseOutput,
-  type EvalContextLedgerEntry,
   type EvalRegressionThresholds,
   type EvalReport,
   type EvalReportScoring,
   type EvalReportSelection
 } from './eval-report-contracts.js'
-import {
-  EVAL_REPORT_ARTIFACT_NAME,
-  EVAL_RECALL_REPORT_ARTIFACT_NAME,
-  EVAL_SUMMARY_ARTIFACT_NAME,
-  renderEvalSummary
-} from './eval-summary-report-rendering.js'
-import { renderEvalComparison } from './eval-comparison-report-rendering.js'
-import { renderEvalRecallReport } from './eval-recall-report-rendering.js'
+import { EVAL_REPORT_ARTIFACT_NAME } from './eval-summary-report-rendering.js'
 
 export {
   EvalRegressionThresholdsSchema,
@@ -160,14 +152,6 @@ const isActionableFinding = (
     hasFixProposal
   )
 }
-
-const findingIdsByIndex = (
-  findings: readonly AdmittedFinding[],
-  indexes: readonly number[]
-): readonly string[] =>
-  indexes
-    .map((index) => findings[index]?.id)
-    .filter((id): id is string => id !== undefined)
 
 const falsePositiveFindingSummaries = (
   findings: readonly AdmittedFinding[],

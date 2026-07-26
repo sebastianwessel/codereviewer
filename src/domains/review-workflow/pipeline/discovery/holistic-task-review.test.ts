@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'vitest'
+import { CodeReviewerConfigSchema } from '../../../../shared/contracts/index.js'
+import { assembleContext } from '../../run/context/context.js'
 import {
   TaskReviewInputSchema,
   type ModelHolisticReviewResult,
@@ -389,6 +391,116 @@ describe('runModelBackedHolisticTaskReview', () => {
       logger: { debug: () => {} }
     })
     expect(empty.candidates).toHaveLength(0)
+  })
+})
+
+// A file whose lines carry multi-byte UTF-8 characters and where every line names
+// its own absolute line number, so the rendered numbering can be checked against
+// the truth. The source chunk budget works in UTF-8 BYTES, so a byte-derived line
+// origin would silently drift here while looking correct on pure ASCII.
+const multiByteSource = (lineCount: number): string =>
+  `${Array.from(
+    { length: lineCount },
+    (_unused, index) =>
+      `const größe${index + 1} = 'Grüße 🙂 ${'ü'.repeat(30)}' // Zeile ${index + 1}`
+  ).join('\n')}\n`
+
+describe('line numbering across split source chunks', () => {
+  test('numbers a second chunk with the file’s absolute lines, so its findings carry the real line', async () => {
+    const config = CodeReviewerConfigSchema.parse({
+      review: { contextMaxBytes: 10000 }
+    })
+    const sourceContent = multiByteSource(200)
+    const assembled = await assembleContext({
+      repositoryRoot: '/unused',
+      config,
+      sourceFiles: [{ path: 'src/large.ts', content: sourceContent }],
+      analysis: { facts: [], evidence: [] },
+      tasks: [
+        {
+          id: 'task_large',
+          round: 1,
+          kind: 'file',
+          paths: ['src/large.ts'],
+          factIds: [],
+          evidenceIds: [],
+          candidateIds: [],
+          contextEntryIds: [],
+          priority: 0
+        }
+      ]
+    })
+
+    // The file exceeds the chunk budget, so it becomes several tasks; take the
+    // SECOND one, the first whose content does not start at line 1.
+    expect(assembled.tasks.length).toBeGreaterThan(1)
+    const secondChunkTask = assembled.tasks[1] as WorkflowReviewTask
+    const secondChunk = secondChunkTask.reviewContext.find(
+      (context) => context.kind === 'file'
+    )
+    expect(secondChunk?.startLine).toBeGreaterThan(1)
+
+    // Target a line a few lines into the second chunk. Every line states its own
+    // absolute number, so the expected rendering is known independently.
+    const targetLine = secondChunk!.startLine! + 3
+    const chunkTaskInput = TaskReviewInputSchema.parse({
+      ...taskInput,
+      task: secondChunkTask,
+      reviewedDiffRanges: [
+        { path: 'src/large.ts', startLine: 1, endLine: 200 }
+      ]
+    })
+    const largeFileWorkflowInput = ReviewWorkflowInputSchema.parse({
+      runId: 'run-holistic',
+      reviewedPaths: ['src/large.ts'],
+      evidence: [],
+      candidates: [],
+      instructions: [],
+      skills: [],
+      provenance: {
+        reviewer: 'review-agent',
+        modelProvider: 'openai',
+        modelName: 'holistic-test',
+        signalVersions: { typescript: '6.0.3' },
+        configHash
+      }
+    })
+
+    let captured = ''
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: largeFileWorkflowInput,
+      taskInput: chunkTaskInput,
+      task: secondChunkTask,
+      runners: {
+        // Stands in for the model: it reports the line number the document showed
+        // it for the target source line, which is exactly how a real model
+        // derives the location it reports.
+        holisticReview: async (holisticInput) => {
+          captured = holisticInput.reviewText
+          const shown = new RegExp(
+            `^(\\d+): const größe${targetLine} =`,
+            'mu'
+          ).exec(holisticInput.reviewText)
+
+          return holisticResultWith([
+            {
+              category: 'bug',
+              severity: 'high',
+              title: 'Defect in the second chunk of a large file',
+              description: 'Reported at the line number the document showed.',
+              path: 'src/large.ts',
+              startLine: Number(shown?.[1] ?? 0)
+            }
+          ])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // The rendered document numbers the chunk from its absolute origin, not from
+    // 1, so the number the model reads back is the file's real line.
+    expect(captured).toContain(`${targetLine}: const größe${targetLine} =`)
+    expect(result.candidates[0]?.location.startLine).toBe(targetLine)
   })
 })
 

@@ -181,9 +181,17 @@ const buildContextSections = (
         taskInput.task.paths.includes(entry.path)
     )
     .map((entry) => {
+      // A file too large for one packet is split into chunks that each become
+      // their own task, so this content may start partway into the file.
+      // Numbering from the chunk's absolute origin (1 for the usual whole-file
+      // chunk) is what makes the number the model reads back the file's real
+      // line; numbering every chunk from 1 produced locations that were plausible
+      // but wrong, and the finding then anchored its fingerprint on the wrong
+      // source line.
+      const firstLine = entry.startLine ?? 1
       const numbered = entry.content
         .split('\n')
-        .map((line, index) => `${index + 1}: ${line}`)
+        .map((line, index) => `${index + firstLine}: ${line}`)
         .join('\n')
       return `### FILE: ${entry.path}\n${numbered}`
     })

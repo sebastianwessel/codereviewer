@@ -88,7 +88,7 @@ provider-specific object as passthrough.
 | `paths` | no | object | default includes/excludes |
 | `security` | no | object | secure defaults |
 | `reporting` | no | object | JSON, Markdown, and SARIF local reports |
-| `evaluation` | no | object | eval disabled |
+| `evaluation` | no | object | `minJudgeAgreement` 0.9; case selection is driven by `eval run` CLI flags, not config |
 | `drift` | no | object | drift checks enabled as warnings |
 | `observability` | no | object | OpenTelemetry disabled |
 | `costs` | no | object | detailed token/cost tracking enabled with no prices |
@@ -494,24 +494,27 @@ Rules:
 
 ## Security
 
-Controls the dedicated additive security review pass and deterministic security
-signals (`15-security-focused-review.md`). Disabled by default. Generic OWASP/CWE-
-derived detection only; never tuned to eval findings.
+Controls the dedicated additive security review pass (`15-security-focused-review.md`,
+Mechanism 1). Disabled by default. Generic OWASP/CWE-derived detection only; never
+tuned to eval findings.
 
 | Key | Type | Default |
 | --- | --- | --- |
 | `security.dedicatedPass.enabled` | boolean | `false` |
-| `security.signals.enabled` | boolean | `false` |
 
 Rules:
 
-- with both disabled, no security pass or signal runs and the general review is
-  unchanged (the same single discovery call per task);
+- with it disabled, no security pass runs and the general review is unchanged
+  (the same single discovery call per task);
 - the security pass's candidates pass the same untrusted refutation and admission as
   any other candidate and are additive (they never displace a general candidate);
-  the pass never bypasses scope, severity, baseline, or the gate;
-- security signals are model evidence by default (populating `cwe`/`dataFlow`
-  evidence), not auto-admitted findings.
+  the pass never bypasses scope, severity, baseline, or the gate.
+
+The deterministic security-signal evidence layer (spec 15, Mechanism 2) has no
+implementation yet. There is deliberately no `security.signals.enabled` key today —
+it was removed rather than shipped as a toggle with no behavior behind it. A
+`signals` config key will be introduced in the same change that implements the
+layer, not before.
 
 ## Reporting
 
@@ -521,13 +524,16 @@ Rules:
 | `sarif.target` | `"generic" | "github"` | `"generic"` |
 | `sarif.category` | string | `"codereviewer"` |
 | `sarif.maxResults` | integer 1..25000 | `5000` |
-| `sarif.redact` | boolean | `true` |
 | `reviewComments.enabled` | boolean | `false` |
 | `reviewComments.platform` | `"github" | "gitlab" | "bitbucket" | "generic" | "auto"` | `"auto"` |
 
 JSON is always generated even if omitted from `formats`, because it is the
 canonical machine-readable artifact. Markdown and SARIF rendering can be disabled
 only when their format is absent from `formats`.
+
+Every rendered report format redacts secret-shaped text unconditionally; there is
+deliberately no `sarif.redact` key to turn that off, since a toggle a renderer
+never reads would be a switch that lies about doing something.
 
 `reviewComments` writes platform-neutral inline review-comment drafts, including
 one-click fix suggestions, as local artifacts only — it performs no network

@@ -181,11 +181,50 @@ type JudgePassResult = {
   readonly judgeProviderIssues: readonly EvalJudgeProviderIssue[]
 }
 
-// Assignment order is fully deterministic: expected findings ascending, then
-// admitted findings ascending. The first judge-accepted finding wins the
-// expectation and is removed from the pool, so one admitted finding matches at
-// most one expected finding and repeated runs over the same inputs assign the
-// same pairs.
+// The judge verdict for one expectation/finding pair. `inconclusive` is kept as
+// a distinct outcome because a failed judge call is not a rejection: it must
+// never become an edge, and it must never be re-asked either.
+type PairVerdict =
+  | { readonly kind: 'accepted'; readonly reason: string }
+  | { readonly kind: 'rejected' }
+  | { readonly kind: 'inconclusive' }
+
+const pairKey = (expectedIndex: number, findingIndex: number): string =>
+  `${expectedIndex}:${findingIndex}`
+
+// Assignment used to be greedy: expectations were walked in ascending order and
+// the first judge-accepted finding claimed the expectation for good. That is not
+// merely suboptimal, it is biased in the same direction as the phenomenon this
+// matcher exists to measure. The open question about this reviewer is whether it
+// reports roughly one defect per file and misses later expectations; a greedy
+// matcher manufactures exactly that signal, because a loose accept for an early
+// expectation can consume the only finding a later expectation could have
+// matched, and the later expectation is then scored as a miss the reviewer never
+// committed. Measuring a one-finding-per-file hypothesis with an instrument that
+// invents extra later-expectation misses would confound the result, so the
+// assignment is a maximum-cardinality bipartite matching instead: no expectation
+// is scored as a miss while a pairing exists that would have matched it.
+//
+// The algorithm is Kuhn's augmenting-path search over a graph that is tiny here
+// (typically one to three expectations against one or two findings), so no
+// dependency and no flow machinery is warranted.
+//
+// Determinism and tie-breaking. Several maximum pairings can exist; the one
+// chosen is fixed by two rules that are applied in ascending index order:
+//   1. Expectations are served in ascending expected index.
+//   2. An expectation always prefers the lowest admitted finding index still
+//      available to it, including when it is displaced and re-seated.
+// A finding is only taken from its current owner when that owner can be re-seated
+// elsewhere, so an expectation never loses a match it already holds. Identical
+// inputs and a deterministic judge therefore always yield the identical pairing,
+// and one admitted finding still matches at most one expected finding.
+//
+// Judge calls are paid provider calls, so every pair is judged at most once: the
+// deterministic `gatesPass` filter runs first and cheaply excludes pairs the
+// judge must never see, and every verdict is cached by pair. The worst case is
+// therefore unchanged from the greedy pass — one judge call per gate-passing
+// pair — while the common case where the greedy seeding is already optimal costs
+// exactly what greedy cost.
 const runJudgePass = async (
   input: {
     readonly evalCase: EvalCase
@@ -193,72 +232,158 @@ const runJudgePass = async (
     readonly judge: EvalSemanticJudge | undefined
   }
 ): Promise<JudgePassResult> => {
-  const assignedMatches: AssignedMatch[] = []
   const inconclusivePairs: InconclusivePair[] = []
   const judgeProviderIssues: EvalJudgeProviderIssue[] = []
-  const claimedFindingIndexes = new Set<number>()
+  const verdicts = new Map<string, PairVerdict>()
+  const expectedFindings = input.evalCase.expectedFindings
 
-  for (const [expectedIndex, expected] of input.evalCase.expectedFindings.entries()) {
-    for (const [findingIndex, finding] of input.admittedFindings.entries()) {
-      if (claimedFindingIndexes.has(findingIndex)) {
-        continue
-      }
+  // Candidate edges the judge is allowed to see at all, ascending by finding
+  // index. Computed once from the deterministic gates, so the augmenting search
+  // can never widen the judge's reach.
+  const candidateFindingIndexes = expectedFindings.map((expected) =>
+    input.admittedFindings.flatMap((finding, findingIndex) =>
+      gatesPass(expected, finding) ? [findingIndex] : []
+    )
+  )
 
-      if (!gatesPass(expected, finding)) {
-        continue
-      }
+  const verdictFor = async (
+    expectedIndex: number,
+    findingIndex: number
+  ): Promise<PairVerdict> => {
+    const key = pairKey(expectedIndex, findingIndex)
+    const cached = verdicts.get(key)
+    if (cached !== undefined) {
+      return cached
+    }
 
-      if (input.judge === undefined) {
-        throw missingSemanticJudgeError(input.evalCase.id)
-      }
+    if (input.judge === undefined) {
+      throw missingSemanticJudgeError(input.evalCase.id)
+    }
 
-      let judged: EvalSemanticJudgeResult
-      try {
-        judged = await input.judge({
-          expectedSummary: expected.semanticSummary,
-          findingTitle: finding.title,
-          findingDescription: finding.description
-        })
-      } catch (error) {
-        const normalized = normalizeError(error, {
-          source: 'provider',
-          operation: EVAL_SEMANTIC_JUDGE_STAGE
-        })
-        judgeProviderIssues.push({
-          code: normalized.code,
-          stage: EVAL_SEMANTIC_JUDGE_STAGE,
-          recovered: false,
-          message: normalized.message
-        })
-        inconclusivePairs.push({
-          expectedIndex,
-          findingIndex,
-          code: normalized.code,
-          message: normalized.message
-        })
+    const expected = expectedFindings[expectedIndex]!
+    const finding = input.admittedFindings[findingIndex]!
 
-        continue
-      }
-
-      if (!judged.match) {
-        continue
-      }
-
-      claimedFindingIndexes.add(findingIndex)
-      assignedMatches.push({
+    let judged: EvalSemanticJudgeResult
+    try {
+      judged = await input.judge({
+        expectedSummary: expected.semanticSummary,
+        findingTitle: finding.title,
+        findingDescription: finding.description
+      })
+    } catch (error) {
+      const normalized = normalizeError(error, {
+        source: 'provider',
+        operation: EVAL_SEMANTIC_JUDGE_STAGE
+      })
+      judgeProviderIssues.push({
+        code: normalized.code,
+        stage: EVAL_SEMANTIC_JUDGE_STAGE,
+        recovered: false,
+        message: normalized.message
+      })
+      inconclusivePairs.push({
         expectedIndex,
         findingIndex,
-        semanticReason: judged.reason,
+        code: normalized.code,
+        message: normalized.message
+      })
+      const verdict: PairVerdict = { kind: 'inconclusive' }
+      verdicts.set(key, verdict)
+
+      return verdict
+    }
+
+    const verdict: PairVerdict = judged.match
+      ? { kind: 'accepted', reason: judged.reason }
+      : { kind: 'rejected' }
+    verdicts.set(key, verdict)
+
+    return verdict
+  }
+
+  const isAccepted = async (
+    expectedIndex: number,
+    findingIndex: number
+  ): Promise<boolean> => (await verdictFor(expectedIndex, findingIndex)).kind === 'accepted'
+
+  // Owner of each admitted finding, indexed by finding index.
+  const ownerExpectedIndexes = new Map<number, number>()
+
+  // Seed with a pass that only takes free findings. It costs no more judge calls
+  // than the old greedy pass and reaches the same pairing whenever greedy was
+  // already optimal, which keeps the common case cheap and stable.
+  for (const expectedIndex of expectedFindings.keys()) {
+    for (const findingIndex of candidateFindingIndexes[expectedIndex]!) {
+      if (ownerExpectedIndexes.has(findingIndex)) {
+        continue
+      }
+
+      if (await isAccepted(expectedIndex, findingIndex)) {
+        ownerExpectedIndexes.set(findingIndex, expectedIndex)
+        break
+      }
+    }
+  }
+
+  // Kuhn's augmenting step for one expectation. `visitedFindingIndexes` keeps a
+  // single search from revisiting a finding, which both terminates the recursion
+  // and bounds it to the candidate edges.
+  const tryAssign = async (
+    expectedIndex: number,
+    visitedFindingIndexes: Set<number>
+  ): Promise<boolean> => {
+    for (const findingIndex of candidateFindingIndexes[expectedIndex]!) {
+      if (visitedFindingIndexes.has(findingIndex)) {
+        continue
+      }
+
+      if (!(await isAccepted(expectedIndex, findingIndex))) {
+        continue
+      }
+
+      visitedFindingIndexes.add(findingIndex)
+      const currentOwner = ownerExpectedIndexes.get(findingIndex)
+
+      if (
+        currentOwner === undefined ||
+        (await tryAssign(currentOwner, visitedFindingIndexes))
+      ) {
+        ownerExpectedIndexes.set(findingIndex, expectedIndex)
+
+        return true
+      }
+    }
+
+    return false
+  }
+
+  const seededExpectedIndexes = new Set(ownerExpectedIndexes.values())
+  for (const expectedIndex of expectedFindings.keys()) {
+    if (!seededExpectedIndexes.has(expectedIndex)) {
+      await tryAssign(expectedIndex, new Set<number>())
+    }
+  }
+
+  const assignedMatches: AssignedMatch[] = [...ownerExpectedIndexes.entries()]
+    .map(([findingIndex, expectedIndex]) => {
+      const expected = expectedFindings[expectedIndex]!
+      const finding = input.admittedFindings[findingIndex]!
+      const verdict = verdicts.get(pairKey(expectedIndex, findingIndex))
+
+      return {
+        expectedIndex,
+        findingIndex,
+        // Every assigned pair was accepted by the judge, so its cached rationale
+        // is always present; the fallback only keeps the type honest.
+        semanticReason: verdict?.kind === 'accepted' ? verdict.reason : '',
         lineOverlaps:
           resolveExpectedFindingMatchMode(expected) === 'path-line'
             ? lineRulePasses(expected, finding)
             : false,
         severityMatches: expected.severity === finding.severity
-      })
-
-      break
-    }
-  }
+      }
+    })
+    .sort((left, right) => left.expectedIndex - right.expectedIndex)
 
   return { assignedMatches, inconclusivePairs, judgeProviderIssues }
 }

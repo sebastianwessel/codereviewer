@@ -31,7 +31,9 @@ flowchart TD
   D -- no --> R2["rejected · location-invalid"]
   D -- yes --> E{"line range inside reviewed source?"}
   E -- no --> R2
-  E -- yes --> F{"≥ 1 evidence record?"}
+  E -- yes --> E2{"line inside the chunk this task was shown?"}
+  E2 -- no --> R2
+  E2 -- yes --> F{"≥ 1 evidence record?"}
   F -- no --> R3["needs-more-evidence · insufficient-evidence"]
   F -- yes --> G{"all evidence redacted?"}
   G -- no --> R4["rejected · unsafe-content"]
@@ -117,6 +119,7 @@ and the hashes of the instruction and skill documents that were in scope.
 | --- | --- |
 | Model reports a line beyond the file | `location-invalid` rejection |
 | Model reports a file that was not reviewed | `location-invalid` rejection |
+| Model reports a line its task never saw (large file split into chunks) | `location-invalid` rejection — the line is inside the file but outside that task's chunk |
 | Candidate arrives with no evidence | `insufficient-evidence` (`needs-more-evidence`) — normally impossible after refutation, which attaches its rationale evidence |
 | Two passes found the same defect | Second one is a `duplicate` rejection |
 | Correct but low-severity model finding | `below-threshold` rejection; visible in the report, not actionable |

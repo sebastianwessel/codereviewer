@@ -205,10 +205,15 @@ follow-up, not full-repository injection.
 ## Configuration
 
 A `security` block, disabled by default. Keys are defined in
-`04-configuration-and-providers.md`: `dedicatedPass.enabled`, `signals.enabled`, and
-any bounds. Invalid configuration fails validation with exit code 2. With the block
-disabled, no security pass or signal runs and the general review is byte-for-byte
-unchanged (the same task set, the same single discovery call per task).
+`04-configuration-and-providers.md`: `dedicatedPass.enabled`, and any bounds.
+Invalid configuration fails validation with exit code 2. With the block disabled,
+no security pass runs and the general review is byte-for-byte unchanged (the same
+task set, the same single discovery call per task).
+
+Mechanism 2 (deterministic security-signal evidence) has no implementation yet, so
+it has no config key today. A `security.signals.enabled` key is introduced in the
+same change that implements Mechanism 2 — shipping the key ahead of the mechanism
+would be a switch with no behavior behind it.
 
 ## Observability, Safety, Privacy
 

@@ -148,18 +148,15 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
-  test('security dedicated pass and signals default to disabled', () => {
+  test('security dedicated pass defaults to disabled', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.security.dedicatedPass.enabled).toBe(false)
-    expect(disabled.security.signals.enabled).toBe(false)
 
     const enabled = CodeReviewerConfigSchema.parse({
       security: { dedicatedPass: { enabled: true } }
     })
     expect(enabled.security.dedicatedPass.enabled).toBe(true)
-    // Signals stays disabled unless explicitly enabled; the permission literals
-    // keep their secure defaults.
-    expect(enabled.security.signals.enabled).toBe(false)
+    // The permission literals keep their secure defaults regardless.
     expect(enabled.security.captureContentTelemetry).toBe(false)
   })
 

@@ -7,6 +7,7 @@ export {
   type CandidateFinding,
   type ReviewedDiffRange,
   type ReviewedLineRange,
+  type TaskSourceChunkRange,
   reviewedLineRangeForContent,
   sourceLineCount
 } from './admission-gate.js'

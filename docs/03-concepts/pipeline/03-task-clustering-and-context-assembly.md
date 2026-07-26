@@ -74,6 +74,10 @@ All budgets derive from `review.depth` (never from `review.mode`), and
 - The source chunk budget is 45 % of the effective budget; file content is split
   into chunks of at most that size and packed into batches, so a very large file
   becomes several workflow tasks rather than a truncated one.
+- Chunks are cut on line boundaries and each one records the absolute line range
+  it covers. The reviewer sees a chunk numbered from that origin, so a finding in
+  the second chunk of a split file carries the file's real line number, and
+  admission rejects a location outside the chunk the task was actually given.
 - The retrieval caps bound the mediated repository retriever, which is only
   exercised by the optional cross-file capabilities.
 

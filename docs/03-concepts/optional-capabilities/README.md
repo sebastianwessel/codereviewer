@@ -21,7 +21,6 @@ figure is the mean across seeds, never the best observed run.
 | [Context scout](context-scout.md) | `review.contextScout.enabled` | `false` | Symbol *bodies* from unchanged files, chosen for this change, while the reviewer stays single-shot and tool-free | +27% | **Neutral.** 2026-07-25, 16-case corpus: recall flat at 62.5%, precision held at 100%, severity accuracy unchanged. Four cases gained, four lost — churn, not signal. It engaged on only 3 of 18 tasks |
 | [Cross-file retrieval](cross-file-retrieval.md) | `review.crossFileRetrieval.enabled` | `false` | Lets discovery read other-file code on demand through mediated tools | +71% … 2.5× | **Net negative — do not enable.** Three measurements on the corpus built to favour it: flat at 4 cases (2.5× cost), 66.7% → 44.4% at 9, 68.8% → 56.3% at 16. Precision stayed 100% throughout, so the loss is recall, not noise |
 | [Dedicated security pass](dedicated-security-pass.md) | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task (generic OWASP/CWE checklist), merged additively | +61% | **Mixed.** 2026-07-24, full benchmark, n=1: overall recall 24.8% → 29.3%, +22 unlisted-real findings (trustworthy, large denominator). But labeled security recall 14 → 12 and authorization 8 → 6. The **security-specific lift it was built for is unproven** |
-| [Security signals](dedicated-security-pass.md#mechanism-2-deterministic-security-signals-not-yet-implemented) | `security.signals.enabled` | `false` | Nothing yet | None | **Config-only.** The key is wired; the deterministic signal layer carries no behavior in this phase |
 | [Verification](verification-and-fix.md) | `verification.enabled` | `false` | Investigates external/prior claims against the real code and returns verdicts; corroborates findings | Bounded agent run per claim | **Unmeasured as a quality lever.** It is a distinct product feature, not a recall knob; its outputs never touch the gate |
 | [Fix lane](verification-and-fix.md#the-fix-lane) | `fix.enabled` | `false` | Real-file-grounded `real`/`false-positive` judgment plus an apply-checked fix per admitted finding | One bounded agent run per eligible finding | **Unmeasured as a quality lever.** Advisory: it enriches `fixProposal`, never admission, severity, or the gate |
 
@@ -64,7 +63,7 @@ identical to a build without it, which is what makes the A/Bs above single-varia
     "crossFileRetrieval": { "enabled": false },
     "contextScout": { "enabled": false }
   },
-  "security": { "dedicatedPass": { "enabled": false }, "signals": { "enabled": false } },
+  "security": { "dedicatedPass": { "enabled": false } },
   "contextSources": { "enabled": false },
   "verification": { "enabled": false },
   "fix": { "enabled": false }

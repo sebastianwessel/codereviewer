@@ -261,6 +261,91 @@ describe('admission gate', () => {
     })
   })
 
+  test('rejects a candidate outside the source chunk its task was given', () => {
+    // A large file is split into chunks and each chunk becomes its own task. A
+    // candidate from the second chunk that points at a line the second chunk did
+    // not contain is a mis-numbered location: it lands inside the file, so the
+    // whole-file range check accepts it, and the finding then anchors its
+    // fingerprint on the wrong source line. Only the chunk range catches it.
+    const chunkPolicy: AdmissionPolicy = {
+      ...policy,
+      reviewedLineRanges: [{ path: 'src/app.ts', startLine: 1, endLine: 400 }],
+      taskSourceChunkRanges: [
+        { taskId: 'task_bug1', path: 'src/app.ts', startLine: 201, endLine: 400 }
+      ]
+    }
+
+    expect(
+      admitCandidate({
+        candidate: {
+          ...candidate,
+          location: { path: 'src/app.ts', startLine: 4, side: 'new' }
+        },
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy: chunkPolicy
+      })
+    ).toEqual({
+      status: 'rejected',
+      rejectedFinding: {
+        candidateId: 'cand_bug1',
+        status: 'rejected',
+        reason: 'location-invalid',
+        message:
+          'Candidate location is outside the source chunk its review task was given.',
+        evidenceIds: ['ev_diff1']
+      }
+    })
+
+    // The same candidate inside the chunk it came from is admitted unchanged.
+    expect(
+      admitCandidate({
+        candidate: {
+          ...candidate,
+          location: { path: 'src/app.ts', startLine: 210, side: 'new' }
+        },
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy: chunkPolicy
+      }).status
+    ).toBe('admitted')
+  })
+
+  test('leaves single-chunk (small file) admission untouched', () => {
+    // Every file that fits in one chunk gets a chunk range equal to its whole-file
+    // range, so the extra check can never reject a finding the previous gate
+    // admitted. This is the case for every file in both evaluation corpora.
+    expect(
+      admitCandidate({
+        candidate,
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy: {
+          ...policy,
+          taskSourceChunkRanges: [
+            { taskId: 'task_bug1', path: 'src/app.ts', startLine: 1, endLine: 20 }
+          ]
+        }
+      }).status
+    ).toBe('admitted')
+
+    // A candidate whose task has no chunk provenance at all (deterministic
+    // candidates, or a task that never carried file context) is unaffected.
+    expect(
+      admitCandidate({
+        candidate,
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy: {
+          ...policy,
+          taskSourceChunkRanges: [
+            { taskId: 'task_other', path: 'src/app.ts', startLine: 900, endLine: 999 }
+          ]
+        }
+      }).status
+    ).toBe('admitted')
+  })
+
   test('keeps old-side candidates out of inline eligibility', () => {
     const result = admitCandidate({
       candidate: {

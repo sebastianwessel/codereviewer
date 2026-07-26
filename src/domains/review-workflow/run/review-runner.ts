@@ -1,7 +1,6 @@
 import type { Logger } from '@purista/harness'
 import {
   type CodeReviewerConfig,
-  type CoverageSummary,
   type ReviewReport
 } from '../../../shared/contracts/index.js'
 import type { ContextLedgerEntry } from '../../review-planning/context-ledger.js'
@@ -10,17 +9,11 @@ import {
   type NoContentObservabilitySnapshot
 } from '../../observability/index.js'
 import {
-  type DeterministicSignalExtraction
-} from '../../deterministic-signals/index.js'
-import {
   type ProviderImport
 } from '../../provider-resolution/index.js'
 import { type DiffMap } from '../../repository-intake/index.js'
 import type { ReviewSharedContextSnapshot } from '../../shared-context/index.js'
-import {
-  aiReviewBudgetFor,
-  type AiReviewRuntimeBudget
-} from './support/budgets.js'
+import { aiReviewBudgetFor } from './support/budgets.js'
 import { reviewedLineRangesForSourceFiles } from './context/context.js'
 import { createWorkflowInput } from './workflow-input.js'
 import {
@@ -44,9 +37,6 @@ export {
   ReviewRunFailedError,
   type PartialReviewRunState
 } from './support/errors.js'
-
-const emptySha256 =
-  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 
 export type RunReviewOptions = {
   readonly repositoryRoot: string

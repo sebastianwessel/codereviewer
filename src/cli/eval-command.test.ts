@@ -365,6 +365,90 @@ class SemanticJudgeCliProvider implements ModelProvider {
   }
 }
 
+// Like `SemanticJudgeCliProvider`, but the match and plausibility verdicts are
+// script-controlled per test so a case can be driven to a specific, non-perfect
+// recall/false-positive outcome (`SemanticJudgeCliProvider` always answers
+// "match", so it can only ever produce a recall of 1).
+class ConfigurableSemanticJudgeProvider implements ModelProvider {
+  readonly id = 'configurable-semantic-judge'
+  readonly genAiSystem = 'scripted'
+  matchResult = true
+  plausibleResult = true
+
+  async object<T extends JsonValue = JsonValue>(
+    request: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    if (request.schemaName === 'eval_semantic_match') {
+      return {
+        object: {
+          match: this.matchResult,
+          reason: 'Scripted judge decision for regression-gate testing.'
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+      }
+    }
+
+    if (request.schemaName === 'eval_plausibility') {
+      return {
+        object: {
+          plausible: this.plausibleResult,
+          reason: 'Scripted plausibility decision for regression-gate testing.'
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+      }
+    }
+
+    if (isFindingRefutationRequest(request)) {
+      return {
+        object: {
+          verdicts: refutationCandidateIds(request).map((candidateId) => ({
+            candidateId,
+            verdict: 'proved',
+            rationaleSummary:
+              'The reviewed context proves the incomplete export syntax breaks the file.',
+            changedBehavior:
+              'The changed export leaves the TypeScript file syntactically incomplete.',
+            executionOrDataPath:
+              'The evaluated slice parses src/app.ts and reaches the incomplete export statement.',
+            violatedInvariant:
+              'The file must contain valid TypeScript syntax after the review change.',
+            impact: 'The project can no longer compile the changed file.',
+            introducedByChange:
+              'The incomplete export statement is present in the reviewed slice.',
+            contradictionChecks: [
+              'No surrounding context completes the export.'
+            ],
+            fixDirection: 'Complete or remove the malformed export statement.'
+          }))
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+      }
+    }
+
+    return {
+      object: {
+        findings: [
+          {
+            category: 'bug',
+            severity: 'high',
+            title: 'Incomplete export declaration breaks review',
+            description:
+              'The changed file contains an incomplete exported declaration that cannot be parsed.',
+            path: 'src/app.ts',
+            startLine: 1,
+            fixSummary: 'Complete the exported declaration before review.'
+          }
+        ]
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+    }
+  }
+}
+
 class FailFirstEvalReviewProvider implements ModelProvider {
   readonly id = 'fail-first-eval-review'
   readonly genAiSystem = 'scripted'
@@ -871,6 +955,256 @@ describe('eval CLI', () => {
       expect(result.exitCode).toBe(2)
       expect(result.stderr).toContain('eval_semantic_judge_missing')
       expect(result.stderr).toContain('semantic-local-1')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Regression coverage for the eval regression gate defaulting to a threshold
+  // set that cannot pass (hard-coded `minRecall: 1, maxFalsePositiveCount: 0`).
+  // This run is scripted to miss its one expected finding (recall 0) AND raise
+  // a genuine false positive, which used to fail every provider-backed run
+  // regardless of actual review quality. The default `stable` profile must
+  // still pass because it gates only on parse validity and provider errors.
+  test('the default stable gate profile passes despite imperfect recall and a false positive', async () => {
+    const root = await createTempDir()
+    const provider = new ConfigurableSemanticJudgeProvider()
+    provider.matchResult = false
+    provider.plausibleResult = false
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'judge-model',
+            maxRetries: 0
+          },
+          review: {
+            depth: 'fast'
+          },
+          drift: {
+            enabled: false
+          }
+        })
+      )
+      await writeSemanticJudgeSliceEvalCase(root)
+
+      const result = await runCli(
+        ['eval', 'run', '--slice-root', 'eval/benchmarks/semantic'],
+        {
+          cwd: root,
+          environment: {
+            OPENAI_API_KEY: 'sk-test'
+          },
+          providerImport: async () => ({
+            openai: () => provider
+          })
+        }
+      )
+
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+
+      // Sanity check that this run genuinely has imperfect recall and a real
+      // false positive — otherwise the gate passing would prove nothing.
+      expect(report.metrics.recall).toBeLessThan(1)
+      expect(report.metrics.falsePositiveCount).toBeGreaterThan(0)
+      expect(report.metrics.genuineFalsePositiveCount).toBeGreaterThan(0)
+
+      expect(report.regressionGate.passed).toBe(true)
+      expect(report.regressionGate.reasons).toEqual([])
+      expect(report.regressionGate.thresholds).toEqual({
+        minParseValidity: 1,
+        failOnProviderError: true
+      })
+      expect(result.exitCode).toBe(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Same scripted run as above, but opting into the `strict` profile (the
+  // historical hard-coded behaviour) via the CLI flag must still fail on the
+  // same imperfect recall, proving the perfect-score gate remains available as
+  // an explicit choice rather than having been deleted outright.
+  test('--gate-profile strict restores the perfect-score gate and fails on imperfect recall', async () => {
+    const root = await createTempDir()
+    const provider = new ConfigurableSemanticJudgeProvider()
+    provider.matchResult = false
+    provider.plausibleResult = false
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'judge-model',
+            maxRetries: 0
+          },
+          review: {
+            depth: 'fast'
+          },
+          drift: {
+            enabled: false
+          }
+        })
+      )
+      await writeSemanticJudgeSliceEvalCase(root)
+
+      const result = await runCli(
+        [
+          'eval',
+          'run',
+          '--slice-root',
+          'eval/benchmarks/semantic',
+          '--gate-profile',
+          'strict'
+        ],
+        {
+          cwd: root,
+          environment: {
+            OPENAI_API_KEY: 'sk-test'
+          },
+          providerImport: async () => ({
+            openai: () => provider
+          })
+        }
+      )
+
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+
+      expect(report.metrics.recall).toBeLessThan(1)
+      expect(report.regressionGate.passed).toBe(false)
+      expect(report.regressionGate.reasons).toEqual(
+        expect.arrayContaining([expect.stringContaining('recall below threshold')])
+      )
+      expect(report.regressionGate.thresholds).toEqual({
+        minParseValidity: 1,
+        minRecall: 1,
+        maxFalsePositiveCount: 0,
+        failOnProviderError: true
+      })
+      expect(result.exitCode).toBe(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // A config-level override must layer on top of the resolved profile without
+  // requiring the `strict` profile wholesale, proving
+  // `evaluation.regressionGate.overrides` is actually read.
+  test('evaluation.regressionGate.overrides tightens the stable profile from config alone', async () => {
+    const root = await createTempDir()
+    const provider = new ConfigurableSemanticJudgeProvider()
+    provider.matchResult = false
+    provider.plausibleResult = false
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'judge-model',
+            maxRetries: 0
+          },
+          review: {
+            depth: 'fast'
+          },
+          drift: {
+            enabled: false
+          },
+          evaluation: {
+            regressionGate: {
+              overrides: {
+                minRecall: 1
+              }
+            }
+          }
+        })
+      )
+      await writeSemanticJudgeSliceEvalCase(root)
+
+      const result = await runCli(
+        ['eval', 'run', '--slice-root', 'eval/benchmarks/semantic'],
+        {
+          cwd: root,
+          environment: {
+            OPENAI_API_KEY: 'sk-test'
+          },
+          providerImport: async () => ({
+            openai: () => provider
+          })
+        }
+      )
+
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+
+      expect(report.regressionGate.passed).toBe(false)
+      // The override adds `minRecall` but the profile is still `stable`, so
+      // `maxFalsePositiveCount` (never set) must NOT appear in the resolved
+      // thresholds.
+      expect(report.regressionGate.thresholds).toEqual({
+        minParseValidity: 1,
+        failOnProviderError: true,
+        minRecall: 1
+      })
+      expect(result.exitCode).toBe(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Regression coverage for the eval report's `generatedAt` being frozen to a
+  // committed literal timestamp, which made run ordering depend on directory
+  // names rather than the report's own data.
+  test('generatedAt reflects the injected clock, defaulting to the real clock', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeSampleEvalCases(root)
+
+      const injectedNow = new Date('2030-05-17T12:34:56.000Z')
+      const injectedResult = await runCli(['eval', 'run'], {
+        cwd: root,
+        environment: {},
+        now: () => injectedNow
+      })
+      expect(injectedResult.exitCode).toBe(0)
+      const injectedReport = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+      expect(injectedReport.generatedAt).toBe('2030-05-17T12:34:56.000Z')
+
+      const beforeRealRun = Date.now()
+      const realResult = await runCli(['eval', 'run'], {
+        cwd: root,
+        environment: {}
+      })
+      const afterRealRun = Date.now()
+      expect(realResult.exitCode).toBe(0)
+      const realReport = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+      const realGeneratedAtMs = new Date(realReport.generatedAt as string).getTime()
+
+      // Not the historical frozen literal, and within the window the run
+      // actually executed in — proof it stamps the real wall clock rather
+      // than a fixed value baked into the CLI.
+      expect(realReport.generatedAt).not.toBe('2026-06-20T00:00:02.000Z')
+      expect(realGeneratedAtMs).toBeGreaterThanOrEqual(beforeRealRun)
+      expect(realGeneratedAtMs).toBeLessThanOrEqual(afterRealRun)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

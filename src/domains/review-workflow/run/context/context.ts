@@ -72,6 +72,11 @@ type ContextInput = {
   readonly content: string
   readonly kind: ReviewContextDocument['kind']
   readonly path?: string
+  // Absolute origin of a 'file' chunk in its source file. Present only for source
+  // chunks; support-signal and referenced-definition context has no place in the
+  // reviewed file to point at.
+  readonly startLine?: number
+  readonly endLine?: number
 }
 
 export const readChangedSourceFiles = async (
@@ -150,11 +155,103 @@ export const splitTextByUtf8Bytes = (
   return chunks
 }
 
+// One source chunk plus the absolute line span it occupies in the original file.
+// The span is what makes a chunk reviewable on its own: discovery renders the
+// chunk as a line-numbered document and admission checks the reported location
+// against the lines the chunk actually contained.
+export type SourceLineChunk = {
+  readonly content: string
+  readonly startLine: number
+  readonly endLine: number
+}
+
+// Split content into line units that KEEP their terminator, so concatenating the
+// units restores the input byte for byte. A file ending in a newline yields a
+// final empty unit, which is the same trailing line `sourceLineCount` counts;
+// keeping it makes the last chunk's `endLine` equal the file's line count.
+const lineUnits = (content: string): readonly string[] => {
+  const units: string[] = []
+  let current = ''
+
+  for (let index = 0; index < content.length; index += 1) {
+    const character = content[index] as string
+
+    current += character
+
+    // A CR is only a line break when it does not start a CRLF pair; otherwise the
+    // pair would be counted as two lines and every following number would shift.
+    if (
+      character === '\n' ||
+      (character === '\r' && content[index + 1] !== '\n')
+    ) {
+      units.push(current)
+      current = ''
+    }
+  }
+
+  units.push(current)
+
+  return units
+}
+
+/**
+ * Split source into byte-bounded chunks that each know where they start in the
+ * original file.
+ *
+ * Chunks are cut on line boundaries so a chunk's first line is a whole line of
+ * the file: discovery numbers a chunk's lines from `startLine`, and a cut in the
+ * middle of a line would make every number after it ambiguous. A single line
+ * longer than the budget cannot be cut on a boundary, so it is split by bytes and
+ * every piece keeps that same line number, which leaves the lines after it
+ * correctly numbered.
+ *
+ * Splitting stays lossless: concatenating the chunks of a path in order restores
+ * the file, which the fingerprint anchor resolver depends on.
+ */
+export const splitSourceIntoLineChunks = (
+  content: string,
+  maxBytes: number
+): readonly SourceLineChunk[] => {
+  if (maxBytes < 1) {
+    throw new TypeError('maxBytes must be greater than 0.')
+  }
+
+  const chunks: SourceLineChunk[] = []
+  let current = ''
+  let currentBytes = 0
+  let startLine = 1
+  let endLine = 1
+
+  for (const [index, unit] of lineUnits(content).entries()) {
+    const lineNumber = index + 1
+
+    for (const piece of splitTextByUtf8Bytes(unit, maxBytes)) {
+      const pieceBytes = utf8ByteLength(piece)
+
+      if (currentBytes > 0 && currentBytes + pieceBytes > maxBytes) {
+        chunks.push({ content: current, startLine, endLine })
+        current = ''
+        currentBytes = 0
+        startLine = lineNumber
+      }
+
+      current += piece
+      currentBytes += pieceBytes
+      endLine = lineNumber
+    }
+  }
+
+  if (current.length > 0 || chunks.length === 0) {
+    chunks.push({ content: current, startLine, endLine })
+  }
+
+  return chunks
+}
+
 const contextBytes = (contexts: readonly ContextInput[]): number =>
   contexts.reduce((total, context) => total + utf8ByteLength(context.content), 0)
 
 const workflowTaskPaths = (
-  task: ReviewTask,
   contexts: readonly ContextInput[],
   fallbackPaths: readonly string[]
 ): readonly string[] => {
@@ -228,6 +325,16 @@ export const assembleContext = async (
       const contextDocument: ReviewContextDocument = {
         kind: inputContext.kind,
         ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
+        // The chunk's origin travels with the document because everything
+        // downstream (line-numbered rendering, admission) sees only the document,
+        // never the split that produced it.
+        ...(inputContext.startLine === undefined ||
+        inputContext.endLine === undefined
+          ? {}
+          : {
+              startLine: inputContext.startLine,
+              endLine: inputContext.endLine
+            }),
         content: redactText(inputContext.content),
         ledgerEntryId: ledgerEntry.id
       }
@@ -356,18 +463,23 @@ export const assembleContext = async (
     const taskSourceFiles = input.sourceFiles.filter((sourceFile) =>
       taskPathSet.has(sourceFile.path)
     )
+    // Each chunk carries its absolute line span so the task built from it can be
+    // reviewed and admitted against the file's real line numbers rather than
+    // numbers counted from the start of the chunk.
     const sourceContexts = taskSourceFiles.flatMap((file) =>
-      splitTextByUtf8Bytes(file.content, chunkBudget).map((chunk) => ({
+      splitSourceIntoLineChunks(file.content, chunkBudget).map((chunk) => ({
         kind: 'file' as const,
         path: file.path,
-        content: chunk
+        content: chunk.content,
+        startLine: chunk.startLine,
+        endLine: chunk.endLine
       }))
     )
     const batches: ContextInput[][] = []
     const supportSignalAttachedPaths = new Set<string>()
 
     for (const batch of packContexts(sourceContexts)) {
-      const batchPaths = workflowTaskPaths(task, batch, task.paths)
+      const batchPaths = workflowTaskPaths(batch, task.paths)
       const newSupportSignalPaths = batchPaths.filter(
         (pathValue) => !supportSignalAttachedPaths.has(pathValue)
       )
@@ -431,7 +543,7 @@ export const assembleContext = async (
           }))
 
     batches.forEach((batch, index) => {
-      const paths = workflowTaskPaths(task, batch, task.paths)
+      const paths = workflowTaskPaths(batch, task.paths)
 
       tasks.push(
         createWorkflowTask(

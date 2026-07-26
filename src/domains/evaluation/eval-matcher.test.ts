@@ -108,6 +108,54 @@ const throwingJudge: EvalSemanticJudge = async () => {
   throw new Error('judge provider exploded')
 }
 
+// A pair is identified by the only two report-safe strings the judge ever sees,
+// which is enough to key an acceptance table and to prove no pair is judged
+// twice.
+const pairKeyOf = (input: EvalSemanticJudgeInput): string =>
+  `${input.expectedSummary} :: ${input.findingTitle}`
+
+type TableJudge = {
+  readonly judge: EvalSemanticJudge
+  readonly judgedPairKeys: string[]
+}
+
+// A judge whose verdicts come from an explicit accept list, so a test can shape
+// an arbitrary bipartite graph without depending on wording heuristics.
+const tableJudge = (acceptedPairKeys: readonly string[]): TableJudge => {
+  const judgedPairKeys: string[] = []
+  const accepted = new Set(acceptedPairKeys)
+
+  return {
+    judgedPairKeys,
+    judge: async (input) => {
+      const key = pairKeyOf(input)
+      judgedPairKeys.push(key)
+
+      return {
+        match: accepted.has(key),
+        reason: `Judged ${key}.`
+      }
+    }
+  }
+}
+
+const semanticOnlyCase = (
+  semanticSummaries: readonly string[]
+): EvalCase =>
+  ({
+    ...evalCase,
+    expectedFindings: semanticSummaries.map((semanticSummary) => ({
+      category: 'bug',
+      severity: 'high',
+      semanticSummary,
+      matchMode: 'semantic-only'
+    })),
+    expectedNoFindingZones: []
+  }) as unknown as EvalCase
+
+const titledFinding = (id: string, title: string): AdmittedFinding =>
+  admittedFinding({ id, title, description: `Description of ${title}.` })
+
 describe('eval matcher', () => {
   test('accepts a judged match and records the judge rationale', async () => {
     const judge = recordingJudge()
@@ -366,6 +414,184 @@ describe('eval matcher', () => {
       [1, 'find_b']
     ])
     expect(second.matches).toEqual(first.matches)
+  })
+
+  test('re-seats a contested finding so both expectations match', async () => {
+    // Expectation alpha accepts both findings; expectation beta accepts only
+    // `find_one`. A greedy left-to-right assignment gives alpha `find_one` and
+    // strands beta, scoring a miss that the reviewer did not commit. The
+    // maximum-cardinality pairing must instead move alpha to `find_two`.
+    const collisionCase = semanticOnlyCase([
+      'expectation alpha',
+      'expectation beta'
+    ])
+    const judge = tableJudge([
+      'expectation alpha :: Contested defect',
+      'expectation alpha :: Alpha only defect',
+      'expectation beta :: Contested defect'
+    ])
+    const result = await matchEvalFindings({
+      evalCase: collisionCase,
+      admittedFindings: [
+        titledFinding('find_one', 'Contested defect'),
+        titledFinding('find_two', 'Alpha only defect')
+      ],
+      judge: judge.judge
+    })
+
+    expect(
+      result.matches.map((match) => [match.expectedIndex, match.findingId])
+    ).toEqual([
+      [0, 'find_two'],
+      [1, 'find_one']
+    ])
+    expect(result.unmatchedExpectedIndexes).toEqual([])
+    expect(result.falsePositiveFindingIds).toEqual([])
+    // The rationale must belong to the pair that was actually accepted.
+    expect(result.matches.map((match) => match.semanticReason)).toEqual([
+      'Judged expectation alpha :: Alpha only defect.',
+      'Judged expectation beta :: Contested defect.'
+    ])
+  })
+
+  test('produces the same pairing on repeated invocations of a contested graph', async () => {
+    const collisionCase = semanticOnlyCase([
+      'expectation alpha',
+      'expectation beta'
+    ])
+    const admittedFindings = [
+      titledFinding('find_one', 'Contested defect'),
+      titledFinding('find_two', 'Alpha only defect')
+    ]
+    const acceptedPairKeys = [
+      'expectation alpha :: Contested defect',
+      'expectation alpha :: Alpha only defect',
+      'expectation beta :: Contested defect'
+    ]
+    const runs = await Promise.all(
+      [0, 1, 2].map(async () =>
+        matchEvalFindings({
+          evalCase: collisionCase,
+          admittedFindings,
+          judge: tableJudge(acceptedPairKeys).judge
+        })
+      )
+    )
+
+    expect(runs[1]).toEqual(runs[0])
+    expect(runs[2]).toEqual(runs[0])
+  })
+
+  test('breaks a tie by giving an expectation its lowest admitted finding index', async () => {
+    // Both findings are acceptable, so both single-pair matchings are maximum.
+    // The documented rule is that the lowest admitted finding index wins.
+    const singleExpectedCase = semanticOnlyCase(['expectation alpha'])
+    const judge = tableJudge([
+      'expectation alpha :: First defect',
+      'expectation alpha :: Second defect'
+    ])
+    const result = await matchEvalFindings({
+      evalCase: singleExpectedCase,
+      admittedFindings: [
+        titledFinding('find_first', 'First defect'),
+        titledFinding('find_second', 'Second defect')
+      ],
+      judge: judge.judge
+    })
+
+    expect(result.matches.map((match) => match.findingId)).toEqual([
+      'find_first'
+    ])
+    expect(result.duplicateFindingIds).toEqual(['find_second'])
+  })
+
+  test('breaks a tie by re-seating a displaced expectation on its lowest alternative', async () => {
+    // Alpha accepts all three findings and beta only `find_a`, so beta can only
+    // be served by displacing alpha. Two maximum pairings exist; the documented
+    // rule sends the displaced expectation to its lowest available index.
+    const collisionCase = semanticOnlyCase([
+      'expectation alpha',
+      'expectation beta'
+    ])
+    const judge = tableJudge([
+      'expectation alpha :: Defect a',
+      'expectation alpha :: Defect b',
+      'expectation alpha :: Defect c',
+      'expectation beta :: Defect a'
+    ])
+    const result = await matchEvalFindings({
+      evalCase: collisionCase,
+      admittedFindings: [
+        titledFinding('find_a', 'Defect a'),
+        titledFinding('find_b', 'Defect b'),
+        titledFinding('find_c', 'Defect c')
+      ],
+      judge: judge.judge
+    })
+
+    expect(
+      result.matches.map((match) => [match.expectedIndex, match.findingId])
+    ).toEqual([
+      [0, 'find_b'],
+      [1, 'find_a']
+    ])
+  })
+
+  test('keeps every expectation and every finding in at most one pair', async () => {
+    // Re-seating must never leave an expectation holding two findings, so the
+    // one-to-one contract is asserted on a graph where every pair is acceptable.
+    const summaries = ['expectation alpha', 'expectation beta', 'expectation gamma']
+    const titles = ['Defect a', 'Defect b', 'Defect c']
+    const result = await matchEvalFindings({
+      evalCase: semanticOnlyCase(summaries),
+      admittedFindings: titles.map((title, index) =>
+        titledFinding(`find_${index}`, title)
+      ),
+      judge: tableJudge(
+        summaries.flatMap((summary) =>
+          titles.map((title) => `${summary} :: ${title}`)
+        )
+      ).judge
+    })
+
+    expect(result.matches.map((match) => match.expectedIndex)).toEqual([0, 1, 2])
+    expect(result.matches.map((match) => match.findingId)).toEqual([
+      'find_0',
+      'find_1',
+      'find_2'
+    ])
+  })
+
+  test('judges every expectation and finding pair at most once', async () => {
+    // Judge calls are paid provider calls, so the augmenting search must read
+    // cached verdicts instead of re-asking about a pair it already explored.
+    const collisionCase = semanticOnlyCase([
+      'expectation alpha',
+      'expectation beta',
+      'expectation gamma'
+    ])
+    const judge = tableJudge([
+      'expectation alpha :: Defect a',
+      'expectation alpha :: Defect b',
+      'expectation beta :: Defect a',
+      'expectation gamma :: Defect a',
+      'expectation gamma :: Defect c'
+    ])
+    await matchEvalFindings({
+      evalCase: collisionCase,
+      admittedFindings: [
+        titledFinding('find_a', 'Defect a'),
+        titledFinding('find_b', 'Defect b'),
+        titledFinding('find_c', 'Defect c')
+      ],
+      judge: judge.judge
+    })
+
+    expect(judge.judgedPairKeys).toEqual([
+      ...new Set(judge.judgedPairKeys)
+    ])
+    // Nine pairs pass the gates, which bounds the worst case.
+    expect(judge.judgedPairKeys.length).toBeLessThanOrEqual(9)
   })
 
   test('marks a failed judge call inconclusive instead of a miss or false positive', async () => {

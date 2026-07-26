@@ -58,14 +58,19 @@ are unfinished. Enabling them is a deliberate, measured choice.
 | `review.crossFileRetrieval.enabled` | `false` | Agentic cross-file discovery — the discovery agent may read other files through mediated tools. **Measured net negative.** Built, hardened, and measured three times; recall fell each time (flat at four cases, 66.7% → 44.4% at nine, 68.8% → 56.3% at sixteen) while precision stayed perfect. |
 | `review.contextScout.enabled` | `false` | A cheap scout call picks which out-of-change symbol bodies to pre-fetch, keeping the reviewer single-shot and tool-free. Built as the answer to the above; **measured neutral**. |
 | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task. Additive by construction, but it costs an extra discovery call per task and has not cleared a held-out A/B showing net recall gain without an authorization regression. |
-| `security.signals.enabled` | `false` | **Configuration only — carries no behavior in this phase.** Reserved for a later deterministic security-evidence layer. Turning it on today changes nothing. |
 | `contextSources.enabled` | `false` | External change-intent ingestion (ticket/PR context). Off unless you configure providers. |
 | `verification.enabled` | `false` | A separate agentic flow that verifies specific claims — see [two flows](../03-concepts/two-flows.md). |
 | `fix.enabled` | `false` | Advisory finding-investigation and fix-proposal lane. |
 | `reporting.reviewComments.enabled` | `false` | Writes inline review-comment draft artifacts. |
 | `skills.enabled` | `false` | Mounted reviewer skill directory with bounded read/list/grep tools. |
 | `observability.openTelemetry.enabled` | `false` | No-content telemetry export. |
-| `evaluation.enabled` | `false` | Evaluation-specific configuration block. |
+
+The deterministic security-signal evidence layer (spec 15, Mechanism 2) has no
+implementation yet, so there is no `security.signals.enabled` key — a key with no
+behavior behind it would be a switch that lies about doing something. It ships
+alongside the layer, not before it. Similarly, the evaluation block has no
+`enabled` key: case selection is driven by `eval run` CLI flags, and the SARIF
+reporter has no `sarif.redact` key, since it redacts unconditionally regardless.
 
 **Consequence of the defaults:** out of the box, discovery is a single
 general pass per review task, with no tools and no scout. That is the

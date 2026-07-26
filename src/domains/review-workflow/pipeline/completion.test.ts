@@ -122,6 +122,64 @@ describe('workflow completion', () => {
     expect(output.admittedFindings[0]?.refutationId).toBe('refute_completion1')
   })
 
+  // A file too large for one packet is split into chunks that each become their
+  // own task. The task below was shown lines 201-400 only, so a candidate it
+  // reports at line 10 is a chunk-relative number that was never resolved against
+  // the file. It is inside the file, so the whole-file range check accepts it; only
+  // the chunk range its task carries can reject it.
+  test('rejects a candidate outside the source chunk its task was given', () => {
+    const secondChunkWorkflowInput = ReviewWorkflowInputSchema.parse({
+      ...workflowInput,
+      reviewedLineRanges: [
+        { path: 'src/completion.ts', startLine: 1, endLine: 400 }
+      ],
+      tasks: [
+        {
+          id: 'task_completion1',
+          kind: 'file',
+          round: 1,
+          paths: ['src/completion.ts'],
+          factIds: [],
+          evidenceIds: [],
+          candidateIds: [],
+          contextEntryIds: [],
+          priority: 1,
+          reviewContext: [
+            {
+              kind: 'file',
+              path: 'src/completion.ts',
+              startLine: 201,
+              endLine: 400,
+              content: 'const tail = 1\n',
+              ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+            }
+          ]
+        }
+      ]
+    })
+    const output = completeReviewWorkflow({
+      workflowInput: secondChunkWorkflowInput,
+      candidateFindings: [candidate],
+      admissionCandidates: [candidate],
+      artifactOnlyCandidateIds: [],
+      refutationResults: [],
+      providerIssues: [],
+      contextLedgerEntries: [],
+      evidence: [evidence],
+      preRejectedFindings: [],
+      preAdmissionDecisions: [],
+      taskEvents: [],
+      instructionHashes: [configHash],
+      skillHashes: []
+    })
+
+    expect(output.admittedFindings).toHaveLength(0)
+    expect(output.rejectedFindings[0]).toMatchObject({
+      candidateId: 'cand_completion1',
+      reason: 'location-invalid'
+    })
+  })
+
   test('marks artifact-only admitted candidates before baseline and quality gate evaluation', () => {
     const output = completeReviewWorkflow({
       workflowInput,

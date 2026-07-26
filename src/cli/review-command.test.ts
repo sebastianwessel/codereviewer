@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest'
 import type {
   JsonValue,
   ModelProvider,
+  ObjectRequest,
   ObjectResponse
 } from '@purista/harness'
 import { runCli } from './index.js'
@@ -24,6 +25,32 @@ class UnusedModelProvider implements ModelProvider {
 
   async object<T extends JsonValue = JsonValue>(): Promise<ObjectResponse<T>> {
     throw new Error('UnusedModelProvider.object must not be called in this test')
+  }
+}
+
+// A minimal scripted provider that reports zero findings for every discovery
+// call. Records every request it receives so a test can prove it was actually
+// invoked (as opposed to the real `@purista/harness` SDK provider that the CLI
+// falls back to when it fails to forward `providerImport`).
+class EmptyFindingProvider implements ModelProvider {
+  readonly id = 'empty-finding-provider'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  async object<T extends JsonValue = JsonValue>(
+    request: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(request)
+
+    return {
+      object: { findings: [] } as unknown as T,
+      finishReason: 'stop',
+      usage: {
+        inputTokens: 1,
+        outputTokens: 1,
+        totalTokens: 2
+      }
+    }
   }
 }
 
@@ -362,6 +389,59 @@ describe('review CLI', () => {
       expect(credentialsMissing.stderr).toContain('provider_credentials_missing')
       expect(repositoryFailure.exitCode).toBe(2)
       expect(repositoryFailure.stderr).toContain('invalid_git_ref')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Regression test for `review` dropping `providerImport`: every other seam
+  // that resolves a provider (`eval run`'s judge/case-runner resolution, and
+  // verification's claim-provider resolution earlier in this file) forwards
+  // `options.providerImport`, but `review`'s call into `runReviewPipeline` did
+  // not, so a test-supplied fake provider factory was silently ignored and the
+  // CLI fell back to importing the real `@purista/harness` SDK provider (which
+  // would attempt a genuine network call). This test configures a model-backed
+  // review (a `provider` makes `aiReview` model-backed by default; see
+  // `provider-workflow.ts`) and asserts the SCRIPTED provider handed in via
+  // `providerImport` is the one actually invoked.
+  test('forwards providerImport so the review pipeline uses the scripted provider', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1;\n')
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'sentinel-model'
+          }
+        })
+      )
+
+      const provider = new EmptyFindingProvider()
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {
+          OPENAI_API_KEY: 'sk-test'
+        },
+        providerImport: async () => ({
+          openai: () => provider
+        })
+      })
+
+      expect(result.exitCode).toBe(0)
+      // Only reachable if the CLI actually handed our scripted factory to the
+      // pipeline instead of falling back to the real SDK import.
+      expect(provider.requests.length).toBeGreaterThan(0)
+
+      const artifactDir = JSON.parse(result.stdout).artifactDir as string
+      const report = JSON.parse(
+        await readFile(join(root, artifactDir, 'report.json'), 'utf8')
+      )
+      expect(report.run.provider).toBe('openai')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

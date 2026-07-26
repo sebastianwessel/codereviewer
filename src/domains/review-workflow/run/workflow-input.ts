@@ -59,8 +59,13 @@ export const contextEvidenceForTasks = (
           kind: 'file',
           summary: `Reviewed source context for ${context.path}.`,
           location: {
+            // The chunk's own origin, not the file's. A large file is split into
+            // several context documents, and pinning every one of them to line 1
+            // pointed the evidence for a second-chunk finding at the top of the
+            // file -- the same class of mislocation the chunk numbering itself
+            // used to have.
             path: context.path,
-            startLine: 1,
+            startLine: context.startLine ?? 1,
             side: 'file'
           },
           source: 'review-context',

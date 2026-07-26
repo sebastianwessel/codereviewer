@@ -15,7 +15,6 @@
 // enforced by CODE via the injected bounded tools, not by the model.
 
 import { defineHarness, type Logger, type ModelAlias } from '@purista/harness'
-import { z } from 'zod'
 import { createNoopReviewLogger } from '../observability/index.js'
 import { ClaimSchema } from '../../shared/contracts/verification/verification.schema.js'
 import {

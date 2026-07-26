@@ -8,8 +8,7 @@ import {
   RejectedFindingSchema,
   RepositoryRelativePathSchema,
   ReviewReportSchema,
-  SeveritySchema,
-  type ReviewReport
+  SeveritySchema
 } from '../../../shared/contracts/index.js'
 import {
   CandidateFindingSchema
@@ -45,6 +44,13 @@ export const ReviewContextDocumentSchema = z.strictObject({
     'change-intent'
   ]),
   path: RepositoryRelativePathSchema.optional(),
+  // Absolute line span this document occupies in its source file. Set for 'file'
+  // chunks, because a file too large for one packet is split into several chunks
+  // that each become their own task: without the origin the second chunk would be
+  // presented (and its findings reported) as if it started at line 1. Absent for
+  // context kinds that are not a span of a reviewed file.
+  startLine: z.int().min(1).optional(),
+  endLine: z.int().min(1).optional(),
   content: z.string(),
   ledgerEntryId: ContextLedgerIdSchema
 })

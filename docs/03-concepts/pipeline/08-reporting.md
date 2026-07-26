@@ -116,8 +116,9 @@ and the structured error's exit code on failure.
 | `reporting.reviewComments.enabled` | `false` | Emit inline comment drafts |
 | `reporting.reviewComments.platform` | `auto` | Pin a renderer instead of detecting |
 
-> `reporting.sarif.redact` is accepted by the config schema but is not read by the
-> SARIF renderer, which redacts its text unconditionally.
+> There is no `reporting.sarif.redact` key. The SARIF renderer, like every other
+> report renderer, redacts its text unconditionally, so a key to turn that off
+> would have had nothing to switch.
 
 See also: [Artifacts reference](../../06-reference/artifacts.md) ·
 [CLI reference](../../06-reference/cli.md) ·

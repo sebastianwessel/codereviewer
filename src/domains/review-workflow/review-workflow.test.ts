@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
 import type {
   JsonValue,
-  Logger,
   ModelProvider,
   ObjectRequest,
   ObjectResponse
@@ -26,36 +25,6 @@ import { parseGitDiffMaps } from '../repository-intake/index.js'
 
 const configHash =
   '1111111111111111111111111111111111111111111111111111111111111111'
-
-type CapturedLogRecord = {
-  readonly level: string
-  readonly message: string
-  readonly fields?: Record<string, unknown>
-}
-
-const createCapturingLogger = (): {
-  readonly logger: Logger
-  readonly records: CapturedLogRecord[]
-} => {
-  const records: CapturedLogRecord[] = []
-  const capture =
-    (level: string) =>
-    (message: string, fields?: Record<string, unknown>): void => {
-      records.push({ level, message, ...(fields === undefined ? {} : { fields }) })
-    }
-
-  const logger: Logger = {
-    trace: capture('trace'),
-    debug: capture('debug'),
-    info: capture('info'),
-    warn: capture('warn'),
-    error: capture('error'),
-    fatal: capture('fatal'),
-    child: () => logger
-  }
-
-  return { logger, records }
-}
 
 const createMountedSkill = async (): Promise<{
   readonly root: string
@@ -457,57 +426,6 @@ class EvidenceOptionalFindingProvider implements ModelProvider {
             path: 'src/app.ts',
             startLine: 4,
             fixSummary: 'Return the expected value from the changed branch.'
-          }
-        ]
-      } as unknown as T,
-      finishReason: 'stop',
-      usage: {
-        inputTokens: 1,
-        outputTokens: 1,
-        totalTokens: 2
-      }
-    }
-  }
-}
-
-class EvidenceCitingFindingProvider implements ModelProvider {
-  readonly id = 'evidence-citing-finding'
-  readonly genAiSystem = 'scripted'
-  readonly requests: ObjectRequest[] = []
-
-  constructor(
-    private readonly input: {
-      readonly evidenceId: string
-      readonly title: string
-      readonly description: string
-      readonly category?: 'bug' | 'security' | 'performance' | 'maintainability'
-    }
-  ) {}
-
-  async object<T extends JsonValue = JsonValue>(
-    req: ObjectRequest<T>
-  ): Promise<ObjectResponse<T>> {
-    this.requests.push(req)
-
-    if (isFindingRefutationRequest(req)) {
-      return provedFindingResponse<T>(
-        req,
-        'Refutation check confirmed the model finding from cited deterministic evidence.'
-      )
-    }
-
-    return {
-      object: {
-        findings: [
-          {
-            category: this.input.category ?? 'bug',
-            severity: 'high',
-            title: this.input.title,
-            description: this.input.description,
-            path: 'src/app.ts',
-            startLine: 4,
-            evidenceIds: [this.input.evidenceId],
-            fixSummary: 'Apply the deterministic tool recommendation.'
           }
         ]
       } as unknown as T,

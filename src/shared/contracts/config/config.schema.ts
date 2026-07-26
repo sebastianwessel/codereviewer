@@ -220,20 +220,16 @@ export const SecurityDedicatedPassConfigSchema = z.strictObject({
   enabled: z.boolean().default(false)
 })
 
-// Deterministic security-signal evidence layer (spec 15, Mechanism 2). Wired now
-// as configuration only; reserved for a later signal layer and carries no behavior
-// in this phase.
-export const SecuritySignalsConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false)
-})
-
+// The deterministic security-signal evidence layer (spec 15, Mechanism 2) has no
+// implementation yet, so this config surface was removed rather than shipping a
+// toggle that silently does nothing (see specs/15-security-focused-review.md).
+// Re-add a `signals` key here in the same change that implements the layer.
 export const SecurityConfigSchema = z.strictObject({
   allowShell: z.literal(false).default(false),
   allowNetwork: z.literal(false).default(false),
   allowFilesystemWrite: z.literal(false).default(false),
   captureContentTelemetry: z.literal(false).default(false),
-  dedicatedPass: SecurityDedicatedPassConfigSchema.default({ enabled: false }),
-  signals: SecuritySignalsConfigSchema.default({ enabled: false })
+  dedicatedPass: SecurityDedicatedPassConfigSchema.default({ enabled: false })
 })
 
 export const QualityGateConfigSchema = z.strictObject({
@@ -380,8 +376,7 @@ export const DriftConfigSchema = z.strictObject({
 export const SarifReportingConfigSchema = z.strictObject({
   target: z.enum(['generic', 'github']).default('generic'),
   category: z.string().min(1).default('codereviewer'),
-  maxResults: z.int().min(1).max(25000).default(5000),
-  redact: z.boolean().default(true)
+  maxResults: z.int().min(1).max(25000).default(5000)
 })
 
 // Platform-neutral inline review comments (spec 13). Disabled by default. When
@@ -397,8 +392,7 @@ export const ReportingConfigSchema = z.strictObject({
   sarif: SarifReportingConfigSchema.default({
     target: 'generic',
     category: 'codereviewer',
-    maxResults: 5000,
-    redact: true
+    maxResults: 5000
   }),
   reviewComments: ReviewCommentsConfigSchema.default({
     enabled: false,
@@ -406,12 +400,62 @@ export const ReportingConfigSchema = z.strictObject({
   })
 })
 
+// Mirrors `EvalRegressionThresholdsSchema`
+// (src/domains/evaluation/eval-report-contracts.ts) field-for-field so any
+// value that validates here also parses there. It is redefined rather than
+// imported: this file is the configuration boundary (shared/contracts) and must
+// not depend on an application domain module, since the dependency arrow runs
+// config -> domain and never the reverse. `npm run generate:schemas:check` and
+// the eval CLI tests catch the two shapes drifting apart.
+const EvalRegressionGateOverridesSchema = z.strictObject({
+  minParseValidity: z.number().min(0).max(1).optional(),
+  minRecall: z.number().min(0).max(1).optional(),
+  minPrecision: z.number().min(0).max(1).optional(),
+  minSeverityWeightedF1: z.number().min(0).max(1).optional(),
+  maxFalsePositiveCount: z.int().min(0).optional(),
+  maxCommentsPerKloc: z.number().min(0).optional(),
+  maxCommentsPerDiffHunk: z.number().min(0).optional(),
+  maxIncompleteCoverageRate: z.number().min(0).max(1).optional(),
+  maxContextMutationRate: z.number().min(0).max(1).optional(),
+  maxCostUsd: z.number().min(0).optional(),
+  maxDurationMs: z.int().min(0).optional(),
+  minProductRecall: z.number().min(0).max(1).optional(),
+  failOnProviderError: z.boolean().optional()
+})
+
+// `stable` (the default) gates `eval run` only on signals that carry zero
+// run-to-run sampling variance: parse validity and provider errors are each
+// either satisfied or not on a given run, unlike a mean metric such as recall,
+// which this project has measured to vary seed-to-seed by several percentage
+// points on the primary corpus (see "Metrics" in
+// specs/06-evaluation-and-quality-gates.md). `strict` restores the historical
+// all-or-nothing behaviour (perfect recall, zero false positives) as an
+// explicit opt-in for a maintainer who wants a release-quality bar rather than
+// a CI smoke gate. See "Eval Regression Gate" in
+// specs/06-evaluation-and-quality-gates.md for the full rationale.
+export const EvalRegressionGateProfileSchema = z.enum(['stable', 'strict'])
+
+export const EvalRegressionGateConfigSchema = z.strictObject({
+  profile: EvalRegressionGateProfileSchema.default('stable'),
+  // Per-field overrides layered on top of the resolved profile; any key set
+  // here wins over that profile's value for the same key, so a project can
+  // keep the stable default shape while tightening (or loosening) one signal.
+  overrides: EvalRegressionGateOverridesSchema.default({})
+})
+
 export const EvaluationConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false),
   // Minimum semantic-judge agreement against the committed calibration set. The
   // judge is the sole authority for every eval quality metric, so a run whose
   // agreement falls below this bar reports `scoring.judgeTrustworthy = false`.
-  minJudgeAgreement: z.number().min(0).max(1).default(0.9)
+  //
+  // There is deliberately no `enabled` key here: case selection is driven by
+  // `eval run` CLI flags, not config, so an `enabled` flag would be accepted and
+  // then silently ignored (see specs/06-evaluation-and-quality-gates.md).
+  minJudgeAgreement: z.number().min(0).max(1).default(0.9),
+  regressionGate: EvalRegressionGateConfigSchema.default({
+    profile: 'stable',
+    overrides: {}
+  })
 })
 
 export const OpenTelemetryConfigSchema = z
@@ -532,16 +576,14 @@ export const CodeReviewerConfigSchema = z.strictObject({
     allowNetwork: false,
     allowFilesystemWrite: false,
     captureContentTelemetry: false,
-    dedicatedPass: { enabled: false },
-    signals: { enabled: false }
+    dedicatedPass: { enabled: false }
   }),
   reporting: ReportingConfigSchema.default({
     formats: ['json', 'markdown', 'sarif'],
     sarif: {
       target: 'generic',
       category: 'codereviewer',
-      maxResults: 5000,
-      redact: true
+      maxResults: 5000
     },
     reviewComments: {
       enabled: false,
@@ -549,8 +591,8 @@ export const CodeReviewerConfigSchema = z.strictObject({
     }
   }),
   evaluation: EvaluationConfigSchema.default({
-    enabled: false,
-    minJudgeAgreement: 0.9
+    minJudgeAgreement: 0.9,
+    regressionGate: { profile: 'stable', overrides: {} }
   }),
   drift: DriftConfigSchema.default({
     enabled: true,
@@ -599,13 +641,18 @@ export type SecurityConfig = z.infer<typeof SecurityConfigSchema>
 export type SecurityDedicatedPassConfig = z.infer<
   typeof SecurityDedicatedPassConfigSchema
 >
-export type SecuritySignalsConfig = z.infer<typeof SecuritySignalsConfigSchema>
 export type DriftCategory = z.infer<typeof DriftCategorySchema>
 export type DriftConfig = z.infer<typeof DriftConfigSchema>
 export type ReportingConfig = z.infer<typeof ReportingConfigSchema>
 export type ReviewCommentPlatform = z.infer<typeof ReviewCommentPlatformSchema>
 export type ReviewCommentsConfig = z.infer<typeof ReviewCommentsConfigSchema>
 export type EvaluationConfig = z.infer<typeof EvaluationConfigSchema>
+export type EvalRegressionGateProfile = z.infer<
+  typeof EvalRegressionGateProfileSchema
+>
+export type EvalRegressionGateConfig = z.infer<
+  typeof EvalRegressionGateConfigSchema
+>
 export type OpenTelemetryConfig = z.infer<typeof OpenTelemetryConfigSchema>
 export type LoggingConfig = z.infer<typeof LoggingConfigSchema>
 export type ObservabilityConfig = z.infer<typeof ObservabilityConfigSchema>

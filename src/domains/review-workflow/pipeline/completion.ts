@@ -17,7 +17,8 @@ import {
   type CandidateFinding,
   type QualityGateThresholds,
   type ReviewedDiffRange,
-  type ReviewedLineRange
+  type ReviewedLineRange,
+  type TaskSourceChunkRange
 } from '../../admission/index.js'
 import {
   createReviewSharedContext,
@@ -26,6 +27,7 @@ import {
 import { type ContextLedgerEntry } from '../../review-planning/index.js'
 import {
   ReviewContextDocumentSchema,
+  type WorkflowReviewTask,
   type WorkflowTaskEvent
 } from './agent-contracts.js'
 import { type ProviderIssue } from './provider-issues.js'
@@ -67,6 +69,12 @@ const runAdmission = (
     reviewedLineRangesFromReviewContext(input.workflowInput.reviewContext ?? [])
   const reviewedDiffRanges: readonly ReviewedDiffRange[] | undefined =
     input.workflowInput.reviewedDiffRanges
+  // Which lines each task was actually shown. A file too large for one packet is
+  // split into chunks that each become their own task, so a task's candidate must
+  // fall inside its own chunk; the whole-file range cannot tell the difference.
+  const taskSourceChunkRanges = taskSourceChunkRangesFromTasks(
+    input.workflowInput.tasks ?? []
+  )
 
   for (const evidence of evidenceRecords) {
     assertDeterministicSignalEvidenceOwnsPath(evidence)
@@ -84,6 +92,9 @@ const runAdmission = (
         reviewedPaths: input.workflowInput.reviewedPaths,
         ...(reviewedLineRanges === undefined ? {} : { reviewedLineRanges }),
         ...(reviewedDiffRanges === undefined ? {} : { reviewedDiffRanges }),
+        ...(taskSourceChunkRanges.length === 0
+          ? {}
+          : { taskSourceChunkRanges }),
         minimumSeverity: 'info',
         actionableSeverityThreshold:
           input.workflowInput.admissionPolicy.actionableSeverityThreshold,
@@ -123,6 +134,30 @@ const runAdmission = (
 
   return { admittedFindings, rejectedFindings, admissionDecisions }
 }
+
+// Chunk provenance is recorded per (task, path) so a candidate can be checked
+// against the chunk of the file its own task was given. Tasks whose file context
+// carries no origin (nothing produced one) contribute nothing and stay unchecked.
+const taskSourceChunkRangesFromTasks = (
+  tasks: readonly WorkflowReviewTask[]
+): readonly TaskSourceChunkRange[] =>
+  tasks.flatMap((task) =>
+    task.reviewContext.flatMap((document) =>
+      document.kind === 'file' &&
+      document.path !== undefined &&
+      document.startLine !== undefined &&
+      document.endLine !== undefined
+        ? [
+            {
+              taskId: task.id,
+              path: document.path,
+              startLine: document.startLine,
+              endLine: document.endLine
+            }
+          ]
+        : []
+    )
+  )
 
 const reviewedLineRangesFromReviewContext = (
   reviewContext: readonly z.infer<typeof ReviewContextDocumentSchema>[]

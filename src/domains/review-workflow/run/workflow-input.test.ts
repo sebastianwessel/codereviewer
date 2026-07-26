@@ -84,6 +84,29 @@ describe('review runner workflow input', () => {
     ])
   })
 
+  // A large file is split into several context documents. Pinning every one to
+  // line 1 pointed the evidence for a second-chunk finding at the top of the
+  // file, which is the same mislocation the chunk numbering itself used to have.
+  test('anchors chunk evidence at the chunk’s own origin', () => {
+    const chunked: WorkflowReviewTask = {
+      ...task({ id: 'task_chunked', content: 'later chunk body' }),
+      reviewContext: [
+        {
+          kind: 'file',
+          path: 'src/a.ts',
+          content: 'later chunk body',
+          ledgerEntryId: `ctx_${'c'.repeat(24)}`,
+          startLine: 201,
+          endLine: 400
+        }
+      ]
+    }
+
+    const [chunkEvidence] = contextEvidenceForTasks([chunked])
+
+    expect(chunkEvidence?.location?.startLine).toBe(201)
+  })
+
   test('creates provider workflow input with budgets, context evidence, and cloned baseline', () => {
     const evidence = EvidenceRecordSchema.parse({
       id: 'ev_alpha',

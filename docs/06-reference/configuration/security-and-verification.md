@@ -16,7 +16,10 @@ Note the nesting: the cross-file retrieval and context scout settings live under
 | `security.allowFilesystemWrite` | literal `false` | `false` | Writes happen only through the artifact-writer boundary. `true` is rejected. |
 | `security.captureContentTelemetry` | literal `false` | `false` | Source, prompts, and model output are never sent to telemetry. `true` is rejected. |
 | `security.dedicatedPass.enabled` | boolean | `false` | Adds a second, security-only discovery call per task applying a generic OWASP/CWE checklist. |
-| `security.signals.enabled` | boolean | `false` | Deterministic security-signal evidence layer. **Configuration only in this phase — it carries no behavior yet.** |
+
+There is no `security.signals` key. The deterministic security-signal evidence
+layer (spec 15, Mechanism 2) has no implementation yet; its config key ships
+alongside the layer, not before it.
 
 `security.dedicatedPass` candidates are *additive*: they merge with the general
 pass's candidates and never displace them, so the pass can raise security recall

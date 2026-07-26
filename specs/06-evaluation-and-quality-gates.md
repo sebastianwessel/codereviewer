@@ -606,9 +606,19 @@ location, match mode, summary, detection rate, and run marks.
   `Semantic Judge Matches` audit table.
 - The judge decides semantic identity only. It never replaces the deterministic
   path and line gates, which are always applied first.
-- One admitted finding can match at most one expected finding. Pair assignment is
-  deterministic: expected findings ascending, then admitted findings ascending;
-  the first judge-accepted admitted finding claims the expectation.
+- One admitted finding can match at most one expected finding. Pair assignment
+  maximises the number of matched expectations rather than taking the first
+  acceptable pairing: assigning greedily lets a loose accept for an earlier
+  expectation consume the only finding a later expectation could have matched,
+  which scores that later expectation as a miss the reviewer did not commit.
+  That bias runs in the same direction as the multi-defect behaviour the corpus
+  exists to measure, so the matcher would have flattered its own diagnosis.
+- Assignment is deterministic. Expectations are served in ascending order and each
+  prefers the lowest available admitted finding index, including when it is
+  displaced and re-seated, so identical inputs always yield identical pairs. Every
+  pair is judged at most once: a pair the deterministic path and line gates reject
+  is never sent to the judge, and a judged pair is cached, so maximising the
+  matching costs no more judge calls than the first-acceptable rule did.
 - An unmatched admitted finding at the same path and exact overlapping line
   range as an already matched finding is classified as a duplicate finding.
   Duplicate findings are tracked as review noise and must not be counted as
@@ -660,6 +670,54 @@ Gate result:
 - treats model-origin findings as gate-relevant only when their
   `RefutationResult.verdict = "proved"` and they are admitted as actionable.
 - records whether baseline filtering was applied.
+
+## Eval Regression Gate
+
+`codereviewer eval run`'s pass/fail exit code is a SEPARATE gate from the
+review command's Quality Gate above: it is computed from
+`EvalRegressionThresholds` (`src/domains/evaluation/eval-report-contracts.ts`)
+against the run's own `metrics`, and is recorded on the saved report as
+`regressionGate`.
+
+Threshold values are resolved from `evaluation.regressionGate` config in this
+order, each layer overriding the previous field-by-field:
+
+1. the selected profile's built-in thresholds (`stable` or `strict`, below);
+2. `evaluation.regressionGate.overrides` from committed config;
+3. `--gate-profile <stable|strict>` on the `eval run` command line, which
+   overrides `evaluation.regressionGate.profile` for that invocation only.
+
+| Profile | `minParseValidity` | `minRecall` | `maxFalsePositiveCount` | `failOnProviderError` |
+| --- | --- | --- | --- | --- |
+| `stable` (default) | `1` | unset (no fail) | unset (no fail) | `true` |
+| `strict` | `1` | `1` | `0` | `true` |
+
+`stable` is the default because `parseValidity` and provider-error presence
+are the only two eval signals with zero run-to-run sampling variance: a given
+run's output either validates against schema or it does not, and a provider
+call either errored or it did not. Every other metric is a MEAN over a
+model-backed, non-deterministic run. The "Metrics" section above records a
+measured four-seed recall band (81.3%, 87.5%, 81.3%, 75.0%; mean 81.3%,
+standard deviation 4.4 percentage points) on the primary corpus, and later
+measurement on an expanded corpus found a comparable band (~4.8 points). A
+default gate that thresholds on mean recall (or on the raw, fixture-
+incompleteness-inflated `falsePositiveCount` — see its definition in
+"Metrics") would fail unpredictably depending on which side of that band a
+given run landed on, which is a worse default than always failing, because a
+flaky gate trains reviewers to ignore it. `strict` restores an all-or-nothing
+bar (perfect recall, zero tolerated false positives) as an explicit opt-in for
+a maintainer preparing a release cut who has verified it holds for their own
+fixture set, rather than as the default every CI run is measured against.
+
+A project may tighten or loosen any individual threshold — including opting
+into `minRecall`, `minProductRecall`, or `maxFalsePositiveCount` — via
+`evaluation.regressionGate.overrides`, without changing the resolved profile's
+other fields.
+
+`eval run`'s `generatedAt` on the saved report reflects the real wall clock for
+a production run. Test fixtures that need a byte-for-byte reproducible saved
+report inject a fixed clock at the CLI boundary (`CliRunOptions.now`) rather
+than the eval report contract carrying a special-cased "test mode".
 
 ## Drift And Ambiguity Gates
 

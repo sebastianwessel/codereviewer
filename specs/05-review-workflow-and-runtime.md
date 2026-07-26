@@ -141,6 +141,15 @@ Task limits:
   file or dependency cluster cannot fit in one packet. Large files and large
   dependency clusters create more review tasks; they must not create skipped or
   truncated required source;
+- every source chunk must carry the absolute line range it occupies in its file,
+  and chunks must be cut on line boundaries (a single line longer than the chunk
+  budget is the only exception and keeps one line number across its pieces).
+  Discovery must number a chunk's lines from that absolute origin, so a finding
+  in the second chunk of a split file reports the file's real line and not a
+  chunk-relative one. Chunk-relative numbering is a correctness defect, not a
+  cosmetic one: the finding fingerprint anchors on the text at the reported
+  line, so a wrong line silently gives the finding a wrong identity and breaks
+  baseline suppression and cross-run matching;
 - workflow context assembly records every included source chunk in the context
   ledger with reason `task-context-source-chunk`, task ID, byte counts, and
   content hash. Budget pressure is not an evidence record unless another
@@ -644,6 +653,13 @@ Rules:
 - admission must receive source-derived reviewed line ranges for every reviewed
   head-file path; new-side or whole-file candidate locations outside those
   ranges must be rejected as `location-invalid`;
+- admission must also receive the absolute line range of the source chunk each
+  review task was given, and must reject as `location-invalid` a candidate whose
+  location falls outside the chunk of its own task. The whole-file range cannot
+  catch this: a chunk-relative number from a split file still lands inside the
+  file. A file that fits in one chunk has a chunk range equal to its whole-file
+  range, so this check never changes single-chunk admission; a task with no chunk
+  provenance for the path (for example a deterministic candidate) is not checked;
 - `reporterEligibility = inline` is allowed only for new-side findings whose
   line range is valid in reviewed head-file content and whose severity meets the
   configured inline threshold;

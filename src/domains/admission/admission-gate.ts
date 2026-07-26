@@ -55,10 +55,24 @@ export type ReviewedDiffRange = {
   readonly changeKind?: 'new' | 'modified' | 'deleted' | undefined
 }
 
+// The absolute line span of one source chunk, tied to the review task that was
+// given that chunk. A file too large for one packet is split into chunks and each
+// chunk becomes its own task, so a task usually saw only part of its file.
+export type TaskSourceChunkRange = {
+  readonly taskId: string
+  readonly path: string
+  readonly startLine: number
+  readonly endLine: number
+}
+
 export type AdmissionPolicy = {
   readonly reviewedPaths: readonly string[]
   readonly reviewedLineRanges?: readonly ReviewedLineRange[]
   readonly reviewedDiffRanges?: readonly ReviewedDiffRange[]
+  // Per-task chunk provenance. Optional: when a task has no entry here (a
+  // deterministic candidate, or a task that carried no file context) the chunk
+  // check is skipped and admission behaves exactly as before.
+  readonly taskSourceChunkRanges?: readonly TaskSourceChunkRange[]
   readonly minimumSeverity?: Severity
   // Minimum severity for a model-origin candidate to be admitted as actionable.
   // Trusted deterministic-rule candidates are exempt. Below this, the candidate
@@ -181,6 +195,41 @@ const locationLineRangeIsValid = (
     reviewedRange !== undefined &&
     candidate.location.startLine >= reviewedRange.startLine &&
     endLine <= reviewedRange.endLine
+  )
+}
+
+// The whole-file range above cannot catch a mis-numbered location from a split
+// file: a chunk-relative number still lands somewhere inside the file and looks
+// valid. Checking against the chunk the task was actually shown does catch it,
+// which matters beyond the reported number - the fingerprint anchors on the text
+// at that line, so a wrong line silently gives the finding a wrong identity and
+// breaks baseline suppression and cross-run matching.
+// Skipped when the task has no chunk provenance for the path, so this can only
+// reject locations the reviewer provably could not have seen. For a file that fits
+// in a single chunk the chunk range IS the whole-file range, so nothing changes.
+const locationChunkRangeIsValid = (
+  candidate: CandidateFinding,
+  ranges: readonly TaskSourceChunkRange[] | undefined
+): boolean => {
+  if (candidate.location.side === 'old' || ranges === undefined) {
+    return true
+  }
+
+  const chunkRanges = ranges.filter(
+    (range) =>
+      range.taskId === candidate.taskId &&
+      range.path === candidate.location.path
+  )
+
+  if (chunkRanges.length === 0) {
+    return true
+  }
+
+  const endLine = candidate.location.endLine ?? candidate.location.startLine
+
+  return chunkRanges.some(
+    (range) =>
+      candidate.location.startLine >= range.startLine && endLine <= range.endLine
   )
 }
 
@@ -451,6 +500,15 @@ export const admitCandidate = (
     return reject(
       'location-invalid',
       'Candidate location line range is outside reviewed source input.'
+    )
+  }
+
+  if (
+    !locationChunkRangeIsValid(candidate, input.policy.taskSourceChunkRanges)
+  ) {
+    return reject(
+      'location-invalid',
+      'Candidate location is outside the source chunk its review task was given.'
     )
   }
 
