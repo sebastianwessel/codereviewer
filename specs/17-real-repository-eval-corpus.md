@@ -100,6 +100,31 @@ manifest data, so a violation fails loading instead of silently inflating a scor
 - No test performs a network fetch, and no test runs a provider call. Hydration
   against upstream is an explicit, operator-run step.
 
+## Measured Baseline
+
+Measured 2026-07-26 on the thirty-case, forty-two-finding corpus: recall 54.8%,
+adjusted precision 95.8%, one genuine false positive, five plausibility-confirmed
+unlisted-real findings, severity accuracy 43.5%, no provider errors, $1.20. Recall
+by tier is 100% runtime-critical, 57.9% logic, 50.0% security, 100% nit.
+
+The first attempt at this measurement reported 78.8% and was void: it scored
+against thirty-three findings, because nine cases gained a second expected finding
+after their slices were hydrated and the cache did not treat an answer-key change
+as invalidating. That is the reason hydration now compares a stored slice against
+the definition it would be built from today.
+
+The corrected key exposes the corpus's most useful signal. Cases carrying one
+expected finding score 16 of 24; cases carrying two score 7 of 18, and in seven of
+those nine the review found exactly one of the two and never both. Since per-case
+detection is comparable across the two groups, the shortfall is a stopping
+behaviour rather than a discovery gap — the review reports the most salient defect
+in a file and moves on. A corpus of one-finding cases cannot see this at all,
+which is why expected findings per case is itself a property worth curating.
+
+`lineAccuracy` reads 0.0% on this corpus because every expected finding uses
+`path-semantic` matching and declares no line check, leaving the denominator
+empty. The metric is undefined here, not failing.
+
 ## Acceptance
 
 - A hydrated case yields a working tree containing the repository's unchanged files,
