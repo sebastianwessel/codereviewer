@@ -277,6 +277,48 @@ const buildSecurityReviewText = (
     `\n${securityReviewChecklist}`
   ].join('\n')
 
+// Spec 05, Holistic Discovery: the lens directive for the second serial pass. The
+// classes are the ones a general read most often walks past — they are visible
+// only when you go looking for them specifically, because each requires following
+// a path the happy-path reading never takes. Generic and language-neutral: it
+// names defect classes, never a language, framework, or fixture.
+const lensReviewInstruction = [
+  'FOCUSED SECOND-PASS REVIEW. A general review of this same change has already',
+  'run. Re-read the change through one specific lens: the high-impact defect',
+  'classes a general read most often misses because they hide off the success',
+  'path. Report every concrete instance you can justify from the code.',
+  '- Concurrency and atomicity: non-atomic read-modify-write on shared state,',
+  '  check-then-act races, missing or incorrect locking, state mutated without',
+  '  synchronization.',
+  '- Asynchrony: work started and never awaited, dropped promises/futures,',
+  '  fire-and-forget paths that discard errors or ordering guarantees.',
+  '- Error and failure paths: swallowed or ignored errors, cleanup skipped on the',
+  '  failure branch, work committed after a partial failure, state left',
+  '  inconsistent when an operation aborts partway.',
+  '- Resource lifetime: handles, connections, files, listeners, or buffers that',
+  '  leak, are used after release, or grow without bound.',
+  '- Interface and contract violations: caller and callee disagreeing on',
+  '  signature, nullability, return shape, or a documented invariant; one call',
+  '  site updated while a sibling is not.',
+  '- Edge cases: empty, zero, negative, boundary, absent, and maximum inputs, and',
+  '  the first and last iteration of a loop.',
+  'Apply the same standard of evidence as the general pass: name the concrete',
+  'failure and the exact path or input that triggers it. Do not report style,',
+  'naming, formatting, documentation, or cleanup preferences, and do not restate a',
+  'defect the general pass would obviously have caught on the success path.',
+  'Returning {"findings": []} is correct when this lens genuinely finds nothing.'
+].join('\n')
+
+const buildLensReviewText = (
+  taskInput: TaskReviewInput,
+  rawDiff: string
+): string =>
+  [
+    `Focused review task ${taskInput.task.id}.`,
+    lensReviewInstruction,
+    ...buildContextSections(taskInput, rawDiff)
+  ].join('\n')
+
 // The enumeration sweep prompt. A discovery call answers with the defect it is
 // most confident about and stops, so a file holding two defects yields one — the
 // instruction to report every instance does not overcome the pull of a single
@@ -566,6 +608,39 @@ export const runModelBackedHolisticTaskReview = async (
   let suppressedByIdCount = collected.suppressedById
   const generalCandidateCount = candidatesById.size
 
+  // Spec 05: the second, diverse-lens pass. Serial, so it stays inside the
+  // workflow's parallel child-agent budget, and additive at locations the general
+  // pass did not claim, so it can only add.
+  let lensFindingCount = 0
+  let lensCandidateCount = 0
+  if (input.workflowInput.discoveryLensPassEnabled) {
+    const beforeLens = candidatesById.size
+    const generalLocations = new Set(
+      [...candidatesById.values()].map(locationKey)
+    )
+    const lens = await runDiscoveryCall(
+      input.runners.holisticReview,
+      input.taskInput,
+      input.task,
+      buildLensReviewText(input.taskInput, rawDiff),
+      input.signal,
+      'holistic_review_lens'
+    )
+    providerIssues.push(...lens.providerIssues)
+    lensFindingCount = lens.findings.length
+    const lensCollected = collectCandidates({
+      findings: lens.findings,
+      task: input.task,
+      into: candidatesById,
+      maxToAdd: Math.max(0, HOLISTIC_MAX_CANDIDATES - candidatesById.size),
+      excludeLocations: generalLocations
+    })
+    droppedCount += lensCollected.dropped
+    suppressedByLocationCount += lensCollected.suppressedByLocation
+    suppressedByIdCount += lensCollected.suppressedById
+    lensCandidateCount = candidatesById.size - beforeLens
+  }
+
   // Enumeration sweep: keep asking what the previous rounds missed until a round
   // adds nothing or the budget runs out. Purely additive — a round can only add
   // candidates at locations no earlier round claimed, so the sweep can never cost
@@ -649,13 +724,19 @@ export const runModelBackedHolisticTaskReview = async (
     scout_bytes_injected: scout?.bytesInjected ?? 0,
     security_finding_count: securityFindingCount,
     general_candidate_count: generalCandidateCount,
+    lens_pass_enabled: input.workflowInput.discoveryLensPassEnabled,
+    lens_finding_count: lensFindingCount,
+    lens_candidate_count: lensCandidateCount,
     sweep_rounds_run: sweepRoundsRun,
     sweep_finding_count: sweepFindingCount,
     sweep_candidate_count: sweepCandidateCount,
     suppressed_by_location_count: suppressedByLocationCount,
     suppressed_by_id_count: suppressedByIdCount,
     security_candidate_count:
-      candidates.length - generalCandidateCount - sweepCandidateCount,
+      candidates.length -
+      generalCandidateCount -
+      sweepCandidateCount -
+      lensCandidateCount,
     candidate_count: candidates.length,
     dropped_count: droppedCount
   })

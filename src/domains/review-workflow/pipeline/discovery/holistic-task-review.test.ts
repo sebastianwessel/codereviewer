@@ -364,6 +364,67 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(reviewTexts).toHaveLength(1)
   })
 
+  const workflowInputWithLensPass = ReviewWorkflowInputSchema.parse({
+    runId: 'run-holistic',
+    reviewedPaths: ['src/app.ts'],
+    discoveryLensPassEnabled: true,
+    evidence: [],
+    candidates: [],
+    instructions: [],
+    skills: [],
+    provenance: {
+      reviewer: 'review-agent',
+      modelProvider: 'openai',
+      modelName: 'holistic-test',
+      signalVersions: { typescript: '6.0.3' },
+      configHash
+    }
+  })
+
+  // Spec 05 requires two serial diverse-lens passes per task. The lens asks a
+  // different question rather than the same one again, which is what separates it
+  // from the sweep.
+  test('issues a second, diverse-lens discovery call when the lens pass is enabled', async () => {
+    const reviewTexts: string[] = []
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithLensPass,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          reviewTexts.push(holisticInput.reviewText)
+          return holisticResultWith([
+            reviewTexts.length === 1
+              ? findingAt(1, 'General defect')
+              : findingAt(2, 'Race on shared state')
+          ])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(reviewTexts).toHaveLength(2)
+    expect(reviewTexts[0]).not.toContain('FOCUSED SECOND-PASS REVIEW')
+    expect(reviewTexts[1]).toContain('FOCUSED SECOND-PASS REVIEW')
+    expect(reviewTexts[1]).toContain('Concurrency and atomicity')
+    expect(result.candidates).toHaveLength(2)
+  })
+
+  test('keeps the lens pass additive at locations the general pass already claimed', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithLensPass,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([findingAt(1, 'Same location')])
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(1)
+  })
+
   test('runs a single general discovery call and never adds the security checklist when the pass is disabled', async () => {
     const reviewTexts: string[] = []
     await runModelBackedHolisticTaskReview({

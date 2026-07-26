@@ -28,6 +28,7 @@ export const maxChildAgentCallsForReview = (
     readonly maxConcurrentTasks?: number
     readonly securityPassEnabled?: boolean
     readonly discoverySweepRounds?: number
+    readonly discoveryLensPassEnabled?: boolean
     readonly contextScoutEnabled?: boolean
   } = {}
 ): number => {
@@ -45,7 +46,8 @@ export const maxChildAgentCallsForReview = (
   const discoveryCallsPerTask =
     (input.securityPassEnabled === true ? 2 : 1) +
     (input.contextScoutEnabled === true ? 1 : 0) +
-    Math.max(0, input.discoverySweepRounds ?? 0)
+    Math.max(0, input.discoverySweepRounds ?? 0) +
+    (input.discoveryLensPassEnabled === true ? 1 : 0)
   const refutationCallsPerTask = 1 + refutationBatchSplitAllowance
   // Cross-file retrieval (spec 16) needs no reservation here: a mediated tool call
   // is an agent STEP, bounded by the agent's maxSteps, and never counts against the

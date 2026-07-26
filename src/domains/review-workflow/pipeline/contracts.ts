@@ -42,6 +42,8 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   securityPassEnabled: z.boolean().default(false),
   // Extra discovery rounds per task; 0 keeps discovery single-shot.
   discoverySweepRounds: z.int().min(0).default(0),
+  // Spec 05: the second, diverse-lens discovery pass.
+  discoveryLensPassEnabled: z.boolean().default(false),
   // Context scout (spec 18). When set, a cheap scout call per task names the
   // out-of-change symbols this change depends on and their bodies are injected as
   // referenced-definition context. Absent, no scout call is issued and the
