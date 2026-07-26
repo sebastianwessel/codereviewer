@@ -11,10 +11,10 @@ export const formatPercent = (value: number): string =>
 // shows an empty denominator on any corpus without a `path-line` expectation,
 // which includes the whole real-repository corpus.
 export const formatRateOverCount = (
-  value: number,
+  value: number | null,
   checkedCount: number
 ): string =>
-  checkedCount === 0
+  value === null || checkedCount === 0
     ? 'n/a (0 checked)'
     : `${formatPercent(value)} (${checkedCount} checked)`
 

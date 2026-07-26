@@ -742,7 +742,9 @@ describe('eval runner', () => {
           caseIds: ['python-benchmark'],
           metrics: expect.objectContaining({
             recall: 1,
-            lineAccuracy: 1
+            // Semantic-only group: nothing declares a line to check, so the rate
+            // is undefined rather than a vacuous 1.
+            lineAccuracy: null
           })
         }),
         expect.objectContaining({
@@ -928,6 +930,10 @@ describe('eval runner', () => {
 
     expect(semanticOnlyRun.report.metrics.recall).toBe(1)
     expect(semanticOnlyRun.report.metrics.lineCheckCount).toBe(0)
+    // A rate over an empty denominator is vacuously 1, and serialising that 1
+    // into report.json reads as perfect placement to any consumer that does not
+    // also read the count. Null cannot be misread.
+    expect(semanticOnlyRun.report.metrics.lineAccuracy).toBeNull()
     expect(
       renderEvalSummary({
         cases: semanticOnlyCases,
@@ -957,6 +963,7 @@ describe('eval runner', () => {
     expect(mixedRun.report.metrics.lineCheckCount).toBe(1)
     expect(mixedRun.report.metrics.lineAccuracy).toBe(1)
   })
+
 
   test('excludes inconclusive pairs from recall and precision and warns about them', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])

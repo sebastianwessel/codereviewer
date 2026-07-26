@@ -317,9 +317,14 @@ below), so the requirement is withdrawn rather than left as an unmet mandate.
 Discovery emits roughly one finding per file, and that is a property of the model's
 answer rather than of the pipeline. Instrumenting a live run showed every task
 producing one finding, keeping one candidate, and dropping none, while refutation
-proved nearly all of them. On the real-repository corpus, cases holding one expected
-defect score 16 of 24 while cases holding two score 7 of 18, and in seven of those
-nine the review found exactly one of the two.
+proved nearly all of them. The corpus holds 19 single-expectation cases, 10 double and 1 triple. Pooled over the
+three baseline seeds, single-expectation cases score 39 of 57 (68.4%) while
+multi-expectation cases score 30 of 69 (43.5%). By rank the split is sharper: the
+first-listed expectation of a case is found 64 of 90 times (71.1%), every later
+expectation only 5 of 36 (13.9%). Both decompositions reconcile to the published
+54.8%. No later expectation in the corpus is high-severity -- all fourteen highs are
+first-listed -- and every one of the seven later `medium` expectations was missed in
+all three seeds.
 
 Two additional passes were built against this and measured on that corpus, three
 seeds each: an enumeration sweep that re-asks what the previous round missed, and

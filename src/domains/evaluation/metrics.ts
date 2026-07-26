@@ -144,9 +144,13 @@ export const EvalMetricsSchema = z.strictObject({
   // overlap. The counts travel with the rates so a report can say "undefined"
   // instead of rendering an empty denominator as 0.0%, which reads as total
   // failure.
-  lineAccuracy: RateSchema,
+  // Null when nothing was checked. A rate over an empty denominator is vacuously
+  // 1, and serialising that vacuous 1 into report.json reads as "perfect line
+  // placement" to anything that consumes the number without also reading the
+  // count. Null cannot be misread, and it forces a consumer to handle the case.
+  lineAccuracy: RateSchema.nullable(),
   lineCheckCount: z.int().min(0).default(0),
-  severityAccuracy: RateSchema,
+  severityAccuracy: RateSchema.nullable(),
   severityCheckCount: z.int().min(0).default(0),
   falsePositiveCount: z.int().min(0),
   // Trustworthy false-positive count: unmatched findings the plausibility judge
@@ -350,6 +354,11 @@ const ratio = (
   denominator: number,
   emptyValue: number
 ): number => (denominator === 0 ? emptyValue : roundMetric(numerator / denominator))
+
+// For rates whose empty case is "nobody measured this", as opposed to precision's
+// empty case of "nothing was reported, so nothing was wrong".
+const rateOrNull = (numerator: number, denominator: number): number | null =>
+  denominator === 0 ? null : roundMetric(numerator / denominator)
 
 const harmonicMean = (left: number, right: number): number =>
   left + right === 0 ? 0 : roundMetric((2 * left * right) / (left + right))
@@ -570,15 +579,13 @@ export const calculateEvalMetrics = (
     severityCheckCount: sum(
       caseResults.map((result) => result.matchedSeverityCheckCount)
     ),
-    lineAccuracy: ratio(
+    lineAccuracy: rateOrNull(
       sum(caseResults.map((result) => result.accurateLineMatchCount)),
-      sum(caseResults.map((result) => result.matchedLineCheckCount)),
-      1
+      sum(caseResults.map((result) => result.matchedLineCheckCount))
     ),
-    severityAccuracy: ratio(
+    severityAccuracy: rateOrNull(
       sum(caseResults.map((result) => result.accurateSeverityMatchCount)),
-      sum(caseResults.map((result) => result.matchedSeverityCheckCount)),
-      1
+      sum(caseResults.map((result) => result.matchedSeverityCheckCount))
     ),
     falsePositiveCount: totalFalsePositiveCount,
     genuineFalsePositiveCount: totalGenuineFalsePositiveCount,

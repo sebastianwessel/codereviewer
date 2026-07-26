@@ -59,11 +59,11 @@ and a reviewer that finds a defect the key omits gets no recall credit for it at
 all (it lands in `unlistedRealFindingCount` instead).
 
 The corollary is a curation rule, not a caveat: **expected findings per case is
-itself a measured property**. On the real-repository corpus, cases carrying one
-expected finding scored 16/24 while cases carrying two scored 7/18 — and in seven
-of those nine two-finding cases the review found exactly one of the two and never
-both. That gap is a *stopping* behaviour, and a corpus of one-finding cases
-cannot see it at all.
+itself a measured property**. On the real-repository corpus, pooled over three seeds, cases carrying one expected
+finding scored 39/57 (68.4%) while cases carrying two or more scored 30/69 (43.5%).
+By rank the gap is sharper still: a case's first-listed expectation is found 71.1% of
+the time, every later one 13.9%. That gap is a *stopping* behaviour, and a corpus of
+one-finding cases cannot see it at all.
 
 ---
 

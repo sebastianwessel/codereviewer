@@ -34,17 +34,26 @@ everything: roughly two of every five known defects are missed.
 ## What limits recall today
 
 **A single discovery pass reports about one defect per file.** This is measured, not
-inferred. Splitting the corpus by how many defects a case contains:
+inferred. The corpus holds 19 single-expectation cases, 10 double and 1 triple.
+Pooled over the three baseline seeds:
 
-| Case contains | Recall |
+| Split | Recall |
 | --- | ---: |
-| one expected finding | 16 of 24 (66.7%) |
-| two expected findings | 7 of 18 (38.9%) |
+| single-expectation cases | 39 of 57 (68.4%) |
+| multi-expectation cases | 30 of 69 (43.5%) |
+| **first-listed expectation of a case** | **64 of 90 (71.1%)** |
+| **every later expectation** | **5 of 36 (13.9%)** |
 
-In seven of the nine two-defect cases the engine found exactly one of the two, and
-never both. Per-case "found at least one" is comparable across both groups, so this
-is not a discovery-quality gap — the review reports the most salient defect in a file
-and stops.
+Both decompositions reconcile exactly to the 54.8% headline. The rank split is the
+sharper one: the engine reliably finds a case's headline defect and almost never the
+later one. **No later expectation in this corpus is high-severity** — all fourteen
+highs are first-listed — and every one of the seven later `medium` expectations was
+missed in all three seeds.
+
+A further measurement caveat: the semantic matcher assigns findings to expectations
+greedily in order, so with two expectations and two findings a loose accept for the
+first can strand the second. Most cases emit only one finding, so the effect on these
+numbers is probably small, but it confounds precisely the multi-defect measurement.
 
 Instrumenting a live run confirmed the mechanism sits in generation, not in the
 pipeline: every task logged one finding produced, one candidate kept, and zero

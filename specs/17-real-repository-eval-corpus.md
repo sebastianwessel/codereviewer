@@ -113,11 +113,15 @@ after their slices were hydrated and the cache did not treat an answer-key chang
 as invalidating. That is the reason hydration now compares a stored slice against
 the definition it would be built from today.
 
-The corrected key exposes the corpus's most useful signal. Cases carrying one
-expected finding score 16 of 24; cases carrying two score 7 of 18, and in seven of
-those nine the review found exactly one of the two and never both. Since per-case
-detection is comparable across the two groups, the shortfall is a stopping
-behaviour rather than a discovery gap — the review reports the most salient defect
+The corrected key exposes the corpus's most useful signal. The corpus holds 19
+single-expectation cases, 10 double and 1 triple. Pooled over three baseline seeds,
+single-expectation cases score 39 of 57 (68.4%) and multi-expectation cases 30 of 69
+(43.5%); by rank, a case's first-listed expectation is found 64 of 90 times (71.1%)
+and every later expectation only 5 of 36 (13.9%). Both decompositions reconcile to
+the published 54.8%. No later expectation is high-severity — all fourteen highs are
+first-listed. Since per-case detection is comparable across the two groups, the
+shortfall is a stopping behaviour rather than a discovery gap — the review reports
+the most salient defect
 in a file and moves on. A corpus of one-finding cases cannot see this at all,
 which is why expected findings per case is itself a property worth curating.
 
