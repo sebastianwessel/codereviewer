@@ -301,14 +301,36 @@ export const completeReviewWorkflow = (
         : []
     )
   )
-  const visibleFindings = admittedFindings.map((finding) =>
-    artifactOnlyFindingIds.has(finding.id)
-      ? {
-          ...finding,
-          reporterEligibility: 'artifact-only' as const
-        }
-      : finding
+  // Carry the refutation verdict onto the finding it decided. The report renders
+  // an "Unresolved - Needs Human Decision" entry per artifact-only finding and
+  // looks the verdict up by `refutationId`; nothing wrote that field, so every
+  // entry read "no refutation verdict was recorded" and the reader was told a
+  // decision was needed without being told what was already established. Spec 05
+  // requires the verdict and its rationale to travel with the finding.
+  const refutationIdByFindingId = new Map(
+    admissionDecisions.flatMap((decision) => {
+      if (decision.findingId === undefined) {
+        return []
+      }
+
+      const refutation = refutationResults.find(
+        (result) => result.candidateId === decision.candidateId
+      )
+
+      return refutation === undefined ? [] : [[decision.findingId, refutation.id]]
+    })
   )
+  const visibleFindings = admittedFindings.map((finding) => {
+    const refutationId = refutationIdByFindingId.get(finding.id)
+
+    return {
+      ...finding,
+      ...(refutationId === undefined ? {} : { refutationId }),
+      ...(artifactOnlyFindingIds.has(finding.id)
+        ? { reporterEligibility: 'artifact-only' as const }
+        : {})
+    }
+  })
   const baseline = matchBaselineFindings({
     admittedFindings: visibleFindings,
     ...(input.workflowInput.baselineFingerprints === undefined

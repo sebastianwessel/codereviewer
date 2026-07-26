@@ -46,7 +46,8 @@ describe('Markdown reporter', () => {
           description: 'A deterministic support signal was preserved for audit.',
           proposedBy: 'typescript-support-signal',
           reporterEligibility: 'artifact-only',
-          severity: 'medium'
+          severity: 'medium',
+          refutationId: 'refute_abc123'
         }
       ]
     })
@@ -63,6 +64,11 @@ describe('Markdown reporter', () => {
     expect(rendered).toContain('## Unresolved - Needs Human Decision')
     expect(rendered).toContain('find_artifact1')
     expect(rendered).toContain('- Why unresolved:')
+    // Assert the VERDICT, not just the label. The label alone passed while nothing
+    // populated `refutationId`, so every entry silently rendered "no refutation
+    // verdict was recorded" and told the reader a decision was needed without
+    // saying what had already been established.
+    expect(rendered).not.toContain('no refutation verdict was recorded')
     expect(rendered).toContain('## Refutation Results')
     expect(rendered).toContain('refute_abc123')
     expect(rendered).toContain('Refutation evidence: ev_diff1')

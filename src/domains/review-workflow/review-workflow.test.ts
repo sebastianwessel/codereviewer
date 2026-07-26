@@ -3466,16 +3466,10 @@ describe('review workflow', () => {
         'Return "refuted" for vague clarity, strictness, or cleanup suggestions unless the candidate identifies a concrete runtime, security, or data-integrity failure.'
       )
       expect(String(refutationSystemMessage?.content)).toContain(
-        'Return "needs-more-evidence" for spelling, import consistency, storage type preference, frontend-only formatting, or helper-refactor concerns unless context proves a concrete runtime, security, or data-integrity failure.'
+        'Return "needs-more-evidence" for cosmetic or preference-level concerns'
       )
       expect(String(refutationSystemMessage?.content)).toContain(
-        'Return "needs-more-evidence" for frontend API response-shape refutation concerns unless reviewContext proves malformed or untrusted response data can reach a concrete runtime failure.'
-      )
-      expect(String(refutationSystemMessage?.content)).toContain(
-        'Return "refuted" for schema syntax claims when deterministic diagnostic evidence did not report a parse error for that file.'
-      )
-      expect(String(refutationSystemMessage?.content)).toContain(
-        'Return "needs-more-evidence" for storage-format or encryption-preference claims unless context proves plaintext exposure, non-atomic consumption, or another concrete integrity failure.'
+        'Return "refuted" for a syntax or parse-validity claim about a file when deterministic diagnostic evidence did not report a parse error for that file.'
       )
       expect(refutationInput.reviewContext).toEqual(
         expect.arrayContaining([

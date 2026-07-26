@@ -377,16 +377,51 @@ describe('eval metrics', () => {
     expect(metrics.refutationFalseNegativeCount).toBe(1)
   })
 
-  test('derives refutation false positives from proved refutations whose findings never matched', () => {
+  test('counts a proved candidate as a refuter false positive only when it was not a real defect', () => {
     const metrics = calculateEvalMetrics([
       caseResult({
         matchedFindingCount: 1,
-        provedRefutationCount: 3
+        provedRefutationCount: 3,
+        falsePositiveCount: 2,
+        unlistedRealFindingCount: 0
       })
     ])
 
-    // 3 proved refutations, only 1 matched: 2 unmatched proved refutations.
+    // Both unmatched findings were judged spurious, so both are refuter errors.
     expect(metrics.refutationFalsePositiveCount).toBe(2)
+  })
+
+  // The regression this metric was built on: it used to count every proved
+  // finding that missed the answer key, which charged the refuter for the genuine
+  // defects the fixture never listed and made it numerically identical to
+  // unlistedRealFindingCount on a clean run.
+  test('never charges the refuter for defects the answer key simply omitted', () => {
+    const metrics = calculateEvalMetrics([
+      caseResult({
+        matchedFindingCount: 1,
+        provedRefutationCount: 3,
+        falsePositiveCount: 2,
+        unlistedRealFindingCount: 2
+      })
+    ])
+
+    expect(metrics.unlistedRealFindingCount).toBe(2)
+    expect(metrics.refutationFalsePositiveCount).toBe(0)
+  })
+
+  test('bounds refuter false positives by the proved refutations', () => {
+    // A trusted deterministic finding is refutation-exempt, so a spurious one
+    // must not be charged to a refuter that never adjudicated it.
+    const metrics = calculateEvalMetrics([
+      caseResult({
+        matchedFindingCount: 0,
+        provedRefutationCount: 1,
+        falsePositiveCount: 3,
+        unlistedRealFindingCount: 0
+      })
+    ])
+
+    expect(metrics.refutationFalsePositiveCount).toBe(1)
   })
 
   test('reports zero for every fix-lane metric when the lane never ran', () => {

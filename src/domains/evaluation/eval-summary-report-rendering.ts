@@ -173,7 +173,7 @@ const appendEvalSummaryMetrics = (
       `| Artifact-only matched | ${report.metrics.artifactOnlyMatchedFindingCount} |`,
       `| Artifact-only false positives | ${report.metrics.artifactOnlyFalsePositiveCount} |`,
       `| Trusted deterministic findings | ${report.metrics.trustedDeterministicFindingCount} |`,
-      `| Refutation false negatives | ${report.metrics.refutationFalseNegativeCount} |`,
+      `| Refutation false negatives (upper bound) | ${report.metrics.refutationFalseNegativeCount} |`,
       `| Refutation false positives | ${report.metrics.refutationFalsePositiveCount} |`,
       `| Fix judgment accuracy | ${formatPercent(report.metrics.fixJudgmentAccuracy)} (${report.metrics.fixJudgedFindingCount} judged) |`,
       `| Fix false-positive detection rate | ${formatPercent(report.metrics.fixFalsePositiveDetectionRate)} (${report.metrics.fixGroundTruthFalsePositiveCount} false positives) |`,

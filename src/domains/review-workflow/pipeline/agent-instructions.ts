@@ -12,7 +12,7 @@ export const modelHolisticReviewerInstructions = [
   'STEP 4 - Systematically check each defect class and report every concrete instance you can justify from the code:',
   '- Correctness & logic: inverted/incorrect conditions, off-by-one, wrong or copy-pasted variable, missing case/branch/filter/clause, returning a stale or unmodified value, branch asymmetry where one branch omits a field or adjustment its sibling applies.',
   '- Side effects & control: unhandled, swallowed, or ignored errors; fire-and-forget async that drops errors or ordering; writes/commits performed unconditionally on a failure path; operations not idempotent or not rolled back on error.',
-  '- Concurrency & state: non-atomic read-modify-write on shared mutable state, missing or incorrect locking (e.g. incomplete double-checked locking), TOCTOU races, shared state mutated without synchronization.',
+  '- Concurrency & state: non-atomic read-modify-write on shared mutable state, missing or incorrect locking, TOCTOU races, shared state mutated without synchronization.',
   '- Interface & type alignment: caller/callee signature, argument, return-type, schema, or documented-contract mismatch; a declared never-null contract violated; a nullable/optional value dereferenced without a guard; a changed return shape not reflected at call sites.',
   '- Security: missing authentication/authorization checks, injection (SQL/command/template), unvalidated or untrusted input reaching a sensitive sink, unsafe deserialization, path traversal, SSRF, weak or missing crypto.',
   '- Memory & resources: leaks (unclosed files/connections/handles/listeners), use-after-close/free, unbounded growth or accumulation, expensive work on hot paths.',
@@ -56,6 +56,13 @@ export const modelContextScoutInstructions = [
   'Return at most the maximum number of requests you are given, ranked most-decisive first: the reviewer keeps the top entries when the budget is tight, so the symbol that most changes the verdict must come first.'
 ].join('\n')
 
+// Batched refutation: the precision filter that adjudicates every discovery
+// candidate for one task in a single call. Because this stage decides what reaches
+// the user, its rules are the easiest place to accidentally encode a fixture: a
+// clause that pre-decides a verdict for one narrowly described defect ("prove X
+// when Y") is tuning, not judgement, and spec 15 treats that as a defect. Every
+// rule here must therefore be a general adjudication principle, and each
+// non-obvious one carries a comment saying WHY it exists in general terms.
 export const modelFindingRefuterInstructions = [
   'You are given the review context for ONE task and the LIST of candidate findings raised for it in `candidates`. Adjudicate EVERY candidate in that list, and report nothing else. Do not review unrelated issues and do not add findings of your own.',
   'Judge each candidate strictly on its own merits: a weak candidate sitting next to a strong one must still be refuted, and a strong candidate sitting next to weak ones must still be proved. Sharing one review context does not make the candidates related, and the number of candidates says nothing about how many are real.',
@@ -69,15 +76,25 @@ export const modelFindingRefuterInstructions = [
   'Return verdict "proved" only when the provided context proves the finding and its impact.',
   'Return verdict "refuted" when the candidate is contradicted by the provided context.',
   'Return "refuted" for vague clarity, strictness, or cleanup suggestions unless the candidate identifies a concrete runtime, security, or data-integrity failure.',
+  // The largest single precision lever measured on this stage: a reviewer that is
+  // free to imagine a caller which ignores the declared types can invent an
+  // unbounded number of unfalsifiable defects, so a declared contract counts as
+  // evidence until the context shows something actually violates it.
   'Return verdict "refuted" when the finding only occurs by violating declared static types, function signatures, schemas, or documented contracts and no provided context shows such a caller or input can happen.',
   'Return verdict "needs-more-evidence" when the issue might exist but the provided context is not enough to prove it.',
-  'Return "needs-more-evidence" for spelling, import consistency, storage type preference, frontend-only formatting, or helper-refactor concerns unless context proves a concrete runtime, security, or data-integrity failure.',
-  'Return "needs-more-evidence" for frontend API response-shape refutation concerns unless reviewContext proves malformed or untrusted response data can reach a concrete runtime failure.',
-  'Return "refuted" for schema syntax claims when deterministic diagnostic evidence did not report a parse error for that file.',
-  'Return "needs-more-evidence" for storage-format or encryption-preference claims unless context proves plaintext exposure, non-atomic consumption, or another concrete integrity failure.',
+  // Cosmetic and preference-level candidates are the dominant noise class for any
+  // reviewer, and they are indistinguishable from real defects unless a concrete
+  // failure is shown. One general rule covers them; enumerating the particular
+  // preferences somebody happened to observe would only narrow it.
+  'Return "needs-more-evidence" for cosmetic or preference-level concerns - spelling, formatting, import organization, the choice of a data, storage, or encoding format, or a refactoring suggestion - unless context proves a concrete runtime, security, or data-integrity failure.',
+  // Syntactic validity is decided authoritatively by a parser, so deterministic
+  // diagnostics that stayed silent about a file are positive evidence against a
+  // claim that the same file does not parse.
+  'Return "refuted" for a syntax or parse-validity claim about a file when deterministic diagnostic evidence did not report a parse error for that file.',
+  // A race is proved by the structure of the access, not by exhibiting an
+  // interleaving. Demanding evidence of an actual concurrent execution would refute
+  // every genuine concurrency defect, because a diff never contains that evidence.
   'Do not require proof of actual concurrent requests when reviewContext shows a non-atomic read-modify-write flow on shared mutable state.',
-  'Prove case or Unicode normalization defects when reviewContext shows sanitized input compared, looked up, or used as a dedup key against stored values without normalizing at the point of comparison.',
-  'Prove operation-specific error-message defects when reviewContext proves an endpoint or action reports a message for a different operation than the one it performs.',
   'Do not invent files, line numbers, evidence IDs, behavior, tests, or call paths.',
   'Use rationaleSummary to explain the deciding evidence without raw code blocks.',
   'Use fixSummary and fixEdits only when the fix is concrete and scoped to the candidate path.',

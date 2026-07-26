@@ -644,9 +644,12 @@ export const calculateEvalMetrics = (
     artifactOnlyMatchedFindingCount: totalArtifactOnlyMatchedFindingCount,
     artifactOnlyFalsePositiveCount: totalArtifactOnlyFalsePositiveCount,
     trustedDeterministicFindingCount: totalTrustedDeterministicFindingCount,
-    // Expected findings that were demoted/rejected without a matching admitted
-    // finding. Bounded by the unmatched-expected count so a case that rejected
-    // many duplicates of an otherwise-matched expectation is not penalised.
+    // UPPER BOUND, not a measurement: expected findings left unmatched in a case
+    // that also rejected something. Whether the rejected candidate was actually
+    // the missing expectation is not checked, because establishing that would
+    // mean judging every rejected candidate against every expectation, which
+    // costs provider calls the evaluation does not spend. Reported as an upper
+    // bound so it is not read as a count of proven refuter mistakes.
     refutationFalseNegativeCount: sum(
       caseResults.map((result) =>
         Math.min(
@@ -655,11 +658,24 @@ export const calculateEvalMetrics = (
         )
       )
     ),
-    // Refutations marked `proved` whose admitted finding never matched an
-    // expected finding.
+    // Candidates the refuter PROVED that turned out not to be real defects.
+    //
+    // This previously counted every proved finding that did not match the answer
+    // key, which made it numerically identical to unlistedRealFindingCount on a
+    // clean run -- it charged the refuter for the genuine defects the fixture
+    // simply never listed, which is precisely what the plausibility judge exists
+    // to exonerate. Only a finding the judge deemed spurious is a refuter error,
+    // and the count is bounded by the proved refutations so a trusted
+    // deterministic finding (which is refutation-exempt) is never charged here.
     refutationFalsePositiveCount: sum(
       caseResults.map((result) =>
-        Math.max(0, result.provedRefutationCount - result.matchedFindingCount)
+        Math.min(
+          result.provedRefutationCount,
+          Math.max(
+            0,
+            result.falsePositiveCount - result.unlistedRealFindingCount
+          )
+        )
       )
     ),
     // Fix-lane accuracy (spec 12). Every rate uses an empty value of 0: a run

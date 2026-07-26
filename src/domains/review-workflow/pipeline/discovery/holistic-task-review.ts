@@ -102,7 +102,10 @@ export const renderChangeIntentSection = (changeIntent: string): string =>
 // the dominant authorization class for the injection classes). The extra candidates
 // it yields still pass the same untrusted refutation and admission as any other
 // candidate, and are additive (they never displace a general-pass candidate).
-const securityReviewChecklist = [
+// Exported so the prompt-genericity guard (agent-instructions.test.ts) can assert
+// over every prompt the engine sends, not only the ones that happen to live in the
+// instructions module.
+export const securityReviewChecklist = [
   '## Security review checklist',
   '',
   'Scrutinize the CHANGED code for these security classes. Report only a concrete,',
@@ -142,7 +145,7 @@ const securityReviewChecklist = [
 // explicit prompt-injection guard, since the changed code it reviews is untrusted
 // (spec 15: the security pass prompt is hardened against repository-content
 // injection).
-const securityReviewInstruction = [
+export const securityReviewInstruction = [
   'SECURITY-ONLY REVIEW. Report ONLY concrete, evidenced security defects in the',
   'changed code, drawn from the checklist below. Do NOT report general correctness,',
   'style, naming, documentation, performance, or other non-security issues here — a',

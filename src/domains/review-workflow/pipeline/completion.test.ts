@@ -89,6 +89,39 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
 })
 
 describe('workflow completion', () => {
+  // The report's "Unresolved - Needs Human Decision" section looks the verdict up by
+  // `refutationId`. Nothing wrote that field, so every entry rendered "no refutation
+  // verdict was recorded" -- the reader was told a decision was needed without being
+  // told what had already been established.
+  test('carries the refutation verdict onto the finding it decided', () => {
+    const output = completeReviewWorkflow({
+      workflowInput,
+      candidateFindings: [candidate],
+      admissionCandidates: [candidate],
+      artifactOnlyCandidateIds: ['cand_completion1'],
+      refutationResults: [
+        {
+          id: 'refute_completion1',
+          candidateId: 'cand_completion1',
+          verdict: 'needs-more-evidence',
+          summary: 'The reachable caller set is not present in the reviewed context.',
+          evidenceIds: [],
+          checks: []
+        }
+      ],
+      providerIssues: [],
+      contextLedgerEntries: [],
+      evidence: [evidence],
+      preRejectedFindings: [],
+      preAdmissionDecisions: [],
+      taskEvents: [],
+      instructionHashes: [configHash],
+      skillHashes: []
+    })
+
+    expect(output.admittedFindings[0]?.refutationId).toBe('refute_completion1')
+  })
+
   test('marks artifact-only admitted candidates before baseline and quality gate evaluation', () => {
     const output = completeReviewWorkflow({
       workflowInput,
