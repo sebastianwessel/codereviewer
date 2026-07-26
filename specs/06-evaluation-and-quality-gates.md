@@ -255,6 +255,21 @@ committed calibration set of findings labeled genuine or spurious against sample
 code, producing a plausibility agreement metric; a run below the configured
 minimum marks its adjusted precision untrustworthy.
 
+## Metrics Version
+
+Every report records a `metricsVersion` describing the rules its numbers were
+computed under, distinct from `schemaVersion`, which describes the shape they are
+written in. It is bumped whenever a change alters what a metric would report for
+identical review output — expectation assignment and the model category taxonomy
+have each done so.
+
+Comparison and significance testing refuse to run across differing versions rather
+than producing a delta. A delta measured across a scoring change reports the
+change in the ruler, not in the engine, and it is indistinguishable from a real
+regression or win. Failing loudly is the only safe behaviour here: this project has
+already published a recall figure that was scored against a stale answer key, and
+nothing in the artifact revealed it.
+
 ## Metrics
 
 | Metric | Definition |
@@ -324,8 +339,14 @@ change until that paired check is done.
 | `commentsPerDiffHunk` | Actionable admitted findings per changed diff hunk. |
 | `incompleteCoverageRate` | Runs whose report coverage is incomplete divided by total runs. The release target is `0`. |
 | `contextMutationRate` | Context ledger entries with budget-driven mutation divided by entries considered for model context. The release target is `0`. |
-| `costUsd` | Provider-reported or estimated cost. |
-| `durationMs` | Wall-clock run duration. |
+| `costUsd` | Provider-reported or estimated cost, summed across each case's REVIEW report only. Does not include judge or plausibility-judge provider spend — see `scoringCostUsd`. |
+| `durationMs` | Summed per-case review duration (each case's own `run.durationMs`, added together). This is **not** a wall-clock measurement: it excludes judge/plausibility-judge calls, calibration, orchestration, and any idle time between cases, so it cannot be compared to how long the run actually took. See `elapsedMs` for that. |
+| `scoringInputTokens` | Input tokens the semantic-match judge and the plausibility judge consumed across the WHOLE run — both matching and their own calibration passes — captured by wrapping the judge model alias in the same usage-recorder mechanism the review path uses. `0` when no judge ran (an offline run). |
+| `scoringCachedInputTokens` | Cached (prompt-cache read) subset of `scoringInputTokens`. |
+| `scoringOutputTokens` | Output tokens the judge/plausibility judge produced across the whole run. |
+| `scoringCostUsd` | Judge + plausibility-judge provider spend for the whole run, priced with the same cost helper (and the same configured/built-in prices) that produces `costUsd`. Deliberately its own field, never summed into `costUsd`: folding it in would silently inflate every historical cost figure's meaning instead of making the previously-invisible judge spend visible as what it is. Before this metric existed, judge/plausibility calls were real provider calls that nothing counted, so every published cost figure understated true spend by roughly this amount (10-30% depending on corpus, from this project's own measurement). |
+| `scoringCostUnavailable` | `true` when a judge ran but its cost could not be priced (no provider cost and no configured/built-in prices) — mirrors `costUnavailableCount`, but as a single run-level flag rather than a per-case count, since one usage recorder covers the whole run rather than one case. |
+| `elapsedMs` | Monotonic wall-clock elapsed time for the WHOLE evaluation run: per-case review execution plus judge/plausibility scoring. Unlike `durationMs`, this genuinely answers "how long did the run take" because it is a real elapsed-time measurement, not a sum of per-case self-reports. Measured with an injectable monotonic clock (mirroring the CLI's `now` seam used for `generatedAt`) so tests stay deterministic. |
 
 ### Fix Lane Measurement
 
@@ -336,7 +357,11 @@ and before scoring, capturing each `FixOutcome` (`findingId`,
 is off by default, so existing eval runs and their cost are unchanged; the lane
 is exercised only when a caller enables `fix` and configures a provider. The
 lane is advisory and non-fatal in eval: a lane failure is logged and the case is
-scored without fix outcomes rather than failing the run.
+scored without fix outcomes rather than failing the run. The failure is also
+recorded as a `stage: 'fix'`, `recovered: false` entry in the case's
+`providerIssues`, so it stays distinguishable in the report from the lane
+being disabled or having no eligible finding — both of which also produce no
+fix outcomes but are not failures and carry no such entry.
 
 Each `FixOutcome` is joined to its finding by `findingId` and scored against the
 match result as ground truth — a matched finding is a real defect, an unmatched
@@ -358,7 +383,7 @@ human-readable output:
 | Artifact | Purpose |
 | --- | --- |
 | `.codereviewer/eval/eval-report.json` | Stable structured metrics and case results for CI and automation. |
-| `.codereviewer/eval/eval-summary.md` | Human-readable gate status, comparison metrics, per-case status, missed expected findings, false positives, warnings, costs, duration, and artifact links. |
+| `.codereviewer/eval/eval-summary.md` | Human-readable gate status, comparison metrics, per-case status, missed expected findings, false positives, warnings, review cost/duration, judge/plausibility-judge scoring cost and elapsed wall-clock time (see `scoringCostUsd` and `elapsedMs` in Metrics), and artifact links. |
 | `.codereviewer/eval/eval-recall-report.md` | Human-readable per-expected-finding recall report for the current run. |
 
 The top-level artifacts are latest-run convenience copies. Every run must also
@@ -551,6 +576,14 @@ without being treated as unrecovered case errors. Markdown summaries must render
 token totals and must not present missing cost as a free run. When any case has
 unavailable cost, the cost row must show known cost plus the number of cases
 with unavailable cost.
+
+`scoringInputTokens`, `scoringCachedInputTokens`, `scoringOutputTokens`,
+`scoringCostUsd`, `scoringCostUnavailable`, and `elapsedMs` are **run-level
+only** — they have no per-case field on `caseResults[]` entries and are not
+summed from them, because a shared usage recorder and a single monotonic timer
+each cover the whole run rather than one case. Every `metricGroups[].metrics`
+entry repeats the same run-level values (exactly like `judgeAgreement`), since
+one run produced every group's numbers.
 Markdown summaries must also render context ledger kind coverage as a compact
 case table when cases include context ledger entries. The table must show
 per-kind counts plus the number of entries considered for model context and the

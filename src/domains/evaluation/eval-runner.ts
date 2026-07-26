@@ -1,11 +1,12 @@
 import type { Logger } from '@purista/harness'
+import { performance } from 'node:perf_hooks'
 import { z } from 'zod'
 import type {
   AdmittedFinding,
   ReviewReport
 } from '../../shared/contracts/index.js'
 import { uniqueSorted } from '../../shared/text/unique-sorted.js'
-import { COST_UNAVAILABLE_WARNING } from '../costs/index.js'
+import { COST_UNAVAILABLE_WARNING, type RunCostSummary } from '../costs/index.js'
 import {
   EVAL_PROVIDER_RETRY_WARNING_PREFIX,
   inconclusiveMatchWarnings,
@@ -48,13 +49,15 @@ import {
   severityWeight,
   type EvalJudgeReliability,
   type EvalMetricCaseResult,
-  type EvalMetrics
+  type EvalMetrics,
+  type EvalRunTotals
 } from './metrics.js'
 import {
   EvalCaseOutputSchema,
   EvalCaseReportSchema,
   EvalAgenticStageReportSchema,
   EvalExpectedFindingReportSchema,
+  EVAL_METRICS_VERSION,
   EvalFalsePositiveFindingReportSchema,
   EvalMetricGroupSchema,
   EvalProviderIssueReportSchema,
@@ -213,9 +216,18 @@ const agenticStagesForReport = (
   // the refutation and provider-recovery stages for the per-step comparison view.
   fixOutcomeCount: number
 ): readonly z.infer<typeof EvalAgenticStageReportSchema>[] => {
-  const recoveredProviderIssues = providerIssuesFromReport(report).filter(
+  const providerIssues = providerIssuesFromReport(report)
+  const recoveredProviderIssues = providerIssues.filter(
     (issue) => issue.recovered
   ).length
+  // A fix lane that crashed produces no outcomes, and so did a lane that was
+  // disabled or found nothing eligible. Counting alone cannot tell those apart,
+  // and reporting a crash as `skipped` hides a broken stage behind a word that
+  // means "correctly did nothing". An unrecovered fix-stage provider issue is
+  // the signal that separates them.
+  const fixLaneFailed = providerIssues.some(
+    (issue) => issue.stage === 'fix' && !issue.recovered
+  )
   const stageCounts = [
     ['refutation', report.refutationResults.length],
     ['fix', fixOutcomeCount]
@@ -225,7 +237,10 @@ const agenticStagesForReport = (
     ...stageCounts.map(([stage, count]) =>
       EvalAgenticStageReportSchema.parse({
         stage,
-        status: stageStatusForCount(count),
+        status:
+          stage === 'fix' && count === 0 && fixLaneFailed
+            ? 'error'
+            : stageStatusForCount(count),
         count
       })
     ),
@@ -947,6 +962,10 @@ const buildMetricGroupsForDimension = (
     // Run-level judge reliability, repeated on every group: one judge produced
     // every group's numbers.
     readonly judgeReliability: EvalJudgeReliability
+    // Run-level judge/plausibility spend and elapsed time, repeated on every
+    // group for the same reason as `judgeReliability`: one run produced every
+    // group's numbers.
+    readonly runTotals: EvalRunTotals
   }
 ): readonly z.infer<typeof EvalMetricGroupSchema>[] => {
   const grouped = new Map<
@@ -989,7 +1008,11 @@ const buildMetricGroupsForDimension = (
         key,
         fixtureCount: group.caseIds.length,
         caseIds: group.caseIds,
-        metrics: calculateEvalMetrics(group.metricCases, input.judgeReliability)
+        metrics: calculateEvalMetrics(
+          group.metricCases,
+          input.judgeReliability,
+          input.runTotals
+        )
       })
     )
 }
@@ -997,7 +1020,8 @@ const buildMetricGroupsForDimension = (
 const buildMetricGroups = (
   cases: readonly EvalCase[],
   metricCases: readonly EvalMetricCaseResult[],
-  judgeReliability: EvalJudgeReliability
+  judgeReliability: EvalJudgeReliability,
+  runTotals: EvalRunTotals
 ): readonly z.infer<typeof EvalMetricGroupSchema>[] => {
   const metricCaseMap = metricCaseById(metricCases)
 
@@ -1006,18 +1030,21 @@ const buildMetricGroups = (
       cases,
       metricCaseMap,
       judgeReliability,
+      runTotals,
       groupBy: 'sourceProfile'
     }),
     ...buildMetricGroupsForDimension({
       cases,
       metricCaseMap,
       judgeReliability,
+      runTotals,
       groupBy: 'language'
     }),
     ...buildMetricGroupsForDimension({
       cases,
       metricCaseMap,
       judgeReliability,
+      runTotals,
       groupBy: 'tag'
     })
   ]
@@ -1148,6 +1175,33 @@ type RunEvaluationInput = {
   // Used only to surface run-level judge-calibration provider failures, which
   // have no per-case slot in the eval report contract.
   readonly logger?: Logger | undefined
+  // Reads the judge + plausibility-judge provider spend for the WHOLE run, as a
+  // thunk rather than a precomputed value. The caller wraps the judge model
+  // alias once with the SAME `createProviderUsageRecorder` mechanism the
+  // review path already uses (see provider-usage-recorder.ts), so the SAME
+  // wrapped alias backs both `judge` and `plausibilityJudge` above; every call
+  // this function makes through them -- across matching AND the judge/
+  // plausibility calibration passes below -- accumulates in that one
+  // recorder. Reading it only here, after all of that has happened, is the
+  // only way to see the run's true total rather than whatever had
+  // accumulated when the thunk was constructed. The thunk returns the SAME
+  // `RunCostSummary` shape `summarizeRunCost` already produces for review
+  // cost, so this is not a second cost-accounting mechanism. Omitted for an
+  // offline run (no judge, so nothing was spent).
+  readonly evaluationScoringCost?: () => RunCostSummary
+  // Reads the monotonic elapsed time for the WHOLE evaluation -- per-case
+  // review execution (which happens entirely OUTSIDE this function, before it
+  // is called) plus the judge/plausibility scoring this function performs --
+  // as opposed to `durationMs` in the built report, which only SUMS each
+  // case's own review time and so can never be compared to how long the run
+  // actually took. The CLI supplies a thunk closed over its own monotonic
+  // clock and a start timestamp captured before it began running cases; a
+  // test supplies a deterministic thunk so a saved report stays byte-for-byte
+  // reproducible, mirroring the `now` seam `CliRunOptions` already uses for
+  // `generatedAt`. When omitted, this function times only its own execution
+  // (matching and calibration), so a bare call still reports a real -- if
+  // partial -- number instead of a silent 0.
+  readonly evaluationElapsedMs?: () => number
   readonly thresholds?: EvalRegressionThresholds
   readonly selection?: {
     readonly fixtureSource: EvalReportSelection['fixtureSource']
@@ -1165,6 +1219,10 @@ const buildEvaluationResult = (
     readonly selection?: RunEvaluationInput['selection']
     readonly scoring: EvalReportScoring
     readonly judgeReliability: EvalJudgeReliability
+    // Run-level judge/plausibility spend and elapsed time (see `EvalRunTotals`),
+    // computed once for the whole run and folded into both the overall
+    // metrics and every metric group below.
+    readonly runTotals: EvalRunTotals
     readonly generatedAt?: string
     readonly caseComputations: readonly EvalCaseComputation[]
   }
@@ -1175,7 +1233,11 @@ const buildEvaluationResult = (
   const metricCases = input.caseComputations.map(
     (computation) => computation.metricCase
   )
-  const metrics = calculateEvalMetrics(metricCases, input.judgeReliability)
+  const metrics = calculateEvalMetrics(
+    metricCases,
+    input.judgeReliability,
+    input.runTotals
+  )
   const selection = EvalReportSelectionSchema.parse({
     fixtureSource: input.selection?.fixtureSource ?? 'default',
     ...(input.selection?.sliceRoot === undefined
@@ -1187,7 +1249,8 @@ const buildEvaluationResult = (
   const metricGroups = buildMetricGroups(
     input.cases,
     metricCases,
-    input.judgeReliability
+    input.judgeReliability,
+    input.runTotals
   )
   const gate = thresholdReasons({
     thresholds: input.thresholds,
@@ -1196,6 +1259,7 @@ const buildEvaluationResult = (
   })
   const report = EvalReportSchema.parse({
     schemaVersion: '1.0',
+    metricsVersion: EVAL_METRICS_VERSION,
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     fixtureCount: input.cases.length,
     selection,
@@ -1262,6 +1326,12 @@ export const runEvaluation = async (
   readonly artifactName: typeof EVAL_REPORT_ARTIFACT_NAME
   readonly report: EvalReport
 }> => {
+  // Fallback start reference for `elapsedMs` when the caller supplies no
+  // `evaluationElapsedMs` thunk (e.g. a direct unit-test call). Reading it here,
+  // before anything else runs, means a bare call still reports a real -- if
+  // partial, since it excludes the per-case review work that happens before
+  // this function is even called -- elapsed time instead of a silent 0.
+  const internalStartMs = performance.now()
   const prepared = prepareEvaluationInputs(input)
   assertJudgeAvailableForExpectations(prepared.cases, input.judge)
 
@@ -1320,10 +1390,35 @@ export const runEvaluation = async (
           ...(input.logger === undefined ? {} : { logger: input.logger })
         })
 
+  // Read both run totals only NOW, after every judge/plausibility call this
+  // function will ever make (matching above, calibration just above) has
+  // already happened. Reading either earlier would under-count: the usage
+  // recorder keeps accumulating through calibration, and the elapsed clock
+  // must span everything this function did, not just the case-computation loop.
+  const scoringCost = input.evaluationScoringCost?.()
+  const elapsedMs = Math.max(
+    0,
+    Math.round(
+      input.evaluationElapsedMs === undefined
+        ? performance.now() - internalStartMs
+        : input.evaluationElapsedMs()
+    )
+  )
+  const runTotals: EvalRunTotals = {
+    elapsedMs,
+    scoringInputTokens: scoringCost?.inputTokens ?? 0,
+    scoringCachedInputTokens: scoringCost?.cachedInputTokens ?? 0,
+    scoringOutputTokens: scoringCost?.outputTokens ?? 0,
+    scoringCostUsd: scoringCost?.costUsd ?? 0,
+    scoringCostUnavailable:
+      scoringCost?.warnings.includes(COST_UNAVAILABLE_WARNING) ?? false
+  }
+
   return buildEvaluationResult({
     cases: prepared.cases,
     thresholds: prepared.thresholds,
     ...(input.selection === undefined ? {} : { selection: input.selection }),
+    runTotals,
     scoring: {
       ...(calibration?.judgeAgreement === undefined
         ? {}

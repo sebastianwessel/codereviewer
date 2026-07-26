@@ -46,6 +46,18 @@ const formatCachedInputTokens = (metrics: EvalMetrics): string => {
   return `${cached} (${formatPercent(metrics.cachedInputTokens / metrics.inputTokens)} of input)`
 }
 
+// Judge + plausibility-judge spend for the whole run, kept as its OWN metric
+// (see `scoringCostUsd` on `EvalMetrics`) rather than folded into the review
+// "Cost" row: the two figures answer different questions and combining them
+// would make neither one trustworthy.
+const formatScoringCost = (metrics: EvalMetrics): string => {
+  const value = `$${metrics.scoringCostUsd.toFixed(4)}`
+
+  return metrics.scoringCostUnavailable
+    ? `${value} known; additional judge/plausibility spend unavailable`
+    : value
+}
+
 // Judge agreement is omitted when no calibration pair was scored (a fully
 // negative fixture set needs no judge). Render the denominator with it so a
 // partially scored calibration set is visible.
@@ -134,7 +146,12 @@ const appendEvalSummaryHeadline = (
       `| False positives | Duplicate findings | ${formatInteger(metrics.duplicateFindingCount)} |`,
       `| Priority | Severity accuracy | ${formatRateOverCount(metrics.severityAccuracy, metrics.severityCheckCount)} |`,
       `| Health | Provider error rate | ${formatPercent(metrics.providerErrorRate)} |`,
-      `| Health | Cost | ${formatCostMetric(metrics)} |`
+      `| Health | Review cost | ${formatCostMetric(metrics)} |`,
+      // Deliberately its own row rather than folded into "Review cost" above:
+      // this is judge + plausibility-judge provider spend for the whole run,
+      // which used to be counted nowhere. Summing the two would silently
+      // change what "Review cost" has always meant to every existing report.
+      `| Health | Scoring cost (judge, separate from review cost) | ${formatScoringCost(metrics)} |`
     ]
   })
 }
@@ -190,11 +207,18 @@ const appendEvalSummaryMetrics = (
       `| Actionable rate | ${formatPercent(report.metrics.actionableRate)} |`,
       `| Incomplete coverage rate | ${formatPercent(report.metrics.incompleteCoverageRate)} |`,
       `| Context mutation rate | ${formatPercent(report.metrics.contextMutationRate)} |`,
-      `| Duration | ${formatDuration(report.metrics.durationMs)} |`,
+      // Elapsed is the monotonic wall clock for the WHOLE run (case reviews
+      // plus judge/plausibility scoring); Duration only SUMS each case's own
+      // review time and cannot be compared to how long the run actually took.
+      `| Elapsed (wall clock) | ${formatDuration(report.metrics.elapsedMs)} |`,
+      `| Duration (summed review time) | ${formatDuration(report.metrics.durationMs)} |`,
       `| Input tokens | ${formatInteger(report.metrics.inputTokens)} |`,
       `| Input tokens (cached) | ${formatCachedInputTokens(report.metrics)} |`,
       `| Output tokens | ${formatInteger(report.metrics.outputTokens)} |`,
-      `| Cost | ${formatCostMetric(report.metrics)} |`
+      `| Review cost | ${formatCostMetric(report.metrics)} |`,
+      `| Scoring input tokens (judge + plausibility judge) | ${formatInteger(report.metrics.scoringInputTokens)} |`,
+      `| Scoring output tokens (judge + plausibility judge) | ${formatInteger(report.metrics.scoringOutputTokens)} |`,
+      `| Scoring cost (judge, separate from review cost) | ${formatScoringCost(report.metrics)} |`
     ]
   })
 }

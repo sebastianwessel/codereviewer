@@ -15,9 +15,11 @@ const reportWith = (
     readonly caseId: string
     readonly expectedIndexes: readonly number[]
     readonly matchedIndexes: readonly number[]
-  }[]
+  }[],
+  metricsVersion = 'test-metrics-version'
 ): EvalReport =>
   ({
+    metricsVersion,
     caseResults: cases.map((entry) => ({
       caseId: entry.caseId,
       expectedFindings: entry.expectedIndexes.map((expectedIndex) => ({
@@ -35,7 +37,9 @@ const arm = (
     readonly expectedIndexes: readonly number[]
     readonly matchedIndexes: readonly number[]
   }[][]
-): ArmOutcomes => collectArmOutcomes(reports.map(reportWith))
+  // Passing `reportWith` directly to `map` would hand it the array index as the
+  // metrics version, giving every run a different one.
+): ArmOutcomes => collectArmOutcomes(reports.map((report) => reportWith(report)))
 
 describe('expectation outcome collection', () => {
   test('records a hit rate per expectation across an arm’s runs', () => {
@@ -47,6 +51,30 @@ describe('expectation outcome collection', () => {
     expect(outcomes.runCount).toBe(2)
     expect(outcomes.hitRateByExpectation.get(expectationKey('a', 0))).toBe(1)
     expect(outcomes.hitRateByExpectation.get(expectationKey('a', 1))).toBe(0.5)
+  })
+})
+
+describe('scoring-rule compatibility', () => {
+  // A metrics-version change alters what a metric reports for identical review
+  // output, so pooling across one measures the scoring change rather than the
+  // engine. This repository has already published a number that was scored
+  // against a stale answer key with nothing in the artifact revealing it.
+  test('refuses to pool runs scored by different rules', () => {
+    expect(() =>
+      collectArmOutcomes([
+        reportWith([{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [0] }], 'v1'),
+        reportWith([{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [0] }], 'v2')
+      ])
+    ).toThrow(/different rules/u)
+  })
+
+  test('pools runs that share a scoring version', () => {
+    expect(() =>
+      collectArmOutcomes([
+        reportWith([{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [0] }], 'v1'),
+        reportWith([{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [] }], 'v1')
+      ])
+    ).not.toThrow()
   })
 })
 

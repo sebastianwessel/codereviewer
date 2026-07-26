@@ -56,6 +56,7 @@ describe('eval report rendering', () => {
       ],
       report: {
         schemaVersion: '1.0',
+      metricsVersion: 'test-metrics-version',
         generatedAt: '2026-06-20T00:00:02.000Z',
         fixtureCount: 1,
         selection: {
@@ -201,7 +202,13 @@ describe('eval report rendering', () => {
           outputTokens: 0,
           costUnavailableCount: 0,
           costUsd: 0,
-          durationMs: 1
+          durationMs: 1,
+          scoringInputTokens: 0,
+          scoringCachedInputTokens: 0,
+          scoringOutputTokens: 0,
+          scoringCostUnavailable: false,
+          scoringCostUsd: 0,
+          elapsedMs: 1
         },
         metricGroups: [],
         regressionGate: {

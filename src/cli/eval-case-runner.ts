@@ -20,7 +20,7 @@ import { parseGitDiffMaps } from '../domains/repository-intake/index.js'
 import { type ProviderImport } from '../domains/provider-resolution/index.js'
 import { type Logger } from '../domains/observability/index.js'
 import { normalizeError, type StructuredError } from '../shared/errors/error-normalizer.js'
-import type { CodeReviewerConfig } from '../shared/contracts/index.js'
+import type { CodeReviewerConfig, ReviewReport } from '../shared/contracts/index.js'
 
 const countChangedLines = async (
   repositoryRoot: string,
@@ -120,17 +120,33 @@ export const runEvalCase = async (
         : { providerImport: input.providerImport })
     })
 
+  // Result of attempting the fix lane for one case: the per-finding outcomes it
+  // produced (empty when the lane never ran a finding through it), plus a
+  // provider issue when the lane itself crashed. `providerIssue` is the only
+  // signal that distinguishes a crash from the lane being disabled or having no
+  // eligible finding -- both of which also yield an empty `fixOutcomes` array
+  // but are not failures, so they carry no issue.
+  type FixLaneAttempt = {
+    readonly fixOutcomes: EvalCaseOutput['fixOutcomes']
+    readonly providerIssue?: ReviewReport['providerIssues'][number]
+  }
+
   // Run the finding investigation-and-fix lane (spec 12) in the eval path so its
   // real outcomes can be scored. It is gated internally on `config.fix.enabled`
-  // (default off), so an eval run with fix disabled captures no outcomes and is
-  // unchanged. The lane is advisory and non-fatal: any failure is swallowed and
-  // the case is scored without fix outcomes rather than failing the eval.
+  // (default off), and `runFixRun` itself returns cleanly with no outcomes when
+  // there is no admitted finding at or above `fix.minSeverity` -- both cases are
+  // genuinely benign and never reach the catch below. The lane is advisory: a
+  // crash caught here must never fail the eval case, but scoring it as an empty
+  // result would make it look exactly like those benign paths, so a caught
+  // failure is instead carried out as a `stage: 'fix'` provider issue merged
+  // into the review report, keeping "the lane broke" visible and distinct from
+  // "the lane found nothing to do".
   const runFixOutcomesForCase = async (
     config: CodeReviewerConfig,
     admittedFindings: readonly AdmittedFinding[]
-  ): Promise<EvalCaseOutput['fixOutcomes']> => {
+  ): Promise<FixLaneAttempt> => {
     if (!config.fix.enabled) {
-      return []
+      return { fixOutcomes: [] }
     }
 
     try {
@@ -145,26 +161,60 @@ export const runEvalCase = async (
           : { providerImport: input.providerImport })
       })
 
-      return report.fixOutcomes.map((outcome) => ({
-        findingId: outcome.findingId,
-        ...(outcome.findingJudgment === undefined
-          ? {}
-          : { findingJudgment: outcome.findingJudgment }),
-        fixProduced: outcome.fixProduced,
-        applyCheck: outcome.applyCheck
-      }))
+      return {
+        fixOutcomes: report.fixOutcomes.map((outcome) => ({
+          findingId: outcome.findingId,
+          ...(outcome.findingJudgment === undefined
+            ? {}
+            : { findingJudgment: outcome.findingJudgment }),
+          fixProduced: outcome.fixProduced,
+          applyCheck: outcome.applyCheck
+        }))
+      }
     } catch (error) {
+      const normalized = normalizeError(error, {
+        source: 'provider',
+        operation: 'fix'
+      })
+
       input.logger?.warn(
         'Eval fix lane failed; scoring the case without fix outcomes.',
         {
           eval_case_id: input.evalCase.id,
-          error_name: error instanceof Error ? error.name : 'unknown'
+          code: normalized.code
         }
       )
 
-      return []
+      return {
+        fixOutcomes: [],
+        providerIssue: {
+          code: normalized.code,
+          stage: 'fix',
+          recovered: false,
+          message: normalized.message.slice(0, 500)
+        }
+      }
     }
   }
+
+  // Merges a fix-lane crash into the review report's own `providerIssues`, the
+  // same field a hard provider recovery already uses, so the eval report's
+  // existing provider-issue rendering and counts surface the failure without a
+  // new field. Absent when the lane did not crash, so a benign empty
+  // `fixOutcomes` array is left exactly as it was.
+  const withFixLaneProviderIssue = (
+    reviewResult: Awaited<ReturnType<typeof runReviewPipeline>>,
+    providerIssue: ReviewReport['providerIssues'][number] | undefined
+  ): Awaited<ReturnType<typeof runReviewPipeline>> =>
+    providerIssue === undefined
+      ? reviewResult
+      : {
+          ...reviewResult,
+          report: {
+            ...reviewResult.report,
+            providerIssues: [...reviewResult.report.providerIssues, providerIssue]
+          }
+        }
 
   const retryConfigForTransientProviderError = (): CodeReviewerConfig => ({
     ...input.config,
@@ -222,12 +272,15 @@ export const runEvalCase = async (
     config: CodeReviewerConfig
   ): Promise<EvalCaseOutput> => {
     const reviewResult = await runReviewForCase(config)
-    const fixOutcomes = await runFixOutcomesForCase(
+    const fixLaneAttempt = await runFixOutcomesForCase(
       config,
       reviewResult.report.admittedFindings
     )
 
-    return resultForReviewReport(reviewResult, fixOutcomes)
+    return resultForReviewReport(
+      withFixLaneProviderIssue(reviewResult, fixLaneAttempt.providerIssue),
+      fixLaneAttempt.fixOutcomes
+    )
   }
 
   try {
@@ -265,12 +318,15 @@ export const runEvalCase = async (
             }
           }
         }
-        const retryFixOutcomes = await runFixOutcomesForCase(
+        const retryFixLaneAttempt = await runFixOutcomesForCase(
           retryConfig,
           retryReviewResult.report.admittedFindings
         )
 
-        return resultForReviewReport(retryReviewResult, retryFixOutcomes)
+        return resultForReviewReport(
+          withFixLaneProviderIssue(retryReviewResult, retryFixLaneAttempt.providerIssue),
+          retryFixLaneAttempt.fixOutcomes
+        )
       } catch (retryError) {
         const retryNormalized = normalizeError(retryError, {
           source: 'provider'

@@ -1,6 +1,11 @@
 import { appendFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { performance } from 'node:perf_hooks'
+import {
+  createProviderUsageRecorder,
+  summarizeRunCost
+} from '../domains/costs/index.js'
 import {
   resolveExistingPathInsideRoot,
   resolvePathInsideRoot
@@ -104,6 +109,16 @@ export type CliRunOptions = {
   // no `generatedAt` is supplied at all, so this stays a thin seam rather than
   // a second source of truth for the clock).
   readonly now?: () => Date
+  // Monotonic clock used to measure `metrics.elapsedMs` on eval reports: the
+  // WHOLE run's wall-clock time (per-case review execution plus judge/
+  // plausibility scoring), as opposed to `metrics.durationMs`, which only sums
+  // each case's own review time. Deliberately a separate seam from `now`
+  // above: `now` stamps a point in time (`generatedAt`), this measures a
+  // monotonic duration, and `Date.now()` is not monotonic (it can jump on a
+  // clock adjustment), so the two must never share one clock. Defaults to
+  // `performance.now` in production; tests inject a deterministic function so
+  // a saved report stays byte-for-byte reproducible.
+  readonly monotonicNow?: () => number
 }
 
 const usageError = (message: string): CliResult => ({
@@ -646,6 +661,14 @@ const runEval = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  // Captured before ANYTHING else so `metrics.elapsedMs` reflects the whole
+  // run: fixture loading, every case's review execution (which happens in the
+  // `runEvalCase` calls below, entirely outside `runEvaluation`), and the
+  // judge/plausibility scoring `runEvaluation` performs. `metrics.durationMs`
+  // only sums each case's own review time and cannot be compared to how long
+  // the run actually took, which is exactly the gap this timer closes.
+  const monotonicNow = options.monotonicNow ?? ((): number => performance.now())
+  const evaluationStartedAtMs = monotonicNow()
   try {
     const logLevelOverride = parseLogLevelOverride(args)
     const logFileOverride = parseLogFileOverride(logLevelOverride.args)
@@ -762,14 +785,51 @@ const runEval = async (
                 : { importProvider: options.providerImport })
             })
           ).modelAlias
+    // Same resolved provider config the judge model alias above came from;
+    // kept alongside it (rather than re-reading `loadedConfig.config.provider`
+    // later) so the cost reader below can price judge usage without a
+    // redundant undefined check.
+    const providerConfig = loadedConfig.config.provider
+    // Wraps the judge model alias in the SAME usage-recorder mechanism the
+    // review path uses (`createProviderUsageRecorder`; see
+    // `run/provider/provider-workflow.ts`), so every provider call the
+    // semantic-match judge and the plausibility judge make -- both matching
+    // AND their calibration passes inside `runEvaluation` -- is captured. This
+    // spend used to be counted nowhere: judge calls are real provider calls,
+    // but neither judge factory reads `response.usage`. One recorder is shared
+    // by both judges (they are the same model), so `scoringUsageRecorder`
+    // below reports their COMBINED spend rather than inventing a second,
+    // per-judge accounting path.
+    const scoringUsageRecorder =
+      modelAlias === undefined
+        ? undefined
+        : createProviderUsageRecorder(modelAlias)
     const semanticJudge =
-      modelAlias === undefined
+      scoringUsageRecorder === undefined
         ? undefined
-        : createModelSemanticJudge({ modelAlias })
+        : createModelSemanticJudge({ modelAlias: scoringUsageRecorder.modelAlias })
     const plausibilityJudge =
-      modelAlias === undefined
+      scoringUsageRecorder === undefined
         ? undefined
-        : createModelPlausibilityJudge({ modelAlias })
+        : createModelPlausibilityJudge({
+            modelAlias: scoringUsageRecorder.modelAlias
+          })
+    // Reads the FINAL judge + plausibility-judge spend, priced with the SAME
+    // `summarizeRunCost` helper that prices review cost. A thunk (not called
+    // here) because the recorder keeps accumulating until `runEvaluation`
+    // finishes matching and calibration; `runEvaluation` calls this only once,
+    // at the very end.
+    const evaluationScoringCost =
+      scoringUsageRecorder === undefined || providerConfig === undefined
+        ? undefined
+        : () =>
+            summarizeRunCost({
+              providerConfigured: true,
+              providerId: providerConfig.id,
+              modelName: providerConfig.model,
+              prices: loadedConfig.config.costs,
+              usage: scoringUsageRecorder.usage()
+            })
     // Reads the new-side content of a finding's file from the case's fixture
     // repo, so the plausibility judge sees the same file the reviewer saw.
     // Returns undefined on any read failure; the judge then fails closed.
@@ -841,7 +901,15 @@ const runEval = async (
       // Production runs stamp the real time; a test passes `options.now` to
       // keep a saved report byte-for-byte reproducible (fix for the eval
       // report's `generatedAt` being frozen to a literal committed timestamp).
-      generatedAt: (options.now ?? ((): Date => new Date()))().toISOString()
+      generatedAt: (options.now ?? ((): Date => new Date()))().toISOString(),
+      ...(evaluationScoringCost === undefined
+        ? {}
+        : { evaluationScoringCost }),
+      // A thunk closed over the monotonic start captured before this function
+      // did anything, so `runEvaluation` measures the WHOLE run (case review
+      // execution above, plus its own judge/plausibility scoring) instead of
+      // only the time spent inside `runEvaluation` itself.
+      evaluationElapsedMs: () => monotonicNow() - evaluationStartedAtMs
     }
     const result = await runEvaluation(evaluationInput)
 

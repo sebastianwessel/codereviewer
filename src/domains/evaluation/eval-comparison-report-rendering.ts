@@ -34,6 +34,18 @@ export const renderEvalComparison = (
 ): string => {
   const baseLabel = input.baseLabel ?? 'base'
   const headLabel = input.headLabel ?? 'head'
+
+  // Refuse to diff runs scored by different rules. A metrics-version change
+  // means identical review output would produce different numbers, so a delta
+  // across the boundary measures the scoring change rather than the engine --
+  // and it looks exactly like a real regression or win. Failing loudly is the
+  // only safe behaviour: this repository has already published a result that was
+  // scored against a stale answer key, and nothing in the artifact revealed it.
+  if (input.base.metricsVersion !== input.head.metricsVersion) {
+    throw new Error(
+      `Refusing to compare evaluation runs scored by different rules: ${baseLabel} used metrics version "${input.base.metricsVersion}" and ${headLabel} used "${input.head.metricsVersion}". Re-run both sides with the current build before comparing.`
+    )
+  }
   const baseStatus = caseStatusById(input.base)
   const headStatus = caseStatusById(input.head)
   const selection = selectionStatus({

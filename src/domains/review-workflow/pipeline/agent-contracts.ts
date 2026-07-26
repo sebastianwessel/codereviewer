@@ -147,113 +147,209 @@ const normalizeModelEnumValue = <T extends string>(
   return aliases[key] ?? value
 }
 
-const normalizeUnknownModelCategoryFromText = (text: string): unknown => {
-  const key = slugifyModelKey(text)
+type ModelCategory = (typeof modelCategoryValues)[number]
 
-  if (key.length === 0) {
-    return undefined
+// The single source of truth for mapping a model-authored category word or
+// phrase onto FindingCategorySchema's closed enum. Every key is already a
+// `slugifyModelKey` output (lowercase, dash-separated), so it doubles as both an
+// exact-phrase alias (the whole raw `category`/`type` field slugifies to this
+// key) and, via `categoryTokenPatterns` below, a bounded keyword a free-text
+// scan can find inside a longer title or description. Before this table
+// existed, the same word reached the engine through three independent code
+// paths that disagreed with each other (e.g. "race condition" filed under
+// `security` while a description merely mentioning "race" or "lock" filed under
+// `performance`); resolving both a structured field and free text through this
+// one table is what makes that impossible again.
+//
+// Exported (read-only) so its tests can assert every entry resolves correctly
+// by iterating this table directly, rather than hand-copying ~60 aliases into
+// the test file where the two could silently drift apart.
+export const modelCategoryAliases: Readonly<Record<string, ModelCategory>> = {
+  // Correctness, logic, and reliability defects, including concurrency ones. A
+  // race condition, deadlock, or other concurrency defect is a correctness bug
+  // first: it MAY have security impact (e.g. a bypassed TOCTOU check), but
+  // filing it under `security` on the strength of the word "race" alone hides
+  // it from reviewers of ordinary correctness bugs, and spec 15 explicitly
+  // scopes concurrency OUT of the dedicated security pass. It is not
+  // `performance` either - a race is about producing a wrong result, not about
+  // being slow.
+  bugs: 'bug',
+  defect: 'bug',
+  regression: 'bug',
+  correctness: 'bug',
+  logic: 'bug',
+  'logic-error': 'bug',
+  functional: 'bug',
+  'functional-correctness': 'bug',
+  reliability: 'bug',
+  issue: 'bug',
+  problem: 'bug',
+  risk: 'bug',
+  flaw: 'bug',
+  crash: 'bug',
+  panic: 'bug',
+  exception: 'bug',
+  stale: 'bug',
+  'data-loss': 'bug',
+  wrong: 'bug',
+  incorrect: 'bug',
+  missing: 'bug',
+  omitted: 'bug',
+  omits: 'bug',
+  concurrency: 'bug',
+  concurrent: 'bug',
+  race: 'bug',
+  'race-condition': 'bug',
+  deadlock: 'bug',
+  lock: 'bug',
+  // Domain-specific correctness defects (pricing/billing/discount math) are
+  // still plain correctness bugs, not a category of their own - the engine's
+  // enum has no "financial" category.
+  pricing: 'bug',
+  'pricing-bug': 'bug',
+  'pricing-correctness': 'bug',
+  'pricing-logic': 'bug',
+  billing: 'bug',
+  'billing-bug': 'bug',
+  'billing-correctness': 'bug',
+  'billing-logic': 'bug',
+  business: 'bug',
+  'business-correctness': 'bug',
+  'business-logic': 'bug',
+  businesslogic: 'bug',
+  'business-rule': 'bug',
+  discount: 'bug',
+  'discount-bug': 'bug',
+  'discount-correctness': 'bug',
+  'discount-logic': 'bug',
+  calculation: 'bug',
+  'calculation-logic': 'bug',
+  financial: 'bug',
+  finance: 'bug',
+  overcharged: 'bug',
+  undercharged: 'bug',
+  prorated: 'bug',
+  // Vulnerabilities and access-control failures. Deliberately narrow: words
+  // that merely CO-OCCUR with security concerns elsewhere (like "race" above)
+  // stay out of this list so they cannot re-create the original defect.
+  vulnerability: 'security',
+  vulnerabilities: 'security',
+  authz: 'security',
+  authorization: 'security',
+  unauthorized: 'security',
+  bypass: 'security',
+  token: 'security',
+  secret: 'security',
+  leak: 'security',
+  // Speed and resource-usage defects, not correctness defects.
+  perf: 'performance',
+  latency: 'performance',
+  memory: 'performance',
+  expensive: 'performance',
+  slow: 'performance',
+  cache: 'performance',
+  // Readability/consistency/naming concerns.
+  maintenance: 'maintainability',
+  naming: 'maintainability',
+  consistency: 'maintainability',
+  'naming-consistency': 'maintainability',
+  readability: 'maintainability',
+  // Cross-platform/cross-version portability.
+  migration: 'compatibility',
+  portable: 'compatibility',
+  portability: 'compatibility',
+  // Policy/compliance rule violations.
+  compliance: 'policy',
+  // Test-suite defects.
+  tests: 'test',
+  testing: 'test'
+} as const
+
+// Categories are checked in this fixed priority order when a slug contains
+// more than one alias's keyword, so the result depends on this explicit
+// ordering rather than on `modelCategoryAliases`' incidental key order. `bug`
+// is the catch-all and stays last.
+const categoryResolutionPriority: readonly ModelCategory[] = [
+  'security',
+  'compatibility',
+  'policy',
+  'test',
+  'maintainability',
+  'performance',
+  'bug'
+]
+
+// One bounded-keyword regex per category, built once from `modelCategoryAliases`
+// so the token scan can never drift from the alias table it is derived from.
+const categoryTokenPatterns = new Map<ModelCategory, RegExp>(
+  categoryResolutionPriority
+    .map((category) => {
+      const tokens = Object.entries(modelCategoryAliases)
+        .filter(([, mappedCategory]) => mappedCategory === category)
+        .map(([token]) => token)
+
+      return tokens.length === 0
+        ? undefined
+        : ([
+            category,
+            new RegExp(`(?:^|-)(?:${tokens.join('|')})(?:-|$)`, 'u')
+          ] as const)
+    })
+    .filter((entry): entry is readonly [ModelCategory, RegExp] => entry !== undefined)
+)
+
+// Resolves an already-slugified key against the enum itself, then the exact
+// alias table, then the bounded keyword scan. Shared by both the structured
+// `category`/`type` field and the free-text fallback below so the two paths
+// can never disagree.
+const resolveModelCategoryFromSlug = (key: string): ModelCategory | undefined => {
+  if ((modelCategoryValues as readonly string[]).includes(key)) {
+    return key as ModelCategory
   }
 
-  if (/(?:^|-)(?:security|vulnerability|authz|authorization|unauthorized|bypass|token|secret|leak)(?:-|$)/u.test(key)) {
-    return 'security'
+  const exactAlias = modelCategoryAliases[key]
+
+  if (exactAlias !== undefined) {
+    return exactAlias
   }
 
-  if (/(?:^|-)(?:performance|perf|latency|memory|expensive|slow|concurrent|race|lock|cache)(?:-|$)/u.test(key)) {
-    return 'performance'
-  }
-
-  if (
-    /(?:^|-)(?:bug|defect|regression|correctness|logic|functional|reliability|billing|business|discount|calculation|financial|finance|overcharged|undercharged|prorated|omits|omitted|missing|wrong|incorrect|crash|panic|exception|stale|data-loss)(?:-|$)/u.test(
-      key
-    )
-  ) {
-    return 'bug'
+  for (const category of categoryResolutionPriority) {
+    if (categoryTokenPatterns.get(category)?.test(key)) {
+      return category
+    }
   }
 
   return undefined
 }
 
-const normalizeModelCategoryValue = (value: unknown): unknown => {
-  const exact = normalizeModelEnumValue(value, modelCategoryValues, {
-    bugs: 'bug',
-    correctness: 'bug',
-    logic: 'bug',
-    'logic-error': 'bug',
-    'functional-correctness': 'bug',
-    functional: 'bug',
-    concurrency: 'bug',
-    reliability: 'bug',
-    pricing: 'bug',
-    'pricing-bug': 'bug',
-    'pricing-correctness': 'bug',
-    'pricing-logic': 'bug',
-    billing: 'bug',
-    'billing-bug': 'bug',
-    'billing-correctness': 'bug',
-    'billing-logic': 'bug',
-    business: 'bug',
-    'business-correctness': 'bug',
-    'business-logic': 'bug',
-    businesslogic: 'bug',
-    'business-rule': 'bug',
-    discount: 'bug',
-    'discount-bug': 'bug',
-    'discount-correctness': 'bug',
-    'discount-logic': 'bug',
-    calculation: 'bug',
-    'calculation-logic': 'bug',
-    financial: 'bug',
-    finance: 'bug',
-    'race-condition': 'security',
-    vulnerability: 'security',
-    vulnerabilities: 'security',
-    perf: 'performance',
-    maintenance: 'maintainability',
-    naming: 'maintainability',
-    consistency: 'maintainability',
-    'naming-consistency': 'maintainability',
-    readability: 'maintainability'
-  })
-
-  if (typeof exact !== 'string' || exact !== value || typeof value !== 'string') {
-    return exact
-  }
-
-  const key = slugifyModelKey(value)
-
-  if (/(?:^|-)(?:security|vulnerability|authz|authorization)(?:-|$)/u.test(key)) {
-    return 'security'
-  }
-
-  if (/(?:^|-)(?:performance|perf|latency|memory)(?:-|$)/u.test(key)) {
-    return 'performance'
-  }
-
-  if (/(?:^|-)(?:maintainability|maintenance|readability|naming)(?:-|$)/u.test(key)) {
-    return 'maintainability'
-  }
-
-  if (/(?:^|-)(?:compatibility|migration|portable|portability)(?:-|$)/u.test(key)) {
-    return 'compatibility'
-  }
-
-  if (/(?:^|-)(?:policy|compliance)(?:-|$)/u.test(key)) {
-    return 'policy'
-  }
-
-  if (/(?:^|-)(?:test|tests|testing)(?:-|$)/u.test(key)) {
-    return 'test'
-  }
-
-  if (
-    /(?:^|-)(?:bug|defect|regression|correctness|logic|functional|reliability|concurrency|pricing|billing|business|discount|calculation|financial|finance|issue|problem|risk|flaw)(?:-|$)/u.test(
-      key
+// Resolves a finding's category from whatever the model actually sent. The
+// structured `category`/`type` field is authoritative when it resolves to
+// anything at all (via the enum, an alias, or a keyword inside it); free text
+// (title/summary/description/...) is consulted only when the structured value
+// resolves to nothing, which covers a reviewer that stated the defect's nature
+// in prose without filling in - or without correctly filling in - the
+// structured field.
+const resolveModelCategory = (
+  structuredValue: unknown,
+  freeTextParts: readonly unknown[]
+): ModelCategory | undefined => {
+  if (typeof structuredValue === 'string') {
+    const fromStructuredValue = resolveModelCategoryFromSlug(
+      slugifyModelKey(structuredValue)
     )
-  ) {
-    return 'bug'
+
+    if (fromStructuredValue !== undefined) {
+      return fromStructuredValue
+    }
   }
 
-  return value
+  const key = slugifyModelKey(
+    [structuredValue, ...freeTextParts]
+      .filter((part): part is string => typeof part === 'string')
+      .join('\n')
+  )
+
+  return key.length === 0 ? undefined : resolveModelCategoryFromSlug(key)
 }
 
 const normalizeModelLineValue = (value: unknown): unknown => {
@@ -324,23 +420,14 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
 
   const record = value as Record<string, unknown>
   const rawCategory = record.category ?? record.type
-  const normalizedCategory = normalizeModelCategoryValue(rawCategory)
-  const category =
-    normalizedCategory !== rawCategory
-      ? normalizedCategory
-      : normalizeUnknownModelCategoryFromText(
-          [
-            rawCategory,
-            record.title,
-            record.summary,
-            record.hypothesis,
-            record.description,
-            record.rationaleSummary,
-            record.rationale
-          ]
-            .filter((part): part is string => typeof part === 'string')
-            .join('\n')
-        ) ?? normalizedCategory
+  const category = resolveModelCategory(rawCategory, [
+    record.title,
+    record.summary,
+    record.hypothesis,
+    record.description,
+    record.rationaleSummary,
+    record.rationale
+  ])
 
   return {
     category,
@@ -374,11 +461,12 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
     fixEdits: record.fixEdits ?? record.fix_edits
   }
 }, z.object({
-  category: z
-    .preprocess(
-      normalizeModelCategoryValue,
-      CandidateFindingSchema.shape.category.optional()
-    ),
+  // Already resolved to a valid category (or left `undefined`) by
+  // `resolveModelCategory` in the preprocess step above, so this field needs no
+  // preprocessing of its own - giving it one would just re-run normalization on
+  // an already-normalized value through a second, independent path, which is
+  // the exact duplication this schema is meant to have eliminated.
+  category: CandidateFindingSchema.shape.category.optional(),
   severity: z
     .preprocess(
       (value) =>

@@ -288,7 +288,11 @@ describe('eval runner', () => {
         maxFalsePositiveCount: 0,
         failOnProviderError: true
       },
-      generatedAt: '2026-06-20T00:00:02.000Z'
+      generatedAt: '2026-06-20T00:00:02.000Z',
+      // A fixed thunk, not the real monotonic clock: this test snapshots the
+      // whole report, and `elapsedMs` would otherwise vary run to run (it
+      // measures genuine wall-clock time), making the snapshot flaky.
+      evaluationElapsedMs: () => 42
     })
 
     expect(result.artifactName).toBe('eval-report.json')
@@ -359,7 +363,107 @@ describe('eval runner', () => {
     const summary = renderEvalSummary({ cases, report: result.report })
     expect(summary).toContain('| Input tokens | 12 |')
     expect(summary).toContain('| Output tokens | 8 |')
-    expect(summary).toContain('| Cost | $0.00 known; unavailable for 1 case(s) |')
+    expect(summary).toContain(
+      '| Review cost | $0.00 known; unavailable for 1 case(s) |'
+    )
+  })
+
+  // The judge and plausibility judge make real provider calls (matching, plus
+  // their own calibration passes), but until this test's underlying fix,
+  // NOTHING read their `response.usage`, so that spend was counted nowhere and
+  // every published cost figure understated the run's true provider spend.
+  // `evaluationScoringCost` stands in for the CLI's usage-recorder-backed
+  // thunk (see cli/index.ts), and this proves the run folds it into its OWN
+  // metric rather than the review-only `costUsd`/`inputTokens`/`outputTokens`.
+  test('reports judge/plausibility-judge spend as its own metric, separate from review cost', async () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding()])
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z',
+      evaluationScoringCost: () => ({
+        warnings: [],
+        costUsd: 0.075,
+        inputTokens: 900,
+        outputTokens: 150,
+        cachedInputTokens: 30
+      })
+    })
+
+    // Judge spend is its own number...
+    expect(result.report.metrics.scoringCostUsd).toBe(0.075)
+    expect(result.report.metrics.scoringInputTokens).toBe(900)
+    expect(result.report.metrics.scoringOutputTokens).toBe(150)
+    expect(result.report.metrics.scoringCachedInputTokens).toBe(30)
+    expect(result.report.metrics.scoringCostUnavailable).toBe(false)
+    // ...that never leaks into the review-only figures, which come solely
+    // from the case's review report (costUsd 0.1, inputTokens/outputTokens 0
+    // per the shared `reviewReport` fixture default).
+    expect(result.report.metrics.costUsd).toBe(0.1)
+    expect(result.report.metrics.inputTokens).toBe(0)
+    expect(result.report.metrics.outputTokens).toBe(0)
+
+    // Repeated on every metric group, exactly like judge reliability: one run
+    // produced every group's numbers.
+    for (const group of result.report.metricGroups) {
+      expect(group.metrics.scoringCostUsd).toBe(0.075)
+    }
+
+    const summary = renderEvalSummary({ cases, report: result.report })
+    expect(summary).toContain(
+      '| Scoring cost (judge, separate from review cost) | $0.0750 |'
+    )
+    expect(summary).toContain(
+      '| Scoring input tokens (judge + plausibility judge) | 900 |'
+    )
+  })
+
+  // `durationMs` sums only each case's review time, so it cannot answer how
+  // long the run actually took (judge calls, calibration, and orchestration
+  // overhead are invisible to it). `elapsedMs` is the monotonic wall clock for
+  // the WHOLE run and must be injectable, exactly like the CLI's `now` seam,
+  // so a saved report stays deterministic in tests.
+  test('reports a monotonic whole-run elapsed time distinct from summed review duration', async () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding()])
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z',
+      // Deliberately far from the case's own review durationMs (1000, per the
+      // shared `reviewReport` fixture default) so the two numbers cannot be
+      // confused for one another.
+      evaluationElapsedMs: () => 987
+    })
+
+    expect(result.report.metrics.elapsedMs).toBe(987)
+    expect(result.report.metrics.durationMs).toBe(1000)
+    expect(result.report.metrics.elapsedMs).not.toBe(
+      result.report.metrics.durationMs
+    )
   })
 
   test('scores artifact-only findings separately from actionable eval metrics', async () => {

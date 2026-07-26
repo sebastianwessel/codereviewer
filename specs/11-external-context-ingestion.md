@@ -227,6 +227,14 @@ standard schema validation.
   as a run warning in the report, so the degradation is visible rather than
   silent, and the review proceeds without that provider's context. A source
   failure never changes the review exit code.
+- Resolving the `model` summarizer itself can fail before any provider ever
+  runs — a missing optional provider package, invalid credentials, a network
+  failure, or an adapter that resolves with no callable model. This is
+  non-fatal (ingestion falls back to the deterministic `digest`), but it is
+  classified and surfaced as a run warning naming the reason, so a user who
+  configured a model summarizer and got the digest instead can tell that apart
+  from `contextSources` never having been configured at all. A resolution
+  failure never changes the review exit code.
 
 The later-phase network `platform-API` provider adds semantic configuration
 checks (host allowlist, no literal secret) that warrant a dedicated

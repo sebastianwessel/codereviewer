@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'vitest'
 import {
   ModelContextScoutResultSchema,
+  ModelHolisticFindingSchema,
   ModelHolisticReviewResultSchema,
-  contextScoutRequests
+  contextScoutRequests,
+  modelCategoryAliases
 } from './agent-contracts.js'
 
 describe('ModelHolisticReviewResultSchema', () => {
@@ -17,6 +19,79 @@ describe('ModelHolisticReviewResultSchema', () => {
     expect(
       ModelHolisticReviewResultSchema.parse({ findings: [] }).findings
     ).toEqual([])
+  })
+})
+
+// These findings are minimal: only the fields the category resolver reads
+// (category/type and the free-text fields) are ever set, since every other
+// field on ModelHolisticFindingSchema is independently optional.
+describe('ModelHolisticFindingSchema category normalization', () => {
+  test('every declared alias resolves through the structured category field to its mapped category', () => {
+    for (const [alias, expectedCategory] of Object.entries(modelCategoryAliases)) {
+      const { category } = ModelHolisticFindingSchema.parse({ category: alias })
+
+      expect(category, `alias "${alias}" should resolve to "${expectedCategory}"`).toBe(
+        expectedCategory
+      )
+    }
+  })
+
+  test('resolves an alias regardless of the casing, spacing, or punctuation the model sent', () => {
+    expect(ModelHolisticFindingSchema.parse({ category: 'Race Condition' }).category).toBe(
+      'bug'
+    )
+    expect(ModelHolisticFindingSchema.parse({ type: 'RACE_CONDITION!!' }).category).toBe(
+      'bug'
+    )
+  })
+
+  test('falls back to a keyword scan over free text when there is no structured category', () => {
+    expect(
+      ModelHolisticFindingSchema.parse({
+        title: 'Customer invoice total is wrong',
+        description: 'Customer was overcharged due to a rounding error in checkout.'
+      }).category
+    ).toBe('bug')
+  })
+
+  test('a structured category takes priority over free text that would resolve differently', () => {
+    // The description below would resolve to `performance` on a text scan (it
+    // mentions caching), but the model's own `category` field is authoritative
+    // once it resolves to something, so that must win.
+    expect(
+      ModelHolisticFindingSchema.parse({
+        category: 'security',
+        title: 'Slow endpoint',
+        description: 'This endpoint leaks a JWT in its response body and caches too eagerly.'
+      }).category
+    ).toBe('security')
+  })
+
+  test('an unrecognized category with no matching free text resolves to no category', () => {
+    expect(
+      ModelHolisticFindingSchema.parse({ category: 'zzz-not-a-real-category' }).category
+    ).toBeUndefined()
+    expect(ModelHolisticFindingSchema.parse({}).category).toBeUndefined()
+  })
+
+  // The defect this normalization replaces: "race condition" filed under
+  // `security`, "concurrency" filed under `bug`, and free text merely
+  // mentioning a race or a lock filed under `performance` - three different
+  // categories for the same underlying kind of defect, depending on which
+  // field/word the model happened to use. All three must now agree.
+  test('a race condition, "concurrency", and free text mentioning a race or a lock all agree on bug', () => {
+    expect(ModelHolisticFindingSchema.parse({ category: 'race condition' }).category).toBe(
+      'bug'
+    )
+    expect(ModelHolisticFindingSchema.parse({ category: 'concurrency' }).category).toBe(
+      'bug'
+    )
+    expect(
+      ModelHolisticFindingSchema.parse({
+        title: 'Possible race between two goroutines',
+        description: 'One thread may still hold the lock when the other reads stale state.'
+      }).category
+    ).toBe('bug')
   })
 })
 

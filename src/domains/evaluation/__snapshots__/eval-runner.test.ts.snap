@@ -177,6 +177,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "costUsd": 0.2,
         "duplicateFindingCount": 0,
         "durationMs": 2000,
+        "elapsedMs": 42,
         "f1": 0.666667,
         "falsePositiveCount": 1,
         "fixApplyFailureRate": 0,
@@ -215,6 +216,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
         "rejectionReasonCounts": {},
+        "scoringCachedInputTokens": 0,
+        "scoringCostUnavailable": false,
+        "scoringCostUsd": 0,
+        "scoringInputTokens": 0,
+        "scoringOutputTokens": 0,
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -350,6 +356,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "costUsd": 0.2,
         "duplicateFindingCount": 0,
         "durationMs": 2000,
+        "elapsedMs": 42,
         "f1": 0.666667,
         "falsePositiveCount": 1,
         "fixApplyFailureRate": 0,
@@ -388,6 +395,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
         "rejectionReasonCounts": {},
+        "scoringCachedInputTokens": 0,
+        "scoringCostUnavailable": false,
+        "scoringCostUsd": 0,
+        "scoringInputTokens": 0,
+        "scoringOutputTokens": 0,
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -522,6 +534,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "costUsd": 0.1,
         "duplicateFindingCount": 0,
         "durationMs": 1000,
+        "elapsedMs": 42,
         "f1": 0,
         "falsePositiveCount": 1,
         "fixApplyFailureRate": 0,
@@ -560,6 +573,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
         "rejectionReasonCounts": {},
+        "scoringCachedInputTokens": 0,
+        "scoringCostUnavailable": false,
+        "scoringCostUsd": 0,
+        "scoringInputTokens": 0,
+        "scoringOutputTokens": 0,
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -694,6 +712,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "costUsd": 0.1,
         "duplicateFindingCount": 0,
         "durationMs": 1000,
+        "elapsedMs": 42,
         "f1": 1,
         "falsePositiveCount": 0,
         "fixApplyFailureRate": 0,
@@ -732,6 +751,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
         "rejectionReasonCounts": {},
+        "scoringCachedInputTokens": 0,
+        "scoringCostUnavailable": false,
+        "scoringCostUsd": 0,
+        "scoringInputTokens": 0,
+        "scoringOutputTokens": 0,
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -867,6 +891,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "costUsd": 0.2,
         "duplicateFindingCount": 0,
         "durationMs": 2000,
+        "elapsedMs": 42,
         "f1": 0.666667,
         "falsePositiveCount": 1,
         "fixApplyFailureRate": 0,
@@ -905,6 +930,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
         "rejectionReasonCounts": {},
+        "scoringCachedInputTokens": 0,
+        "scoringCostUnavailable": false,
+        "scoringCostUsd": 0,
+        "scoringInputTokens": 0,
+        "scoringOutputTokens": 0,
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -1033,6 +1063,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "costUsd": 0.2,
     "duplicateFindingCount": 0,
     "durationMs": 2000,
+    "elapsedMs": 42,
     "f1": 0.666667,
     "falsePositiveCount": 1,
     "fixApplyFailureRate": 0,
@@ -1071,6 +1102,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "refutationFalseNegativeCount": 0,
     "refutationFalsePositiveCount": 0,
     "rejectionReasonCounts": {},
+    "scoringCachedInputTokens": 0,
+    "scoringCostUnavailable": false,
+    "scoringCostUsd": 0,
+    "scoringInputTokens": 0,
+    "scoringOutputTokens": 0,
     "securityContextDepthCounts": {
       "analyzer-path-dependent": {
         "expected": 0,
@@ -1181,6 +1217,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "trustedDeterministicFindingCount": 0,
     "unlistedRealFindingCount": 0,
   },
+  "metricsVersion": "2026-07-26.max-cardinality-matching",
   "regressionGate": {
     "failingCaseIds": [
       "typescript-negative",
@@ -1232,7 +1269,8 @@ Fixtures: 2
 | False positives | Duplicate findings | 0 |
 | Priority | Severity accuracy | 100.0% (1 checked) |
 | Health | Provider error rate | 0.0% |
-| Health | Cost | $0.2000 |
+| Health | Review cost | $0.2000 |
+| Health | Scoring cost (judge, separate from review cost) | $0.0000 |
 
 ## Selection
 
@@ -1288,11 +1326,15 @@ Fixtures: 2
 | Actionable rate | 100.0% |
 | Incomplete coverage rate | 0.0% |
 | Context mutation rate | 0.0% |
-| Duration | 2.0s |
+| Elapsed (wall clock) | 42ms |
+| Duration (summed review time) | 2.0s |
 | Input tokens | 0 |
 | Input tokens (cached) | 0 |
 | Output tokens | 0 |
-| Cost | $0.2000 |
+| Review cost | $0.2000 |
+| Scoring input tokens (judge + plausibility judge) | 0 |
+| Scoring output tokens (judge + plausibility judge) | 0 |
+| Scoring cost (judge, separate from review cost) | $0.0000 |
 
 ## Recall by Tier
 

@@ -263,7 +263,33 @@ export const EvalMetricsSchema = z.strictObject({
   outputTokens: z.int().min(0).default(0),
   costUnavailableCount: z.int().min(0).default(0),
   costUsd: z.number().min(0),
-  durationMs: z.int().min(0)
+  durationMs: z.int().min(0),
+  // Judge + plausibility-judge provider spend for the WHOLE run, wrapped by the
+  // SAME `createProviderUsageRecorder` mechanism the review path uses (see
+  // provider-usage-recorder.ts) and priced with the SAME `summarizeRunCost`
+  // helper that produces `costUsd` above. Deliberately NOT folded into
+  // `costUsd`/`inputTokens`/`outputTokens`, which are folded ONLY from each
+  // case's REVIEW report: every judge/plausibility-judge call a run made --
+  // across matching AND the judge/plausibility calibration passes -- used to
+  // be counted nowhere, so true provider spend was understated by whatever the
+  // judge itself cost. Folding it into `costUsd` instead of giving it its own
+  // field would silently change what that number has always meant to every
+  // existing report and dashboard that reads it.
+  scoringInputTokens: z.int().min(0).default(0),
+  scoringCachedInputTokens: z.int().min(0).default(0),
+  scoringOutputTokens: z.int().min(0).default(0),
+  // Mirrors `costUnavailableCount`'s per-case semantics, but the judge/
+  // plausibility recorder covers the whole run rather than one case, so this
+  // is a single flag rather than a count.
+  scoringCostUnavailable: z.boolean().default(false),
+  scoringCostUsd: z.number().min(0).default(0),
+  // Monotonic wall-clock elapsed time for the WHOLE evaluation run (per-case
+  // review execution AND judge/plausibility scoring), as opposed to
+  // `durationMs`, which only SUMS each case's own review time and therefore
+  // can never be compared to how long the run actually took: idle time
+  // between cases, judge/plausibility provider calls, and orchestration
+  // overhead are all invisible to a sum of per-case numbers.
+  elapsedMs: z.int().min(0).default(0)
 })
 
 export type EvalMetrics = z.infer<typeof EvalMetricsSchema>
@@ -390,9 +416,34 @@ export type EvalJudgeReliability = {
   readonly plausibilityJudgeAgreementPairCount: number
 }
 
+// Run-level judge/plausibility-judge spend and wall-clock elapsed time.
+// Neither is derivable from case results -- the usage recorder wraps
+// judge/plausibility calls across the WHOLE run rather than per case, and the
+// elapsed timer spans the whole run -- so both are passed in and repeated on
+// every metric group, exactly like `EvalJudgeReliability`: one run produced
+// every group's numbers.
+export type EvalRunTotals = {
+  readonly elapsedMs: number
+  readonly scoringInputTokens: number
+  readonly scoringCachedInputTokens: number
+  readonly scoringOutputTokens: number
+  readonly scoringCostUsd: number
+  readonly scoringCostUnavailable: boolean
+}
+
+export const emptyRunTotals: EvalRunTotals = {
+  elapsedMs: 0,
+  scoringInputTokens: 0,
+  scoringCachedInputTokens: 0,
+  scoringOutputTokens: 0,
+  scoringCostUsd: 0,
+  scoringCostUnavailable: false
+}
+
 export const calculateEvalMetrics = (
   caseResults: readonly EvalMetricCaseResult[],
-  judgeReliability?: EvalJudgeReliability
+  judgeReliability?: EvalJudgeReliability,
+  runTotals: EvalRunTotals = emptyRunTotals
 ): EvalMetrics => {
   const totalCaseCount = caseResults.length
   const totalExpectedFindingCount = sum(
@@ -758,6 +809,12 @@ export const calculateEvalMetrics = (
     costUnavailableCount: caseResults.filter((result) => result.costUnavailable)
       .length,
     costUsd: roundMetric(sum(caseResults.map((result) => result.costUsd))),
-    durationMs: sum(caseResults.map((result) => result.durationMs))
+    durationMs: sum(caseResults.map((result) => result.durationMs)),
+    scoringInputTokens: runTotals.scoringInputTokens,
+    scoringCachedInputTokens: runTotals.scoringCachedInputTokens,
+    scoringOutputTokens: runTotals.scoringOutputTokens,
+    scoringCostUnavailable: runTotals.scoringCostUnavailable,
+    scoringCostUsd: roundMetric(runTotals.scoringCostUsd),
+    elapsedMs: runTotals.elapsedMs
   })
 }

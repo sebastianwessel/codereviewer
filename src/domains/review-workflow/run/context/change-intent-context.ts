@@ -22,6 +22,7 @@ import {
   type ProviderImport
 } from '../../../provider-resolution/index.js'
 import { createRedactor } from '../../../../shared/redaction/redactor.js'
+import { normalizeError } from '../../../../shared/errors/error-normalizer.js'
 import {
   WorkflowReviewTaskSchema,
   type WorkflowReviewTask
@@ -46,10 +47,33 @@ const warningsForFailedProviders = (
         `External change-intent provider "${metric.id}" failed and was skipped.`
     )
 
+// Why the run fell back to the deterministic digest instead of the requested
+// model summarizer. Absent (not just "false") whenever the digest was the
+// deliberate choice -- `summary.mode: 'digest'`, no provider configured, or AI
+// review disabled -- so a real degradation is never confused with a setting the
+// user chose on purpose.
+type SummarizerUnavailableReason =
+  // The resolved provider alias carried no callable model object. Nothing threw,
+  // so without this the run silently ran the digest and nobody could tell a
+  // misconfigured provider from "digest was requested".
+  | { readonly kind: 'no-callable-model' }
+  // Resolving the provider (missing package, bad credential, network failure,
+  // ...) threw. `code`/`message` come from the same normalizer the fix lane and
+  // provider-recovery paths use, so this failure is classified the same way.
+  | { readonly kind: 'resolution-failed'; readonly code: string; readonly message: string }
+
+type SummarizerSelection = {
+  readonly summarizer: ContextSummarizer
+  readonly modelSummarizerUnavailableReason?: SummarizerUnavailableReason
+}
+
 // Selects the summarizer for the run. `model` is used only when a provider is
 // configured and model-backed review is not disabled; otherwise the
-// deterministic digest is used. A model summarizer that throws at resolution
-// time falls back to the digest so ingestion never fails the review.
+// deterministic digest is used deliberately, and no reason is reported. A model
+// summarizer that cannot be used -- whether it throws at resolution time or
+// simply resolves to no callable model -- degrades to the digest so ingestion
+// never fails the review, but now carries WHY, so a user who configured a model
+// summarizer and silently got the digest instead can find out.
 const selectSummarizer = async (input: {
   readonly config: CodeReviewerConfig
   readonly environment: Readonly<Record<string, string | undefined>>
@@ -57,7 +81,7 @@ const selectSummarizer = async (input: {
   readonly logger: Logger
   readonly onUsage: (usage: RunTokenUsage) => void
   readonly signal?: AbortSignal | undefined
-}): Promise<ContextSummarizer> => {
+}): Promise<SummarizerSelection> => {
   const requested =
     input.config.contextSources.summary.mode ??
     (input.config.provider !== undefined ? 'model' : 'digest')
@@ -67,7 +91,7 @@ const selectSummarizer = async (input: {
     input.config.provider === undefined ||
     input.config.aiReview.enabled === false
   ) {
-    return createDigestSummarizer()
+    return { summarizer: createDigestSummarizer() }
   }
 
   try {
@@ -81,17 +105,68 @@ const selectSummarizer = async (input: {
     })
 
     if (resolved.modelAlias.provider.object === undefined) {
-      return createDigestSummarizer()
+      input.logger.warn(
+        'Change-intent model summarizer resolved no callable model; falling back to the deterministic digest.'
+      )
+
+      return {
+        summarizer: createDigestSummarizer(),
+        modelSummarizerUnavailableReason: { kind: 'no-callable-model' }
+      }
     }
 
-    return createModelSummarizer({
-      modelAlias: resolved.modelAlias,
-      onUsage: input.onUsage,
-      ...(input.signal === undefined ? {} : { signal: input.signal })
+    return {
+      summarizer: createModelSummarizer({
+        modelAlias: resolved.modelAlias,
+        onUsage: input.onUsage,
+        ...(input.signal === undefined ? {} : { signal: input.signal })
+      })
+    }
+  } catch (error) {
+    // Bind and classify the error instead of swallowing it: a missing optional
+    // package, a bad credential, and a network failure are all "the model
+    // summarizer could not be resolved", but they are not the same problem, and
+    // a user debugging an empty change-intent brief needs the distinction.
+    const normalized = normalizeError(error, {
+      source: 'provider',
+      operation: 'change-intent-summarizer'
     })
-  } catch {
-    return createDigestSummarizer()
+
+    input.logger.warn(
+      'Change-intent model summarizer resolution failed; falling back to the deterministic digest.',
+      { code: normalized.code }
+    )
+
+    return {
+      summarizer: createDigestSummarizer(),
+      modelSummarizerUnavailableReason: {
+        kind: 'resolution-failed',
+        code: normalized.code,
+        message: normalized.message
+      }
+    }
   }
+}
+
+// Renders the classified reason as the same kind of human-readable warning the
+// per-provider failures already produce, so both appear side by side in the run
+// report and the eval artifact instead of one being visible and the other mute.
+const warningForSummarizerUnavailable = (
+  reason: SummarizerUnavailableReason | undefined
+): readonly string[] => {
+  if (reason === undefined) {
+    return []
+  }
+
+  if (reason.kind === 'no-callable-model') {
+    return [
+      'External change-intent model summarizer resolved no callable model; the run used the deterministic digest instead.'
+    ]
+  }
+
+  return [
+    `External change-intent model summarizer unavailable (${reason.code}): ${reason.message} The run used the deterministic digest instead.`
+  ]
 }
 
 const ledgerDecisionFor = (
@@ -136,20 +211,24 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
   }
 
   let usage: RunTokenUsage | undefined
-  const summarizer =
-    input.summarizer ??
-    (await selectSummarizer({
-      config: input.config,
-      environment: input.environment,
-      logger: input.logger,
-      onUsage: (recorded) => {
-        usage = combineRunTokenUsage(usage, recorded)
-      },
-      ...(input.providerImport === undefined
-        ? {}
-        : { providerImport: input.providerImport }),
-      ...(input.signal === undefined ? {} : { signal: input.signal })
-    }))
+  // An explicitly injected summarizer (test seam) is never "unavailable" -- it
+  // was handed in on purpose, so it carries no reason.
+  const summarizerSelection: SummarizerSelection =
+    input.summarizer !== undefined
+      ? { summarizer: input.summarizer }
+      : await selectSummarizer({
+          config: input.config,
+          environment: input.environment,
+          logger: input.logger,
+          onUsage: (recorded) => {
+            usage = combineRunTokenUsage(usage, recorded)
+          },
+          ...(input.providerImport === undefined
+            ? {}
+            : { providerImport: input.providerImport }),
+          ...(input.signal === undefined ? {} : { signal: input.signal })
+        })
+  const summarizer = summarizerSelection.summarizer
 
   const step = input.observability.startStep('context_ingestion', {
     providerCount: contextSources.providers.length,
@@ -177,8 +256,17 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     ...(input.signal === undefined ? {} : { signal: input.signal })
   })
 
-  const warnings = warningsForFailedProviders(result.providerMetrics)
-  const failedProviders = warnings.length
+  // Kept separate from `warnings`: `failedProviders` feeds step/debug metrics
+  // that count ingestion providers specifically, and the summarizer-unavailable
+  // warning (prepended below) is not one of those providers.
+  const providerWarnings = warningsForFailedProviders(result.providerMetrics)
+  const failedProviders = providerWarnings.length
+  const warnings = [
+    ...warningForSummarizerUnavailable(
+      summarizerSelection.modelSummarizerUnavailableReason
+    ),
+    ...providerWarnings
+  ]
 
   if (result.brief === undefined) {
     step.end({

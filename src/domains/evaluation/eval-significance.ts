@@ -49,6 +49,18 @@ const expectedKeysIn = (report: EvalReport): readonly ExpectationKey[] =>
 export const collectArmOutcomes = (
   reports: readonly EvalReport[]
 ): ArmOutcomes => {
+  // Every run in an arm must have been scored by the same rules, for the same
+  // reason the comparison refuses to mix them: a metrics-version change alters
+  // what a metric reports for identical review output, so pooling across one
+  // measures the scoring change.
+  const versions = [...new Set(reports.map((report) => report.metricsVersion))]
+
+  if (versions.length > 1) {
+    throw new Error(
+      `Refusing to pool evaluation runs scored by different rules: metrics versions ${versions.join(', ')}.`
+    )
+  }
+
   const hits = new Map<ExpectationKey, number>()
 
   for (const report of reports) {

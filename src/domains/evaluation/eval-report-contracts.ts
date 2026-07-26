@@ -208,8 +208,25 @@ export const EvalMetricGroupSchema = z.strictObject({
   metrics: EvalMetricsSchema
 })
 
+// How the numbers in a report were COMPUTED, as opposed to `schemaVersion`,
+// which describes the shape they are written in. A report is only comparable to
+// another report produced by the same scoring rules, and two changes have already
+// broken that: expectation-to-finding assignment became maximum-cardinality
+// rather than first-acceptable, and the model category taxonomy was unified,
+// which moves race and concurrency findings and so shifts tier resolution.
+//
+// Bump this whenever a change alters what a metric would report for identical
+// review output. Comparing across a bump silently mixes incomparable runs, which
+// is the same class of failure as scoring a run against a stale answer key -- and
+// that one has already happened here.
+export const EVAL_METRICS_VERSION = '2026-07-26.max-cardinality-matching'
+
 export const EvalReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),
+  // Defaulted so a report written before this field existed still parses; such a
+  // report predates the scoring changes above and is correctly reported as
+  // incomparable to a current one.
+  metricsVersion: z.string().min(1).default('pre-2026-07-26'),
   generatedAt: z.iso.datetime(),
   fixtureCount: z.int().min(0),
   selection: EvalReportSelectionSchema,

@@ -934,6 +934,75 @@ describe('eval CLI', () => {
     }
   })
 
+  // Before this fix, the semantic-match judge and the plausibility judge made
+  // real provider calls but nothing read `response.usage`, so their tokens and
+  // cost were counted nowhere: every published cost figure was a floor, not a
+  // total. This proves the CLI wraps the judge model alias in the same
+  // usage-recorder mechanism the review path uses, so judge/plausibility spend
+  // now shows up as its OWN metric, separate from (and in addition to) the
+  // review-only cost/token figures.
+  test('captures judge and plausibility-judge spend as a separate scoring metric', async () => {
+    const root = await createTempDir()
+    const provider = new SemanticJudgeCliProvider()
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'judge-model',
+            maxRetries: 0
+          },
+          review: {
+            depth: 'fast'
+          },
+          drift: {
+            enabled: false
+          }
+        })
+      )
+      await writeSemanticJudgeSliceEvalCase(root)
+
+      const result = await runCli(
+        ['eval', 'run', '--slice-root', 'eval/benchmarks/semantic'],
+        {
+          cwd: root,
+          environment: {
+            OPENAI_API_KEY: 'sk-test'
+          },
+          providerImport: async () => ({
+            openai: () => provider
+          })
+        }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(provider.judgeCalls).toBeGreaterThan(0)
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+
+      // Judge/plausibility calls each report usage of 1 input + 1 output token
+      // (see `SemanticJudgeCliProvider`); at least the semantic-match call and
+      // its calibration pairs ran, so scoring tokens must be strictly positive.
+      expect(report.metrics.scoringInputTokens).toBeGreaterThan(0)
+      expect(report.metrics.scoringOutputTokens).toBeGreaterThan(0)
+      // Review-only token/cost figures come solely from the review pass and
+      // must stay unaffected by judge spend: no double counting either way.
+      expect(report.metrics.inputTokens).toBeGreaterThan(0)
+      expect(report.metrics.scoringInputTokens).not.toBe(report.metrics.inputTokens)
+
+      // A monotonic top-level wall-clock timer for the whole run, distinct
+      // from `durationMs` (which only sums each case's own review time).
+      expect(typeof report.metrics.elapsedMs).toBe('number')
+      expect(report.metrics.elapsedMs).toBeGreaterThanOrEqual(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('fails with a config error when a positive case has no judge provider', async () => {
     const root = await createTempDir()
 
