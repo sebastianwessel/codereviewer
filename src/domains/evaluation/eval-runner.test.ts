@@ -861,6 +861,103 @@ describe('eval runner', () => {
     ])
   })
 
+  test('counts only path-line expectations that declare a line toward line accuracy', async () => {
+    // Only `path-line` expectations are scored for line overlap, so only they
+    // may enter the denominator. A `path-semantic` expectation that still
+    // carries a `lineRange` -- the shape every real-repository corpus finding
+    // uses -- can never be credited, and counting it reported a rate of 0 that
+    // read as failed line placement rather than an inapplicable metric.
+    const expectedFinding = (
+      overrides: Record<string, unknown>
+    ): Record<string, unknown> => ({
+      category: 'bug',
+      severity: 'high',
+      path: 'src/app.ts',
+      semanticSummary: 'changed branch returns a stale total to its callers',
+      ...overrides
+    })
+    const evalCase = (
+      id: string,
+      expected: Record<string, unknown>
+    ): Record<string, unknown> => ({
+      id,
+      language: 'typescript',
+      repositoryFixture: 'fixtures/typescript/positive',
+      changedFiles: ['src/app.ts'],
+      expectedFindings: [expectedFinding(expected)],
+      expectedNoFindingZones: [],
+      tags: ['line-accuracy']
+    })
+    const outputFor = (caseId: string, startLine: number) => {
+      const slug = caseId.replace(/[^a-z0-9]/gu, '')
+
+      return {
+        caseId,
+        changedLineCount: 10,
+        diffHunkCount: 1,
+        contextLedger: [],
+        result: {
+          status: 'ok' as const,
+          reviewReport: reviewReport([
+            admittedFinding({
+              id: `find_${slug}`,
+              title: 'Stale total returned',
+              description: 'The changed branch returns a stale total.',
+              location: { path: 'src/app.ts', startLine, side: 'new' },
+              fingerprints: [{ algorithm: 'test', value: slug }]
+            })
+          ])
+        }
+      }
+    }
+
+    const corpusShapedCase = evalCase('path-semantic-with-line', {
+      lineRange: [4, 4],
+      matchMode: 'path-semantic'
+    })
+
+    // The corpus shape on its own: matched, but nothing about its line is
+    // scored, so the metric is undefined rather than zero.
+    const semanticOnlyCases = parseEvalCases([corpusShapedCase])
+    const semanticOnlyRun = await runEvaluation({
+      cases: semanticOnlyCases,
+      judge: acceptingJudge,
+      outputs: [outputFor('path-semantic-with-line', 90)],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(semanticOnlyRun.report.metrics.recall).toBe(1)
+    expect(semanticOnlyRun.report.metrics.lineCheckCount).toBe(0)
+    expect(
+      renderEvalSummary({
+        cases: semanticOnlyCases,
+        report: semanticOnlyRun.report
+      })
+    ).toContain('| Line accuracy | n/a (0 checked) |')
+
+    const mixedRun = await runEvaluation({
+      cases: parseEvalCases([
+        corpusShapedCase,
+        // Declares a line and is scored against it.
+        evalCase('path-line-with-line', { lineRange: [4, 4] }),
+        // Explicitly `path-line` but declares no line: `lineRulePasses` would
+        // credit it unconditionally, so it must stay out of the denominator.
+        evalCase('path-line-without-line', { matchMode: 'path-line' })
+      ]),
+      judge: acceptingJudge,
+      outputs: [
+        outputFor('path-semantic-with-line', 90),
+        outputFor('path-line-with-line', 4),
+        outputFor('path-line-without-line', 90)
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(mixedRun.report.metrics.recall).toBe(1)
+    expect(mixedRun.report.metrics.lineCheckCount).toBe(1)
+    expect(mixedRun.report.metrics.lineAccuracy).toBe(1)
+  })
+
   test('excludes inconclusive pairs from recall and precision and warns about them', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
     const result = await runEvaluation({

@@ -546,13 +546,17 @@ const buildMetricCase = (
   // Counting a path-semantic expectation here put it in the denominator while
   // making the numerator unreachable, so a corpus matched semantically reported a
   // guaranteed 0.0% -- a metric that cannot pass, displayed as one that failed.
-  const matchedLineCheckCount = input.matchResult.matches.filter((match) => {
+  // An explicit path-line that declares no lineRange is excluded too: it asserts
+  // no line, and lineRulePasses would credit it unconditionally. Both sides of
+  // the ratio come from this one set, so they cannot drift apart again.
+  const lineCheckedMatches = input.matchResult.matches.filter((match) => {
     const expected = input.evalCase.expectedFindings[match.expectedIndex]
+
     return (
       expected?.lineRange !== undefined &&
       resolveExpectedFindingMatchMode(expected) === 'path-line'
     )
-  }).length
+  })
   const falsePositiveFindingIdSet = new Set(
     input.matchResult.falsePositiveFindingIds
   )
@@ -596,11 +600,9 @@ const buildMetricCase = (
     falsePositiveSeverityWeights: falsePositiveFindings.map((finding) =>
       severityWeight(finding.severity)
     ),
-    matchedLineCheckCount,
-    accurateLineMatchCount: input.matchResult.matches.filter(
-      (match) =>
-        input.evalCase.expectedFindings[match.expectedIndex]?.lineRange !==
-          undefined && match.lineOverlaps
+    matchedLineCheckCount: lineCheckedMatches.length,
+    accurateLineMatchCount: lineCheckedMatches.filter(
+      (match) => match.lineOverlaps
     ).length,
     matchedSeverityCheckCount: input.matchResult.matches.length,
     accurateSeverityMatchCount: input.matchResult.matches.filter(

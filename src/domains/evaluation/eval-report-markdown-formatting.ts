@@ -8,8 +8,8 @@ export const formatPercent = (value: number): string =>
 
 // A rate computed over an empty denominator is undefined, not zero. Rendering it
 // as 0.0% reads as total failure and has been misread that way: lineAccuracy
-// shows an empty denominator on any corpus whose expected findings all match
-// semantically and declare no line to check.
+// shows an empty denominator on any corpus without a `path-line` expectation,
+// which includes the whole real-repository corpus.
 export const formatRateOverCount = (
   value: number,
   checkedCount: number

@@ -139,10 +139,11 @@ export const EvalMetricsSchema = z.strictObject({
   severityWeightedRecall: RateSchema,
   severityWeightedF1: RateSchema,
   // Both rates are computed over MATCHED findings, so their denominator is empty
-  // whenever nothing matched, and lineAccuracy's is empty on any corpus whose
-  // expected findings all match semantically and declare no line to check. The
-  // counts travel with the rates so a report can say "undefined" instead of
-  // rendering an empty denominator as 0.0%, which reads as total failure.
+  // whenever nothing matched, and lineAccuracy's is empty on any corpus without a
+  // `path-line` expectation, since no other match mode is scored for line
+  // overlap. The counts travel with the rates so a report can say "undefined"
+  // instead of rendering an empty denominator as 0.0%, which reads as total
+  // failure.
   lineAccuracy: RateSchema,
   lineCheckCount: z.int().min(0).default(0),
   severityAccuracy: RateSchema,

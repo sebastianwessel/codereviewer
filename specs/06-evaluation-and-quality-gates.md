@@ -292,7 +292,7 @@ change until that paired check is done.
 | `recallByTier` | Recall computed per intent tier (`runtime-critical`, `security`, `logic`, `nit`). Each expected finding carries an explicit `tier` or one derived from category/severity. Lets product-critical recall be read separately from nits. |
 | `productRecall` | Headline recall over the product tiers (`runtime-critical` + `security` + `logic`), excluding `nit`. This is the number the >80% accuracy target is measured against, matching the low-noise product scope in `00-vision.md`. |
 | `nitRecall` | Recall over `nit`-tier expected findings only. Reported for visibility; not part of the headline target or gates. |
-| `lineAccuracy` | Fraction of matched findings with overlapping line range when expected line exists. Semantic-only benchmark expectations are excluded from the denominator. |
+| `lineAccuracy` | Fraction of matched findings whose location overlaps the expected line range. Only `path-line` expectations that declare a `lineRange` are scored for line overlap, so only they enter the denominator; `path-semantic` and `semantic-only` expectations are excluded even when they carry a `lineRange`. A corpus with no such expectation reports an empty `lineCheckCount` and the metric is undefined, not zero. |
 | `severityAccuracy` | Fraction of matched findings with exact severity. |
 | `falsePositiveCount` | Actionable admitted findings not matched to expected findings (raw; includes real-but-unlisted defects). |
 | `genuineFalsePositiveCount` | Unmatched admitted findings the plausibility judge deemed spurious, plus any whose plausibility judgment could not be completed (fail-closed). The trustworthy false-positive count. |
@@ -577,6 +577,16 @@ location, match mode, summary, detection rate, and run marks.
 - `path-line`: exact path match is required and admitted finding location must
   overlap the expected range within three lines.
 - `path-semantic`: exact path match is required and line overlap is not scored.
+  This holds even when the expectation declares a `lineRange`: the range
+  documents where the defect sits for a human reader and for report location
+  labels, and it neither gates the match nor enters the `lineAccuracy`
+  denominator. Scoring line placement for these expectations is a deliberate
+  future change, not an oversight — the real-repository corpus carries curated
+  ranges for all of its expectations, so line placement on real code is
+  currently unmeasured. Making that measurement requires deciding how to treat
+  a finding that identifies the same defect from a different anchor (a caller
+  rather than the definition), which the three-line tolerance would score as a
+  miss, and it must be specified here before the matcher changes.
 - `semantic-only`: path and line are not used for matching; the judge decision
   and one-to-one assignment determine recall/precision.
 - Semantic identity is decided only by the semantic judge. There is no lexical,

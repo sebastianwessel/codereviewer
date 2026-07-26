@@ -229,6 +229,11 @@ describe('eval metrics', () => {
     expect(metrics.recall).toBe(1)
     expect(metrics.precision).toBe(1)
     expect(metrics.commentsPerKloc).toBe(0)
+    // The empty denominator must travel with the rate. Without it a reader
+    // cannot tell an undefined rate from a measured failure, and the neutral
+    // 1 these rates fall back to would read as a perfect score.
+    expect(metrics.lineCheckCount).toBe(0)
+    expect(metrics.severityCheckCount).toBe(0)
   })
 
   test('computes security recall per mechanism, per context depth, and the obvious/hard split', () => {
