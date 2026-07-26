@@ -59,8 +59,6 @@ are unfinished. Enabling them is a deliberate, measured choice.
 | `review.contextScout.enabled` | `false` | A cheap scout call picks which out-of-change symbol bodies to pre-fetch, keeping the reviewer single-shot and tool-free. Built as the answer to the above; **measured neutral**. |
 | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task. Additive by construction, but it costs an extra discovery call per task and has not cleared a held-out A/B showing net recall gain without an authorization regression. |
 | `security.signals.enabled` | `false` | **Configuration only — carries no behavior in this phase.** Reserved for a later deterministic security-evidence layer. Turning it on today changes nothing. |
-| `review.discoveryLensPass.enabled` | `false` | An additional discovery pass that re-reads the same change through a lens aimed at commonly-missed, high-impact defect classes. Additive; costs one extra call per task. |
-| `review.discoverySweep.maxAdditionalRounds` | `0` | Extra "what did you miss?" discovery rounds. Additive; each round costs a call per task. |
 | `contextSources.enabled` | `false` | External change-intent ingestion (ticket/PR context). Off unless you configure providers. |
 | `verification.enabled` | `false` | A separate agentic flow that verifies specific claims — see [two flows](../03-concepts/two-flows.md). |
 | `fix.enabled` | `false` | Advisory finding-investigation and fix-proposal lane. |

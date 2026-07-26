@@ -51,33 +51,41 @@ pipeline: every task logged one finding produced, one candidate kept, and zero
 dropped. Refutation proved nearly every candidate it received. There was simply only
 ever one.
 
-## What was tried against it, and rejected
+## What was tried against it, and removed
 
-Two structural fixes were built and measured. **Neither improved recall**, so both
-ship **off by default**.
+Two structural fixes were built and measured, three seeds each. **Neither improved
+recall**, so both were **removed** — code and configuration keys alike.
 
 | Arm | Recall (3 seeds) | Mean | Cost |
 | --- | --- | ---: | ---: |
-| Baseline | 54.8 / 50.0 / 59.5 | **54.8%** | $1.22 |
+| Baseline | 50.0 / 54.8 / 59.5 | **54.8%** | $1.22 |
 | + enumeration sweep | 50.0 / 52.4 / 61.9 | **54.8%** | $1.71 (+40%) |
 | + diverse-lens pass | 57.1 / 52.4 / 52.4 | **54.0%** | $1.78 (+47%) |
 
-- The **enumeration sweep** re-asks the same question — "what did the last pass
-  miss?" — until a round adds nothing. Mean recall is identical to baseline.
-- The **diverse-lens pass** asks a *different* question, re-reading the change hunting
-  concurrency, unawaited asynchrony, error paths, resource lifetime, contract
-  violations, and edge cases. Mean recall is within noise of baseline. It does find
-  more genuine defects the answer key never listed (7.3 per run against 5.3), which
-  is a real if unproven signal — the difference is smaller than the corpus's own
-  seed-to-seed spread.
+- The **enumeration sweep** re-asked the same question — "what did the last pass
+  miss?" — until a round added nothing. Mean recall identical to baseline.
+- The **diverse-lens pass** asked a *different* question, re-reading the change
+  hunting concurrency, unawaited asynchrony, error paths, resource lifetime,
+  contract violations, and edge cases. Mean recall within noise of baseline.
+
+Two qualifications belong with that verdict:
+
+- **Unproven, not disproven.** With 3 seeds and a baseline deviation of 4.8pp the
+  resolution is roughly ±5.5pp. A small real effect would be invisible. Both were
+  removed as unproven and expensive, not as demonstrated failures.
+- **One signal ran the other way.** The lens pass surfaced more
+  plausibility-confirmed defects the answer key never listed — 7.3 per run against
+  5.3, at 100% adjusted precision. That is a real-world gain this corpus's recall
+  metric cannot see, and it is also inside the noise band.
 
 The honest reading: the missed second defect is not being withheld by a model that
 would surface it if asked once more, or asked differently. Asking again mostly
-reproduces the first answer. What would actually move this number is still open.
+reproduces the first answer. **The limitation remains open** — what would actually
+move this number is not yet known.
 
-Both remain configurable — see
-[extra discovery passes](../03-concepts/optional-capabilities/extra-discovery-passes.md)
-— but turning them on buys cost, not recall, on the evidence available.
+Neither is configurable any more. The record of what they were and what the
+measurement established is kept in
+[extra discovery passes (removed)](../03-concepts/optional-capabilities/extra-discovery-passes.md).
 
 ## Variance: why single runs prove little
 

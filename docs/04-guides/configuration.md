@@ -370,8 +370,6 @@ All of these are off by default and each adds provider calls:
 {
   "review": {
     "contextScout": { "enabled": true, "maxSymbols": 8, "maxBytesPerSymbol": 4000 },
-    "discoverySweep": { "maxAdditionalRounds": 1 },
-    "discoveryLensPass": { "enabled": true },
     "crossFileRetrieval": { "enabled": false }
   },
   "security": {

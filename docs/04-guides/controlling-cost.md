@@ -16,8 +16,6 @@ The unit is the **review task**, not the file and not the finding.
 | --- | --- | --- |
 | Holistic discovery | 1 per task | Always (with a provider configured) |
 | Context scout | 1 per task | `review.contextScout.enabled` |
-| Enumeration sweep | up to `maxAdditionalRounds` per task | `review.discoverySweep.maxAdditionalRounds > 0`; rounds stop early once one adds nothing |
-| Diverse-lens pass | 1 per task | `review.discoveryLensPass.enabled` |
 | Dedicated security pass | 1 per task | `security.dedicatedPass.enabled` |
 | **Refutation** | **1 per task** | Always, whenever the task produced candidates |
 | Change-intent summarizer | 1 per run | `contextSources.enabled` and the summary mode resolves to `model` |
@@ -41,10 +39,9 @@ So the baseline cost of a default run is:
 calls ≈ 2 × taskCount   (one discovery + one refutation per task)
 ```
 
-Each optional pass you enable adds `1 × taskCount` (or `rounds × taskCount` for
-the sweep) to the discovery side. Enabling the scout, the lens pass, one sweep
-round and the security pass together takes a task from 2 calls to 6 — a 3×
-increase before any change in packet size.
+Each optional pass you enable adds `1 × taskCount` to the discovery side.
+Enabling both the scout and the security pass takes a task from 2 calls to 4 — a
+2× increase before any change in packet size.
 
 ---
 

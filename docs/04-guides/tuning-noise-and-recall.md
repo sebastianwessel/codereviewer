@@ -142,33 +142,12 @@ All are **off by default**. Each one adds provider calls per task — see
 [controlling-cost.md](controlling-cost.md) for the arithmetic before you turn
 one on.
 
-### Enumeration sweep
-
-```json
-{ "review": { "discoverySweep": { "maxAdditionalRounds": 1 } } }
-```
-
-A discovery response tends to answer with the defect it is most confident about
-and stop, so a file holding two defects yields one. The sweep issues additional
-discovery calls that are told what has already been reported and asked only for
-further, distinct defects. Rounds stop early as soon as one adds nothing.
-
-Range 0–4. This is the dial to reach for when the review finds *one* real
-defect per case but misses the second.
-
-### Diverse-lens second pass
-
-```json
-{ "review": { "discoveryLensPass": { "enabled": true } } }
-```
-
-One extra discovery call per task that re-reads the same change through a lens
-aimed at classes a general read walks past: concurrency and atomicity,
-asynchrony, error and failure paths, resource lifetime, interface and contract
-violations, edge cases.
-
-Distinct from the sweep: the sweep asks the same question again, the lens pass
-asks a different question.
+> **There is no dial for the second defect in a file.** A discovery response tends
+> to answer with the defect it is most confident about and stop, so a file holding
+> two defects usually yields one. Two passes aimed at exactly this — an enumeration
+> sweep and a diverse-lens pass — were built, measured, and
+> [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md);
+> neither earned its cost, and the limitation is still open.
 
 ### Context scout
 
@@ -233,15 +212,13 @@ class for the injection classes — finite attention.
 1. **Too much noise?** Raise `aiReview.actionableSeverityThreshold`, then set
    `promotionPolicy.modelWeakOrRefuted` to `rejected`, then raise
    `review.inlineSeverityThreshold`.
-2. **Missing a second defect in files that already produced one?**
-   `discoverySweep.maxAdditionalRounds: 1`.
-3. **Missing whole classes (races, error paths, resource leaks)?**
-   `discoveryLensPass`.
-4. **Missing security specifically?** `security.dedicatedPass`.
-5. **Missing defects that depend on unchanged code?** `contextScout` first;
+2. **Missing security specifically?** `security.dedicatedPass`.
+3. **Missing defects that depend on unchanged code?** `contextScout` first;
    `crossFileRetrieval` only if the scout is not enough.
-6. **Still missing?** Raise `review.depth` to `thorough` so more source fits in
+4. **Still missing?** Raise `review.depth` to `thorough` so more source fits in
    each task.
+5. **Missing a second defect in files that already produced one?** No dial
+   addresses this today — see the note above.
 
 After each step, re-measure on the same corpus and compare two reports:
 

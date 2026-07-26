@@ -107,10 +107,9 @@ By default this is **exactly one general model call per task**. The reviewer get
 the diff plus the whole changed files and follows a fixed method — understand the
 intent, trace control and data flow on every path, verify against the intent,
 then sweep defect classes — and returns findings that are converted into
-*candidate findings* (deduplicated, capped at 12 per task). Three additional
-passes exist and are **all off by default**: a diverse-lens second pass, an
-enumeration sweep, and a dedicated security pass. All of them are purely additive
-and none of them bypass anything downstream.
+*candidate findings* (deduplicated, capped at 12 per task). One additional pass
+exists and is **off by default**: the dedicated security pass. It is purely
+additive and does not bypass anything downstream.
 → [Details](pipeline/04-holistic-discovery.md)
 
 ### 5. Refutation
@@ -169,5 +168,5 @@ them, because it holds no network or write permission.
 | --- | --- |
 | `review.mode` selects a review strategy | It is recorded in the report and in observability attributes and nothing branches on it. Budgets and clustering come from `review.depth`. |
 | Refutation costs one call per candidate | One batched call per task adjudicates all of that task's candidates. |
-| Discovery makes two passes | One general call per task. The lens pass, the sweep, and the security pass are separate opt-ins, all disabled by default. |
+| Discovery makes two passes | One general call per task. The dedicated security pass is a separate opt-in, disabled by default. |
 | Deterministic signals produce findings | They inform clustering and context. The trusted-rule promotion table is currently empty, so no signal becomes a finding by itself. |

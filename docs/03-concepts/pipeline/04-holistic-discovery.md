@@ -54,26 +54,27 @@ field or pointing outside the task is dropped. Survivors get a deterministic
 candidate id derived from task id, path, start line, and title, with the title
 capped at 120 and the description at 1200 characters.
 
-At most **12 candidates per task** are kept across the general, lens, and sweep
-passes; the dedicated security pass may add up to **8 more** on top. The cap
-exists because every candidate costs downstream refutation budget — it is not the
-precision mechanism. Refutation is.
+At most **12 candidates per task** are kept from the general pass; the dedicated
+security pass may add up to **8 more** on top. The cap exists because every
+candidate costs downstream refutation budget — it is not the precision mechanism.
+Refutation is.
 
-## The optional extra passes
+## The one optional extra pass
 
-There are three additional discovery passes. **All are off by default, and none
-of them has been shown by measurement to improve results** — they exist as
-levers, not as recommendations. Each is *additive*: it may only add candidates at
-locations no earlier pass already claimed, is capped, and its candidates face the
-same refutation and admission as any other.
+Discovery has exactly one optional additional call, and it is off by default. It
+is *additive*: it may only add candidates at locations the general pass did not
+already claim, is capped, and its candidates face the same refutation and
+admission as any other.
 
 | Pass | Config key | What it asks |
 | --- | --- | --- |
-| Diverse-lens second pass | `review.discoveryLensPass.enabled` (`false`) | The *same* change through a different lens: concurrency/atomicity, asynchrony, error and failure paths, resource lifetime, interface and contract violations, edge cases |
-| Enumeration sweep | `review.discoverySweep.maxAdditionalRounds` (`0`, max 4) | "Here is what has already been reported — what did that pass miss?" Rounds stop early as soon as one adds nothing |
 | Dedicated security pass | `security.dedicatedPass.enabled` (`false`) | A security-only call with a generic OWASP/CWE checklist and a source→sink method; capped at 8 additional candidates |
 
-A fourth opt-in, the **context scout** (`review.contextScout.enabled`), does not
+Two further passes — an enumeration sweep and a diverse-lens second pass — were
+built, measured, and [removed](../optional-capabilities/extra-discovery-passes.md);
+neither earned its cost.
+
+Another opt-in, the **context scout** (`review.contextScout.enabled`), does not
 review anything: it is a cheap call that names out-of-change symbols the changed
 code depends on, which deterministic code then resolves and appends to the
 reviewer's packet. **Cross-file retrieval** (`review.crossFileRetrieval.enabled`)
@@ -86,20 +87,11 @@ flowchart TD
   S -- yes --> SC["scout call → resolved symbol bodies appended"]
   S -- no --> G
   SC --> G["general discovery call (always)"]
-  G --> L{"discoveryLensPass.enabled?"}
-  L -- yes --> LP["lens call (additive)"]
-  L -- no --> W
-  LP --> W{"discoverySweep rounds > 0?"}
-  W -- yes --> SW["sweep rounds (additive, stop when a round adds nothing)"]
-  W -- no --> SE
-  SW --> SE{"security.dedicatedPass.enabled?"}
+  G --> SE{"security.dedicatedPass.enabled?"}
   SE -- yes --> SP["security-only call (additive, ≤ 8 more)"]
   SE -- no --> C["candidates, deduped · ≤ 12 general (+ ≤ 8 security)"]
   SP --> C
 ```
-
-> Spec 05 still describes two mandatory discovery passes. The code is the truth:
-> the second pass is opt-in and disabled by default.
 
 ## What it emits
 
@@ -116,7 +108,7 @@ provider issues. Candidates are not findings and are never reported as such.
 | A finding points outside the task's paths, or omits a required field | Dropped; counted in the run's debug metrics |
 | More than 12 valid findings | Excess is discarded by the cap |
 | A genuine provider failure (auth, budget, network exhaustion) | Fails the task and the run, writing partial artifacts |
-| Two passes report the same location | The later pass's candidate is suppressed — extra passes can only add |
+| The security pass reports a location the general pass already flagged | Its candidate is suppressed — the extra pass can only add |
 
 Recovering from a bad response instead of failing is deliberate: letting one
 malformed response fail the whole task would silently discard every other finding
@@ -129,8 +121,6 @@ it had, and in an evaluation would drop the case from the comparison entirely.
 | `provider.*` | unset | No provider means no discovery at all |
 | `aiReview.enabled` | unset (on) | `false` disables the model stages |
 | `review.maxConcurrentTasks` | `4` | Discovery parallelism |
-| `review.discoveryLensPass.enabled` | `false` | Adds the diverse-lens call |
-| `review.discoverySweep.maxAdditionalRounds` | `0` | Adds up to 4 enumeration rounds |
 | `security.dedicatedPass.enabled` | `false` | Adds the security-only call |
 | `review.contextScout.*` | disabled | Pre-selects extra symbol context |
 | `review.crossFileRetrieval.*` | disabled | Gives the reviewer mediated repo tools |

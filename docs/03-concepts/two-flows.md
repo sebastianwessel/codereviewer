@@ -74,11 +74,9 @@ full line-numbered changed files, bounded referenced-definition digests, and —
 when enabled — a change-intent brief. The model is asked once per task to
 enumerate concrete defects. Every candidate then passes a batched refutation call
 and deterministic admission. The discovery agent is configured with **no tools and
-a single step**; the optional capabilities that add calls
-([lens pass](optional-capabilities/extra-discovery-passes.md),
-[sweep](optional-capabilities/extra-discovery-passes.md),
-[security pass](optional-capabilities/dedicated-security-pass.md)) add *more
-single-shot calls*, they do not turn the reviewer into an agent. The single
+a single step**; the one optional capability that adds a call
+([the dedicated security pass](optional-capabilities/dedicated-security-pass.md))
+adds *another single-shot call*, it does not turn the reviewer into an agent. The single
 exception is [cross-file retrieval](optional-capabilities/cross-file-retrieval.md),
 which does hand the reviewer tools — and is off by default because measurement
 said it costs recall.

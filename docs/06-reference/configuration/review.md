@@ -3,8 +3,8 @@
 What is reviewed, how deeply, and how model output is promoted to a finding.
 
 Read the [strict-object rule and precedence](./README.md) first. Nesting matters:
-`crossFileRetrieval`, `contextScout`, `discoverySweep`, and `discoveryLensPass`
-are nested **under `review`**, not under `security`.
+`crossFileRetrieval` and `contextScout` are nested **under `review`**, not under
+`security`.
 
 ## `review`
 
@@ -61,18 +61,6 @@ only if deterministic resolution finds it.
 | `review.contextScout.enabled` | boolean | `false` | Master switch. |
 | `review.contextScout.maxSymbols` | integer 1–40 | `8` | Symbols one scout call may request. A relevance ration, not a loop guard. |
 | `review.contextScout.maxBytesPerSymbol` | integer 500–40000 | `4000` | Per-symbol byte cap on an extracted body. Budget pressure sheds scout context before changed-file source. |
-
-### `review.discoverySweep`
-
-| Key | Type | Default | What it does |
-| --- | --- | --- | --- |
-| `review.discoverySweep.maxAdditionalRounds` | integer 0–4 | `0` | Extra discovery calls per task, each told what was already reported and asked only for further, distinct defects. Rounds stop early as soon as one adds nothing. `0` disables the sweep. |
-
-### `review.discoveryLensPass`
-
-| Key | Type | Default | What it does |
-| --- | --- | --- | --- |
-| `review.discoveryLensPass.enabled` | boolean | `false` | Re-reads the same change through a lens aimed at defect classes a general read walks past. Distinct from the sweep, which asks the *same* question again. |
 
 ## `aiReview`
 
