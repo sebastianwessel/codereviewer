@@ -382,11 +382,23 @@ export const HOLISTIC_MAX_CANDIDATES = 12
 // child-agent budget reserves a refutation call for each when the pass is enabled.
 export const SECURITY_MAX_CANDIDATES = 8
 
-// Location identity used to keep the security pass additive: a security candidate at
-// a (path, line) the general pass already flagged is dropped, so the merge adds new
-// security findings without stacking a duplicate on an existing one.
+// Spec 15's rule for the dedicated security pass: a security candidate at a
+// (path, line) the general pass already flagged is dropped, because a security
+// reading of a line the general pass already reported is the same defect seen
+// through a different lens, and reporting both is noise.
 const locationKey = (candidate: CandidateFinding): string =>
   `${candidate.location.path}:${candidate.location.startLine}`
+
+// The key the general-purpose extra passes use instead. Keying on (path, line)
+// alone assumes one line holds at most one defect, which is false: a single
+// signature line can carry both a contract violation and a resource leak. A probe
+// of the lens pass found it returning two findings that were BOTH discarded for
+// sharing a start line with the general finding, so the pass was being measured
+// while its output was thrown away. Same line AND same category is still treated
+// as a restatement; the admission gate's duplicate fingerprint is the backstop
+// for anything finer.
+const locationCategoryKey = (candidate: CandidateFinding): string =>
+  `${candidate.location.path}:${candidate.location.startLine}:${candidate.category}`
 
 // Collect candidates from one discovery call's findings into the shared map, capping
 // how many THIS call may add and skipping any at an excluded location. Reports what
@@ -406,6 +418,10 @@ const collectCandidates = (params: {
   readonly into: Map<string, CandidateFinding>
   readonly maxToAdd: number
   readonly excludeLocations?: ReadonlySet<string>
+  // Which identity to suppress on. Defaults to spec 15's (path, line) rule used
+  // by the security pass; the general-purpose extra passes pass the
+  // category-aware key so two different defect classes on one line both survive.
+  readonly keyOf?: (candidate: CandidateFinding) => string
 }): CollectedCandidates => {
   let dropped = 0
   let suppressedByLocation = 0
@@ -421,7 +437,7 @@ const collectCandidates = (params: {
       dropped += 1
       continue
     }
-    if (params.excludeLocations?.has(locationKey(candidate))) {
+    if (params.excludeLocations?.has((params.keyOf ?? locationKey)(candidate))) {
       suppressedByLocation += 1
       continue
     }
@@ -616,7 +632,7 @@ export const runModelBackedHolisticTaskReview = async (
   if (input.workflowInput.discoveryLensPassEnabled) {
     const beforeLens = candidatesById.size
     const generalLocations = new Set(
-      [...candidatesById.values()].map(locationKey)
+      [...candidatesById.values()].map(locationCategoryKey)
     )
     const lens = await runDiscoveryCall(
       input.runners.holisticReview,
@@ -633,7 +649,8 @@ export const runModelBackedHolisticTaskReview = async (
       task: input.task,
       into: candidatesById,
       maxToAdd: Math.max(0, HOLISTIC_MAX_CANDIDATES - candidatesById.size),
-      excludeLocations: generalLocations
+      excludeLocations: generalLocations,
+      keyOf: locationCategoryKey
     })
     droppedCount += lensCollected.dropped
     suppressedByLocationCount += lensCollected.suppressedByLocation
@@ -672,7 +689,8 @@ export const runModelBackedHolisticTaskReview = async (
       task: input.task,
       into: candidatesById,
       maxToAdd: remaining,
-      excludeLocations: new Set(known.map(locationKey))
+      excludeLocations: new Set(known.map(locationCategoryKey)),
+      keyOf: locationCategoryKey
     })
     droppedCount += sweepCollected.dropped
     suppressedByLocationCount += sweepCollected.suppressedByLocation

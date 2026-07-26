@@ -410,6 +410,35 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(result.candidates).toHaveLength(2)
   })
 
+  // Regression: the first implementation suppressed on (path, line) alone, so a
+  // lens finding of a different defect class on the same line was discarded. A
+  // live probe caught the lens returning two findings and both being thrown away.
+  test('keeps a lens finding of a different category on a line the general pass already reported', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithLensPass,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) =>
+          holisticResultWith([
+            holisticInput.reviewText.includes('FOCUSED SECOND-PASS')
+              ? {
+                  ...findingAt(1, 'Credential logged on the same line'),
+                  category: 'security'
+                }
+              : { ...findingAt(1, 'Wrong branch taken'), category: 'bug' }
+          ])
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(2)
+    expect(result.candidates.map((candidate) => candidate.category)).toEqual([
+      'bug',
+      'security'
+    ])
+  })
+
   test('keeps the lens pass additive at locations the general pass already claimed', async () => {
     const result = await runModelBackedHolisticTaskReview({
       workflowInput: workflowInputWithLensPass,
