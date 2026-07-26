@@ -77,6 +77,56 @@ something to leave as an observation.
 
 ---
 
+## Triage of the 13 never-found expectations — COMPLETE, and it changes the plan
+
+Executed 2026-07-26, zero provider spend. This was the gating item.
+
+**All 13 are GENUINE, reachable defects. Zero artefacts, zero corpus bugs, zero
+floor-suppressed.** The recall target exists in full; no planned experiment is
+chasing phantoms.
+
+**The admission-floor hypothesis (audit item A-11) is DISPROVEN, with direct
+evidence.** The gate reads the *model-assigned* severity, not the expectation's, and
+the matcher never gates on severity agreement. Decisive counter-example in the same
+corpus: `rack-static-header-rules-match-encoded-path#2` is `severity: low` and was
+matched in **12 of 12 runs**. Across all 12 runs the 152 non-matched admitted
+findings are 118 high / 34 medium / **0 low** — the engine does not emit
+low-severity findings on this corpus at all. **Lowering `actionableSeverityThreshold`
+is not warranted and would only add noise.** The severity-floor sweep proposed as a
+cheap win (A-21) is cancelled.
+
+**The cause is finding count per case, now measured precisely: 0.97 findings per
+case across 360 case-runs, with only 13.1% of case-runs producing two or more.** For
+nine of the 13, expectation `#0` was matched in ~10.4 of 12 runs and consumed the
+single finding. Where a second finding did appear it was usually a restatement of
+the first. Any experiment aimed at these nine must raise findings-per-file; nothing
+aimed at discovery depth or the severity gate will move them.
+
+Three findings that are actionable and were not in any proposal:
+
+- **A reverse-diff decoy costs both precision and recall, systematically.** The
+  upstream fix for `aspnetcore-url-normalizer` added the backslash handling *and* a
+  null guard. Read backwards, the generated diff presents the pre-fix code as
+  *someone deleting a null guard*, and in **12 of 12 runs** the engine spent its
+  single finding there. Any upstream fix that hardens something incidental produces
+  the same decoy. Two provider-free remedies: add the null-deref as a second
+  expectation, or restrict the generated diff to the hunk carrying the labelled
+  defect. This is a corpus-generation defect, not a reviewer defect.
+- **One of the 13 is a depth miss, not a discovery miss.** For
+  `ws-close-frame-leaks-uninitialised-buffer-bytes`, in 10 of 12 runs the engine
+  landed on the exact lines but stopped at the shallow consequence (wrong error
+  type) instead of following the byteLength-versus-set mismatch to uninitialised
+  memory. This is the only one of the 13 that prompt work could plausibly move.
+- **Persist rejected findings in the eval report.** The archives do not serialise
+  them, so "was a low-severity candidate dropped at the gate?" cannot be answered
+  from any archived run. Free to fix, and it closes the question permanently.
+
+Deterministic-signal coverage is a red herring here: C#, Kotlin and PHP are unparsed,
+but the signal layer emits structural facts that would not have surfaced any of these
+defects, and Ruby — which *does* have signals — missed its case anyway.
+
+---
+
 ## Evidence gathered outside the investigations
 
 Three findings computed directly from the archived runs and the manifest, which the
