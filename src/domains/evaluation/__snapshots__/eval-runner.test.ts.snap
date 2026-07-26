@@ -67,6 +67,8 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "expectedIndex": 0,
           "findingId": "find_eval1",
           "lineOverlaps": true,
+          "producedPath": "src/app.ts",
+          "producedStartLine": 4,
           "semanticReason": "Both summaries describe the same defect.",
           "severityMatches": true,
         },
@@ -196,6 +198,8 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "judgeAgreementPairCount": 12,
         "lineAccuracy": 1,
         "lineCheckCount": 1,
+        "linePlacementCheckCount": 1,
+        "linePlacementRate": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
         "outputTokens": 0,
@@ -215,7 +219,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "rejectionReasonBySeverityCounts": {},
         "rejectionReasonCounts": {},
+        "rejectionSeverityCounts": {},
         "scoringCachedInputTokens": 0,
         "scoringCostUnavailable": false,
         "scoringCostUsd": 0,
@@ -375,6 +381,8 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "judgeAgreementPairCount": 12,
         "lineAccuracy": 1,
         "lineCheckCount": 1,
+        "linePlacementCheckCount": 1,
+        "linePlacementRate": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
         "outputTokens": 0,
@@ -394,7 +402,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "rejectionReasonBySeverityCounts": {},
         "rejectionReasonCounts": {},
+        "rejectionSeverityCounts": {},
         "scoringCachedInputTokens": 0,
         "scoringCostUnavailable": false,
         "scoringCostUsd": 0,
@@ -553,6 +563,8 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "judgeAgreementPairCount": 12,
         "lineAccuracy": null,
         "lineCheckCount": 0,
+        "linePlacementCheckCount": 0,
+        "linePlacementRate": null,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
         "outputTokens": 0,
@@ -572,7 +584,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "rejectionReasonBySeverityCounts": {},
         "rejectionReasonCounts": {},
+        "rejectionSeverityCounts": {},
         "scoringCachedInputTokens": 0,
         "scoringCostUnavailable": false,
         "scoringCostUsd": 0,
@@ -731,6 +745,8 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "judgeAgreementPairCount": 12,
         "lineAccuracy": 1,
         "lineCheckCount": 1,
+        "linePlacementCheckCount": 1,
+        "linePlacementRate": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 0,
         "outputTokens": 0,
@@ -750,7 +766,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "rejectionReasonBySeverityCounts": {},
         "rejectionReasonCounts": {},
+        "rejectionSeverityCounts": {},
         "scoringCachedInputTokens": 0,
         "scoringCostUnavailable": false,
         "scoringCostUsd": 0,
@@ -910,6 +928,8 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "judgeAgreementPairCount": 12,
         "lineAccuracy": 1,
         "lineCheckCount": 1,
+        "linePlacementCheckCount": 1,
+        "linePlacementRate": 1,
         "nitRecall": 1,
         "noFindingZoneFalsePositiveCount": 1,
         "outputTokens": 0,
@@ -929,7 +949,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "rejectionReasonBySeverityCounts": {},
         "rejectionReasonCounts": {},
+        "rejectionSeverityCounts": {},
         "scoringCachedInputTokens": 0,
         "scoringCostUnavailable": false,
         "scoringCostUsd": 0,
@@ -1082,6 +1104,8 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "judgeAgreementPairCount": 12,
     "lineAccuracy": 1,
     "lineCheckCount": 1,
+    "linePlacementCheckCount": 1,
+    "linePlacementRate": 1,
     "nitRecall": 1,
     "noFindingZoneFalsePositiveCount": 1,
     "outputTokens": 0,
@@ -1101,7 +1125,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     },
     "refutationFalseNegativeCount": 0,
     "refutationFalsePositiveCount": 0,
+    "rejectionReasonBySeverityCounts": {},
     "rejectionReasonCounts": {},
+    "rejectionSeverityCounts": {},
     "scoringCachedInputTokens": 0,
     "scoringCostUnavailable": false,
     "scoringCostUsd": 0,
@@ -1218,6 +1244,10 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "unlistedRealFindingCount": 0,
   },
   "metricsVersion": "2026-07-26.max-cardinality-matching",
+  "provenance": {
+    "answerKeyDigest": "8a0f6c4247b62cb5ae0d182f93ca56547fb831d783599d2c4d19626a6452d8e2",
+    "configHash": "unspecified",
+  },
   "regressionGate": {
     "failingCaseIds": [
       "typescript-negative",
@@ -1299,6 +1329,7 @@ Fixtures: 2
 | F1 | 66.7% |
 | Severity weighted F1 | 66.7% |
 | Line accuracy | 100.0% (1 checked) |
+| Line placement rate (diagnostic, all match modes) | 100.0% (1 checked) |
 | Severity accuracy | 100.0% (1 checked) |
 | Parse validity | 100.0% |
 | Provider error rate | 0.0% |
@@ -1315,6 +1346,7 @@ Fixtures: 2
 | Artifact-only false positives | 0 |
 | Trusted deterministic findings | 0 |
 | Rejected candidates by reason | none |
+| Rejected candidates by severity | none |
 | Refutation false negatives (upper bound) | 0 |
 | Refutation false positives | 0 |
 | Fix judgment accuracy | 0.0% (0 judged) |

@@ -263,7 +263,16 @@ export const RejectedFindingSchema = z.strictObject({
   // sites must truncate via `truncateForContract` before parsing; the cap is kept
   // as a plain max so the field stays representable in the generated JSON Schema.
   message: z.string().max(REJECTED_FINDING_MESSAGE_MAX),
-  evidenceIds: z.array(ContractIdSchema).optional()
+  evidenceIds: z.array(ContractIdSchema).optional(),
+  // The rejected candidate's own severity, when the rejecting call site has the
+  // parsed candidate in hand. Optional, not defaulted: a candidate that failed
+  // schema validation before it could be parsed has no severity to record, and
+  // a construction site that has not been updated to pass it through simply
+  // omits it rather than fabricating a value. This exists so eval measurement
+  // can tally rejections by severity (spec 06) -- without it, "is the model
+  // over-calling severity" is confounded by the admission floor deleting every
+  // model-origin `low` candidate before anyone downstream can observe it.
+  severity: SeveritySchema.optional()
 })
 
 export type FindingCategory = z.infer<typeof FindingCategorySchema>

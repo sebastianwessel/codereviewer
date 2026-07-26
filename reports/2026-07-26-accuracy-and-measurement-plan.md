@@ -77,6 +77,41 @@ something to leave as an observation.
 
 ---
 
+## Status against HEAD — updated after execution
+
+Audited against the code rather than from memory. **Wave 0 is substantially done and
+the gating Wave 4.1 triage is complete.**
+
+| Item | State |
+| --- | --- |
+| 0.1 correct the multi-defect statistics | done — and the error was in two approved specs, the docs and the memory notes |
+| 0.2 answer-key + config digest | partial — `metricsVersion` ships and comparison refuses to diff across it; the corpus/config digest is in flight |
+| 0.3 line placement + severity/locality cross-tab | in flight |
+| 0.4 rejections by reason and severity | partial — by reason ships; by severity in flight |
+| 0.5 redefine the refutation metrics | done |
+| 0.6 finding-level significance test | done, and validated on the 12 archived runs: an A/A control is correctly non-significant, and the paired statistic resolves at ±5.6pp where the run-mean test needs 10–16pp |
+| 0.7 refutation output-validation retry | done — retries only harness-level output-validation failures, never the hard provider errors that already have their own backoff |
+| 0.8 populate `refutationId` | done |
+| 0.9 judge cost accounting | done — true run cost is review plus scoring, roughly 10–30% above the old review-only figure |
+| 0.10 wire the gate to config, unfreeze timestamps | done — the default profile gates only on mechanical signals, because a recall threshold against a 4.8pp deviation would flake rather than inform |
+| 0.11 resolve the eval-script drift | done — `eval:corpus` and `eval:corpus:hydrate` are committed, and spec 06 no longer mandates scripts a test simultaneously forbids |
+| 0.12 delete the discarded discovery `fixSummary` | done |
+| 0.13 delete the fixture-derived refuter clauses | done — plus one the audit missed, copied verbatim from a fixture answer key |
+| 4.1 triage the 13 never-found expectations | done — all 13 genuine, zero artefacts, and the admission-floor hypothesis disproven |
+
+**What that changes about the plan.** The severity-floor sweep (audit item A-21) is
+cancelled: the triage disproved its premise directly. Wave 2.1 (inline comments)
+remains gated on 0.3, which is the last free item before it. Waves 1–3 are unchanged
+and still need provider spend, and the discipline that gates them still holds — the
+instrument had to become trustworthy first, and most of that work is now done.
+
+One thing the execution surfaced that the plan did not anticipate: the primary
+baseline was not reproducible from the repository at all. There was no committed
+script for the real-repository corpus, so the headline 54.8% existed only because
+someone typed the flags by hand.
+
+---
+
 ## Triage of the 13 never-found expectations — COMPLETE, and it changes the plan
 
 Executed 2026-07-26, zero provider spend. This was the gating item.

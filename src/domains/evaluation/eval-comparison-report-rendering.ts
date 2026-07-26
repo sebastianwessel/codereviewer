@@ -46,6 +46,21 @@ export const renderEvalComparison = (
       `Refusing to compare evaluation runs scored by different rules: ${baseLabel} used metrics version "${input.base.metricsVersion}" and ${headLabel} used "${input.head.metricsVersion}". Re-run both sides with the current build before comparing.`
     )
   }
+
+  // Refuse the same way across a differing answer-key digest. A metrics-version
+  // match only proves the two runs computed metrics the same WAY; it says
+  // nothing about whether they were scored against the same WHAT. Diffing two
+  // reports whose expected-finding content differs looks exactly like a real
+  // regression or win, and this project has already published a recall figure
+  // (78.8%) that was silently scored against an answer key that had since
+  // changed underneath it -- the exact class of failure this guards against,
+  // reusing the metricsVersion guard above rather than inventing a second
+  // comparability check.
+  if (input.base.provenance.answerKeyDigest !== input.head.provenance.answerKeyDigest) {
+    throw new Error(
+      `Refusing to compare evaluation runs scored against different answer keys: ${baseLabel} used answer-key digest "${input.base.provenance.answerKeyDigest}" and ${headLabel} used "${input.head.provenance.answerKeyDigest}". Re-run both sides against the same fixture selection before comparing.`
+    )
+  }
   const baseStatus = caseStatusById(input.base)
   const headStatus = caseStatusById(input.head)
   const selection = selectionStatus({

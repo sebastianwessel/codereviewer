@@ -733,6 +733,16 @@
               "type": "string",
               "pattern": "^(?:test-[A-Za-z0-9_-]+|[a-z]+(?:_[a-z0-9]+)+)$"
             }
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info"
+            ]
           }
         },
         "required": [

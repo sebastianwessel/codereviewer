@@ -9,6 +9,7 @@ import { noRefuterAdmissionOutcome } from './preflight-outcome.js'
 import { mapWithBoundedConcurrencyInOrder } from '../ordered-bounded-map.js'
 import {
   executeBatchRefutation,
+  type RefutationExecutionLogger,
   type RefutationResolution
 } from '../refutation/execution.js'
 import {
@@ -62,6 +63,7 @@ export const prepareCandidatesForAdmission = async (
     readonly reviewEvidence?: readonly EvidenceRecord[]
     readonly refuteFinding?: FindingRefutationRunner
     readonly signal?: AbortSignal
+    readonly logger?: RefutationExecutionLogger
   }
 ): Promise<AdmissionCandidateOutcome> => {
   if (input.refuteFinding === undefined) {
@@ -93,7 +95,8 @@ export const prepareCandidatesForAdmission = async (
         sharedDigest: input.sharedDigest,
         reviewEvidence,
         refuteFinding,
-        ...(input.signal === undefined ? {} : { signal: input.signal })
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+        ...(input.logger === undefined ? {} : { logger: input.logger })
       })
   })
 

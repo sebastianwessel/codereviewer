@@ -23,6 +23,15 @@ describe('model agent instructions', () => {
     )
   })
 
+  // Discovery candidates start with no evidence id, and a fix proposal requires
+  // at least one - so a discovery-side fixSummary could never reach the write-back
+  // path it would feed. Asking the model for one, and accepting it, was pure dead
+  // weight; only the REFUTER's fixSummary (which genuinely feeds the fix lane)
+  // may appear here.
+  test('holistic reviewer does not ask for a fixSummary it cannot use', () => {
+    expect(modelHolisticReviewerInstructions).not.toContain('fixSummary')
+  })
+
   test('context scout selects context only and may return nothing', () => {
     // A scout that starts reviewing is the failure mode this stage exists to
     // avoid: selecting context and judging code must stay separate.

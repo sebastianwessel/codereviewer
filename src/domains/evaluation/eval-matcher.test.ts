@@ -171,7 +171,9 @@ describe('eval matcher', () => {
         findingId: 'find_match1',
         semanticReason: 'Both summaries describe the same defect.',
         lineOverlaps: true,
-        severityMatches: true
+        severityMatches: true,
+        producedPath: 'src/app.ts',
+        producedStartLine: 11
       }
     ])
     expect(result.unmatchedExpectedIndexes).toEqual([])
@@ -308,7 +310,9 @@ describe('eval matcher', () => {
         findingId: 'find_semantic1',
         semanticReason: 'Both summaries describe the same defect.',
         lineOverlaps: false,
-        severityMatches: true
+        severityMatches: true,
+        producedPath: 'src/other.ts',
+        producedStartLine: 99
       }
     ])
   })

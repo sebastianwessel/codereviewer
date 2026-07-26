@@ -40,5 +40,6 @@ export const rejectedFindingForOutOfDiffScope = (
     reason: 'not-in-scope',
     message:
       'Model candidate is in a file with no reviewed changes and lacks deterministic corroboration.',
-    evidenceIds: candidate.evidenceIds
+    evidenceIds: candidate.evidenceIds,
+    severity: candidate.severity
   })

@@ -97,6 +97,17 @@ each half retried**. An oversized task therefore degrades into more calls rather
 than losing its candidates. A single candidate that still does not fit is a
 genuine packet failure.
 
+### Output-validation retry
+
+A call that fails because the model's response did not validate — the harness's
+own output-schema check rejected it, or the provider adapter could not parse a
+structured object out of the response at all — gets **exactly one retry** over
+the identical packet before the batch degrades. A hard provider failure (auth,
+rate limiting, network, an unavailable provider) is *not* retried here, since
+that already has its own retry policy at the provider layer; retrying it again
+would just double an already-handled backoff. If the retry also fails, the batch
+degrades exactly as an unretried failure would.
+
 ## What it emits
 
 | Output | Consumed by |
@@ -112,6 +123,7 @@ genuine packet failure.
 | Situation | Behaviour |
 | --- | --- |
 | Provider error during the call | Every candidate in that batch is recorded as `needs-more-evidence` with reason `provider-error`, plus a **recovered** provider issue — the run continues rather than failing |
+| Model's response fails output validation or cannot be parsed as a structured object | Retried once over the identical packet; only if the retry also fails does the batch degrade to the provider-error outcome above |
 | Packet cannot be built even after shedding | Batch splits; a single unsplittable candidate becomes a `refutation-packet` provider error |
 | Model omits a candidate from its verdict list | That candidate is `needs-more-evidence` — never silently admitted |
 | Model invents a `candidateId` | Unmatched entries are discarded |

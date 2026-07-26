@@ -64,6 +64,10 @@ describe('eval report rendering', () => {
           caseFilters: [],
           selectedCaseIds: ['semantic-case']
         },
+        provenance: {
+          answerKeyDigest: 'test-answer-key-digest',
+          configHash: 'test-config-hash'
+        },
         scoring: {
           judgeAgreement: 1,
           judgeTrustworthy: true,
@@ -103,7 +107,9 @@ describe('eval report rendering', () => {
                 findingId: 'find_semantic1',
                 semanticReason: 'Both findings describe the leaked descriptor.',
                 lineOverlaps: false,
-                severityMatches: true
+                severityMatches: true,
+                producedPath: 'src/app.ts',
+                producedStartLine: 12
               }
             ],
             unmatchedExpectedIndexes: [],
@@ -137,8 +143,12 @@ describe('eval report rendering', () => {
         metrics: {
           parseValidity: 1,
           rejectionReasonCounts: {},
+          rejectionSeverityCounts: {},
+          rejectionReasonBySeverityCounts: {},
           lineCheckCount: 0,
           severityCheckCount: 0,
+          linePlacementRate: null,
+          linePlacementCheckCount: 0,
           recall: 1,
           precision: 1,
           adjustedPrecision: 1,

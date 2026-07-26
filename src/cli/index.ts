@@ -23,6 +23,7 @@ import {
   renderEvalRecallReport,
   renderEvalSummary,
   runEvaluation,
+  stableJsonDigest,
   type EvalCaseFileReader,
   type EvalRegressionThresholds,
 } from '../domains/evaluation/index.js'
@@ -909,7 +910,22 @@ const runEval = async (
       // did anything, so `runEvaluation` measures the WHOLE run (case review
       // execution above, plus its own judge/plausibility scoring) instead of
       // only the time spent inside `runEvaluation` itself.
-      evaluationElapsedMs: () => monotonicNow() - evaluationStartedAtMs
+      evaluationElapsedMs: () => monotonicNow() - evaluationStartedAtMs,
+      // Provenance the eval domain cannot derive on its own (it does not import
+      // the configuration or provider-resolution domains): the effective,
+      // fully-merged config this invocation resolved -- file + environment +
+      // the CLI-only overrides (`--review-mode`, `--gate-profile`, etc.) folded
+      // in above -- hashed with the SAME canonical digest the answer-key digest
+      // uses, plus the provider/model identity the judge itself was built
+      // from. `answerKeyDigest` is computed inside `runEvaluation` from the
+      // selected cases, so it is not supplied here.
+      provenance: {
+        configHash: stableJsonDigest(loadedConfig.config),
+        ...(providerConfig === undefined
+          ? {}
+          : { providerId: providerConfig.id, modelName: providerConfig.model }
+        )
+      }
     }
     const result = await runEvaluation(evaluationInput)
 

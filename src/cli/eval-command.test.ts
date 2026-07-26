@@ -188,6 +188,8 @@ const metricSet = (overrides: Record<string, unknown> = {}): Record<string, unkn
   severityWeightedRecall: 1,
   severityWeightedF1: 1,
   lineAccuracy: 1,
+  linePlacementRate: null,
+  linePlacementCheckCount: 0,
   severityAccuracy: 1,
   falsePositiveCount: 0,
   noFindingZoneFalsePositiveCount: 0,
@@ -1875,7 +1877,9 @@ describe('eval CLI', () => {
                     findingId: 'find-a',
                     semanticReason: 'Both summaries describe the same defect.',
                     lineOverlaps: true,
-                    severityMatches: true
+                    severityMatches: true,
+                    producedPath: 'src/app.ts',
+                    producedStartLine: 4
                   }
                 ],
                 unmatchedExpectedIndexes: [],

@@ -73,7 +73,17 @@ export const EvalFindingMatchReportSchema = z.strictObject({
   // There is no numeric similarity score: identity of defect is a judgment.
   semanticReason: z.string().min(1).max(1000),
   lineOverlaps: z.boolean(),
-  severityMatches: z.boolean()
+  severityMatches: z.boolean(),
+  // DIAGNOSTIC ONLY (spec 06 item 0.3): the finding's produced location,
+  // recorded for EVERY matched pair regardless of match mode. This is
+  // deliberately NOT the same signal as `lineOverlaps`, which stays gated to
+  // `path-line` and feeds the strict `lineAccuracy` scoring metric. These two
+  // fields let `linePlacementRate` measure line placement on `path-semantic`
+  // matches too -- the entire primary corpus, which `lineAccuracy`
+  // structurally cannot see -- without changing what a match IS or touching
+  // the regression gate.
+  producedPath: z.string().min(1),
+  producedStartLine: z.int().min(1)
 })
 
 // An expected/finding pair the judge could not decide. It is excluded from the
@@ -200,6 +210,37 @@ export const EvalReportScoringSchema = z.strictObject({
   adjustedPrecisionTrustworthy: z.boolean().default(true)
 })
 
+// Provenance proves WHAT was scored and under WHAT configuration, which
+// `metricsVersion` alone does not: `metricsVersion` says how a metric is
+// computed from review output, but nothing before this recorded which answer
+// key produced the review output in the first place. An archived run in this
+// repository once reported 78.8% recall after its answer key had since
+// changed underneath it, and nothing in the artifact revealed that -- the
+// same class of failure `metricsVersion` mismatches already guard against, one
+// layer up the stack.
+export const EvalReportProvenanceSchema = z.strictObject({
+  // sha256 digest over the expected-finding content of every selected case
+  // (see `computeAnswerKeyDigest` for the exact scope and why it stops at
+  // expected-finding content). Two reports with the same digest scored an
+  // IDENTICAL answer key; comparison and the significance module refuse to
+  // diff across a mismatch here, exactly like a `metricsVersion` mismatch.
+  answerKeyDigest: z.string().min(1),
+  // sha256 digest over the effective (file + environment + CLI-override
+  // merged) configuration the run used. Comparison does NOT refuse across a
+  // config-hash mismatch the way it does for `answerKeyDigest`: a maintainer
+  // legitimately compares two runs under DIFFERENT configurations to measure
+  // the effect of changing one, so refusing here would block the very
+  // comparisons this project exists to make. The hash exists so an archived
+  // run can be read back and its configuration identity checked, not to gate
+  // diffing.
+  configHash: z.string().min(1),
+  // Provider/model identity, present only when a provider was configured for
+  // the run (an offline run scoring only cases with no expected findings needs
+  // neither).
+  providerId: z.string().min(1).optional(),
+  modelName: z.string().min(1).optional()
+})
+
 export const EvalMetricGroupSchema = z.strictObject({
   groupBy: z.enum(['sourceProfile', 'language', 'tag']),
   key: z.string().min(1),
@@ -230,6 +271,16 @@ export const EvalReportSchema = z.strictObject({
   generatedAt: z.iso.datetime(),
   fixtureCount: z.int().min(0),
   selection: EvalReportSelectionSchema,
+  // Defaulted for the same reason as `metricsVersion`: a report saved before
+  // this field existed must still parse. Such a report predates answer-key
+  // digesting entirely, so it is correctly treated as incomparable to a
+  // current one -- comparison and the significance module refuse to diff
+  // across a mismatch, and every pre-existing report shares this one sentinel
+  // digest, exactly mirroring how `metricsVersion`'s own sentinel behaves.
+  provenance: EvalReportProvenanceSchema.default({
+    answerKeyDigest: 'pre-2026-07-26.provenance',
+    configHash: 'pre-2026-07-26.provenance'
+  }),
   // Required: the producer always writes scoring. Defaulting it would let a
   // report carrying no scoring data silently claim `judgeTrustworthy: true`.
   scoring: EvalReportScoringSchema,
@@ -246,4 +297,5 @@ export type EvalRegressionThresholds = z.infer<
 >
 export type EvalReportSelection = z.infer<typeof EvalReportSelectionSchema>
 export type EvalReportScoring = z.infer<typeof EvalReportScoringSchema>
+export type EvalReportProvenance = z.infer<typeof EvalReportProvenanceSchema>
 export type EvalReport = z.infer<typeof EvalReportSchema>

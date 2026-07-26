@@ -61,6 +61,22 @@ export const collectArmOutcomes = (
     )
   }
 
+  // Same refusal, one layer down: a shared metrics version only proves every
+  // report computed its numbers the same WAY. Pooling reports scored against
+  // DIFFERENT answer keys would silently average together runs that were never
+  // measuring the same thing -- the same failure mode `metricsVersion`
+  // mismatches already guard against, reusing that pattern rather than a
+  // second one.
+  const answerKeyDigests = [
+    ...new Set(reports.map((report) => report.provenance.answerKeyDigest))
+  ]
+
+  if (answerKeyDigests.length > 1) {
+    throw new Error(
+      `Refusing to pool evaluation runs scored against different answer keys: digests ${answerKeyDigests.join(', ')}.`
+    )
+  }
+
   const hits = new Map<ExpectationKey, number>()
 
   for (const report of reports) {

@@ -14,7 +14,9 @@ const matchResult = (input: {
     findingId,
     semanticReason: 'matched',
     lineOverlaps: false,
-    severityMatches: true
+    severityMatches: true,
+    producedPath: 'src/app.ts',
+    producedStartLine: 1
   })),
   unmatchedExpectedIndexes: [],
   inconclusiveExpectedIndexes: [],

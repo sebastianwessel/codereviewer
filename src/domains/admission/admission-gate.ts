@@ -126,6 +126,10 @@ const makeRejectedFinding = (
     readonly reason: RejectedFinding['reason']
     readonly message: string
     readonly evidenceIds?: readonly string[]
+    // The candidate's own severity, when a parsed candidate was available at
+    // the call site (see spec 06 item 0.4 -- a candidate that failed schema
+    // validation before parsing has no severity to record).
+    readonly severity?: Severity
   }
 ): RejectedFinding =>
   RejectedFindingSchema.parse({
@@ -135,7 +139,8 @@ const makeRejectedFinding = (
     message: createRedactor().redact(input.message).slice(0, 500),
     ...(input.evidenceIds === undefined
       ? {}
-      : { evidenceIds: [...input.evidenceIds] })
+      : { evidenceIds: [...input.evidenceIds] }),
+    ...(input.severity === undefined ? {} : { severity: input.severity })
   })
 
 const candidateIdFrom = (candidate: unknown): string =>
@@ -455,7 +460,8 @@ export const admitCandidate = (
       candidateId: candidate.id,
       reason,
       message,
-      evidenceIds: candidate.evidenceIds
+      evidenceIds: candidate.evidenceIds,
+      severity: candidate.severity
     })
   })
 
@@ -469,7 +475,8 @@ export const admitCandidate = (
       status: 'needs-more-evidence',
       reason,
       message,
-      evidenceIds: candidate.evidenceIds
+      evidenceIds: candidate.evidenceIds,
+      severity: candidate.severity
     })
   })
 

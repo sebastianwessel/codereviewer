@@ -24,6 +24,8 @@ const caseResult = (
   falsePositiveSeverityWeights: [1, 3],
   matchedLineCheckCount: 1,
   accurateLineMatchCount: 1,
+  linePlacementCheckCount: 1,
+  accurateLinePlacementCount: 1,
   matchedSeverityCheckCount: 1,
   accurateSeverityMatchCount: 1,
   actionableFindingCount: 2,
@@ -37,6 +39,8 @@ const caseResult = (
   provedRefutationCount: 0,
   rejectedFindingCount: 0,
   rejectionReasonCounts: {},
+  rejectionSeverityCounts: {},
+  rejectionReasonBySeverityCounts: {},
   fixJudgmentAgreementCount: 0,
   fixJudgedLabeledCount: 0,
   fixFalsePositiveDetectedCount: 0,
@@ -184,6 +188,8 @@ describe('eval metrics', () => {
         falsePositiveSeverityWeights: [],
         matchedLineCheckCount: 0,
         accurateLineMatchCount: 0,
+        linePlacementCheckCount: 0,
+        accurateLinePlacementCount: 0,
         matchedSeverityCheckCount: 0,
         accurateSeverityMatchCount: 0,
         actionableFindingCount: 0,
@@ -397,6 +403,42 @@ describe('eval metrics', () => {
     expect(metrics.rejectionReasonCounts).toEqual({
       'below-threshold': 3,
       duplicate: 1
+    })
+  })
+
+  // Companion tally to the one above: without a per-severity breakdown, "is the
+  // model over-calling severity" is confounded by the admission floor deleting
+  // every model-origin `low` candidate before anyone downstream can observe
+  // it. `unknown` covers a rejection whose candidate severity could not be
+  // recovered (currently: refutation-stage rejections).
+  test('tallies what the admission gate discarded, by severity and by reason x severity', () => {
+    const metrics = calculateEvalMetrics([
+      caseResult({
+        rejectedFindingCount: 3,
+        rejectionSeverityCounts: { high: 2, low: 1 },
+        rejectionReasonBySeverityCounts: {
+          'below-threshold': { low: 1 },
+          duplicate: { high: 2 }
+        }
+      }),
+      caseResult({
+        rejectedFindingCount: 1,
+        rejectionSeverityCounts: { unknown: 1 },
+        rejectionReasonBySeverityCounts: {
+          refuted: { unknown: 1 }
+        }
+      })
+    ])
+
+    expect(metrics.rejectionSeverityCounts).toEqual({
+      high: 2,
+      low: 1,
+      unknown: 1
+    })
+    expect(metrics.rejectionReasonBySeverityCounts).toEqual({
+      'below-threshold': { low: 1 },
+      duplicate: { high: 2 },
+      refuted: { unknown: 1 }
     })
   })
 

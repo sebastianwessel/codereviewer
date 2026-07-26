@@ -1,3 +1,4 @@
+import { ModelError, ValidationError } from '@purista/harness'
 import { describe, expect, test } from 'vitest'
 import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
 import { type CandidateFinding } from '../../../admission/index.js'
@@ -6,7 +7,10 @@ import {
   type ModelFindingRefutationBatchResult,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
-import { executeBatchRefutation } from './execution.js'
+import {
+  executeBatchRefutation,
+  type RefutationExecutionLogger
+} from './execution.js'
 import {
   ReviewWorkflowInputSchema,
   type ReviewWorkflowInput
@@ -121,6 +125,7 @@ const batchInput = (
       packet: FindingRefutationBatchInput
     ) => Promise<ModelFindingRefutationBatchResult>
     readonly workflowInput?: ReviewWorkflowInput
+    readonly logger?: RefutationExecutionLogger
   }
 ) => ({
   workflowInput: input.workflowInput ?? workflowInput(),
@@ -130,8 +135,27 @@ const batchInput = (
   sharedDigest: '(no admitted shared context yet)',
   reviewEvidence: [evidence],
   refuteFinding: async (packet: FindingRefutationBatchInput) =>
-    input.refuteFinding(packet)
+    input.refuteFinding(packet),
+  ...(input.logger === undefined ? {} : { logger: input.logger })
 })
+
+// A recorded logger the retry tests use to assert both that a retry happened and
+// what the logged fields were, so the instrumentation itself is under test rather
+// than only the observable retry behaviour.
+const recordingLogger = (): {
+  readonly logger: RefutationExecutionLogger
+  readonly messages: string[]
+} => {
+  const messages: string[] = []
+  return {
+    messages,
+    logger: {
+      debug: (message) => {
+        messages.push(message)
+      }
+    }
+  }
+}
 
 describe('model admission batched refutation execution', () => {
   test('adjudicates every candidate of a task in a single refuter call', async () => {
@@ -244,6 +268,151 @@ describe('model admission batched refutation execution', () => {
         resolution?.status === 'provider-error' ? resolution.stage : undefined
       ).toBe('refutation-check')
     }
+  })
+
+  test('does NOT retry a plain provider error, since that already has its own retry policy', async () => {
+    // A generic thrown error (a timeout, a dropped connection) is exactly the shape
+    // of failure the provider layer already retries on its own; retrying it again
+    // here would double an already-handled backoff instead of adding recall.
+    let refutationCalls = 0
+    const resolutions = await executeBatchRefutation(
+      batchInput({
+        candidates: [candidate],
+        refuteFinding: async () => {
+          refutationCalls += 1
+          throw new Error('provider timed out while refuting')
+        }
+      })
+    )
+
+    expect(refutationCalls).toBe(1)
+    expect(resolutions.get(candidate.id)?.status).toBe('provider-error')
+  })
+
+  test('retries once on a harness output-validation failure and uses the successful retry', async () => {
+    // This is the failure mode the plan measured firing 16 times across 9 cases:
+    // the model's response failed the harness's own agent-output schema check.
+    // Without the retry, this test fails because the first (and only) call's
+    // ValidationError maps every candidate straight to a provider-error / needs-
+    // more-evidence outcome.
+    let refutationCalls = 0
+    const { logger, messages } = recordingLogger()
+    const resolutions = await executeBatchRefutation(
+      batchInput({
+        candidates: [candidate],
+        logger,
+        refuteFinding: async () => {
+          refutationCalls += 1
+          if (refutationCalls === 1) {
+            throw new ValidationError('Agent output validation failed.', {
+              where: 'agent_output',
+              issues: []
+            })
+          }
+          return {
+            verdicts: [
+              {
+                candidateId: candidate.id,
+                verdict: 'proved',
+                rationaleSummary: 'The retried call proved the claim.'
+              }
+            ]
+          }
+        }
+      })
+    )
+
+    expect(refutationCalls).toBe(2)
+    expect(resolutions.get(candidate.id)).toEqual({
+      status: 'verdict',
+      refutation: {
+        verdict: 'proved',
+        rationaleSummary: 'The retried call proved the claim.'
+      }
+    })
+    expect(messages).toEqual(['Refutation output-validation retry succeeded.'])
+  })
+
+  test('retries once on a malformed-structured-output ModelError and uses the retry', async () => {
+    // The provider adapter can also fail to parse a structured object out of the
+    // response at all, which surfaces as a `ModelError` rather than a schema
+    // `ValidationError`. Both are "the model returned garbage this one time" and
+    // both must be retried.
+    let refutationCalls = 0
+    const resolutions = await executeBatchRefutation(
+      batchInput({
+        candidates: [candidate],
+        refuteFinding: async () => {
+          refutationCalls += 1
+          if (refutationCalls === 1) {
+            throw new ModelError('OpenAI returned malformed structured object JSON.', {
+              provider: 'openai',
+              model: 'gpt-test',
+              method: 'generateObject',
+              reason: 'malformed_response'
+            })
+          }
+          return {
+            verdicts: [
+              {
+                candidateId: candidate.id,
+                verdict: 'proved',
+                rationaleSummary: 'The retried call proved the claim.'
+              }
+            ]
+          }
+        }
+      })
+    )
+
+    expect(refutationCalls).toBe(2)
+    expect(resolutions.get(candidate.id)?.status).toBe('verdict')
+  })
+
+  test('degrades to provider-error when the retry also fails, without a third attempt', async () => {
+    let refutationCalls = 0
+    const { logger, messages } = recordingLogger()
+    const resolutions = await executeBatchRefutation(
+      batchInput({
+        candidates: [candidate],
+        logger,
+        refuteFinding: async () => {
+          refutationCalls += 1
+          throw new ValidationError('Agent output validation failed.', {
+            where: 'agent_output',
+            issues: []
+          })
+        }
+      })
+    )
+
+    expect(refutationCalls).toBe(2)
+    expect(resolutions.get(candidate.id)?.status).toBe('provider-error')
+    expect(messages).toEqual(['Refutation output-validation retry failed.'])
+  })
+
+  test('does not retry a hard provider ModelError (e.g. rate limiting)', async () => {
+    // Auth failures, rate limiting, and network errors already have their own
+    // retry policy in the provider layer; retrying them again here would
+    // duplicate that policy instead of adding recall.
+    let refutationCalls = 0
+    const resolutions = await executeBatchRefutation(
+      batchInput({
+        candidates: [candidate],
+        refuteFinding: async () => {
+          refutationCalls += 1
+          throw new ModelError('Provider rate limited the request.', {
+            provider: 'openai',
+            model: 'gpt-test',
+            method: 'generateObject',
+            reason: 'rate_limited'
+          })
+        }
+      })
+    )
+
+    expect(refutationCalls).toBe(1)
+    expect(resolutions.get(candidate.id)?.status).toBe('provider-error')
   })
 
   test('splits an oversized batch in half instead of losing its candidates', async () => {

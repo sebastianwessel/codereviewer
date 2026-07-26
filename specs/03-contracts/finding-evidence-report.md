@@ -296,6 +296,7 @@ All `CandidateFinding` fields plus:
 | `reason` | yes | `RejectReason` | Closed enum. |
 | `message` | yes | string <= 500 | Redacted human-readable reason. |
 | `evidenceIds` | no | string[] | Evidence considered. |
+| `severity` | no | `Severity` | The rejected candidate's own severity, when the rejecting call site had a parsed candidate available. Omitted when the candidate failed schema validation before it could be parsed, or when the rejecting call site has not been updated to pass it through. Exists so eval measurement (spec 06) can tally rejections by severity without being confounded by the admission floor deleting model-origin `low` candidates before anyone downstream can observe them. |
 
 ## FindingProvenance
 

@@ -601,6 +601,77 @@ describe('eval runner', () => {
     expect(summary).toContain('- refute_eval1 candidate cand_eval1 verdict proved')
   })
 
+  // Spec 06 item 0.4: without a per-severity rejection tally, "is the model
+  // over-calling severity" is confounded by the admission floor deleting every
+  // model-origin `low` candidate before anyone downstream can observe it. This
+  // exercises the real admission-gate-to-report path: a rejected candidate
+  // that carries its own severity (an admission-floor rejection) and one that
+  // does not (a refutation-stage rejection, which does not yet thread severity
+  // through its own contract) must both be tallied, the latter under `unknown`
+  // rather than silently dropped.
+  test('tallies rejected candidates by severity and by reason x severity', async () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport(
+              [admittedFinding()],
+              [],
+              'complete',
+              {},
+              {
+                rejectedFindings: [
+                  {
+                    candidateId: 'cand_below_threshold1',
+                    status: 'rejected',
+                    reason: 'below-threshold',
+                    message: 'Candidate severity is below configured admission threshold.',
+                    severity: 'low'
+                  },
+                  {
+                    candidateId: 'cand_refuted1',
+                    status: 'rejected',
+                    reason: 'refuted',
+                    message: 'Refutation found a contradiction.'
+                  }
+                ]
+              }
+            )
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.metrics.rejectionReasonCounts).toEqual({
+      'below-threshold': 1,
+      refuted: 1
+    })
+    expect(result.report.metrics.rejectionSeverityCounts).toEqual({
+      low: 1,
+      unknown: 1
+    })
+    expect(result.report.metrics.rejectionReasonBySeverityCounts).toEqual({
+      'below-threshold': { low: 1 },
+      refuted: { unknown: 1 }
+    })
+
+    const summary = renderEvalSummary({ cases, report: result.report })
+    expect(summary).toContain('Rejected candidates by severity')
+    expect(summary).toContain('low 1, unknown 1')
+    expect(summary).toContain('## Rejections by Reason and Severity')
+    expect(summary).toContain('| below-threshold | low | 1 |')
+    expect(summary).toContain('| refuted | unknown | 1 |')
+  })
+
   test('keeps artifact-only noise out of normal false-positive counts', async () => {
     const cases = parseEvalCases([inlineEvalCases[1]])
     const result = await runEvaluation({
@@ -962,7 +1033,9 @@ describe('eval runner', () => {
         findingId: 'find_paraphrase1',
         semanticReason: 'Both findings describe the same leaked descriptor.',
         lineOverlaps: false,
-        severityMatches: true
+        severityMatches: true,
+        producedPath: 'src/other.ts',
+        producedStartLine: 99
       }
     ])
   })
@@ -1044,6 +1117,15 @@ describe('eval runner', () => {
         report: semanticOnlyRun.report
       })
     ).toContain('| Line accuracy | n/a (0 checked) |')
+    // linePlacementRate (item 0.3) is a DIFFERENT, diagnostic-only measurement:
+    // unlike lineAccuracy it DOES score this path-semantic match, because it
+    // declares a lineRange. The finding landed at line 90 against a declared
+    // [4, 4] range -- far outside even the 3-line tolerance -- so it is
+    // checked but not counted accurate. This is exactly the case lineAccuracy
+    // structurally cannot see: line placement on path-semantic matches was
+    // completely unmeasured before this metric existed.
+    expect(semanticOnlyRun.report.metrics.linePlacementCheckCount).toBe(1)
+    expect(semanticOnlyRun.report.metrics.linePlacementRate).toBe(0)
 
     const mixedRun = await runEvaluation({
       cases: parseEvalCases([
@@ -1066,6 +1148,12 @@ describe('eval runner', () => {
     expect(mixedRun.report.metrics.recall).toBe(1)
     expect(mixedRun.report.metrics.lineCheckCount).toBe(1)
     expect(mixedRun.report.metrics.lineAccuracy).toBe(1)
+    // linePlacementRate's denominator is broader (2: the path-semantic AND the
+    // path-line expectation that both declare a lineRange) while lineAccuracy's
+    // stays at 1 (only the path-line one) -- proving the two metrics are
+    // genuinely independent measurements, not the same number rendered twice.
+    expect(mixedRun.report.metrics.linePlacementCheckCount).toBe(2)
+    expect(mixedRun.report.metrics.linePlacementRate).toBe(0.5)
   })
 
 
@@ -1476,6 +1564,15 @@ describe('eval runner', () => {
       },
       head: {
         ...head.report,
+        // This test's subject is selection-status and metric-group rendering
+        // when the two runs cover DIFFERENT case sets -- a scenario spec 06
+        // deliberately renders as a warning rather than refusing outright.
+        // `head` really did select fewer cases than `base`, so its genuine
+        // answer-key digest legitimately differs; pin it to `base`'s here so
+        // this test keeps exercising that selection-mismatch warning path
+        // rather than tripping the (separately tested) hard provenance
+        // refusal that a real differing digest now triggers.
+        provenance: base.report.provenance,
         metrics: {
           ...head.report.metrics,
           providerErrorRate: 0.5,

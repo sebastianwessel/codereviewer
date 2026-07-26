@@ -406,6 +406,19 @@ sharing a call must not make one candidate's verdict depend on another's.
 - Packet fields are ordered so everything shared across batches comes first and
   the per-candidate payload last, keeping the longest possible stable prompt
   prefix for provider prompt caches.
+- A batch that fails because the model's response did not validate — an
+  output-schema failure or a response the provider adapter could not parse into
+  a structured object at all — gets exactly ONE retry over the identical packet
+  before it degrades. This is deliberately narrower than "any refutation
+  failure": a hard provider failure (auth, rate limiting, network, an
+  unavailable provider) already carries its own retry policy in the provider
+  layer and must not be retried again here. The retry composes with the
+  packet-splitting above rather than multiplying it, because splitting happens
+  before any call is made (while sizing the packet) and the retry applies only
+  to the call itself; a split half gets its own single retry, never a multiple
+  of the parent batch's. If the retry also fails, the batch degrades exactly as
+  an unretried failure would — every candidate in it records a recovered
+  provider issue and resolves to `needs-more-evidence`.
 - The rule that refutes a finding reachable only by violating a declared type,
   signature, schema, or contract is load-bearing for precision and must not be
   relaxed without evidence. Removing its guard-rail — by exempting values that cross

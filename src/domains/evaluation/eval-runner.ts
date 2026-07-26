@@ -21,8 +21,10 @@ import {
   type EvalCase
 } from './eval-fixture.schema.js'
 import {
+  LINE_TOLERANCE,
   matchEvalFindings,
   missingSemanticJudgeError,
+  rangesOverlap,
   type EvalMatcherResult,
   type EvalSemanticJudge
 } from './eval-matcher.js'
@@ -68,9 +70,11 @@ import {
   type EvalCaseOutput,
   type EvalRegressionThresholds,
   type EvalReport,
+  type EvalReportProvenance,
   type EvalReportScoring,
   type EvalReportSelection
 } from './eval-report-contracts.js'
+import { computeAnswerKeyDigest } from './eval-report-provenance.js'
 import { EVAL_REPORT_ARTIFACT_NAME } from './eval-summary-report-rendering.js'
 
 export {
@@ -80,9 +84,11 @@ export {
   type EvalContextLedgerEntry,
   type EvalRegressionThresholds,
   type EvalReport,
+  type EvalReportProvenance,
   type EvalReportScoring,
   type EvalReportSelection
 } from './eval-report-contracts.js'
+export { computeAnswerKeyDigest, stableJsonDigest } from './eval-report-provenance.js'
 export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
@@ -154,6 +160,39 @@ const isActionableFinding = (
     finding.description.trim().length > 0 &&
     hasFixProposal
   )
+}
+
+// Bucket for a rejected candidate whose severity could not be recovered (a
+// refutation-stage rejection, whose contract does not yet thread severity
+// through). Named rather than left as `undefined` so the rendered tally is
+// self-explanatory instead of silently losing those rejections from the count.
+const UNKNOWN_REJECTION_SEVERITY = 'unknown'
+
+// Per-severity and reason x severity tallies of rejected candidates (spec 06
+// item 0.4). Without this, "is the model over-calling severity" is confounded
+// by the admission floor deleting every model-origin `low` candidate before
+// anyone downstream can observe it -- the floor and the question it is
+// suspected of confounding would otherwise share exactly one blind spot.
+const rejectionSeverityTallies = (
+  rejectedFindings: ReviewReport['rejectedFindings']
+): {
+  readonly rejectionSeverityCounts: Record<string, number>
+  readonly rejectionReasonBySeverityCounts: Record<string, Record<string, number>>
+} => {
+  const rejectionSeverityCounts: Record<string, number> = {}
+  const rejectionReasonBySeverityCounts: Record<string, Record<string, number>> = {}
+
+  for (const rejected of rejectedFindings) {
+    const severity = rejected.severity ?? UNKNOWN_REJECTION_SEVERITY
+    rejectionSeverityCounts[severity] =
+      (rejectionSeverityCounts[severity] ?? 0) + 1
+
+    const reasonCounts = rejectionReasonBySeverityCounts[rejected.reason] ?? {}
+    reasonCounts[severity] = (reasonCounts[severity] ?? 0) + 1
+    rejectionReasonBySeverityCounts[rejected.reason] = reasonCounts
+  }
+
+  return { rejectionSeverityCounts, rejectionReasonBySeverityCounts }
 }
 
 const falsePositiveFindingSummaries = (
@@ -556,6 +595,33 @@ const buildMetricCase = (
       resolveExpectedFindingMatchMode(expected) === 'path-line'
     )
   })
+  // DIAGNOSTIC ONLY (spec 06 item 0.3): every matched expectation that declares
+  // a lineRange, regardless of match mode, unlike `lineCheckedMatches` above
+  // which stays gated to `path-line` for the strict `lineAccuracy` metric. This
+  // is what finally makes line placement measurable on `path-semantic`
+  // expectations -- the entire primary real-repository corpus. The deterministic
+  // gate in the matcher already required an exact path match before either
+  // match mode could reach the judge, so re-checking path here would be inert;
+  // only the produced start line is compared against the declared range, with
+  // the SAME tolerance `lineAccuracy` uses, imported from the matcher so the
+  // two definitions cannot silently drift apart.
+  const linePlacementCheckedMatches = input.matchResult.matches.filter(
+    (match) =>
+      input.evalCase.expectedFindings[match.expectedIndex]?.lineRange !==
+      undefined
+  )
+  const accurateLinePlacementMatches = linePlacementCheckedMatches.filter(
+    (match) => {
+      const expectedLineRange =
+        input.evalCase.expectedFindings[match.expectedIndex]!.lineRange!
+
+      return rangesOverlap(
+        expectedLineRange,
+        [match.producedStartLine, match.producedStartLine],
+        LINE_TOLERANCE
+      )
+    }
+  )
   const falsePositiveFindingIdSet = new Set(
     input.matchResult.falsePositiveFindingIds
   )
@@ -603,6 +669,8 @@ const buildMetricCase = (
     accurateLineMatchCount: lineCheckedMatches.filter(
       (match) => match.lineOverlaps
     ).length,
+    linePlacementCheckCount: linePlacementCheckedMatches.length,
+    accurateLinePlacementCount: accurateLinePlacementMatches.length,
     matchedSeverityCheckCount: input.matchResult.matches.length,
     accurateSeverityMatchCount: input.matchResult.matches.filter(
       (match) => match.severityMatches
@@ -639,6 +707,7 @@ const buildMetricCase = (
       }),
       {}
     ),
+    ...rejectionSeverityTallies(rejectedFindings),
     ...fixLaneCaseTallies({
       fixOutcomes: input.output.fixOutcomes,
       matchResult: input.matchResult,
@@ -1210,6 +1279,18 @@ type RunEvaluationInput = {
     readonly selectedCaseIds?: readonly string[]
   }
   readonly generatedAt?: string
+  // Provenance the eval domain cannot derive on its own: `answerKeyDigest` is
+  // always computed internally from the selected cases (see
+  // `computeAnswerKeyDigest`), but the effective config hash and provider/model
+  // identity live in the configuration domain, which this module deliberately
+  // does not import (see `.agent/IMPLEMENTATION.md` on avoiding cross-domain
+  // coupling). The CLI resolves and hashes its own merged config and passes the
+  // result through as plain data.
+  readonly provenance?: {
+    readonly configHash?: string
+    readonly providerId?: string
+    readonly modelName?: string
+  }
 }
 
 const buildEvaluationResult = (
@@ -1225,6 +1306,7 @@ const buildEvaluationResult = (
     readonly runTotals: EvalRunTotals
     readonly generatedAt?: string
     readonly caseComputations: readonly EvalCaseComputation[]
+    readonly provenance: EvalReportProvenance
   }
 ): {
   readonly artifactName: typeof EVAL_REPORT_ARTIFACT_NAME
@@ -1263,6 +1345,7 @@ const buildEvaluationResult = (
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     fixtureCount: input.cases.length,
     selection,
+    provenance: input.provenance,
     scoring: input.scoring,
     caseResults: input.caseComputations.map((computation) => computation.reportCase),
     metrics,
@@ -1452,6 +1535,22 @@ export const runEvaluation = async (
         plausibilityCalibration?.plausibilityJudgeAgreementPairCount ?? 0
     },
     ...(input.generatedAt === undefined ? {} : { generatedAt: input.generatedAt }),
-    caseComputations
+    caseComputations,
+    // `answerKeyDigest` is always derived here, from the exact selected case
+    // set this function scored -- never supplied by the caller -- so it can
+    // never drift from what was actually scored. `configHash`/provider
+    // identity come from the caller (see `RunEvaluationInput.provenance`)
+    // because this module does not resolve or import the configuration
+    // domain's merged config.
+    provenance: {
+      answerKeyDigest: computeAnswerKeyDigest(prepared.cases),
+      configHash: input.provenance?.configHash ?? 'unspecified',
+      ...(input.provenance?.providerId === undefined
+        ? {}
+        : { providerId: input.provenance.providerId }),
+      ...(input.provenance?.modelName === undefined
+        ? {}
+        : { modelName: input.provenance.modelName })
+    }
   })
 }

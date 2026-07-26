@@ -256,7 +256,8 @@ describe('admission gate', () => {
         status: 'rejected',
         reason: 'location-invalid',
         message: 'Candidate location line range is outside reviewed source input.',
-        evidenceIds: ['ev_diff1']
+        evidenceIds: ['ev_diff1'],
+        severity: 'high'
       }
     })
   })
@@ -293,7 +294,8 @@ describe('admission gate', () => {
         reason: 'location-invalid',
         message:
           'Candidate location is outside the source chunk its review task was given.',
-        evidenceIds: ['ev_diff1']
+        evidenceIds: ['ev_diff1'],
+        severity: 'high'
       }
     })
 

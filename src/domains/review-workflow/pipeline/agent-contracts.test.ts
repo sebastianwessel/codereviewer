@@ -95,6 +95,21 @@ describe('ModelHolisticFindingSchema category normalization', () => {
   })
 })
 
+describe('ModelHolisticFindingSchema fixSummary', () => {
+  // Discovery's fixSummary was pure dead weight: the prompt asked for it, this
+  // schema accepted it, but the candidate mapping in holistic-task-review.ts never
+  // read it (a fix proposal requires at least one evidence id, and discovery
+  // candidates start with none). It must not survive parsing.
+  test('drops a model-supplied fixSummary instead of carrying it through', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      category: 'bug',
+      fixSummary: 'Add a null check before dereferencing.'
+    })
+
+    expect(parsed).not.toHaveProperty('fixSummary')
+  })
+})
+
 describe('contextScoutRequests', () => {
   test('returns nothing for an absent or empty request list', () => {
     expect(contextScoutRequests(ModelContextScoutResultSchema.parse({}))).toEqual(

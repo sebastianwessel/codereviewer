@@ -255,6 +255,20 @@ calibrates both judges (23 extra calls) — cheap, not free.
 npm run eval:benchmark
 ```
 
+The real-repository corpus — the one the headline recall baseline is measured on
+— has its own script:
+
+```bash
+npm run eval:corpus
+```
+
+Hydration alone costs no provider spend, so a corpus can be refreshed or repaired
+without running a review:
+
+```bash
+npm run eval:corpus:hydrate
+```
+
 **Same, with a sanitized debug log:**
 
 ```bash

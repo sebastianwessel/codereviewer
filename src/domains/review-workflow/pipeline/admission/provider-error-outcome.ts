@@ -28,7 +28,8 @@ export const rejectedFindingForRefutationError = (input: {
     status: 'needs-more-evidence',
     reason: 'provider-error',
     message: `Refutation check failed: ${normalized.code}`.slice(0, 500),
-    evidenceIds: input.candidate.evidenceIds
+    evidenceIds: input.candidate.evidenceIds,
+    severity: input.candidate.severity
   })
 }
 

@@ -16,10 +16,15 @@ const reportWith = (
     readonly expectedIndexes: readonly number[]
     readonly matchedIndexes: readonly number[]
   }[],
-  metricsVersion = 'test-metrics-version'
+  metricsVersion = 'test-metrics-version',
+  answerKeyDigest = 'test-answer-key-digest'
 ): EvalReport =>
   ({
     metricsVersion,
+    provenance: {
+      answerKeyDigest,
+      configHash: 'test-config-hash'
+    },
     caseResults: cases.map((entry) => ({
       caseId: entry.caseId,
       expectedFindings: entry.expectedIndexes.map((expectedIndex) => ({
@@ -73,6 +78,44 @@ describe('scoring-rule compatibility', () => {
       collectArmOutcomes([
         reportWith([{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [0] }], 'v1'),
         reportWith([{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [] }], 'v1')
+      ])
+    ).not.toThrow()
+  })
+
+  // A shared metrics version only proves the two runs computed metrics the same
+  // WAY; it says nothing about whether they were scored against the same WHAT.
+  // This repository has already published a recall figure that was silently
+  // scored against an answer key that had since changed underneath it.
+  test('refuses to pool runs scored against different answer keys', () => {
+    expect(() =>
+      collectArmOutcomes([
+        reportWith(
+          [{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [0] }],
+          'v1',
+          'answer-key-a'
+        ),
+        reportWith(
+          [{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [0] }],
+          'v1',
+          'answer-key-b'
+        )
+      ])
+    ).toThrow(/different answer keys/u)
+  })
+
+  test('pools runs that share both a scoring version and an answer key', () => {
+    expect(() =>
+      collectArmOutcomes([
+        reportWith(
+          [{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [0] }],
+          'v1',
+          'answer-key-a'
+        ),
+        reportWith(
+          [{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [] }],
+          'v1',
+          'answer-key-a'
+        )
       ])
     ).not.toThrow()
   })

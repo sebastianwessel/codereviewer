@@ -64,6 +64,20 @@ describe('evaluation package scripts', () => {
       '--log-file .codereviewer/eval/log.log'
     )
 
+    // The real-repository corpus is where the headline recall baseline comes
+    // from, and it had no committed script at all: the number existed only
+    // because someone typed the flags by hand, which is not reproducible.
+    expect(packageJson.scripts['eval:corpus']).toContain(
+      '.codereviewer/eval/corpus-slices/real-repo-cross-file'
+    )
+    expect(packageJson.scripts['eval:corpus']).toContain('--review-mode pr')
+    expect(packageJson.scripts['eval:corpus']).toContain('--review-depth thorough')
+    expect(packageJson.scripts['eval:corpus']).toContain('--max-concurrent-tasks 1')
+    // Hydration alone costs no provider spend, so it stays separately runnable.
+    expect(packageJson.scripts['eval:corpus:hydrate']).toContain(
+      'hydrate-real-repo-corpus'
+    )
+
     // removed scripts must not exist
     const removed = [
       'eval',

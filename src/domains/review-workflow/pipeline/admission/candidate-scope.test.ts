@@ -74,7 +74,8 @@ describe('model admission candidate scope', () => {
       reason: 'not-in-scope',
       message:
         'Model candidate is in a file with no reviewed changes and lacks deterministic corroboration.',
-      evidenceIds: ['ev_support1']
+      evidenceIds: ['ev_support1'],
+      severity: 'high'
     })
   })
 })

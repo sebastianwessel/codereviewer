@@ -136,11 +136,13 @@ Stated plainly, because each of these was a wrong number at some point:
 ## Reproducing
 
 ```bash
-node --import tsx scripts/hydrate-real-repo-corpus.ts
+npm run eval:corpus
 ```
 
+Hydration alone, which costs no provider spend:
+
 ```bash
-npm run cli -- eval run --slice-root .codereviewer/eval/corpus-slices/real-repo-cross-file --review-mode pr --review-depth thorough --max-concurrent-tasks 1
+npm run eval:corpus:hydrate
 ```
 
 The regression gate is hard-coded to demand 100% recall and zero false positives, so

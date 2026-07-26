@@ -20,7 +20,12 @@ export type EvalJudgeProviderIssue = {
 }
 
 // Line gate tolerance. Deterministic, exact, and applied before any judge call.
-const LINE_TOLERANCE = 3
+// Exported so the eval runner can apply the SAME tolerance when it derives the
+// diagnostic `linePlacementRate` (spec 06 item 0.3) from the raw produced
+// location this module now records on every match; a second, silently
+// diverging tolerance constant would make the two line metrics disagree for no
+// reason a reader could see.
+export const LINE_TOLERANCE = 3
 
 export const EVAL_SEMANTIC_JUDGE_STAGE = 'eval_semantic_judge'
 
@@ -33,6 +38,17 @@ export type EvalFindingMatch = {
   readonly semanticReason: string
   readonly lineOverlaps: boolean
   readonly severityMatches: boolean
+  // DIAGNOSTIC ONLY (spec 06 item 0.3), recorded for EVERY matched pair
+  // regardless of match mode. `lineOverlaps` above is the strict scoring
+  // signal and only ever fires for `path-line`; it must stay that way. These
+  // two fields exist so the eval runner can additionally compute
+  // `linePlacementRate` -- a looser, non-gating observation over every match
+  // whose expectation happens to declare a `lineRange`, which is how line
+  // placement becomes measurable on `path-semantic` expectations (the entire
+  // primary corpus) for the first time. Never used to decide a match and never
+  // fed into `lineAccuracy` or the regression gate.
+  readonly producedPath: string
+  readonly producedStartLine: number
 }
 
 // A pair the judge could not decide because the judge call failed after the
@@ -100,7 +116,11 @@ const findingLineRange = (
   finding.location.endLine ?? finding.location.startLine
 ]
 
-const rangesOverlap = (
+// Exported for the same reason as `LINE_TOLERANCE`: the eval runner reuses this
+// exact overlap rule to score the diagnostic `linePlacementRate`, rather than
+// re-deriving a second overlap definition that could quietly drift from this
+// one.
+export const rangesOverlap = (
   left: EvalLineRange,
   right: EvalLineRange,
   tolerance: number
@@ -166,6 +186,8 @@ type AssignedMatch = {
   readonly semanticReason: string
   readonly lineOverlaps: boolean
   readonly severityMatches: boolean
+  readonly producedPath: string
+  readonly producedStartLine: number
 }
 
 type InconclusivePair = {
@@ -380,7 +402,9 @@ const runJudgePass = async (
           resolveExpectedFindingMatchMode(expected) === 'path-line'
             ? lineRulePasses(expected, finding)
             : false,
-        severityMatches: expected.severity === finding.severity
+        severityMatches: expected.severity === finding.severity,
+        producedPath: finding.location.path,
+        producedStartLine: finding.location.startLine
       }
     })
     .sort((left, right) => left.expectedIndex - right.expectedIndex)
@@ -414,7 +438,9 @@ export const matchEvalFindings = async (
       findingId: input.admittedFindings[match.findingIndex]!.id,
       semanticReason: match.semanticReason,
       lineOverlaps: match.lineOverlaps,
-      severityMatches: match.severityMatches
+      severityMatches: match.severityMatches,
+      producedPath: match.producedPath,
+      producedStartLine: match.producedStartLine
     }))
     .sort((left, right) => left.expectedIndex - right.expectedIndex)
 

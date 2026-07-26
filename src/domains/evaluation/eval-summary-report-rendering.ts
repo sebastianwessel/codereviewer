@@ -73,6 +73,16 @@ const formatPlausibilityJudgeAgreement = (report: EvalReport): string =>
     ? 'not scored'
     : `${formatPercent(report.metrics.plausibilityJudgeAgreement)} (${report.metrics.plausibilityJudgeAgreementPairCount} pairs)`
 
+// Shared formatter for a `Record<string, number>` tally rendered as an inline
+// comma-joined summary (e.g. rejection reason or severity counts). Reused so
+// the reason and severity rows can never drift into two different renderings
+// of the same shape.
+const formatCountRecord = (record: Readonly<Record<string, number>>): string =>
+  Object.entries(record)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, count]) => `${key} ${count}`)
+    .join(', ') || 'none'
+
 const findCase = (
   cases: readonly EvalCase[],
   caseId: string
@@ -175,6 +185,12 @@ const appendEvalSummaryMetrics = (
       `| F1 | ${formatPercent(report.metrics.f1)} |`,
       `| Severity weighted F1 | ${formatPercent(report.metrics.severityWeightedF1)} |`,
       `| Line accuracy | ${formatRateOverCount(report.metrics.lineAccuracy, report.metrics.lineCheckCount)} |`,
+      // DIAGNOSTIC ONLY -- see the schema comment on `linePlacementRate`. This is
+      // NOT lineAccuracy: it is a looser measurement over every matched
+      // expectation that declares a lineRange regardless of match mode, and it
+      // gates nothing. Rendered as its own row rather than folded into the line
+      // accuracy row above so a reader can never mistake one for the other.
+      `| Line placement rate (diagnostic, all match modes) | ${formatRateOverCount(report.metrics.linePlacementRate, report.metrics.linePlacementCheckCount)} |`,
       `| Severity accuracy | ${formatRateOverCount(report.metrics.severityAccuracy, report.metrics.severityCheckCount)} |`,
       `| Parse validity | ${formatPercent(report.metrics.parseValidity)} |`,
       `| Provider error rate | ${formatPercent(report.metrics.providerErrorRate)} |`,
@@ -190,12 +206,11 @@ const appendEvalSummaryMetrics = (
       `| Artifact-only matched | ${report.metrics.artifactOnlyMatchedFindingCount} |`,
       `| Artifact-only false positives | ${report.metrics.artifactOnlyFalsePositiveCount} |`,
       `| Trusted deterministic findings | ${report.metrics.trustedDeterministicFindingCount} |`,
-      `| Rejected candidates by reason | ${
-        Object.entries(report.metrics.rejectionReasonCounts)
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([reason, count]) => `${reason} ${count}`)
-          .join(', ') || 'none'
-      } |`,
+      `| Rejected candidates by reason | ${formatCountRecord(report.metrics.rejectionReasonCounts)} |`,
+      // Severity of the REJECTED candidate (spec 06 item 0.4), not the
+      // expectation's severity. Answers "is the model over-calling severity"
+      // without the admission floor's `low` deletion hiding the answer.
+      `| Rejected candidates by severity | ${formatCountRecord(report.metrics.rejectionSeverityCounts)} |`,
       `| Refutation false negatives (upper bound) | ${report.metrics.refutationFalseNegativeCount} |`,
       `| Refutation false positives | ${report.metrics.refutationFalsePositiveCount} |`,
       `| Fix judgment accuracy | ${formatPercent(report.metrics.fixJudgmentAccuracy)} (${report.metrics.fixJudgedFindingCount} judged) |`,
@@ -220,6 +235,33 @@ const appendEvalSummaryMetrics = (
       `| Scoring output tokens (judge + plausibility judge) | ${formatInteger(report.metrics.scoringOutputTokens)} |`,
       `| Scoring cost (judge, separate from review cost) | ${formatScoringCost(report.metrics)} |`
     ]
+  })
+}
+
+// Reason x severity cross-tab (spec 06 item 0.4), rendered only when there is
+// at least one rejection: an all-zero table would just repeat "none" for
+// every reason and add nothing a reader could act on. Sorted by reason then
+// severity so the table is deterministic across identical runs.
+const appendEvalSummaryRejectionsByReasonAndSeverity = (
+  lines: string[],
+  report: EvalReport
+): void => {
+  const rows = Object.entries(report.metrics.rejectionReasonBySeverityCounts)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([reason, severityCounts]) =>
+      Object.entries(severityCounts)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(
+          ([severity, count]) =>
+            `| ${escapeMarkdownCell(reason)} | ${escapeMarkdownCell(severity)} | ${count} |`
+        )
+    )
+
+  appendMarkdownTable(lines, {
+    heading: '## Rejections by Reason and Severity',
+    header: '| Reason | Severity | Count |',
+    alignment: '| --- | --- | ---: |',
+    rows
   })
 }
 
@@ -720,6 +762,7 @@ export const renderEvalSummary = (
   appendEvalSummaryHeadline(lines, input.report)
   appendEvalSummarySelection(lines, input.report)
   appendEvalSummaryMetrics(lines, input.report)
+  appendEvalSummaryRejectionsByReasonAndSeverity(lines, input.report)
   appendEvalSummaryRecallByTier(lines, input.report)
   appendEvalSummaryMetricGroups(lines, input.report)
   // Per-mechanism security labels are a secondary breakdown (label accuracy is not

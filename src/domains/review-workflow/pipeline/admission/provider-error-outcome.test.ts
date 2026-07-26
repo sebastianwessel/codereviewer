@@ -33,7 +33,8 @@ describe('model admission provider-error outcome', () => {
       status: 'needs-more-evidence',
       reason: 'provider-error',
       message: 'Refutation check failed: internal_timeout',
-      evidenceIds: ['ev_support1']
+      evidenceIds: ['ev_support1'],
+      severity: 'high'
     })
   })
 
@@ -53,7 +54,8 @@ describe('model admission provider-error outcome', () => {
           status: 'needs-more-evidence',
           reason: 'provider-error',
           message: 'Refutation check failed: internal_timeout',
-          evidenceIds: ['ev_support1']
+          evidenceIds: ['ev_support1'],
+          severity: 'high'
         }
       ],
       admissionDecisions: [

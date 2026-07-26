@@ -129,8 +129,13 @@ export {
   type EvalCaseOutput,
   type EvalContextLedgerEntry,
   type EvalRegressionThresholds,
-  type EvalReport
+  type EvalReport,
+  type EvalReportProvenance
 } from './eval-report-contracts.js'
+export {
+  computeAnswerKeyDigest,
+  stableJsonDigest
+} from './eval-report-provenance.js'
 export {
   loadEvalCasesFromFixtures
 } from './eval-fixture-loader.js'

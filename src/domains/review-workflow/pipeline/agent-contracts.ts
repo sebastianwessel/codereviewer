@@ -457,7 +457,6 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
     evidenceIds: record.evidenceIds ?? record.evidence_ids,
     contextRequests: record.contextRequests ?? record.context_requests,
     requestedContext: record.requestedContext ?? record.requested_context,
-    fixSummary: record.fixSummary ?? record.fix_summary ?? record.suggestedFix,
     fixEdits: record.fixEdits ?? record.fix_edits
   }
 }, z.object({
@@ -496,7 +495,6 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
       z.array(z.string().min(1).max(300)).max(10).optional()
     )
     .catch(undefined),
-  fixSummary: z.string().min(1).max(1200).optional(),
   fixEdits: z
     .array(ModelFixEditSuggestionSchema)
     .max(5)

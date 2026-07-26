@@ -150,6 +150,20 @@ export const EvalMetricsSchema = z.strictObject({
   // count. Null cannot be misread, and it forces a consumer to handle the case.
   lineAccuracy: RateSchema.nullable(),
   lineCheckCount: z.int().min(0).default(0),
+  // DIAGNOSTIC ONLY (spec 06 item 0.3). This is deliberately a DIFFERENT
+  // measurement from lineAccuracy, not a replacement for it: lineAccuracy is
+  // the strict scoring metric restricted to `path-line` expectations and
+  // feeds nothing else that gates. `linePlacementRate` is a looser observation
+  // over every MATCHED expectation that declares a `lineRange`, regardless of
+  // match mode -- chiefly `path-semantic`, which is the entire primary
+  // real-repository corpus and was therefore invisible to any line-quality
+  // measurement at all. It answers "are reported line numbers roughly right on
+  // real code", nothing more, and it must never be read into the regression
+  // gate or any pass/fail decision. Null (not 0) on an empty denominator, for
+  // the same reason lineAccuracy is null: a vacuous 1 or a floored 0 would
+  // both misreport "nobody measured this" as a real result.
+  linePlacementRate: RateSchema.nullable(),
+  linePlacementCheckCount: z.int().min(0).default(0),
   severityAccuracy: RateSchema.nullable(),
   severityCheckCount: z.int().min(0).default(0),
   falsePositiveCount: z.int().min(0),
@@ -180,6 +194,23 @@ export const EvalMetricsSchema = z.strictObject({
   // Rejections by reason, aggregated. Shows what the admission gate discarded
   // before anything downstream could see it.
   rejectionReasonCounts: z.record(z.string(), z.int().min(0)).default({}),
+  // Rejections by the rejected CANDIDATE's own severity (spec 06 item 0.4),
+  // aggregated. `rejectionReasonCounts` alone cannot answer "is the model
+  // over-calling severity", because the admission floor deletes every
+  // model-origin `low` candidate before anyone downstream can observe it --
+  // the floor and the question it is suspected of confounding would otherwise
+  // share one blind spot. A rejection whose candidate severity could not be
+  // recovered (currently: refutation-stage rejections, which do not yet thread
+  // severity through their own contract) is bucketed under `unknown` rather
+  // than silently dropped, so the denominators here always sum to
+  // `rejectedFindingCount`.
+  rejectionSeverityCounts: z.record(z.string(), z.int().min(0)).default({}),
+  // Same tally, cross-tabulated by reason then severity, so a spike in one
+  // reason's rejections can be attributed to a severity band instead of only
+  // read in aggregate.
+  rejectionReasonBySeverityCounts: z
+    .record(z.string(), z.record(z.string(), z.int().min(0)))
+    .default({}),
   refutationFalseNegativeCount: z.int().min(0).default(0),
   refutationFalsePositiveCount: z.int().min(0).default(0),
   // Fix-lane accuracy metrics (spec 12). All are measured over REAL runs of the
@@ -312,6 +343,12 @@ export type EvalMetricCaseResult = {
   readonly falsePositiveSeverityWeights: readonly number[]
   readonly matchedLineCheckCount: number
   readonly accurateLineMatchCount: number
+  // Diagnostic-only counterparts (spec 06 item 0.3): numerator/denominator of
+  // `linePlacementRate`. See that field's schema comment for why this is a
+  // separate measurement from the pair above rather than a broader version of
+  // it feeding the same metric.
+  readonly linePlacementCheckCount: number
+  readonly accurateLinePlacementCount: number
   readonly matchedSeverityCheckCount: number
   readonly accurateSeverityMatchCount: number
   readonly actionableFindingCount: number
@@ -333,6 +370,14 @@ export type EvalMetricCaseResult = {
   // count (expected findings demoted without a matching admitted finding).
   readonly rejectedFindingCount: number
   readonly rejectionReasonCounts: Readonly<Record<string, number>>
+  // Per-severity and reason x severity tallies of the same rejected candidates
+  // (spec 06 item 0.4). See `EvalMetricsSchema` for why a candidate whose
+  // severity could not be recovered is bucketed under `unknown` rather than
+  // dropped.
+  readonly rejectionSeverityCounts: Readonly<Record<string, number>>
+  readonly rejectionReasonBySeverityCounts: Readonly<
+    Record<string, Readonly<Record<string, number>>>
+  >
   // Fix-lane (spec 12) per-case tallies, all derived from real fix-lane outcomes
   // joined to the match result. See EvalMetricsSchema for the aggregate formulas.
   // Numerator/denominator of fixJudgmentAccuracy.
@@ -638,6 +683,16 @@ export const calculateEvalMetrics = (
       sum(caseResults.map((result) => result.accurateLineMatchCount)),
       sum(caseResults.map((result) => result.matchedLineCheckCount))
     ),
+    // Diagnostic only -- see the schema comment on `linePlacementRate`. Kept as
+    // a wholly separate aggregation from `lineAccuracy` immediately above so
+    // the two can never be conflated by sharing a computation.
+    linePlacementCheckCount: sum(
+      caseResults.map((result) => result.linePlacementCheckCount)
+    ),
+    linePlacementRate: rateOrNull(
+      sum(caseResults.map((result) => result.accurateLinePlacementCount)),
+      sum(caseResults.map((result) => result.linePlacementCheckCount))
+    ),
     severityAccuracy: rateOrNull(
       sum(caseResults.map((result) => result.accurateSeverityMatchCount)),
       sum(caseResults.map((result) => result.matchedSeverityCheckCount))
@@ -711,6 +766,33 @@ export const calculateEvalMetrics = (
       },
       {}
     ),
+    rejectionSeverityCounts: caseResults.reduce<Record<string, number>>(
+      (totals, result) => {
+        for (const [severity, count] of Object.entries(
+          result.rejectionSeverityCounts
+        )) {
+          totals[severity] = (totals[severity] ?? 0) + count
+        }
+
+        return totals
+      },
+      {}
+    ),
+    rejectionReasonBySeverityCounts: caseResults.reduce<
+      Record<string, Record<string, number>>
+    >((totals, result) => {
+      for (const [reason, severityCounts] of Object.entries(
+        result.rejectionReasonBySeverityCounts
+      )) {
+        const reasonTotals = totals[reason] ?? {}
+        for (const [severity, count] of Object.entries(severityCounts)) {
+          reasonTotals[severity] = (reasonTotals[severity] ?? 0) + count
+        }
+        totals[reason] = reasonTotals
+      }
+
+      return totals
+    }, {}),
     // UPPER BOUND, not a measurement: expected findings left unmatched in a case
     // that also rejected something. Whether the rejected candidate was actually
     // the missing expectation is not checked, because establishing that would

@@ -1,3 +1,4 @@
+import { ModelError, ValidationError } from '@purista/harness'
 import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
 import { type CandidateFinding } from '../../../admission/index.js'
 import {
@@ -10,6 +11,45 @@ import { isTaskPacketBudgetExceededError } from '../packet-budget.js'
 import { findingRefutationBatchInput } from './packet.js'
 import { type RefutationProviderErrorStage } from '../admission/provider-error-outcome.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
+
+// Narrow, duck-typed logger so this module does not require callers to thread a
+// full `@purista/harness` `Logger` through tests that have no interest in one.
+export type RefutationExecutionLogger = {
+  readonly debug: (
+    message: string,
+    metadata?: Readonly<Record<string, unknown>>
+  ) => void
+}
+
+// A refutation call can fail two structurally different ways, and only one of
+// them is ours to retry. A hard provider failure - auth, rate limiting, a
+// network error, an unavailable provider - already carries its own retry policy
+// inside the harness's model layer (see `ModelError`'s `retriable` flag), so
+// retrying it again here would silently double an already-handled backoff.
+// The failure this DOES retry is a single bad model response that the harness
+// marks non-retriable at its own layer because auto-retrying it is the wrong
+// default for every caller: either the response failed the harness's own output
+// schema check (`ValidationError`, `where: 'agent_output'`), or the provider
+// adapter could not parse a structured object out of the response at all
+// (`ModelError`, `reason: 'malformed_response'` or `'unstructured_response'`).
+// Both are "the model returned garbage this one time," and a fresh call over the
+// identical packet routinely produces a valid response - measurement found this
+// firing 16 times across 9 cases in 12 archived runs, with one case failing in 6
+// of 11 runs, which is the recall this retry recovers.
+const isRetriableRefutationOutputFailure = (error: unknown): boolean => {
+  if (error instanceof ValidationError) {
+    return error.meta?.where === 'agent_output'
+  }
+
+  if (error instanceof ModelError) {
+    return (
+      error.meta?.reason === 'malformed_response' ||
+      error.meta?.reason === 'unstructured_response'
+    )
+  }
+
+  return false
+}
 
 // How one candidate of a batch was resolved. A candidate the model did not
 // adjudicate is absent from the verdict map and resolves to `missing-verdict`;
@@ -32,6 +72,7 @@ export type BatchRefutationInput = {
   readonly reviewEvidence: readonly EvidenceRecord[]
   readonly refuteFinding: FindingRefutationRunner
   readonly signal?: AbortSignal
+  readonly logger?: RefutationExecutionLogger
 }
 
 const resolutionForAll = (
@@ -48,6 +89,14 @@ const resolutionForAll = (
  * provider input budget even after the packet sheds its optional context, the batch
  * is split in half and each half retried, so an oversized task degrades into more
  * calls instead of losing its candidates.
+ *
+ * The call itself gets ONE retry, but only when it fails with an output-validation
+ * or malformed-structured-output failure (see `isRetriableRefutationOutputFailure`);
+ * a hard provider error is never retried here, since that already has its own retry
+ * policy. This composes with the splitting above rather than multiplying it: a
+ * split happens before any call is made (while sizing the packet), so a retry never
+ * doubles the split, and a split half that itself fails only gets its own single
+ * retry, never a multiple of the parent batch's retries.
  */
 export const executeBatchRefutation = async (
   input: BatchRefutationInput
@@ -106,7 +155,27 @@ export const executeBatchRefutation = async (
   try {
     batchResult = await input.refuteFinding(packetInput, input.signal)
   } catch (error: unknown) {
-    return providerError(error, 'refutation-check')
+    if (!isRetriableRefutationOutputFailure(error)) {
+      return providerError(error, 'refutation-check')
+    }
+
+    // One retry over the identical packet: the failure this recovers is one bad
+    // response, not a systemic outage, so a second attempt is where nearly all of
+    // the recoverable value is - looping further would spend real cost chasing a
+    // task that is genuinely failing rather than one that had a bad roll.
+    try {
+      batchResult = await input.refuteFinding(packetInput, input.signal)
+      input.logger?.debug('Refutation output-validation retry succeeded.', {
+        task_id: task?.id,
+        candidate_count: input.candidates.length
+      })
+    } catch (retryError: unknown) {
+      input.logger?.debug('Refutation output-validation retry failed.', {
+        task_id: task?.id,
+        candidate_count: input.candidates.length
+      })
+      return providerError(retryError, 'refutation-check')
+    }
   }
 
   const verdicts = refutationVerdictsByCandidateId(batchResult)

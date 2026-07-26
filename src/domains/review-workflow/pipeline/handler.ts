@@ -201,7 +201,8 @@ export const runReviewWorkflowHandler = async (params: {
     ...(params.refuteFinding === undefined
       ? {}
       : { refuteFinding: params.refuteFinding }),
-    ...(params.signal === undefined ? {} : { signal: params.signal })
+    ...(params.signal === undefined ? {} : { signal: params.signal }),
+    logger
   }).catch((error: unknown) => {
     throw new ReviewTaskExecutionError({
       taskEvents: queued.taskEvents,

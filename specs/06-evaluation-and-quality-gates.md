@@ -308,6 +308,8 @@ change until that paired check is done.
 | `productRecall` | Headline recall over the product tiers (`runtime-critical` + `security` + `logic`), excluding `nit`. This is the number the >80% accuracy target is measured against, matching the low-noise product scope in `00-vision.md`. |
 | `nitRecall` | Recall over `nit`-tier expected findings only. Reported for visibility; not part of the headline target or gates. |
 | `lineAccuracy` | Fraction of matched findings whose location overlaps the expected line range. Only `path-line` expectations that declare a `lineRange` are scored for line overlap, so only they enter the denominator; `path-semantic` and `semantic-only` expectations are excluded even when they carry a `lineRange`. A corpus with no such expectation reports an empty `lineCheckCount` and the metric is undefined, not zero. |
+| `linePlacementRate` | **Diagnostic only; never gates.** Fraction of MATCHED findings, across every match mode, whose produced location falls within the expected `lineRange` (same 3-line tolerance as `lineAccuracy`'s overlap rule). Unlike `lineAccuracy`, an expectation enters this denominator whenever it declares a `lineRange`, regardless of `matchMode` — chiefly `path-semantic`, which is the entire primary real-repository corpus and was therefore invisible to any line-quality measurement at all. This is a DIFFERENT measurement from `lineAccuracy`, not a broader version feeding the same number: it exists to answer a diagnostic question (are reported line numbers roughly right on real code) and must never be read into the regression gate or any pass/fail decision. `null` on an empty denominator, for the same reason as `lineAccuracy`. |
+| `linePlacementCheckCount` | Denominator of `linePlacementRate`. |
 | `severityAccuracy` | Fraction of matched findings with exact severity. |
 | `falsePositiveCount` | Actionable admitted findings not matched to expected findings (raw; includes real-but-unlisted defects). |
 | `genuineFalsePositiveCount` | Unmatched admitted findings the plausibility judge deemed spurious, plus any whose plausibility judgment could not be completed (fail-closed). The trustworthy false-positive count. |
@@ -493,22 +495,27 @@ that should force PR mode, thorough depth, serial provider calls, and sanitized
 debug logs. Semantic scoring is not a flag: the judge is constructed whenever a
 provider is configured.
 
-The committed Code Review Bench-style package scripts must make the
-PR-review posture the default costly benchmark path. `eval:benchmark` hydrates
-the benchmark pack and runs PR mode, thorough depth, and serial provider calls;
-the configured provider supplies the semantic judge.
-`eval:cheap` must provide a low-cost provider-backed review-quality smoke path
-that first runs zero-token refutation gate regressions, then runs the
-project-owned semantic authz positive/control slices plus small benchmark-derived
-scheduling, cache-concurrency, and branch-asymmetric business-rule regression
-slices with the same PR/thorough posture. The package scripts
-must also expose `eval:cheap:refutation` for the zero-token precheck and
-`eval:cheap:provider` for the artifact-producing provider-backed slice run.
-`eval:benchmark:debug` runs the same posture with sanitized no-content debug
-logs written to `.codereviewer/eval/log.log`. A separate
-`eval:benchmark:baseline` script may preserve the older current-config provider
-benchmark posture for before/after comparison, but it must be clearly named as
-baseline so humans do not mistake it for the intended agentic quality run.
+Every corpus a published number comes from must be runnable from a committed
+script. A result produced by hand-typed flags is not reproducible by anyone else,
+and the primary baseline was in exactly that state until `eval:corpus` was added.
+
+- `eval:benchmark` hydrates the Code Review Bench-style pack and runs the
+  PR-review posture — PR mode, thorough depth, serial provider calls — which is
+  the default costly benchmark path. The configured provider supplies the
+  semantic judge; scoring is not a flag.
+- `eval:benchmark:debug` runs the same posture with sanitized no-content debug
+  logs written to `.codereviewer/eval/log.log`.
+- `eval:corpus` hydrates the real-repository corpus and runs the same posture
+  against it. This is the corpus the headline recall baseline is measured on.
+- `eval:corpus:hydrate` performs only the hydration, which costs no provider
+  spend, so a corpus can be refreshed or repaired without running a review.
+
+The `eval:cheap*`, `eval:benchmark:baseline`, `eval:semantic` and related scripts
+this section once required were removed, and a committed test asserts they stay
+removed. The requirement is recorded here as withdrawn rather than deleted,
+because the spec previously mandated scripts whose absence was simultaneously
+enforced by a test — a contradiction that survived because nothing checked the
+two against each other.
 
 `eval-report.json` must also include deterministic metric groups for human and
 machine comparison:
