@@ -318,6 +318,13 @@ const checkoutCase = async (
   const workTreeDirectory = path.join(input.caseDirectory, 'repo')
   const gitDirectory = path.join(input.caseDirectory, 'git')
 
+  // Every case is built from an empty directory. `git init` is idempotent but
+  // `git remote add` is not, so re-running against leftover material fails with
+  // "remote origin already exists" — and a directory left by an interrupted
+  // hydration reads as absent rather than stale, because it has neither a
+  // resolvable HEAD nor a slice. Rebuilding unconditionally also discards
+  // partial fetches, which cannot be trusted to describe the commit they claim.
+  await rm(input.caseDirectory, { recursive: true, force: true })
   await mkdir(workTreeDirectory, { recursive: true })
   await input.runGit({
     args: gitInitArgs({ gitDirectory, workTreeDirectory }),
@@ -546,12 +553,8 @@ export const hydrateRealRepoCorpus = async (
       continue
     }
 
-    // A stale case is repaired by rebuilding it: a partially fetched checkout
-    // cannot be trusted to describe the commit it claims.
-    if (state === 'stale') {
-      await rm(caseDirectory, { recursive: true, force: true })
-    }
-
+    // A stale case is repaired by rebuilding it; `checkoutCase` clears the case
+    // directory for every case it builds, so no separate removal is needed here.
     options.log?.(
       `${state === 'stale' ? 'Repairing' : 'Hydrating'} ${corpusCase.id}`
     )

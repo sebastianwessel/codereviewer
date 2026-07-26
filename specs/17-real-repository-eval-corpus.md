@@ -31,7 +31,12 @@ callee body, an interface, or a constructor in an unchanged file is reachable.
   rather than silently accepted; and a checkout whose case the manifest no longer
   defines is pruned and reported. An evaluation loads a slice root by directory, so
   a leftover checkout from a dropped case would otherwise re-enter the next
-  measurement as a case nobody curates. Pruning is skipped when case filters are in
+  measurement as a case nobody curates. A case is always built from an empty
+  directory, because a case left behind by an interrupted hydration has neither a
+  resolvable HEAD nor a slice and so reads as absent rather than mismatched, while
+  still holding a git directory and a configured remote; building over it fails on
+  git operations that are not idempotent, and any partial fetch it holds cannot be
+  trusted to describe the commit it claims. Pruning is skipped when case filters are in
   effect, because the unselected cases are legitimately absent from that run. Fetches are depth-limited to the pinned commit so a
   case costs one commit, not a repository history.
 - Hydrated cases are consumed through the existing evaluation fixture contract, so
@@ -88,8 +93,10 @@ manifest data, so a violation fails loading instead of silently inflating a scor
 
 - Unit: manifest schema validation, including each anti-contamination rule (cutoff
   violation, non-permissive license, answer-key leakage, malformed commit sha);
-  case selection and filtering; the diff fingerprint; and the pure helpers that
-  build the git argument vectors and check checkout integrity.
+  case selection and filtering; the diff fingerprint; the repair and
+  interrupted-hydration rebuild paths, exercised through a scripted git that
+  reproduces which git operations are idempotent and which are not; and the pure
+  helpers that build the git argument vectors and check checkout integrity.
 - No test performs a network fetch, and no test runs a provider call. Hydration
   against upstream is an explicit, operator-run step.
 
@@ -98,7 +105,8 @@ manifest data, so a violation fails loading instead of silently inflating a scor
 - A hydrated case yields a working tree containing the repository's unchanged files,
   not only the reviewed paths, so a cross-file defect is reachable from the review.
 - Re-running hydration for an already-hydrated, integral case performs no refetch;
-  a checkout that does not match its pinned commit is repaired.
+  a checkout that does not match its pinned commit is repaired, and a case left
+  behind by an interrupted hydration is rebuilt rather than aborting the run.
 - Manifest data that violates the temporal cutoff, the license allowlist, or the
   answer-key exclusion fails validation with a configuration error.
 - Cross-file recall reported on this corpus is a property of the engine: the

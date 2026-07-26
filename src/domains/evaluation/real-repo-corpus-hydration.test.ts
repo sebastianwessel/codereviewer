@@ -95,14 +95,50 @@ const createFakeGit = (
   options: {
     readonly upstreamParent?: string
     readonly diff?: string
+    readonly failFetchTimes?: number
   } = {}
 ): FakeGit => {
   const checkedOutWorkTrees = new Set<string>()
+  const workTreesWithOrigin = new Set<string>()
   const calls: (readonly string[])[] = []
+  let remainingFetchFailures = options.failFetchTimes ?? 0
   const runGit: CorpusGitCommandRunner = async ({ args, cwd }) => {
     calls.push([...args])
 
     const subcommand = args.find((arg) => gitSubcommands.has(arg))
+
+    if (subcommand === 'init') {
+      const gitDirectory = args[args.indexOf('--separate-git-dir') + 1] ?? ''
+      const workTreeDirectory = args[args.length - 1] ?? ''
+
+      // `git init` is idempotent, so re-initialising an existing repository
+      // keeps its remotes and HEAD. Only a git directory that is genuinely
+      // gone yields a fresh repository.
+      if (!existsSync(gitDirectory)) {
+        workTreesWithOrigin.delete(workTreeDirectory)
+        checkedOutWorkTrees.delete(workTreeDirectory)
+      }
+
+      await mkdir(gitDirectory, { recursive: true })
+      return ''
+    }
+
+    if (subcommand === 'remote' && args.includes('add')) {
+      // Mirror real git: unlike `init`, `remote add` is NOT idempotent.
+      if (workTreesWithOrigin.has(cwd)) {
+        throw new Error(
+          'Command failed: git remote add origin\nerror: remote origin already exists.'
+        )
+      }
+
+      workTreesWithOrigin.add(cwd)
+      return ''
+    }
+
+    if (subcommand === 'fetch' && remainingFetchFailures > 0) {
+      remainingFetchFailures -= 1
+      throw new Error('Command failed: git fetch\nfatal: unable to access remote')
+    }
 
     if (subcommand === 'rev-parse') {
       if (args.includes('HEAD')) {
@@ -323,6 +359,37 @@ describe('real repository corpus hydration', () => {
     expect(
       fakeGit.calls.filter((call) => call.includes('fetch'))
     ).toHaveLength(1)
+  })
+
+  // An interrupted hydration leaves a case directory that has a git directory
+  // and an `origin` remote but no resolvable HEAD and no slice, so it reads as
+  // absent rather than stale. Re-running must rebuild it instead of failing on
+  // the non-idempotent `git remote add`.
+  test('rebuilds a case left behind by an interrupted hydration', async () => {
+    const fakeGit = createFakeGit({ failFetchTimes: 1 })
+
+    await expect(hydrate(fakeGit)).rejects.toThrow(/unable to access remote/)
+
+    const caseDirectory = path.join(
+      repositoryRoot,
+      outputSliceRoot,
+      'tenant-lookup-case'
+    )
+
+    expect(existsSync(path.join(caseDirectory, 'repo'))).toBe(true)
+    expect(existsSync(path.join(caseDirectory, 'slice.json'))).toBe(false)
+
+    const second = await hydrate(fakeGit)
+
+    expect(second.hydratedCaseCount).toBe(1)
+
+    const cases = await loadEvalSliceCasesFromRoot(
+      repositoryRoot,
+      outputSliceRoot
+    )
+
+    expect(cases).toHaveLength(1)
+    expect(cases[0]?.diff).toContain('func lookup(id string) *Row')
   })
 
   test('repairs a case whose slice lost its reviewed diff', async () => {
