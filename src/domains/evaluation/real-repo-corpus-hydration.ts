@@ -151,6 +151,7 @@ export const resolveCaseHydrationState = (input: {
   readonly headCommit: string | undefined
   readonly expectedParentCommit: string
   readonly sliceDiff: string | undefined
+  readonly sliceMatchesCaseDefinition: boolean
 }): CaseHydrationState => {
   if (input.headCommit === undefined && input.sliceDiff === undefined) {
     return 'absent'
@@ -158,7 +159,8 @@ export const resolveCaseHydrationState = (input: {
 
   return input.headCommit === input.expectedParentCommit &&
     input.sliceDiff !== undefined &&
-    input.sliceDiff.length > 0
+    input.sliceDiff.length > 0 &&
+    input.sliceMatchesCaseDefinition
     ? 'hydrated'
     : 'stale'
 }
@@ -274,18 +276,65 @@ const readOptionalText = async (
   }
 }
 
-const readSliceDiff = async (
+const readSlice = async (
   slicePath: string
-): Promise<string | undefined> => {
+): Promise<Record<string, unknown> | undefined> => {
   const text = await readOptionalText(slicePath)
 
   if (text === undefined) {
     return undefined
   }
 
-  const slice = JSON.parse(text) as Record<string, unknown>
+  try {
+    return JSON.parse(text) as Record<string, unknown>
+  } catch {
+    // An unreadable slice is rebuilt, exactly like a missing one.
+    return undefined
+  }
+}
 
-  return typeof slice.diff === 'string' ? slice.diff : undefined
+const sliceDiffOf = (
+  slice: Record<string, unknown> | undefined
+): string | undefined =>
+  typeof slice?.diff === 'string' ? slice.diff : undefined
+
+// A hydrated slice carries a copy of the case definition, so editing the
+// manifest leaves every existing slice describing the previous one. Comparing
+// the stored slice against the definition it would be built from now is what
+// makes a manifest edit take effect: without it, expected findings added to a
+// curated case are silently absent from the next measurement, and the run
+// reports a recall computed against a stale answer key.
+const sliceMatchesCaseDefinition = (
+  input: {
+    readonly storedSlice: Record<string, unknown> | undefined
+    readonly corpusCase: RealRepoCorpusCase
+    readonly datasetId: string
+  }
+): boolean => {
+  const storedDiff = sliceDiffOf(input.storedSlice)
+  const storedChangedFiles = input.storedSlice?.changedFiles
+
+  if (storedDiff === undefined || !Array.isArray(storedChangedFiles)) {
+    return false
+  }
+
+  try {
+    return (
+      JSON.stringify(input.storedSlice) ===
+      JSON.stringify(
+        buildRealRepoSlice({
+          corpusCase: input.corpusCase,
+          datasetId: input.datasetId,
+          diff: storedDiff,
+          changedFiles: storedChangedFiles as readonly string[]
+        })
+      )
+    )
+  } catch {
+    // A definition the builder now rejects (a reviewed path that no longer
+    // covers the stored diff, say) cannot be reused either.
+    return false
+  }
 }
 
 const readHeadCommit = async (
@@ -509,8 +558,19 @@ export const hydrateRealRepoCorpus = async (
     outputSliceRoot
   )
 
+  // Forcing removes only what this run rebuilds. Clearing the whole root while
+  // case filters are in effect would destroy the checkouts of every unselected
+  // case, which the run then does not restore — the same reason pruning is
+  // skipped for a filtered run.
   if (options.force === true) {
-    await rm(outputRoot, { recursive: true, force: true })
+    await Promise.all(
+      selectedCases.map(async (corpusCase) =>
+        rm(path.join(outputRoot, corpusCase.id), {
+          recursive: true,
+          force: true
+        })
+      )
+    )
   }
 
   await mkdir(outputRoot, { recursive: true })
@@ -525,14 +585,20 @@ export const hydrateRealRepoCorpus = async (
   for (const corpusCase of selectedCases) {
     const caseDirectory = path.join(outputRoot, corpusCase.id)
     const slicePath = path.join(caseDirectory, 'slice.json')
-    const [headCommit, sliceDiff] = await Promise.all([
+    const [headCommit, storedSlice] = await Promise.all([
       readHeadCommit({
         runGit,
         workTreeDirectory: path.join(caseDirectory, 'repo')
       }),
-      readSliceDiff(slicePath)
+      readSlice(slicePath)
     ])
+    const sliceDiff = sliceDiffOf(storedSlice)
     const state = resolveCaseHydrationState({
+      sliceMatchesCaseDefinition: sliceMatchesCaseDefinition({
+        storedSlice,
+        corpusCase,
+        datasetId: manifest.datasetId
+      }),
       headCommit,
       expectedParentCommit: corpusCase.parentCommit,
       sliceDiff

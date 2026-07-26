@@ -263,7 +263,8 @@ describe('case hydration state', () => {
       resolveCaseHydrationState({
         headCommit: undefined,
         expectedParentCommit: parentCommit,
-        sliceDiff: undefined
+        sliceDiff: undefined,
+        sliceMatchesCaseDefinition: false
       })
     ).toBe('absent')
   })
@@ -273,7 +274,8 @@ describe('case hydration state', () => {
       resolveCaseHydrationState({
         headCommit: parentCommit,
         expectedParentCommit: parentCommit,
-        sliceDiff: reviewedDiff
+        sliceDiff: reviewedDiff,
+        sliceMatchesCaseDefinition: true
       })
     ).toBe('hydrated')
   })
@@ -283,14 +285,27 @@ describe('case hydration state', () => {
       resolveCaseHydrationState({
         headCommit: 'c'.repeat(40),
         expectedParentCommit: parentCommit,
-        sliceDiff: reviewedDiff
+        sliceDiff: reviewedDiff,
+        sliceMatchesCaseDefinition: true
       })
     ).toBe('stale')
     expect(
       resolveCaseHydrationState({
         headCommit: parentCommit,
         expectedParentCommit: parentCommit,
-        sliceDiff: ''
+        sliceDiff: '',
+        sliceMatchesCaseDefinition: true
+      })
+    ).toBe('stale')
+  })
+
+  test('reports a stale case when the slice no longer matches its definition', () => {
+    expect(
+      resolveCaseHydrationState({
+        headCommit: parentCommit,
+        expectedParentCommit: parentCommit,
+        sliceDiff: reviewedDiff,
+        sliceMatchesCaseDefinition: false
       })
     ).toBe('stale')
   })
@@ -390,6 +405,65 @@ describe('real repository corpus hydration', () => {
 
     expect(cases).toHaveLength(1)
     expect(cases[0]?.diff).toContain('func lookup(id string) *Row')
+  })
+
+  // A curator who adds an expected finding to an existing case must see it in
+  // the next measurement. Reusing the slice on checkout integrity alone scores
+  // the run against the answer key the slice was built with, not the one the
+  // manifest now declares.
+  test('rebuilds a cached case whose manifest definition changed', async () => {
+    const fakeGit = createFakeGit()
+
+    await hydrate(fakeGit)
+    expect(
+      (await readHydratedSlice('tenant-lookup-case')).expectedFindings
+    ).toHaveLength(1)
+
+    const [baseCase] = manifestFixture.cases
+    const extendedCase = {
+      ...baseCase,
+      expectedFindings: [
+        ...(baseCase?.expectedFindings ?? []),
+        {
+          category: 'bug',
+          severity: 'high',
+          path: 'pkg/service.go',
+          matchMode: 'path-semantic',
+          semanticSummary: 'The caller now passes an unscoped identifier.'
+        }
+      ]
+    }
+
+    await writeFile(
+      path.join(repositoryRoot, manifestRelativePath),
+      JSON.stringify({ ...manifestFixture, cases: [extendedCase] })
+    )
+
+    const second = await hydrate(fakeGit)
+
+    expect(second.cachedCaseCount).toBe(0)
+    expect(second.repairedCaseCount).toBe(1)
+    expect(
+      (await readHydratedSlice('tenant-lookup-case')).expectedFindings
+    ).toHaveLength(2)
+  })
+
+  test('forcing a filtered run keeps the checkouts it does not rebuild', async () => {
+    const fakeGit = createFakeGit()
+
+    await hydrate(fakeGit)
+
+    const untouched = path.join(repositoryRoot, outputSliceRoot, 'other-case')
+
+    await mkdir(untouched, { recursive: true })
+    await writeFile(path.join(untouched, 'marker'), 'keep')
+
+    await hydrate(fakeGit, {
+      force: true,
+      caseFilters: ['tenant-lookup-case']
+    })
+
+    expect(existsSync(path.join(untouched, 'marker'))).toBe(true)
   })
 
   test('repairs a case whose slice lost its reviewed diff', async () => {
