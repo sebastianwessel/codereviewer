@@ -77,6 +77,40 @@ something to leave as an observation.
 
 ---
 
+## Wave 1.1 cache probe — RUN, and it re-prices the recall wave
+
+Executed 2026-07-26 for about $0.36. Two identical single-case runs, back to back,
+`gpt-5.3-codex` on the Responses API: **0 cached input tokens on both**, against
+67,632 and 67,493 input tokens.
+
+The telemetry was checked before concluding, because "the metric is broken" and
+"caching is off" look identical from the outside. The harness does read
+`usage.input_tokens_details.cached_tokens`, and the usage recorder does sum it.
+The provider reported zero.
+
+**Caching is not reachable from this stack as configured.** The diagnosis is not
+finished — the adapter sends neither `prompt_cache_key` nor `store`, and OpenAI
+uses that key to route a request to a machine holding the cache, so that is the
+first thing to try if this is ever revisited. Organisation-level disablement and
+`json_schema` participating in prefix identity are not ruled out.
+
+**What this settles.** Wave 3.1 was priced at +5-15% if caching worked and
++40-50% if not. It is **+40-50%, permanently, per review**. Set against the
+verified union ceiling of 66.7% — of which almost nothing is the multi-defect
+class — the honest question is no longer "does k-sampling work" but "is up to
++5-10pp recall worth a permanent ~45% cost increase". That question can be
+answered before spending the $50-70 the experiment itself costs, and the answer
+may be no.
+
+**An unplanned second result.** Judge spend is much larger than the 10-30% this
+plan assumed, at least on small runs: scoring cost $0.0785 against a review cost
+of $0.1291 on the first run (61%) and $0.0523 against $0.1283 on the second
+(41%). Judge cost scales with findings rather than file size, so the share falls
+on larger corpora — but every per-case cost figure published before today
+understated the true total by more than anyone thought.
+
+---
+
 ## Status against HEAD — updated after execution
 
 Audited against the code rather than from memory. **Wave 0 is substantially done and
