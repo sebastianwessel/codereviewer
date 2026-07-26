@@ -214,6 +214,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "rejectionReasonCounts": {},
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -386,6 +387,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "rejectionReasonCounts": {},
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -557,6 +559,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "rejectionReasonCounts": {},
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -728,6 +731,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "rejectionReasonCounts": {},
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -900,6 +904,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "refutationFalseNegativeCount": 0,
         "refutationFalsePositiveCount": 0,
+        "rejectionReasonCounts": {},
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -1065,6 +1070,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     },
     "refutationFalseNegativeCount": 0,
     "refutationFalsePositiveCount": 0,
+    "rejectionReasonCounts": {},
     "securityContextDepthCounts": {
       "analyzer-path-dependent": {
         "expected": 0,
@@ -1270,6 +1276,7 @@ Fixtures: 2
 | Artifact-only matched | 0 |
 | Artifact-only false positives | 0 |
 | Trusted deterministic findings | 0 |
+| Rejected candidates by reason | none |
 | Refutation false negatives (upper bound) | 0 |
 | Refutation false positives | 0 |
 | Fix judgment accuracy | 0.0% (0 judged) |

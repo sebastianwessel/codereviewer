@@ -628,6 +628,18 @@ const buildMetricCase = (
       (refutation) => refutation.verdict === 'proved'
     ).length,
     rejectedFindingCount: rejectedFindings.length,
+    // Why candidates were dropped, tallied by reason. Without this an archived run
+    // cannot answer whether the admission gate discarded a candidate before anyone
+    // could observe it -- a question that came up when the severity floor was
+    // suspected of hiding low-severity findings, and which no stored artifact
+    // could settle in either direction.
+    rejectionReasonCounts: rejectedFindings.reduce<Record<string, number>>(
+      (counts, rejected) => ({
+        ...counts,
+        [rejected.reason]: (counts[rejected.reason] ?? 0) + 1
+      }),
+      {}
+    ),
     ...fixLaneCaseTallies({
       fixOutcomes: input.output.fixOutcomes,
       matchResult: input.matchResult,

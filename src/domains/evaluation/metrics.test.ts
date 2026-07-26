@@ -36,6 +36,7 @@ const caseResult = (
   trustedDeterministicFindingCount: 1,
   provedRefutationCount: 0,
   rejectedFindingCount: 0,
+  rejectionReasonCounts: {},
   fixJudgmentAgreementCount: 0,
   fixJudgedLabeledCount: 0,
   fixFalsePositiveDetectedCount: 0,
@@ -375,6 +376,28 @@ describe('eval metrics', () => {
 
     // Unmatched expected = 2 - 1 = 1 bounds the 3 rejected findings.
     expect(metrics.refutationFalseNegativeCount).toBe(1)
+  })
+
+  // The floor hypothesis could not be settled from any archived run because
+  // rejections were never persisted: "did the gate discard a low-severity
+  // candidate before anyone could see it?" had no stored answer in either
+  // direction.
+  test('tallies what the admission gate discarded, by reason', () => {
+    const metrics = calculateEvalMetrics([
+      caseResult({
+        rejectedFindingCount: 3,
+        rejectionReasonCounts: { 'below-threshold': 2, duplicate: 1 }
+      }),
+      caseResult({
+        rejectedFindingCount: 1,
+        rejectionReasonCounts: { 'below-threshold': 1 }
+      })
+    ])
+
+    expect(metrics.rejectionReasonCounts).toEqual({
+      'below-threshold': 3,
+      duplicate: 1
+    })
   })
 
   test('counts a proved candidate as a refuter false positive only when it was not a real defect', () => {

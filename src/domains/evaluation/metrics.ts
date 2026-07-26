@@ -177,6 +177,9 @@ export const EvalMetricsSchema = z.strictObject({
   artifactOnlyMatchedFindingCount: z.int().min(0).default(0),
   artifactOnlyFalsePositiveCount: z.int().min(0).default(0),
   trustedDeterministicFindingCount: z.int().min(0).default(0),
+  // Rejections by reason, aggregated. Shows what the admission gate discarded
+  // before anything downstream could see it.
+  rejectionReasonCounts: z.record(z.string(), z.int().min(0)).default({}),
   refutationFalseNegativeCount: z.int().min(0).default(0),
   refutationFalsePositiveCount: z.int().min(0).default(0),
   // Fix-lane accuracy metrics (spec 12). All are measured over REAL runs of the
@@ -303,6 +306,7 @@ export type EvalMetricCaseResult = {
   // Rejected/demoted candidates. Used to derive the refutation false-negative
   // count (expected findings demoted without a matching admitted finding).
   readonly rejectedFindingCount: number
+  readonly rejectionReasonCounts: Readonly<Record<string, number>>
   // Fix-lane (spec 12) per-case tallies, all derived from real fix-lane outcomes
   // joined to the match result. See EvalMetricsSchema for the aggregate formulas.
   // Numerator/denominator of fixJudgmentAccuracy.
@@ -644,6 +648,18 @@ export const calculateEvalMetrics = (
     artifactOnlyMatchedFindingCount: totalArtifactOnlyMatchedFindingCount,
     artifactOnlyFalsePositiveCount: totalArtifactOnlyFalsePositiveCount,
     trustedDeterministicFindingCount: totalTrustedDeterministicFindingCount,
+    rejectionReasonCounts: caseResults.reduce<Record<string, number>>(
+      (totals, result) => {
+        for (const [reason, count] of Object.entries(
+          result.rejectionReasonCounts
+        )) {
+          totals[reason] = (totals[reason] ?? 0) + count
+        }
+
+        return totals
+      },
+      {}
+    ),
     // UPPER BOUND, not a measurement: expected findings left unmatched in a case
     // that also rejected something. Whether the rejected candidate was actually
     // the missing expectation is not checked, because establishing that would

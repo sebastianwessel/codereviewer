@@ -135,6 +135,7 @@ describe('eval report rendering', () => {
         ],
         metrics: {
           parseValidity: 1,
+          rejectionReasonCounts: {},
           lineCheckCount: 0,
           severityCheckCount: 0,
           recall: 1,
