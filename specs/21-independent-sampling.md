@@ -9,11 +9,28 @@ Recover the recall that run-to-run variance currently throws away, and reduce th
 variance itself, by running discovery independently more than once and taking the
 union of what it finds.
 
-## What Our Own Data Prices
+## What Our Own Data Prices — MEASURED AND FALSIFIED, 2026-07-27
 
-Single-run recall on the real-repository corpus is ~46%. The **union across runs
-reaches ~67%**. That ~20pp gap is not a capability limit — it is the same defect
-being found in one run and missed in the next.
+This spec was written on the premise that single-run recall of ~46% sat against a
+**union ceiling of ~67%**, leaving ~20pp of run-to-run variance to harvest. That
+figure came from a different corpus and configuration.
+
+Measured on this corpus: single-run mean **46.3%**, post-hoc union of three runs
+**50.0%**, k=3 sampling inside one run **48.3%**.
+
+**The harvestable variance is about 4pp, not 20pp, and k=3 already captures most
+of it.** Sampling works as designed; the prize does not exist. No value of k
+changes that, because the ceiling is the limit.
+
+The reason is visible in the same run: the semantic merge fired 78 times per run,
+yet adjusted precision still fell from 0.819 to 0.628 and genuine false positives
+nearly tripled. The extra candidates are **distinct wrong findings**, not
+restatements — independent samples disagree about what is wrong rather than
+agreeing about a defect one of them missed. Run-to-run variance here is mostly
+noise, not near-misses.
+
+The capability is therefore removed. What follows is retained as the record of why
+it was tried and what its measurement established.
 
 The same variance makes results wobble between 43.8% and 48.8% across identical
 configurations. **This is the only proposed change that addresses recall and

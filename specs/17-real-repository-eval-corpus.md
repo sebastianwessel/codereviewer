@@ -189,6 +189,29 @@ be reported as one. The pilot's only job is to establish whether the mechanism
 exists — whether repairing one defect lets a second, already inside the diff,
 surface — before fixtures are built to measure it.
 
+### Required Control Arm
+
+A convergence measurement MUST include a **diff-narrowing control**: the same
+round-2 diff with the first defect **left unrepaired**, merely removed from the
+reviewed scope. Without it, the measurement cannot distinguish repair from scope
+change.
+
+This is not hypothetical. The 2026-07-27 pilot measured a second defect at 0/9 in
+round 1, 6/6 after the first was repaired, and **5/6 with the first defect still
+present and only its file removed from the diff**. Round two and the control were
+indistinguishable: the reviewer reports roughly one defect per reviewed diff and
+re-aims when the diff changes, rather than being blocked by the first defect.
+
+A fixture set without this control would report the full effect as convergence
+and overstate what the iterative loop delivers.
+
+### Round-One Rates Must Be Re-Measured, Not Read From Archives
+
+A round-one hit rate used as a convergence denominator MUST come from runs made
+against the same build as the later rounds. In the pilot, three archived runs gave
+0/3 for an expectation that six fresh round-one runs found twice; using the
+archive alone would have produced a false positive.
+
 Closing that gap requires new cases in which **one diff introduces several
 defects**. Upstream fix commits that repair more than one defect at once are the
 natural source: reversed, they present as a change introducing several defects,
