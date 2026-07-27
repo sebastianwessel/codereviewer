@@ -2,9 +2,10 @@ import { z } from 'zod'
 
 export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'info'])
 
-// Ordinal ranking of severities, low to high. Exported so severity-floor checks
-// (admission threshold, the fix lane's `minSeverity` gate) share one ordering
-// instead of re-deriving it.
+// Ordinal ranking of severities, low to high. Kept private and reached only
+// through the two helpers below, so every consumer — admission's severity floor,
+// the fix lane's `minSeverity` gate, discovery's merge ordering, the report sort
+// — shares one ordering instead of re-deriving it.
 const severityOrder: Readonly<Record<z.infer<typeof SeveritySchema>, number>> = {
   info: 0,
   low: 1,
@@ -20,7 +21,8 @@ export const severityMeetsThreshold = (
 
 // Comparator that sorts the most severe first, derived from the same ordering as
 // the threshold check above so a ranking and a floor can never disagree about
-// which of two severities is higher.
+// which of two severities is higher. Note the inversion: a higher severity yields
+// a negative result, which is what puts `critical` ahead of `info` in a sort.
 export const compareSeverityDescending = (
   left: z.infer<typeof SeveritySchema>,
   right: z.infer<typeof SeveritySchema>

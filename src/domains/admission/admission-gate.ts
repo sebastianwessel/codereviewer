@@ -9,6 +9,7 @@ import {
   FixEditSchema,
   FixProposalSchema,
   RejectedFindingSchema,
+  severityMeetsThreshold,
   SeveritySchema,
   TaskIdSchema,
   type AdmittedFinding,
@@ -104,14 +105,6 @@ export type AdmissionResult =
       readonly rejectedFinding: RejectedFinding
       readonly admittedFinding?: never
     }
-
-const severityRank: Readonly<Record<Severity, number>> = {
-  info: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-  critical: 4
-}
 
 const normalizeText = (value: string): string =>
   value.toLowerCase().replace(/[^a-z0-9]+/gu, ' ').trim()
@@ -376,7 +369,7 @@ const reporterEligibilityFor = (
 ): ReporterEligibility =>
   lineRangeIsValid &&
   diffRangeIsInlineEligible &&
-  severityRank[severity] >= severityRank[threshold]
+  severityMeetsThreshold(severity, threshold)
     ? 'inline'
     : 'summary-only'
 
@@ -575,7 +568,7 @@ export const admitCandidate = (
 
   if (
     severityFloor !== undefined &&
-    severityRank[candidate.severity] < severityRank[severityFloor]
+    !severityMeetsThreshold(candidate.severity, severityFloor)
   ) {
     return reject(
       'below-threshold',

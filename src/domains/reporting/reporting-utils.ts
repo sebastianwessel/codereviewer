@@ -1,22 +1,14 @@
 import { sha256 } from '../../shared/hash/hash.js'
 import {
+  compareSeverityDescending,
   ReportArtifactSchema,
   ReviewReportSchema,
   type AdmittedFinding,
   type ReportArtifact,
   type ReportFormat,
-  type ReviewReport,
-  type Severity
+  type ReviewReport
 } from '../../shared/contracts/index.js'
 import { redactText } from '../../shared/redaction/redactor.js'
-
-const severityOrder: Readonly<Record<Severity, number>> = {
-  critical: 0,
-  high: 1,
-  medium: 2,
-  low: 3,
-  info: 4
-}
 
 export { sha256 }
 
@@ -27,7 +19,7 @@ export const sortAdmittedFindings = (
   findings: readonly AdmittedFinding[]
 ): readonly AdmittedFinding[] =>
   [...findings].sort((left, right) => {
-    const severity = severityOrder[left.severity] - severityOrder[right.severity]
+    const severity = compareSeverityDescending(left.severity, right.severity)
 
     if (severity !== 0) {
       return severity
