@@ -1928,10 +1928,15 @@ describe('review workflow', () => {
     )
     expect(provider.requests).toHaveLength(2)
     expect(result.rejectedFindings).toEqual([])
+    // The finding is reported on line 6 of a file whose reviewed hunk covers
+    // lines 1-10, so admission can prove the line was changed and the finding is
+    // anchorable as an inline review comment. Whole-file locations were treated
+    // as never anchorable before, which is why this whole surface produced zero
+    // drafts; admission is unchanged in what it admits, only in how it presents.
     expect(result.admittedFindings).toEqual([
       expect.objectContaining({
         title: 'Backup code can be consumed twice by concurrent logins',
-        reporterEligibility: 'summary-only'
+        reporterEligibility: 'inline'
       })
     ])
 

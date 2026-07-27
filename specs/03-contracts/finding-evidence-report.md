@@ -71,10 +71,14 @@ old-side findings that otherwise pass admission must be `summary-only` or
 `artifact-only`.
 
 When a run has a `DiffMap[]`, `reporterEligibility = inline` additionally
-requires the new-side finding line range to overlap a changed new-side diff
-hunk for the same path. Findings on reviewed source lines outside changed hunks
-may still be admitted, but they must be `summary-only` or `artifact-only` so
-review-comment drafts cannot target lines a review platform cannot anchor.
+requires the finding to be anchorable on a changed line for the same path: a
+`side = "new"` finding must have a line range that overlaps a changed new-side
+hunk, and a `side = "file"` finding must have a `startLine` that falls inside
+one. A `side = "file"` finding is inline-eligible only through that hunk test,
+so a run with no diff ranges produces no inline whole-file findings. Findings on
+reviewed source lines outside changed hunks may still be admitted, but they must
+be `summary-only` or `artifact-only` so review-comment drafts cannot target
+lines a review platform cannot anchor.
 
 Provider task and validation packets may include diff-range `changeKind`
 metadata. `changeKind = "new"` means the matching new-side hunk is introduced
@@ -275,7 +279,7 @@ All `CandidateFinding` fields plus:
 | `admissionStatus` | yes | `"admitted"` | Fixed value. |
 | `admittedAt` | yes | ISO datetime | UTC. |
 | `admissionEvidenceIds` | yes | non-empty string[] | Evidence used by gate. |
-| `reporterEligibility` | yes | `ReporterEligibility` | Inline only when diff line is valid and severity is at least configured inline threshold. |
+| `reporterEligibility` | yes | `ReporterEligibility` | Inline only when the location anchors to a changed new-side line (see the diff-map rule above) and severity is at least the configured inline threshold. |
 | `provenance` | yes | `FindingProvenance` | Model/signal/config versions. |
 | `refutationId` | conditional | `refutationId` | Required for model-origin admitted findings; references the proved refutation. |
 | `baselineStatus` | yes | `BaselineStatus` | `existing` when matched against the configured baseline, `unknown` when a baseline is explicitly configured but its file is missing/indeterminate, otherwise `new`. |
@@ -481,7 +485,10 @@ the neutral contract is summarized here.
 Comment eligibility rules:
 
 - only admitted findings with `reporterEligibility = inline` are rendered;
-- only `location.side = "new"` is rendered;
+- `location.side = "old"` is never rendered; `"new"` and `"file"` are, because
+  admission has already proved an inline-eligible location anchors to a changed
+  new-side line. Re-testing the side here would drop every model-origin finding,
+  since discovery stamps them all `side = "file"`;
 - `targetRange.endLine` is `location.endLine` when present, otherwise
   `location.startLine`; `targetRange.startLine` is `location.startLine`;
 - the body includes severity, category, title, description, finding ID, and fix

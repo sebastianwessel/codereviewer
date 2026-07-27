@@ -234,6 +234,108 @@ describe('admission gate', () => {
     expect(result.admittedFinding?.reporterEligibility).toBe('summary-only')
   })
 
+  // Every model-origin candidate is stamped `side: 'file'` by discovery, because
+  // the model reads line-numbered file content and cannot be trusted to say which
+  // side of the diff a line belongs to. Inline eligibility used to require
+  // `side === 'new'`, so no model finding could ever be inline and the whole
+  // review-comment surface produced zero drafts. Admission owns the diff ranges,
+  // so admission is the only place that can decide this without guessing.
+  describe('whole-file locations', () => {
+    const wholeFileCandidate: CandidateFinding = {
+      ...candidate,
+      location: {
+        path: 'src/app.ts',
+        startLine: 4,
+        side: 'file'
+      }
+    }
+
+    test('marks a whole-file finding inline when its line sits in a changed hunk', () => {
+      const result = admitCandidate({
+        candidate: wholeFileCandidate,
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy: diffBackedPolicy
+      })
+
+      expect(result.status).toBe('admitted')
+      expect(result.admittedFinding?.reporterEligibility).toBe('inline')
+    })
+
+    test('keeps a whole-file finding outside every changed hunk summary-only', () => {
+      const result = admitCandidate({
+        candidate: {
+          ...wholeFileCandidate,
+          location: { path: 'src/app.ts', startLine: 6, side: 'file' }
+        },
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy: diffBackedPolicy
+      })
+
+      // A real defect that a change merely exposes stays a reported finding; it
+      // just has no changed line a review comment could anchor to.
+      expect(result.status).toBe('admitted')
+      expect(result.admittedFinding?.reporterEligibility).toBe('summary-only')
+    })
+
+    test('still applies the inline severity threshold to whole-file findings', () => {
+      const result = admitCandidate({
+        candidate: { ...wholeFileCandidate, severity: 'medium' },
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy: diffBackedPolicy
+      })
+
+      expect(result.status).toBe('admitted')
+      expect(result.admittedFinding?.reporterEligibility).toBe('summary-only')
+    })
+
+    test('keeps whole-file findings summary-only when the run has no diff ranges', () => {
+      const result = admitCandidate({
+        candidate: wholeFileCandidate,
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy
+      })
+
+      // Without diff ranges nothing proves the line was changed, and a whole-file
+      // location carries no side of its own to fall back on.
+      expect(result.status).toBe('admitted')
+      expect(result.admittedFinding?.reporterEligibility).toBe('summary-only')
+    })
+
+    test('changes only presentation: the admitted finding is otherwise identical', () => {
+      const inHunk = admitCandidate({
+        candidate: wholeFileCandidate,
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy: diffBackedPolicy
+      })
+      const outsideHunk = admitCandidate({
+        candidate: wholeFileCandidate,
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        policy: {
+          ...policy,
+          reviewedDiffRanges: [{ path: 'src/app.ts', startLine: 9, endLine: 9 }]
+        }
+      })
+
+      expect(inHunk.admittedFinding?.reporterEligibility).toBe('inline')
+      expect(outsideHunk.admittedFinding?.reporterEligibility).toBe(
+        'summary-only'
+      )
+      // Identity, severity, evidence and fingerprint are untouched by the hunk
+      // test: inline eligibility decides how a finding is presented, never
+      // whether it is admitted.
+      expect({
+        ...inHunk.admittedFinding,
+        reporterEligibility: 'summary-only' as const
+      }).toEqual(outsideHunk.admittedFinding)
+    })
+  })
+
   test('rejects new-side candidates outside reviewed source line ranges', () => {
     const result = admitCandidate({
       candidate: {

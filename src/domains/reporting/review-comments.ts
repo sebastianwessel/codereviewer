@@ -99,12 +99,19 @@ const bodyFor = (finding: AdmittedFinding): string => {
   return lines.join('\n').slice(0, REVIEW_COMMENT_BODY_MAX)
 }
 
+// Inline eligibility is decided once, in admission, which is the only stage that
+// holds the reviewed diff ranges. This layer used to additionally require
+// `side === 'new'`; combined with discovery stamping every model-origin finding
+// `side: 'file'`, that second gate meant no model finding could ever become a
+// draft and the surface produced nothing on real runs. What remains here is the
+// one claim this layer can check on its own: an old-side location names a line
+// that no longer exists on the new side, so it can never be anchored.
 const draftFor = (
   finding: AdmittedFinding
 ): ReviewCommentDraft | undefined => {
   if (
     finding.reporterEligibility !== 'inline' ||
-    finding.location.side !== 'new'
+    finding.location.side === 'old'
   ) {
     return undefined
   }

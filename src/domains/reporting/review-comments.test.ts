@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'vitest'
 import { ReviewCommentDraftSchema } from '../../shared/contracts/index.js'
+import {
+  admitCandidate,
+  type AdmissionPolicy,
+  type CandidateFinding
+} from '../admission/index.js'
 import { createReportFixture } from './reporting-fixture.js'
+import { renderReviewComments } from './review-comment-renderers.js'
 import { buildReviewCommentDrafts } from './review-comments.js'
 
 describe('neutral review-comment drafts', () => {
@@ -183,5 +189,133 @@ describe('neutral review-comment drafts', () => {
     const body = drafts[0]!.body
     expect(body).not.toContain('```')
     expect(body).not.toContain('](javascript:')
+  })
+
+  test('drafts a whole-file finding that admission marked inline', () => {
+    const report = createReportFixture()
+    const finding = report.admittedFindings[0]!
+    const drafts = buildReviewCommentDrafts({
+      ...report,
+      admittedFindings: [
+        {
+          ...finding,
+          // Model-origin findings carry `side: 'file'`; admission decides whether
+          // the line sits in a changed hunk, and this layer must honour that
+          // decision instead of dropping every non-`new` location.
+          location: { path: 'src/app.ts', startLine: 4, side: 'file' }
+        }
+      ]
+    })
+
+    expect(drafts).toHaveLength(1)
+    expect(drafts[0]).toMatchObject({
+      path: 'src/app.ts',
+      targetRange: { startLine: 4, endLine: 4 }
+    })
+  })
+})
+
+// This is the assertion that would have caught the review-comment surface
+// shipping at zero: every model-origin finding was stamped `side: 'file'`, which
+// no admitted finding could turn into an inline draft, so the whole feature
+// produced nothing on real runs while every layer's own unit tests passed on
+// hand-written `side: 'new'` fixtures.
+describe('model-origin finding to platform review comment', () => {
+  const modelCandidate: CandidateFinding = {
+    id: 'cand_model1',
+    taskId: 'task_model1',
+    category: 'bug',
+    severity: 'high',
+    title: 'Incorrect return branch',
+    description: 'The changed branch can return an incorrect value.',
+    // Exactly what `mapCandidate` in holistic discovery produces: a whole-file
+    // location, because the model read line-numbered file content.
+    location: { path: 'src/app.ts', startLine: 4, side: 'file' },
+    evidenceIds: ['ev_diff1'],
+    proposedBy: 'review-agent',
+    fixProposal: {
+      summary: 'Return the computed value from the changed branch.',
+      evidenceIds: ['ev_diff1'],
+      safety: 'manual-review',
+      edits: [
+        {
+          path: 'src/app.ts',
+          startLine: 4,
+          endLine: 4,
+          replacement: 'return computedValue'
+        }
+      ]
+    }
+  }
+
+  const policy: AdmissionPolicy = {
+    reviewedPaths: ['src/app.ts'],
+    reviewedLineRanges: [{ path: 'src/app.ts', startLine: 1, endLine: 20 }],
+    reviewedDiffRanges: [{ path: 'src/app.ts', startLine: 3, endLine: 6 }],
+    minimumSeverity: 'low',
+    inlineSeverityThreshold: 'high',
+    provenance: {
+      reviewer: 'review-agent',
+      modelProvider: 'openai',
+      modelName: 'gpt-5-mini',
+      instructionHashes: [],
+      skillHashes: [],
+      signalVersions: { typescript: '6.0.3' },
+      configHash: '1'.repeat(64)
+    },
+    admittedAt: '2026-06-20T00:00:00.000Z'
+  }
+
+  const draftsForRun = (): ReturnType<typeof buildReviewCommentDrafts> => {
+    const report = createReportFixture()
+    const admission = admitCandidate({
+      candidate: modelCandidate,
+      evidence: report.evidence,
+      existingAdmittedFindings: [],
+      policy
+    })
+
+    expect(admission.status).toBe('admitted')
+
+    return buildReviewCommentDrafts({
+      ...report,
+      admittedFindings: [admission.admittedFinding!],
+      qualityGate: {
+        ...report.qualityGate,
+        failingFindingIds: []
+      }
+    })
+  }
+
+  test('produces one neutral draft with a structured suggestion', () => {
+    const drafts = draftsForRun()
+
+    expect(drafts).toHaveLength(1)
+    expect(drafts[0]).toMatchObject({
+      path: 'src/app.ts',
+      targetRange: { startLine: 4, endLine: 4 },
+      suggestion: { replacement: 'return computedValue' }
+    })
+  })
+
+  test('renders on every comment platform with its own suggestion syntax', () => {
+    const drafts = draftsForRun()
+
+    const [github] = renderReviewComments(drafts, 'github')
+    expect(github).toMatchObject({ line: 4, side: 'RIGHT' })
+    expect(github?.body).toContain('```suggestion\nreturn computedValue\n```')
+
+    const [gitlab] = renderReviewComments(drafts, 'gitlab')
+    expect(gitlab).toMatchObject({ line: 4 })
+    expect(gitlab?.body).toContain(
+      '```suggestion:-0+0\nreturn computedValue\n```'
+    )
+
+    // Bitbucket has no one-click apply, so the replacement degrades to a plain
+    // fenced block.
+    const [bitbucket] = renderReviewComments(drafts, 'bitbucket')
+    expect(bitbucket).toMatchObject({ line: 4 })
+    expect(bitbucket?.body).toContain('```\nreturn computedValue\n```')
+    expect(bitbucket?.body).not.toContain('```suggestion')
   })
 })

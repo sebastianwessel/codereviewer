@@ -3,7 +3,9 @@ import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
+import type { AdmittedFinding } from '../../shared/contracts/index.js'
 import { loadEvalSliceCasesFromRoot } from './eval-fixture-loader.js'
+import { matchEvalFindings } from './eval-matcher.js'
 import {
   buildRealRepoSlice,
   diffPathsOutsideReviewedSet,
@@ -534,6 +536,92 @@ describe('real repository corpus hydration', () => {
 
     expect(forced.hydratedCaseCount).toBe(1)
     expect(forced.cachedCaseCount).toBe(0)
+  })
+})
+
+// `noFindingZoneFalsePositiveCount` is only worth reporting if a zone declared
+// in the corpus manifest actually reaches the matcher. The chain is manifest ->
+// buildRealRepoSlice -> slice.json -> loadEvalSliceCasesFromRoot -> matcher, and
+// every link is silent about a zone it drops, so it is asserted end to end here
+// rather than at any single hop.
+describe('no-finding zones declared in the corpus manifest', () => {
+  const zonedCase = {
+    ...manifestFixture.cases[0],
+    expectedNoFindingZones: [
+      {
+        path: 'pkg/service.go',
+        lineRange: [40, 50],
+        reason: 'Unchanged formatting helpers; nothing here is under review.'
+      }
+    ]
+  }
+
+  const zonedFinding = (
+    id: string,
+    startLine: number
+  ): AdmittedFinding =>
+    ({
+      id,
+      taskId: `task_${id}`,
+      category: 'bug',
+      severity: 'medium',
+      title: 'Reported defect',
+      description: 'A finding produced by the reviewer under measurement.',
+      location: { path: 'pkg/service.go', startLine, side: 'new' },
+      evidenceIds: [`ev_${id}`],
+      proposedBy: 'scripted-reviewer',
+      admissionStatus: 'admitted',
+      admittedAt: '2026-07-26T00:00:00.000Z',
+      admissionEvidenceIds: [`ev_${id}`],
+      reporterEligibility: 'inline',
+      provenance: {
+        reviewer: 'scripted-reviewer',
+        instructionHashes: [],
+        skillHashes: [],
+        signalVersions: {},
+        configHash: '1'.repeat(64)
+      },
+      baselineStatus: 'new',
+      fingerprints: [{ algorithm: 'test', value: id }]
+    }) as unknown as AdmittedFinding
+
+  test('carries a zone through hydration and counts only the finding inside it', async () => {
+    await writeFile(
+      path.join(repositoryRoot, manifestRelativePath),
+      JSON.stringify({ ...manifestFixture, cases: [zonedCase] })
+    )
+
+    await hydrate(createFakeGit())
+
+    const cases = await loadEvalSliceCasesFromRoot(
+      repositoryRoot,
+      outputSliceRoot
+    )
+    const evalCase = cases[0]
+
+    expect(evalCase?.expectedNoFindingZones).toEqual(
+      zonedCase.expectedNoFindingZones
+    )
+
+    const result = await matchEvalFindings({
+      evalCase: evalCase as Parameters<typeof matchEvalFindings>[0]['evalCase'],
+      admittedFindings: [
+        zonedFinding('find_inside_zone', 44),
+        zonedFinding('find_outside_zone', 8)
+      ],
+      judge: async () => ({
+        match: false,
+        reason: 'Describes something other than the expected defect.'
+      })
+    })
+
+    // Both findings are false positives; only the one landing in the declared
+    // clean region is a no-finding-zone hit.
+    expect(result.falsePositiveFindingIds).toEqual([
+      'find_inside_zone',
+      'find_outside_zone'
+    ])
+    expect(result.noFindingZoneFalsePositiveIds).toEqual(['find_inside_zone'])
   })
 })
 

@@ -204,6 +204,32 @@ one `caller` and one `cross-function`; only 2 are `local`.
 - Findings per case: 19 cases with one, 10 with two, 1 with three.
 - Expected-finding shape: all 42 are **`path-semantic`** (path required, no line
   gate) — though each still carries a `lineRange` field.
+- **10 no-finding zones**, one each on 10 cases, all line-ranged and all inside a
+  reviewed path (see below).
+
+### No-finding zones on this corpus
+
+Every case here contains a known defect, so without declared clean regions
+`noFindingZoneFalsePositiveCount` was pinned at zero and answered nothing about
+false alarms. Ten cases now declare one line-ranged zone each, over code that was
+read at the parent commit and is structurally unrelated to the case's defect:
+delegating interface accessors (`golang-jwt`), pure serializers (`werkzeug`),
+date-formatting lookup tables (`plug`), a future constructor (`tokio-util`), a
+`FromIterator` impl (`axum`), a declarative config schema (`apisix`), a builder's
+constructor/`build`/getter surface (`nestjs`), the one-line HTTP verb predicates
+(`rack`), three mutex-guarded readers (`puma`), and a nil-skipping name lister
+(`gin`).
+
+Two invariants are enforced by test (`real-repo-corpus.schema.test.ts`), because
+a wrong zone manufactures false "false positives" rather than measuring them:
+a zone must name a **reviewed path**, and must carry a **`lineRange`** that does
+**not overlap** any expected finding in the same file. Zones were additionally
+cross-checked against every archived `eval-report.json` so that no region the
+plausibility judge has credited as an `unlistedReal` defect is declared clean.
+
+These zones are a conservative negative control: they fire only if the reviewer
+starts flagging code that is plainly fine. They do not make this corpus a
+false-alarm benchmark — see the limitation below.
 
 ### Anti-contamination, enforced as validation
 
@@ -252,6 +278,13 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
   costs on the order of one to two dollars of provider spend.
 - **Held-out only** — there is currently no `dev` split to iterate on, so
   repeated tuning against this corpus erodes its held-out status.
+- **No fully clean case.** Every case carries a defect. The manifest schema
+  requires `expectedFindings` to be non-empty, and the case model is a fix
+  commit reviewed backwards from its parent, which has no meaning for a pull
+  request that fixes nothing. A defect-free upstream change therefore cannot be
+  expressed here today; the ten zones are a partial substitute measured on
+  regions, not on whole changes. What it would take is recorded in
+  `specs/17-real-repository-eval-corpus.md` §No-Finding Zones And Clean Cases.
 
 ---
 

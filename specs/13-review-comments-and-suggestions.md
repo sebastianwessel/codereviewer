@@ -26,6 +26,23 @@ Comment drafting is split in two:
 Every eligibility and safety rule is enforced once in the neutral layer and
 inherited by every renderer, so a platform can only differ in syntax.
 
+## Which Findings Become Drafts
+
+A draft is built for every admitted finding that admission marked
+`reporterEligibility = inline` and whose location is not on the old side.
+Whether a location can be anchored at all is decided once, in admission, which
+is the only stage that holds the reviewed diff ranges (see
+[05-review-workflow-and-runtime.md](05-review-workflow-and-runtime.md)). The
+comment layer must not re-derive it from `location.side`.
+
+This is a correction, not a restatement: until this rule was written, the neutral
+layer additionally required `location.side = "new"`, while discovery stamps every
+model-origin finding `side = "file"`. The two rules could not both hold, so this
+surface produced zero drafts for model-origin findings on every run since it
+shipped, even though each layer's own tests passed on hand-written new-side
+fixtures. Tests for this spec must therefore start from a finding in the shape
+discovery actually produces.
+
 There is no platform-specific report format: the removed `github-review-comments`
 format has no replacement value in the `ReportFormat` enum, and callers configure
 `reporting.reviewComments` instead. Markdown and SARIF reports render fix
@@ -127,6 +144,9 @@ Invalid configuration fails validation with exit code `2`.
 
 ## Acceptance
 
+- A model-origin admitted finding whose reported line falls inside a reviewed
+  diff hunk, and which meets the inline severity threshold, yields a draft on
+  every platform.
 - Fix suggestions render natively for the resolved platform, and as a neutral
   artifact for every enabled run.
 - Detection resolves from CI env, then remote host, then `generic`, and an

@@ -673,12 +673,20 @@ Rules:
   file. A file that fits in one chunk has a chunk range equal to its whole-file
   range, so this check never changes single-chunk admission; a task with no chunk
   provenance for the path (for example a deterministic candidate) is not checked;
-- `reporterEligibility = inline` is allowed only for new-side findings whose
-  line range is valid in reviewed head-file content and whose severity meets the
-  configured inline threshold;
+- `reporterEligibility = inline` is allowed only for findings whose line range is
+  valid in reviewed head-file content, whose location can be anchored on the new
+  side of the change, and whose severity meets the configured inline threshold;
+  old-side findings are never anchorable;
 - when repository intake provides `DiffMap[]`, `reporterEligibility = inline`
-  is allowed only when the finding's new-side line range overlaps a changed
+  is allowed for a new-side finding only when its line range overlaps a changed
   diff hunk for the same path;
+- a whole-file finding (`side = "file"`, the shape every model-origin candidate
+  carries because discovery shows the model line-numbered file content rather
+  than diff sides) is anchorable only when its reported `startLine` falls inside
+  a reviewed diff hunk for the same path. Admission decides this because it is
+  the only stage holding the reviewed diff ranges; discovery must not reclassify
+  a location as `side = "new"` on a guess. With no diff ranges at all, no
+  whole-file finding is inline-eligible, because nothing proves the line changed;
 - effective diff ranges passed to provider-backed tasks must preserve
   `changeKind` metadata (`new`, `modified`, or `deleted`) when known, so
   refutation can distinguish new-file findings from existing-file context;
@@ -689,8 +697,11 @@ Rules:
 - model-origin candidate locations and deterministic-signal-derived diagnostic
   locations may be marked `side = "new"` only when the effective diff map proves
   the line range overlaps a changed new-side hunk for the same path;
-- old-side and whole-file findings may remain in local reports when otherwise
-  valid, but they are not inline PR comment candidates in R1;
+- old-side findings, and whole-file findings whose line falls outside every
+  reviewed hunk, may remain in local reports when otherwise valid, but they are
+  not inline PR comment candidates in R1. A defect a change merely exposes
+  elsewhere in a changed file stays a reported finding; it simply has no changed
+  line a review comment could anchor to;
 - Markdown and SARIF outputs must render suggested fixes when present;
 - SARIF output must render provider issues as redacted run metadata, not as
   diagnostic results, so CI consumers can inspect provider degradation without

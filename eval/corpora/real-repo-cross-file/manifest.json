@@ -137,6 +137,16 @@
           "semanticSummary": "Copy() reads c.Keys into a local variable before taking the read lock and clones that local inside the lock, so the field read itself is unsynchronised. Set() assigns a fresh map to c.Keys under the write lock the first time a key is stored, so a Set concurrent with a Copy races on the map header the copy just read - exactly the race the mutex around the clone exists to prevent, in the one method whose documented purpose is handing a context to another goroutine."
         }
       ],
+      "expectedNoFindingZones": [
+        {
+          "path": "context.go",
+          "lineRange": [
+            153,
+            164
+          ],
+          "reason": "HandlerNames allocates a slice with the right capacity and appends the name of every non-nil handler, explicitly skipping nils. It reads no request state and is unchanged by the reviewed diff, which only touches Copy."
+        }
+      ],
       "tags": ["contract", "async", "state-copy"],
       "notes": "The omission is visible only against the full Context struct and the middleware that reads c.Errors (errors.go, recovery.go, logger.go)."
     },
@@ -175,6 +185,16 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "parseClaimsString has no branch for a claim value that is neither a string nor a list of strings, so an aud claim carrying a number, a boolean, or an object falls out of the type switch and returns an empty ClaimStrings with a nil error. The sibling parsers report ErrInvalidType for that case and the validator documents a wrong-typed claim as unverifiable, so a malformed audience becomes indistinguishable from an absent one."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "map_claims.go",
+          "lineRange": [
+            12,
+            40
+          ],
+          "reason": "The six one-line Claims-interface accessors (GetExpirationTime through GetSubject) only delegate to the parse helpers below them. They hold no branching, no arithmetic and no untrusted input handling, and the reviewed diff does not touch them."
         }
       ],
       "tags": ["cross-file", "security", "claims-validation"],
@@ -401,6 +421,16 @@
           "semanticSummary": "range_for_length resolves a suffix range by adding the entity length to the negative start without clamping the result at zero, so a suffix longer than the entity (bytes=-1000 against 500 bytes) yields a negative start, fails the byte-range validity check, and returns None. HTTP requires a suffix length larger than the representation to be answered with the whole representation, but the None result is what the response layer turns into 416 for a range that is in fact satisfiable."
         }
       ],
+      "expectedNoFindingZones": [
+        {
+          "path": "src/werkzeug/datastructures/range.py",
+          "lineRange": [
+            50,
+            62
+          ],
+          "reason": "IfRange.to_header/__str__/__repr__ only re-serialise the etag or date that was already parsed into the instance, choosing http_date or quote_etag and otherwise returning an empty string. No parsing, no comparison, and unchanged by the reviewed diff."
+        }
+      ],
       "tags": ["cross-file", "http-semantics", "conditional-requests"],
       "notes": "Cross-file: src/werkzeug/http.py shows unquote_etag returning a (etag, weak) pair and stripping the W/ prefix (lines 1016-1038), which is what makes the [0] subscript a silent loss rather than a rename; and src/werkzeug/sansio/http.py shows is_resource_modified feeding if_range.etag into the entity-tag comparison that decides the 206 (lines 71-75). The reviewed file alone shows no consequence."
     },
@@ -547,6 +577,16 @@
           "semanticSummary": "generate_boundary draws the multipart boundary from a non-cryptographic pseudo-random generator, and nothing ever checks the generated value against the parts it is about to delimit, although the function's own documentation states the boundary must be a value that does not occur in any of the data. Part contents are arbitrary caller-supplied bytes, so a body that happens to contain the boundary line splits the response into parts the application never wrote."
         }
       ],
+      "expectedNoFindingZones": [
+        {
+          "path": "axum-extra/src/response/multiple.rs",
+          "lineRange": [
+            204,
+            210
+          ],
+          "reason": "The FromIterator<Part> impl collects the iterator into the parts vector and does nothing else. It performs no formatting and no header construction, and it sits outside every hunk of the reviewed diff."
+        }
+      ],
       "tags": ["cross-file", "security", "multipart"],
       "notes": "Cross-file: the unchanged axum-extra/src/response/content_disposition.rs already defines EscapedFilename, the wrapper that escapes backslashes and quotes for exactly this position, and its doc comment states that including an unescaped value is parameter injection. Sibling responses in attachment.rs and file_stream.rs already use it, so the crate's contract — and the fact that this call path is the one bypassing it — is only visible outside the reviewed file."
     },
@@ -627,6 +667,16 @@
           "semanticSummary": "scheme answers https for a bare X-Forwarded-SSL: on header before it consults forwarded_scheme, so this one forwarded header is read outside the forwarded_priority and x_forwarded_proto_priority allow-lists that gate every other forwarded source. An application that empties those lists precisely because it is not behind a trusted proxy still has its scheme flipped by a header the client sent, and ssl?, base_url, url and every redirect built from them follow."
         }
       ],
+      "expectedNoFindingZones": [
+        {
+          "path": "lib/rack/request.rb",
+          "lineRange": [
+            305,
+            333
+          ],
+          "reason": "The one-line HTTP verb predicates (delete? through unlink?) each compare request_method to a frozen constant. They sit immediately above the changed scheme method, so a reviewer reads them as context, and there is nothing in them to report."
+        }
+      ],
       "tags": ["security", "trusted-proxy", "forwarded-headers"],
       "notes": "The allow-list machinery this branch sidesteps is in the same file but far from it: the class-level forwarded_priority and x_forwarded_proto_priority defaults around lines 42-43, and forwarded_scheme with FORWARDED_SCHEME_HEADERS around lines 844-872, which dispatches every other forwarded source through those lists. ssl? at line 505 and base_url at line 684 are the consumers that turn a wrong scheme into wrong behaviour."
     },
@@ -654,6 +704,16 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "The branch that retires a surplus IO thread deletes the processor and exits the thread without decrementing the spawned counter, while the trim branch a few lines below does decrement it. The counter then permanently over-counts live threads: the spawn guard compares it against the maximum and stops replacing threads, the out-of-band hook requires it to equal the waiting count and can never fire again, and the reported pool capacity and busy-thread count describe a pool that no longer exists."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "lib/puma/thread_pool.rb",
+          "lineRange": [
+            157,
+            171
+          ],
+          "reason": "reset_max, backlog and backlog_max are one-line readers that each take the pool mutex through with_mutex, consistently with their neighbours. The reviewed diff only touches the worker loop two hundred lines below."
         }
       ],
       "tags": ["bug", "thread-pool", "resource-accounting"],
@@ -783,6 +843,16 @@
           "semanticSummary": "Each parameterized route's pattern is compiled once with the global flag and the same object is reused for every route in the filter below. A global regular expression carries lastIndex across calls to test, so after the first successful match the next test resumes mid-string and fails the start anchor: overlap removal works for one route and silently keeps the rest, leaving a concrete route that a parameterized route already covers, whose middleware is then bound twice."
         }
       ],
+      "expectedNoFindingZones": [
+        {
+          "path": "packages/core/middleware/builder.ts",
+          "lineRange": [
+            17,
+            42
+          ],
+          "reason": "MiddlewareBuilder's own surface — the configuration Set, the constructor, apply, build and getHttpAdapter — is construction, spreading and a field read. The reviewed diff only touches removeOverlappedRoutes further down the file."
+        }
+      ],
       "tags": ["bug", "middleware", "stateful-regex"],
       "notes": "Self-contained: the pattern is anchored and only ever used with test, so the global flag contributes nothing except the lastIndex it introduces. Included as a plain-logic control case in a widely used framework."
     },
@@ -868,6 +938,16 @@
           "matchMode": "path-semantic",
           "tier": "runtime-critical",
           "semanticSummary": "Once the loop above leaves the residual count holding the bytes consumed from the first surviving buffer, that buffer is rebuilt from its first residual bytes — the part already written — instead of from the remainder, and the rebuilt slice is installed through the unsafe transmute below. Every partial vectored write that splits a buffer therefore re-sends the bytes just written and drops the unwritten tail, so the peer receives duplicated and truncated data with no error."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "tokio-util/src/io/write_all_vectored.rs",
+          "lineRange": [
+            86,
+            98
+          ],
+          "reason": "write_all_vectored only moves its two borrowed arguments into the future struct. No arithmetic, no slicing, no unsafe, and unchanged by the reviewed diff, which only touches advance_slices."
         }
       ],
       "tags": ["bug", "io", "data-corruption"],
@@ -992,6 +1072,16 @@
           "semanticSummary": "before_proxy returns early when the request has no consumer, and again when the matched consumer has no labels, and on neither path does it touch the headers named in its own configuration. Those headers are what the upstream is meant to read as gateway-asserted consumer identity, so a client that sends them itself has them forwarded unchanged whenever the consumer or its labels are absent; only the mapping loop ever overwrites them."
         }
       ],
+      "expectedNoFindingZones": [
+        {
+          "path": "apisix/plugins/attach-consumer-label.lua",
+          "lineRange": [
+            22,
+            42
+          ],
+          "reason": "The plugin config JSON schema and the plugin module table are static declarations: an object of string properties constrained to a leading \"$\", minProperties 1, headers required. They execute no request logic, and the reviewed diff starts below them."
+        }
+      ],
       "tags": ["cross-file", "security", "identity-headers"],
       "notes": "Cross-file: apisix/core/request.lua (set_header and modify_header, around lines 122-184) is the only mechanism in the request path that overwrites or clears an inbound header, so the reviewed file's early returns mean the client's own values survive to the upstream. Nothing in the plugin says that its configured header names are also inbound-controllable."
     },
@@ -1021,6 +1111,16 @@
           "securityMechanism": "injection",
           "contextDepth": "cross-file",
           "semanticSummary": "encode concatenates the key, the value, the path, the domain and the same-site option into one semicolon-delimited header string and rejects a semicolon in none of them. A semicolon inside any of those values ends the current attribute and appends caller-chosen ones, so a value carrying a domain attribute widens the cookie's scope and one carrying a same-site attribute removes the cross-site restriction the application configured."
+        }
+      ],
+      "expectedNoFindingZones": [
+        {
+          "path": "lib/plug/conn/cookies.ex",
+          "lineRange": [
+            139,
+            184
+          ],
+          "reason": "rfc2822/1, weekday_name/1, month_name/1 and add_seconds/2 are pure total helpers over calendar tuples: two exhaustive lookup tables and a gregorian-seconds conversion. They never see a cookie key, value or attribute, and the reviewed diff ends before them."
         }
       ],
       "tags": ["cross-file", "security", "cookies", "header-injection"],

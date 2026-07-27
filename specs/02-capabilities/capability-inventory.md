@@ -222,9 +222,11 @@ whole-file review and a per-candidate refutation pass.
   platform-rendered `review-comments.<platform>.json` from actionable admitted
   findings only. The platform is resolved from config, then CI environment, then
   the git remote host, then `generic`.
-- Preconditions: admitted finding has `reporterEligibility = inline`, a
-  resolvable new-side diff location, a `proved` refutation result, and severity
-  at or above the configured inline threshold.
+- Preconditions: admitted finding has `reporterEligibility = inline` (which
+  admission grants only to a location that anchors to a changed new-side line —
+  a `side = "new"` range overlapping a hunk, or a `side = "file"` line inside
+  one), a `proved` refutation result, and severity at or above the configured
+  inline threshold.
 - Side effects: writes the artifacts in the run artifact directory only. It
   reads environment variables and the git remote for detection, performs no
   network IO, and does not publish comments.

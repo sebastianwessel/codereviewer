@@ -202,13 +202,34 @@ const createModelAlias = (
     ...(provider.maxOutputTokens === undefined
       ? {}
       : { maxTokens: provider.maxOutputTokens }),
-    // The OpenAI Responses adapter maps `providerOptions.reasoning_effort` to the
-    // request's `reasoning: { effort }`. Only emitted when configured.
-    ...(provider.reasoningEffort === undefined
-      ? {}
-      : { providerOptions: { reasoning_effort: provider.reasoningEffort } })
+    // `providerOptions` is spread straight into the provider request body by the
+    // adapter, so it carries both the reasoning effort and the cache-routing key.
+    //
+    // `prompt_cache_key` is what lets the provider route requests that share a
+    // prompt prefix to a machine holding that prefix cached. Without it, routing is
+    // best-effort, and a probe of two byte-identical runs measured zero cached
+    // tokens against roughly 67,000 input tokens each. Input dominates output on
+    // this workload by more than twenty to one, so an unroutable cache is the
+    // single largest avoidable cost. The key is stable across runs by design --
+    // varying it per run would defeat the entire mechanism -- and carries no
+    // request content, only the alias it groups.
+    providerOptions: {
+      ...(provider.reasoningEffort === undefined
+        ? {}
+        : { reasoning_effort: provider.reasoningEffort }),
+      prompt_cache_key: promptCacheKeyFor(provider)
+    }
   }
 })
+
+// Groups requests that share a prompt prefix. Requests from the same engine and
+// model share the static instruction prefix that precedes every call, so keying on
+// the model is the coarsest grouping that is still correct. A per-run or per-task
+// key would be worse than none: it would scatter requests across machines and
+// guarantee a miss.
+export const promptCacheKeyFor = (provider: {
+  readonly model: string
+}): string => `codereviewer:${provider.model}`
 
 export const resolveProviderModelAlias = async (
   options: ResolveProviderModelAliasOptions

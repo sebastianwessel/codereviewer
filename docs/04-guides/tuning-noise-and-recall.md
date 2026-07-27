@@ -67,8 +67,10 @@ hunting for misses and are willing to triage.
 ```
 
 Default `high`. This does not admit or reject anything — it decides whether an
-already-admitted finding is `inline` or `summary-only`. Only `inline` findings
-on the new side of a reviewed diff range become review-comment drafts.
+already-admitted finding is `inline` or `summary-only`. A finding also has to be
+anchorable to become a draft: its reported line must fall inside a reviewed diff
+range. One that meets the severity but sits outside every changed hunk stays
+`summary-only`.
 
 Lower it to `medium` to put more findings directly on the diff; raise it to
 `critical` to reserve inline comments for blockers.

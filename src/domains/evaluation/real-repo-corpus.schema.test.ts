@@ -257,4 +257,42 @@ describe('committed real repository corpus manifest', () => {
       expect(containsAnswerKey(corpusCase.reviewIntent)).toBe(false)
     }
   })
+
+  // A no-finding zone is an assertion that a region is clean, and a wrong one
+  // manufactures false "false positives" instead of measuring them. Two
+  // properties keep an unjustifiable zone out: it must cover a file the reviewer
+  // was actually asked to look at, and it must not sit on top of the case's own
+  // answer key, which would score a correct finding as a false alarm.
+  test('declares no-finding zones that are reviewable and clear of the answer key', async () => {
+    const manifest = parseRealRepoCorpusManifestJson(
+      await readFile(committedManifestPath, 'utf8')
+    )
+    const zonedCases = manifest.cases.filter(
+      (corpusCase) => corpusCase.expectedNoFindingZones.length > 0
+    )
+
+    expect(zonedCases.length).toBeGreaterThan(0)
+
+    for (const corpusCase of zonedCases) {
+      for (const zone of corpusCase.expectedNoFindingZones) {
+        expect(corpusCase.reviewedPaths).toContain(zone.path)
+        // A whole-file zone would flag every unmatched finding in the file,
+        // including one aimed at a defect nobody listed.
+        expect(zone.lineRange).toBeDefined()
+
+        for (const expected of corpusCase.expectedFindings) {
+          if (expected.path !== zone.path || expected.lineRange === undefined) {
+            continue
+          }
+
+          const [zoneStart, zoneEnd] = zone.lineRange ?? [0, 0]
+          const [expectedStart, expectedEnd] = expected.lineRange
+
+          expect(expectedStart <= zoneEnd && zoneStart <= expectedEnd).toBe(
+            false
+          )
+        }
+      }
+    }
+  })
 })

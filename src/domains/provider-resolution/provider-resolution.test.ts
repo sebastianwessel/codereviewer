@@ -120,7 +120,10 @@ describe('provider resolution', () => {
 
     expect(resolution.modelAlias.defaults).not.toHaveProperty('temperature')
     expect(resolution.modelAlias.defaults?.providerOptions).toEqual({
-      reasoning_effort: 'high'
+      reasoning_effort: 'high',
+      // Stable across runs by design: a key that varied per run would scatter
+      // requests across machines and guarantee a prompt-cache miss.
+      prompt_cache_key: 'codereviewer:gpt-5.4-mini'
     })
     // The OpenAI adapter must use the Responses API: it is required for reasoning
     // models with function tools, and chat-completions drops reasoning effort.

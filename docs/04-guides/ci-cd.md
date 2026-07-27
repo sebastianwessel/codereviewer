@@ -250,8 +250,10 @@ What each renderer emits:
 | `bitbucket` | `line` = range end | Plain fenced code block — Bitbucket has no one-click apply |
 | `generic` | `startLine` + `endLine` | Plain fenced code block |
 
-Only findings that are `reporterEligibility: inline`, on the new side, and
-inside a reviewed diff range become drafts. Raise or lower
+Only findings that are `reporterEligibility: inline` become drafts — that is, a
+finding whose reported line is inside a reviewed diff range, so a platform can
+anchor a comment to it. A defect found elsewhere in a changed file is still
+reported, just in the summary rather than on a line. Raise or lower
 `review.inlineSeverityThreshold` (default `high`) to change the volume.
 
 ---

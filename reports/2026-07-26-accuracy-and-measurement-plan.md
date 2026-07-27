@@ -77,6 +77,113 @@ something to leave as an observation.
 
 ---
 
+## Next wave (items 3-6) — plan
+
+Written after the post-fix baseline. Recall is capped near the verified 66.7% union
+ceiling and the cheap routes there are closed, so this wave deliberately spends on
+things that are not recall.
+
+### 5 first — `prompt_cache_key` (~$0.20, S)
+
+Cheapest and highest-leverage, so it goes first even though it is numbered last.
+The probe proved caching is unreachable; the adapter sends neither
+`prompt_cache_key` nor `store`, and that key is how a request reaches a machine
+holding the cache.
+
+**Blocker found while planning:** `@purista/harness-openai` exposes no passthrough
+for extra request parameters, so this is not a config change. Either the harness
+gains a passthrough (upstream change, or a local adapter wrapper) or this stays
+closed.
+
+- **Do:** confirm the passthrough gap, then either add one or wrap the adapter.
+  Re-run the two-identical-runs probe.
+- **Falsified if:** `cachedInputTokens` is still 0 with a stable key set. Then
+  caching is genuinely unavailable and the +40-50% k-sampling price is final.
+- **Worth it because:** a hit re-prices every future recall experiment by ~4x and
+  cuts steady-state cost on an input-dominated workload.
+
+### 3 — severity, in the only defensible order (~$5-10, S then M)
+
+Severity accuracy is 39-46% and is the weakest metric. It is also the one most
+likely to be measuring the wrong thing.
+
+**No spec defines severity.** The rubric exists only in the discovery prompt, so
+`severityAccuracy` currently scores agreement with an undocumented curator label.
+Changing the prompt before defining the target would be tuning toward a label
+nobody has justified.
+
+- **3a. Write a normative rubric into a spec** (impact x reachability), human
+  approved. $0.
+- **3b. Audit the corpus labels against it** before touching the engine. If curator
+  labels disagree with the rubric, the metric was measuring label noise and the fix
+  is the fixture. $0.
+- **3c. Only then A/B a prompt change.**
+
+**The trap, now quantified.** Six of the 42 expectations are `low`, and the
+actionable floor is `medium`. The admission gate reads the MODEL's severity, so a
+`low` expectation only matches today when the model over-rates it — which is
+exactly what happens (one such expectation matched 12/12 runs). **Correctly
+calibrating severity downward would therefore lose up to 6/42 = 14.3pp of recall**,
+and a naive reading would call that a regression. Any severity A/B must either
+lower the floor to `low` for the measurement or tally below-threshold rejections
+separately.
+
+- **Expected:** inconclusive is the single most likely outcome at this resolution.
+  Say so in advance rather than after.
+
+### 4 — multi-file cases (curation, $0 provider, M-L)
+
+**29 of 30 cases change exactly one file.** Task clustering, context packing,
+budget behaviour on wide diffs, and cross-file dilution are all structurally
+invisible to every number this project has published. Real pull requests are not
+single-file.
+
+- **Do:** curate cases whose upstream fix touches several files, under the same
+  spec 17 anti-contamination rules. Do not require the defect to be cross-file —
+  a realistic multi-file PR containing one defect already exercises packing and
+  budget.
+- **Value:** this is the only item that can reveal a problem nobody suspects. It is
+  also the most likely to make the engine look worse, which is the point.
+- **Falsified if:** multi-file cases score within noise of single-file ones, in
+  which case the single-file corpus was representative after all and that is worth
+  knowing.
+
+### 6 — grow expectations per existing case (curation, $0 provider, L)
+
+The only corpus lever that improves statistical power per dollar: minimum
+detectable effect scales as 1/sqrt(cases x findings) while cost scales with cases,
+so adding findings to the 30 checkouts already hydrated is strictly better than
+adding cases.
+
+- **Do:** target ~3 expectations per case, drawn from upstream history and human
+  review. **Never from engine output** — that converges "recall" toward "similarity
+  to the 2026-07 engine".
+- **Gate on discriminative power, not on variance:** the fraction of added findings
+  with 0 < p < 1 across three runs should be >= 0.3. Adding near-dead findings
+  lowers the observed deviation while buying nothing, so deviation is not a valid
+  success proxy.
+- **Pilot 5 cases first** and abandon if the added findings cluster at p ~ 0 the way
+  the existing non-primary ones do.
+
+### Sequencing
+
+```mermaid
+flowchart LR
+    A["5 - cache key<br/>~$0.20"] --> B{"Cache reachable?"}
+    B -->|yes| C["Recall wave re-priced ~4x<br/>revisit k-sampling"]
+    B -->|no| D["+40-50% price is final<br/>do not run k-sampling"]
+    E["3a/3b - severity rubric<br/>+ label audit, $0"] --> F{"Do curator labels<br/>match the rubric?"}
+    F -->|no| G["Fix the fixture,<br/>not the engine"]
+    F -->|yes| H["3c - A/B with the floor<br/>lowered, ~$5-10"]
+    I["4 - multi-file cases"] --> J["First evidence about<br/>the deployment shape"]
+    K["6 - grow expectations"] --> L["Power per dollar,<br/>gated on discriminativeness"]
+```
+
+3a, 4 and 6 are all zero-provider-cost and can proceed in parallel with 5. Nothing
+here depends on k-sampling, which remains declined on the evidence.
+
+---
+
 ## Wave 1.1 cache probe — RUN, and it re-prices the recall wave
 
 Executed 2026-07-26 for about $0.36. Two identical single-case runs, back to back,

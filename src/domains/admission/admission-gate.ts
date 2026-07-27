@@ -243,16 +243,41 @@ const lineRangesOverlap = (
   right: { readonly startLine: number; readonly endLine: number }
 ): boolean => left.startLine <= right.endLine && right.startLine <= left.endLine
 
+// Whether the candidate's location can be anchored as an inline review comment.
+// This is presentation policy only: it never decides whether a candidate is
+// admitted, only how the reported finding may be surfaced.
+//
+// A whole-file location is the ordinary shape of a model-origin finding:
+// discovery shows the model line-numbered file content, not a diff, so it stamps
+// every candidate `side: 'file'` rather than have the model guess which side of
+// the diff a line belongs to. Requiring `side === 'new'` here therefore made
+// inline eligibility unreachable for model findings, and the review-comment
+// surface silently produced zero drafts on every run. Admission is the only
+// stage that holds the reviewed diff ranges, so it is the only stage that can
+// answer "was this line actually changed?" without guessing. A whole-file
+// location earns inline eligibility when its reported line provably falls inside
+// a reviewed hunk, and nothing else does: with no diff ranges at all there is no
+// hunk to prove it, and a defect merely exposed elsewhere in a changed file is
+// still reported, just with no changed line to anchor a comment to.
 const locationDiffRangeIsInlineEligible = (
   candidate: CandidateFinding,
   ranges: readonly ReviewedDiffRange[] | undefined
 ): boolean => {
-  if (ranges === undefined) {
-    return true
+  if (candidate.location.side === 'old') {
+    return false
   }
 
-  if (candidate.location.side !== 'new') {
-    return false
+  if (candidate.location.side === 'file') {
+    return (ranges ?? []).some(
+      (range) =>
+        range.path === candidate.location.path &&
+        candidate.location.startLine >= range.startLine &&
+        candidate.location.startLine <= range.endLine
+    )
+  }
+
+  if (ranges === undefined) {
+    return true
   }
 
   const candidateRange = {
@@ -339,14 +364,16 @@ const hasDuplicateEvidenceLocation = (
   )
 }
 
+// The side check lives entirely in `locationDiffRangeIsInlineEligible` so there
+// is a single place that decides which locations can be anchored. Meeting the
+// inline severity threshold remains necessary on top of it: an anchorable
+// location is not by itself a reason to comment on the line.
 const reporterEligibilityFor = (
-  candidate: CandidateFinding,
   severity: Severity,
   threshold: Severity,
   lineRangeIsValid: boolean,
   diffRangeIsInlineEligible: boolean
 ): ReporterEligibility =>
-  candidate.location.side === 'new' &&
   lineRangeIsValid &&
   diffRangeIsInlineEligible &&
   severityRank[severity] >= severityRank[threshold]
@@ -580,7 +607,6 @@ export const admitCandidate = (
     admittedAt: input.policy.admittedAt,
     admissionEvidenceIds: evidence.map((record) => record.id),
     reporterEligibility: reporterEligibilityFor(
-      candidate,
       candidate.severity,
       input.policy.inlineSeverityThreshold,
       lineRangeIsValid,

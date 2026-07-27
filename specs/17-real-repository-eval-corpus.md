@@ -52,6 +52,45 @@ Expected findings reuse the evaluation fixture's expected-finding contract,
 including the security mechanism and context-depth labels, so a real-repository case
 reports through the same per-mechanism and per-context-depth metrics as any other.
 
+## No-Finding Zones And Clean Cases
+
+Every case in this corpus contains a known defect, so `noFindingZoneFalsePositiveCount`
+was structurally pinned at zero: the corpus that decides releases could not say
+whether the engine flags code that is fine. A case may therefore declare
+`expectedNoFindingZones` over regions of its reviewed files that are clean at the
+parent commit.
+
+A zone is an assertion, and a wrong one manufactures false positives instead of
+measuring them, so two properties are validated rather than trusted: a zone must
+name a **reviewed path** — the reviewer was never asked to look anywhere else —
+and it must carry a **line range that does not overlap any expected finding in the
+same file**, or a correct finding would be scored as a false alarm. A whole-file
+zone is rejected for the same reason: it would flag every unmatched finding in the
+file, including one aimed at a real defect nobody listed. Curation additionally
+excludes any region that the plausibility judge has credited as an unlisted-real
+finding in an archived run.
+
+Zones are a control over *regions*, not over changes. A **whole clean case** — an
+upstream pull request that introduces no defect — is a stronger negative control
+and is **not expressible here**, for three independent reasons:
+
+- The case schema requires at least one expected finding.
+- A case is a fix commit and its parent: the parent is checked out and the diff is
+  read backwards. A change that fixes nothing has no such pair, and reversing a
+  pure refactor produces a de-refactor, which is legitimately worth commenting on.
+  A clean case needs a forward-diff mode (check out the commit, diff parent to
+  commit) that the hydration contract does not have.
+- Ground truth is far harder to establish. A defect case is evidenced by the
+  upstream fix; "nothing here is worth reporting anywhere in this diff" has no
+  upstream evidence, and post-cutoff commits are too recent for the absence of a
+  later fix to mean anything. The answer-key guard also rejects the diffs most
+  likely to be clean by construction — dependency bumps whose changelogs carry
+  advisory wording.
+
+Adding clean cases is therefore a spec change (forward-diff cases with an empty
+answer key), not a curation task. The generic negative control remains the default
+fixture pack, whose seven cases are all clean by construction.
+
 ## Anti-Contamination
 
 The corpus encodes the policy in `06-evaluation-and-quality-gates.md` as validated
@@ -91,6 +130,11 @@ manifest data, so a violation fails loading instead of silently inflating a scor
 
 ## Testing
 
+- Unit: the committed manifest's no-finding zones, asserting that each names a
+  reviewed path, carries a line range, and does not overlap an expected finding;
+  and the zone path end to end — manifest through `buildRealRepoSlice`, the written
+  slice, the fixture loader, and the matcher — so that a finding landing inside a
+  declared zone is counted and one outside it is not. No provider is involved.
 - Unit: manifest schema validation, including each anti-contamination rule (cutoff
   violation, non-permissive license, answer-key leakage, malformed commit sha);
   case selection and filtering; the diff fingerprint; the repair and
