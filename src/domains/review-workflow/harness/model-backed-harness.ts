@@ -178,23 +178,19 @@ export const createModelBackedReviewHarness = (
                   taskInput,
                   task,
                   runners: {
-                    // Spec 21: `historyWindow: 0` forwards no prior conversation
-                    // into the call, so every discovery invocation sees its system
-                    // instructions and its own packet and nothing else. Without it,
-                    // the session's accumulated messages travel with the call and a
-                    // second sample would open holding the first sample's answer —
-                    // which is the anchoring that made the withdrawn enumeration
-                    // sweep fail, and would make independent samples independent in
-                    // name only. It also makes true what the rest of this pipeline
-                    // already assumes of discovery: that two discovery calls never
-                    // see each other's output.
+                    // None of these calls forwards prior conversation: the harness
+                    // default is `historyWindow: 0` (see `harnessDefaults`). For
+                    // discovery that is what makes independent samples independent
+                    // rather than independent in name only — a second sample would
+                    // otherwise open holding the first sample's answer, which is the
+                    // anchoring that made the withdrawn enumeration sweep fail.
                     holisticReview: (holisticInput, holisticSignal) =>
-                      ctx.agents.holistic_review(holisticInput, {
-                        historyWindow: 0,
-                        ...(holisticSignal === undefined
+                      ctx.agents.holistic_review(
+                        holisticInput,
+                        holisticSignal === undefined
                           ? {}
-                          : { signal: holisticSignal })
-                      }),
+                          : { signal: holisticSignal }
+                      ),
                     contextScout: (scoutInput, scoutSignal) =>
                       ctx.agents.context_scout(
                         scoutInput,

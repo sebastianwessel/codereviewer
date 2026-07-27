@@ -45,8 +45,11 @@ through refutation and admission unchanged.
   the run.
 - `k = 1` MUST preserve packet shape, packet field order, and call count, so the
   default path's prompt-cache prefix stability does not regress.
-- Discovery calls MUST carry no prior conversation. See *Conversation History*
-  below: this is a behaviour change at `k = 1` and is deliberate.
+- **No review agent call may carry prior conversation.** This MUST be the harness
+  default, so a stage added later inherits it, and any stage that genuinely needs
+  history MUST opt in at its own invocation where the reason is visible. See
+  *Conversation History* below: this changes behaviour at `k = 1` and across
+  refutation, the semantic merge, and the context scout, and is deliberate.
 - Failure of one sample MUST NOT fail the review. Remaining samples proceed and
   the reduced sample count is recorded.
 - The default is `k = 1` until measurement selects otherwise.
@@ -107,12 +110,42 @@ Consequences, which must not be glossed:
   removed because it contradicts what the rest of the pipeline assumes of
   discovery, not because it was shown to be harmful.
 
-The suppression is scoped to discovery. **Refutation, the semantic finding merge,
-and the context scout still carry conversation history.** For refutation this
-contradicts its own instructions, which require each candidate to be judged
-strictly on its own merits; a refuter that has just proved several candidates
-opens the next task holding that exchange. This is recorded here as a known
-divergence to be investigated and measured separately, not as accepted design.
+### Resolved: the suppression is harness-wide
+
+The divergence this section originally recorded — refutation, the semantic finding
+merge, and the context scout still carrying history — has been closed. Suppression
+is no longer scoped to discovery: **no agent call in the review harness forwards
+prior conversation.** It is now the harness default rather than a per-invocation
+option, so a stage added later inherits it and a stage that genuinely needs
+history must opt in where the reason is visible.
+
+What the calls actually received was captured at the provider boundary before the
+change, not inferred: the harness appends each completed call's output to the
+shared session as an `assistant` message, so a call arrived holding the
+JSON output of every call that had finished before it — across tasks and across
+stages — **attributed to the model itself**. A refutation call therefore opened
+appearing to have already asserted the very candidates it was about to adjudicate,
+and, for the second and later tasks, holding its own earlier verdicts. That is
+incompatible with the refuter's own instruction to judge each candidate strictly
+on its own merits.
+
+The consequences recorded above extend to these stages unchanged:
+
+- **The whole engine is re-baselined, not just discovery.** Every recall and
+  precision figure this project has ever recorded was produced with
+  history-carrying refutation, merge, and scout calls. None of them is comparable
+  to a post-change run.
+- **The direction of the effect is unknown and unmeasured** for all three stages.
+  The forwarded conversation is removed because it contradicts what those stages
+  are specified to do, not because it was shown to be harmful. Nothing here may be
+  described as an accuracy improvement until a run measures it.
+
+**Requirement broadened, 2026-07-27.** The requirement above now reads "no review
+agent call may carry prior conversation", matching the harness-wide rule the
+implementation enforces. Leaving the requirement narrower than the code would be
+exactly the silent spec/implementation divergence this project forbids, and the
+narrower wording would have permitted a future stage to reintroduce the defect
+without contradicting any spec.
 
 ## Honest Limits
 
@@ -151,4 +184,5 @@ benefit of this change and must be shown rather than assumed.
 | Candidates are combined by union, never by agreement | discovery unit test |
 | No second deduplication mechanism exists | discovery unit test |
 | One failed sample leaves a complete review | discovery unit test |
+| No review agent call forwards prior conversation, by harness default | harness config and provider-boundary tests |
 | Applied `k` and reduced sample counts are recorded | run artifact test |

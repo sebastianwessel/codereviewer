@@ -12,14 +12,20 @@ describe('workflow harness config', () => {
   test('derives runtime defaults and delegation limits for review workflows', () => {
     expect(effectiveMaxConcurrentTasks(undefined)).toBe(4)
     expect(effectiveMaxConcurrentTasks(2)).toBe(2)
+    // Spec 21: `historyWindow: 0` is a DEFAULT, so blindness is what an agent gets
+    // unless its invocation asks for history. The provider-boundary assertion that
+    // this actually reaches every stage lives in model-backed-harness.test.ts; this
+    // only pins that the default is set and survives the other options.
     expect(harnessDefaults({}, 3)).toEqual({
       runTimeoutMs: 0,
+      historyWindow: 0,
       delegation: {
         maxParallelChildAgentCalls: 3
       }
     })
     expect(harnessDefaults({ runTimeoutMs: 1200 }, 3)).toEqual({
       runTimeoutMs: 1200,
+      historyWindow: 0,
       delegation: {
         maxParallelChildAgentCalls: 3
       }

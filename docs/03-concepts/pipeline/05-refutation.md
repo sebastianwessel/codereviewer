@@ -44,6 +44,26 @@ the `candidateId` copied verbatim, and is told explicitly to judge each candidat
 on its own merits: a weak candidate next to a strong one must still be refuted,
 and the number of candidates says nothing about how many are real.
 
+### The call carries no conversation
+
+A refutation call sees its instructions and its own packet, and nothing else. It
+does **not** see what discovery answered, what the semantic finding merge decided,
+or the verdicts it returned for any other task — every one of those is a separate
+call, and no output of one is forwarded into another.
+
+This matters here more than anywhere else in the pipeline. The whole run shares a
+single session, so before this was fixed a refutation call arrived carrying every
+earlier call's output *as if the refuter itself had said it* — including the
+discovery findings for the very candidates it was about to adjudicate, and its own
+earlier verdicts. That is incompatible with judging each candidate on its own
+merits.
+
+> **Not a measured improvement.** Every recall and precision figure recorded for
+> this engine was produced by history-carrying refutation, merge, and scout calls.
+> Whether the forwarded conversation helped, hurt, or did nothing is **unknown and
+> unmeasured**; it was removed because it contradicts what these stages are
+> specified to do.
+
 ```mermaid
 flowchart TD
   C["candidates"] --> F{"model-proposed AND in a changed file?"}

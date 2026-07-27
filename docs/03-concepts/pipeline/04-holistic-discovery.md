@@ -157,6 +157,28 @@ roughly one candidate per file the stage costs close to nothing; it becomes
 load-bearing as soon as a file is reviewed as several units, which produces
 duplicate candidates by construction.
 
+Like discovery, the merge call carries no conversation: it sees its instructions,
+the candidates for one file, and that file. It is not shown the discovery call
+that produced those candidates.
+
+## No stage carries conversation
+
+The property stated for the reviewer above holds for **every** model call the
+review makes — discovery, the context scout, the semantic finding merge, and
+[refutation](05-refutation.md). Each is a single invocation that receives its
+instructions and its own packet, and no call is ever handed the output of a call
+that ran before it, whether for the same task or a different one.
+
+This is worth stating explicitly because the whole run shares one session, and the
+default behaviour of a session is to accumulate. Before it was fixed, a call
+arrived carrying every earlier call's output attributed to the model itself.
+
+> **This is not a measured improvement.** Every recall and precision number
+> recorded for this engine was produced with the scout, merge, and refutation
+> calls carrying that history. Whether it helped or hurt is unknown; it was
+> removed because it contradicts what those stages are specified to do, and any
+> effect on accuracy is unmeasured.
+
 ```mermaid
 flowchart TD
   P["task packet"] --> S{"contextScout.enabled?"}

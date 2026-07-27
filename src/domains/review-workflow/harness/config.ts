@@ -80,6 +80,32 @@ export const maxChildAgentCallsForReview = (
   )
 }
 
+// Spec 21: no agent call in this harness carries prior conversation.
+//
+// The whole review runs in ONE session, and the harness appends every completed
+// agent call's output to that session as an `assistant` message. Without this
+// default, each call is handed the JSON output of every call that finished before
+// it — across tasks AND across stages — attributed to the model itself. The
+// refuter would open its call appearing to have already asserted the very
+// candidates it must adjudicate, and holding its own verdicts for other tasks,
+// which contradicts its instruction to judge each candidate strictly on its own
+// merits. The merge and the scout would likewise see discovery's raw findings,
+// which neither of their prompts contemplates.
+//
+// It lives in the DEFAULTS rather than on each invocation deliberately. Every
+// agent here is single-shot over a self-contained packet; none reads `history`,
+// and none of their prompts refers to a prior turn. Making blindness the default
+// means an agent added later inherits it, and an agent that genuinely needs
+// history must say so at its own invocation (per-call `historyWindow` wins over
+// this), where the reason is visible in review.
+//
+// This CHANGES MEASURED BEHAVIOUR. Every recall and precision figure this project
+// has recorded was produced by history-carrying refutation, merge, and scout
+// calls. Whether it helped or hurt is unknown and unmeasured; it is removed
+// because it contradicts what those stages are specified to do, not because it
+// was shown to be harmful.
+const noForwardedConversationHistory = 0
+
 export const harnessDefaults = (
   options: {
     readonly runTimeoutMs?: number
@@ -87,6 +113,7 @@ export const harnessDefaults = (
   maxConcurrentTasks: number
 ) => ({
   runTimeoutMs: options.runTimeoutMs ?? defaultRunTimeoutMs,
+  historyWindow: noForwardedConversationHistory,
   delegation: {
     maxParallelChildAgentCalls: maxConcurrentTasks
   }
