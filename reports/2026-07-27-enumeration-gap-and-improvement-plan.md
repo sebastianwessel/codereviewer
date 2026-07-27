@@ -313,6 +313,103 @@ refutation's kill rate should **rise** when those land — if it stays at 1.4%
 after we widen discovery, the refuter is not doing its job and precision will
 fall instead.
 
+### 5.2 Capability test result: attention confirmed — but the anchor is the DIFF
+
+Run 2026-07-27, $1.58 of a $2.00 ceiling, 139 provider calls, production model
+and prompt (gpt-5.3-codex, temperature 0), no full-corpus eval.
+
+Window rule, fixed in advance and applied identically everywhere: **60-line
+windows from line 1, stride 40**. It reads only the file's line count, so it
+cannot have leaked defect locations. Two arms:
+
+- **Arm A** — production packet, file section replaced by one window. **The
+  whole-file diff still present, as production sends it.**
+- **Arm B** — window only, diff withheld.
+
+**Controls first.** Arm A found 3/3 strict controls (7/7 with near-controls) —
+a sound harness. Arm B found 0/3 strict (1/7) — a **weak instrument**, so its
+negatives prove nothing and only its positives count.
+
+**The decisive number: only 16 of 76 Arm A candidates (21%) point at a line
+inside the window they were shown.** `casbin`'s role_manager.go is 1251 lines;
+all 31 windows returned exactly one finding, all at **L820** — including window
+[1201-1251], where line 820 is 400 lines away and not present in the packet.
+`starlette`: 14/14 windows, one finding, all at L516.
+
+**The engine is not reading the file and stopping early. It is answering the
+diff and never reading the rest.** On this corpus "one defect per file" is
+really **one defect per diff hunk** — and five of six diffs here are one- or
+two-line hunks.
+
+The cleanest proof is `slim`, one 84-line file, same model, prompt and
+temperature:
+
+| presentation | idx0 | idx1 |
+|---|---|---|
+| production (full file + diff) | 7/9 | **0/9** |
+| Arm A (60-line window + diff) | 2/2 | **0/2** |
+| Arm B (60-line window, no diff) | **0/2** | **2/2** |
+
+The model can detect idx1 and never exercises that capability while idx0 is
+anchored by the diff. **Attention, demonstrated by construction.**
+
+Recovery: 2 of 7 never-found expectations (`rack-static` idx1 via Arm A 5/5;
+`slim` idx1 via Arm B 2/2). Arm B also surfaced genuine defects the key omits
+(a `remove()` leak in typeorm, a byte-vs-element copy limit in netty).
+
+| arm | windows | candidates | mean/window | inside own window |
+|---|---:|---:|---:|---:|
+| A (diff + window) | 69 | 76 | 1.10 (never >2) | **16/76 (21%)** |
+| B (window only) | 69 | 50 | 0.72 (0–5) | **50/50 (100%)** |
+
+#### What this does to Step 2
+
+**Step 2 as originally written would have failed.** It proposed windowing the
+*file section* while the packet kept the whole-file diff. Arm A is exactly that
+configuration and it recovered almost nothing at N× the cost. The file section
+was never the binding constraint.
+
+**The variable that must be decomposed is the diff — or the anchor must be
+removed for a second pass.** The revised shape (§5.3) is additive, mirroring the
+security pass: keep the diff-anchored pass, which is precise and reliably gets
+the primary defect, and add an un-anchored windowed pass whose candidates merge
+in. That makes the semantic merge (separate proposal) a hard prerequisite, not a
+nicety: Arm B's candidates carry different anchors and different ids by
+construction.
+
+#### Honest limits — this is one experiment
+
+- **n=1 per window**, against a measured sd 4.8pp band.
+- **Arm B moves two variables at once** (unit size *and* the diff). Its five
+  negatives are weak evidence for anything.
+- **Selection was not random** — 7 of 31 eligible, chosen for language spread and
+  the examples this report names. The two recoveries may be the easy end.
+- **Five of six diffs are one- or two-line hunks.** Diff anchoring is plausibly
+  weaker on a real multi-hunk PR, so the effect size may not transfer.
+- **Some of the gap is not addressable by decomposition at all.** `netty` idx1
+  and idx2 sit in the same 25-line function; no window scheme of any size
+  separates them, and 13 attempts never surfaced idx2.
+- Match judgements were made by hand, not by `eval-matcher`, with both sides
+  quoted so they are auditable. `slim` idx1 is defensibly scoreable either way.
+
+### 5.3 Revised Step 2 — decompose the anchor, not the file
+
+Supersedes the original Step 2. Same evidence base (Sovrano's +37% still stands;
+our result refines *what* to shrink), now constrained by our own measurement:
+
+1. Keep the current diff-anchored pass unchanged. It is what earns our precision
+   and it reliably lands the primary defect.
+2. Add an **un-anchored windowed pass** — window without the whole-file diff, so
+   the model has no changed line to answer and must read what it is given.
+3. Merge additively through the semantic merge, then refute as usual. Refutation
+   is at 1.4% utilisation (§5.1) and is the stage that must absorb the extra
+   volume; expect and require its kill rate to rise.
+4. Bound the window count per file. Arm B cost $0.54 for 69 windows across six
+   files; unbounded, this is the most expensive item on the list.
+
+Measure before believing: Arm B lost 6 of 7 controls, so an un-anchored pass on
+its own is not a reviewer. It is only a candidate generator feeding a gate.
+
 ### Step 1 — cheap, evidence-backed, ceiling-breaking
 
 3. **Drop the implicit "primary issue" framing; enumerate; prune by predicted
