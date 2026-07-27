@@ -1,5 +1,14 @@
 # The corpus measures two different jobs, and reports one number
 
+> **CORRECTED 2026-07-27.** The classifier below counted an expectation as
+> in-diff only when its lines intersected *added* lines. That was too strict: a
+> fix that only adds a guard reverses into a pure deletion, and the reviewer is
+> still shown that hunk. Under the correct hunk-span rule the split is **in-diff
+> 69.8% / out-of-diff 0.0% (0 of 81)**, not 72.8% / 8.8%. The finding is
+> unchanged in direction and sharper in fact: the engine finds *nothing* outside
+> a hunk. The "8.8% is not zero, so the boundary is soft" argument below was an
+> artefact of the bug and does not hold.
+
 Date: 2026-07-27
 Status: finding. Derived from committed fixtures and archived runs. **No provider
 spend.**

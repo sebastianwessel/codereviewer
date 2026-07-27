@@ -120,10 +120,24 @@ MUST be reported separately for the two populations. A single blended recall
 figure is not interpretable: its value depends on the ratio of the two
 populations in the fixture set rather than on reviewer quality.
 
-The classification is derived deterministically from the reviewed diff — an
-expectation is in-diff when any line of its `lineRange` appears among the diff's
-changed lines in head coordinates — and MUST be stored with the case so it is
-auditable and cannot drift. It MUST NOT be hand-assigned.
+The classification is derived deterministically from the reviewed diff and MUST be
+stored with the case so it is auditable and cannot drift. It MUST NOT be
+hand-assigned.
+
+**The rule is hunk span, not added lines.** An expectation is in-diff when its
+`lineRange` intersects the head-coordinate span of any hunk, taken from the hunk
+header `@@ -a,b +c,d @@` as `[c, c+d-1]`. Hunks that are pure deletions in the
+reversed diff count: a fix that only *adds* a guard reverses into a deletion, and
+the reviewer is still shown that hunk with its surrounding context, so the region
+is genuinely under review.
+
+An added-lines-only rule was used initially and was wrong. Measured on the same
+runs: it reported in-diff 73.9% against out-of-diff 8.8%, while the hunk-span rule
+reports **in-diff 69.8% against out-of-diff 0.0%**. The apparent 8.8% was entirely
+regions the stricter rule had misclassified as unreviewed. **The engine finds
+nothing whatsoever outside a hunk** — 0 of 81 — which is a cleaner statement of the
+boundary than the earlier figure suggested, and it removes the basis for calling
+that boundary soft.
 
 ### Why This Section Exists
 
@@ -132,9 +146,9 @@ Measured 2026-07-27 over 18 archived runs
 
 | population | recall |
 |---|---:|
-| in-diff | **72.8%** |
-| out-of-diff | **8.8%** |
-| blended, as previously reported | 45.6% |
+| in-diff | **69.8%** |
+| out-of-diff | **0.0%** (0 of 81) |
+| blended, as previously reported | 46.3% |
 
 **42.5% of expectations (34 of 80) lie in unchanged code.** The corpus reviews
 `base = fixCommit`, `head = parentCommit`, so a defect the upstream fix commit did
