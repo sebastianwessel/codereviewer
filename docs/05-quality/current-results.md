@@ -9,37 +9,34 @@ Read [Metrics](metrics.md) first if the terms are unfamiliar, and
 
 ## Headline
 
-Measured **2026-07-26** after the correctness and instrumentation work, model
-`gpt-5.3-codex`, metrics version `2026-07-26.max-cardinality-matching`, on the
-**real-repository corpus**: 30 cases, 42 expected findings, 24 upstream
-repositories, 13 languages, each checked out in full at the commit before the
-upstream fix. Three seeds.
+Measured **2026-07-26** after the correctness, instrumentation and prompt-cache
+work. Model `gpt-5.3-codex`, metrics version
+`2026-07-26.max-cardinality-matching`, on the **real-repository corpus**: 30 cases,
+42 expected findings, 24 upstream repositories, 13 languages, each checked out in
+full at the commit before the upstream fix. Three seeds.
 
 | Metric | Value | Notes |
 | --- | ---: | --- |
-| Recall | **54.8%** | mean of 52.4 / 57.1 / 54.8, sd **2.4pp** |
-| Adjusted precision | **95.8–100%** | one genuine false positive across three runs |
-| Unlisted-real findings | 6–8 per run | genuine defects the answer key never listed |
-| **Line placement** | **97.2%** | 100 / 95.8 / 95.7, over 22–24 checks per run |
-| Severity accuracy | 39.1–45.8% | the weakest metric |
-| Rejected by admission | 0–2 per run | the gate discards almost nothing |
-| Cost | **$1.35** | $1.18 review + $0.17 scoring, per 30-case run |
+| Recall | **53.2%** | mean of 52.4 / 50.0 / 57.1 |
+| Adjusted precision | **100%** | no genuine false positive in any of the three runs |
+| **False alarms on clean code** | **0** | first time this could be measured at all |
+| Line placement | ~97% | over 22–24 checks per run |
+| Severity accuracy | ~39–46% | the weakest metric |
+| Cost, warm | **~$0.84** | review, down from $1.18 before prompt caching worked |
+| Cached input | **36–39%** | on a warm run; 7.9% on a cold one |
 
-**Line placement is measured, and it is good.** This was previously unknown in
-either direction. A reported line lands within tolerance of the expected range
-about 97% of the time, which clears the bar for posting findings as inline review
-comments. The scope is honest: only matched findings can be checked, so this
-measures placement on findings the engine found, not on ones it missed.
+**Nothing regressed.** A paired finding-level comparison against the three runs
+immediately before the cache work gives −1.6pp (95% CI −10.3 to +7.1, p=0.59, 6
+expectations gained and 8 lost). The removed field was never read by anything, so
+no behaviour change was expected and none is detectable.
 
-**Cost is now a total rather than a floor.** Judge spend was previously counted
-nowhere; it is 14% of review cost on this corpus. It scales with findings rather
-than file size, so it is a much larger share on small runs — 41–61% on a single
-case.
+**Zero false alarms.** The corpus carries ten curated no-finding zones over regions
+that are clean at the parent commit, and the engine flagged none of them in any
+run. This is the first evidence the project has on whether it cries wolf. The scope
+is honest: ten zones across ten files is a floor on the question, not a full answer.
 
-**Variance halved.** The same configuration previously varied with a 4.8pp
-standard deviation; it is now 2.4pp. Part of that is the refutation retry removing
-a failure that cost a whole task its findings. Three seeds estimate a standard
-deviation imprecisely, so treat this as directional.
+**Caching works, and it is worth about 30%.** A run's review cost falls from $1.18
+to roughly $0.84 once the cache is warm, with 36–39% of input served from cache.
 
 ## What limits recall today
 
