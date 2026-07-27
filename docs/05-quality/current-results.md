@@ -9,34 +9,31 @@ Read [Metrics](metrics.md) first if the terms are unfamiliar, and
 
 ## Headline
 
-Measured **2026-07-26** after the correctness, instrumentation and prompt-cache
-work. Model `gpt-5.3-codex`, metrics version
-`2026-07-26.max-cardinality-matching`, on the **real-repository corpus**: 30 cases,
-42 expected findings, 24 upstream repositories, 13 languages, each checked out in
-full at the commit before the upstream fix. Three seeds.
+Measured **2026-07-26** on the **real-repository corpus** as it now stands: 36
+cases, 80 expected findings, 29 upstream projects, 7 of them multi-file. Model
+`gpt-5.3-codex`, three seeds, default configuration.
 
 | Metric | Value | Notes |
 | --- | ---: | --- |
-| Recall | **53.2%** | mean of 52.4 / 50.0 / 57.1 |
-| Adjusted precision | **100%** | no genuine false positive in any of the three runs |
-| **False alarms on clean code** | **0** | first time this could be measured at all |
-| Line placement | ~97% | over 22–24 checks per run |
-| Severity accuracy | ~39–46% | the weakest metric |
-| Cost, warm | **~$0.84** | review, down from $1.18 before prompt caching worked |
-| Cached input | **36–39%** | on a warm run; 7.9% on a cold one |
+| Recall | **46.7%** | 46.3 / 45.0 / 48.8 |
+| Adjusted precision | **97.3–100%** | |
+| **False alarms on clean code** | **0** | across every run, on ten curated zones |
+| Severity accuracy | ~44% | ~49% when the actionable floor is lowered to `low` |
+| Line placement | ~97% | |
+| Cost | **~$1.6–1.9** | per 36-case run, with prompt caching working |
 
-**Nothing regressed.** A paired finding-level comparison against the three runs
-immediately before the cache work gives −1.6pp (95% CI −10.3 to +7.1, p=0.59, 6
-expectations gained and 8 lost). The removed field was never read by anything, so
-no behaviour change was expected and none is detectable.
+**This number is not comparable to the 53.2% published earlier the same day.** The
+corpus changed underneath it: from 30 cases and 42 findings to 36 and 80, with
+findings beyond the first added to 22 cases and one case carrying six. The
+comparison tooling refuses to diff across that change rather than reporting a
+misleading delta.
 
-**Zero false alarms.** The corpus carries ten curated no-finding zones over regions
-that are clean at the parent commit, and the engine flagged none of them in any
-run. This is the first evidence the project has on whether it cries wolf. The scope
-is honest: ten zones across ten files is a floor on the question, not a full answer.
+The drop is the corpus getting harder, and specifically it is the
+one-defect-per-file behaviour becoming visible. A corpus of one-finding cases
+cannot see that limitation at all; this one is built to.
 
-**Caching works, and it is worth about 30%.** A run's review cost falls from $1.18
-to roughly $0.84 once the cache is warm, with 36–39% of input served from cache.
+**Precision and false alarms held under a substantially harder corpus**, which is
+the more reassuring half of the result.
 
 ## What limits recall today
 

@@ -903,6 +903,33 @@ severity must not be raised because a finding's evidence is strong or lowered
 because it is thin; that judgement belongs to refutation and admission, which
 decide whether the finding exists at all.
 
+### Measured Outcome Of The Severity Rubric
+
+The discovery prompt implements this rubric, and the pair was measured together on
+the 36-case corpus, three seeds per arm, with the actionable threshold lowered to
+`low` on both arms as this spec's evaluation counterpart requires.
+
+Severity agreement moves from 48.5% (48 of 99 checks) to 55.0% (61 of 111), a gain
+of 6.5 percentage points at z = 0.94, p = 0.35. **That is directional, not
+established.** Recall is unharmed at 46.3% against a 46.7% default-floor baseline,
+and adjusted precision is unchanged.
+
+Cost is a 2.5% increase on warm runs. The first treatment run cost noticeably more
+because changing the prompt invalidates its cached prefix; that is a one-off on any
+prompt edit and not a property of the clause.
+
+The clause ships despite the result being inconclusive, because the argument for it
+is not the measurement. This spec now defines severity normatively, and the previous
+prompt clause did not implement it: its `high` band read "a defect that produces
+wrong results, a security weakness, or a failure on a realistic path, that would
+block release", which covers nearly anything worth reporting, while `medium` was
+defined only negatively. A reviewer following it literally rates almost everything
+`high`, which is what nineteen archived runs show — 96% agreement with a `high`
+expectation, 4% with a `medium`, none with a `low`, and no `critical` or `low`
+findings emitted at all. Leaving that clause in place would be a spec violation
+whatever the metric said. The measurement's role was to establish that implementing
+the spec costs neither recall nor precision, and it does not.
+
 ## Admission Gate
 
 A candidate is admitted only when all checks pass:
