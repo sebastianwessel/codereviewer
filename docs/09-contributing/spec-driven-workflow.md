@@ -55,7 +55,7 @@ Find the spec that owns the behavior. The set is listed in
 | `00-*` | Vision, scope and glossary, conventions, stack, file structure, architecture overview |
 | `01`–`03` | Architecture, capability inventory, contracts and flows |
 | `04`–`09` | Configuration and providers, review workflow and runtime, evaluation and gates, security/privacy/operations, dependencies and release, readiness audit |
-| `11`+ | Feature specs: external context ingestion, verification flow, review comments, security-focused review, cross-file discovery, real-repository eval corpus, discovery posture, independent sampling. Withdrawn numbers (`14`, `18`, `19`) are retired, not reused |
+| `11`+ | Feature specs: external context ingestion, verification flow, review comments, security-focused review, cross-file discovery, real-repository eval corpus, independent sampling. Withdrawn numbers (`14`, `18`, `19`, `20`) are retired, not reused |
 
 Every spec carries a `Status` and a `Date` header. Implement against
 `Approved` specs.

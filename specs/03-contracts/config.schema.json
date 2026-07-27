@@ -17,7 +17,6 @@
           "maxToolCallsPerTask": 100,
           "maxBytesPerRead": 24000
         },
-        "discoveryPosture": "precise",
         "discoverySampleCount": 1
       },
       "type": "object",
@@ -126,14 +125,6 @@
           ],
           "additionalProperties": false
         },
-        "discoveryPosture": {
-          "default": "precise",
-          "type": "string",
-          "enum": [
-            "precise",
-            "investigative"
-          ]
-        },
         "discoverySampleCount": {
           "default": 1,
           "type": "integer",
@@ -151,7 +142,6 @@
         "maxFileBytes",
         "inlineSeverityThreshold",
         "crossFileRetrieval",
-        "discoveryPosture",
         "discoverySampleCount"
       ],
       "additionalProperties": false

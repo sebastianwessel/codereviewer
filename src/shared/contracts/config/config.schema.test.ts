@@ -114,26 +114,18 @@ describe('CodeReviewerConfigSchema', () => {
     }
   })
 
-  test('discovery posture defaults to precise', () => {
-    // Spec 20: the posture is a measured variant, so the shipped default stays
-    // the behaviour that has actually been measured.
-    expect(CodeReviewerConfigSchema.parse({}).review.discoveryPosture).toBe(
-      'precise'
-    )
-
-    expect(
-      CodeReviewerConfigSchema.parse({
-        review: { discoveryPosture: 'investigative' }
-      }).review.discoveryPosture
-    ).toBe('investigative')
-  })
-
-  test('discovery posture rejects a value outside the two postures', () => {
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        review: { discoveryPosture: 'aggressive' }
-      })
-    ).toThrow()
+  // The discovery posture was removed on 2026-07-27 after its A/B failed the rule
+  // fixed in advance. As with the context scout above, no compatibility shim is
+  // offered: a config that still selects a posture must fail loudly rather than
+  // run a review that quietly ignores what the file asks for.
+  test('a config still setting the removed discovery posture fails validation', () => {
+    for (const removed of ['precise', 'investigative', 'aggressive']) {
+      expect(() =>
+        CodeReviewerConfigSchema.parse({
+          review: { discoveryPosture: removed }
+        })
+      ).toThrow()
+    }
   })
 
   test('discovery sample count defaults to one and is bounded', () => {

@@ -228,6 +228,23 @@ cost.** Every structural intervention added calls, tokens, or context and bought
 between nothing and noise. The changes that moved the number changed what the
 reviewer was asked, or what the scoring counted.
 
+### Framing is cheap, not automatic
+
+| Change | What it changed | Measured result | Status |
+| --- | --- | --- | --- |
+| **Discovery posture** | One appended paragraph lowering the evidence bar the reviewer applied to *itself*, at unchanged call count and packet | 36-case / 80-expectation corpus, 4 seeds per arm: **45.94% → 44.69%**, 95% CI **[−4.38, +1.25]**, 5 gained and 5 lost, **p = 1.0**. Candidates per run **fell**, 74.8 → 70.8 | **[Removed](../03-concepts/optional-capabilities/discovery-posture.md)** |
+
+The posture is the counterexample that keeps the sentence above honest: a prompt
+change costs almost nothing, and it can still fail. It failed in an instructive
+way — it was built to *widen* discovery and the candidate count went **down**, so
+the arm never tested the mechanism it was written for.
+
+It also came from a source we implemented only half of: that source paired
+aggressive prompting with an agent that **calls tools and chooses its own
+investigation depth**, and this engine's discovery lane is single-shot and
+tools-off. The reviewer was told to investigate with no way to investigate.
+**What failed here is a prompt, not the idea.**
+
 ### Two results that outlived the interventions that produced them
 
 Neither of these is a feature. Both are measurements that any future attempt at
@@ -320,6 +337,7 @@ Source: `specs/21-independent-sampling.md`, *Conversation History*.
 - [Current results](current-results.md) — the measured numbers, with their dates and corpora
 - [Comparing runs](comparing-runs.md) — the variance band and the decision procedure
 - [Extra discovery passes (removed)](../03-concepts/optional-capabilities/extra-discovery-passes.md) — the record of the three removals
+- [Discovery posture (removed)](../03-concepts/optional-capabilities/discovery-posture.md) — the framing change that failed, and why that is not a verdict on the idea
 - [Optional capabilities](../03-concepts/optional-capabilities/README.md) — the three retained switches and their verdicts
 - [Holistic discovery](../03-concepts/pipeline/04-holistic-discovery.md) — what discovery does today
 - [Running in CI/CD](../04-guides/ci-cd.md) — wiring the iterative loop into a gate

@@ -24,7 +24,6 @@ whole-file review and a per-candidate refutation pass.
 | CAP-AI-004 | Refutation | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
 | CAP-AI-005 | Semantic finding merge | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-AI-006 | Agentic cross-file discovery (mediated repo read/list/grep during discovery, off by default) | ACT-MODEL, ACT-REVIEWER | Yes | `16-agentic-cross-file-discovery.md`, `04-configuration-and-providers.md` |
-| CAP-AI-008 | Discovery posture (measured variant; default `precise`) | ACT-MODEL, ACT-REVIEWER | Yes | `20-discovery-posture.md`, `04-configuration-and-providers.md` |
 | CAP-AI-009 | Independent discovery sampling with union merge (measured variant; default `k = 1`) | ACT-MODEL, ACT-REVIEWER | Yes | `21-independent-sampling.md`, `05-review-workflow-and-runtime.md`, `04-configuration-and-providers.md` |
 | CAP-ADM-001 | Admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
@@ -217,19 +216,16 @@ include in the discovery packet; it is removed on mechanism, not on a failed
 result, because its only measurement is void. The reasoning is recorded under
 *Withdrawal Of The Context Scout* in `05-review-workflow-and-runtime.md`.
 
-### CAP-AI-008 Discovery Posture
+### CAP-AI-008 Discovery Posture — withdrawn
 
-- Trigger: `review.discoveryPosture`. Default `precise`.
-- Contracts: `20-discovery-posture.md`. The posture changes only how much
-  self-evidence the reviewer demands before raising a candidate. It introduces no
-  categories, checklists, or examples, and alters neither the call count nor the
-  packet's field order.
-- Side effects: none beyond a slightly longer instruction.
-- Final state: refutation, the semantic finding merge, and admission are unchanged;
-  the posture widens what reaches them and never what leaves them.
-- Verification: config schema default test, prompt genericity guard, instruction
-  unit test, and a discovery test asserting identical call count and packet field
-  order across postures.
+Removed on 2026-07-27, together with `specs/20-discovery-posture.md` and the
+`review.discoveryPosture` configuration key. The identifier is retired and not
+reused. The posture was an instruction segment that lowered the evidentiary bar
+the discovery reviewer applied to itself; its A/B failed the decision rule fixed
+in advance, and the intervention moved candidate count in the wrong direction. The
+measurement, and the reason it is not a verdict on the idea it came from, are
+recorded under *Measured Outcome Of The Withdrawn Discovery Posture* in
+`05-review-workflow-and-runtime.md`.
 
 ### CAP-AI-009 Independent Discovery Sampling
 

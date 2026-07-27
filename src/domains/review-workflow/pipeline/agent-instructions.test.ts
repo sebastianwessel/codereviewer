@@ -6,7 +6,6 @@ import {
 import {
   crossFileRetrievalInstructions,
   holisticReviewerInstructionsFor,
-  investigativeDiscoveryPostureInstructions,
   modelFindingRefuterInstructions,
   modelHolisticReviewerInstructions,
   modelSemanticMergeInstructions
@@ -97,149 +96,30 @@ describe('model agent instructions', () => {
   })
 })
 
-// Spec 20. The posture is only a valid experiment if it moves ONE dial: how much
-// self-evidence the reviewer demands before raising a candidate. Everything below
-// exists to hold it to that, because the failure mode is silent — a posture that
-// quietly names a defect class reads exactly like a posture and behaves like the
-// checklist that was already measured and rejected here.
-describe('discovery posture', () => {
-  test('the precise posture is the current prompt, byte for byte', () => {
-    // The default path must not change at all: same prompt, and therefore the
-    // same prompt-cache prefix a run already gets today.
+// Prompt-cache prefix stability is a measured property of this engine: a
+// provider-side cache matches on leading tokens, so every optional discovery
+// segment must be a strict SUFFIX of the base prompt rather than woven into it.
+describe('discovery prompt composition', () => {
+  test('the default discovery prompt is the base prompt, byte for byte', () => {
     expect(
-      holisticReviewerInstructionsFor({
-        posture: 'precise',
-        crossFileRetrievalEnabled: false
-      })
+      holisticReviewerInstructionsFor({ crossFileRetrievalEnabled: false })
     ).toBe(modelHolisticReviewerInstructions)
   })
 
-  test('every posture keeps the base prompt as an exact leading prefix', () => {
-    // Prompt-cache prefix stability is a measured property of this engine, and a
-    // provider cache matches on leading tokens. A posture woven into the middle
-    // of the method would invalidate the prefix for every configuration at once.
+  test('every configuration keeps the base prompt as an exact leading prefix', () => {
     for (const crossFileRetrievalEnabled of [false, true]) {
-      for (const posture of ['precise', 'investigative'] as const) {
-        expect(
-          holisticReviewerInstructionsFor({
-            posture,
-            crossFileRetrievalEnabled
-          }).startsWith(modelHolisticReviewerInstructions)
-        ).toBe(true)
-      }
-    }
-  })
-
-  test('the investigative posture only appends, and only the posture segment', () => {
-    const precise = holisticReviewerInstructionsFor({
-      posture: 'precise',
-      crossFileRetrievalEnabled: false
-    })
-    const investigative = holisticReviewerInstructionsFor({
-      posture: 'investigative',
-      crossFileRetrievalEnabled: false
-    })
-
-    expect(investigative).toBe(
-      `${precise}\n${investigativeDiscoveryPostureInstructions}`
-    )
-  })
-
-  test('the investigative posture speaks only about the evidentiary bar', () => {
-    // The dial it is allowed to move, stated in its own words.
-    expect(investigativeDiscoveryPostureInstructions).toContain(
-      'Lower the bar you apply to YOURSELF before raising a finding'
-    )
-    // And the promise that nothing else moves with it.
-    expect(investigativeDiscoveryPostureInstructions).toContain(
-      'This changes how much certainty you demand of yourself, and nothing else.'
-    )
-    expect(investigativeDiscoveryPostureInstructions).toContain(
-      'It does not change what to look for, which files or lines are in scope, or what counts as a defect'
-    )
-    // Severity must not become a confidence dial when the bar drops, or the
-    // gate's meaning changes with the posture.
-    expect(investigativeDiscoveryPostureInstructions).toContain(
-      'severity must still reflect impact rather than your confidence'
-    )
-  })
-
-  // THE validity condition for the whole experiment. If this fails, the arm being
-  // measured is not "the same review with a lower bar" but "a different review",
-  // and the comparison means nothing. The vocabulary below is deliberately drawn
-  // from the defect classes the base prompt itself enumerates plus the security
-  // mechanisms the dedicated pass enumerates: those are precisely the words a
-  // posture must not repeat, because repeating them is what reallocates attention.
-  test('the investigative posture names no defect category, mechanism, or example', () => {
-    const forbiddenVocabulary = [
-      // Defect classes from the reviewer's own STEP 4 sweep.
-      'correctness',
-      'logic',
-      'off-by-one',
-      'condition',
-      'branch',
-      'side effect',
-      'idempotent',
-      'concurrency',
-      'concurrent',
-      'race',
-      'deadlock',
-      'lock',
-      'atomic',
-      'interface',
-      'signature',
-      'schema',
-      'contract',
-      'nullable',
-      'null',
-      'security',
-      'memory',
-      'resource',
-      'leak',
-      'privacy',
-      'secret',
-      'credential',
-      'token',
-      // Mechanisms the dedicated security pass enumerates.
-      'injection',
-      'authentication',
-      'authorization',
-      'permission',
-      'traversal',
-      'deserialization',
-      'crypto',
-      'randomness',
-      'sanitize',
-      'escaping',
-      'parameterization',
-      'validation',
-      'allowlist'
-    ]
-
-    for (const token of forbiddenVocabulary) {
-      const escaped = token.replaceAll(/[.*+?^${}()|[\]\\]/gu, '\\$&')
-      const bounded = new RegExp(`(?<![A-Za-z0-9])${escaped}`, 'iu')
-
       expect(
-        bounded.test(investigativeDiscoveryPostureInstructions),
-        `the investigative posture mentions "${token}"; a posture that names a defect class is a checklist, and a checklist reallocates attention across categories (spec 20)`
-      ).toBe(false)
+        holisticReviewerInstructionsFor({
+          crossFileRetrievalEnabled
+        }).startsWith(modelHolisticReviewerInstructions)
+      ).toBe(true)
     }
   })
 
-  test('the investigative posture gives no examples and is not a list', () => {
-    // An example is a category in disguise: it tells the reviewer what shape of
-    // defect the instruction has in mind.
-    for (const marker of ['for example', 'e.g.', 'such as', 'for instance']) {
-      expect(
-        investigativeDiscoveryPostureInstructions.toLowerCase()
-      ).not.toContain(marker)
-    }
-
-    // A checklist is recognisable by its enumeration. Prose only.
-    for (const clause of investigativeDiscoveryPostureInstructions.split('\n')) {
-      expect(/^\s*(?:[-*•]|\d+[.)])\s/u.test(clause)).toBe(false)
-    }
+  test('cross-file retrieval only appends its own segment', () => {
+    expect(
+      holisticReviewerInstructionsFor({ crossFileRetrievalEnabled: true })
+    ).toBe(`${modelHolisticReviewerInstructions}\n${crossFileRetrievalInstructions}`)
   })
 })
 
@@ -259,23 +139,11 @@ describe('prompt genericity guard', () => {
     ['semantic merge', modelSemanticMergeInstructions],
     ['security pass instruction', securityReviewInstruction],
     ['security pass checklist', securityReviewChecklist],
-    // Spec 20 requires BOTH postures to stay generic and language-neutral, so the
-    // posture segment and the composed prompt a run actually sends are both
-    // guarded, not only the segment in isolation.
-    ['investigative posture', investigativeDiscoveryPostureInstructions],
+    // The composed prompt a run actually sends is guarded too, not only the
+    // segments in isolation.
     [
-      'precise-posture reviewer',
-      holisticReviewerInstructionsFor({
-        posture: 'precise',
-        crossFileRetrievalEnabled: false
-      })
-    ],
-    [
-      'investigative-posture reviewer',
-      holisticReviewerInstructionsFor({
-        posture: 'investigative',
-        crossFileRetrievalEnabled: false
-      })
+      'composed discovery reviewer',
+      holisticReviewerInstructionsFor({ crossFileRetrievalEnabled: true })
     ]
   ]
 

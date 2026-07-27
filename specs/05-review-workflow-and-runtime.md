@@ -25,8 +25,7 @@ Date: 2026-07-21
 12. Resolve provider when model-backed review is enabled.
 13. Run holistic discovery: a recall-first whole-file review per task, drawn as
     `review.discoverySampleCount` mutually blind samples combined by union
-    (`21-independent-sampling.md`, default one sample) under the configured
-    `review.discoveryPosture` (`20-discovery-posture.md`), plus the optional
+    (`21-independent-sampling.md`, default one sample), plus the optional
     dedicated security pass (`15-security-focused-review.md`) when enabled. That
     pass is additive and cannot displace a candidate the primary review raised.
 14. Merge candidates that describe one defect, per Semantic Finding Merge below.
@@ -303,9 +302,7 @@ That single framing may be **sampled** more than once. `review.discoverySampleCo
 their candidates by union, per `21-independent-sampling.md`. Sampling is not a second
 pass: every sample asks the same question of the same packet, no sample sees another
 sample's output, and the union is deduplicated only by the Semantic Finding Merge
-below. How much self-evidence the reviewer demands before raising a candidate is set
-by `review.discoveryPosture` (default `precise`), per `20-discovery-posture.md`; the
-posture changes neither the packet nor the number of calls.
+below.
 
 - The review input is the task's unified-diff segment plus the full
   line-numbered changed files, alongside deterministic support signals,
@@ -499,6 +496,62 @@ measured and that the mechanism argues against it. Anyone proposing demand-drive
 context should bring a design that answers point 1 — some reason the reviewer will
 read what it is handed — rather than a better selector in front of the same
 reviewer.
+
+### Measured Outcome Of The Withdrawn Discovery Posture
+
+A configurable **discovery posture** existed briefly: `review.discoveryPosture`,
+with `precise` (the default and current behaviour) against `investigative`, an
+appended instruction segment that lowered the evidentiary bar the reviewer applied
+to **itself** before raising a candidate. It had its own spec (20), its own
+capability entry (CAP-AI-008), and no other effect — no defect categories, no
+change to the call count, the packet, or its field order. All of it was removed on
+2026-07-27, including the spec and the configuration key; a config that still sets
+`review.discoveryPosture` fails validation with exit code 2, as with the withdrawn
+passes and the context scout above.
+
+The A/B, n=4 per arm on the 36-case / 80-expectation real-repository corpus, paired
+finding-level test (`reports/eval-results-ledger.md`):
+
+| | `precise` | `investigative` |
+|---|---:|---:|
+| Recall | **45.94%** | **44.69%** |
+| Adjusted precision | 0.819 | 0.873 |
+| Genuine false positives / run | 8.3 | 5.3 |
+| Candidates / run | 74.8 | **70.8** |
+| Cost / run | $1.32 | $1.36 |
+
+Recall delta **−1.25pp**, 95% CI **[−4.38, +1.25]**, 5 gained against 5 lost,
+**p = 1.0000**. Spec 20's rule, fixed before the run, read "remove if recall does
+not rise". Recall did not rise.
+
+**The intervention did not do the thing it was built to do.** The posture existed
+to *widen* discovery, and the candidate count **fell**, 74.8 → 70.8. So this arm
+never tested "widen discovery and see whether the refutation gate absorbs it" —
+discovery never widened. The added paragraph appears to have made the reviewer more
+careful rather than less, plausibly because it repeats that severity must reflect
+impact rather than confidence and asks the reviewer to state what it could not
+determine. A future attempt at this idea should first demonstrate on a handful of
+cases that the prompt actually raises candidate count, before spending on an arm.
+
+The precision movement is **not** a reason to keep it. Adjusted precision rose
+0.819 → 0.873 and genuine false positives fell 36% at equal cost, but that is a
+post-hoc reading of an experiment that failed its primary endpoint, on the arm
+whose candidate count happened to fall — the classic shape of a result that does
+not replicate. It is recorded as a hypothesis worth its own pre-registered test
+(*does an instruction that makes the reviewer more explicit about uncertainty
+improve precision at no recall cost?*), not as a finding.
+
+**What this does not establish, and it is the most important line here.** This was
+not a faithful test of the idea it came from. The source changed **two** things: it
+replaced a fixed pipeline with an agent that **calls tools and decides its own
+investigation depth**, *and* it made prompting aggressive. **We implemented only the
+prompt.** This engine's discovery lane is single-shot and tools-off by design, so
+the reviewer was told to investigate every suspicious pattern **with no mechanism to
+investigate anything** — words were added, not capability, and that is a plausible
+reason candidate count fell rather than rose. **What was measured here is a prompt.
+The source's actual architecture — aggressive prompting paired with an agent that
+can act on the instruction — is untested in this engine, and this record must not be
+cited as evidence against it.**
 
 ## Refutation
 

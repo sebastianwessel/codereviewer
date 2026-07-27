@@ -160,7 +160,7 @@ Concept-level detail lives in [the concepts section](../03-concepts/review-lifec
 | `07-security-privacy-operations.md` | Security, privacy and operations |
 | `08-dependencies-and-release.md` | Dependencies and release |
 | `09-readiness-self-audit.md` | Readiness self-audit |
-| `11-` … `21-` | Feature specs: external context ingestion, verification flow, review comments, security-focused review, cross-file discovery, real-repository eval corpus, discovery posture, independent sampling. `14`, `18`, and `19` are retired and never reused |
+| `11-` … `21-` | Feature specs: external context ingestion, verification flow, review comments, security-focused review, cross-file discovery, real-repository eval corpus, independent sampling. `14`, `18`, `19`, and `20` are retired and never reused |
 | `_registry.yaml`, `_provenance.yaml` | Spec registry and provenance |
 
 `specs/README.md` and `specs/00-conventions.md` define the source-of-truth

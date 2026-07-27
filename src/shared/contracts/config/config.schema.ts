@@ -81,24 +81,6 @@ export const CrossFileRetrievalConfigSchema = z.strictObject({
   maxBytesPerRead: z.int().min(1000).max(200000).default(24000)
 })
 
-// Discovery posture (spec 20). This selects ONE thing and nothing else: how much
-// self-evidence the discovery reviewer demands of itself before it raises a
-// candidate.
-//
-// `precise` is the current, default behaviour — a candidate is raised only when
-// the reviewer can support the claim from the code in front of it.
-// `investigative` lowers that bar: the reviewer pursues a pattern it finds
-// suspicious and reports what it can support, leaving adjudication to refutation
-// and admission, which exist for exactly that purpose.
-//
-// It deliberately does NOT name, hint at, or enumerate any defect category,
-// mechanism, or example. A checklist reallocates attention ACROSS categories,
-// which was measured here to trade authorization recall for injection recall,
-// and that change was rejected on those grounds. The posture also adds no model
-// calls and changes neither the packet shape nor its field order, because
-// prompt-cache prefix stability is a measured property of this engine.
-export const DiscoveryPostureSchema = z.enum(['precise', 'investigative'])
-
 // Independent discovery samples (spec 21). Discovery runs this many times for a
 // task, each sample blind to every other, and the candidates are combined by
 // UNION and then deduplicated by the semantic finding merge alone.
@@ -133,9 +115,6 @@ export const ReviewConfigSchema = z.strictObject({
     maxToolCallsPerTask: 100,
     maxBytesPerRead: 24000
   }),
-  // Spec 20. `precise` until measurement selects otherwise: the posture is a
-  // measured variant, not a shipped recommendation.
-  discoveryPosture: DiscoveryPostureSchema.default('precise'),
   // Spec 21. `1` until measurement selects otherwise, and `1` is exactly today's
   // single-call path: same packet, same field order, same call count.
   discoverySampleCount: z
@@ -542,7 +521,6 @@ export const CodeReviewerConfigSchema = z.strictObject({
       maxToolCallsPerTask: 100,
       maxBytesPerRead: 24000
     },
-    discoveryPosture: 'precise',
     discoverySampleCount: 1
   }),
   provider: ProviderConfigSchema.optional(),
@@ -644,7 +622,6 @@ export type ReviewConfig = z.infer<typeof ReviewConfigSchema>
 export type CrossFileRetrievalConfig = z.infer<
   typeof CrossFileRetrievalConfigSchema
 >
-export type DiscoveryPosture = z.infer<typeof DiscoveryPostureSchema>
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 export type InstructionsConfig = z.infer<typeof InstructionsConfigSchema>
 export type SkillsConfig = z.infer<typeof SkillsConfigSchema>

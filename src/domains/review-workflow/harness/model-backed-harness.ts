@@ -111,11 +111,7 @@ export const createModelBackedReviewHarness = (
         input: HolisticReviewInputSchema,
         output: ModelHolisticReviewResultSchema,
         ...agentOptionsForRole('holistic_review'),
-        // Spec 20: the posture lives in the AGENT's instructions, not in the
-        // per-call packet, so it changes neither the number of calls nor the
-        // packet's shape or field order.
         instructions: holisticReviewerInstructionsFor({
-          posture: options.discoveryPosture ?? 'precise',
           crossFileRetrievalEnabled: crossFileEnabled
         })
       }),

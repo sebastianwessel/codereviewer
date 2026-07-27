@@ -115,7 +115,6 @@ provider-specific object as passthrough.
 | `inlineSeverityThreshold` | severity | `"high"` | Only affects reporter eligibility. |
 | `maxCostUsd` | number >= 0 | preset-defined | Hard stop only when token usage and configured/provider pricing are available; otherwise reported as unavailable. |
 | `runTimeoutMs` | integer 10000..7200000 | unset | Optional whole-run timeout. When unset, no hidden Harness run timeout is applied; provider calls still use `provider.timeoutMs`. |
-| `discoveryPosture` | `"precise" \| "investigative"` | `"precise"` | How much self-evidence discovery demands before raising a candidate (`20-discovery-posture.md`). Adds no calls and changes neither the packet shape nor its field order. |
 | `discoverySampleCount` | integer 1..5 | `1` | Number of mutually blind discovery samples combined by union (`21-independent-sampling.md`). `1` is the single-call path. The upper bound is the published plateau. |
 
 `review.crossFileRetrieval` is a nested review block and is inventoried in its own
