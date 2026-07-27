@@ -46,6 +46,71 @@ An A/B whose effect is smaller than the band is not a null result — it is an
 
 ---
 
+## Deciding whether a change ships
+
+The variance band above says when a difference is readable. It does not say what
+to do with one. That is a separate discipline, and it is what keeps this
+project's verdicts cheap to accept afterwards.
+
+### Write the decision rule before the run
+
+Every measured change is specified with a three-way outcome **before any
+provider spend**, in the spec that introduces it. The shape is the same each
+time:
+
+| Outcome | Requires |
+| --- | --- |
+| **Adopt** | Recall rises **and** the paired test clears significance **and** `adjustedPrecision` and `genuineFalsePositiveCount` do not degrade **and** the cost per additional matched expectation is defensible |
+| **Retain as configuration** | Recall rises without significance at n=3, or the result is a genuine trade a user might reasonably want either side of |
+| **Remove** | Recall does not rise |
+
+Committing the rule in advance is what stops a marginal result from being
+re-argued into a shipped feature. A change that fails its own rule is
+**removed** — code, configuration keys, and spec — rather than kept as an
+unproven switch, because an option nobody can justify enabling is permanent
+maintenance and documentation cost with no counterpart. Five structural
+interventions have failed this rule so far; see
+[What limits recall](what-limits-recall.md#what-has-been-tried-against-it).
+
+Where a rule depends on a mechanism rather than a headline, say so in advance
+too. The un-anchored discovery A/B pre-committed that refutation's kill rate had
+to *rise*: had discovery raised 56% more candidates while the gate killed the
+same fraction, the extra candidates would have been reaching reports rather than
+being filtered, and the change would have failed regardless of what recall did.
+
+### Compare paired expectations, not run means
+
+A difference of arm means throws away the information that matters. Score each
+**individual expected finding**, keyed by `caseId` + `expectedIndex`, across
+every seed of both arms, then ask how many expectations changed side.
+`src/domains/evaluation/eval-significance.ts` does this and reports:
+
+- the per-expectation hit-rate difference and a confidence interval on the mean;
+- **gained**, **lost**, and **discordant** counts;
+- a normal approximation to McNemar's statistic over the discordant
+  expectations, so an effect built from a handful of coin flips is reported as
+  such;
+- **unpaired expectations** — anything scored in only one arm — held out of the
+  comparison entirely.
+
+The difference this makes is not cosmetic. The un-anchored discovery pass
+measured **+0.83pp** of mean recall, which reads like a small win. Paired, the
+same data is **10 expectations gained and 9 lost, p = 0.82** — a coin flip, and
+an unambiguous removal.
+
+Gained-and-lost counts also diagnose a specific failure that means alone hide: a
+mechanism that wrongly collapses or filters findings produces **one-sided**
+loss. Symmetric churn is noise; nine lost against zero gained is a bug.
+
+### Report the band, not the best run
+
+A headline figure is the **mean across seeds** with its range. A single-seed
+claim is reported with the band or not at all, and an effect below the
+resolution of the run count is described as **unmeasured**, never as the
+direction it happened to point.
+
+---
+
 ## `eval compare`
 
 ```bash

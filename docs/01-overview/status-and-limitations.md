@@ -84,6 +84,26 @@ toggle), `aiReview.deterministicSignalMode: 'support'`, `baseline.enabled`,
 
 ## Quality numbers: what can and cannot be claimed
 
+- **Every figure recorded so far predates a harness change and none of them is
+  comparable to a current run.** Until 2026-07-27 the review harness forwarded the
+  accumulated session conversation into every agent call, so each stage opened
+  holding the output of every call that had finished before it, attributed to the
+  model itself — refutation in particular began each call appearing to have already
+  asserted the candidates it was about to adjudicate. That is now suppressed
+  harness-wide. **The direction of the effect is unknown and unmeasured**: the
+  behaviour was removed because it contradicts what those stages are specified to
+  do, not because it was shown to be harmful, so it must not be described as an
+  accuracy improvement. Every recall and precision number this project has published
+  was produced with history-carrying stages. See
+  [What limits recall](../05-quality/what-limits-recall.md#a-caveat-that-applies-to-every-number-here).
+- **The known quality limitation is enumeration, not capability.** The engine
+  reliably finds the primary defect in a changed region and rarely a second one in
+  the same file, because its attention follows the diff. Six structural
+  interventions have been measured against this; five failed. That sets a
+  **58.8% ceiling on a single review pass** against the evaluation corpus, which the
+  engine already reaches about 80% of, and it is the reason the iterative
+  review-fix-re-review loop matters more than any single-pass tuning.
+  → [What limits recall](../05-quality/what-limits-recall.md)
 - **There is no published baseline.** Expected-finding matching moved to a
   judge-only semantic matcher and the previous lexical matcher was removed, so
   every previously published number is void and not comparable to anything the

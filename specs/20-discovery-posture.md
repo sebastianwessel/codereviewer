@@ -22,6 +22,12 @@ Measured 2026-07-27 (`reports/2026-07-27-unanchored-pass-ab-result.md`):
 being conservative.** That couples precision and recall to a single dial and
 explains why every attempt to raise recall so far has cost precision.
 
+Both columns were measured before the harness-wide suppression of conversation
+history (see *Conversation History* in `21-independent-sampling.md`), so neither is
+a current figure. They are quoted for the *relationship* they establish — the gate
+absorbs speculation — and the measurement below must re-baseline rather than reuse
+them as an arm.
+
 The gate has now been shown, under load, to absorb a large increase in
 speculative candidates without adjusted precision degrading. Widening discovery
 is therefore a change the pipeline can afford, and the posture is the cheapest
@@ -64,10 +70,24 @@ This change touches neither the categories nor the number of calls. It changes
 the evidentiary bar the reviewer applies to itself, which is the one dial none of
 the withdrawn experiments moved.
 
-Precedent for the size of prompt effects in this engine: adding a single
-instruction — the untrusted-input guard — moved recall from 62.5% to 81.3–87.5%
-at identical cost with no precision loss. Framing has outperformed every
-structural change attempted here.
+Precedent for the size of prompt effects in this engine, stated at its corrected
+size: adding a single instruction — the untrusted-input guard — was first reported
+as +18.8pp (62.5% → 81.3–87.5%), but that was measured on a 16-finding corpus.
+Re-measured on 133 findings the same change is worth **+3.8pp** — 48 matched of
+133 with the guard on against 43 without it, 36.1% versus 32.3%, from the archived
+paired arms `crbA-guard-on.json` and `crbB-guard-off.json`. The larger
+figure was mostly that small corpus's own noise, and the smaller one is the number
+to plan against.
+
+That correction cuts both ways, and both directions matter here. It removes the
+claim that a prompt change once moved recall by twenty points, so this proposal
+must not be justified by that figure. What survives is the narrower and still
+useful observation: prompt changes in this engine have produced **positive**
+effects at **no additional cost**, while five structural interventions produced
+none at costs from +27% to +136%. A +3.8pp-sized effect is below what three seeds
+can resolve against a ~4.8pp variance band, so this measurement should expect to
+need more seeds, or to report an honest "cannot distinguish from noise" rather
+than a win.
 
 ## Measurement
 

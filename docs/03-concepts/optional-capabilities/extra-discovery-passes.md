@@ -117,6 +117,9 @@ diverse-lens pass; that requirement has been withdrawn. Discovery is officially
 
 ## Related
 
+- [What limits recall](../../05-quality/what-limits-recall.md) — the enumeration gap
+  these three were built against, why attention follows the diff, and every
+  intervention measured against it
 - [Holistic discovery](../pipeline/04-holistic-discovery.md) — what discovery does today
 - [Current results](../../05-quality/current-results.md) — the measurement in context
 - [Optional capabilities](README.md) — what actually ships as a switch

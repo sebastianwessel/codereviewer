@@ -21,8 +21,12 @@ whole-file review and a per-candidate refutation pass.
 | CAP-INSTR-001 | Reviewer instructions | ACT-DEV | Yes | `04-configuration-and-providers.md` |
 | CAP-SKILL-001 | Mounted reviewer skills | ACT-DEV | Yes | `04-configuration-and-providers.md`, `07-security-privacy-operations.md` |
 | CAP-AI-001 | Holistic discovery | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
-| CAP-AI-005 | Semantic finding merge | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-AI-004 | Refutation | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
+| CAP-AI-005 | Semantic finding merge | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
+| CAP-AI-006 | Agentic cross-file discovery (mediated repo read/list/grep during discovery, off by default) | ACT-MODEL, ACT-REVIEWER | Yes | `16-agentic-cross-file-discovery.md`, `04-configuration-and-providers.md` |
+| CAP-AI-007 | Context scout (separate context-selection call, off by default) | ACT-MODEL, ACT-REVIEWER | Yes | `18-context-scout.md`, `04-configuration-and-providers.md` |
+| CAP-AI-008 | Discovery posture (measured variant; default `precise`) | ACT-MODEL, ACT-REVIEWER | Yes | `20-discovery-posture.md`, `04-configuration-and-providers.md` |
+| CAP-AI-009 | Independent discovery sampling with union merge (measured variant; default `k = 1`) | ACT-MODEL, ACT-REVIEWER | Yes | `21-independent-sampling.md`, `05-review-workflow-and-runtime.md`, `04-configuration-and-providers.md` |
 | CAP-ADM-001 | Admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-002 | Markdown report | ACT-DEV, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md` |
@@ -41,6 +45,7 @@ whole-file review and a per-candidate refutation pass.
 | CAP-EVAL-001 | Evaluation runner | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-002 | Evaluation analysis commands | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-003 | Semantic judge matching | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md` |
+| CAP-EVAL-005 | Real-repository evaluation corpus | ACT-OPS | Yes | `17-real-repository-eval-corpus.md`, `06-evaluation-and-quality-gates.md` |
 | CAP-EVAL-004 | Per-mechanism security measurement (recall/precision by CWE mechanism + context-depth, held-out anti-contamination) | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `15-security-focused-review.md` |
 | CAP-SEC-001 | Security review lens (generic OWASP/CWE checklist discovery, refutation-gated) | ACT-MODEL, ACT-REVIEWER | Yes | `15-security-focused-review.md`, `05-review-workflow-and-runtime.md` |
 | CAP-SEC-002 | Deterministic security-signal evidence (source/sink, CWE/data-flow) | ACT-MODEL, ACT-DEV | Yes | `15-security-focused-review.md`, `03-contracts/finding-evidence-report.md` |
@@ -191,6 +196,62 @@ whole-file review and a per-candidate refutation pass.
 - Verification: tests with intentionally false candidates, guard-protected code,
   out-of-scope references, and provider failures.
 
+### CAP-AI-006 Agentic Cross-File Discovery
+
+- Trigger: `review.crossFileRetrieval.enabled`. Off by default.
+- Contracts: `16-agentic-cross-file-discovery.md`. Discovery may call the mediated
+  `repo_read`/`repo_list`/`repo_grep` tools, bounded by a per-task tool-call cap
+  and a per-read byte cap enforced in code.
+- Side effects: additional bounded provider steps and mediated repository reads;
+  no shell, network, or write authority.
+- Final state: disabled, discovery is single-shot with no tools and the run is
+  unchanged. Enabled, retrieved content is untrusted and its findings pass the
+  same refutation and admission as any other candidate.
+- Verification: cross-file tool and discovery wiring tests.
+
+### CAP-AI-007 Context Scout
+
+- Trigger: `review.contextScout.enabled`. Off by default.
+- Contracts: `18-context-scout.md`. A separate cheap call names out-of-change
+  symbols; deterministic resolution fetches their bodies and injects them as
+  referenced-definition context. The reviewer itself stays single-shot and
+  tool-free.
+- Side effects: one additional provider call per task and bounded repository reads.
+- Final state: a symbol deterministic resolution cannot find is never injected;
+  the scout can never influence a finding, a severity, or the gate.
+- Verification: context scout unit tests.
+
+### CAP-AI-008 Discovery Posture
+
+- Trigger: `review.discoveryPosture`. Default `precise`.
+- Contracts: `20-discovery-posture.md`. The posture changes only how much
+  self-evidence the reviewer demands before raising a candidate. It introduces no
+  categories, checklists, or examples, and alters neither the call count nor the
+  packet's field order.
+- Side effects: none beyond a slightly longer instruction.
+- Final state: refutation, the semantic finding merge, and admission are unchanged;
+  the posture widens what reaches them and never what leaves them.
+- Verification: config schema default test, prompt genericity guard, instruction
+  unit test, and a discovery test asserting identical call count and packet field
+  order across postures.
+
+### CAP-AI-009 Independent Discovery Sampling
+
+- Trigger: `review.discoverySampleCount`. Default `1`, bounded at `5`.
+- Contracts: `21-independent-sampling.md`. Discovery runs `k` mutually blind
+  samples over the identical packet and combines the candidates by union.
+  Consensus, majority voting, and agreement thresholds are forbidden, and no
+  second deduplication mechanism exists — the semantic finding merge (CAP-AI-005)
+  is the only one.
+- Side effects: `k` provider calls per task instead of one; cost rises close to
+  linearly in `k`.
+- Final state: `k = 1` is the single-call path. A failed sample costs that sample
+  only; the reduced count is recorded in the run and surfaced as a run warning.
+  No review agent call carries prior conversation.
+- Verification: discovery sampling unit tests for blindness, union, no second
+  dedup, and partial sample failure; handler tests for the reduced-count warning;
+  harness config and provider-boundary tests for conversation suppression.
+
 ### CAP-ADM-001 Admission Gate
 
 - Trigger: refutation result generated.
@@ -263,8 +324,10 @@ whole-file review and a per-candidate refutation pass.
 
 - Trigger: after admission, before reporting and quality gates.
 - Contracts: uses `FindingFingerprint` values and baseline config.
-- Side effects: reads configured baseline path when present; future write/update
-  command requires a separate spec.
+- Side effects: reads configured baseline path when present. Writing the baseline
+  is a separate explicit operation, `codereviewer baseline write`, defined under
+  *Baseline Generation* in `05-review-workflow-and-runtime.md`; the `review`
+  command must never write it.
 - Final state: admitted findings are marked new, existing, or unknown; resolved
   baseline entries are available in reports when configured.
 - Verification: baseline fixture tests for new, existing, resolved, and missing
@@ -322,6 +385,17 @@ whole-file review and a per-candidate refutation pass.
   config error. Matching metadata is recorded separately from production
   admission decisions.
 - Verification: hermetic scripted-judge matcher, calibration, and CLI tests.
+
+### CAP-EVAL-005 Real-Repository Evaluation Corpus
+
+- Trigger: `codereviewer eval run` against the real-repository corpus under
+  `eval/corpora/`.
+- Contracts: `17-real-repository-eval-corpus.md`.
+- Side effects: provider calls for review and judge scoring; local eval artifacts
+  only.
+- Final state: recall and precision are measured against cases derived from real
+  repository history rather than hand-authored fixtures.
+- Verification: corpus manifest and eval runner tests.
 
 ### CAP-EVAL-004 Benchmark Posture
 

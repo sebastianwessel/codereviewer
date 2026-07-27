@@ -21,9 +21,12 @@ the same shape — plan and scope first, analyse second.
 
 The context scout applies that separation: a **cheap, narrow model call decides what
 extra code is relevant**, deterministic code **fetches it**, and the reviewer stays a
-**single-shot, tool-free** review over a pre-assembled packet — the configuration
-that measures at roughly 68% recall with 100% adjusted precision and zero genuine
-false positives.
+**single-shot, tool-free** review over a pre-assembled packet — the configuration that
+measured 68.8% and 62.5% recall on the sixteen-case corpus in the two runs recorded in
+this spec and in `16-agentic-cross-file-discovery.md`, at 100% adjusted precision with
+zero genuine false positives in both. The spread between those two figures is the
+run-to-run band `06-evaluation-and-quality-gates.md` requires be reported rather than
+resolved to its best observed run.
 
 ## Mechanism
 
@@ -97,6 +100,24 @@ exit code 2. Keys are defined in `04-configuration-and-providers.md`.
 
 ## Measured Outcome
 
+**This measurement is void, and is retained only as a record of what was run.** Two
+independent reasons, both recorded elsewhere in this repository rather than inferred
+here:
+
+- The arm was measured on an implementation that does not conform to the *Mechanism*
+  section above — the scout is handed the full line-numbered discovery packet while
+  its own prompt tells it that it has no file bodies, and the symbol inventory this
+  spec requires is not built anywhere. `reports/2026-07-26-accuracy-and-measurement-plan.md`
+  states the consequence directly: the neutral verdict "should be treated as void."
+  See *Known Divergences From This Spec* below.
+- It predates the harness-wide suppression of conversation history on 2026-07-27
+  (see *Conversation History* in `21-independent-sampling.md`), so neither arm is
+  comparable to a current run.
+
+Nothing below may be quoted as evidence that the scout is neutral, harmful, or
+helpful. The capability's default is unaffected: it was already off, and it stays off
+until a conforming implementation is measured.
+
 Measured on the sixteen-case real-repository corpus against the same-model baseline,
 single variable, with zero provider errors in both arms: recall flat at 62.5%
 (ten matched in each), **adjusted precision held at 100% with zero genuine false
@@ -120,6 +141,29 @@ The actionable gap is engagement, not safety: either the scout is too conservati
 about asking, or these cases' evidence is not reachable by naming a symbol in an
 imported file. That is what a next iteration should attack, and a wider corpus should
 confirm, before this ships enabled.
+
+## Known Divergences From This Spec
+
+Recorded on 2026-07-27 by an alignment audit. **These are unmet requirements, not
+amendments.** The requirements above stand as written; this section exists so the gap
+is visible instead of silent, and so no future measurement is run against a
+non-conforming build without knowing it. Every item was verified against the
+implementation in `src/domains/review-workflow/pipeline/discovery/context-scout.ts`
+and its callers.
+
+| Requirement | What the implementation does |
+| --- | --- |
+| *Mechanism*: the scout "receives no file bodies and no tools" | It is passed the discovery packet's full line-numbered changed-file content, while its own prompt asserts it has none. |
+| *Mechanism*: a compact **symbol inventory** derived from the deterministic import/declaration facts | No inventory is built. The prompt requires every request to name a symbol "in the inventory" the model is never given. |
+| *Mechanism*: resolution derived from existing deterministic facts | The declaring path is a model-supplied hint and the declaring line is found by a heuristic text scan. |
+| *Mechanism*: bodies injected as `referenced-definition` review context | A string is appended to the review text after packet assembly, so a packet can carry two sections under the same heading. |
+| *Bounds And Cost*: a **total** byte cap across extracted bodies | Only the per-symbol cap exists. |
+| *Bounds And Cost*: the packet obeys `maxTaskInputBytes` and sheds scout context before changed-file source | The scout section is appended after budget fitting, so it is never measured or shed. |
+| *Purpose*/*Bounds And Cost*: a **cheap** model call | The scout uses the same model alias as the reviewer; only the prompt is narrower. |
+| *Observability*: a dropped count | Requested, resolved, and injected-byte counts are emitted; dropped is not. |
+
+Closing these is a prerequisite for any future scout measurement. Until then the
+*Measured Outcome* above is void, as that section states.
 
 ## Acceptance
 

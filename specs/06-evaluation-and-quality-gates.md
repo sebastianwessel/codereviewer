@@ -358,6 +358,13 @@ figure is the MEAN across seeds, never the best observed run. And a quality clai
 that rests on one seed must be reported with the band, because quoting the top of a
 range as the result overstates the engine.
 
+Those four seeds, and every other accuracy figure recorded anywhere in this
+repository, were measured before the harness-wide suppression of conversation
+history on 2026-07-27 (see *Conversation History* in `21-independent-sampling.md`).
+They are cited here for the run-to-run **variance** they establish, which is what
+this section is about; none of them is a current recall figure, and none may be
+quoted as one until a post-change run re-establishes a baseline.
+
 Rates computed over MATCHED findings — `severityAccuracy`, `lineAccuracy`, and the
 severity-weighted scores — are not comparable between two runs whose recall differs.
 Their denominator is the matched set, so a change that improves recall mechanically

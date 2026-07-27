@@ -11,8 +11,8 @@ repository files — summarize it with a dedicated model call, and inject it as 
 bounded, redacted, context-only document. The feature is optional and off by
 default.
 
-Design rationale and phasing:
-[`docs/design/external-context-ingestion.md`](../docs/design/external-context-ingestion.md).
+User-facing documentation for the implemented phase:
+[`docs/03-concepts/optional-capabilities/change-intent-context.md`](../docs/03-concepts/optional-capabilities/change-intent-context.md).
 
 ## Trust And Authority Boundary
 

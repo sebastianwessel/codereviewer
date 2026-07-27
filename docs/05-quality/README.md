@@ -12,7 +12,7 @@ code and a spec disagree, this section documents the code and says so.
 
 ## Why the numbers are worth reading
 
-Five design decisions do the work. Each one exists because the obvious
+Six design decisions do the work. Each one exists because the obvious
 alternative produces a number that looks fine and means nothing.
 
 1. **Matching is decided by a judge, and the judge is scored.**
@@ -51,7 +51,16 @@ alternative produces a number that looks fine and means nothing.
    across seeds**, never the best observed run.
    → [Comparing runs](comparing-runs.md#the-variance-band)
 
-5. **The corpus has to be able to contain the defect.**
+5. **A number is reported with what invalidates it.**
+   Measurement here is expected to survive its own history, so a change that
+   makes earlier runs incomparable is stated before the numbers rather than
+   after them. The most recent one is harness-wide: no review agent call
+   forwards prior conversation any more, and **every figure recorded before
+   2026-07-27 was produced under the old behaviour**. Whether it helped or hurt
+   is unmeasured.
+   → [What limits recall](what-limits-recall.md#a-caveat-that-applies-to-every-number-here)
+
+6. **The corpus has to be able to contain the defect.**
    Changed-files-only slices cannot test a cross-file defect at all: the
    evidence is not on disk, so no reviewer could find it and the measured
    "recall" is a property of the dataset. That is why a second corpus of **real
@@ -83,6 +92,7 @@ alternative produces a number that looks fine and means nothing.
 | [Running an evaluation](running-an-evaluation.md) | Hydration, the flags `eval run` actually parses, the artifacts it writes, and the gate trap. |
 | [Comparing runs](comparing-runs.md) | `eval compare`, `eval recall-report`, `eval slice-manifest`, and the statistics needed for a comparison to mean anything. |
 | [Current results](current-results.md) | The measured numbers themselves. |
+| [What limits recall](what-limits-recall.md) | Why the engine finds roughly one defect per file, the ceiling that puts on a single pass, every intervention measured against it, and the harness change that re-baselines all of the above. |
 
 ---
 

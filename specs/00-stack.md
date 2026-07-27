@@ -1,20 +1,24 @@
 # 00: Stack
 
 Status: Approved
-Date: 2026-06-22
+Date: 2026-07-27
 
 ## Runtime Stack
 
 | Layer | Decision | Evidence |
 | --- | --- | --- |
-| Runtime | Node.js `>=24.15.0` | `@purista/harness@1.5.2` engine metadata. |
+| Runtime | Node.js `>=24.15.0` | `@purista/harness` engine metadata. |
 | Module system | ESM only | `package.json` has `"type": "module"`; global invariant `INV-ESM-001`. |
 | Language | TypeScript `NodeNext`, strict mode | `tsconfig.json`; architecture spec. |
 | Package manager | npm with committed `package-lock.json` | dependency and release spec. |
-| Orchestration | `@purista/harness@1.5.2` | package metadata retrieved 2026-06-22. |
-| Validation | Zod `4.4.3` | package metadata retrieved 2026-06-22. |
-| Tests | Vitest `4.1.9` | package metadata retrieved 2026-06-22. |
-| Dev runner | tsx `4.22.4` | package metadata retrieved 2026-06-22. |
+| Orchestration | `@purista/harness` `^1.6.0` | `package.json` dependency range. |
+| Validation | Zod `^4.4.3` | `package.json` dependency range. |
+| Tests | Vitest `^4.1.9` | `package.json` dev dependency range. |
+| Dev runner | tsx `^4.22.4` | `package.json` dev dependency range. |
+
+Version evidence is the committed `package.json` range plus `package-lock.json`,
+not a point-in-time registry lookup, so this table cannot drift from the installed
+tree without the lockfile also changing.
 
 ## Public API Inventory
 
@@ -23,6 +27,11 @@ Date: 2026-06-22
 | CLI `codereviewer review` | Public R1 | `configuration`, `repository-intake`, `review-workflow` | Config and report contracts | Parses config, runs review, writes artifacts, exits with mapped code. |
 | CLI `codereviewer config validate` | Public R1 | `configuration` | Config contract | Validates normalized config and exits without side effects. |
 | CLI `codereviewer eval run` | Public R1 | `evaluation` | Eval contract | Runs fixture evaluations and writes eval report artifacts. |
+| CLI `codereviewer eval compare` | Public R1 | `evaluation` | Eval contract | Compares two eval reports and writes a comparison artifact. |
+| CLI `codereviewer eval recall-report` | Public R1 | `evaluation` | Eval contract | Renders a recall breakdown from eval report artifacts. |
+| CLI `codereviewer eval slice-manifest` | Public R1 | `evaluation` | Eval contract | Emits a corpus slice manifest for a selected case set. |
+| CLI `codereviewer baseline write` | Public R1 | `admission`, `reporting` | Baseline file contract | Writes the configured baseline from a completed report; never invoked by `review`. |
+| CLI `codereviewer drift` | Public R1 | `drift` | Drift categories | Runs the deterministic drift checks and exits by `drift.failOn`. |
 | Library `src/index.ts` | Public R1 | root package | exported TypeScript types | Re-exports stable types/helpers with no side effects. |
 | Config file `.codereviewer/config.json` | Public R1 | `configuration` | `03-contracts/config.schema.json` | Strict JSON config, merged with env and CLI flags. |
 | Report JSON `report.json` | Public R1 | `reporting` | `03-contracts/review-report.schema.json` | Canonical machine-readable run output. |

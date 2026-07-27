@@ -61,7 +61,7 @@ afford a recall-oriented first stage. See
 - **[04 Guides](04-guides/)** — task-oriented recipes
   - [Configuration](04-guides/configuration.md) · [Providers](04-guides/providers.md) · [Instructions and skills](04-guides/instructions-and-skills.md) · [Tuning noise and recall](04-guides/tuning-noise-and-recall.md) · [Controlling cost](04-guides/controlling-cost.md) · [CI/CD](04-guides/ci-cd.md)
 - **[05 Quality](05-quality/)** — how review quality is measured, and what it measures at
-  - [Why you should believe the numbers](05-quality/README.md) · [Metrics](05-quality/metrics.md) · [Judges and calibration](05-quality/judges-and-calibration.md) · [Datasets](05-quality/datasets.md) · [**Current results**](05-quality/current-results.md) · [Running an evaluation](05-quality/running-an-evaluation.md) · [Comparing runs](05-quality/comparing-runs.md)
+  - [Why you should believe the numbers](05-quality/README.md) · [Metrics](05-quality/metrics.md) · [Judges and calibration](05-quality/judges-and-calibration.md) · [Datasets](05-quality/datasets.md) · [**Current results**](05-quality/current-results.md) · [**What limits recall**](05-quality/what-limits-recall.md) · [Running an evaluation](05-quality/running-an-evaluation.md) · [Comparing runs](05-quality/comparing-runs.md)
 - **[06 Reference](06-reference/)** — exhaustive lookup
   - [CLI](06-reference/cli.md) · [Configuration](06-reference/configuration/README.md) · [Environment](06-reference/environment.md) · [Exit and error codes](06-reference/exit-codes-and-error-codes.md) · [Artifacts](06-reference/artifacts.md)
 - **[07 Security](07-security/)**
@@ -107,4 +107,19 @@ the evidence is not on disk. See [Datasets](05-quality/datasets.md).
   usually is not. Comparisons need multiple seeds.
 
 The numbers themselves, with their dates, corpora, and caveats, live in
-[Current results](05-quality/current-results.md).
+[Current results](05-quality/current-results.md). **Every figure recorded so far
+predates a harness change that has not been re-measured**, which that page states
+before its first table.
+
+## What the engine is weak at, and what has been tried
+
+The known limitation is enumeration: the engine reliably finds the primary defect in
+a changed region and rarely a second one in the same file. The cause is measured —
+**attention follows the diff** — and six structural interventions have been built and
+measured against it, five of which failed and three of which were deleted. What has
+moved the number instead has been prompt-level and scoring-level, at a fraction of
+the cost.
+
+That investigation, the ceiling it puts on a single review pass, and the reason it
+makes the iterative review-fix-re-review loop the dominant way to use the tool, are
+in [What limits recall](05-quality/what-limits-recall.md).

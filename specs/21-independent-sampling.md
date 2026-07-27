@@ -86,66 +86,48 @@ one-sided loss — before this spec was written.
 ## Conversation History
 
 Implementing this spec surfaced behaviour nothing had specified: the harness
-forwarded the accumulated session conversation into every discovery call, so
-discovery for task N opened carrying task N−1's findings. A second sample would
-therefore have opened holding the first sample's answer — independent in name
-only, and the precise anchoring that made the withdrawn enumeration sweep fail.
+forwarded the accumulated session conversation into every review agent call.
+Discovery for task N opened carrying task N−1's findings, so a second sample would
+have opened holding the first sample's answer — independent in name only, and the
+precise anchoring that made the withdrawn enumeration sweep fail.
 
-Discovery calls now forward no prior conversation. **This changes behaviour at
-`k = 1` as well**, and the original requirement that `k = 1` be exactly
-equivalent to prior behaviour has been amended above rather than quietly
-violated.
+What the calls actually received was captured at the provider boundary rather than
+inferred: the harness appends each completed call's output to the shared session as
+an `assistant` message, so a call arrived holding the JSON output of every call
+that had finished before it — across tasks and across stages — **attributed to the
+model itself**. This was never confined to discovery. A refutation call opened
+appearing to have already asserted the very candidates it was about to adjudicate
+and, from the second task onward, holding its own earlier verdicts, which is
+incompatible with the refuter's own instruction to judge each candidate strictly on
+its own merits. The semantic finding merge and the context scout carried the same
+freight.
 
-The alternatives were worse. Suppressing history only when `k > 1` would make the
-two measurement arms differ in two variables and invalidate the A/B. Suppressing
-it only for samples 2..k would make the samples non-identical draws. Both trade a
-real measurement for a nominal compatibility.
+**No review agent call forwards prior conversation.** Blindness is the harness
+default rather than a per-invocation option, so a stage added later inherits it and
+a stage that genuinely needs history must opt in at its own invocation, where the
+reason is visible. The requirement above is stated harness-wide for that reason: a
+narrower, discovery-only wording would have permitted a future stage to reintroduce
+the defect without contradicting any spec.
+
+This changes behaviour at `k = 1` as well, and the original expectation that
+`k = 1` be exactly equivalent to prior behaviour is amended in the requirements
+above rather than quietly violated. The alternatives were worse: suppressing
+history only when `k > 1` would make the two measurement arms differ in two
+variables and invalidate the A/B, and suppressing it only for samples 2..k would
+make the samples non-identical draws. Both trade a real measurement for a nominal
+compatibility.
 
 Consequences, which must not be glossed:
 
-- **`k = 1` is a new baseline.** Every recall figure measured before this change
-  was produced by history-carrying discovery and is not comparable. The posture
-  and sampling A/Bs must both re-baseline rather than reuse the prior numbers.
-- Whether cross-task history helped or hurt is **unknown and unmeasured**. It is
-  removed because it contradicts what the rest of the pipeline assumes of
-  discovery, not because it was shown to be harmful.
-
-### Resolved: the suppression is harness-wide
-
-The divergence this section originally recorded — refutation, the semantic finding
-merge, and the context scout still carrying history — has been closed. Suppression
-is no longer scoped to discovery: **no agent call in the review harness forwards
-prior conversation.** It is now the harness default rather than a per-invocation
-option, so a stage added later inherits it and a stage that genuinely needs
-history must opt in where the reason is visible.
-
-What the calls actually received was captured at the provider boundary before the
-change, not inferred: the harness appends each completed call's output to the
-shared session as an `assistant` message, so a call arrived holding the
-JSON output of every call that had finished before it — across tasks and across
-stages — **attributed to the model itself**. A refutation call therefore opened
-appearing to have already asserted the very candidates it was about to adjudicate,
-and, for the second and later tasks, holding its own earlier verdicts. That is
-incompatible with the refuter's own instruction to judge each candidate strictly
-on its own merits.
-
-The consequences recorded above extend to these stages unchanged:
-
 - **The whole engine is re-baselined, not just discovery.** Every recall and
-  precision figure this project has ever recorded was produced with
-  history-carrying refutation, merge, and scout calls. None of them is comparable
-  to a post-change run.
-- **The direction of the effect is unknown and unmeasured** for all three stages.
-  The forwarded conversation is removed because it contradicts what those stages
-  are specified to do, not because it was shown to be harmful. Nothing here may be
+  precision figure this project has recorded was produced with history-carrying
+  discovery, refutation, merge, and scout calls. None of them is comparable to a
+  post-change run, and the posture and sampling A/Bs must both re-baseline rather
+  than reuse the prior numbers.
+- **The direction of the effect is unknown and unmeasured** for every stage. The
+  forwarded conversation is removed because it contradicts what those stages are
+  specified to do, not because it was shown to be harmful. Nothing here may be
   described as an accuracy improvement until a run measures it.
-
-**Requirement broadened, 2026-07-27.** The requirement above now reads "no review
-agent call may carry prior conversation", matching the harness-wide rule the
-implementation enforces. Leaving the requirement narrower than the code would be
-exactly the silent spec/implementation divergence this project forbids, and the
-narrower wording would have permitted a future stage to reintroduce the defect
-without contradicting any spec.
 
 ## Honest Limits
 

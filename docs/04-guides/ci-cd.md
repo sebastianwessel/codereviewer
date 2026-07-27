@@ -91,6 +91,40 @@ image. (`eval run` deliberately does not read `.env` at all.)
 
 ---
 
+## Why the gate should be a required check, not a comment
+
+The single most useful thing a pipeline can do with this engine is **keep the merge
+gate closed until the review comes back clean**, so that a pull request is reviewed
+again after each round of fixes. That is a measured recommendation rather than a
+process preference.
+
+A single discovery pass reports roughly one defect per file, because the reviewer's
+attention follows the diff. On the evaluation corpus, whose 80 expected findings sit
+across 47 distinct (case, file) pairs, that behaviour puts a **58.8% ceiling on what
+any one pass can score** — and the engine already measures at about 80% of that
+ceiling. The lever with the most headroom is therefore not a better single review,
+it is a second one.
+
+Each round of fixes changes the diff, which moves the anchor, so the next defect in
+that file becomes the one the reviewer is pointed at. Under that assumption the
+reachable share rises to 88.8% after two rounds and 97.5% after three. **The
+assumption that fixing one defect surfaces the next has not been measured** — treat
+those figures as the argument for iterating, not as a forecast. The full evidence is
+in [What limits recall](../05-quality/what-limits-recall.md#the-structural-ceiling-and-why-it-changes-how-you-should-use-the-tool).
+
+Practically, this means:
+
+- Wire the review job into a **required status check**, so exit code `1` blocks the
+  merge rather than posting an advisory comment somebody can scroll past.
+- Re-run the review on every push to the branch, not only on the first one. The
+  second run is where the second defect in a file has its chance.
+- Adopt a [baseline](#baselines-adopting-the-tool-on-an-existing-codebase) if the
+  repository has existing debt, so the gate blocks on new findings rather than on
+  everything.
+- Use `review.maxCostUsd` to bound the cost of iterating.
+
+---
+
 ## The exit-code contract
 
 Branch your pipeline on the exit code, not on parsing stdout.

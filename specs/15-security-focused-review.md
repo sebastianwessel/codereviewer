@@ -138,6 +138,13 @@ general call's attention.
 
 ### Measured Outcome Of The Injection Hardening
 
+Every figure in this section predates the harness-wide suppression of conversation
+history on 2026-07-27 (see *Conversation History* in `21-independent-sampling.md`).
+None of them is comparable to a current run; they are retained as the record of why
+the guard was adopted. Note also that this section measures the **injection guard**,
+not Mechanism 1 — the dedicated security pass's own A/B result is not recorded in this
+spec (see *Known Divergences From This Spec* below).
+
 Extending the guard to the general reviewer and the refuter was made for consistency
 rather than for recall, and it does improve recall — by less than a small corpus first
 suggested.
@@ -170,8 +177,11 @@ real findings, is the number on this benchmark that can be trusted.
 
 ## Mechanism 2: Deterministic Security-Signal Evidence
 
-A generic, deterministic detector that produces **typed evidence**, following the
-"analyzers find paths; the model judges context" principle (concept spec 06.4):
+A generic, deterministic detector that produces **typed evidence**, following this
+spec's own division of labour: analyzers find paths, the model judges context. It
+is the same split the *Deterministic Support Signal Contract* in
+`05-review-workflow-and-runtime.md` already makes for non-security signals — they
+supply facts and never publish findings.
 
 - Language-neutral source/sink/sanitizer detection grounded in public rule catalogs
   (Semgrep registry, CodeQL CWE suites, OWASP dangerous-function lists), run on the
@@ -199,8 +209,10 @@ finding's parsed `contextRequests` or one demand-driven evidence request. This i
 deferred: it is the highest-plumbing, highest-cost, non-deterministic lever, and it
 is only justified after the security pass and deterministic-evidence levers are
 measured. It
-must respect the "more context reduces quality" evidence — one bounded, ranked
-follow-up, not full-repository injection.
+must respect this project's own measured "more context reduces quality" result —
+recorded under *Measured Outcome* in `16-agentic-cross-file-discovery.md` and
+`18-context-scout.md` — so it is one bounded, ranked follow-up, never
+full-repository injection.
 
 ## Configuration
 
@@ -267,3 +279,18 @@ would be a switch with no behavior behind it.
   the pass never bypasses scope, severity, baseline, or the gate.
 - Any security improvement is demonstrated on the held-out set under the
   anti-contamination policy, not on the set it was built against.
+
+## Known Divergences From This Spec
+
+Recorded on 2026-07-27 by an alignment audit. **These are unmet requirements, not
+amendments.** Everything above stands as written; this section exists so the gap is
+visible rather than silent.
+
+| Requirement | State of the implementation |
+| --- | --- |
+| *Acceptance*: the evaluation reports security recall **and adjusted precision** per mechanism and context-depth | Recall only. An admitted finding carries no mechanism label, so per-mechanism precision has no denominator; the eval renderer says so explicitly. Reporting precision per mechanism needs a labelling mechanism that does not exist yet. |
+| *Mechanism 2* in full | Not implemented. This is already stated under *Configuration*: no detector, no rule catalog, and the `cwe`/`dataFlow`/`ruleId`/`securitySeverity` evidence fields exist on the contract but are never populated. The `security.signals` config key is correctly absent. |
+| *Mechanisms*: `prompt-injection` as a measured security mechanism | The enum value exists; no committed expected finding carries it, so the mechanism has an empty denominator. |
+| *Measurement First*: a contaminated `dev` set and a separate `held-out` set | Every case in the real-repository corpus manifest is labelled `held-out`. The chronological-split validation therefore has nothing to compare and passes vacuously, and the final acceptance criterion above cannot currently be satisfied as written. |
+| *Mechanism 1*'s own measured outcome | Not recorded in this spec. The A/B exists and is recorded in the user documentation for the dedicated pass; its headline is that overall recall rose while **labelled security recall fell**, at materially higher cost, so the security-specific lift the mechanism was built for is unproven at n=1. That result belongs in this spec and should be transcribed here by its owner, alongside the standing caveat that it too predates the 2026-07-27 conversation-history suppression. |
+| *Configuration*: "and any bounds" | The pass is capped in code at a fixed number of additional candidates per task. The bound is real and enforced; this spec names no bound at all. |

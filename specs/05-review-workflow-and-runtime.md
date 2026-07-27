@@ -9,29 +9,36 @@ Date: 2026-07-21
 2. Load and validate config.
 3. Load root `.env` when present and merge process env.
 4. Resolve repository root from CLI or current working directory.
-5. Create run directory.
+5. Run deterministic drift/security preflight checks. These run first, so a hard
+   drift error stops before repository IO and before any network-capable path.
 6. Collect repository intake, including the raw unified diff.
-7. Load reviewer instruction metadata.
-8. Load mounted skill index when enabled.
-9. Run deterministic drift/security preflight checks.
-10. Build deterministic support signals.
-11. Plan review tasks.
-12. Ingest external change-intent context when configured: gather from bounded
+7. Build deterministic support signals.
+8. Plan review tasks.
+9. Assemble bounded task context: read source chunks, load reviewer instruction
+   metadata, and load the mounted skill index when enabled.
+10. Ingest external change-intent context when configured: gather from bounded
     providers, redact, summarize with a dedicated model call (or a deterministic
     digest), and inject the brief as a context-only `change-intent` document. See
     `11-external-context-ingestion.md`. This step is skipped when the feature is
     disabled and never fails the run on a provider error.
-13. Resolve provider when model-backed review is enabled.
-14. Run holistic discovery: one recall-first whole-file review per task, plus the
-    optional dedicated security pass (`15-security-focused-review.md`) when
-    enabled. That pass is additive and cannot displace a candidate the primary
-    review raised.
-15. Merge candidates that describe one defect, per Semantic Finding Merge below.
-16. Run refutation once per task, adjudicating every candidate that task raised.
-17. Admit or reject candidates against the admission gate.
-18. Match actionable admitted findings against baseline.
-19. Render reports.
-20. Evaluate optional quality gate.
+11. Load configured baseline data.
+12. Resolve provider when model-backed review is enabled.
+13. Run holistic discovery: a recall-first whole-file review per task, drawn as
+    `review.discoverySampleCount` mutually blind samples combined by union
+    (`21-independent-sampling.md`, default one sample) under the configured
+    `review.discoveryPosture` (`20-discovery-posture.md`), plus the optional
+    dedicated security pass (`15-security-focused-review.md`) when enabled. That
+    pass is additive and cannot displace a candidate the primary review raised.
+14. Merge candidates that describe one defect, per Semantic Finding Merge below.
+15. Run refutation once per task, adjudicating every candidate that task raised.
+16. Admit or reject candidates against the admission gate.
+17. Match actionable admitted findings against baseline.
+18. Evaluate optional quality gate.
+19. Run the optional fix lane and the optional verification flow when configured
+    (`12-verification-flow.md`). Both are advisory: neither changes admission,
+    severity, or the gate.
+20. Create the run directory, render reports and run artifacts, and record the run
+    in the run index.
 21. Record available token/cost metadata and optional no-content telemetry
     configuration.
 22. Exit with mapped code.
@@ -283,13 +290,22 @@ Task queue rules:
 
 ## Holistic Discovery
 
-Provider-backed review runs **one** recall-first whole-file review per task. The
-`holistic_review` agent emits candidate findings directly; they are deduped by
-candidate id before refutation.
+Provider-backed review runs **one** recall-first whole-file review per task — one
+framing, one prompt, asked once. The `holistic_review` agent emits candidate
+findings directly; they are deduped by candidate id before refutation.
 
 This spec previously required a second, serial diverse-lens pass. That pass was
 implemented and measured, and it did not earn its cost (see the measured outcome
 below), so the requirement is withdrawn rather than left as an unmet mandate.
+
+That single framing may be **sampled** more than once. `review.discoverySampleCount`
+(default `1`) draws that many mutually blind samples of the same review and combines
+their candidates by union, per `21-independent-sampling.md`. Sampling is not a second
+pass: every sample asks the same question of the same packet, no sample sees another
+sample's output, and the union is deduplicated only by the Semantic Finding Merge
+below. How much self-evidence the reviewer demands before raising a candidate is set
+by `review.discoveryPosture` (default `precise`), per `20-discovery-posture.md`; the
+posture changes neither the packet nor the number of calls.
 
 - The review input is the task's unified-diff segment plus the full
   line-numbered changed files, alongside deterministic support signals,
@@ -321,6 +337,21 @@ below), so the requirement is withdrawn rather than left as an unmet mandate.
 - Candidate findings are untrusted until they pass refutation and admission.
   Raw candidates do not influence later workers before they pass the configured
   safe digest boundary.
+
+### Standing Caveat On Every Figure Below
+
+**Every accuracy figure quoted anywhere in this spec predates the harness-wide
+suppression of conversation history** (2026-07-27; see *Conversation History* in
+`21-independent-sampling.md`). Those runs were produced by discovery, refutation,
+merge, and scout calls that each opened carrying the output of every call that had
+finished before them. A current run is not comparable to any of them, in either
+direction, and the direction of the effect is unmeasured.
+
+The figures are retained because each records the outcome of a decision that was
+taken on the evidence available at the time — they are the audit trail for a
+withdrawal or an adoption, not a description of today's accuracy. None of them may
+be quoted as the engine's current recall or precision until a post-change run
+re-establishes a baseline.
 
 ### Measured Outcome Of The Withdrawn Second Pass
 
@@ -1166,13 +1197,20 @@ provider messages, prompt text, source snippets, tool output, or secrets.
 | Requirement | Test |
 | --- | --- |
 | Intake handles git and explicit files | fixture integration tests |
+| Intake fails with `merge_base_unavailable` instead of diffing `baseRef` to `headRef` directly | repository intake unit tests |
 | Paths work on POSIX and Windows forms | unit tests |
 | Provider missing error is actionable | provider-resolution unit test |
 | Harness workflow uses hermetic provider fixture | workflow integration test |
 | Admission rejects weak/internal candidates | admission and promotion matrix test |
 | Semantic merge groups restatements of one defect and keeps distinct defects on one line apart | semantic merge unit tests |
 | Semantic merge issues no call below two candidates and degrades to no grouping on failure | semantic merge unit tests |
+| Semantic merge runs only once every candidate for a task exists, ahead of refutation and admission | holistic task review unit tests |
+| The group representative is chosen in code by severity, then location specificity, then candidate index | semantic merge unit tests |
 | Merged-away candidates stay on the record rather than disappearing | handler test |
+| Merged-away candidates are held out of refutation and admission | handler test |
+| A candidate whose line falls outside its own task's source chunk is rejected as `location-invalid` | admission gate unit test |
+| Baseline write copies fingerprints verbatim and cannot be triggered by `review` | baseline writer and CLI baseline command tests |
+| Run index caps entries, keeps the newest first, and survives a corrupt index | run index unit tests |
 | Reports include admitted findings plus clearly marked artifact-only/refuted/provider-issue sections | report snapshot test |
 | Context ledger records included source chunks without raw content | context ledger unit and snapshot tests |
 | Completed reports include complete coverage certificate | runner and report schema tests |

@@ -86,9 +86,11 @@ provider-specific object as passthrough.
 | `instructions` | no | object | no instructions |
 | `skills` | no | object | no skills |
 | `paths` | no | object | default includes/excludes |
-| `security` | no | object | secure defaults |
+| `baseline` | no | object | baseline matching enabled at the default path |
+| `qualityGate` | no | object | no critical or high admitted findings |
+| `security` | no | object | secure defaults; dedicated security pass disabled |
 | `reporting` | no | object | JSON, Markdown, and SARIF local reports |
-| `evaluation` | no | object | `minJudgeAgreement` 0.9; case selection is driven by `eval run` CLI flags, not config |
+| `evaluation` | no | object | `minJudgeAgreement` 0.9 and the `stable` regression-gate profile; case selection is driven by `eval run` CLI flags, not config |
 | `drift` | no | object | drift checks enabled as warnings |
 | `observability` | no | object | OpenTelemetry disabled |
 | `costs` | no | object | detailed token/cost tracking enabled with no prices |
@@ -97,7 +99,6 @@ provider-specific object as passthrough.
 | `contextSources` | no | object | external change-intent context disabled |
 | `verification` | no | object | agentic claim verification disabled |
 | `fix` | no | object | agentic finding investigation and fix disabled |
-| `security` | no | object | security review lens and signals disabled |
 
 ## Review Config
 
@@ -114,6 +115,11 @@ provider-specific object as passthrough.
 | `inlineSeverityThreshold` | severity | `"high"` | Only affects reporter eligibility. |
 | `maxCostUsd` | number >= 0 | preset-defined | Hard stop only when token usage and configured/provider pricing are available; otherwise reported as unavailable. |
 | `runTimeoutMs` | integer 10000..7200000 | unset | Optional whole-run timeout. When unset, no hidden Harness run timeout is applied; provider calls still use `provider.timeoutMs`. |
+| `discoveryPosture` | `"precise" \| "investigative"` | `"precise"` | How much self-evidence discovery demands before raising a candidate (`20-discovery-posture.md`). Adds no calls and changes neither the packet shape nor its field order. |
+| `discoverySampleCount` | integer 1..5 | `1` | Number of mutually blind discovery samples combined by union (`21-independent-sampling.md`). `1` is the single-call path. The upper bound is the published plateau. |
+
+`review.crossFileRetrieval` and `review.contextScout` are nested review blocks and
+are inventoried in their own sections below.
 
 ## AI Review Config
 
@@ -281,7 +287,7 @@ root. Run summaries record path and SHA-256 hash only.
 | Key | Type | Default |
 | --- | --- | --- |
 | `enabled` | boolean | `false` |
-| `directories` | string[] | `[]` |
+| `directories` | string[] | `[".codereviewer/skills"]` |
 | `allowTools` | `read | list | grep`[] | `["read", "list", "grep"]` |
 
 Default skills directory is `.codereviewer/skills` when it exists and
@@ -460,6 +466,18 @@ Disabled by default.
 | `review.crossFileRetrieval.maxToolCallsPerTask` | integer (1-500) | `100` |
 | `review.crossFileRetrieval.maxBytesPerRead` | integer (1000-200000) | `24000` |
 
+Rules:
+
+- with it disabled, holistic discovery issues no tool call and runs as a single-shot
+  review with no tools;
+- when enabled, discovery may call the mediated `repo_read`/`repo_list`/`repo_grep`
+  tools; `maxToolCallsPerTask` is a runaway-loop guard enforced in code, not a
+  context ration, and the context retriever's own eligibility, redaction, and
+  byte/match caps still apply;
+- retrieved content is untrusted repository data: it cannot bypass scope, severity,
+  baseline, admission, or the gate, and its findings pass the same refutation and
+  admission as any other candidate.
+
 ## Context Scout
 
 Controls the context scout (`18-context-scout.md`). Disabled by default.
@@ -479,18 +497,6 @@ Rules:
 - a symbol the scout names that deterministic resolution cannot find is never
   injected, and injected content passes the same eligibility gate, redaction, and
   containment as any other repository access.
-
-Rules:
-
-- with it disabled, holistic discovery issues no tool call and runs as a single-shot
-  review with no tools;
-- when enabled, discovery may call the mediated `repo_read`/`repo_list`/`repo_grep`
-  tools; `maxToolCallsPerTask` is a runaway-loop guard enforced in code, not a
-  context ration, and the context retriever's own eligibility, redaction, and
-  byte/match caps still apply;
-- retrieved content is untrusted repository data: it cannot bypass scope, severity,
-  baseline, admission, or the gate, and its findings pass the same refutation and
-  admission as any other candidate.
 
 ## Security
 
@@ -583,8 +589,14 @@ of input tokens.
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `enabled` | boolean | `false` |
 | `minJudgeAgreement` | number 0..1 | `0.9` |
+| `regressionGate.profile` | `"stable" \| "strict"` | `"stable"` |
+| `regressionGate.overrides` | per-threshold override object | `{}` |
+
+There is deliberately no `evaluation.enabled` key. Case selection is driven by
+`eval run` CLI flags, so an `enabled` flag would be accepted by config validation
+and then silently ignored. `regressionGate` is defined in
+`06-evaluation-and-quality-gates.md`, section *Eval Regression Gate*.
 
 `minJudgeAgreement` is the minimum semantic-judge agreement against the
 committed calibration set described in `06-evaluation-and-quality-gates.md`. The
@@ -601,6 +613,7 @@ it does not by itself fail the regression gate.
 | `allowNetwork` | boolean | `false` |
 | `allowFilesystemWrite` | boolean | `false` |
 | `captureContentTelemetry` | boolean | `false` |
+| `dedicatedPass.enabled` | boolean | `false` |
 
 `allowShell: true`, broad `allowNetwork: true`, broad
 `allowFilesystemWrite: true`, and `captureContentTelemetry: true` are rejected

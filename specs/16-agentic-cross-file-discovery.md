@@ -7,7 +7,9 @@ Date: 2026-07-24
 
 Close the cross-file recall gap. Holistic discovery sees only the changed files,
 the diff, and bounded signature-level digests of directly-imported unchanged files
-(R4, spec 05). Defects whose presence depends on the *behavior* of code in another
+(the referenced-definition context injection defined under *Review Planning* in
+`05-review-workflow-and-runtime.md`). Defects whose presence depends on the
+*behavior* of code in another
 file are therefore invisible: on the committed benchmark, cross-file recall is
 **0%**. The dominant cross-file misses are high-severity authorization defects — a
 changed file calls a helper defined elsewhere (e.g. `getOrCreateResource`,
@@ -51,8 +53,10 @@ findings as today.
   allowed, never exhausting it), so a tight cap only starves the tasks that genuinely
   need several lookups. The cap is therefore set generously; focus comes from the
   instruction to retrieve only what a specific suspicion requires, and from the
-  retriever's own per-call byte/match caps. "More context reduces quality" (spec 10)
-  is respected by demand-driven, targeted reads, never a whole-repository dump.
+  retriever's own per-call byte/match caps. "More context reduces quality" — this
+  project's own measured result, recorded under *Measured Outcome* below and in
+  `18-context-scout.md` — is respected by demand-driven, targeted reads, never a
+  whole-repository dump.
 - **Steps, not delegation budget.** A mediated tool call is an agent STEP, bounded by
   the discovery agent's step allowance (the cap plus headroom, so a model that hits
   the cap can still answer). It never counts against the workflow's child-agent call
@@ -138,6 +142,21 @@ Re-enabling requires a changed mechanism AND a multi-seed measurement, not a
 configuration change. Two hypotheses are worth testing first: that tool-use mode
 itself diverts the model's attention from the diff to retrieval, and that a truncated
 excerpt of an unfamiliar file misleads more than it informs.
+
+Three caveats on the figures above, so nobody re-derives them:
+
+- All three arms are single-seed on corpora of four, nine, and sixteen cases. The
+  real-repository corpus now holds thirty-six cases and no arm has been re-run on it.
+- Every figure predates the harness-wide suppression of conversation history on
+  2026-07-27 (see *Conversation History* in `21-independent-sampling.md`) and is not
+  comparable to a current run.
+- The **0% cross-file recall** quoted in *Purpose* is a property of the slices it was
+  measured on, not of the engine: a changed-files-only slice contains no other file to
+  read, so a cross-file defect cannot be represented in it at all. The user
+  documentation on datasets records this directly. The consequence for this spec is
+  that the final acceptance criterion below cannot be evaluated against that baseline;
+  it needs a corpus whose slices carry the unchanged callee, and a general cross-file
+  recall metric, neither of which exists yet.
 
 ## Acceptance
 

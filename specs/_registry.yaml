@@ -1,11 +1,15 @@
 schema_version: "1.0"
 status: approved
-updated_at: "2026-07-22"
+updated_at: "2026-07-27"
 spec_root: specs
 source_of_truth:
   - specs/README.md
   - specs/00-vision.md
   - specs/00-scope-and-glossary.md
+  - specs/00-architecture-overview.md
+  - specs/00-stack.md
+  - specs/00-conventions.md
+  - specs/00-file-structure.md
   - specs/01-architecture-and-structure.md
 capability_inventory: specs/02-capabilities/capability-inventory.md
 e2e_coverage: specs/03-flows/e2e-coverage.md
