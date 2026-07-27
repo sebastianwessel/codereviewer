@@ -2,8 +2,52 @@
 
 Append-only record of every measurement, with what invalidates it. Newest first.
 
-Corpus `real-repo-cross-file` unless stated: 36 cases, 80 expectations.
+Corpus `real-repo-cross-file`: **37 cases, 87 expectations** as of 2026-07-27.
+Entries above the clean-corpus baseline use earlier keys (36/80, then 31/74) and
+do not pool across them; the tooling refuses cross-key deltas by digest.
 Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
+
+---
+
+## 2026-07-27 — BASELINE ON THE CLEAN CORPUS (37 cases / 87 expectations)
+
+**Status: CURRENT.** First measurement against the post-contamination answer key.
+Supersedes every earlier entry for comparison purposes; the key moved twice today.
+
+| metric | value | per seed |
+|---|---:|---|
+| **Recall, in-diff** | **64.4%** (116/180) | |
+| **Recall, out-of-diff** | **0.0%** (0/81) | |
+| Blended | 44.4% | 42.5 / 48.3 / 42.5 |
+| Adjusted precision | 0.872 | 0.881 / 0.913 / 0.822 |
+| Genuine false positives / run | 5.7 | 5 / 4 / 8 |
+| **No-finding-zone false positives** | **0** | 0 / 0 / 0 |
+| Refutation kill rate | 3.2% | 4.1 / 2.9 / 2.6 |
+| Cost / run | $1.41 | 2.08 / 1.10 / 1.04 |
+
+Expectation mix: 60 in-diff, 27 out-of-diff (31% out, down from 42.5%).
+
+### In-diff recall FELL, and that is the cleanup working
+
+69.8% on the old key against **64.4%** here. The five cases removed for answer-key
+disclosure were scoring 83.3%, so their removal was always going to lower the
+headline — that is what removing a leak looks like. The six added cases are
+multi-defect by construction and therefore harder. **A number that went down here
+is more trustworthy than the one that went up.**
+
+### Out-of-diff recall is 0.0% again, on a different key
+
+0 of 81, replicating 0 of 81 on the previous corpus. Two independent answer keys,
+same result: **the engine finds nothing outside a hunk.** This is now the
+best-replicated finding in the ledger and should be treated as an architectural
+property rather than a measurement.
+
+### Precision improved
+
+Adjusted precision 0.831 → 0.872 and genuine false positives 7.7 → 5.7. Some of
+that is the corpus change rather than the engine. Zone false positives remain
+**zero across every run ever recorded** — the engine does not invent defects in
+code verified to be clean.
 
 ---
 
