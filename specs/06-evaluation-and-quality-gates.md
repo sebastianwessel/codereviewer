@@ -255,6 +255,45 @@ committed calibration set of findings labeled genuine or spurious against sample
 code, producing a plausibility agreement metric; a run below the configured
 minimum marks its adjusted precision untrustworthy.
 
+### Restatement Collapsing
+
+Judging every unmatched finding in total isolation has a second failure mode
+beyond the fixture-incompleteness problem above: a reviewer that finds one real
+defect and reports it again at a neighbouring line gets each restatement
+individually confirmed, because a judge shown only the finding and the file has
+no way to know the same defect was already counted. A precision audit found this
+common enough to matter: a majority of one benchmark's "unlisted-real" evidence
+was a single defect restated at adjacent lines, each restatement individually
+true and therefore individually credited — turning one real defect into several
+counted defects and pinning `adjustedPrecision` at or near 100% while raw
+`precision` visibly collapsed from the same noise.
+
+The plausibility judge is therefore also given every finding already credited as
+a real defect in the SAME file — both findings matched to an expected finding and
+findings this same run has already deemed unlisted-real — and asked an explicit
+second question: does the finding under review describe the SAME underlying
+defect as one of those, merely restated at a different location, rather than a
+distinct defect of its own? A finding the judge answers yes to is **not** added to
+`unlistedRealFindingCount`: crediting it there is exactly the mechanism that
+inflated `adjustedPrecision`. It is not otherwise treated specially — it stays in
+the case's raw false-positive count, and therefore in `genuineFalsePositiveCount`,
+exactly as it would if the restatement question had never been asked, because it
+is not a further, distinct real defect the fixture omitted.
+
+This is a judge-side, semantic fix and deliberately not a matcher-side, line-based
+one. The matcher's existing zero-tolerance duplicate check (same path, an
+overlapping line range against an already-matched finding) stays at zero
+tolerance: it has no view of what either finding actually says, so widening it to
+catch a restatement at line 593 of a match at line 592 would just as readily
+merge two genuinely distinct defects sitting a few lines apart, and would do so
+silently. Whether two findings are the SAME defect is a semantic question, so it
+is answered by a judge that reads both descriptions, not by a line-distance
+threshold.
+
+Restatement collapsing is scoring-side only: it changes how findings are
+COUNTED, never what a review produces. The reviewer's own output, recall, and
+every matched finding are unaffected.
+
 ## Metrics Version
 
 Every report records a `metricsVersion` describing the rules its numbers were

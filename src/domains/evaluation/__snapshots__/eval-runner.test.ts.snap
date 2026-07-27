@@ -1243,7 +1243,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "trustedDeterministicFindingCount": 0,
     "unlistedRealFindingCount": 0,
   },
-  "metricsVersion": "2026-07-26.max-cardinality-matching",
+  "metricsVersion": "2026-07-27.plausibility-restatement-collapse",
   "provenance": {
     "answerKeyDigest": "8a0f6c4247b62cb5ae0d182f93ca56547fb831d783599d2c4d19626a6452d8e2",
     "answerKeyDigestByCase": {

@@ -170,6 +170,22 @@ const isInNoFindingZone = (
   return rangesOverlap(zone.lineRange, findingLineRange(finding), 0)
 }
 
+// Zero tolerance is deliberate and NOT the fix for a finding that restates a
+// matched defect at a nearby-but-non-overlapping line (e.g. a matched finding at
+// line 592 and a restatement at 593): a precision audit found that shape common
+// enough to visibly inflate adjustedPrecision, and the instinctive fix is to
+// widen this tolerance. That is a blunter instrument than it looks. This check is
+// purely textual (same path, overlapping line range) with no view of WHAT either
+// finding says, so widening it would just as readily merge two genuinely
+// different defects that happen to sit a few lines apart (two independent
+// nil-dereferences on consecutive lines are not the same bug) as it would catch a
+// real restatement -- and it would do so silently, discarding a true positive
+// with no signal that anything was lost. Whether two findings describe the SAME
+// underlying defect is a semantic question, not a line-distance one, so it
+// belongs to a judge that can read both descriptions: see
+// `EvalAlreadyCountedFinding` and `restatesAlreadyCounted` in
+// eval-plausibility-judge.ts, which now asks exactly that question for every
+// unmatched finding this raw, zero-tolerance check does not catch.
 const isDuplicateOfMatchedFinding = (
   finding: AdmittedFinding,
   matchedFindings: readonly AdmittedFinding[]

@@ -953,11 +953,22 @@ const computeCaseResult = async (
   // reviewer reported; it only splits the raw false positives into genuine false
   // positives and real-but-unlisted defects for adjustedPrecision.
   const falsePositiveFindingIdSet = new Set(matchResult.falsePositiveFindingIds)
+  const matchedFindingIdSet = new Set(
+    matchResult.matches.map((match) => match.findingId)
+  )
+  // The findings already matched to an expected finding in this case, passed so
+  // the plausibility judge can recognise when an unmatched finding merely
+  // restates one of them at a different line instead of confirming a further,
+  // distinct defect. See judgeUnmatchedFindingsPlausibility's module comment.
+  const matchedFindingsForPlausibility = actionableFindings.filter((finding) =>
+    matchedFindingIdSet.has(finding.id)
+  )
   const plausibility = await judgeUnmatchedFindingsPlausibility({
     evalCase,
     unmatchedFindings: actionableFindings.filter((finding) =>
       falsePositiveFindingIdSet.has(finding.id)
     ),
+    matchedFindings: matchedFindingsForPlausibility,
     judge: input.plausibilityJudge,
     readFileContent: input.readFindingSource
   })

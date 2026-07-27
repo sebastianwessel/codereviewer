@@ -38,6 +38,21 @@ understated an adjusted precision of roughly 83%.
 `adjustedPrecision` is only as good as the judge that produced it. If
 `scoring.adjustedPrecisionTrustworthy` is `false`, do not quote it.
 
+**Restatements do not inflate `unlistedRealFindingCount`.** A reviewer that finds
+one real defect and reports it again at a neighbouring line used to have each
+restatement judged alone and therefore individually credited as its own
+unlisted-real defect — one real defect became several counted defects, and
+`adjustedPrecision` absorbed the verbosity instead of penalising it. The
+plausibility judge is now also shown every finding already credited as real in
+the same file (matched, or already credited earlier in the same run) and asked
+whether the finding under review is the SAME underlying defect, merely restated.
+A restatement is excluded from `unlistedRealFindingCount`, which — because
+`genuineFalsePositiveCount` is derived as `falsePositiveCount −
+unlistedRealFindingCount` — means it now correctly counts toward
+`genuineFalsePositiveCount` instead: it is not a further, distinct real defect
+the fixture omitted, so crediting it as one was what inflated the number. This is
+scoring-side only; it never changes what a review produces.
+
 ### 2. Rates over MATCHED findings are not comparable across runs
 
 `severityAccuracy`, `lineAccuracy` and the severity-weighted scores have the
@@ -114,10 +129,10 @@ refutation and admission to be admitted at all.
 | `precision` | Matched findings | `matched + falsePositiveCount` | **Understated.** See trap 1. Useful only as a floor. |
 | `adjustedPrecision` | Matched findings | `matched + genuineFalsePositiveCount` | **The trustworthy precision.** Valid only when `scoring.adjustedPrecisionTrustworthy` is `true`. |
 | `falsePositiveCount` | Unmatched actionable findings that are not duplicates of a matched finding | — (a count) | *Raw* noise. Includes real-but-unlisted defects. |
-| `genuineFalsePositiveCount` | `falsePositiveCount − unlistedRealFindingCount` | — | Unmatched findings the plausibility judge called spurious, **plus** every finding whose judgment could not be completed (fail-closed). The trustworthy noise count. |
-| `unlistedRealFindingCount` | Unmatched findings the plausibility judge affirmatively called genuine defects | — | Real defects the fixture omitted. Never credited to recall. |
+| `genuineFalsePositiveCount` | `falsePositiveCount − unlistedRealFindingCount` | — | Unmatched findings the plausibility judge called spurious, **plus** every finding whose judgment could not be completed (fail-closed), **plus** every finding the judge recognised as restating a defect already counted in the same file. The trustworthy noise count. |
+| `unlistedRealFindingCount` | Unmatched findings the plausibility judge affirmatively called genuine defects **and not a restatement of one already counted** | — | Real, DISTINCT defects the fixture omitted. Never credited to recall. A finding that restates a match (or an earlier unlisted-real credit in the same run) at a different line is excluded here even when the judge finds it plausible on its own, because it is not a further defect — see the restatement note above. |
 | `noFindingZoneFalsePositiveCount` | Unmatched, non-duplicate findings landing inside a declared `expectedNoFindingZone` | — | The sharpest noise signal: the fixture explicitly asserts there is nothing to report here. |
-| `duplicateFindingCount` | Unmatched findings at the same path with a line range overlapping a matched finding (tolerance 0) | — | Review noise, **not** counted as false positives. |
+| `duplicateFindingCount` | Unmatched findings at the same path with a line range overlapping a matched finding (tolerance 0) | — | Review noise, **not** counted as false positives. Deliberately a raw, line-based check with zero tolerance — it stays narrow on purpose (see the restatement note above); a restatement the plausibility judge recognises semantically at a NON-overlapping line is not added here, it is excluded from `unlistedRealFindingCount` instead. |
 | `severityWeightedPrecision` | Severity weight of matched expected findings | matched weight + false-positive weight | Uses raw false positives, so it inherits trap 1. |
 | `f1` | Harmonic mean of `precision` and `recall` | — | Built on **raw** precision. Prefer reading recall and `adjustedPrecision` separately. |
 | `severityWeightedF1` | Harmonic mean of the two severity-weighted rates | — | Same caveat. |

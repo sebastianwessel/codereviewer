@@ -90,6 +90,7 @@ describe('judgeUnmatchedFindingsPlausibility', () => {
     const result = await judgeUnmatchedFindingsPlausibility({
       evalCase,
       unmatchedFindings: [finding()],
+      matchedFindings: [],
       judge: undefined,
       readFileContent: alwaysReader
     })
@@ -110,6 +111,7 @@ describe('judgeUnmatchedFindingsPlausibility', () => {
     const result = await judgeUnmatchedFindingsPlausibility({
       evalCase,
       unmatchedFindings: [finding()],
+      matchedFindings: [],
       judge,
       readFileContent: undefined
     })
@@ -127,6 +129,7 @@ describe('judgeUnmatchedFindingsPlausibility', () => {
     const result = await judgeUnmatchedFindingsPlausibility({
       evalCase,
       unmatchedFindings: [finding()],
+      matchedFindings: [],
       judge,
       readFileContent: alwaysReader
     })
@@ -151,6 +154,7 @@ describe('judgeUnmatchedFindingsPlausibility', () => {
     const result = await judgeUnmatchedFindingsPlausibility({
       evalCase,
       unmatchedFindings: [finding()],
+      matchedFindings: [],
       judge,
       readFileContent: alwaysReader
     })
@@ -167,6 +171,7 @@ describe('judgeUnmatchedFindingsPlausibility', () => {
     const result = await judgeUnmatchedFindingsPlausibility({
       evalCase,
       unmatchedFindings: [finding()],
+      matchedFindings: [],
       judge,
       readFileContent: alwaysReader
     })
@@ -189,6 +194,7 @@ describe('judgeUnmatchedFindingsPlausibility', () => {
     const result = await judgeUnmatchedFindingsPlausibility({
       evalCase,
       unmatchedFindings: [finding()],
+      matchedFindings: [],
       judge,
       readFileContent: async () => undefined
     })
@@ -199,5 +205,107 @@ describe('judgeUnmatchedFindingsPlausibility', () => {
       code: 'plausibility_source_unavailable',
       stage: 'eval_plausibility_judge'
     })
+  })
+})
+
+// Reproduces the traefik shape from the precision audit: a nil-dereference finding
+// matched at kubernetes_http.go:592, and the SAME defect restated by the reviewer
+// three more times at :593. Before this fix, each restatement was judged alone
+// (never shown the matched finding), so all three were individually confirmed
+// "plausible" and separately credited as unlisted-real defects -- turning one real
+// bug into four counted defects and pinning adjustedPrecision at 100% while raw
+// precision collapsed. This test fails against the pre-fix matcher/judge because
+// `judgeUnmatchedFindingsPlausibility` had no `matchedFindings` parameter at all
+// and credited every plausible finding, restatement or not.
+describe('judgeUnmatchedFindingsPlausibility restatement collapsing', () => {
+  const nilDerefTitle = 'Nil pointer dereference on cfg after failed load'
+  const nilDerefDescription =
+    'cfg is dereferenced without checking the error returned by loadConfig, ' +
+    'so a missing config file causes a nil pointer dereference.'
+
+  const matchedNilDeref = finding({
+    id: 'find_matched_592',
+    location: { path: 'src/kubernetes_http.go', startLine: 592, side: 'new' },
+    title: nilDerefTitle,
+    description: nilDerefDescription
+  })
+
+  const restatementAt593 = (id: string): AdmittedFinding =>
+    finding({
+      id,
+      location: { path: 'src/kubernetes_http.go', startLine: 593, side: 'new' },
+      title: nilDerefTitle,
+      description: nilDerefDescription
+    })
+
+  // Models a judge that correctly implements the new contract: it recognizes a
+  // restatement only when the finding under review names the SAME defect as one
+  // it was shown as already counted, and never invents sameness on its own.
+  const restatementAwareJudge: EvalPlausibilityJudge = async (input) => {
+    const alreadyCounted = input.alreadyCountedFindings ?? []
+    const isSameDefect = alreadyCounted.some(
+      (counted) => counted.title === input.findingTitle
+    )
+
+    return {
+      plausible: true,
+      reason: isSameDefect
+        ? 'Same defect already credited at a nearby line in this file; not a further defect.'
+        : 'A genuine defect the fixture never listed.',
+      restatesAlreadyCounted: isSameDefect
+    }
+  }
+
+  test('does not credit a restatement of an already-matched finding as unlisted-real', async () => {
+    const restatements = ['find_restate_a', 'find_restate_b', 'find_restate_c'].map(
+      restatementAt593
+    )
+
+    const result = await judgeUnmatchedFindingsPlausibility({
+      evalCase,
+      unmatchedFindings: restatements,
+      matchedFindings: [matchedNilDeref],
+      judge: restatementAwareJudge,
+      readFileContent: alwaysReader
+    })
+
+    // The defect is already counted once (as a match). Restating it three more
+    // times at an adjacent line must not manufacture three additional real
+    // defects: adjustedPrecision would otherwise absorb pure verbosity.
+    expect(result.unlistedRealFindingIds).toEqual([])
+    expect(result.outcomes.every((outcome) => outcome.plausible)).toBe(true)
+    expect(
+      result.outcomes.every((outcome) => outcome.restatesAlreadyCounted)
+    ).toBe(true)
+  })
+
+  test('collapses repeated restatements of a defect the fixture never listed at all', async () => {
+    // None of these three match an expected finding, so the FIRST occurrence is
+    // the one genuine credit; the second and third restate it and must not add
+    // further credit, exactly as if the fixture HAD listed the defect and these
+    // were restatements of a matched finding.
+    const first = restatementAt593('find_first')
+    const second = finding({
+      id: 'find_second',
+      location: { path: 'src/kubernetes_http.go', startLine: 594, side: 'new' },
+      title: nilDerefTitle,
+      description: nilDerefDescription
+    })
+    const third = finding({
+      id: 'find_third',
+      location: { path: 'src/kubernetes_http.go', startLine: 595, side: 'new' },
+      title: nilDerefTitle,
+      description: nilDerefDescription
+    })
+
+    const result = await judgeUnmatchedFindingsPlausibility({
+      evalCase,
+      unmatchedFindings: [first, second, third],
+      matchedFindings: [],
+      judge: restatementAwareJudge,
+      readFileContent: alwaysReader
+    })
+
+    expect(result.unlistedRealFindingIds).toEqual(['find_first'])
   })
 })

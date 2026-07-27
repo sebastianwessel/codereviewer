@@ -257,16 +257,24 @@ export const EvalMetricGroupSchema = z.strictObject({
 
 // How the numbers in a report were COMPUTED, as opposed to `schemaVersion`,
 // which describes the shape they are written in. A report is only comparable to
-// another report produced by the same scoring rules, and two changes have already
-// broken that: expectation-to-finding assignment became maximum-cardinality
-// rather than first-acceptable, and the model category taxonomy was unified,
-// which moves race and concurrency findings and so shifts tier resolution.
+// another report produced by the same scoring rules, and three changes have
+// already broken that: expectation-to-finding assignment became
+// maximum-cardinality rather than first-acceptable; the model category taxonomy
+// was unified, which moves race and concurrency findings and so shifts tier
+// resolution; and the plausibility judge now recognises when an unmatched
+// finding merely restates a defect already counted in the same file (a match, or
+// an earlier unlisted-real credit in this same run) instead of crediting every
+// restatement as its own additional unlisted-real defect. That last change
+// alters `unlistedRealFindingCount`, `genuineFalsePositiveCount`, and
+// `adjustedPrecision` for identical review output whenever a run contains a
+// restated finding, so a report scored before it is not comparable to one scored
+// after it.
 //
 // Bump this whenever a change alters what a metric would report for identical
 // review output. Comparing across a bump silently mixes incomparable runs, which
 // is the same class of failure as scoring a run against a stale answer key -- and
 // that one has already happened here.
-export const EVAL_METRICS_VERSION = '2026-07-26.max-cardinality-matching'
+export const EVAL_METRICS_VERSION = '2026-07-27.plausibility-restatement-collapse'
 
 export const EvalReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),
