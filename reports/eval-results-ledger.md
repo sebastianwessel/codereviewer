@@ -40,9 +40,25 @@ different corpus and configuration. Measured here:
 | k=3 sampling inside one run | 48.3% |
 
 **The harvestable variance on this corpus is about 4pp, not 20pp.** And k=3
-captures most of it — 48.3% against a 50.0% ceiling. **Sampling is working as
-designed; the prize is not there.** No value of k fixes that, because the ceiling
-itself is the limit.
+captures most of it — 48.3% against a 50.0% ceiling.
+
+### Scope of that claim — CORRECTION
+
+The ceiling above was measured with **byte-identical packets** on every sample, so
+the only diversity available was sampling randomness. It therefore bounds
+**identical-input resampling**, which is narrower than the claim first written
+here ("no value of k fixes that").
+
+The published sources this spec drew on did something we did not: Cursor's v1 ran
+eight parallel passes with the **diff order randomised** specifically to force
+different reasoning paths, and the self-aggregation result used n=10 with a plateau
+at n=5. **Input-perturbed sampling has a higher potential ceiling and is untested
+here.**
+
+The honest prediction — and it is a prediction, not a measurement — is that it
+still would not pay: precision collapsed hard at k=3, the extra candidates were
+distinct wrong findings rather than near-misses, and more induced diversity should
+produce more of them. But nothing measured here establishes that.
 
 ### Why precision collapsed
 
@@ -155,6 +171,22 @@ confidence and asks the reviewer to state what it could not determine.
 
 A future attempt at this idea should first demonstrate, on a handful of cases,
 that the prompt actually raises candidate count, before spending on an arm.
+
+### This was not a faithful test of the source — CORRECTION
+
+The idea came from Cursor's documented v1 → agentic rewrite, which changed **two**
+things: it replaced a fixed pipeline with an agent that **calls tools and decides
+its own investigation depth**, and it made prompting aggressive.
+
+**We implemented only the prompt.** This engine's discovery lane is single-shot
+and tools-off by design, so the reviewer was instructed to "investigate every
+suspicious pattern" **with no mechanism to investigate anything**. That is a
+plausible reason candidate count fell rather than rose: words were added, not
+capability.
+
+So what failed here is a prompt. **The source's actual approach — aggressive
+prompting paired with an agent that can act on the instruction — remains untested
+in this engine**, and this entry must not be cited as evidence against it.
 
 ### The precision movement is NOT a reason to keep it
 
