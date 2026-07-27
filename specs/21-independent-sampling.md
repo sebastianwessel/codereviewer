@@ -43,9 +43,10 @@ through refutation and admission unchanged.
   fall back to positional identity.
 - `k` MUST be bounded by configuration, and the applied `k` MUST be recorded in
   the run.
-- `k = 1` MUST be exactly equivalent to today's behaviour, including packet shape
-  and field order, so the default path is unchanged and prompt-cache prefix
-  stability does not regress.
+- `k = 1` MUST preserve packet shape, packet field order, and call count, so the
+  default path's prompt-cache prefix stability does not regress.
+- Discovery calls MUST carry no prior conversation. See *Conversation History*
+  below: this is a behaviour change at `k = 1` and is deliberate.
 - Failure of one sample MUST NOT fail the review. Remaining samples proceed and
   the reduced sample count is recorded.
 - The default is `k = 1` until measurement selects otherwise.
@@ -78,6 +79,40 @@ restatements of one defect several times over — the failure that made
 The Semantic Finding Merge is the enabling piece. It was measured under exactly
 this load — 19.3 collapses per run under a 56% candidate increase, with no
 one-sided loss — before this spec was written.
+
+## Conversation History
+
+Implementing this spec surfaced behaviour nothing had specified: the harness
+forwarded the accumulated session conversation into every discovery call, so
+discovery for task N opened carrying task N−1's findings. A second sample would
+therefore have opened holding the first sample's answer — independent in name
+only, and the precise anchoring that made the withdrawn enumeration sweep fail.
+
+Discovery calls now forward no prior conversation. **This changes behaviour at
+`k = 1` as well**, and the original requirement that `k = 1` be exactly
+equivalent to prior behaviour has been amended above rather than quietly
+violated.
+
+The alternatives were worse. Suppressing history only when `k > 1` would make the
+two measurement arms differ in two variables and invalidate the A/B. Suppressing
+it only for samples 2..k would make the samples non-identical draws. Both trade a
+real measurement for a nominal compatibility.
+
+Consequences, which must not be glossed:
+
+- **`k = 1` is a new baseline.** Every recall figure measured before this change
+  was produced by history-carrying discovery and is not comparable. The posture
+  and sampling A/Bs must both re-baseline rather than reuse the prior numbers.
+- Whether cross-task history helped or hurt is **unknown and unmeasured**. It is
+  removed because it contradicts what the rest of the pipeline assumes of
+  discovery, not because it was shown to be harmful.
+
+The suppression is scoped to discovery. **Refutation, the semantic finding merge,
+and the context scout still carry conversation history.** For refutation this
+contradicts its own instructions, which require each candidate to be judged
+strictly on its own merits; a refuter that has just proved several candidates
+opens the next task holding that exchange. This is recorded here as a known
+divergence to be investigated and measured separately, not as accepted design.
 
 ## Honest Limits
 
