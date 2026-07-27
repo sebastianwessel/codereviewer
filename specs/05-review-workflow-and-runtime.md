@@ -23,10 +23,9 @@ Date: 2026-07-21
     disabled and never fails the run on a provider error.
 13. Resolve provider when model-backed review is enabled.
 14. Run holistic discovery: one recall-first whole-file review per task, plus the
-    optional dedicated security pass (`15-security-focused-review.md`) and the
-    optional un-anchored pass (`19-unanchored-discovery-pass.md`) when enabled.
-    Both are additive and neither can displace a candidate the primary review
-    raised.
+    optional dedicated security pass (`15-security-focused-review.md`) when
+    enabled. That pass is additive and cannot displace a candidate the primary
+    review raised.
 15. Merge candidates that describe one defect, per Semantic Finding Merge below.
 16. Run refutation once per task, adjudicating every candidate that task raised.
 17. Admit or reject candidates against the admission gate.
@@ -319,10 +318,6 @@ below), so the requirement is withdrawn rather than left as an unmet mandate.
 - The reviewer must report concrete defects only. Style, naming, formatting,
   documentation, and cleanup-only concerns are out of scope.
 - Candidate findings are capped per task.
-- An OPTIONAL additional pass may review a changed file as bounded units with the
-  diff withheld; see `19-unanchored-discovery-pass.md`. It is disabled by default,
-  its candidates are additive, and they pass through the semantic finding merge,
-  refutation, and admission below unchanged.
 - Candidate findings are untrusted until they pass refutation and admission.
   Raw candidates do not influence later workers before they pass the configured
   safe digest boundary.
@@ -370,6 +365,51 @@ The one-finding-per-file limit therefore remains **open and unfixed**. What is
 established is that neither re-asking the same question nor asking a differently
 framed one recovers the missed defect, so a future attempt should start somewhere
 else.
+
+### Measured Outcome Of The Withdrawn Un-Anchored Pass
+
+A third attempt at the same limit was built, measured, and removed on 2026-07-27:
+an optional additive pass that reviewed a changed file as bounded units **with the
+diff withheld**, so the reviewer had no changed line to answer. Its detail is in
+`reports/2026-07-27-unanchored-pass-ab-result.md`.
+
+It was tried because the diagnosis was measured rather than assumed. In a
+controlled experiment on the same decomposition, only 16 of 76 candidates (21%)
+from the diff-BEARING arm pointed at a line inside the unit they were shown, while
+the diff-withheld arm placed 50 of 50 inside their own unit. The reviewer answers
+the diff; removing the anchor demonstrably made it read the code it was handed.
+
+The A/B on the 36-case / 80-expectation real-repository corpus (base n=6, enabled
+n=3) gave **+0.83pp recall, 95% CI [−3.13, +4.79], 10 expectations gained and 9
+lost, p = 0.82, for +136% cost**. Ten gained against nine lost is a coin flip. The
+decision rule fixed in advance required significance, intact precision, and a
+defensible cost per additional matched expectation to ship it enabled, and a
+genuine recall rise even to retain it disabled; it met none of those, so it was
+removed entirely rather than kept as an expensive switch.
+
+The negative result is treated as **general**, not as a property of this corpus,
+because the corpus was recorded in advance as close to the best case for the
+change: median 7 changed lines per case, median 2 hunks, 17 of 36 cases
+single-hunk. A small diff is where the anchor pulls hardest, so it is where
+removing the anchor has the most to add.
+
+Two findings from the same measurement survive the removal and should inform any
+future decomposed-discovery work:
+
+- **The refutation gate has real headroom.** Under a 56% increase in candidates
+  its kill rate rose from 1.3% to 16.0% while adjusted precision held (0.804 →
+  0.792). A "generate wider" experiment can lean on that instead of building its
+  own filter.
+- **The semantic finding merge is load-bearing under decomposition.** Merge
+  collapses rose from 1.7 to 19.3 per run, so roughly nineteen restatements per
+  run would otherwise have reached the reader, and the paired test showed no
+  one-sided loss (9 lost against 10 gained is symmetric noise, not the systematic
+  deletion a defective merge would produce). It is retained on its own merits.
+
+What this does not establish is that decomposed discovery is worthless — it
+establishes that withholding the diff, at this geometry, on the corpus most
+favourable to it, does not pay for itself. A future proposal should bring a
+different mechanism, not this one at a different unit size.
 
 ## Refutation
 
@@ -940,9 +980,9 @@ the spec costs neither recall nor precision, and it does not.
 
 Discovery may produce several candidates that describe one underlying defect.
 This happens whenever more than one call examines overlapping code — the additive
-security pass, and the decomposition of a file into overlapping review units in
-`19-unanchored-discovery-pass.md` — and it also happens within a single call,
-which may restate one defect at neighbouring lines.
+security pass, and any future decomposition of a file into overlapping review
+units — and it also happens within a single call, which may restate one defect at
+neighbouring lines.
 
 Before admission, candidates for the same file MUST be grouped by whether they
 describe the **same underlying defect**, and each group MUST be reduced to one

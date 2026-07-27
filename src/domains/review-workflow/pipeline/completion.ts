@@ -298,11 +298,6 @@ export const completeReviewWorkflow = (
     readonly taskEvents: readonly WorkflowTaskEvent[]
     readonly instructionHashes: readonly string[]
     readonly skillHashes: readonly string[]
-    // Non-fatal things the run must tell its reader about, on top of the ones the
-    // baseline match produces. Today that is the un-anchored discovery pass
-    // reporting the coverage its bound withheld (spec 19), which has to reach the
-    // run report: truncation nobody can see reads as full coverage.
-    readonly warnings?: readonly string[]
   }
 ): ReviewWorkflowOutput => {
   const evidence = uniqueEvidenceRecords(input.evidence)
@@ -400,6 +395,6 @@ export const completeReviewWorkflow = (
     qualityGate,
     instructionHashes: input.instructionHashes,
     skillHashes: input.skillHashes,
-    warnings: [...baseline.warnings, ...(input.warnings ?? [])]
+    warnings: baseline.warnings
   })
 }

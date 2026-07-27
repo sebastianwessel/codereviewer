@@ -55,40 +55,25 @@ candidate id derived from task id, path, start line, and title, with the title
 capped at 120 and the description at 1200 characters.
 
 At most **12 candidates per task** are kept from the general pass; the dedicated
-security pass may add up to **8 more** on top, and the un-anchored pass up to **8
-more** again. The cap exists because every candidate costs downstream refutation
-budget — it is not the precision mechanism. Refutation is.
+security pass may add up to **8 more** on top. The cap exists because every
+candidate costs downstream refutation budget — it is not the precision mechanism.
+Refutation is.
 
-## The optional extra passes
+## The one optional extra pass
 
-Discovery has two optional additional kinds of call, and both are off by default.
-Both are *additive*: they may only add candidates at locations no earlier pass
-already claimed, are capped, and their candidates face the same refutation and
+Discovery has exactly one optional additional call, and it is off by default. It
+is *additive*: it may only add candidates at locations the general pass did not
+already claim, is capped, and its candidates face the same refutation and
 admission as any other.
 
-| Pass | Config key | What it asks | What it is shown |
-| --- | --- | --- | --- |
-| Dedicated security pass | `security.dedicatedPass.enabled` (`false`) | A security-only call with a generic OWASP/CWE checklist and a source→sink method; capped at 8 additional candidates | The same packet as the general call |
-| Un-anchored pass | `review.unanchoredPass.enabled` (`false`) | **Nothing extra** — the general reviewer's own instructions, unchanged; capped at 8 additional candidates | One bounded unit of one file, **with the diff withheld** |
+| Pass | Config key | What it asks |
+| --- | --- | --- |
+| Dedicated security pass | `security.dedicatedPass.enabled` (`false`) | A security-only call with a generic OWASP/CWE checklist and a source→sink method; capped at 8 additional candidates |
 
-The un-anchored pass is the only one whose variable is the *packet* rather than
-the *prompt*, and that is deliberate. The general call is anchored to the diff:
-its candidates land on the changed line even when the file section it was given
-does not contain that line, which is why it reports at most one defect per changed
-region. Removing the anchor is what makes the reviewer read the code it was
-handed. Running the same unit decomposition *with* the diff attached was measured
-and recovered almost nothing at N× the cost, so **any change that lets diff text
-back into that packet makes the pass inert while still paying for it**.
-
-Because a unit is one model call, the pass is bounded per file and per run from
-configuration, and any coverage a bound withholds is reported in the run's
-`warnings` — a bounded pass that says nothing about its bound reads as full
-coverage.
-
-Two further passes — an enumeration sweep and a diverse-lens second pass — were
-built, measured, and [removed](../optional-capabilities/extra-discovery-passes.md);
-neither earned its cost. Both re-asked over the same artifact, which is exactly
-what the un-anchored pass does not do.
+Three further passes — an enumeration sweep, a diverse-lens second pass, and an
+un-anchored pass over bounded units with the diff withheld — were built, measured,
+and [removed](../optional-capabilities/extra-discovery-passes.md); none earned its
+cost.
 
 Another opt-in, the **context scout** (`review.contextScout.enabled`), does not
 review anything: it is a cheap call that names out-of-change symbols the changed
@@ -100,10 +85,10 @@ Both are described in [Optional capabilities](../optional-capabilities/README.md
 ## Semantic finding merge
 
 Discovery can describe one defect more than once: a single call restates it at
-neighbouring lines, and any second call over the same code — the security pass,
-and every overlapping un-anchored unit — never sees the first call's output.
-Deduplicating by the model-assigned id cannot catch that (the ids come from
-different calls) and neither can a `(path, line)` rule (the anchors differ).
+neighbouring lines, and any second call over the same code — the security pass
+today — never sees the first call's output. Deduplicating by the model-assigned
+id cannot catch that (the ids come from different calls) and neither can a
+`(path, line)` rule (the anchors differ).
 
 So once every candidate for the task exists, and before anything reaches
 refutation, the candidates for each file are grouped by whether they describe
@@ -125,11 +110,10 @@ refutation, the candidates for each file are grouped by whether they describe
   list carrying a `duplicate` rejection that names the candidate it was merged
   into, so the merge rate is visible in the report.
 
-**A file with fewer than two candidates produces no call at all.** With the
-default configuration's roughly one candidate per file the stage costs close to
-nothing; it becomes load-bearing the moment the un-anchored pass is enabled, since
-reviewing a file as several overlapping units produces duplicate candidates by
-construction.
+**A file with fewer than two candidates produces no call at all.** With today's
+roughly one candidate per file the stage costs close to nothing; it becomes
+load-bearing as soon as a file is reviewed as several units, which produces
+duplicate candidates by construction.
 
 ```mermaid
 flowchart TD
@@ -139,11 +123,8 @@ flowchart TD
   SC --> G["general discovery call (always)"]
   G --> SE{"security.dedicatedPass.enabled?"}
   SE -- yes --> SP["security-only call (additive, ≤ 8 more)"]
-  SE -- no --> UA{"review.unanchoredPass.enabled?"}
-  SP --> UA
-  UA -- yes --> UP["one call per bounded unit, diff withheld<br/>(additive, ≤ 8 more; per-file and per-run capped)"]
-  UA -- no --> C["candidates, deduped · ≤ 12 general (+ ≤ 8 security, + ≤ 8 un-anchored)"]
-  UP --> C
+  SE -- no --> C["candidates, deduped · ≤ 12 general (+ ≤ 8 security)"]
+  SP --> C
   C --> M{"≥ 2 candidates in one file?"}
   M -- no --> O["candidates for refutation"]
   M -- yes --> MM["merge call per file → groups"]
@@ -168,9 +149,6 @@ Candidates are not findings and are never reported as such.
 | More than 12 valid findings | Excess is discarded by the cap |
 | A genuine provider failure (auth, budget, network exhaustion) | Fails the task and the run, writing partial artifacts |
 | The security pass reports a location the general pass already flagged | Its candidate is suppressed — the extra pass can only add |
-| The un-anchored pass reports a location an earlier pass already flagged | Same: its candidate is suppressed, and the diff-anchored one is untouched |
-| A file derives more un-anchored units than the per-file or per-run bound allows | The allowed units run, the rest are skipped, and the run records `unanchored-discovery-truncated: …` naming the bound |
-| An un-anchored unit call fails | That unit yields nothing and is recorded as a **recovered** provider issue. An unrecognized failure ends the pass for the task; the review is still complete |
 | The semantic merge call fails, or returns a group naming a candidate that does not exist | No grouping for that file, recorded as a **recovered** provider issue; every candidate survives |
 | The merge puts one candidate in two groups | Only the first group is honoured — an ambiguous merge resolves towards leaving candidates alone |
 
@@ -186,7 +164,6 @@ it had, and in an evaluation would drop the case from the comparison entirely.
 | `aiReview.enabled` | unset (on) | `false` disables the model stages |
 | `review.maxConcurrentTasks` | `4` | Discovery parallelism |
 | `security.dedicatedPass.enabled` | `false` | Adds the security-only call |
-| `review.unanchoredPass.*` | disabled | Adds one diff-withheld call per bounded unit of a changed file |
 | `review.contextScout.*` | disabled | Pre-selects extra symbol context |
 | `review.crossFileRetrieval.*` | disabled | Gives the reviewer mediated repo tools |
 | `instructions.*`, `skills.*` | — | Extra reviewer instructions and skills |

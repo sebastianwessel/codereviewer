@@ -168,19 +168,12 @@ export const createModelBackedReviewHarness = (
             ...(options.onTaskEvent === undefined
               ? {}
               : { onTaskEvent: options.onTaskEvent }),
-            runTask: async (
-              taskInput,
-              task,
-              signal,
-              contextRetriever,
-              unanchoredBudget
-            ) =>
+            runTask: async (taskInput, task, signal, contextRetriever) =>
               runDiscoveryTask(contextRetriever, () =>
                 runModelBackedHolisticTaskReview({
                   workflowInput: ctx.input,
                   taskInput,
                   task,
-                  unanchoredBudget,
                   runners: {
                     holisticReview: (holisticInput, holisticSignal) =>
                       ctx.agents.holistic_review(

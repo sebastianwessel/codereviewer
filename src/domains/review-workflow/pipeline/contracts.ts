@@ -50,20 +50,6 @@ export const ReviewWorkflowInputSchema = z.strictObject({
       maxBytesPerSymbol: z.int().min(1)
     })
     .optional(),
-  // Un-anchored discovery pass (spec 19). Present ONLY when the pass is enabled,
-  // exactly like `contextScout` above: absent means no extra call is issued and
-  // the discovery packet is byte-for-byte what it is today. When present, each
-  // task additionally reviews its changed files as bounded units WITH THE DIFF
-  // WITHHELD, and the bounds travel with the toggle because a pass that cannot be
-  // bounded must not run.
-  unanchoredPass: z
-    .strictObject({
-      unitLines: z.int().min(1),
-      strideLines: z.int().min(1),
-      maxUnitsPerFile: z.int().min(1),
-      maxUnitsPerRun: z.int().min(1)
-    })
-    .optional(),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
   instructions: z.array(ContextDocumentSchema),

@@ -62,30 +62,6 @@ only if deterministic resolution finds it.
 | `review.contextScout.maxSymbols` | integer 1–40 | `8` | Symbols one scout call may request. A relevance ration, not a loop guard. |
 | `review.contextScout.maxBytesPerSymbol` | integer 500–40000 | `4000` | Per-symbol byte cap on an extracted body. Budget pressure sheds scout context before changed-file source. |
 
-### `review.unanchoredPass`
-
-Additional discovery calls that review a changed file as bounded units **with the
-diff withheld**, so the reviewer has no changed line to answer and must read what
-it is given. Its candidates are additive — they can never displace, reorder, or
-suppress a candidate from the diff-anchored pass — and they pass through the same
-semantic merge, refutation, and admission as any other candidate.
-
-**This is the most expensive option in the engine**: one model call per reviewed
-unit. Both caps are enforced in code, and any coverage they withhold is reported
-in `run.warnings` as `unanchored-discovery-truncated: …`.
-
-| Key | Type | Default | What it does |
-| --- | --- | --- | --- |
-| `review.unanchoredPass.enabled` | boolean | `false` | Master switch. |
-| `review.unanchoredPass.unitLines` | integer 10–2000 | `60` | Lines per reviewed unit. |
-| `review.unanchoredPass.strideLines` | integer 1–2000 | `40` | How far the next unit starts after the previous one. Must not exceed `unitLines`, otherwise some lines would never be reviewed and configuration is rejected. |
-| `review.unanchoredPass.maxUnitsPerFile` | integer 1–200 | `8` | Units one file may spend. |
-| `review.unanchoredPass.maxUnitsPerRun` | integer 1–2000 | `40` | Units the whole run may spend, across every task. |
-
-Units are derived from a file's line count and nothing else, so two files with the
-same length decompose identically in any language. `60`/`40` is **arbitrary**: it
-is the only geometry that has been measured, and it was chosen on budget grounds.
-
 ## `aiReview`
 
 | Key | Type | Default | What it does |

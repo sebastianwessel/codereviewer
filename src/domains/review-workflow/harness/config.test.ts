@@ -153,23 +153,6 @@ describe('workflow harness config', () => {
     ).toBe(132)
   })
 
-  // Spec 19: the un-anchored pass issues one call per reviewed unit, and its
-  // per-RUN cap is the exact ceiling on how many that can be. Under-reserving is
-  // fatal — the workflow refuses the call and the task loses its findings — so the
-  // reservation is derived from the cap rather than estimated per task.
-  test('reserves the un-anchored pass’s per-run unit cap plus its extra merge headroom', () => {
-    // 8 tasks * 1 discovery + 8*4 refutation + 8*10 merge ceiling (12 + 8
-    // candidates -> at most 10 files with two of them) + 25 unit calls for the
-    // whole run + 2*2 buffer = 8 + 32 + 80 + 25 + 4 = 149.
-    expect(
-      maxChildAgentCallsForReview({
-        taskCount: 8,
-        maxConcurrentTasks: 2,
-        unanchoredMaxUnitsPerRun: 25
-      })
-    ).toBe(149)
-  })
-
   test('enables only read/list/grep builtins for skill-backed review agents', () => {
     expect(
       reviewSkillAgentOptions({

@@ -1,10 +1,10 @@
 // The document a discovery call is shown.
 //
 // It lives in its own module because more than one call is built from it — the
-// general pass, the dedicated security pass (spec 15), and the un-anchored pass
-// (spec 19) — and because the semantic finding merge must reason over source
-// numbered exactly as discovery numbered it. Two copies of the numbering rule
-// would eventually disagree about which line a candidate names.
+// general pass and the dedicated security pass (spec 15) — and because the
+// semantic finding merge must reason over source numbered exactly as discovery
+// numbered it. Two copies of the numbering rule would eventually disagree about
+// which line a candidate names.
 
 import { type TaskReviewInput } from '../agent-contracts.js'
 
@@ -137,10 +137,9 @@ export const numberedFileContentByPath = (
 // change intent) presented to every discovery call.
 //
 // `rawDiff` of '' is a supported, production shape, not a test convenience: an
-// explicit-file run has no diff at all, and the un-anchored pass (spec 19)
-// deliberately withholds the one it has. In both cases the change section falls
-// back to the reviewed line ranges, which say WHICH LINES ARE BEING REVIEWED
-// without handing the reviewer a changed line to answer.
+// explicit-file run has no diff at all. The change section then falls back to the
+// reviewed line ranges, which say which lines are being reviewed without handing
+// the reviewer a diff.
 export const buildContextSections = (
   taskInput: TaskReviewInput,
   rawDiff: string

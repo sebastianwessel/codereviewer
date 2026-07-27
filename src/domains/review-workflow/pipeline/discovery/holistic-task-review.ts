@@ -19,11 +19,6 @@ import {
   numberedFileContentByPath
 } from './review-packet.js'
 import { runSemanticFindingMerge } from './semantic-merge.js'
-import {
-  runUnanchoredDiscoveryPass,
-  UNANCHORED_MAX_CANDIDATES
-} from './unanchored-pass.js'
-import { type UnanchoredRunBudget } from './unanchored-run-budget.js'
 import { type ContextRetriever } from '../../../context-retrieval/index.js'
 import {
   type ContextScoutRunner,
@@ -252,12 +247,6 @@ const candidateFromFinding = (
 // ones that describe the same underlying defect and keeps one representative per
 // group. The shared refutation + admission filter (prepareCandidatesForAdmission)
 // then verifies or discards every surviving candidate downstream.
-//
-// When the un-anchored pass is enabled (spec 19), a THIRD kind of call runs after
-// those two: the task's changed files are reviewed as bounded units with the diff
-// withheld. It is additive on exactly the same terms as the security pass, and it
-// runs last on purpose — the anchored candidates are already in the map, so the
-// un-anchored ones can only be appended at locations nobody claimed.
 export const runModelBackedHolisticTaskReview = async (
   input: {
     readonly workflowInput: ReviewWorkflowInput
@@ -273,12 +262,6 @@ export const runModelBackedHolisticTaskReview = async (
       readonly semanticMerge?: SemanticMergeRunner
     }
     readonly contextRetriever?: ContextRetriever | undefined
-    // Spec 19: the RUN-scoped bound on the un-anchored pass. It is owned by the
-    // workflow handler because a per-run cap enforced per task is not a per-run
-    // cap. Absent, the pass cannot be bounded across the run and therefore does
-    // not run at all — an unbounded pass is the single most expensive mistake
-    // available here, so the safe direction is off.
-    readonly unanchoredBudget?: UnanchoredRunBudget | undefined
     readonly logger: HolisticTaskReviewLogger
     readonly signal?: AbortSignal | undefined
   }
@@ -354,50 +337,6 @@ export const runModelBackedHolisticTaskReview = async (
     suppressedByIdCount += securityCollected.suppressedById
   }
 
-  const anchoredCandidateCount = candidatesById.size
-
-  // Spec 19: the un-anchored pass. It runs only when configuration turned it on
-  // AND a run-scoped budget exists to bound it. Its findings are collected with
-  // the same rules the security pass uses, against the locations EVERY anchored
-  // candidate already claimed, so an un-anchored candidate can only ever be
-  // appended — the anchored candidates keep their identity, their order, and
-  // their place in the map.
-  const unanchoredBounds = input.workflowInput.unanchoredPass
-  const unanchored =
-    unanchoredBounds === undefined || input.unanchoredBudget === undefined
-      ? undefined
-      : await runUnanchoredDiscoveryPass({
-          taskInput: input.taskInput,
-          task: input.task,
-          geometry: {
-            unitLines: unanchoredBounds.unitLines,
-            strideLines: unanchoredBounds.strideLines
-          },
-          budget: input.unanchoredBudget,
-          runReview: input.runners.holisticReview,
-          ...(input.signal === undefined ? {} : { signal: input.signal })
-        })
-
-  if (unanchored !== undefined) {
-    const anchoredLocations = new Set(
-      [...candidatesById.values()].map(locationKey)
-    )
-
-    providerIssues.push(...unanchored.providerIssues)
-
-    const unanchoredCollected = collectCandidates({
-      findings: unanchored.findings,
-      task: input.task,
-      into: candidatesById,
-      maxToAdd: UNANCHORED_MAX_CANDIDATES,
-      excludeLocations: anchoredLocations
-    })
-
-    droppedCount += unanchoredCollected.dropped
-    suppressedByLocationCount += unanchoredCollected.suppressedByLocation
-    suppressedByIdCount += unanchoredCollected.suppressedById
-  }
-
   const discovered = [...candidatesById.values()]
 
   // Spec 05: every discovery candidate for this task now exists, and merging runs
@@ -430,16 +369,7 @@ export const runModelBackedHolisticTaskReview = async (
     general_candidate_count: generalCandidateCount,
     suppressed_by_location_count: suppressedByLocationCount,
     suppressed_by_id_count: suppressedByIdCount,
-    security_candidate_count: anchoredCandidateCount - generalCandidateCount,
-    // Spec 19 forbids silent truncation, so the units this task DERIVED and the
-    // units it was allowed to REVIEW are recorded separately. Equal numbers mean
-    // the file was covered; a gap is the run bound speaking, and the run report
-    // carries the matching warning.
-    unanchored_pass_enabled: unanchoredBounds !== undefined,
-    unanchored_units_derived: unanchored?.unitsDerived ?? 0,
-    unanchored_units_reviewed: unanchored?.unitsReviewed ?? 0,
-    unanchored_finding_count: unanchored?.findings.length ?? 0,
-    unanchored_candidate_count: discovered.length - anchoredCandidateCount,
+    security_candidate_count: discovered.length - generalCandidateCount,
     // Both merge counters are recorded from the start, and both are needed:
     // "the merge is not firing" (no calls) and "there was nothing to merge"
     // (calls, no groups) are indistinguishable from a candidate count alone, and

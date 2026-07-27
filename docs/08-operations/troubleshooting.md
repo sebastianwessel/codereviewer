@@ -263,8 +263,7 @@ reports what was spent rather than stopping it. See
 | Too many low-value findings | Raise `aiReview.actionableSeverityThreshold`; set `promotionPolicy.modelWeakOrRefuted` to `rejected` |
 | Report has a large "needs more evidence" section | Same: `promotionPolicy.modelWeakOrRefuted: "rejected"` |
 | Findings exist but no inline comments | `reporting.reviewComments.enabled` must be true, and only `inline` findings on the new side of a reviewed diff range become drafts. Lower `review.inlineSeverityThreshold` |
-| Misses a second defect in a file where it found one | The one candidate dial is `review.unanchoredPass.enabled: true`, and it is [unproven and expensive](../03-concepts/optional-capabilities/unanchored-discovery-pass.md). Two earlier passes built for this were measured and [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md) |
-| A run warns `unanchored-discovery-truncated: …` | Working as configured: the un-anchored pass hit `maxUnitsPerFile` or `maxUnitsPerRun`. Raise the bound named in the warning, or accept the partial coverage it is telling you about |
+| Misses a second defect in a file where it found one | Known limitation, no dial. Three passes built for it were measured and [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md) |
 | Misses security issues specifically | `security.dedicatedPass.enabled: true` |
 | Misses defects that depend on unchanged code | `review.contextScout.enabled: true` |
 | Two runs disagree | Expected. Model output is non-deterministic; a small difference between runs is noise. Measure on a corpus, not on one run — see the [quality docs](../05-quality/README.md) |

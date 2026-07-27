@@ -4,7 +4,6 @@ import {
   HOLISTIC_MAX_CANDIDATES,
   SECURITY_MAX_CANDIDATES
 } from '../pipeline/discovery/holistic-task-review.js'
-import { UNANCHORED_MAX_CANDIDATES } from '../pipeline/discovery/unanchored-pass.js'
 import { type CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
 
 const defaultMaxConcurrentTasks = 4
@@ -33,13 +32,6 @@ export const maxChildAgentCallsForReview = (
     readonly maxConcurrentTasks?: number
     readonly securityPassEnabled?: boolean
     readonly contextScoutEnabled?: boolean
-    // Spec 19: the un-anchored pass issues one ADDITIONAL discovery call per
-    // reviewed unit, and its per-RUN cap is the exact ceiling on how many units
-    // the whole run may review — so that number, not a per-task estimate, is what
-    // has to be reserved. Reserving too little is fatal (the workflow refuses the
-    // call and the task loses its findings); reserving too much costs nothing,
-    // because this budget is a ceiling and not a spend.
-    readonly unanchoredMaxUnitsPerRun?: number
   } = {}
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
@@ -61,11 +53,9 @@ export const maxChildAgentCallsForReview = (
   // the call) while over-reserving costs nothing: this budget is a ceiling, not
   // a spend, and today's roughly one candidate per file means almost none of it
   // is used.
-  const unanchoredEnabled = (input.unanchoredMaxUnitsPerRun ?? 0) > 0
   const mergeCallsPerTask = Math.floor(
     (HOLISTIC_MAX_CANDIDATES +
-      (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0) +
-      (unanchoredEnabled ? UNANCHORED_MAX_CANDIDATES : 0)) /
+      (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0)) /
       2
   )
   // Cross-file retrieval (spec 16) needs no reservation here: a mediated tool call
@@ -74,16 +64,9 @@ export const maxChildAgentCallsForReview = (
   const holisticCalls = taskCount * discoveryCallsPerTask
   const refutationCalls = taskCount * refutationCallsPerTask
   const mergeCalls = taskCount * mergeCallsPerTask
-  // Spec 19: reserved for the whole run, not per task, because the un-anchored
-  // pass's per-run bound is what actually limits it.
-  const unanchoredCalls = Math.max(0, input.unanchoredMaxUnitsPerRun ?? 0)
   const concurrencyBuffer = maxConcurrentTasks * 2
   const derived =
-    holisticCalls +
-    refutationCalls +
-    mergeCalls +
-    unanchoredCalls +
-    concurrencyBuffer
+    holisticCalls + refutationCalls + mergeCalls + concurrencyBuffer
 
   return Math.min(
     maxChildAgentCallCap,

@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest'
-import * as unanchoredPassModule from './discovery/unanchored-pass.js'
 import {
   securityReviewChecklist,
   securityReviewInstruction
@@ -233,20 +232,6 @@ describe('prompt genericity guard', () => {
       })
     }
   }
-
-  // Spec 19: the un-anchored pass differs from the primary pass in WHAT IT IS
-  // SHOWN, never in what it is asked. It reuses the discovery agent and the
-  // primary prompt builder, so it must contribute no instruction text at all —
-  // no hints, no defect categories, no "look harder" framing. A new prompt
-  // constant appearing in that module is the symptom, and it would also escape
-  // the vocabulary guard above, which can only check prompts it is handed.
-  test('the un-anchored discovery pass ships no prompt of its own', () => {
-    const stringExports = Object.entries(unanchoredPassModule)
-      .filter(([, value]) => typeof value === 'string')
-      .map(([name]) => name)
-
-    expect(stringExports).toEqual([])
-  })
 
   test('the refuter states adjudication rules, never a verdict for a named defect', () => {
     // The regression this catches: clauses of the form "Prove <specific defect

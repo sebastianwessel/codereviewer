@@ -184,52 +184,5 @@ describe('review runner workflow input', () => {
     expect(workflowInput.qualityGate).toEqual(
       expect.objectContaining({ maxCritical: 0, maxHigh: 0 })
     )
-    // Spec 19: with the un-anchored pass off (the default), the key is absent, so
-    // no unit call is reachable and the discovery packet is unchanged.
-    expect(workflowInput.unanchoredPass).toBeUndefined()
-  })
-
-  test('carries the un-anchored pass bounds only when the pass is enabled', () => {
-    const config = CodeReviewerConfigSchema.parse({
-      review: {
-        unanchoredPass: {
-          enabled: true,
-          unitLines: 80,
-          strideLines: 50,
-          maxUnitsPerFile: 4,
-          maxUnitsPerRun: 12
-        }
-      }
-    })
-
-    const workflowInput = createWorkflowInput({
-      runId: 'run-unanchored',
-      repositoryRoot: '/repo/project',
-      reviewedPaths: ['src/a.ts'],
-      reviewedLineRanges: [],
-      reviewedDiffRanges: [],
-      reviewedDiffText: '',
-      evidence: [],
-      candidates: [],
-      config,
-      configHash: sha256('config'),
-      providerId: 'openai',
-      modelName: 'review-model',
-      admittedAt: '2026-06-22T10:00:00.000Z',
-      baselineConfigured: false,
-      instructions: [],
-      skills: [],
-      tasks: [task({ id: 'task_a' })],
-      aiReviewBudget: aiReviewBudgetFor(config)
-    })
-
-    // The geometry and BOTH caps travel together: the pass is never reachable
-    // without the bound that makes it affordable.
-    expect(workflowInput.unanchoredPass).toEqual({
-      unitLines: 80,
-      strideLines: 50,
-      maxUnitsPerFile: 4,
-      maxUnitsPerRun: 12
-    })
   })
 })

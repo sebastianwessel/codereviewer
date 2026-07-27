@@ -148,44 +148,6 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
-  // Spec 19 requires the un-anchored pass to stay off until a measurement on the
-  // real-repository corpus shows it earns its cost. It is also the most expensive
-  // thing in the engine when enabled, so a default flipped by accident would be
-  // expensive as well as unmeasured.
-  test('the un-anchored discovery pass defaults to disabled, with its bounds present', () => {
-    const disabled = CodeReviewerConfigSchema.parse({})
-    expect(disabled.review.unanchoredPass.enabled).toBe(false)
-    expect(disabled.review.unanchoredPass.unitLines).toBe(60)
-    expect(disabled.review.unanchoredPass.strideLines).toBe(40)
-    expect(disabled.review.unanchoredPass.maxUnitsPerFile).toBe(8)
-    expect(disabled.review.unanchoredPass.maxUnitsPerRun).toBe(40)
-
-    const enabled = CodeReviewerConfigSchema.parse({
-      review: { unanchoredPass: { enabled: true } }
-    })
-    expect(enabled.review.unanchoredPass.enabled).toBe(true)
-    // The bounds are not optional when the pass is on: an unbounded pass must be
-    // unrepresentable, not merely discouraged.
-    expect(enabled.review.unanchoredPass.maxUnitsPerFile).toBe(8)
-    expect(enabled.review.unanchoredPass.maxUnitsPerRun).toBe(40)
-  })
-
-  test('the un-anchored pass rejects a stride wider than a unit, which would leave lines unreviewed', () => {
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        review: { unanchoredPass: { unitLines: 40, strideLines: 60 } }
-      })
-    ).toThrow()
-  })
-
-  test('the un-anchored pass rejects an unknown nested key', () => {
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        review: { unanchoredPass: { on: true } }
-      })
-    ).toThrow()
-  })
-
   test('security dedicated pass defaults to disabled', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.security.dedicatedPass.enabled).toBe(false)

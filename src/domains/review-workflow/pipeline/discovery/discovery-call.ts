@@ -1,9 +1,8 @@
 // One discovery model call, and the failure policy every discovery call shares.
 //
-// Extracted so the general pass, the dedicated security pass (spec 15), and the
-// un-anchored pass (spec 19) cannot drift apart on what "this call failed" means.
-// Every one of them is a single model response whose loss must cost that response
-// and nothing more.
+// Extracted so the general pass and the dedicated security pass (spec 15) cannot
+// drift apart on what "this call failed" means. Each of them is a single model
+// response whose loss must cost that response and nothing more.
 
 import {
   ModelHolisticReviewResultSchema,

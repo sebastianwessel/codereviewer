@@ -1,21 +1,22 @@
 # Extra Discovery Passes (Removed)
 
-Two additional discovery passes once existed as opt-in capabilities. **Both were
-removed** — code, configuration keys, and the spec requirement. This page is the
-record of what they were and what measuring them established, so the same shape is
-not rebuilt without new evidence.
+Three additional discovery passes once existed as opt-in capabilities. **All three
+were removed** — code, configuration keys, and the spec requirement. This page is
+the record of what they were and what measuring them established, so the same
+shape is not rebuilt without new evidence.
 
-There is nothing to configure here. Both keys were deleted from the configuration
-schema, which is strict: a config file that still sets either one now fails
+There is nothing to configure here. Every one of those keys was deleted from the
+configuration schema, which is strict: a config file that still sets one now fails
 validation with exit code `2`. Remove the block.
 
 ## What they were
 
-| | Enumeration sweep | Diverse-lens pass |
-| --- | --- | --- |
-| Asked | the **same** question again, minus what was already reported | a **different** question: concurrency, asynchrony, error paths, resource lifetime, contracts, edge cases |
-| Calls added | up to 4 per task, stopping early once a round added nothing | 1 per task, serial |
-| Merge | additive — could only add candidates at locations no earlier pass claimed | same |
+| | Enumeration sweep | Diverse-lens pass | Un-anchored pass |
+| --- | --- | --- | --- |
+| Asked | the **same** question again, minus what was already reported | a **different** question: concurrency, asynchrony, error paths, resource lifetime, contracts, edge cases | the **same** question, unchanged — the variable was the packet, not the prompt |
+| Was shown | the whole task packet | the whole task packet | one bounded unit of one file, **with the diff withheld** |
+| Calls added | up to 4 per task, stopping early once a round added nothing | 1 per task, serial | 1 per reviewed unit, bounded per file and per run |
+| Merge | additive — could only add candidates at locations no earlier pass claimed | same | same |
 
 ## The problem they addressed — still open
 
@@ -36,7 +37,7 @@ Nothing was losing findings; there simply was one.
 re-asking the same question nor asking a differently-framed one recovers the missed
 defect.
 
-## What was measured
+## What was measured — the first two
 
 30-case / 42-finding real-repository corpus, **3 seeds per arm**.
 
@@ -48,13 +49,43 @@ defect.
 
 Baseline seed-to-seed standard deviation: **4.8pp**.
 
+## What was measured — the un-anchored pass
+
+Built after those two, on measured evidence that the reviewer *answers the diff*:
+in a controlled experiment only 16 of 76 candidates (21%) from a diff-bearing arm
+pointed at a line inside the unit they were shown, while the diff-withheld arm
+placed 50 of 50 inside their own unit. Taking the diff away demonstrably made the
+reviewer read the code it was handed.
+
+That did not turn into findings anyone was looking for. On the 36-case /
+80-expectation real-repository corpus (base n=6, enabled n=3):
+
+| | Base | Un-anchored pass enabled |
+| --- | ---: | ---: |
+| Recall | 46.25% | 47.08% |
+| Adjusted precision | 0.804 | 0.792 |
+| Candidates per run | 74.7 | 117.0 |
+| Cost per run | $1.92 | $4.53 |
+
+Paired over 80 expectations: **+0.83pp, 95% CI [−3.13, +4.79], 10 gained and 9
+lost, p = 0.82** — for **+136% cost**. Ten gained against nine lost is a coin flip.
+
+Two results from that run outlived the pass:
+
+- **The refutation gate has headroom.** Its kill rate rose 1.3% → 16.0% under a
+  56% increase in candidates, and adjusted precision held. A future "generate
+  wider" experiment can lean on that.
+- **The semantic finding merge is load-bearing under decomposition.** Collapses
+  rose 1.7 → 19.3 per run, so about nineteen restatements per run would otherwise
+  have reached the reader — with no one-sided loss. It stays.
+
 ## Why they were removed
 
-Neither is a measurable improvement, so both were removed rather than kept as
-unproven, expensive switches. An option nobody can justify enabling is a
-maintenance and documentation cost with no counterpart.
+None of the three is a measurable improvement, so all three were removed rather
+than kept as unproven, expensive switches. An option nobody can justify enabling
+is a maintenance and documentation cost with no counterpart.
 
-Two qualifications belong with that verdict:
+Two qualifications belong with that verdict for the first two passes:
 
 - **Unproven, not disproven.** At 3 seeds with a 4.8pp deviation the resolution is
   roughly **±5.5pp**. A small real effect would be invisible at this n. The removal
@@ -66,12 +97,18 @@ Two qualifications belong with that verdict:
   metric cannot see, and it is also inside the noise band. Pursuing it needs a
   targeted experiment, not a retained switch.
 
+The un-anchored pass carries a stronger verdict, because its corpus was recorded
+in advance as close to its best case — median 7 changed lines per case, median 2
+hunks, 17 of 36 cases single-hunk, which is where removing the diff anchor has the
+most to add. A pass that does not help there is not expected to help elsewhere.
+
 ## If you revisit this
 
 Bring a design that is *not* "issue the same whole-file review again with different
 wording" — that shape has been measured twice and cleared the noise band neither
-time. Bring more seeds too: at ±5.5pp resolution, 3 seeds cannot answer the
-question that the unlisted-defect signal raises.
+time — and not "the same review at a different unit size with the diff removed",
+which has now been measured too. Bring more seeds as well: at ±5.5pp resolution,
+3 seeds cannot answer the question that the unlisted-defect signal raises.
 
 `specs/05-review-workflow-and-runtime.md` previously required a second serial
 diverse-lens pass; that requirement has been withdrawn. Discovery is officially
