@@ -77,6 +77,54 @@ something to leave as an observation.
 
 ---
 
+## k-sampling, re-priced after the cache fix — and my re-pricing was half wrong
+
+Measured 2026-07-26 after prompt caching started working. I said the +40-50% price
+for an extra discovery pass assumed no caching and should be recomputed. That was
+only true for one of the two shapes, and the distinction matters.
+
+**Measured: an extra discovery call with a DIFFERENT prompt still costs +44%.**
+Enabling the dedicated security pass on one warm case took input from 67,348 to
+90,993 tokens and review cost from $0.0973 to $0.1399. **Cached tokens did not move
+at all — 19,200 before, 19,200 after.** The extra call cached nothing, because its
+instruction text differs from the general call's, so the two share no cacheable
+prefix.
+
+The consequence is that **the enumeration sweep and the diverse-lens pass were not
+mispriced.** Both used a different prompt by construction — that was the entire
+point of the lens. Their measured +40-47% stands, and caching does not retroactively
+make them cheap. The earlier note suggesting otherwise was wrong.
+
+**Computed, not measured: true k-sampling would cost about +13%.** A k-sample sends
+the IDENTICAL prompt again, so its input should serve almost entirely from cache.
+The marginal call is 23,645 input tokens; at the uncached rate that is $0.0414,
+which matches the observed delta almost exactly, and at the cached rate (0.1x, from
+this repository's own pricing table) it is $0.0041, plus roughly $0.008 of output.
+That is **+13% of a warm run rather than +44%**.
+
+This figure is arithmetic over measured token counts, not an observation. No
+k-sampling implementation exists to measure directly — the sweep was removed. Two
+things could invalidate it:
+
+- **Observed caching is partial.** A warm run serves 28-39% of input from cache, not
+  the ~100% an all-identical workload would suggest. The 19,200 figure is a round
+  multiple of 128, which is the provider's cache granularity, so it looks like one
+  call's prefix caching cleanly while others do not. If an identical second
+  discovery call caches as poorly, the marginal cost rises toward the measured +44%.
+- **Samples must be issued sequentially.** Parallel identical calls cannot cache
+  each other, since both start before either populates the cache. That doubles
+  discovery wall-clock.
+
+**What this changes about the decision.** The trade moves from "+45% forever for a
+capped, mostly-primary +5-10pp" to somewhere between +13% and +44% for the same
+capped gain, with the true figure unknown. That is no longer an obvious reject, and
+it is not yet an obvious accept either. **The cheapest way to settle it is to
+implement k=2 behind a flag and measure the marginal cost on one case — roughly
+$0.30 — before spending anything on a recall arm.** Measure the cost first; the
+recall question only matters if the price is at the low end.
+
+---
+
 ## Next wave (items 3-6) — plan
 
 Written after the post-fix baseline. Recall is capped near the verified 66.7% union

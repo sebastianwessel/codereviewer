@@ -89,7 +89,7 @@ without requiring a hosted experiment tracker.
 | Field | Required | Type |
 | --- | --- | --- |
 | `category` | yes | FindingCategory |
-| `severity` | yes | Severity |
+| `severity` | yes | Severity (assigned by the severity rubric in `05-review-workflow-and-runtime.md`) |
 | `path` | conditional | repositoryRelativePath |
 | `lineRange` | no | `[start, end]` |
 | `semanticSummary` | yes | string |
@@ -340,7 +340,7 @@ change until that paired check is done.
 | `lineAccuracy` | Fraction of matched findings whose location overlaps the expected line range. Only `path-line` expectations that declare a `lineRange` are scored for line overlap, so only they enter the denominator; `path-semantic` and `semantic-only` expectations are excluded even when they carry a `lineRange`. A corpus with no such expectation reports an empty `lineCheckCount` and the metric is undefined, not zero. |
 | `linePlacementRate` | **Diagnostic only; never gates.** Fraction of MATCHED findings, across every match mode, whose produced location falls within the expected `lineRange` (same 3-line tolerance as `lineAccuracy`'s overlap rule). Unlike `lineAccuracy`, an expectation enters this denominator whenever it declares a `lineRange`, regardless of `matchMode` — chiefly `path-semantic`, which is the entire primary real-repository corpus and was therefore invisible to any line-quality measurement at all. This is a DIFFERENT measurement from `lineAccuracy`, not a broader version feeding the same number: it exists to answer a diagnostic question (are reported line numbers roughly right on real code) and must never be read into the regression gate or any pass/fail decision. `null` on an empty denominator, for the same reason as `lineAccuracy`. |
 | `linePlacementCheckCount` | Denominator of `linePlacementRate`. |
-| `severityAccuracy` | Fraction of matched findings with exact severity. |
+| `severityAccuracy` | Fraction of matched findings with exact severity. Both sides of the comparison are governed by the severity rubric in `05-review-workflow-and-runtime.md`; read it with "Severity Measurement" below, which states why the bare rate cannot be read as a quality figure. |
 | `falsePositiveCount` | Actionable admitted findings not matched to expected findings (raw; includes real-but-unlisted defects). |
 | `genuineFalsePositiveCount` | Unmatched admitted findings the plausibility judge deemed spurious, plus any whose plausibility judgment could not be completed (fail-closed). The trustworthy false-positive count. |
 | `unlistedRealFindingCount` | Unmatched admitted findings the plausibility judge deemed genuine defects absent from the fixture's expected list. |
@@ -382,6 +382,59 @@ change until that paired check is done.
 | `scoringCostUsd` | Judge + plausibility-judge provider spend for the whole run, priced with the same cost helper (and the same configured/built-in prices) that produces `costUsd`. Deliberately its own field, never summed into `costUsd`: folding it in would silently inflate every historical cost figure's meaning instead of making the previously-invisible judge spend visible as what it is. Before this metric existed, judge/plausibility calls were real provider calls that nothing counted, so every published cost figure understated true spend by roughly this amount (10-30% depending on corpus, from this project's own measurement). |
 | `scoringCostUnavailable` | `true` when a judge ran but its cost could not be priced (no provider cost and no configured/built-in prices) — mirrors `costUnavailableCount`, but as a single run-level flag rather than a per-case count, since one usage recorder covers the whole run rather than one case. |
 | `elapsedMs` | Monotonic wall-clock elapsed time for the WHOLE evaluation run: per-case review execution plus judge/plausibility scoring. Unlike `durationMs`, this genuinely answers "how long did the run take" because it is a real elapsed-time measurement, not a sum of per-case self-reports. Measured with an injectable monotonic clock (mirroring the CLI's `now` seam used for `generatedAt`) so tests stay deterministic. |
+
+### Severity Measurement
+
+`expectedFindings[].severity` and the severity a run assigns are both governed by
+the severity rubric in `05-review-workflow-and-runtime.md`. A curator labelling a
+new expectation applies that rubric; a label that cannot be derived from it is a
+fixture defect, not an engine defect, and `severityAccuracy` computed against such
+a label measures label noise. This dependency is the whole reason the rubric is
+normative: before it existed, `severityAccuracy` scored agreement with a
+judgement no written standard justified, so neither a low score nor an improvement
+in it could be attributed to the engine.
+
+Three properties of this metric must be stated plainly, because each one makes a
+naive reading wrong:
+
+- **Exact equality on a five-level scale, with no partial credit.** A finding one
+  band away scores identically to one three bands away. The metric therefore
+  cannot distinguish a systematic one-band bias from random assignment, and a
+  severity claim must be supported by the direction of the disagreements, not by
+  the rate alone.
+- **The denominator is the matched set.** Severity is scored only where recall
+  already succeeded, so the metric's value is partly a function of which
+  expectations were found — see the paired-comparison requirement above.
+- **The metric is confounded with the answer key's own severity distribution.**
+  Where an engine's assignments cluster in one band, `severityAccuracy`
+  degenerates into the share of the matched set carrying that band, which is a
+  property of the fixture rather than of the engine's judgement. A run whose
+  disagreements are concentrated on one expected band must be reported that way,
+  broken down by expected severity, and never as a single rate.
+
+#### The Severity Floor Trap In A/B Measurement
+
+The admission gate reads the **model's** severity, not the expectation's. An
+expectation labelled below `aiReview.actionableSeverityThreshold` (default
+`medium`) therefore cannot be matched at all unless the model over-rates it: a
+correctly-rated `low` candidate is rejected as `below-threshold` before scoring
+sees it, so recall on that expectation depends on the engine making exactly the
+severity mistake this rubric forbids.
+
+This is not hypothetical on the primary real-repository corpus. Six of its 42
+expectations are labelled `low`. One of them was matched in every one of the
+archived runs, and in none of those runs did the model agree with the `low` label
+-- it matched only because it called the defect actionable.
+
+The consequence is a requirement. **Calibrating severity downward correctly would
+lose up to 6 of 42 expectations, 14.3 percentage points of recall, while making
+the engine more accurate, and a naive reading would report that as a regression.**
+Any experiment that changes how severity is assigned must therefore either lower
+`aiReview.actionableSeverityThreshold` to `low` for the measurement runs, or tally
+`below-threshold` rejections separately and read them alongside recall. A severity
+A/B reported as a plain recall delta against the default floor is invalid, and the
+recall figures from such a run must not be compared with figures produced under
+the default floor.
 
 ### Fix Lane Measurement
 

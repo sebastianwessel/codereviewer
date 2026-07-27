@@ -801,6 +801,108 @@ tasks. It must not publish actionable admitted findings for incomplete
 provider-backed runs unless every admitted finding's refutation completed before
 the terminal failure.
 
+## Severity Rubric
+
+Severity is a property of a **finding**, not of the run that produced it and not
+of anyone's confidence that the code is wrong. It answers exactly one question:
+how bad is it if this defect stays in the code? This section is the single
+normative definition of that answer. Every producer assigns severity by this rule
+-- model discovery, trusted deterministic rules, and anything that restates a
+finding downstream -- and every consumer reads that one meaning: the admission
+floor below, inline-comment eligibility, quality-gate counts, report ordering,
+and the `severityAccuracy` measurement in `06-evaluation-and-quality-gates.md`.
+The rubric lives here rather than in the evaluation spec because a finding
+carries a severity into a user-facing report whether or not an evaluation ever
+runs; it lives here rather than beside the `Severity` enum in
+`03-contracts/finding-evidence-report.md` because that spec's own source rule
+scopes it to shapes that a schema can validate, and an assignment rule is a
+judgement no schema can express.
+
+Severity is the product of two independent judgements: **impact**, the worst
+consequence that follows from the defect's own contract, and **reachability**,
+how much has to be true -- beyond the containing code running at all -- before
+that consequence occurs. Neither axis is about how likely the reviewer is to be
+right.
+
+### Impact Bands
+
+| Band | Meaning |
+| --- | --- |
+| Control defeated | An untrusted party acts as a principal it is not, reads or writes state it must not, or has input of its choosing interpreted as code or protocol. Also: persisted data destroyed or corrupted, or the service permanently stops serving. |
+| Silently wrong | The unit returns, stores, or transmits a wrong result, or does not perform a function it states it performs, and the caller gets no signal that this happened. An unbounded resource leak belongs here: nothing reports it until the resource is gone. |
+| Signalled or bounded | The outcome is wrong or degraded, but the caller can see it -- an error, a refused request, a visible failure -- or the effect is bounded and self-correcting. |
+| None | No behavioural difference at all. Readability, naming, or consistency only. |
+
+Two rules make the impact band decidable when the reviewed code is a reusable
+component rather than a whole application, which is the usual case:
+
+- Judge the consequence that follows from the reviewed unit's **own** stated
+  contract. Where the worst outcome additionally needs the calling application to
+  make a further decision of its own, the band drops by one. A function
+  contracted to return a trustworthy value that returns a caller-controlled one
+  instead is *silently wrong*; it is *control defeated* only where the unit
+  itself is the thing that grants, denies, escapes, or binds.
+- A missing defence-in-depth measure, whose absence causes harm only after
+  another independent failure, is *silently wrong*, not *control defeated*.
+
+### Reachability Bands
+
+Count the conditions that must hold beyond the containing function being called
+at all. Input that an untrusted party supplies for itself counts as **no**
+condition, because an untrusted party will choose the value that triggers the
+defect.
+
+| Band | Meaning |
+| --- | --- |
+| Routine | No further condition, or only values an untrusted party supplies itself. The defect fires on the ordinary path. |
+| Conditional | Exactly one further legitimate condition: an error path, an opt-in setting, an uncommon but supported input from a trusted caller, or a concurrent interleaving that ordinary load produces. |
+| Remote | Two or more independent further conditions, or a single condition that a correct deployment is expected to avoid. |
+
+### The Matrix
+
+| Impact \ Reachability | Routine | Conditional | Remote |
+| --- | --- | --- | --- |
+| Control defeated | `critical` | `high` | `medium` |
+| Silently wrong | `high` | `medium` | `low` |
+| Signalled or bounded | `medium` | `low` | `low` |
+| None | `info` | `info` | `info` |
+
+### Boundary Cases
+
+These are the cases that produce disagreement between two competent reviewers.
+The rubric decides them, and the decision is normative:
+
+- **A defect on an error path.** The error path counts as exactly one condition,
+  never as a disqualification: error paths execute in production, and the reason
+  they are under-reviewed is the reason they hold defects. A resource leaked on
+  every failed call is *silently wrong* plus *conditional* -- `medium` -- and
+  becomes `high` only if the leak also occurs on the success path.
+- **A defect requiring an unusual input.** An unusual input from a *trusted*
+  caller is one condition (`conditional`). An unusual input from an *untrusted*
+  party is no condition at all (`routine`), because choosing it is free. This
+  distinction, not the strangeness of the input, is what separates the two.
+- **A defect that is certain but low-impact.** Certainty never raises severity.
+  A defect that fires on every call but whose worst outcome is *signalled or
+  bounded* is `medium`, and one whose outcome is *none* is `info` no matter how
+  provable it is.
+- **A defect that is severe but hard to reach.** A *control defeated* outcome
+  behind two independent unusual conditions is `medium`, not `high`. Severity is
+  not a synonym for defect class: an injection or disclosure defect that a
+  correct deployment's configuration already prevents ranks below a silent
+  wrong-result defect that fires on every request.
+- **`critical` is deliberately rare.** It requires the worst outcome to be
+  reachable with no further condition at all. A defect whose exploitation waits
+  on an opt-in setting, a specific deployment shape, or a decision the calling
+  application makes is `high`.
+
+Two prohibitions follow, and both are requirements rather than advice. Severity
+must not be rounded up to clear a threshold: a finding is assigned the band this
+rubric produces, and if that band is below the actionable floor, the correct
+outcome is a recorded below-threshold rejection, not an inflated label. And
+severity must not be raised because a finding's evidence is strong or lowered
+because it is thin; that judgement belongs to refutation and admission, which
+decide whether the finding exists at all.
+
 ## Admission Gate
 
 A candidate is admitted only when all checks pass:

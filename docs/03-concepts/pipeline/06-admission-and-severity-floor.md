@@ -46,6 +46,13 @@ flowchart TD
 
 ### The severity floor
 
+What the five bands mean is not a matter of taste: severity is assigned by the
+rubric in `specs/05-review-workflow-and-runtime.md`, which grades a finding by
+impact (how bad the consequence is) against reachability (how much must be true
+before that consequence occurs). The floor below filters on that band, so a
+producer that inflates a `low` defect to `medium` to get it past the floor is
+defeating the rule, not passing it.
+
 | Candidate origin | Floor applied |
 | --- | --- |
 | Model (`proposedBy: 'review-agent'`) | `aiReview.actionableSeverityThreshold` (default `medium`) |

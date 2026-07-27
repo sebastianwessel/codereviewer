@@ -136,12 +136,43 @@ with an explicit denominator count, and the renderer prints
 
 | Metric | What it counts | Denominator | How to read it |
 | --- | --- | --- | --- |
-| `severityAccuracy` | Matches where the finding's severity equals the expected severity exactly | `severityCheckCount` = every matched finding | Exact equality — no partial credit for being one level off. |
+| `severityAccuracy` | Matches where the finding's severity equals the expected severity exactly | `severityCheckCount` = every matched finding | Exact equality — no partial credit for being one level off. **See the note below before quoting it.** |
 | `severityCheckCount` | — | — | Denominator of the above. |
 | `lineAccuracy` | Matches whose `lineOverlaps` flag is true | `lineCheckCount` | **See the note below.** |
 | `lineCheckCount` | Matched findings whose expected finding is `path-line` **and** declares a `lineRange` | — | Denominator of the above. |
 | `linePlacementRate` | Matches whose produced `startLine` falls within the expected `lineRange` (same 3-line tolerance `lineAccuracy` uses) | `linePlacementCheckCount` | **Diagnostic only — never gates.** See "linePlacementRate is a different, broader measurement" below. |
 | `linePlacementCheckCount` | Matched findings whose expected finding declares a `lineRange`, **regardless of match mode** | — | Denominator of the above. |
+
+> ### `severityAccuracy` is not a quality score on its own
+>
+> Both sides of the comparison — the label in the answer key and the band the
+> engine assigns — are supposed to come from one rule: the severity rubric in
+> `specs/05-review-workflow-and-runtime.md` (impact × reachability). Read the
+> rate against three facts about how it is built.
+>
+> - **Exact equality on five levels.** One band off scores the same as three
+>   bands off, so the rate alone cannot tell a systematic bias from random
+>   assignment. Break the disagreements down by expected severity before drawing
+>   any conclusion.
+> - **It is confounded with the answer key's composition.** On the
+>   real-repository corpus, pooled over the 19 archived runs of the 42-expectation
+>   answer key, matched expectations labelled `high` agreed 171/178 (96%), those
+>   labelled `medium` agreed 8/207 (4%), and those labelled `low` agreed 0/49.
+>   Over the same runs, the admitted findings whose own severity the report
+>   records (the unmatched ones) were 90 `high` against 29 `medium`, with no
+>   `critical` and no `low` at all — the engine uses two bands. With that
+>   distribution, `severityAccuracy` degenerates into *the share of the matched
+>   set that is labelled `high`* — a property of the fixture. The measured 41.2%
+>   over those runs is within a rounding error of that share.
+> - **The severity floor decides which `low` expectations can be matched at
+>   all.** The admission gate reads the **model's** severity, not the
+>   expectation's, so a `low` expectation only ever matches when the engine
+>   over-rates it to at least `medium`. Six of the 42 expectations are `low`.
+>   Calibrating severity downward *correctly* would therefore cost up to
+>   6/42 = **14.3 percentage points of recall** while making the engine more
+>   accurate. Any severity A/B must lower `aiReview.actionableSeverityThreshold`
+>   to `low` for the measurement runs, or tally `below-threshold` rejections
+>   separately — otherwise the improvement reports itself as a regression.
 
 > ### `lineAccuracy` only measures `path-line` expectations
 >
