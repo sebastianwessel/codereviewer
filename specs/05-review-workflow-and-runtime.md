@@ -23,10 +23,8 @@ Date: 2026-07-21
     disabled and never fails the run on a provider error.
 11. Load configured baseline data.
 12. Resolve provider when model-backed review is enabled.
-13. Run holistic discovery: a recall-first whole-file review per task, drawn as
-    `review.discoverySampleCount` mutually blind samples combined by union
-    (`21-independent-sampling.md`, default one sample), plus the optional
-    dedicated security pass (`15-security-focused-review.md`) when enabled. That
+13. Run holistic discovery: a recall-first whole-file review per task, plus the
+    optional dedicated security pass (`15-security-focused-review.md`) when enabled. That
     pass is additive and cannot displace a candidate the primary review raised.
 14. Merge candidates that describe one defect, per Semantic Finding Merge below.
 15. Run refutation once per task, adjudicating every candidate that task raised.
@@ -297,12 +295,9 @@ This spec previously required a second, serial diverse-lens pass. That pass was
 implemented and measured, and it did not earn its cost (see the measured outcome
 below), so the requirement is withdrawn rather than left as an unmet mandate.
 
-That single framing may be **sampled** more than once. `review.discoverySampleCount`
-(default `1`) draws that many mutually blind samples of the same review and combines
-their candidates by union, per `21-independent-sampling.md`. Sampling is not a second
-pass: every sample asks the same question of the same packet, no sample sees another
-sample's output, and the union is deduplicated only by the Semantic Finding Merge
-below.
+That framing is asked exactly once per task. Drawing it several times independently
+and unioning the candidates was specified, built, and measured; it is withdrawn (see
+the measured outcome below).
 
 - The review input is the task's unified-diff segment plus the full
   line-numbered changed files, alongside deterministic support signals,
@@ -338,8 +333,8 @@ below.
 ### Standing Caveat On Every Figure Below
 
 **Every accuracy figure quoted anywhere in this spec predates the harness-wide
-suppression of conversation history** (2026-07-27; see *Conversation History* in
-`21-independent-sampling.md`). Those runs were produced by discovery, refutation,
+suppression of conversation history** (2026-07-27; see *Conversation History*
+under *Harness Runtime* below). Those runs were produced by discovery, refutation,
 merge, and scout calls that each opened carrying the output of every call that had
 finished before them. A current run is not comparable to any of them, in either
 direction, and the direction of the effect is unmeasured.
@@ -553,6 +548,73 @@ The source's actual architecture — aggressive prompting paired with an agent t
 can act on the instruction — is untested in this engine, and this record must not be
 cited as evidence against it.**
 
+### Measured Outcome Of The Withdrawn Independent Sampling
+
+Discovery could be **sampled**: `review.discoverySampleCount` (`k`, default `1`,
+bounded at 5) drew that many mutually blind samples of the same review over a
+byte-identical packet and combined their candidates by union, deduplicated only by
+the Semantic Finding Merge. Consensus, majority voting, and agreement thresholds
+were forbidden by construction. It had its own spec (21) and its own capability
+entry (CAP-AI-009). All of it was removed on 2026-07-27, including the spec and the
+configuration key; a config that still sets `review.discoverySampleCount` fails
+validation with exit code 2.
+
+The A/B, `k = 1` against `k = 3`, n=3 per arm on the 36-case / 80-expectation
+real-repository corpus (`reports/eval-results-ledger.md`):
+
+| | `k = 1` | `k = 3` |
+|---|---:|---:|
+| Recall | 46.25% | **48.33%** |
+| Adjusted precision | **0.819** | **0.628** |
+| Genuine false positives / run | **8.3** | **23.3** |
+| Candidates / run | 74.8 | 127.0 |
+| Semantic merge collapses / run | ~1.7 | **78.0** |
+| Cost / run | $1.43 | $2.38 (**+67%**) |
+
+Recall delta **+2.08pp**, 95% CI **[−1.67, +6.25]**, 7 gained against 5 lost,
+**p = 0.56**. Recall did not rise significantly, adjusted precision fell by 0.19,
+and genuine false positives nearly tripled.
+
+**It also falsified its own premise.** Spec 21 was written on an assumed union
+ceiling of ~67% against ~46% single-run recall — roughly 20pp of run-to-run
+variance waiting to be harvested — a figure taken from a different corpus and
+configuration. Measured here: single run 46.3% (mean of 3), post-hoc union of those
+same 3 runs **50.0%**, `k = 3` inside one run 48.3%. **The harvestable variance is
+about 4pp, not 20pp, and `k = 3` already captured most of it.**
+
+The mechanism behind the small ceiling is visible in the same run. The merge fired
+78 times per run, up from ~1.7, and adjusted precision still fell hard — so the
+extra candidates are **distinct wrong findings**, not restatements. Independent
+samples disagree about what is wrong rather than agreeing about a defect one of
+them missed. Run-to-run variance here is mostly noise, not near-misses.
+
+Spec 21's literal rule would have permitted retaining this disabled-by-default
+("retain as configuration if recall rises without significance at n=3"). The
+deviation is deliberate: the rule was written assuming ~20pp was available, the
+measurement falsified that assumption, and retaining an option nobody should ever
+enable is configuration surface for a strictly worse setting.
+
+**What survives the removal.** The Semantic Finding Merge stays. This arm exercised
+it under the only load that tests it — 78 collapses per run — and it did its job
+with no one-sided loss. The harness-wide suppression of conversation history landed
+under spec 21 but is independent of sampling; its requirement is rehomed under
+*Harness Runtime → Conversation History* below.
+
+**What this does not establish, and it is the most important line here.** This was
+not a faithful test of the idea it came from. The published sources used **n = 10**
+with a plateau at 5 and an aggregation call, and one of them **randomised the diff
+order across parallel passes specifically to force different reasoning paths**. We
+used `k = 3` with **byte-identical packets**, so the only diversity available to a
+sample was sampling randomness. **The ~4pp ceiling measured here therefore bounds
+identical-input resampling only. Input-perturbed sampling has a higher potential
+ceiling and is untested in this engine.**
+
+The honest expectation — recorded explicitly **as a prediction, not as a
+measurement** — is that input-perturbed sampling would still not pay: precision
+collapsed hard at `k = 3`, the extra candidates were distinct wrong findings rather
+than near-misses, and inducing more diversity should produce more of them. Nothing
+measured here establishes that, and it may not be quoted as if it did.
+
 ## Refutation
 
 Every candidate finding passes a precision filter run by the `refute_finding`
@@ -764,6 +826,10 @@ Rules:
 - Product review must not claim provider-backed completion when no provider was
   resolved and invoked. Hermetic provider fixtures are limited to tests and explicitly
   labeled hermetic commands until removed by the real pipeline ticket.
+- **No review agent call may forward prior conversation.** This MUST be the
+  harness default, so a stage added later inherits it, and any stage that
+  genuinely needs history MUST opt in at its own invocation, where the reason is
+  visible. See *Conversation History* below.
 - Telemetry must use no-content capture by default.
 - Review execution is stateless and one-shot in R1. Harnesses must not configure
   durable runtime, persistent session state, runtime checkpoints, or
@@ -839,6 +905,44 @@ Rules:
   model name, and redacted error codes. Logs must not include source snippets,
   prompts, request or response bodies, provider headers, environment values,
   tokens, or secrets.
+
+### Conversation History
+
+This requirement arrived under `21-independent-sampling.md` and is **independent of
+that spec**. It is recorded here because it is a property of how this harness
+invokes every agent, not of any one stage, and it must survive spec 21's
+withdrawal.
+
+The harness forwarded the accumulated session conversation into every review agent
+call. What the calls actually received was captured at the provider boundary rather
+than inferred: the harness appends each completed call's output to the shared
+session as an `assistant` message, so a call arrived holding the JSON output of
+every call that had finished before it — across tasks and across stages —
+**attributed to the model itself**. A refutation call opened appearing to have
+already asserted the very candidates it was about to adjudicate and, from the
+second task onward, holding its own earlier verdicts, which is incompatible with
+the refuter's own instruction to judge each candidate strictly on its own merits.
+The semantic finding merge carried the same freight, as did discovery and the
+context scout that has since been withdrawn.
+
+**No review agent call forwards prior conversation.** Blindness is the harness
+default rather than a per-invocation option, so a stage added later inherits it and
+a stage that genuinely needs history must opt in at its own invocation, where the
+reason is visible. The requirement is stated harness-wide for that reason: a
+narrower, single-stage wording would permit a future stage to reintroduce the
+defect without contradicting any spec.
+
+Consequences, which must not be glossed:
+
+- **The whole engine was re-baselined, not just discovery.** Every recall and
+  precision figure recorded before 2026-07-27 was produced with history-carrying
+  discovery, refutation, merge, and scout calls, and none of them is comparable to
+  a post-change run. See *Standing Caveat On Every Figure Below* above.
+- **The change is not an accuracy improvement.** The forwarded conversation was
+  removed because it contradicts what those stages are specified to do, not because
+  it was shown to be harmful. The paired re-baseline measured **−0.00pp** recall
+  (CI [−3.13, +2.71], p = 0.56) and a **26% cost reduction**. The cost reduction is
+  the real, measured benefit; the accuracy claim is that nothing moved.
 
 ## Suggested Fixes
 

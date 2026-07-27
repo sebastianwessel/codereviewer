@@ -139,7 +139,7 @@ general call's attention.
 ### Measured Outcome Of The Injection Hardening
 
 Every figure in this section predates the harness-wide suppression of conversation
-history on 2026-07-27 (see *Conversation History* in `21-independent-sampling.md`).
+history on 2026-07-27 (see *Conversation History* in `05-review-workflow-and-runtime.md`).
 None of them is comparable to a current run; they are retained as the record of why
 the guard was adopted. Note also that this section measures the **injection guard**,
 not Mechanism 1 — the dedicated security pass's own A/B result is not recorded in this

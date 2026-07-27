@@ -161,11 +161,9 @@ export const createModelBackedReviewHarness = (
                   task,
                   runners: {
                     // None of these calls forwards prior conversation: the harness
-                    // default is `historyWindow: 0` (see `harnessDefaults`). For
-                    // discovery that is what makes independent samples independent
-                    // rather than independent in name only — a second sample would
-                    // otherwise open holding the first sample's answer, which is the
-                    // anchoring that made the withdrawn enumeration sweep fail.
+                    // default is `historyWindow: 0` (see `harnessDefaults`), so a
+                    // call never opens holding the output of a call that finished
+                    // before it (spec 05, Conversation History).
                     holisticReview: (holisticInput, holisticSignal) =>
                       ctx.agents.holistic_review(
                         holisticInput,

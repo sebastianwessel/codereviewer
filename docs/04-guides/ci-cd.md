@@ -446,8 +446,7 @@ discovery call and one refutation call. Refutation is batched — a single call
 adjudicates every candidate of that task and returns one verdict per candidate
 — so cost scales with tasks, not with findings.
 
-Enabling the dedicated security pass adds another call per task, and
-`review.discoverySampleCount` multiplies the discovery call. Set
+Enabling the dedicated security pass adds another call per task. Set
 `review.maxCostUsd` so a pathological change fails the job instead of quietly
 spending. Full arithmetic: [controlling-cost.md](controlling-cost.md).
 

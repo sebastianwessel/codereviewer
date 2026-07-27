@@ -298,10 +298,6 @@ export const completeReviewWorkflow = (
     readonly taskEvents: readonly WorkflowTaskEvent[]
     readonly instructionHashes: readonly string[]
     readonly skillHashes: readonly string[]
-    // Warnings the pipeline produced before admission ran — today, the reduced
-    // independent-sample counts of spec 21. They join the baseline's own warnings
-    // rather than replacing them, because a run can degrade in both ways at once.
-    readonly additionalWarnings?: readonly string[]
   }
 ): ReviewWorkflowOutput => {
   const evidence = uniqueEvidenceRecords(input.evidence)
@@ -399,6 +395,6 @@ export const completeReviewWorkflow = (
     qualityGate,
     instructionHashes: input.instructionHashes,
     skillHashes: input.skillHashes,
-    warnings: [...(input.additionalWarnings ?? []), ...baseline.warnings]
+    warnings: [...baseline.warnings]
   })
 }

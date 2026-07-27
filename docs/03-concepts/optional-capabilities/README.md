@@ -20,7 +20,6 @@ figure is the mean across seeds, never the best observed run.
 | [Change-intent context](change-intent-context.md) | `contextSources.enabled` | `false` | Orientation: the reviewer learns *why* the change was made, which should reduce misunderstanding-driven false positives | One summarizer call per run (`model` mode); zero with `digest` | **Unmeasured.** No A/B exists. Rationale is design, not evidence. Enable if your pipeline already has PR/ticket text; do not expect a measured recall number |
 | [Cross-file retrieval](cross-file-retrieval.md) | `review.crossFileRetrieval.enabled` | `false` | Lets discovery read other-file code on demand through mediated tools | +71% … 2.5× | **Net negative — do not enable.** Three measurements on the corpus built to favour it: flat at 4 cases (2.5× cost), 66.7% → 44.4% at 9, 68.8% → 56.3% at 16. Precision stayed 100% throughout, so the loss is recall, not noise |
 | [Dedicated security pass](dedicated-security-pass.md) | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task (generic OWASP/CWE checklist), merged additively | +61% | **Mixed.** 2026-07-24, full benchmark, n=1: overall recall 24.8% → 29.3%, +22 unlisted-real findings (trustworthy, large denominator). But labeled security recall 14 → 12 and authorization 8 → 6. The **security-specific lift it was built for is unproven** |
-| [Independent discovery samples](../../06-reference/configuration/review.md#reviewdiscoverysamplecount) | `review.discoverySampleCount` | `1` | Runs discovery *k* times blind and keeps the union, to recover findings that run-to-run variance throws away | Close to linear in *k*; caching is not reachable for a repeated identical request | **Unmeasured.** The A/B at *k* = 3 has not been run. The union of separate runs has previously reached far above any single run on a different corpus, which is the hypothesis, not the result |
 | [Verification](verification-and-fix.md) | `verification.enabled` | `false` | Investigates external/prior claims against the real code and returns verdicts; corroborates findings | Bounded agent run per claim | **Unmeasured as a quality lever.** It is a distinct product feature, not a recall knob; its outputs never touch the gate |
 | [Fix lane](verification-and-fix.md#the-fix-lane) | `fix.enabled` | `false` | Real-file-grounded `real`/`false-positive` judgment plus an apply-checked fix per admitted finding | One bounded agent run per eligible finding | **Unmeasured as a quality lever.** Advisory: it enriches `fixProposal`, never admission, severity, or the gate |
 
@@ -34,6 +33,13 @@ key with it, after an A/B at 4 seeds per arm failed the rule fixed in advance �
 and, notably, moved candidate count the wrong way. See
 [discovery posture (removed)](discovery-posture.md), which also records why that
 result is **not** a verdict on the idea the posture came from.
+
+**Independent discovery sampling** went the same day, with
+`review.discoverySampleCount`. At *k* = 3 recall did not rise significantly while
+adjusted precision fell 0.819 → 0.628 at +67% cost — and the run falsified the
+premise the feature was built on, measuring the union ceiling at ~4pp rather than
+the assumed ~20pp. See [independent sampling (removed)](independent-sampling.md),
+including why that ceiling bounds identical-input resampling only.
 
 The **context scout** was removed too, and its `review.contextScout` key with it.
 It is the one removal without a failed measurement behind it: its only A/B was run

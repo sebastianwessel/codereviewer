@@ -24,7 +24,6 @@ whole-file review and a per-candidate refutation pass.
 | CAP-AI-004 | Refutation | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
 | CAP-AI-005 | Semantic finding merge | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-AI-006 | Agentic cross-file discovery (mediated repo read/list/grep during discovery, off by default) | ACT-MODEL, ACT-REVIEWER | Yes | `16-agentic-cross-file-discovery.md`, `04-configuration-and-providers.md` |
-| CAP-AI-009 | Independent discovery sampling with union merge (measured variant; default `k = 1`) | ACT-MODEL, ACT-REVIEWER | Yes | `21-independent-sampling.md`, `05-review-workflow-and-runtime.md`, `04-configuration-and-providers.md` |
 | CAP-ADM-001 | Admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-002 | Markdown report | ACT-DEV, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md` |
@@ -227,22 +226,20 @@ measurement, and the reason it is not a verdict on the idea it came from, are
 recorded under *Measured Outcome Of The Withdrawn Discovery Posture* in
 `05-review-workflow-and-runtime.md`.
 
-### CAP-AI-009 Independent Discovery Sampling
+### CAP-AI-009 Independent Discovery Sampling — withdrawn
 
-- Trigger: `review.discoverySampleCount`. Default `1`, bounded at `5`.
-- Contracts: `21-independent-sampling.md`. Discovery runs `k` mutually blind
-  samples over the identical packet and combines the candidates by union.
-  Consensus, majority voting, and agreement thresholds are forbidden, and no
-  second deduplication mechanism exists — the semantic finding merge (CAP-AI-005)
-  is the only one.
-- Side effects: `k` provider calls per task instead of one; cost rises close to
-  linearly in `k`.
-- Final state: `k = 1` is the single-call path. A failed sample costs that sample
-  only; the reduced count is recorded in the run and surfaced as a run warning.
-  No review agent call carries prior conversation.
-- Verification: discovery sampling unit tests for blindness, union, no second
-  dedup, and partial sample failure; handler tests for the reduced-count warning;
-  harness config and provider-boundary tests for conversation suppression.
+Removed on 2026-07-27, together with `specs/21-independent-sampling.md` and the
+`review.discoverySampleCount` configuration key. The identifier is retired and not
+reused. Discovery drew `k` mutually blind samples over an identical packet and
+unioned their candidates; at `k = 3` recall did not rise significantly while
+adjusted precision fell 0.819 → 0.628 at +67% cost, and the measurement falsified
+the spec's own premise — the harvestable union ceiling is ~4pp, not the assumed
+~20pp. The measurement, the fact that it bounds identical-input resampling only,
+and what survives the removal are recorded under *Measured Outcome Of The Withdrawn
+Independent Sampling* in `05-review-workflow-and-runtime.md`. The harness-wide
+suppression of conversation history arrived under this capability but is
+independent of it and is rehomed under *Harness Runtime → Conversation History* in
+the same spec.
 
 ### CAP-ADM-001 Admission Gate
 

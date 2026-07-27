@@ -360,7 +360,7 @@ range as the result overstates the engine.
 
 Those four seeds, and every other accuracy figure recorded anywhere in this
 repository, were measured before the harness-wide suppression of conversation
-history on 2026-07-27 (see *Conversation History* in `21-independent-sampling.md`).
+history on 2026-07-27 (see *Conversation History* in `05-review-workflow-and-runtime.md`).
 They are cited here for the run-to-run **variance** they establish, which is what
 this section is about; none of them is a current recall figure, and none may be
 quoted as one until a post-change run re-establishes a baseline.

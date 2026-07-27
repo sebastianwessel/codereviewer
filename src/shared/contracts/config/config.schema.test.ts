@@ -128,22 +128,15 @@ describe('CodeReviewerConfigSchema', () => {
     }
   })
 
-  test('discovery sample count defaults to one and is bounded', () => {
-    // Spec 21: `1` is the default and is today's single-call path exactly.
-    expect(CodeReviewerConfigSchema.parse({}).review.discoverySampleCount).toBe(1)
-
-    expect(
-      CodeReviewerConfigSchema.parse({
-        review: { discoverySampleCount: 3 }
-      }).review.discoverySampleCount
-    ).toBe(3)
-
-    // Bounded by configuration: zero samples is no discovery at all, and beyond
-    // the published plateau cost keeps rising while recall does not.
-    for (const invalid of [0, 6]) {
+  // Independent discovery sampling was removed on 2026-07-27 after k=3 failed its
+  // decision rule and falsified its own premise. Same rule as the removals above:
+  // no shim, so a config that still asks for k samples fails loudly instead of
+  // silently running one.
+  test('a config still setting the removed discovery sample count fails validation', () => {
+    for (const removed of [1, 3, 5]) {
       expect(() =>
         CodeReviewerConfigSchema.parse({
-          review: { discoverySampleCount: invalid }
+          review: { discoverySampleCount: removed }
         })
       ).toThrow()
     }

@@ -31,21 +31,17 @@ export const maxChildAgentCallsForReview = (
     readonly taskCount?: number
     readonly maxConcurrentTasks?: number
     readonly securityPassEnabled?: boolean
-    readonly discoverySampleCount?: number
   } = {}
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
   const maxConcurrentTasks = effectiveMaxConcurrentTasks(input.maxConcurrentTasks)
-  // Spec 21: `k` independent general discovery calls per task, one per sample. The
-  // security pass is not sampled, so it stays a single extra call.
-  const discoverySampleCount = Math.max(1, input.discoverySampleCount ?? 1)
-  // One holistic discovery call per task per sample (plus one more when the
-  // dedicated security pass is enabled, spec 15), plus refutation. Refutation
-  // adjudicates ALL of a task's candidates in a single batched call, so it costs
-  // one call per task rather than one per candidate; a batch that exceeds the input
-  // budget splits in half, so a small allowance is added for those splits.
+  // One holistic discovery call per task (plus one more when the dedicated
+  // security pass is enabled, spec 15), plus refutation. Refutation adjudicates
+  // ALL of a task's candidates in a single batched call, so it costs one call per
+  // task rather than one per candidate; a batch that exceeds the input budget
+  // splits in half, so a small allowance is added for those splits.
   const discoveryCallsPerTask =
-    discoverySampleCount + (input.securityPassEnabled === true ? 1 : 0)
+    1 + (input.securityPassEnabled === true ? 1 : 0)
   const refutationCallsPerTask = 1 + refutationBatchSplitAllowance
   // Spec 05: the semantic finding merge issues at most one call per FILE that
   // carries two or more candidates, and a task's candidates are capped, so
@@ -53,10 +49,9 @@ export const maxChildAgentCallsForReview = (
   // rather than guessed because under-reserving is fatal (the workflow refuses
   // the call) while over-reserving costs nothing: this budget is a ceiling, not
   // a spend, and today's roughly one candidate per file means almost none of it
-  // is used. Spec 21 multiplies the general cap by the sample count, since the
-  // general cap applies per sample and the merge is what collapses the union.
+  // is used.
   const mergeCallsPerTask = Math.floor(
-    (HOLISTIC_MAX_CANDIDATES * discoverySampleCount +
+    (HOLISTIC_MAX_CANDIDATES +
       (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0)) /
       2
   )
@@ -76,7 +71,8 @@ export const maxChildAgentCallsForReview = (
   )
 }
 
-// Spec 21: no agent call in this harness carries prior conversation.
+// Spec 05, Conversation History: no agent call in this harness carries prior
+// conversation.
 //
 // The whole review runs in ONE session, and the harness appends every completed
 // agent call's output to that session as an `assistant` message. Without this

@@ -83,107 +83,6 @@ describe('model-backed harness', () => {
   })
 })
 
-// Spec 21: a sample answers with a marker no other sample could have produced, so
-// a marker reaching a later request could only have come from an earlier sample's
-// output. This runs through the real harness on purpose: independence is a
-// property of how the agent is invoked, and only the provider boundary can show
-// whether an invocation carried anything over from the one before it.
-class MarkedFindingProvider implements ModelProvider {
-  readonly id = 'marked'
-  readonly genAiSystem = 'scripted'
-  readonly requests: ObjectRequest[] = []
-  private sample = 0
-
-  async object<T extends JsonValue = JsonValue>(
-    req: ObjectRequest<T>
-  ): Promise<ObjectResponse<T>> {
-    this.requests.push(req)
-    this.sample += 1
-
-    return {
-      object: {
-        findings: [
-          {
-            category: 'bug',
-            severity: 'high',
-            title: `SAMPLE-MARKER-${this.sample}`,
-            description: `SAMPLE-MARKER-${this.sample} was raised by one sample only.`,
-            path: 'src/model-backed.ts',
-            startLine: this.sample
-          }
-        ]
-      } as unknown as T,
-      finishReason: 'stop',
-      usage: {
-        inputTokens: 1,
-        outputTokens: 1,
-        totalTokens: 2
-      }
-    }
-  }
-}
-
-describe('independent discovery samples at the provider boundary', () => {
-  test('no request ever carries a marker an earlier sample answered with', async () => {
-    const provider = new MarkedFindingProvider()
-    const harness = createModelBackedReviewHarness({
-      modelAlias: {
-        provider,
-        model: 'scripted',
-        capabilities: ['object', 'tool_use']
-      }
-    })
-
-    await runModelBackedReviewWorkflow({
-      harness,
-      sessionId: 'sampling-blindness',
-      input: {
-        runId: 'sampling-run',
-        reviewedPaths: ['src/model-backed.ts'],
-        discoverySampleCount: 3,
-        evidence: [],
-        candidates: [],
-        instructions: [],
-        skills: [],
-        baselineConfigured: false,
-        provenance: {
-          reviewer: 'review-agent',
-          signalVersions: {},
-          configHash
-        },
-        qualityGate: {
-          maxHigh: 0
-        }
-      }
-    })
-    await harness.shutdown()
-
-    const discoveryRequests = provider.requests.filter((request) =>
-      messagesOfRole(request, 'system').some((instruction) =>
-        instruction.startsWith(modelHolisticReviewerInstructions)
-      )
-    )
-
-    expect(discoveryRequests).toHaveLength(3)
-
-    for (const request of discoveryRequests) {
-      const serialized = JSON.stringify(request.messages)
-
-      expect(serialized).not.toContain('SAMPLE-MARKER-')
-    }
-
-    // Identical packets are the same statement from the other side: nothing that
-    // varies between samples reached any of them.
-    expect(
-      new Set(
-        discoveryRequests.map((request) =>
-          messagesOfRole(request, 'user').join('\n')
-        )
-      ).size
-    ).toBe(1)
-  })
-})
-
 const messagesOfRole = (
   request: ObjectRequest,
   role: 'system' | 'user'
@@ -194,7 +93,7 @@ const messagesOfRole = (
       : []
   )
 
-// Spec 21, Conversation History: NO stage forwards prior conversation.
+// Spec 05, Conversation History: NO stage forwards prior conversation.
 //
 // The whole review runs in one session and the harness appends every completed
 // agent call's output to it, so without `historyWindow: 0` a call is handed the

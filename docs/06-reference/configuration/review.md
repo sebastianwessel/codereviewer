@@ -20,32 +20,6 @@ Read the [strict-object rule and precedence](./README.md) first. Nesting matters
 | `review.inlineSeverityThreshold` | severity | `"high"` | Minimum severity for a finding to be eligible for inline presentation. Reporting only — it does not affect admission or the gate. |
 | `review.maxCostUsd` | number ≥ 0 | *unset* | Hard stop when the accumulated run cost exceeds it (`cost_budget_exceeded`, exit `1`). Enforced **only** when token counts and prices are both available; otherwise the run records the warning `cost-unavailable` and no cap applies. When unset, no cost cap is enforced at all. |
 | `review.runTimeoutMs` | integer 10000–7200000 | *unset* | Whole-run timeout (`review_run_timeout`, exit `4`). When unset, no run-level timeout is imposed; individual provider calls still use [`provider.timeoutMs`](./provider.md). |
-| `review.discoverySampleCount` | integer 1–5 | `1` | How many independent discovery samples run per task. Their candidates are combined by union. See below. |
-
-### `review.discoverySampleCount`
-
-The same change reviewed twice does not always yield the same findings. Setting
-this above `1` runs discovery that many times per task and keeps **everything any
-sample found**.
-
-- **The samples are blind to each other.** Each is a fresh call carrying only its
-  own packet: no sample is shown another's findings, reasoning, or output, and
-  every sample receives a byte-identical packet.
-- **Candidates are combined by union — never by agreement.** A finding raised by
-  one sample out of five survives exactly like one every sample raised. There is
-  no vote and no agreement threshold, because samples agree on wrong answers too,
-  and a vote would delete precisely the rare finding that sampling exists to find.
-- **Deduplication belongs to the [semantic finding
-  merge](../../03-concepts/pipeline/04-holistic-discovery.md).** Nothing else
-  collapses the union, and position is never used as an identity test. Expect the
-  merge to run far more often above `k = 1`; that is what it was built for.
-- **A failed sample does not fail the review.** The remaining samples proceed and
-  the run's `warnings` record how many of the requested samples completed. A task
-  whose every sample fails still fails, exactly as a single call does today.
-- **Cost rises close to linearly.** Each sample is a full discovery call, and
-  provider-side caching is not reachable for a repeated identical request.
-
-`run-summary.json` records the applied count as `run.discoverySampleCount`.
 
 ### Effective `contextMaxBytes` when unset
 

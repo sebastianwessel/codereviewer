@@ -48,30 +48,6 @@ Three framing rules matter as much as the checklist:
 Severity is assigned from impact and reachability (not from confidence) using an
 explicit `critical` → `info` rubric that the report and the gate later rely on.
 
-### Independent samples
-
-`review.discoverySampleCount` (default `1`) runs the general discovery call that
-many times per task and keeps **everything any sample found**.
-
-- The samples are **mutually blind**: each is a fresh call carrying only its own
-  packet, and every sample receives a byte-identical one.
-- Candidates are combined by **union**. There is no vote, no majority, and no
-  agreement threshold — a finding raised by one sample of five survives exactly
-  like one every sample raised, which is the whole point: run-to-run variance is
-  what the union recovers, and a vote would delete precisely those findings.
-- The union is deduplicated by the semantic finding merge below and by nothing
-  else. Two samples emitting the *same* finding produce one candidate simply
-  because a candidate id is a hash of task, path, line, and title.
-- The general candidate cap applies **per sample**, so a later sample is never
-  starved by an earlier one.
-- A failed sample costs that sample. The remaining samples proceed and the run's
-  warnings record how many of the requested samples completed; a task whose every
-  sample fails still fails.
-
-The dedicated security pass is not sampled: it is a separately gated additive
-pass, and sampling it would multiply an interaction between two optional
-capabilities.
-
 ### Turning findings into candidates
 
 Each returned finding must carry a category, severity, title, description, a path
@@ -165,7 +141,7 @@ arrived carrying every earlier call's output attributed to the model itself.
 
 ```mermaid
 flowchart TD
-  P["task packet"] --> G["general discovery call × discoverySampleCount (blind samples, unioned)"]
+  P["task packet"] --> G["general discovery call"]
   G --> SE{"security.dedicatedPass.enabled?"}
   SE -- yes --> SP["security-only call (additive, ≤ 8 more)"]
   SE -- no --> C["candidates, deduped · ≤ 12 general (+ ≤ 8 security)"]
@@ -193,8 +169,6 @@ Candidates are not findings and are never reported as such.
 | A finding points outside the task's paths, or omits a required field | Dropped; counted in the run's debug metrics |
 | More than 12 valid findings | Excess is discarded by the cap |
 | A genuine provider failure (auth, budget, network exhaustion) | Fails the task and the run, writing partial artifacts |
-| One of several independent samples fails | That sample is lost; the rest proceed and the run's warnings record how many completed |
-| Every independent sample of a task fails | Fails the task and the run, exactly as a single failed discovery call does |
 | The security pass reports a location the general pass already flagged | Its candidate is suppressed — the extra pass can only add |
 | The semantic merge call fails, or returns a group naming a candidate that does not exist | No grouping for that file, recorded as a **recovered** provider issue; every candidate survives |
 | The merge puts one candidate in two groups | Only the first group is honoured — an ambiguous merge resolves towards leaving candidates alone |
@@ -210,7 +184,6 @@ it had, and in an evaluation would drop the case from the comparison entirely.
 | `provider.*` | unset | No provider means no discovery at all |
 | `aiReview.enabled` | unset (on) | `false` disables the model stages |
 | `review.maxConcurrentTasks` | `4` | Discovery parallelism |
-| `review.discoverySampleCount` | `1` | Independent discovery samples per task, combined by union |
 | `security.dedicatedPass.enabled` | `false` | Adds the security-only call |
 | `review.crossFileRetrieval.*` | disabled | Gives the reviewer mediated repo tools |
 | `instructions.*`, `skills.*` | — | Extra reviewer instructions and skills |

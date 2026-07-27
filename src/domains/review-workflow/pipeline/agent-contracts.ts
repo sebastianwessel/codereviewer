@@ -683,19 +683,7 @@ export const TaskReviewResultSchema = z.strictObject({
   // non-representative member of each group: the spec requires them to be
   // recorded rather than silently dropped, so the merge stays auditable and its
   // rate observable in the report instead of only in a debug log line.
-  rejectedFindings: z.array(RejectedFindingSchema).default([]),
-  // Spec 21: how many independent discovery samples the task asked for and how
-  // many returned. Both numbers travel with the result rather than only reaching
-  // a log line, because the spec requires the applied sample count and any
-  // reduction to be recorded in the run: a review that quietly ran two samples
-  // where three were configured found less than the configuration claims, and a
-  // measurement taken over it would be comparing arms that were not actually run.
-  discoverySamples: z
-    .strictObject({
-      requested: z.int().min(1),
-      completed: z.int().min(1)
-    })
-    .default({ requested: 1, completed: 1 })
+  rejectedFindings: z.array(RejectedFindingSchema).default([])
 })
 
 export const FindingRefutationResultSchema = z.strictObject({

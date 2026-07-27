@@ -12,7 +12,7 @@ describe('workflow harness config', () => {
   test('derives runtime defaults and delegation limits for review workflows', () => {
     expect(effectiveMaxConcurrentTasks(undefined)).toBe(4)
     expect(effectiveMaxConcurrentTasks(2)).toBe(2)
-    // Spec 21: `historyWindow: 0` is a DEFAULT, so blindness is what an agent gets
+    // Spec 05: `historyWindow: 0` is a DEFAULT, so blindness is what an agent gets
     // unless its invocation asks for history. The provider-boundary assertion that
     // this actually reaches every stage lives in model-backed-harness.test.ts; this
     // only pins that the default is set and survives the other options.
@@ -139,30 +139,6 @@ describe('workflow harness config', () => {
         securityPassEnabled: true
       })
     ).toBe(132)
-  })
-
-  test('reserves one discovery call per independent sample', () => {
-    // Spec 21: three samples per task means three general discovery calls, and the
-    // general candidate cap applies per sample, so the merge ceiling rises with it:
-    // 8*3 discovery + 8*4 refutation + 8*18 merge + 2*2 buffer
-    // = 24 + 32 + 144 + 4 = 204. Under-reserving is fatal — the workflow refuses
-    // the call — so this number is derived from the caps rather than guessed.
-    expect(
-      maxChildAgentCallsForReview({
-        taskCount: 8,
-        maxConcurrentTasks: 2,
-        discoverySampleCount: 3
-      })
-    ).toBe(204)
-
-    // One sample is the default and reserves exactly what it does today.
-    expect(
-      maxChildAgentCallsForReview({
-        taskCount: 8,
-        maxConcurrentTasks: 2,
-        discoverySampleCount: 1
-      })
-    ).toBe(maxChildAgentCallsForReview({ taskCount: 8, maxConcurrentTasks: 2 }))
   })
 
   test('enables only read/list/grep builtins for skill-backed review agents', () => {

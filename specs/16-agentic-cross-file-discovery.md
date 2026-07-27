@@ -150,7 +150,7 @@ Three caveats on the figures above, so nobody re-derives them:
 - All three arms are single-seed on corpora of four, nine, and sixteen cases. The
   real-repository corpus now holds thirty-six cases and no arm has been re-run on it.
 - Every figure predates the harness-wide suppression of conversation history on
-  2026-07-27 (see *Conversation History* in `21-independent-sampling.md`) and is not
+  2026-07-27 (see *Conversation History* in `05-review-workflow-and-runtime.md`) and is not
   comparable to a current run.
 - The **0% cross-file recall** quoted in *Purpose* is a property of the slices it was
   measured on, not of the engine: a changed-files-only slice contains no other file to

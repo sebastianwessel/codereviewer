@@ -167,10 +167,10 @@ of an argument for iteration, not as a forecast.
 
 ## What has been tried against it
 
-Six structural interventions have been built. **Five were measured and failed**;
-the sixth, the context scout, was never validly measured at all. Four were removed
-outright, and the two that remain switched-on-able ship off by default with a
-recorded verdict. What has actually moved the number has been prompt-level and
+Seven structural interventions have been built. **Six were measured and failed**;
+the seventh, the context scout, was never validly measured at all. Five were
+removed outright, and the two that remain switched-on-able ship off by default with
+a recorded verdict. What has actually moved the number has been prompt-level and
 scoring-level, at a fraction of the cost.
 
 ### Structural interventions
@@ -183,6 +183,7 @@ scoring-level, at a fraction of the cost.
 | **Context scout** | Separated retrieval from reasoning: a cheap call chooses which out-of-change symbol bodies to pre-fetch, deterministic code fetches them, the reviewer stays single-shot and tool-free | **None. Its only A/B is void** — run against a build that did not implement its own spec, and predating the suppression of conversation history. It has no result in either direction | **[Removed](../03-concepts/optional-capabilities/context-scout.md)** on mechanism, not on a failed measurement |
 | **Dedicated security pass** | A second, security-only discovery call per task, merged additively | 2026-07-24, full benchmark, n=1, **+61% cost**: overall recall **24.8% → 29.3%** with 22 additional confirmed-real findings, but labeled security recall **14 → 12** and authorization **8 → 6** | **Mixed.** Retained, off by default; the security-specific lift it was built for is **unproven** |
 | **Un-anchored discovery pass** | The same question at bounded units **with the diff withheld** — built directly on the attention finding above | 36-case / 80-expectation corpus, base n=6 against enabled n=3: **+0.83pp** (46.25% → 47.08%), 95% CI **[−3.13, +4.79]**, **10 expectations gained and 9 lost**, **p = 0.82**, for **+136% cost** | **Removed** |
+| **Independent sampling** | Ran discovery *k* times per task, blind to each other, and kept the union — no vote, no agreement threshold | Same corpus, 3 seeds per arm at *k* = 3: **+2.08pp** (46.25% → 48.33%), 95% CI **[−1.67, +6.25]**, **p = 0.56**, while adjusted precision fell **0.819 → 0.628** and genuine false positives nearly tripled, for **+67% cost**. It also measured the union ceiling it was built to harvest at **~4pp, not the assumed ~20pp** | **[Removed](../03-concepts/optional-capabilities/independent-sampling.md)** |
 
 The last row is the important one, because the diagnosis behind it was correct
 and the intervention still failed. Taking the diff away demonstrably makes the
@@ -322,13 +323,24 @@ The consequence is unavoidable and must not be glossed:
 > run.** That includes every number on this page and in
 > [Current results](current-results.md).
 
-**The direction of the effect is unknown.** The behaviour was removed because it
+**It is not an accuracy improvement.** The behaviour was removed because it
 contradicted what those stages are specified to do, **not** because it was shown
-to be harmful, and no measurement of either direction exists. It must not be
-described as an accuracy improvement, and the next A/B on this engine has to
-re-baseline rather than reuse a prior arm.
+to be harmful. A paired re-baseline against the six history-carrying runs
+afterwards measured **−0.00pp** recall (95% CI [−3.13, +2.71], 7 gained and 5
+lost, p = 0.56) and a **26% cost reduction** ($1.92 → $1.43 per run). The cost
+saving is the real benefit; the accuracy claim is that nothing moved. Any A/B on
+this engine still has to re-baseline rather than reuse a prior arm.
 
-Source: `specs/21-independent-sampling.md`, *Conversation History*.
+A hypothesis this refutes, stated because it was argued at length: that refutation
+was rubber-stamping because it opened each call holding discovery's findings
+attributed to itself. If that were the dominant effect, removing the history should
+have raised the kill rate. It did not — 1.3% → 0.9%. **The ~1% kill rate is a
+genuine property of the pipeline**, not an artefact of contaminated context.
+Refutation rarely finds anything to kill because discovery rarely proposes anything
+speculative.
+
+Source: `specs/05-review-workflow-and-runtime.md`, *Harness Runtime →
+Conversation History*.
 
 ---
 
@@ -338,6 +350,7 @@ Source: `specs/21-independent-sampling.md`, *Conversation History*.
 - [Comparing runs](comparing-runs.md) — the variance band and the decision procedure
 - [Extra discovery passes (removed)](../03-concepts/optional-capabilities/extra-discovery-passes.md) — the record of the three removals
 - [Discovery posture (removed)](../03-concepts/optional-capabilities/discovery-posture.md) — the framing change that failed, and why that is not a verdict on the idea
+- [Independent sampling (removed)](../03-concepts/optional-capabilities/independent-sampling.md) — the union ceiling measured, and what that ceiling does and does not bound
 - [Optional capabilities](../03-concepts/optional-capabilities/README.md) — the three retained switches and their verdicts
 - [Holistic discovery](../03-concepts/pipeline/04-holistic-discovery.md) — what discovery does today
 - [Running in CI/CD](../04-guides/ci-cd.md) — wiring the iterative loop into a gate

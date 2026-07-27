@@ -184,17 +184,6 @@ export const runReviewWorkflowHandler = async (params: {
     throw error
   })
 
-  // Spec 21: a task that lost a sample still produced a complete review, but it
-  // sampled less than it was configured to. Saying so in the run's warnings is what
-  // keeps a reduced run from being read — by a person or by a comparison between
-  // configurations — as a full one.
-  const reducedSampleWarnings = queued.results.flatMap((result) =>
-    result.discoverySamples.completed < result.discoverySamples.requested
-      ? [
-          `Discovery completed ${result.discoverySamples.completed} of ${result.discoverySamples.requested} independent samples for one review task; the remaining samples failed.`
-        ]
-      : []
-  )
   const taskCandidates = queued.results.flatMap((result) => result.candidates)
   const taskEvidenceRecords = queued.results.flatMap(
     (result) => result.evidenceRecords
@@ -254,7 +243,6 @@ export const runReviewWorkflowHandler = async (params: {
     taskEvents: queued.taskEvents,
     instructionHashes,
     skillHashes,
-    additionalWarnings: reducedSampleWarnings
   })
 
   logger.debug('Review workflow handler completed.', {

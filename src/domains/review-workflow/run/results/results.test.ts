@@ -80,33 +80,12 @@ describe('review runner results', () => {
       configHash: sha256('config'),
       provider: 'openai',
       model: 'review-model',
-      // Spec 21: the applied sample count is part of the run's own record, so a
-      // report can be compared against one taken at a different count.
-      discoverySampleCount: 1,
       durationMs: 2500,
       costUsd: 0.0123,
       inputTokens: 1000,
       outputTokens: 250,
       warnings: ['cost-unavailable']
     })
-  })
-
-  test('records the applied independent-sample count in the run summary', () => {
-    // Spec 21: `run-summary.json` is where a reader (and a comparison between
-    // configurations) learns how many samples produced this run's findings.
-    const summary = createReviewRunSummary({
-      repositoryRoot: '/repo/project',
-      config: CodeReviewerConfigSchema.parse({
-        review: { discoverySampleCount: 3 }
-      }),
-      runId: 'run_sampled',
-      startedAt: new Date('2026-07-27T10:00:00.000Z'),
-      completedAt: new Date('2026-07-27T10:00:01.000Z'),
-      configHash: sha256('config'),
-      warnings: []
-    })
-
-    expect(summary.discoverySampleCount).toBe(3)
   })
 
   test('summarizes complete and incomplete source coverage from ledger entries', () => {

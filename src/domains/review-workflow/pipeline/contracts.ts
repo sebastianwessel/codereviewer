@@ -40,11 +40,6 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   // default: the disabled path runs a single discovery call per task, byte-for-byte
   // unchanged. The extra candidates flow through the same refutation + admission.
   securityPassEnabled: z.boolean().default(false),
-  // Independent discovery samples (spec 21). Discovery runs this many times per
-  // task, each sample blind to the others, and the candidates are combined by
-  // union. `1` is the default and is today's single-call path exactly: same
-  // packet, same field order, same number of calls.
-  discoverySampleCount: z.int().min(1).max(5).default(1),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
   instructions: z.array(ContextDocumentSchema),

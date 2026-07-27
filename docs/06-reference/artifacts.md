@@ -95,11 +95,10 @@ String values in `report.json` pass through redaction before writing.
 | `baseRef`, `headRef` | string, optional | |
 | `mergeBaseRef` | string, optional | The commit the diff was actually taken against. **Absent for explicit-file runs**, which bypass git entirely. |
 | `provider`, `model` | string, optional | |
-| `discoverySampleCount` | integer, optional | Independent discovery samples applied per task. A report taken at one count is not comparable to one taken at another. |
 | `durationMs` | integer | |
 | `costUsd` | number, optional | Omitted when tokens or prices are unavailable (with the `cost-unavailable` warning). |
 | `inputTokens`, `cachedInputTokens`, `outputTokens` | integer, optional | `cachedInputTokens` is a **subset** of `inputTokens`. |
-| `warnings` | string[] | e.g. `config-file-missing`, `baseline-missing`, `cost-unavailable`, claim-provider warnings, and a reduced independent-sample count for a task. |
+| `warnings` | string[] | e.g. `config-file-missing`, `baseline-missing`, `cost-unavailable`, and claim-provider warnings. |
 
 ### `context-ledger.json`
 

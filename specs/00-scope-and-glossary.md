@@ -70,8 +70,7 @@ be implemented in `R1` unless a later spec changes scope:
 | Deterministic signal | Repository fact, diff fact, symbol fact, diagnostic, line-anchor check, scope check, de-duplication key, or contradiction produced without model judgment. Signals are support evidence and gate input, not the main production detection strategy, and they cannot replace refutation for model-origin findings. |
 | Evidence record | Structured evidence item referenced by a finding, such as diff location, AST fact, command summary, diagnostic, or model rationale. |
 | Finding | User-visible issue after admission. Findings are language-neutral and reporter-neutral. |
-| Discovery sample | One independent draw of holistic discovery over an identical task packet. Samples are mutually blind and their candidates are combined by union, never by agreement. See `21-independent-sampling.md`. |
-| Holistic discovery | A single recall-first whole-file review per task that reads the unified diff plus the full line-numbered changed files and emits candidate findings directly. That one review may be drawn as several independent samples whose candidates are unioned. |
+| Holistic discovery | A single recall-first whole-file review per task that reads the unified diff plus the full line-numbered changed files and emits candidate findings directly. |
 | Semantic finding merge | A model call, separate from refutation, that groups a file's candidates by whether they describe the same underlying defect. It is asked for groups, never for a discard; the surviving representative of each group is chosen deterministically in code, and non-representative members are recorded as `duplicate` rejections rather than dropped. |
 | Model provider adapter | Optional package loaded at runtime to connect harness model aliases to a concrete provider. |
 | Portable path | Forward-slash path used in reports, git paths, SARIF-like artifact locations, and JSON artifacts. |

@@ -16,8 +16,7 @@
           "enabled": false,
           "maxToolCallsPerTask": 100,
           "maxBytesPerRead": 24000
-        },
-        "discoverySampleCount": 1
+        }
       },
       "type": "object",
       "properties": {
@@ -124,12 +123,6 @@
             "maxBytesPerRead"
           ],
           "additionalProperties": false
-        },
-        "discoverySampleCount": {
-          "default": 1,
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 5
         }
       },
       "required": [
@@ -141,8 +134,7 @@
         "maxFiles",
         "maxFileBytes",
         "inlineSeverityThreshold",
-        "crossFileRetrieval",
-        "discoverySampleCount"
+        "crossFileRetrieval"
       ],
       "additionalProperties": false
     },
