@@ -59,10 +59,12 @@ alongside language, defect class, and expected findings per case.
   one locatable defect already exercises planning, packing, and budget, which is
   what this property measures. A genuinely cross-file defect is a bonus, and is
   measured separately by `contextDepth`.
-- Composition today: **24 single-file and 7 multi-file cases** (2, 2, 2, 3, 5, 6
-  and 6 reviewed files), 50 reviewed files in total. Two of the multi-file cases
+- Composition today: **29 single-file and 8 multi-file cases** (2, 2, 2, 2, 3, 5,
+  6 and 6 reviewed files), 57 reviewed files in total. Two of the multi-file cases
   carry the same defect in every file they touch, so a review that reports the
   first file and stops is visibly distinguishable from one that works the diff.
+  Recomputed from the manifest on 2026-07-27 after the convergence cases landed;
+  it is a count of committed data, not a measurement.
 
 ## Case Definition
 
@@ -192,20 +194,29 @@ Convergence is only meaningful for defects **inside the diff**: an out-of-diff
 defect is absent from every round's diff, so no amount of fixing brings it into
 scope. Measured against the current fixtures:
 
+Recomputed from the committed manifest and the hydrated diffs on 2026-07-27,
+under this spec's own hunk-span rule. These are deterministic counts of committed
+data, not measurements — no provider call is involved.
+
 | | cases |
 |---|---:|
-| ≥2 in-diff expectations anywhere | **6 of 36** |
-| ≥2 in-diff expectations in the **same file** | **2 of 36** |
+| ≥2 in-diff expectations anywhere | **15 of 37** |
+| ≥2 in-diff expectations in the **same file** | **10 of 37** |
+| ≥2 in-diff expectations across **different files** | 5 of 37 |
 
-Both counts were measured on the thirty-six-case corpus and have not been
-re-measured since five cases were dropped for removed-comment disclosure; the
-denominator is now thirty-one.
+The figures this table previously carried — 6 and 2 "of 36" — were computed under
+the **added-lines** rule that *Diff Scope Of An Expectation* has since replaced,
+and their denominator was already stale. Recomputing the added-lines rule over the
+thirty-one-case corpus reproduces 6 and 2 exactly, which confirms both the rule
+that produced them and that none of the five cases dropped for disclosure had
+contributed to either count. Under the hunk-span rule the same thirty-one cases
+give **9** and **5**; the eleven-case convergence capture of 2026-07-27 (six of
+which survived adjudication) took them to 15 and 10.
 
-**The current corpus therefore supports a pilot, not a measurement.** Two cases
-cannot establish anything about convergence, and a result drawn from them MUST NOT
-be reported as one. The pilot's only job is to establish whether the mechanism
-exists — whether repairing one defect lets a second, already inside the diff,
-surface — before fixtures are built to measure it.
+**Ten same-file cases support a measurement of the kind this section describes,
+where two did not.** A round-one hit rate still MUST be re-measured against the
+same build as the later rounds, and the diff-narrowing control below is still
+required: neither requirement is relaxed by the larger denominator.
 
 ### Required Control Arm
 
@@ -328,11 +339,29 @@ stated in English the cross-file contract its expectation rests on, the other
 restated its whole expectation. The three benign cases carry a recorded
 resolution instead.
 
-**The corpus is therefore thirty-one cases and seventy-four findings from
+The rule was exercised again the same day, on the eleven candidate cases captured
+to make convergence measurable. It flagged **eight of the eleven**, and
+adjudication found **five disclosing**, all dropped before they entered a
+measurement: `nats-server-gateway-pinned-certs-reload-check-inverted`,
+`undici-cookie-serialization-skips-domain-and-attribute-validation`,
+`netty-sni-handler-defaults-omit-clienthello-limit-and-timeout`,
+`ktor-digest-auth-challenge-selection-and-header-handling` and
+`traefik-consul-connect-peer-uri-check-drops-trust-domain`. Each carried a comment
+the upstream fix **added** that states, in English, the intended behaviour its
+expectation says is missing — a default buffer limit that is "small enough to not
+allocate to much memory", a doc asserting the certificate must contain the
+specified URI in its SANs, and so on. The three benign ones are all of the class
+this section already names: prose the fix merely **displaced**, present unchanged
+on the new side of the same hunk, so it carries nothing the checkout does not.
+That eight-of-eleven flag rate, and the five-of-eight disclosure rate, is why the
+rule cannot be a curation checklist.
+
+**The corpus is therefore thirty-seven cases and eighty-seven findings from
 2026-07-27, and every recall figure published before that date — including every
-figure in this spec and in `docs/` — was measured against the old answer key.**
-Dropping cases changes the key, so those figures are not comparable to a run on
-today's corpus, and the comparison tooling refuses such a comparison outright.
+figure in this spec and in `docs/` — was measured against a different answer
+key.** Both dropping and adding cases change the key, so those figures are not
+comparable to a run on today's corpus, and the comparison tooling refuses such a
+comparison outright.
 
 ## Cost And Safety
 
@@ -366,11 +395,13 @@ today's corpus, and the comparison tooling refuses such a comparison outright.
 ## Measured Baseline
 
 The baseline below was measured on the **thirty-case, forty-two-finding** corpus.
-The corpus has since changed three times — first to thirty-six cases and
+The corpus has since changed four times — first to thirty-six cases and
 fifty-eight findings with the multi-file cases described above, then to thirty-six
 cases and eighty findings by curating expectations per case (see *Expectations Per
-Case* below), then down to **thirty-one cases and seventy-four findings** when
-five cases were dropped for removed-comment disclosure (see *Anti-Contamination*).
+Case* below), then down to thirty-one cases and seventy-four findings when
+five cases were dropped for removed-comment disclosure (see *Anti-Contamination*),
+and finally up to **thirty-seven cases and eighty-seven findings** with the
+convergence capture of 2026-07-27.
 A run on today's corpus is therefore not comparable to these numbers
 case-for-case, and the comparison tooling enforces that: it refuses to compare two
 runs whose shared cases carry different answer-key digests. Re-measure before
@@ -407,11 +438,23 @@ already hydrated buys statistical power for nothing. That makes expectations per
 case the cheapest lever the corpus has, and it is curated deliberately rather than
 left at whatever the capture happened to notice.
 
-Composition today: **seventy-four expected findings across thirty-one cases** — 7
-cases with one expectation, 11 with two, 9 with three, 3 with four, and 1 with six.
-Ten of the added expectations are high-severity and sit at rank two or later, which the
-baseline decomposition above could not previously observe at all: every high in the
-old key was first-listed.
+Composition today: **eighty-seven expected findings across thirty-seven cases** —
+7 cases with one expectation, 16 with two, 10 with three, 3 with four, and 1 with
+six. Recomputed from the manifest on 2026-07-27; it is a count of committed data,
+not a measurement. Ten of the added expectations are high-severity and sit at rank
+two or later, which the baseline decomposition above could not previously observe
+at all: every high in the old key was first-listed.
+
+A `low`-severity expectation is a **deliberately hard** entry in this key, and the
+corpus carries twelve of them. The eval scores against **admitted** findings, and
+admission applies `aiReview.actionableSeverityThreshold` (default `medium`) to
+every model-origin candidate, so a `low` expectation can only be matched by a
+candidate the engine itself rated `medium` or above — that is, by a severity the
+answer key says is wrong. Such an expectation is not unmatchable, but it is
+matchable only against the grain of the severity rubric, and it depresses recall
+and severity accuracy in opposite directions. That is a corpus-wide property, not
+a defect of any one case; it is recorded here so nobody re-derives it from a
+disappointing run.
 
 Two rules bound the curation, and both exist because a wrong expectation is worse
 than a missing one — it is a permanent wrong answer that silently depresses every

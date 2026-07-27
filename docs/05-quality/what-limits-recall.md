@@ -46,9 +46,11 @@ matched **79.8% of the time** (79 of 99) — *higher* than a first one.
 
 Source: `reports/2026-07-27-enumeration-gap-and-improvement-plan.md`, nine runs,
 36 cases, 80 expectations, 720 expectation-instances, independently reproduced.
-That corpus is now 31 cases and 74 expectations: five cases were removed on
-2026-07-27 because their reviewed diff deleted a comment naming the defect, so
-every figure on this page predates the current answer key.
+That corpus is now 37 cases and 87 expectations: five cases were removed on
+2026-07-27 because their reviewed diff deleted a comment naming the defect, and
+six convergence cases were added the same day, so every recall figure on this
+page predates the current answer key and none of them is comparable to a run
+against it.
 
 Two consequences follow, and both correct earlier readings of this engine.
 
@@ -134,24 +136,26 @@ Source: `reports/2026-07-27-enumeration-gap-and-improvement-plan.md` §5.2.
 If a reviewer surfaces one defect per file per round, then the answer key itself
 sets a hard ceiling on what any single review can score.
 
-The real-repository corpus holds **74 expected findings across 42 distinct
-(case, file) pairs** — 19 files carry one expectation, 16 carry two, 5 carry
-three and 2 carry four (computed directly from the committed corpus manifest,
-`eval/corpora/real-repo-cross-file/manifest.json`).
+The real-repository corpus holds **87 expected findings across 49 distinct
+(case, file) pairs** — 21 files carry one expectation, 20 carry two, 6 carry
+three and 2 carry four (recomputed from the committed corpus manifest,
+`eval/corpora/real-repo-cross-file/manifest.json`, on 2026-07-27; it is a
+deterministic count of committed data, not a measurement).
 
 | Rounds of review, one defect per file per round | Expectations reachable | Ceiling |
 | --- | ---: | ---: |
-| One | 42 / 74 | **56.8%** |
-| Two | 65 / 74 | **87.8%** |
-| Three | 72 / 74 | **97.3%** |
+| One | 49 / 87 | **56.3%** |
+| Two | 77 / 87 | **88.5%** |
+| Three | 85 / 87 | **97.7%** |
 
 Measured single-pass recall was **46–47%** on the 36-case corpus this table no
 longer describes — about **80% of the one-pass ceiling**, not 47% of some
-notional perfect score. The ceiling moved only slightly when five cases were
-removed for answer-key disclosure ([datasets](datasets.md#real-repository-cross-file-corpus));
-the recall figure has not been re-measured against the new key. That reframes the headline
-considerably: the distance between the engine and its own structural limit is
-much smaller than the distance between the headline and 100%.
+notional perfect score. The ceiling barely moved across two key changes on
+2026-07-27, five cases removed for answer-key disclosure and six convergence
+cases added ([datasets](datasets.md#real-repository-cross-file-corpus)); the
+recall figure has not been re-measured against either key. That reframes the
+headline considerably: the distance between the engine and its own structural
+limit is much smaller than the distance between the headline and 100%.
 
 **This makes the iterative pull-request loop the dominant strategy.** Review,
 fix what came back, push, review again. Each round starts from a changed diff,
@@ -166,8 +170,10 @@ wiring into a required check rather than a comment.
 defect in a file causes the next one to surface on the following round. That
 assumption is consistent with the attention finding — a new diff is a new
 anchor — but **it has not been measured**. What is measured is the one-pass
-ceiling and the current position against it. Treat 88.8% and 97.5% as the shape
-of an argument for iteration, not as a forecast.
+ceiling and the current position against it. Treat 88.5% and 97.7% as the shape
+of an argument for iteration, not as a forecast. The corpus can now carry that
+measurement where it could not before: **10 of its 37 cases hold two or more
+in-diff expectations in one file**, against two before the 2026-07-27 capture.
 
 ---
 

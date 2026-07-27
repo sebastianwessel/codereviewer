@@ -196,10 +196,7 @@
       "expectedNoFindingZones": [
         {
           "path": "context.go",
-          "lineRange": [
-            153,
-            164
-          ],
+          "lineRange": [153, 164],
           "reason": "HandlerNames allocates a slice with the right capacity and appends the name of every non-nil handler, explicitly skipping nils. It reads no request state and is unchanged by the reviewed diff, which only touches Copy."
         }
       ],
@@ -255,10 +252,7 @@
       "expectedNoFindingZones": [
         {
           "path": "map_claims.go",
-          "lineRange": [
-            12,
-            40
-          ],
+          "lineRange": [12, 40],
           "reason": "The six one-line Claims-interface accessors (GetExpirationTime through GetSubject) only delegate to the parse helpers below them. They hold no branching, no arithmetic and no untrusted input handling, and the reviewed diff does not touch them."
         }
       ],
@@ -514,10 +508,7 @@
       "expectedNoFindingZones": [
         {
           "path": "src/werkzeug/datastructures/range.py",
-          "lineRange": [
-            50,
-            62
-          ],
+          "lineRange": [50, 62],
           "reason": "IfRange.to_header/__str__/__repr__ only re-serialise the etag or date that was already parsed into the instance, choosing http_date or quote_etag and otherwise returning an empty string. No parsing, no comparison, and unchanged by the reviewed diff."
         }
       ],
@@ -639,10 +630,7 @@
       "expectedNoFindingZones": [
         {
           "path": "axum-extra/src/response/multiple.rs",
-          "lineRange": [
-            204,
-            210
-          ],
+          "lineRange": [204, 210],
           "reason": "The FromIterator<Part> impl collects the iterator into the parts vector and does nothing else. It performs no formatting and no header construction, and it sits outside every hunk of the reviewed diff."
         }
       ],
@@ -738,10 +726,7 @@
       "expectedNoFindingZones": [
         {
           "path": "lib/rack/request.rb",
-          "lineRange": [
-            305,
-            333
-          ],
+          "lineRange": [305, 333],
           "reason": "The one-line HTTP verb predicates (delete? through unlink?) each compare request_method to a frozen constant. They sit immediately above the changed scheme method, so a reviewer reads them as context, and there is nothing in them to report."
         }
       ],
@@ -777,10 +762,7 @@
       "expectedNoFindingZones": [
         {
           "path": "lib/puma/thread_pool.rb",
-          "lineRange": [
-            157,
-            171
-          ],
+          "lineRange": [157, 171],
           "reason": "reset_max, backlog and backlog_max are one-line readers that each take the pool mutex through with_mutex, consistently with their neighbours. The reviewed diff only touches the worker loop two hundred lines below."
         }
       ],
@@ -978,10 +960,7 @@
       "expectedNoFindingZones": [
         {
           "path": "tokio-util/src/io/write_all_vectored.rs",
-          "lineRange": [
-            86,
-            98
-          ],
+          "lineRange": [86, 98],
           "reason": "write_all_vectored only moves its two borrowed arguments into the future struct. No arithmetic, no slicing, no unsafe, and unchanged by the reviewed diff, which only touches advance_slices."
         }
       ],
@@ -1129,10 +1108,7 @@
       "expectedNoFindingZones": [
         {
           "path": "lib/plug/conn/cookies.ex",
-          "lineRange": [
-            139,
-            184
-          ],
+          "lineRange": [139, 184],
           "reason": "rfc2822/1, weekday_name/1, month_name/1 and add_seconds/2 are pure total helpers over calendar tuples: two exhaustive lookup tables and a gregorian-seconds conversion. They never see a cookie key, value or attribute, and the reviewed diff ends before them."
         }
       ],
@@ -1468,6 +1444,284 @@
       },
       "tags": ["multi-file", "concurrency", "xds", "wide-diff"],
       "notes": "Five-file diff whose defect sits in the helper the other four files call; the reviewed diff adds internal/grpcutil/regex.go as a new file, so the evidence is inside the change while the concurrency argument depends on how the callers hold the compiled pattern. Upstream removed the helper rather than fixing it."
+    },
+    {
+      "id": "nats-server-schedule-snapshot-decode-trusts-header-count",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nats-io/nats-server.git",
+      "upstreamOwner": "nats-io",
+      "upstreamRepo": "nats-server",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "4fb527a086ac75abec3383c13d55ce47eac9b2dc",
+      "fixCommittedAt": "2026-06-05T18:22:55+02:00",
+      "parentCommit": "ca6311b2e1da1f20d68ccb68f20a352f3c7799d7",
+      "reviewedPaths": ["server/scheduler.go"],
+      "reviewIntent": "Decode a persisted message-scheduling snapshot back into the in-memory schedule set during store recovery",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "server/scheduler.go",
+          "lineRange": [289, 292],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "decode takes the entry count from the snapshot header and loops that many times, reading a two-byte subject length with binary.LittleEndian.Uint16(b) without checking that b still holds two bytes. Nothing validates that count against the remaining buffer, and the next statement does guard its own read with len(b) < sl, so this fixed-width read is the only unguarded one. A truncated state file drains the buffer and the next iteration indexes past its end, panicking during recovery."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "server/scheduler.go",
+          "lineRange": [297, 304],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "After the subject, decode reads the timestamp and sequence with binary.Varint and binary.Uvarint and rejects only a negative byte count. Both functions return zero when the buffer is too small to hold a complete varint, and zero passes these checks: the short tail is accepted, ts and seq are both zero, b is re-sliced by tn+vn == 0 so the cursor never advances, and the loop registers the same fabricated schedule for the whole header count instead of reporting a short buffer."
+        }
+      ],
+      "tags": ["bug", "decoding", "recovery", "multi-defect-diff"],
+      "notes": "Two in-diff expectations in one file. The upstream fix also repaired the identical varint check in server/thw/thw.go and reset partially decoded state in server/filestore.go; both are deliberately outside reviewedPaths so the answer key holds exactly one expectation per distinct root cause. Expectation one is a pure insertion upstream, so it appears as a deletion hunk in the reversed diff."
+    },
+    {
+      "id": "undici-set-cookie-value-decoded-and-samesite-substring-matched",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nodejs/undici.git",
+      "upstreamOwner": "nodejs",
+      "upstreamRepo": "undici",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "5655ea43af4add559ee5f94b6cd72e08a55aa621",
+      "fixCommittedAt": "2026-06-11T11:26:20+02:00",
+      "parentCommit": "27586ee92f7b2f78e813c97d9e7b493713eb9cdf",
+      "reviewedPaths": ["lib/web/cookies/parse.js"],
+      "reviewIntent": "Parse a Set-Cookie header string into the cookie name, value and attribute list returned by the public cookie helpers",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/web/cookies/parse.js",
+          "lineRange": [84, 86],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "parseSetCookie splits the header into a name and a value string, then returns the value after passing it through node:querystring's unescape, which percent-decodes it. RFC 6265, quoted in the comment just above, treats the cookie-value as opaque octets to be handed back unchanged and expects servers to encode data in it. A value containing %XX is silently altered before the caller sees it, and handing it back to the serializer either throws on the now-bare separator or emits a different cookie."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/web/cookies/parse.js",
+          "lineRange": [283, 308],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The SameSite branch starts from an enforcement value of 'Default', then runs three independent includes() tests for 'none', 'strict' and 'lax' against the lowercased attribute value, keeping the last that matches. Substring matching accepts any value merely containing one of those words - one containing 'none' yields None, the weakest cross-site setting - and a value containing two resolves by the order the tests are written. An unrecognised value yields 'Default', not a legal mode."
+        }
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "RFC 6265 section 5.2.5 quoted beside the SameSite branch. The fix renumbered the quotation, so hydration reports nine removed lines, but every proposition in them is present on the new side of the same hunk: the pre-fix file quotes the same 'is a case-insensitive match for' rule for None, Strict and Lax and the same 'append an attribute to the cookie-attribute-list with an attribute-name of SameSite' clause. Two of the nine lines are byte-identical on the new side. Neither expectation (percent-decoding a cookie-value that must be returned verbatim, and substring matching an attribute with three legal values) is stated in any of them.",
+        "acknowledgedComments": [
+          "// 1. If cookie-av's attribute-value is a case-insensitive match for",
+          "//    \"None\", append an attribute to the cookie-attribute-list with an",
+          "//    attribute-name of \"SameSite\" and an attribute-value of \"None\".",
+          "// 2. If cookie-av's attribute-value is a case-insensitive match for",
+          "//    \"Strict\", append an attribute to the cookie-attribute-list with",
+          "//    an attribute-name of \"SameSite\" and an attribute-value of",
+          "// 3. If cookie-av's attribute-value is a case-insensitive match for",
+          "//    \"Lax\", append an attribute to the cookie-attribute-list with an",
+          "//    attribute-name of \"SameSite\" and an attribute-value of \"Lax\"."
+        ]
+      },
+      "tags": ["bug", "http", "cookies", "parsing", "multi-defect-diff"],
+      "notes": "Two in-diff expectations in one file, both intersecting added lines of the reversed diff. Distinct root causes: decoding a value that must be preserved verbatim, versus substring-matching an attribute that has exactly three legal values."
+    },
+    {
+      "id": "puma-proxy-protocol-v1-line-unbounded-and-line-anchored",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/puma/puma.git",
+      "upstreamOwner": "puma",
+      "upstreamRepo": "puma",
+      "license": "BSD-3-Clause",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "f723c060f4cecb94086de930fe3a322a007abf9b",
+      "fixCommittedAt": "2026-05-27T07:28:07+09:00",
+      "parentCommit": "2e03ade914846221b37a166af8a5cbc1c7e95008",
+      "reviewedPaths": ["lib/puma/client.rb", "lib/puma/const.rb"],
+      "reviewIntent": "Read the PROXY protocol v1 header out of a client connection's buffer before the HTTP request is parsed",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "lib/puma/client.rb",
+          "lineRange": [215, 235],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "cross-function",
+          "semanticSummary": "try_to_parse_proxy_protocol returns false whenever the accumulated connection buffer holds no CRLF, and the read loop that calls it appends every further chunk to that same buffer before asking again. Nothing bounds that buffer, though a PROXY v1 line is at most 107 bytes. A client on a listener configured for proxy_protocol :v1 can send an endless stream containing no CRLF and hold one unbounded String per connection, exhausting worker memory before any request line is parsed."
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "lib/puma/const.rb",
+          "lineRange": [295, 295],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file",
+          "semanticSummary": "The PROXY v1 pattern is anchored with a caret, which in Ruby matches at the start of any line rather than of the string, and the client applies it to the whole accumulated connection buffer instead of only its first line. A client that sends an ordinary request line and then a line beginning with the PROXY keyword has that later line matched: the address it names replaces the peer IP reported to the application and the log, and the buffer is replaced by the text after it."
+        }
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "Both flagged lines are present unchanged on the new side of the same hunk: the upstream fix moved this two-line comment out of the branch it sat in, so hydration reports it as removed while the pre-fix file the reviewer checks out contains it verbatim. It therefore carries no information the checkout does not already carry. It also describes only the non-PROXY fall-through, and neither expectation (an unbounded PROXY v1 buffer, and a line-anchored pattern matched against the whole connection buffer) is derivable from it.",
+        "acknowledgedComments": [
+          "# if the buffer has a \\r\\n but doesn't have a PROXY protocol",
+          "# request, this is just HTTP from a non-PROXY client; move on"
+        ]
+      },
+      "tags": ["multi-defect", "security", "proxy-protocol", "multi-file"],
+      "notes": "Two independent repairs in one commit: a missing length bound on the buffered PROXY v1 line (client.rb), and a line-anchored regular expression matched against a whole-connection buffer (const.rb, used at client.rb line 219). Both are reachable only when a listener is configured with `proxy_protocol :v1`. Line ranges are from the parent commit. Cross-file: the pattern constant and the code that applies it live in different files."
+    },
+    {
+      "id": "rack-multipart-part-header-splits-return-nil",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/rack/rack.git",
+      "upstreamOwner": "rack",
+      "upstreamRepo": "rack",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "83fff58206e6fec46815322e0783b6d7cb50f979",
+      "fixCommittedAt": "2026-03-31T15:27:19+13:00",
+      "parentCommit": "939f2f81b635331f50b3c933f150c8152aa2950f",
+      "reviewedPaths": ["lib/rack/multipart/parser.rb"],
+      "reviewIntent": "Parse the per-part headers of a multipart request body and tag each parsed part's character encoding",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/rack/multipart/parser.rb",
+          "lineRange": [355, 357],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The mime-head handler looks up the first semicolon in the part's Content-Disposition value and uses that index in an addition to slice off the disposition type, without checking a semicolon was found. The lookup answers nil when the character is absent, so a part whose Content-Disposition carries only a disposition type and no parameters - which the enclosing guard admits - makes the addition run on nil and raise NoMethodError, outside the parser's declared bad-request errors."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/rack/multipart/parser.rb",
+          "lineRange": [533, 537],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The encoding-tagging helper splits each Content-Type parameter on the first equals sign and strips the value in place without checking the split produced a second element. The split answers a one-element list when the separator is absent, so the value is nil for a parameter written with no equals sign and the strip raises NoMethodError. The loop runs after the body is read for every part with no filename whose media type is exactly text/plain."
+        }
+      ],
+      "tags": ["multi-defect", "bug", "multipart", "parser-robustness"],
+      "notes": "Two independent repairs in one commit, in two methods and two phases of the parse: a missing nil check on the semicolon lookup in the Content-Disposition value during header scanning, and a missing nil check on the second element of the Content-Type parameter split during post-parse encoding tagging. Different headers, different triggering inputs, independently fixable. The second hunk is a pure deletion when the fix is read backwards, so the expectation at 533-537 is in-diff by hunk span (head lines 533-538) and not by added lines - it is the case that motivated correcting the classifier. Line ranges are from the parent commit."
+    },
+    {
+      "id": "aspnetcore-tempdata-deferred-load-races-retained-keys",
+      "language": "csharp",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/dotnet/aspnetcore.git",
+      "upstreamOwner": "dotnet",
+      "upstreamRepo": "aspnetcore",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "e55796c6188a4b94f79129aa0a4eb7dafd2b31f6",
+      "fixCommittedAt": "2026-03-10T16:03:39Z",
+      "parentCommit": "cb2bd848a873903324e292cf9168a0048681acf2",
+      "reviewedPaths": ["src/Components/Endpoints/src/TempData/TempData.cs"],
+      "reviewIntent": "Read, remove and retain entries in the component TempData store, whose backing dictionary is populated on first access",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/Components/Endpoints/src/TempData/TempData.cs",
+          "lineRange": [52, 53],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Get drops the key from the retained-key set before it reads Data. Data is the property that runs the deferred load, and that load clears the retained-key set and re-adds every key it just read, so when Get is the first operation on the store the removal is silently undone. The value the caller consumed stays marked as retained, Save writes it back to the store, and a one-shot entry survives into the next request instead of being consumed."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "src/Components/Endpoints/src/TempData/TempData.cs",
+          "lineRange": [81, 82],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "Remove drops the key from the retained-key set before it touches Data. The deferred load that Data triggers re-adds every stored key to the retained set, and only afterwards is the entry deleted from the backing dictionary. Save then iterates the retained keys and indexes that dictionary directly, so a Remove issued before anything else has read the store leaves a retained key with no value behind it and Save throws KeyNotFoundException while the response is being produced."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/Components/Endpoints/src/TempData/TempData.cs",
+          "lineRange": [63, 63],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Keep unions the retained-key set with the keys of the private backing field rather than the property that performs the deferred load. Called before anything has read the store - which is the whole point of asking to keep the current entries - the field is still empty, so Keep retains nothing and Save returns an empty set, dropping every stored entry. The enumerator constructor reads the same backing field, so enumerating the store before any load likewise yields no entries."
+        }
+      ],
+      "tags": ["multi-defect", "deferred-initialization", "state"],
+      "notes": "Two distinct root causes in one 10-line diff. (a) Get and Remove mutate the retained-key set BEFORE the deferred load that repopulates it - an ordering fault; the two sites are listed separately because their failure modes differ (a stale surviving entry vs an unhandled KeyNotFoundException in Save). (b) Keep and the enumerator read the private backing field instead of the loading property - a different fault, folded into one expectation. The fix adds no comments, so the reversed diff carries no explanatory prose."
+    },
+    {
+      "id": "aspnetcore-managed-encryptor-mac-compare-reads-unwritten-buffer",
+      "language": "csharp",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/dotnet/aspnetcore.git",
+      "upstreamOwner": "dotnet",
+      "upstreamRepo": "aspnetcore",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "3741588081b33934bb7f9dd9e4fd28b7752b7d57",
+      "fixCommittedAt": "2026-03-23T10:12:25-07:00",
+      "parentCommit": "472d94239f27f92a7aefd142b5d59e12b2b5a37f",
+      "reviewedPaths": ["src/DataProtection/DataProtection/src/Managed/ManagedAuthenticatedEncryptor.cs"],
+      "reviewIntent": "Recompute and compare the authentication tag of a protected payload before its ciphertext is deciphered",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/DataProtection/DataProtection/src/Managed/ManagedAuthenticatedEncryptor.cs",
+          "lineRange": [453, 454],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "cryptography",
+          "contextDepth": "local",
+          "semanticSummary": "In the non-NET branch of CalculateAndValidateMac the span correctHash is bound to a stack buffer (or a fresh array) and is never written to: ComputeHash returns a new array, assigned to the separate local correctHashArray. The constant-time comparison then compares that untouched buffer against the tag carried in the payload, so the check authenticates nothing - every genuine payload fails to decrypt, and one whose tag field equals the untouched buffer is accepted."
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/DataProtection/DataProtection/src/Managed/ManagedAuthenticatedEncryptor.cs",
+          "lineRange": [448, 450],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "cryptography",
+          "contextDepth": "local",
+          "semanticSummary": "The recomputed tag is taken over payloadArray from macOffset for eofOffset - macOffset bytes - that is, over the tag region of the payload itself. The caller passes ivOffset, macOffset and eofOffset precisely so the tag can be recomputed over the IV and ciphertext, the range macOffset marks the end of; the ciphertext therefore never enters the computation and no modification of it can be detected by this check."
+        }
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "Present unchanged on the new side of the same hunk: the fix moved this line into the try block, so hydration reports it as removed while the pre-fix file carries it verbatim. It concerns allocating the validation subkey, and says nothing about either expectation - the comparison reading a span the hash was never written into, and the hash being computed over the tag region instead of the IV and ciphertext.",
+        "acknowledgedComments": [
+          "// if validationSubkey is stackalloc'ed, there is no way we avoid an alloc here"
+        ]
+      },
+      "tags": ["multi-defect", "cryptography", "authentication-tag"],
+      "notes": "Two independent faults inside one ~25-line method, both repaired by the same commit: the comparison reads a buffer the hash was never written into, and the hash is computed over the wrong byte range. Either alone breaks tag validation. The method compiles for the net462 and netstandard2.0 targets the package ships (the #if NET arm above it is the healthy one), so it is live shipped code. The rest of the reviewed diff is nullable-annotation churn on the same file; reviewedPaths deliberately excludes the other 50+ files of the upstream commit."
     }
   ]
 }

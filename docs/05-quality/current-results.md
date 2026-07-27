@@ -30,9 +30,10 @@ Read [Metrics](metrics.md) first if the terms are unfamiliar, and
 Measured **2026-07-26** on the **real-repository corpus** as it stood then: 36
 cases, 80 expected findings, 29 upstream projects, 7 of them multi-file. Model
 `gpt-5.3-codex`, three seeds, default configuration. That corpus has since lost
-five cases removed for answer-key disclosure, so it is now 31 cases and 74
-findings and **every number on this page was measured against the old key** —
-see [datasets](datasets.md#real-repository-cross-file-corpus).
+five cases removed for answer-key disclosure and gained six curated to make the
+iterative review loop measurable, so it is now 37 cases and 87 findings and
+**every number on this page was measured against an answer key that no longer
+exists** — see [datasets](datasets.md#real-repository-cross-file-corpus).
 
 | Metric | Value | Notes |
 | --- | ---: | --- |

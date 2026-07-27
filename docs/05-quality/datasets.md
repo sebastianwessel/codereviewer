@@ -160,7 +160,7 @@ measured, so the defect classes reflect what the authors thought to test for.
 
 ## Real-repository cross-file corpus
 
-**What it is.** `eval/corpora/real-repo-cross-file/manifest.json` — 31 cases
+**What it is.** `eval/corpora/real-repo-cross-file/manifest.json` — 37 cases
 pinning **real upstream repositories, checked out in full** at the commit
 immediately before an upstream fix landed. Defined by `specs/17`.
 
@@ -177,18 +177,18 @@ A hydrated case here yields a working tree containing the repository's unchanged
 files, so a finding that depends on a callee body, an interface, or a constructor
 in an untouched file is reachable — exactly as it would be for a developer.
 
-**15 of the 74 expected findings are labeled `contextDepth: cross-file`**, plus
-three `cross-function`, one `callee` and one `caller`; only 2 are `local`. (The
-labels are carried by security-category findings only, which is why the other 52
+**16 of the 87 expected findings are labeled `contextDepth: cross-file`**, plus
+four `cross-function`, one `callee` and one `caller`; only 4 are `local`. (The
+labels are carried by security-category findings only, which is why the other 61
 findings have none.)
 
 ### Why multi-file cases exist
 
-The second load-bearing point, added after the first baseline. 24 of the cases
+The second load-bearing point, added after the first baseline. 29 of the cases
 change exactly one file, and on such a case task clustering, context packing,
 per-task budget on a wide diff and any dilution of attention across files are not
 merely weak — they are **never exercised**. Real pull requests are not
-single-file, so seven cases now carry reviewed diffs spanning 2 to 6 files. Two
+single-file, so eight cases now carry reviewed diffs spanning 2 to 6 files. Two
 of them (`traefik-…-nil-check`, `laravel-eloquent-dictionary-key-not-normalized`)
 repeat the same defect in every file they touch, so a review that reports the
 first file and stops scores visibly differently from one that works the whole
@@ -208,29 +208,38 @@ diff. See `specs/17` §Diff Shape.
 
 ### Composition
 
-- 31 cases, 74 expected findings, **all `split: held-out`**.
-- 26 upstream projects, including fastify, gin, tokio, django, netty, rack,
+- 37 cases, 87 expected findings, **all `split: held-out`**.
+- 27 upstream projects, including fastify, gin, tokio, django, netty, rack,
   werkzeug, starlette, typeorm, aspnetcore, libuv, plug, traefik, laravel, vite,
   pydantic, grpc-go.
-- 12 languages: Go 7, Python 6, JavaScript 3, Ruby 3, TypeScript 3, PHP 2,
-  Rust 2, and one each of Kotlin, C, C#, Elixir, Java.
-- Licenses: MIT 19, Apache-2.0 6, BSD-3-Clause 6 (permissive allowlist enforced).
-- Tiers: 41 `logic`, 22 `security`, 11 `runtime-critical`. No nits.
-- Severities: 24 `high`, 38 `medium`, 12 `low`. No `critical`.
-- Findings per case: 7 cases with one, 11 with two, 9 with three, 3 with four,
+- 12 languages: Go 8, Python 6, Ruby 5, JavaScript 4, TypeScript 3, C# 3, PHP 2,
+  Rust 2, and one each of Kotlin, C, Elixir, Java.
+- Licenses: MIT 23, Apache-2.0 7, BSD-3-Clause 7 (permissive allowlist enforced).
+- Tiers: 48 `logic`, 26 `security`, 13 `runtime-critical`. No nits.
+- Severities: 29 `high`, 46 `medium`, 12 `low`. No `critical`.
+- Findings per case: 7 cases with one, 16 with two, 10 with three, 3 with four,
   1 with six. Expectations per case is a curated property, not a by-product of
   capture — see `specs/17` §Expectations Per Case for why, and for the rule that
   no expectation may be promoted from engine output.
-- Reviewed diff shape: **24 single-file and 7 multi-file cases** (2, 2, 2, 3, 5,
-  6, 6 files), 50 reviewed files in total.
-- Expected-finding shape: all 74 are **`path-semantic`** (path required, no line
+- Reviewed diff shape: **29 single-file and 8 multi-file cases** (2, 2, 2, 2, 3,
+  5, 6, 6 files), 57 reviewed files in total.
+- Expected-finding shape: all 87 are **`path-semantic`** (path required, no line
   gate) — though each still carries a `lineRange` field.
 - **8 no-finding zones**, one each on 8 cases, all line-ranged and all inside a
   reviewed path (see below).
 
-Five cases were **removed on 2026-07-27** because their reviewed diff deleted a
-comment that gave the defect away — see *Anti-contamination* below. Every recall
-figure published before that date was measured against the old answer key.
+The corpus changed twice on **2026-07-27**. Five cases were removed because their
+reviewed diff deleted a comment that gave the defect away, and eleven cases
+captured to make the iterative review loop measurable were adjudicated against the
+same rule, of which six were kept and five dropped — see *Anti-contamination*
+below. Every recall figure published before that date was measured against a
+different answer key.
+
+Ten of the 37 cases now carry **two or more in-diff expectations in the same
+file**, and five more carry two or more spread across different files. That is
+what makes rounds-to-clean measurable at all: a defect outside the diff cannot be
+brought into scope by repairing anything. Counts recomputed from the manifest and
+the hydrated diffs, not measured.
 
 ### No-finding zones on this corpus
 
@@ -267,7 +276,7 @@ loading instead of silently inflating a score:
 | **Chronological split** | Cases are `dev` or `held-out`. Improvements are decided on `held-out`. |
 | **Answer-key exclusion** | No field reaching the reviewed input may carry a CVE id, advisory text, or the fix commit message. |
 | **Answer-key exclusion in the generated diff** | Hydration scans the **generated diff** for answer-key wording and fails the case, on a freshly generated diff and on one reused from an existing checkout alike. An upstream fix that also added an advisory reference puts the answer inside the model's input when read backwards. Curation found this in five candidate cases — one had already entered the corpus. |
-| **Removed-comment disclosure** | Advisory vocabulary cannot catch a plain engineering comment. A case reviews the fix backwards, so a comment the fix *added* is a **removed** line the reviewer is shown. Hydration flags removed comment lines carrying prose (a comment marker plus five or more words) and **fails the case until a curator resolves each flagged comment** in `removedCommentDisclosureReview`. The rule is fuzzy, so it warns rather than hard-fails; the advisory scan stays a hard failure because it is specific. |
+| **Removed-comment disclosure** | Advisory vocabulary cannot catch a plain engineering comment. A case reviews the fix backwards, so a comment the fix *added* is a **removed** line the reviewer is shown. Hydration flags removed comment lines carrying prose (a comment marker plus five or more words) and **fails the case until a curator resolves each flagged comment** in `removedCommentDisclosureReview`. The rule is fuzzy, so it warns rather than hard-fails; the advisory scan stays a hard failure because it is specific. On the eleven convergence candidates captured on 2026-07-27 it flagged **eight**, five of which were genuinely disclosing and were dropped. |
 | **Dedup** | A token-normalized diff fingerprint is recorded per case. |
 | **Provenance** | License, source and capture date required; non-permissive licenses rejected. |
 
@@ -295,23 +304,26 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
 
 **Known limitations.**
 
-- **The answer key is still curated.** 74 findings across 26 real repositories
+- **The answer key is still curated.** 87 findings across 27 real repositories
   cannot be exhaustive; recall is a lower bound and `adjustedPrecision` is the
   precision to read. In the multi-file cases the incompleteness is deliberate in
   places: `laravel-eloquent-dictionary-key-not-normalized` lists three of the six
   files it touches, because the other three repeat the listed root cause.
 - **The published baseline predates every key change.** The 2026-07-26 run
   scored 30 cases and 42 findings; the key then grew to 58 findings with the
-  multi-file cases and to 80 by curating expectations per case, then shrank to 74
-  across 31 cases when five disclosing cases were removed. Any comparison
-  against a run on today's 31/74 corpus is a comparison of different
+  multi-file cases and to 80 by curating expectations per case, shrank to 74
+  across 31 cases when five disclosing cases were removed, and grew again to
+  **87 across 37 cases** with the convergence capture. Any comparison
+  against a run on today's 37/87 corpus is a comparison of different
   denominators, and the comparison tooling refuses it outright: it compares the
   per-case answer-key digest and will not report a delta across a changed key.
+  **No recall figure published anywhere in this documentation is comparable to a
+  run on today's corpus.**
 - **Checkouts are untrusted input.** Repository content is reviewed, never
   executed; the eligibility gate and redaction apply to it as to any repository.
 - **Cost.** Reviewing full repositories is the expensive corpus. The 30-case run
-  cost on the order of one to two dollars of provider spend; the corpus is now 31
-  cases, and the seven multi-file ones are the widest diffs in it, so budget more
+  cost on the order of one to two dollars of provider spend; the corpus is now 37
+  cases, and the eight multi-file ones are the widest diffs in it, so budget more
   rather than less. The 2026-07 growth from 58 to 80 expected findings added no
   cost at all — provider spend follows cases, not expectations, which is exactly
   why expectations per case is the lever the corpus grows on.
