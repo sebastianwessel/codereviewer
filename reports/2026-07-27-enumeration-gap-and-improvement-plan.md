@@ -239,7 +239,13 @@ independent support for the §6 methodology change.
 
 ### Step 0 — free diagnostics, before buying anything
 
-1. **Refutation kill-rate by tier and by mechanism.** If logic candidates are
+1. ~~**Refutation kill-rate by tier and by mechanism.**~~ **DONE 2026-07-27 —
+   the gate is exonerated, and the result reframes the whole plan.** See §5.1.
+
+   Original reasoning retained below, because the hypothesis was reasonable and
+   the answer is what matters.
+
+   If logic candidates are
    generated and then killed, no discovery technique is the right purchase — the
    gate is. A proof obligation calibrated on security sinks will over-kill logic,
    which is intrinsically harder to prove from source alone. Zero provider cost;
@@ -261,6 +267,51 @@ independent support for the §6 methodology change.
    is a current file-rank-1+ miss. This is the one experiment that separates
    "cannot find it" from "stopped looking". Everything in §5 assumes the latter;
    this is what would falsify it. Small, bounded cost.
+
+### 5.1 Result of the free diagnostic: the gate is not the problem
+
+Measured across the same nine runs (653 refutation verdicts, zero provider spend):
+
+| refutation verdict | count | share |
+|---|---:|---:|
+| proved | 623 | **95.4%** |
+| needs-more-evidence | 21 | 3.2% |
+| **refuted** | **9** | **1.4%** |
+
+| admission rejection | per run |
+|---|---:|
+| refuted | 1.0 |
+| location-invalid | 1.0 |
+| duplicate | 0.1 |
+| **total rejected** | **2.1** of ~70 candidates |
+
+**The refuter kills one finding per run.** The "Sifting the Noise" hazard —
+a filter destroying 22% of true positives, >77% for crypto — **does not apply to
+us**. Our crypto/XSS/SSRF blind spots are not the gate removing them; discovery
+never proposes them. This confirms on the current 36-case corpus what earlier
+instrumentation showed on the old one, and it removes the cheapest possible
+explanation for the enumeration gap.
+
+**Two consequences that change how to read the rest of this plan.**
+
+**(a) Our precision does not come from refutation. It comes from discovery being
+conservative.** That is a much more fragile place for it to come from — it means
+precision and recall are coupled at the same knob, which is exactly why every
+"find more" intervention we tried cost precision.
+
+**(b) The refutation stage has enormous unused capacity, already built and
+already paid for.** The literature's recurring prescription is *generate wide,
+verify hard*; Cursor's documented v1→agentic rewrite inverted their prompting
+from restraint to "investigate every suspicious pattern" and resolution rate went
+52% → 70%+. We are currently doing the opposite of the first half while running
+a verification stage at 1.4% utilisation.
+
+This substantially de-risks Steps 1 and 2. The windowing and enumeration changes
+are supposed to raise candidate volume; the stage that would absorb that volume
+is demonstrably not saturated. It also means the honest expectation is that
+refutation's kill rate should **rise** when those land — if it stays at 1.4%
+after we widen discovery, the refuter is not doing its job and precision will
+fall instead.
 
 ### Step 1 — cheap, evidence-backed, ceiling-breaking
 
