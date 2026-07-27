@@ -21,6 +21,13 @@
           "enabled": false,
           "maxSymbols": 8,
           "maxBytesPerSymbol": 4000
+        },
+        "unanchoredPass": {
+          "enabled": false,
+          "unitLines": 60,
+          "strideLines": 40,
+          "maxUnitsPerFile": 8,
+          "maxUnitsPerRun": 40
         }
       },
       "type": "object",
@@ -160,6 +167,54 @@
             "maxBytesPerSymbol"
           ],
           "additionalProperties": false
+        },
+        "unanchoredPass": {
+          "default": {
+            "enabled": false,
+            "unitLines": 60,
+            "strideLines": 40,
+            "maxUnitsPerFile": 8,
+            "maxUnitsPerRun": 40
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "unitLines": {
+              "default": 60,
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 2000
+            },
+            "strideLines": {
+              "default": 40,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            },
+            "maxUnitsPerFile": {
+              "default": 8,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "maxUnitsPerRun": {
+              "default": 40,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000
+            }
+          },
+          "required": [
+            "enabled",
+            "unitLines",
+            "strideLines",
+            "maxUnitsPerFile",
+            "maxUnitsPerRun"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -172,7 +227,8 @@
         "maxFileBytes",
         "inlineSeverityThreshold",
         "crossFileRetrieval",
-        "contextScout"
+        "contextScout",
+        "unanchoredPass"
       ],
       "additionalProperties": false
     },

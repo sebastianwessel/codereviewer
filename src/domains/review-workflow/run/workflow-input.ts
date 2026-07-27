@@ -118,6 +118,20 @@ export const createWorkflowInput = (
         }
       }
     : {}),
+  // Spec 19: the un-anchored pass travels as bounds-or-nothing. Disabled, the key
+  // is absent and no unit call can be issued; enabled, the geometry and both caps
+  // arrive together, so the pass is never reachable without the bound that makes
+  // it affordable.
+  ...(input.config.review.unanchoredPass.enabled
+    ? {
+        unanchoredPass: {
+          unitLines: input.config.review.unanchoredPass.unitLines,
+          strideLines: input.config.review.unanchoredPass.strideLines,
+          maxUnitsPerFile: input.config.review.unanchoredPass.maxUnitsPerFile,
+          maxUnitsPerRun: input.config.review.unanchoredPass.maxUnitsPerRun
+        }
+      }
+    : {}),
   evidence: [
     ...input.evidence.map((record) => ({ ...record })),
     ...contextEvidenceForTasks(input.tasks)

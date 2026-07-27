@@ -17,6 +17,7 @@ The unit is the **review task**, not the file and not the finding.
 | Holistic discovery | 1 per task | Always (with a provider configured) |
 | Context scout | 1 per task | `review.contextScout.enabled` |
 | Dedicated security pass | 1 per task | `security.dedicatedPass.enabled` |
+| Un-anchored discovery pass | 1 per reviewed **unit** — a file's units are its line count decomposed at `unitLines`/`strideLines`, capped by `maxUnitsPerFile` and `maxUnitsPerRun` | `review.unanchoredPass.enabled` |
 | Semantic finding merge | 1 per file that has ≥ 2 candidates | Always — and today that is almost never, because discovery averages about one candidate per file |
 | **Refutation** | **1 per task** | Always, whenever the task produced candidates |
 | Change-intent summarizer | 1 per run | `contextSources.enabled` and the summary mode resolves to `model` |
@@ -47,9 +48,21 @@ So the baseline cost of a default run is:
 calls ≈ 2 × taskCount   (one discovery + one refutation per task)
 ```
 
-Each optional pass you enable adds `1 × taskCount` to the discovery side.
-Enabling both the scout and the security pass takes a task from 2 calls to 4 — a
-2× increase before any change in packet size.
+The scout and the security pass each add `1 × taskCount` to the discovery side.
+Enabling both takes a task from 2 calls to 4 — a 2× increase before any change in
+packet size.
+
+The un-anchored pass is the exception, and the reason it is bounded twice: it adds
+**one call per reviewed unit**, not per task. A 600-line file at the default 60/40
+geometry derives 15 units. `maxUnitsPerFile` (default 8) and `maxUnitsPerRun`
+(default 40) are what actually decide the bill, so budget it as:
+
+```
+extra calls ≤ min(taskCount × maxUnitsPerFile, maxUnitsPerRun)
+```
+
+When a bound withholds units, the run says so in `run.warnings` — coverage you did
+not pay for is never presented as coverage you got.
 
 ---
 

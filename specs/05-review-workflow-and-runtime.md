@@ -23,17 +23,19 @@ Date: 2026-07-21
     disabled and never fails the run on a provider error.
 13. Resolve provider when model-backed review is enabled.
 14. Run holistic discovery: one recall-first whole-file review per task, plus the
-    optional dedicated security pass when enabled, whose findings are deduped
-    into candidate
-    findings.
-15. Run refutation once per task, adjudicating every candidate that task raised.
-16. Admit or reject candidates against the admission gate.
-17. Match actionable admitted findings against baseline.
-18. Render reports.
-19. Evaluate optional quality gate.
-20. Record available token/cost metadata and optional no-content telemetry
+    optional dedicated security pass (`15-security-focused-review.md`) and the
+    optional un-anchored pass (`19-unanchored-discovery-pass.md`) when enabled.
+    Both are additive and neither can displace a candidate the primary review
+    raised.
+15. Merge candidates that describe one defect, per Semantic Finding Merge below.
+16. Run refutation once per task, adjudicating every candidate that task raised.
+17. Admit or reject candidates against the admission gate.
+18. Match actionable admitted findings against baseline.
+19. Render reports.
+20. Evaluate optional quality gate.
+21. Record available token/cost metadata and optional no-content telemetry
     configuration.
-21. Exit with mapped code.
+22. Exit with mapped code.
 
 Runtime artifacts and logs must remain redacted. Source snippets, prompt text,
 secrets, tokens, and raw provider payloads must not be logged by default.
@@ -317,6 +319,10 @@ below), so the requirement is withdrawn rather than left as an unmet mandate.
 - The reviewer must report concrete defects only. Style, naming, formatting,
   documentation, and cleanup-only concerns are out of scope.
 - Candidate findings are capped per task.
+- An OPTIONAL additional pass may review a changed file as bounded units with the
+  diff withheld; see `19-unanchored-discovery-pass.md`. It is disabled by default,
+  its candidates are additive, and they pass through the semantic finding merge,
+  refutation, and admission below unchanged.
 - Candidate findings are untrusted until they pass refutation and admission.
   Raw candidates do not influence later workers before they pass the configured
   safe digest boundary.
@@ -934,9 +940,9 @@ the spec costs neither recall nor precision, and it does not.
 
 Discovery may produce several candidates that describe one underlying defect.
 This happens whenever more than one call examines overlapping code — the additive
-security pass, and any future decomposition of a file into multiple review units
-— and it also happens within a single call, which may restate one defect at
-neighbouring lines.
+security pass, and the decomposition of a file into overlapping review units in
+`19-unanchored-discovery-pass.md` — and it also happens within a single call,
+which may restate one defect at neighbouring lines.
 
 Before admission, candidates for the same file MUST be grouped by whether they
 describe the **same underlying defect**, and each group MUST be reduced to one

@@ -8,6 +8,7 @@ import {
 } from '../agent-contracts.js'
 import { ReviewWorkflowInputSchema } from '../contracts.js'
 import { runModelBackedHolisticTaskReview } from './holistic-task-review.js'
+import { createUnanchoredRunBudget } from './unanchored-run-budget.js'
 
 const configHash =
   '3333333333333333333333333333333333333333333333333333333333333333'
@@ -390,6 +391,256 @@ describe('runModelBackedHolisticTaskReview', () => {
       logger: { debug: () => {} }
     })
     expect(empty.candidates).toHaveLength(0)
+  })
+})
+
+// Spec 19: the un-anchored discovery pass, wired into the task review.
+describe('un-anchored discovery pass inside discovery', () => {
+  const unanchoredBounds = {
+    unitLines: 60,
+    strideLines: 40,
+    maxUnitsPerFile: 8,
+    maxUnitsPerRun: 40
+  }
+  const unanchoredWorkflowInput = ReviewWorkflowInputSchema.parse({
+    runId: 'run-holistic',
+    reviewedPaths: ['src/app.ts'],
+    unanchoredPass: unanchoredBounds,
+    evidence: [],
+    candidates: [],
+    instructions: [],
+    skills: [],
+    provenance: {
+      reviewer: 'review-agent',
+      modelProvider: 'openai',
+      modelName: 'holistic-test',
+      signalVersions: { typescript: '6.0.3' },
+      configHash
+    }
+  })
+  const newBudget = () => createUnanchoredRunBudget(unanchoredBounds)
+
+  test('issues no extra call when the pass is not configured on', async () => {
+    const reviewTexts: string[] = []
+    await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      unanchoredBudget: newBudget(),
+      runners: {
+        holisticReview: async (holisticInput) => {
+          reviewTexts.push(holisticInput.reviewText)
+
+          return holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // The default workflow input carries no `unanchoredPass` key, so the disabled
+    // path is the single general discovery call it has always been — even with a
+    // budget available.
+    expect(reviewTexts).toHaveLength(1)
+  })
+
+  // An unbounded pass is the single most expensive mistake available here, so the
+  // safe direction when the run-scoped bound is missing is off, not "bound it per
+  // task and hope".
+  test('does not run when no run budget was supplied', async () => {
+    const reviewTexts: string[] = []
+    await runModelBackedHolisticTaskReview({
+      workflowInput: unanchoredWorkflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          reviewTexts.push(holisticInput.reviewText)
+
+          return holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(reviewTexts).toHaveLength(1)
+  })
+
+  // THE POINT OF THE WHOLE CHANGE. The general call must still see the diff — it
+  // is what makes that call precise — and the un-anchored call must not, because
+  // the same decomposition WITH the diff was measured as inert at N times the
+  // cost.
+  test('withholds the diff from the un-anchored call while the general call keeps it', async () => {
+    const diff = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '--- a/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -1,1 +1,1 @@',
+      '-export const value = 0',
+      '+export const value = 1'
+    ].join('\n')
+    const workflowInputWithDiff = ReviewWorkflowInputSchema.parse({
+      ...unanchoredWorkflowInput,
+      reviewedDiffText: diff
+    })
+    const reviewTexts: string[] = []
+    await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithDiff,
+      taskInput,
+      task,
+      unanchoredBudget: newBudget(),
+      runners: {
+        holisticReview: async (holisticInput) => {
+          reviewTexts.push(holisticInput.reviewText)
+
+          return holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    const [generalText, unanchoredText] = reviewTexts
+    expect(reviewTexts).toHaveLength(2)
+    expect(generalText).toContain('+export const value = 1')
+    expect(unanchoredText).not.toContain('+export const value = 1')
+    expect(unanchoredText).not.toContain('diff --git')
+    expect(unanchoredText).not.toContain('```diff')
+    // It is shown the unit it must read, and this small file is one whole unit.
+    // The declared range is the unit's own span, which is coextensive with what
+    // the packet shows and therefore cannot point at a line the reviewer was not
+    // given — unlike the task's changed-line range, which is withheld.
+    expect(unanchoredText).toContain('src/app.ts lines 1-2')
+    expect(unanchoredText).toContain('1: export const value = 1')
+  })
+
+  test('appends its candidates and never displaces, reorders, or suppresses an anchored one', async () => {
+    const anchored = {
+      category: 'bug',
+      severity: 'high',
+      title: 'Unconditional cache write on error path',
+      description: 'The result is cached even when the fetch returned an error.',
+      path: 'src/app.ts',
+      startLine: 10
+    }
+    // Two un-anchored findings: one restating the anchored candidate's location
+    // (must be suppressed, so the anchored one is untouched) and one elsewhere
+    // (must be appended after it).
+    const unanchoredAtAnchoredLocation = {
+      category: 'bug',
+      severity: 'critical',
+      title: 'Something else entirely at the same line',
+      description: 'A different reading of a line the anchored pass owns.',
+      path: 'src/app.ts',
+      startLine: 10
+    }
+    const unanchoredElsewhere = {
+      category: 'bug',
+      severity: 'medium',
+      title: 'Unchecked index later in the file',
+      description: 'Found by reading the file rather than the change.',
+      path: 'src/app.ts',
+      startLine: 42
+    }
+    let call = 0
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: unanchoredWorkflowInput,
+      taskInput,
+      task,
+      unanchoredBudget: newBudget(),
+      runners: {
+        holisticReview: async () => {
+          call += 1
+
+          return call === 1
+            ? holisticResultWith([anchored])
+            : holisticResultWith([
+                unanchoredAtAnchoredLocation,
+                unanchoredElsewhere
+              ])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(
+      result.candidates.map((candidate) => [
+        candidate.location.startLine,
+        candidate.title
+      ])
+    ).toEqual([
+      [10, 'Unconditional cache write on error path'],
+      [42, 'Unchecked index later in the file']
+    ])
+  })
+
+  test('a failed un-anchored pass still yields a complete review', async () => {
+    const anchored = {
+      category: 'bug',
+      severity: 'high',
+      title: 'Unconditional cache write on error path',
+      description: 'The result is cached even when the fetch returned an error.',
+      path: 'src/app.ts',
+      startLine: 10
+    }
+    let call = 0
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: unanchoredWorkflowInput,
+      taskInput,
+      task,
+      unanchoredBudget: newBudget(),
+      runners: {
+        holisticReview: async () => {
+          call += 1
+
+          if (call === 1) {
+            return holisticResultWith([anchored])
+          }
+
+          throw new Error('connection reset by peer')
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // The anchored candidate survives untouched and the failure is recorded as a
+    // recovered provider issue instead of failing the task.
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0]?.title).toBe(
+      'Unconditional cache write on error path'
+    )
+    expect(result.providerIssues).toHaveLength(1)
+    expect(result.providerIssues[0]?.recovered).toBe(true)
+  })
+
+  test('shares one run budget across tasks, so the per-run bound is a run bound', async () => {
+    const budget = createUnanchoredRunBudget({
+      ...unanchoredBounds,
+      maxUnitsPerRun: 1
+    })
+    let calls = 0
+    const runOnce = async () =>
+      runModelBackedHolisticTaskReview({
+        workflowInput: unanchoredWorkflowInput,
+        taskInput,
+        task,
+        unanchoredBudget: budget,
+        runners: {
+          holisticReview: async () => {
+            calls += 1
+
+            return holisticResultWith([])
+          }
+        },
+        logger: { debug: () => {} }
+      })
+
+    await runOnce()
+    await runOnce()
+
+    // Two general calls, and only the FIRST task's single unit: the second task
+    // finds the run allowance already spent.
+    expect(calls).toBe(3)
+    expect(budget.summary().unitsGranted).toBe(1)
+    expect(budget.summary().unitsWithheld).toBe(1)
   })
 })
 

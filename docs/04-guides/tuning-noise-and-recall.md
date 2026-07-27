@@ -144,12 +144,15 @@ All are **off by default**. Each one adds provider calls per task — see
 [controlling-cost.md](controlling-cost.md) for the arithmetic before you turn
 one on.
 
-> **There is no dial for the second defect in a file.** A discovery response tends
-> to answer with the defect it is most confident about and stop, so a file holding
+> **The second defect in a file has one candidate dial, and it is unproven.** A
+> discovery response answers the diff and tends to stop there, so a file holding
 > two defects usually yields one. Two passes aimed at exactly this — an enumeration
 > sweep and a diverse-lens pass — were built, measured, and
 > [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md);
-> neither earned its cost, and the limitation is still open.
+> both re-asked over the same artifact and neither earned its cost. The
+> [un-anchored pass](#un-anchored-discovery-pass) attacks the cause instead — it
+> takes the diff away — but its A/B has not been run, so treat it as a hypothesis
+> you measure, not a fix you enable.
 
 ### Context scout
 
@@ -207,6 +210,29 @@ class for the injection classes — finite attention.
 
 `security.signals` is configuration-only in this phase and carries no behavior.
 
+### Un-anchored discovery pass
+
+```json
+{ "review": { "unanchoredPass": { "enabled": true, "maxUnitsPerFile": 8, "maxUnitsPerRun": 40 } } }
+```
+
+Additional discovery calls that review a changed file as bounded units **with the
+diff withheld**. It asks nothing the general pass does not ask — same agent, same
+prompt — and differs only in what it is shown. Removing the anchor is the whole
+mechanism: measurements show the diff-anchored call's candidates land on the
+changed line even when the file section it was given does not contain that line.
+
+Its candidates are **additive** and pass the same merge, refutation and admission
+as any other. Units come from the file's line count alone, so the decomposition is
+identical in every language.
+
+This is the **most expensive** option here — one call per unit, not per task —
+which is why it is bounded per file *and* per run, and why any coverage a bound
+withholds is reported in `run.warnings`. Read
+[the capability page](../03-concepts/optional-capabilities/unanchored-discovery-pass.md)
+before enabling it; the pass has not been A/B'd, and the corpus it will be
+measured on is close to its best case.
+
 ---
 
 ## Order to try things
@@ -219,8 +245,9 @@ class for the injection classes — finite attention.
    `crossFileRetrieval` only if the scout is not enough.
 4. **Still missing?** Raise `review.depth` to `thorough` so more source fits in
    each task.
-5. **Missing a second defect in files that already produced one?** No dial
-   addresses this today — see the note above.
+5. **Missing a second defect in files that already produced one?** The only
+   candidate is `review.unanchoredPass`, and it is unproven — enable it as an
+   experiment you measure, not as a fix. Budget for it first.
 
 After each step, re-measure on the same corpus and compare two reports:
 

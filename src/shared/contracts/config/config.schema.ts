@@ -105,6 +105,57 @@ export const ContextScoutConfigSchema = z.strictObject({
   maxBytesPerSymbol: z.int().min(500).max(40000).default(4000)
 })
 
+// Un-anchored discovery pass (spec 19). Off by default. When enabled, each review
+// task issues ADDITIONAL discovery calls that review a changed file as bounded
+// units WITH THE DIFF WITHHELD.
+//
+// Withholding the diff is the entire intervention, and it is the one thing that
+// must never be "simplified" away. The primary discovery call is anchored to the
+// diff, which is what makes it precise and also why it answers with at most one
+// defect per changed region: a controlled experiment (2026-07-27) found only 16 of
+// 76 candidates from the diff-BEARING arm pointed at a line inside the unit they
+// were shown, one 1251-line file returning the same line-820 finding from all 31
+// units including the unit that did not contain line 820 at all, while the
+// un-anchored arm placed 50 of 50 candidates inside their own unit. Re-running the
+// same unit decomposition WITH the diff was measured as inert at N times the cost.
+//
+// The pass is a candidate generator, not a reviewer: with no diff it has no reason
+// to prioritise the changed line, and the same experiment had it losing 6 of 7
+// controls. Its candidates are therefore additive — they can never displace,
+// reorder, or suppress a diff-anchored candidate — and they pass through the same
+// semantic merge, refutation, and admission as any other candidate.
+export const UnanchoredDiscoveryPassConfigSchema = z
+  .strictObject({
+    enabled: z.boolean().default(false),
+    // Lines per reviewed unit, and how far the next unit starts after the previous
+    // one. 60/40 is ARBITRARY and is recorded as such: it is the only size that has
+    // been measured, and it was chosen on budget grounds. Published work reports
+    // that the safe input size is defect-class dependent, which implies no single
+    // value is optimal — but selecting per class would require knowing the class
+    // before looking, which is not available. Treat it as a starting point, not a
+    // finding.
+    unitLines: z.int().min(10).max(2000).default(60),
+    strideLines: z.int().min(1).max(2000).default(40),
+    // The bounds are load-bearing, not hygiene. A unit costs roughly one discovery
+    // call (~$0.008 when measured), and a 600-line file at 60/40 is 15 units, so an
+    // unbounded pass is by far the most expensive thing this engine can be asked to
+    // do. Both caps are enforced in code and any truncation they cause is recorded
+    // as a run warning: a bounded pass that reports nothing about its bound reads as
+    // full coverage. The defaults hold the added spend near a quarter of a run at
+    // the measured per-unit cost, which is the same order as the dedicated security
+    // pass.
+    maxUnitsPerFile: z.int().min(1).max(200).default(8),
+    maxUnitsPerRun: z.int().min(1).max(2000).default(40)
+  })
+  // A stride wider than a unit would leave lines that no unit ever covers, which is
+  // exactly the silent partial coverage the spec forbids. Rejecting it at config
+  // load is cheaper than discovering the gap from a run that looks complete.
+  .refine((value) => value.strideLines <= value.unitLines, {
+    message:
+      'review.unanchoredPass.strideLines must not exceed unitLines, otherwise some lines are never reviewed',
+    path: ['strideLines']
+  })
+
 export const ReviewConfigSchema = z.strictObject({
   mode: z.enum(['local', 'ci', 'pr', 'full']).default('local'),
   depth: z.enum(['fast', 'balanced', 'thorough']).default('balanced'),
@@ -127,6 +178,13 @@ export const ReviewConfigSchema = z.strictObject({
     maxSymbols: 8,
     maxBytesPerSymbol: 4000
   }),
+  unanchoredPass: UnanchoredDiscoveryPassConfigSchema.default({
+    enabled: false,
+    unitLines: 60,
+    strideLines: 40,
+    maxUnitsPerFile: 8,
+    maxUnitsPerRun: 40
+  })
 })
 
 export const ProviderConfigSchema = z
@@ -531,6 +589,13 @@ export const CodeReviewerConfigSchema = z.strictObject({
       maxSymbols: 8,
       maxBytesPerSymbol: 4000
     },
+    unanchoredPass: {
+      enabled: false,
+      unitLines: 60,
+      strideLines: 40,
+      maxUnitsPerFile: 8,
+      maxUnitsPerRun: 40
+    }
   }),
   provider: ProviderConfigSchema.optional(),
   instructions: InstructionsConfigSchema.default({
@@ -632,6 +697,9 @@ export type CrossFileRetrievalConfig = z.infer<
   typeof CrossFileRetrievalConfigSchema
 >
 export type ContextScoutConfig = z.infer<typeof ContextScoutConfigSchema>
+export type UnanchoredDiscoveryPassConfig = z.infer<
+  typeof UnanchoredDiscoveryPassConfigSchema
+>
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 export type InstructionsConfig = z.infer<typeof InstructionsConfigSchema>
 export type SkillsConfig = z.infer<typeof SkillsConfigSchema>

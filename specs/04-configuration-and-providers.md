@@ -492,6 +492,35 @@ Rules:
   baseline, admission, or the gate, and its findings pass the same refutation and
   admission as any other candidate.
 
+## Un-Anchored Discovery Pass
+
+Controls the un-anchored discovery pass (`19-unanchored-discovery-pass.md`).
+Disabled by default.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `review.unanchoredPass.enabled` | boolean | `false` |
+| `review.unanchoredPass.unitLines` | integer (10-2000) | `60` |
+| `review.unanchoredPass.strideLines` | integer (1-2000) | `40` |
+| `review.unanchoredPass.maxUnitsPerFile` | integer (1-200) | `8` |
+| `review.unanchoredPass.maxUnitsPerRun` | integer (1-2000) | `40` |
+
+Rules:
+
+- with it disabled, no unit call is issued and the discovery packet is unchanged;
+- when enabled, each task additionally reviews its changed files as bounded units
+  with the diff withheld; units are derived from a file's line count alone, so the
+  decomposition is identical for every file of that length in every language;
+- `strideLines` must not exceed `unitLines`: a wider stride would leave lines that
+  no unit ever covers, and such a configuration is rejected at load;
+- `maxUnitsPerFile` and `maxUnitsPerRun` are enforced in code, and any units they
+  withhold are recorded in the run's warnings — silent truncation is forbidden;
+- the pass's candidates are additive (they never displace, reorder, or suppress a
+  diff-anchored candidate) and pass the same semantic merge, refutation, and
+  admission as any other candidate;
+- failure of the pass is recoverable and non-fatal: a review without it is a
+  complete review.
+
 ## Security
 
 Controls the dedicated additive security review pass (`15-security-focused-review.md`,

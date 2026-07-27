@@ -370,7 +370,8 @@ All of these are off by default and each adds provider calls:
 {
   "review": {
     "contextScout": { "enabled": true, "maxSymbols": 8, "maxBytesPerSymbol": 4000 },
-    "crossFileRetrieval": { "enabled": false }
+    "crossFileRetrieval": { "enabled": false },
+    "unanchoredPass": { "enabled": false, "maxUnitsPerFile": 8, "maxUnitsPerRun": 40 }
   },
   "security": {
     "dedicatedPass": { "enabled": true }

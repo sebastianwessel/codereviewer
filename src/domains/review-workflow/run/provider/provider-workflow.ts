@@ -78,7 +78,13 @@ export const runProviderWorkflow = async (
       input.workflowInput.tasks?.length ?? input.workflowInput.reviewedPaths.length,
     maxConcurrentTasks: input.config.review.maxConcurrentTasks,
     securityPassEnabled: input.config.security.dedicatedPass.enabled,
-    contextScoutEnabled: input.config.review.contextScout.enabled
+    contextScoutEnabled: input.config.review.contextScout.enabled,
+    ...(input.config.review.unanchoredPass.enabled
+      ? {
+          unanchoredMaxUnitsPerRun:
+            input.config.review.unanchoredPass.maxUnitsPerRun
+        }
+      : {})
   })
   const harness = createModelBackedReviewHarness({
     modelAlias: usageRecorder.modelAlias,

@@ -26,6 +26,11 @@ import {
   isTaskPacketBudgetExceededError,
   taskReviewInputFor
 } from './discovery/task-packet.js'
+import {
+  createUnanchoredRunBudget,
+  unanchoredTruncationWarnings,
+  type UnanchoredRunBudget
+} from './discovery/unanchored-run-budget.js'
 import { renderSharedDigest } from './shared-digest.js'
 import { tasksForWorkflowInput } from './task-planning.js'
 import {
@@ -118,7 +123,11 @@ export type ReviewWorkflowTaskRunner = (
   taskInput: TaskReviewInput,
   task: WorkflowReviewTask,
   signal: AbortSignal | undefined,
-  contextRetriever: ContextRetriever | undefined
+  contextRetriever: ContextRetriever | undefined,
+  // Spec 19: the run-scoped bound on the un-anchored discovery pass. It is
+  // created once here and shared by every task, because a per-run cap that each
+  // task enforces for itself is a per-task cap wearing the wrong name.
+  unanchoredBudget: UnanchoredRunBudget
 ) => Promise<TaskReviewResult>
 
 export const runReviewWorkflowHandler = async (params: {
@@ -155,6 +164,9 @@ export const runReviewWorkflowHandler = async (params: {
             : { budget: input.contextRetrievalBudget }),
           ledgerEntries: contextLedgerEntries
         })
+  // Spec 19. `input.unanchoredPass` is present only when the pass is configured
+  // on; absent, this budget grants nothing and no unit call can be issued.
+  const unanchoredBudget = createUnanchoredRunBudget(input.unanchoredPass)
   const queued = await runQueuedReviewTasks<TaskReviewResult>({
     tasks,
     maxConcurrentTasks: concurrency,
@@ -169,7 +181,8 @@ export const runReviewWorkflowHandler = async (params: {
         taskPacket.input,
         task,
         params.signal,
-        contextRetriever
+        contextRetriever,
+        unanchoredBudget
       )
     }
   }).catch((error: unknown) => {
@@ -229,8 +242,26 @@ export const runReviewWorkflowHandler = async (params: {
     ...prepared.providerIssues
   ]
 
+  // Spec 19 forbids silent truncation: a bounded pass that says nothing about its
+  // bound reads as full coverage. The warning names the applied bound that
+  // withheld the work, and a pass that reviewed everything it derived produces
+  // none.
+  const unanchoredSummary = unanchoredBudget.summary()
+
+  if (unanchoredSummary.enabled) {
+    logger.debug('Un-anchored discovery pass completed.', {
+      max_units_per_file: unanchoredSummary.maxUnitsPerFile,
+      max_units_per_run: unanchoredSummary.maxUnitsPerRun,
+      units_requested: unanchoredSummary.unitsRequested,
+      units_granted: unanchoredSummary.unitsGranted,
+      units_withheld: unanchoredSummary.unitsWithheld,
+      truncated_file_count: unanchoredSummary.truncatedFileCount
+    })
+  }
+
   const output = completeReviewWorkflow({
     workflowInput: input,
+    warnings: unanchoredTruncationWarnings(unanchoredSummary),
     candidateFindings: mergedCandidates,
     admissionCandidates: prepared.admissionCandidates,
     artifactOnlyCandidateIds: prepared.artifactOnlyCandidateIds,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { renderChangeIntentSection } from './holistic-task-review.js'
+import { renderChangeIntentSection } from './review-packet.js'
 
 describe('change-intent prompt section', () => {
   test('renders nothing without a brief', () => {
