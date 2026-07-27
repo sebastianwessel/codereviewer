@@ -88,6 +88,7 @@ export const runProviderWorkflow = async (
     maxConcurrentTasks: input.config.review.maxConcurrentTasks,
     maxChildAgentCalls,
     crossFileRetrieval: input.config.review.crossFileRetrieval,
+    discoveryPosture: input.config.review.discoveryPosture,
     ...(input.config.review.runTimeoutMs === undefined
       ? {}
       : { runTimeoutMs: input.config.review.runTimeoutMs }),

@@ -105,6 +105,24 @@ export const ContextScoutConfigSchema = z.strictObject({
   maxBytesPerSymbol: z.int().min(500).max(40000).default(4000)
 })
 
+// Discovery posture (spec 20). This selects ONE thing and nothing else: how much
+// self-evidence the discovery reviewer demands of itself before it raises a
+// candidate.
+//
+// `precise` is the current, default behaviour — a candidate is raised only when
+// the reviewer can support the claim from the code in front of it.
+// `investigative` lowers that bar: the reviewer pursues a pattern it finds
+// suspicious and reports what it can support, leaving adjudication to refutation
+// and admission, which exist for exactly that purpose.
+//
+// It deliberately does NOT name, hint at, or enumerate any defect category,
+// mechanism, or example. A checklist reallocates attention ACROSS categories,
+// which was measured here to trade authorization recall for injection recall,
+// and that change was rejected on those grounds. The posture also adds no model
+// calls and changes neither the packet shape nor its field order, because
+// prompt-cache prefix stability is a measured property of this engine.
+export const DiscoveryPostureSchema = z.enum(['precise', 'investigative'])
+
 export const ReviewConfigSchema = z.strictObject({
   mode: z.enum(['local', 'ci', 'pr', 'full']).default('local'),
   depth: z.enum(['fast', 'balanced', 'thorough']).default('balanced'),
@@ -126,7 +144,10 @@ export const ReviewConfigSchema = z.strictObject({
     enabled: false,
     maxSymbols: 8,
     maxBytesPerSymbol: 4000
-  })
+  }),
+  // Spec 20. `precise` until measurement selects otherwise: the posture is a
+  // measured variant, not a shipped recommendation.
+  discoveryPosture: DiscoveryPostureSchema.default('precise')
 })
 
 export const ProviderConfigSchema = z
@@ -530,7 +551,8 @@ export const CodeReviewerConfigSchema = z.strictObject({
       enabled: false,
       maxSymbols: 8,
       maxBytesPerSymbol: 4000
-    }
+    },
+    discoveryPosture: 'precise'
   }),
   provider: ProviderConfigSchema.optional(),
   instructions: InstructionsConfigSchema.default({
@@ -632,6 +654,7 @@ export type CrossFileRetrievalConfig = z.infer<
   typeof CrossFileRetrievalConfigSchema
 >
 export type ContextScoutConfig = z.infer<typeof ContextScoutConfigSchema>
+export type DiscoveryPosture = z.infer<typeof DiscoveryPostureSchema>
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 export type InstructionsConfig = z.infer<typeof InstructionsConfigSchema>
 export type SkillsConfig = z.infer<typeof SkillsConfigSchema>

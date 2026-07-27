@@ -1,3 +1,5 @@
+import { type DiscoveryPosture } from '../../../shared/contracts/index.js'
+
 // Holistic discovery: a single recall-first whole-change review per task. This
 // stage reads the full changed files and enumerates every concrete defect
 // directly as a candidate finding. A separate refutation precision filter
@@ -25,6 +27,31 @@ export const modelHolisticReviewerInstructions = [
   'Return a JSON object with a findings array. Return {"findings": []} only when, after completing all four steps, the change genuinely contains no concrete defect.'
 ].join('\n')
 
+// Discovery posture (spec 20), the `investigative` setting. Appended to the
+// holistic reviewer instructions ONLY when that posture is selected, so the
+// default `precise` prompt stays byte-for-byte what it is today.
+//
+// It is written to move exactly one dial: how much certainty the reviewer demands
+// of ITSELF before raising a candidate. That is the dial none of the withdrawn
+// prompt experiments touched, and the measurement it exists to serve is only
+// valid if nothing else moves with it.
+//
+// Read the next sentence before editing this text. It must never name, hint at,
+// or enumerate a defect category, mechanism, or example. The moment it does, it
+// stops being a posture and becomes a checklist, and a checklist reallocates
+// attention ACROSS categories — measured here as authorization recall traded away
+// for injection recall, which is a different and already-rejected change. It must
+// also stay language-neutral: a guard test asserts both properties.
+//
+// It is appended rather than woven into the method above so the existing prompt
+// remains an exact prefix of this one. The prefix is what a provider-side prompt
+// cache can match, and cache-prefix stability is a measured property here.
+export const investigativeDiscoveryPostureInstructions = [
+  'Discovery posture: investigative. Lower the bar you apply to YOURSELF before raising a finding. When something in the changed code looks wrong to you but you cannot fully establish it from what you were given, pursue it and report what you CAN support, saying plainly what you were unable to determine, instead of staying silent.',
+  'This changes how much certainty you demand of yourself, and nothing else. It does not change what to look for, which files or lines are in scope, or what counts as a defect: the review method, the scope and reachability rules, and every exclusion stated above still apply unchanged. A finding must still name a concrete failure and the path or input that triggers it, and severity must still reflect impact rather than your confidence.',
+  'A separate stage adjudicates every finding you raise against this same code, and exists to discard the ones that do not hold up. It cannot recover a finding you never raised. Of the two mistakes available to you here, silence is the more expensive one.'
+].join('\n')
+
 // Spec 16: appended to the holistic reviewer instructions ONLY when
 // `review.crossFileRetrieval.enabled` is true, so the disabled prompt stays
 // byte-for-byte unchanged. It is deliberately restrictive: the reproducible failure
@@ -38,6 +65,33 @@ export const crossFileRetrievalInstructions = [
   'Tools are bounded: your total number of tool calls is capped, a read may be truncated, a search may be capped, and a path may be reported as not found, not eligible, or budget-exceeded. Treat any such response as information and adjust (read a different file, narrow the search, or conclude from what you have), never as an error to retry endlessly. When the budget is gone, report the findings you can justify from what you actually read.',
   'When a finding depends on code you retrieved, say so in its description: name the file and what it showed.'
 ].join('\n')
+
+/**
+ * The instructions the holistic discovery agent is created with.
+ *
+ * Both optional segments are strict SUFFIXES of the base prompt, and the base
+ * prompt is byte-for-byte unchanged, so every configuration shares the longest
+ * possible leading prefix with the default one. That is not tidiness: a
+ * provider-side prompt cache matches on the leading tokens, and this engine has
+ * already measured what happens when the shared prefix is destroyed.
+ *
+ * The posture is appended LAST because it qualifies the evidentiary bar the whole
+ * prompt above it describes, and a qualifier that arrives before the thing it
+ * qualifies is easy for a reader — model or human — to lose.
+ */
+export const holisticReviewerInstructionsFor = (
+  input: {
+    readonly posture: DiscoveryPosture
+    readonly crossFileRetrievalEnabled: boolean
+  }
+): string =>
+  [
+    modelHolisticReviewerInstructions,
+    ...(input.crossFileRetrievalEnabled ? [crossFileRetrievalInstructions] : []),
+    ...(input.posture === 'investigative'
+      ? [investigativeDiscoveryPostureInstructions]
+      : [])
+  ].join('\n')
 
 // Context scout (spec 18). A separate, cheap call that CHOOSES context so the
 // reviewer never has to: it names out-of-change symbols, deterministic code

@@ -1,10 +1,9 @@
 import { defineHarness } from '@purista/harness'
 import { createNoopReviewLogger } from '../../observability/index.js'
 import {
-  crossFileRetrievalInstructions,
+  holisticReviewerInstructionsFor,
   modelContextScoutInstructions,
   modelFindingRefuterInstructions,
-  modelHolisticReviewerInstructions,
   modelSemanticMergeInstructions
 } from '../pipeline/agent-instructions.js'
 import {
@@ -115,9 +114,13 @@ export const createModelBackedReviewHarness = (
         input: HolisticReviewInputSchema,
         output: ModelHolisticReviewResultSchema,
         ...agentOptionsForRole('holistic_review'),
-        instructions: crossFileEnabled
-          ? `${modelHolisticReviewerInstructions}\n${crossFileRetrievalInstructions}`
-          : modelHolisticReviewerInstructions
+        // Spec 20: the posture lives in the AGENT's instructions, not in the
+        // per-call packet, so it changes neither the number of calls nor the
+        // packet's shape or field order.
+        instructions: holisticReviewerInstructionsFor({
+          posture: options.discoveryPosture ?? 'precise',
+          crossFileRetrievalEnabled: crossFileEnabled
+        })
       }),
       // Spec 18: the scout only SELECTS context. It is deliberately a separate,
       // compact agent — no tools and one step — so choosing context never competes

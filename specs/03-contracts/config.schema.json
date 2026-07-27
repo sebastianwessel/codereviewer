@@ -21,7 +21,8 @@
           "enabled": false,
           "maxSymbols": 8,
           "maxBytesPerSymbol": 4000
-        }
+        },
+        "discoveryPosture": "precise"
       },
       "type": "object",
       "properties": {
@@ -160,6 +161,14 @@
             "maxBytesPerSymbol"
           ],
           "additionalProperties": false
+        },
+        "discoveryPosture": {
+          "default": "precise",
+          "type": "string",
+          "enum": [
+            "precise",
+            "investigative"
+          ]
         }
       },
       "required": [
@@ -172,7 +181,8 @@
         "maxFileBytes",
         "inlineSeverityThreshold",
         "crossFileRetrieval",
-        "contextScout"
+        "contextScout",
+        "discoveryPosture"
       ],
       "additionalProperties": false
     },

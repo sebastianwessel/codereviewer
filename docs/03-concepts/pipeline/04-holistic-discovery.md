@@ -46,6 +46,22 @@ Three framing rules matter as much as the checklist:
 Severity is assigned from impact and reachability (not from confidence) using an
 explicit `critical` → `info` rubric that the report and the gate later rely on.
 
+### Discovery posture
+
+One dial changes how much certainty the reviewer demands of **itself** before
+raising a candidate, and nothing else about the review.
+
+| `review.discoveryPosture` | Effect |
+| --- | --- |
+| `precise` (default) | A candidate is raised only when the claim can be supported from the code in front of the reviewer. |
+| `investigative` | The reviewer also pursues a pattern that looks wrong, reports what it can support, and states what it could not determine. |
+
+The posture names no defect category, adds no checklist and no examples, issues
+no extra call, and leaves the packet and its field order untouched — the
+`investigative` prompt is the `precise` prompt with one trailing paragraph
+appended. It widens what reaches refutation and admission; it never widens what
+leaves them.
+
 ### Turning findings into candidates
 
 Each returned finding must carry a category, severity, title, description, a path
@@ -163,6 +179,7 @@ it had, and in an evaluation would drop the case from the comparison entirely.
 | `provider.*` | unset | No provider means no discovery at all |
 | `aiReview.enabled` | unset (on) | `false` disables the model stages |
 | `review.maxConcurrentTasks` | `4` | Discovery parallelism |
+| `review.discoveryPosture` | `precise` | How much self-evidence discovery demands before raising a candidate |
 | `security.dedicatedPass.enabled` | `false` | Adds the security-only call |
 | `review.contextScout.*` | disabled | Pre-selects extra symbol context |
 | `review.crossFileRetrieval.*` | disabled | Gives the reviewer mediated repo tools |

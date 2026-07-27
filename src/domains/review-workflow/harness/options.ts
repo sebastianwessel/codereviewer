@@ -4,7 +4,10 @@ import {
   type ModelAlias,
   type SkillsConfig
 } from '@purista/harness'
-import { type CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
+import {
+  type CrossFileRetrievalConfig,
+  type DiscoveryPosture
+} from '../../../shared/contracts/index.js'
 import { type WorkflowTaskEvent } from '../pipeline/agent-contracts.js'
 
 export type CreateReviewHarnessOptions = {
@@ -22,4 +25,8 @@ export type CreateReviewHarnessOptions = {
   // tools, bounded per task. Omitted/disabled leaves discovery single-shot with no
   // tools (byte-for-byte unchanged).
   readonly crossFileRetrieval?: CrossFileRetrievalConfig
+  // Spec 20. Selects how much self-evidence the discovery reviewer demands of
+  // itself before raising a candidate. Omitted means `precise`, the current
+  // behaviour, whose prompt is byte-for-byte unchanged.
+  readonly discoveryPosture?: DiscoveryPosture
 }

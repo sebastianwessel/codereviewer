@@ -148,6 +148,28 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
+  test('discovery posture defaults to precise', () => {
+    // Spec 20: the posture is a measured variant, so the shipped default stays
+    // the behaviour that has actually been measured.
+    expect(CodeReviewerConfigSchema.parse({}).review.discoveryPosture).toBe(
+      'precise'
+    )
+
+    expect(
+      CodeReviewerConfigSchema.parse({
+        review: { discoveryPosture: 'investigative' }
+      }).review.discoveryPosture
+    ).toBe('investigative')
+  })
+
+  test('discovery posture rejects a value outside the two postures', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        review: { discoveryPosture: 'aggressive' }
+      })
+    ).toThrow()
+  })
+
   test('security dedicated pass defaults to disabled', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.security.dedicatedPass.enabled).toBe(false)

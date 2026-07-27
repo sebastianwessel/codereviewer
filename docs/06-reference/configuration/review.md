@@ -21,6 +21,26 @@ Read the [strict-object rule and precedence](./README.md) first. Nesting matters
 | `review.inlineSeverityThreshold` | severity | `"high"` | Minimum severity for a finding to be eligible for inline presentation. Reporting only — it does not affect admission or the gate. |
 | `review.maxCostUsd` | number ≥ 0 | *unset* | Hard stop when the accumulated run cost exceeds it (`cost_budget_exceeded`, exit `1`). Enforced **only** when token counts and prices are both available; otherwise the run records the warning `cost-unavailable` and no cap applies. When unset, no cost cap is enforced at all. |
 | `review.runTimeoutMs` | integer 10000–7200000 | *unset* | Whole-run timeout (`review_run_timeout`, exit `4`). When unset, no run-level timeout is imposed; individual provider calls still use [`provider.timeoutMs`](./provider.md). |
+| `review.discoveryPosture` | `"precise"` \| `"investigative"` | `"precise"` | How much self-evidence discovery demands of itself before raising a candidate. See below. |
+
+### `review.discoveryPosture`
+
+Discovery is the only stage that *finds* things, and how much certainty it
+demands of itself before speaking is what decides how much reaches refutation.
+
+| Posture | What the reviewer is told |
+| --- | --- |
+| `precise` | Raise a candidate only when the claim can be supported from the code in front of it. This is the default and the behaviour every published measurement was taken under. |
+| `investigative` | Additionally pursue a pattern that looks wrong, report what can be supported, and say what could not be determined — leaving adjudication to refutation and admission. |
+
+The posture changes **only** the evidentiary bar. It names no defect category,
+adds no checklist, gives no examples, issues no extra model call, and changes
+neither the packet nor the order of its fields; the `investigative` prompt is the
+`precise` prompt plus a trailing paragraph. Candidates from either posture face
+the same refutation, semantic merge, and admission.
+
+`investigative` widens what reaches those stages; it never widens what leaves
+them. Expect more candidates and therefore a larger refutation batch per task.
 
 ### Effective `contextMaxBytes` when unset
 
