@@ -169,12 +169,13 @@ manifest data, so a violation fails loading instead of silently inflating a scor
 ## Measured Baseline
 
 The baseline below was measured on the **thirty-case, forty-two-finding** corpus.
-The corpus has since grown to **thirty-six cases and fifty-eight findings** with
-the addition of the multi-file cases described above, so a run on today's corpus
-is not comparable to these numbers case-for-case; six of the new findings sit in
-one six-file case, which the stopping behaviour described here predicts will be
-found only in part. Re-measure before quoting a recall figure against the current
-corpus.
+The corpus has since grown twice — first to thirty-six cases and fifty-eight
+findings with the multi-file cases described above, then to **thirty-six cases and
+eighty findings** by curating expectations per case (see *Expectations Per Case*
+below). A run on today's corpus is therefore not comparable to these numbers
+case-for-case, and the comparison tooling enforces that: it refuses to compare two
+runs whose shared cases carry different answer-key digests. Re-measure before
+quoting a recall figure against the current corpus.
 
 Measured 2026-07-26 on the thirty-case, forty-two-finding corpus: recall 54.8%,
 adjusted precision 95.8%, one genuine false positive, five plausibility-confirmed
@@ -198,6 +199,42 @@ shortfall is a stopping behaviour rather than a discovery gap — the review rep
 the most salient defect
 in a file and moves on. A corpus of one-finding cases cannot see this at all,
 which is why expected findings per case is itself a property worth curating.
+
+## Expectations Per Case
+
+Minimum detectable effect falls with the square root of (cases × findings) while
+provider cost rises with cases, so an expectation added to a checkout that is
+already hydrated buys statistical power for nothing. That makes expectations per
+case the cheapest lever the corpus has, and it is curated deliberately rather than
+left at whatever the capture happened to notice.
+
+Composition today: **eighty expected findings across thirty-six cases** — 11 cases
+with one expectation, 12 with two, 9 with three, 3 with four, and 1 with six. Ten
+of the added expectations are high-severity and sit at rank two or later, which the
+baseline decomposition above could not previously observe at all: every high in the
+old key was first-listed.
+
+Two rules bound the curation, and both exist because a wrong expectation is worse
+than a missing one — it is a permanent wrong answer that silently depresses every
+future recall figure:
+
+- **Every expectation is justified from the code at the parent commit.** An
+  expectation must never be promoted from a finding the engine produced, including
+  the `unlistedRealFindings` recorded in archived runs. Doing so converts recall
+  into similarity-to-the-engine-that-wrote-it and destroys the corpus's
+  independence. Checking after the fact whether an independently justified
+  expectation happens to coincide with an engine finding is fine; sourcing it from
+  there is not.
+- **An expectation states the concrete failure and the input or sequence that
+  triggers it**, describes the pre-fix code rather than the fix, sits in a
+  `reviewedPath`, and carries a severity assigned by the rubric in
+  `05-review-workflow-and-runtime.md` rather than a default.
+
+The success criterion is not the count. It is that added expectations are
+**discriminative** — sometimes found and sometimes missed — because an expectation
+nobody can ever find is as useless to a measurement as one everybody finds. That
+property is only observable in a provider-backed run, so it is a prediction at
+curation time and a fact only after the next re-measurement.
 
 `lineAccuracy` read 0.0% on this corpus, and the reason recorded here first — an
 empty denominator — was wrong. Every expected finding declares a `lineRange`, so

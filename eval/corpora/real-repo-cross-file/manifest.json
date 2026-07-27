@@ -37,6 +37,24 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "checkExistence answers with the `in` operator, so every member reachable through the prototype chain counts as an existing decorator. hasDecorator reports true for Object.prototype members, and because checkDependencies is built on the same helper a plugin can declare a dependency on a name no decorator ever registered — 'name' or 'length' on the Request and Reply constructors — and the missing-dependency guard passes."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "lib/reply.js",
+          "lineRange": [319, 323],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "removeTrailer overwrites the entry with undefined instead of deleting it, while removeHeader a few dozen lines above deletes the key precisely because a leftover one is harmful. Every downstream branch tests whether the trailers object is null, not whether any trailer survives, so a trailer that was added and then removed still forces Transfer-Encoding: chunked and emits a Trailer header with an empty value, and the response loses the content length it could otherwise have declared."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/reply.js",
+          "lineRange": [913, 916],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The trailer callback's return value is tested with typeof result === 'object' before then is read, and typeof null is also 'object', so a callback that returns null makes that property read throw. The throw escapes at a point where the status line and the body have already been written and before the stream is ended, so the response is left open with everything flushed and no terminator until a timeout kills the connection."
         }
       ],
       "tags": ["cross-file", "api-contract", "decorators"],
@@ -66,6 +84,15 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "buildRouterOptions keeps the caller's options.routerOptions object by reference and then writes every missing router key into it. The caller's object is mutated, so a routerOptions object shared between Fastify instances (or reused across registrations) leaks the first instance's defaults into later ones instead of each instance resolving its own defaults."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/route.js",
+          "lineRange": [548, 553],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The socket-level timeout listener is attached once, but the state it later reads is written only when the matched route has onTimeout hooks. On a keep-alive connection a following request routed to a handler without such hooks leaves the previous request's context, request and reply in place, so a socket timeout runs the earlier route's hooks against a request that has already finished, while the request actually in flight gets no timeout handling. Nothing ever clears the field."
         }
       ],
       "tags": ["shared-state", "mutation", "configuration"],
@@ -97,6 +124,15 @@
           "securityMechanism": "authorization",
           "contextDepth": "cross-file",
           "semanticSummary": "ClientIP passes only the first value of each forwarded-IP header to validateHeader, because requestHeader resolves to Header.Get. With more than one X-Forwarded-For header line the proxy-appended line is dropped and only the client-controlled line is parsed; validateHeader then walks that single line right-to-left and returns its right-most entry as the trusted client IP, so a caller-supplied value becomes ClientIP and IP-based allow-listing or rate limiting can be spoofed."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "context.go",
+          "lineRange": [1367, 1383],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The comparison loop stops at the shorter of the accepted type and the offered type, and the offer is then accepted whenever the index reached the end of the accepted string. An accepted value that is a strict prefix of an offer matches with no wildcard involved: Accept: application/x selects the offered application/xml, and Accept: application/json selects an offered application/json-seq. The opposite direction is rejected correctly, which makes this an asymmetry rather than a rule."
         }
       ],
       "tags": ["cross-file", "security", "trusted-proxy"],
@@ -135,6 +171,26 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "Copy() reads c.Keys into a local variable before taking the read lock and clones that local inside the lock, so the field read itself is unsynchronised. Set() assigns a fresh map to c.Keys under the write lock the first time a key is stored, so a Set concurrent with a Copy races on the map header the copy just read - exactly the race the mutex around the clone exists to prevent, in the one method whose documented purpose is handing a context to another goroutine."
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "context.go",
+          "lineRange": [1055, 1075],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "unsafe-config",
+          "contextDepth": "cross-function",
+          "semanticSummary": "Scheme answers from four client-supplied headers - X-Forwarded-Proto, X-Forwarded-Protocol, X-Forwarded-Ssl and X-Url-Scheme - with no trusted-proxy test of any kind, while ClientIP a few methods above gates its forwarded headers on isTrustedProxy and the configured list precisely because they are spoofable. A client on a plain connection sends X-Forwarded-Proto: https, and every decision built on Scheme - secure-cookie flags, redirects, absolute URLs - treats the connection as encrypted."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "context.go",
+          "lineRange": [992, 1023],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "On a unix-socket listener the trusted flag is set directly and the fallback block that parses RemoteIP is skipped, so remoteIP keeps its zero value. If no configured forwarded header validates - none sent, or forwarding off, or the header list nil - the function falls through to remoteIP.String(), and a zero net.IP renders as the literal text for a nil value. Access logs, per-IP limiters and allow-lists then all see one shared placeholder token instead of an address."
         }
       ],
       "expectedNoFindingZones": [
@@ -185,6 +241,15 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "parseClaimsString has no branch for a claim value that is neither a string nor a list of strings, so an aud claim carrying a number, a boolean, or an object falls out of the type switch and returns an empty ClaimStrings with a nil error. The sibling parsers report ErrInvalidType for that case and the validator documents a wrong-typed claim as unverifiable, so a malformed audience becomes indistinguishable from an absent one."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "map_claims.go",
+          "lineRange": [58, 61],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The json.Number branch discards the error from exp.Float64() and hands the value straight to newNumericDateFromSeconds. The parser decodes numbers this way once WithJSONNumber is set, so a claim outside the float64 range, taken from the untrusted token, yields an infinite float plus an unread error, which the helper's int64 conversion turns into a nonsensical instant. A malformed nbf becomes a past date and the not-before check passes; every sibling parser here reports ErrInvalidType."
         }
       ],
       "expectedNoFindingZones": [
@@ -226,6 +291,24 @@
           "securityMechanism": "authorization",
           "contextDepth": "cross-file",
           "semanticSummary": "allowedToPublishOnMsgTraceDest authorises the caller-supplied trace destination with c.perms.pub and pubAllowedFullCheck, which is client-connection semantics. A LEAF connection does not carry that meaning: an accepted leaf has its pub and sub permission sets swapped at connect time, and the export ACL captured for it is held separately. The guard evaluates the wrong permission set for leaf connections and lets a leaf steer trace events to subjects its own leaf permissions deny."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "server/msgtrace.go",
+          "lineRange": [539, 546],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "sample draws with rand.Int31n(100), whose values run from 0 to 99, and then accepts everything less than or equal to the configured percentage, so sampling+1 of the hundred outcomes pass. Every configured rate is one percentage point too high, and the largest value the guard above lets through, 99, traces every message. The comparison has to be strictly less than for the draw to mean a percentage at all."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "server/msgtrace.go",
+          "lineRange": [606, 613],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The trace-flags field of the traceparent header is a full byte written as two hex digits, but it is parsed with a bit size of 8, which asks for a value that fits a signed int8. Any flags byte from 80 to ff overflows, ParseInt reports a range error, and the sampled bit is never examined - so a header ending in -81, which does request sampling, leaves the found flag false and the message is silently not traced."
         }
       ],
       "tags": ["cross-file", "security", "leafnode", "permissions"],
@@ -297,6 +380,15 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "getNextRoles drops the error returned by checkLinkCondition and answers false, while it is used as the callback of a sync.Map range, where a false return stops the iteration. A single condition function that fails therefore loses its error and also abandons the remaining links of the role being expanded, so the breadth-first search continues from a truncated frontier and HasLink can answer false for a role that is reachable through a link it never looked at."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "rbac/default-role-manager/role_manager.go",
+          "lineRange": [1164, 1175],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "AddLink and DeleteLink fan the change out through rangeAffectedRoleManagers, the promoted plain-domain method, whose callback asserts every stored value to *RoleManagerImpl. The map it ranges is the one this type fills with *ConditionalRoleManager values, and its own load asserts them back as such, so the two assertions cannot both hold. Once a domain matching function is registered - the only thing that makes the range body run - the first link added for a domain that matches another panics."
         }
       ],
       "tags": ["cross-file", "security", "rbac"],
@@ -339,6 +431,26 @@
           "securityMechanism": "cryptography",
           "contextDepth": "cross-file",
           "semanticSummary": "process_implicit_token attaches c_hash and at_hash only when the half-hash helper returns a value and silently omits the claim otherwise. That helper derives a hashlib attribute name from the signing algorithm and yields nothing when the name does not resolve, so a configured algorithm whose name does not map makes the server mint an id token with no binding to the access token or the authorization code, in the one flow where that binding is required rather than optional."
+        },
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "authlib/oidc/core/grants/implicit.py",
+          "lineRange": [102, 110],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "secret-flow",
+          "contextDepth": "callee",
+          "semanticSummary": "create_authorization_response reads response_mode straight out of the request payload and never checks it against the response types this grant serves. The helper it calls honours 'query' by appending the parameters to the redirect URI's query string, and those parameters are the freshly minted access_token and id_token. A request carrying response_mode=query hands the tokens back in the URL, where browser history, the Referer header and proxy logs keep them."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "authlib/oidc/core/grants/implicit.py",
+          "lineRange": [92, 101],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "create_authorization_response reads the request's state on its first line but appends it only in the granted branch. The denied branch builds its parameters from AccessDeniedError(), constructed without state, and get_body emits state only when the error carries one. The redirect reporting a refused authorization arrives without the state the client sent, so the client cannot bind the response to its own request."
         }
       ],
       "tags": ["cross-file", "security", "oauth", "open-redirect"],
@@ -419,6 +531,15 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "range_for_length resolves a suffix range by adding the entity length to the negative start without clamping the result at zero, so a suffix longer than the entity (bytes=-1000 against 500 bytes) yields a negative start, fails the byte-range validity check, and returns None. HTTP requires a suffix length larger than the representation to be answered with the whole representation, but the None result is what the response layer turns into 416 for a range that is in fact satisfiable."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/werkzeug/datastructures/range.py",
+          "lineRange": [137, 147],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The suffix branch keeps the parsed value as begin and marks the entry by its negative sign, but the integer helper maps '-0' onto plain zero, so bytes=-0 is stored as (0, None) - byte for byte what bytes=0- produces. A suffix length of zero makes the byte-range-set unsatisfiable and has to be answered 416, yet range_for_length resolves this one to the whole entity and the response layer sends the complete representation under a 206."
         }
       ],
       "expectedNoFindingZones": [
@@ -665,6 +786,15 @@
           "securityMechanism": "unsafe-config",
           "contextDepth": "cross-function",
           "semanticSummary": "scheme answers https for a bare X-Forwarded-SSL: on header before it consults forwarded_scheme, so this one forwarded header is read outside the forwarded_priority and x_forwarded_proto_priority allow-lists that gate every other forwarded source. An application that empties those lists precisely because it is not behind a trusted proxy still has its scheme flipped by a header the client sent, and ssl?, base_url, url and every redirect built from them follow."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "lib/rack/request.rb",
+          "lineRange": [581, 583],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "GET parses the query string once and caches the hash in the environment, with nothing tying the cache to the string it was parsed from - although the constant for exactly that comparison is still defined and is now referenced nowhere. cookies, a few methods above, does compare its cached source string and re-parses on a mismatch. Any middleware that rewrites QUERY_STRING after something has read request.params is therefore ignored, including one that strips a parameter for safety."
         }
       ],
       "expectedNoFindingZones": [
@@ -783,6 +913,15 @@
           "securityMechanism": "path-traversal",
           "contextDepth": "cross-file",
           "semanticSummary": "download takes the filename parameter out of the Content-Disposition header of the downloaded template and joins it onto the temporary directory with a plain path join before moving the file there. That value is entirely under the remote server's control: an absolute path makes the join discard the temporary directory, and parent-directory segments walk out of it, so the server the command was pointed at chooses where the archive lands."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "django/core/management/templates.py",
+          "lineRange": [225, 232],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "Both temporary directories are registered on paths_to_remove while the template is being fetched, but the loop that deletes them is the last statement of handle and runs only when nothing raised. Any error after the template is in place - the CommandError raised inside the copy walk when a target file already exists, or a failure from makedirs or copyfile - aborts before it, so the downloaded archive and the whole extracted tree stay in the system temp directory. No path unwinds them."
         }
       ],
       "tags": ["cross-file", "security", "path-traversal", "management-command"],
@@ -812,6 +951,15 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "A suffix range is resolved as the file size minus the requested suffix length with no lower bound, so a suffix longer than the file yields a negative start. The caller rejects any range whose start is not inside the file, so a request for the last thousand bytes of a five-hundred-byte file is answered with 416 although HTTP requires a suffix longer than the representation to be served as the whole representation."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "starlette/responses.py",
+          "lineRange": [478, 479],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The range parser builds an exclusive end by adding one to the last-byte-pos, so the validity check here has to reject start == end, and it only rejects start > end. A spec whose last-byte-pos sits exactly one below its first-byte-pos - bytes=5-4 against a hundred-byte file - survives as (5, 5), and the single-range handler answers 206 with content-range 'bytes 5-4/100' and content-length 0. An invalid byte-range-spec produces a nonsensical partial response instead of being ignored."
         }
       ],
       "tags": ["bug", "http-semantics", "range-requests"],
@@ -880,6 +1028,15 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "storeInCache creates its own master query runner whenever the caller did not supply a usable one, then awaits an update or an insert and releases the runner only on the method's last statement, with no try/finally around it. A rejection from any of those awaits propagates with the runner never released, so every failed cache write retains a pooled connection for the life of the process and repeated failures exhaust the pool."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "src/cache/DbQueryResultCache.ts",
+          "lineRange": [306, 310],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "clear hands its argument to the helper that creates a query runner whenever none was supplied, then returns the clearTable promise without releasing anything - not on failure and not on success. The interface declares that parameter optional and the shipped cache-clear command calls the method with nothing, so every call checks a pooled connection out for good. remove, directly below, shows the intended shape: it releases the runner exactly when it created it itself."
         }
       ],
       "tags": ["bug", "resource-leak", "cache"],
@@ -909,6 +1066,15 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "isGreaterOrEqual walks only as far as the shorter of the two component lists and then returns true, so components the target has beyond the reported version are never compared: a server reporting 10.0 is treated as satisfying 10.0.5, and 1.2 as satisfying 1.2.1. That comparison is the gate the drivers use to decide which SQL a server understands, so a version that is genuinely too old is admitted."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/util/VersionUtils.ts",
+          "lineRange": [29, 31],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "parseVersion maps every dot-separated component through parseInt and never checks the result, so a component that does not begin with digits becomes NaN. Both comparisons against NaN are false, so the loop treats it as equal and walks on, or falls through to the final return true. A version whose leading component is not numeric - the raw version() banner, left untouched whenever the CockroachDB runner's normalising regex misses - is ranked on its later components alone."
         }
       ],
       "tags": ["cross-file", "bug", "feature-gating"],
@@ -979,6 +1145,17 @@
           "securityMechanism": "authorization",
           "contextDepth": "cross-file",
           "semanticSummary": "The hook creates a phase inserted immediately before the pipeline's call phase, which places token consumption after the authentication phase rather than before it. Authentication answers a rejected call and marks it handled, and the interceptor's first statement returns for a handled call, so requests that fail authentication consume no token: the credential-guessing traffic a rate limit on an authenticated route exists to throttle is exactly the traffic it does not count."
+        },
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "ktor-server/ktor-server-plugins/ktor-server-rate-limit/common/src/io/ktor/server/plugins/ratelimit/RateLimitInterceptors.kt",
+          "lineRange": [72, 80],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "cross-function",
+          "semanticSummary": "Every allowed call cancels the pending eviction job for its key and stores a replacement, but the read and the store are separate operations on a shared map: two calls for one key that interleave between them both launch a job, and the second store overwrites the first without cancelling it. The orphan still fires, at the earlier refill instant, removing the limiter from the application-scoped registry. The next call rebuilds it with a full bucket, so concurrent requests win back budget early."
         }
       ],
       "tags": ["cross-file", "security", "rate-limit"],
@@ -1297,6 +1474,15 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "realloc uses the same capacity + capacity >> 1 expression, which Java parses as (capacity + capacity) >> 1 and evaluates to the current capacity. Once the event array is larger than 65536 kevents the reallocation allocates a buffer of exactly the previous size, so the array never grows on that branch and the copy loop keeps paying an allocation for no additional room."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/KQueueEventArray.java",
+          "lineRange": [100, 125],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "realloc allocates the larger buffer and swaps in the new memory and address but never assigns the new length to the capacity field; the sibling array class in this same change does exactly that at the end of its own grow path. The grow check fires only on size == capacity, so the one growth that happens is the last: size passes capacity and never equals it again, and once more than twice the original event count is queued, evSet writes kevent structures past the end of the buffer."
         }
       ],
       "tags": ["multi-file", "operator-precedence", "native-memory"],
@@ -1338,6 +1524,15 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "_process_param_defaults decides whether a field has a default factory by comparing default_factory against PydanticUndefined, but FieldInfo stores None when no factory was given (fields.py pops 'default_factory' with a None default, and is_required tests it against None). That check never holds, so a required field with no factory is given dataclasses._HAS_DEFAULT_FACTORY as its signature default instead of Signature.empty, and the signature advertises a default the field does not have."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "pydantic/_internal/_dataclasses.py",
+          "lineRange": [114, 125],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The original init is captured from the class and the next statements replace that same attribute with the validating wrapper, but this function runs again on the same class whenever the dataclass is rebuilt - which the deferred-build path and any late forward-reference resolution both do on their own. The second pass captures the wrapper, so the lazily built signature comes out as (*args, **kwargs) with every field re-synthesised as keyword-only, against the comment at the use site."
         }
       ],
       "tags": ["multi-file", "sentinel-confusion", "dataclasses"],
@@ -1379,6 +1574,15 @@
           "matchMode": "path-semantic",
           "tier": "logic",
           "semanticSummary": "compileLightningCSS builds the filename it hands to lightningcss with the same single-occurrence String#replace, so an id holding a second null byte still reaches lightningcss with a raw null byte in it. The comment on the line above states why that matters: lightningcss treats the null byte as a string terminator, so the filename it reports in diagnostics and sourcemaps is truncated at that point."
+        },
+        {
+          "category": "bug",
+          "severity": "low",
+          "path": "packages/vite/src/node/plugins/css.ts",
+          "lineRange": [3371, 3384],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "The glob dependency branch expands the same pattern twice. The second call asks for absolute paths, no directory expansion and an ignore for node_modules; the first call takes the library defaults, so it descends into node_modules and adds relative paths to the same dependency set. Those relative entries are handed to addWatchFile, where they can never match the absolute path a change reports, and the redundant walk runs on every transform of the file."
         }
       ],
       "tags": ["multi-file", "string-handling", "module-ids"],
