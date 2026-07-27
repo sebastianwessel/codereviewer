@@ -1125,5 +1125,299 @@
       ],
       "tags": ["cross-file", "security", "cookies", "header-injection"],
       "notes": "Cross-file: lib/plug/conn.ex pipes the result of encode straight into a set-cookie response header (merge_headers, around lines 1928-1945) and its only check on the finished value is a size cap, so nothing downstream re-validates the separator. The reviewed file alone reads as ordinary string building."
-    }  ]
+    },
+    {
+      "id": "traefik-endpointslice-port-fields-dereferenced-without-nil-check",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/traefik/traefik.git",
+      "upstreamOwner": "traefik",
+      "upstreamRepo": "traefik",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "1cb33b70aeba12a6c12599da9f9dc471be6409e5",
+      "fixCommittedAt": "2026-07-07T17:18:06+02:00",
+      "parentCommit": "17f50398766f31e77bccaa3365ad5de1e8832e74",
+      "reviewedPaths": [
+        "pkg/provider/kubernetes/crd/kubernetes_http.go",
+        "pkg/provider/kubernetes/crd/kubernetes_tcp.go",
+        "pkg/provider/kubernetes/crd/kubernetes_udp.go",
+        "pkg/provider/kubernetes/gateway/kubernetes.go",
+        "pkg/provider/kubernetes/ingress-nginx/kubernetes.go",
+        "pkg/provider/kubernetes/ingress/kubernetes.go"
+      ],
+      "reviewIntent": "Select the backend port by comparing the endpointslice port name across the Kubernetes providers",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/crd/kubernetes_http.go",
+          "lineRange": [591, 596],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "loadServers compares svcPort.Name == *p.Name and assigns port = *p.Port for every port of every EndpointSlice. Both fields of discoveryv1.EndpointPort are optional pointers: Name is nil for an unnamed port and Port is nil when the slice targets all ports. Either shape makes the provider dereference a nil pointer and panic while building the dynamic configuration, so one malformed EndpointSlice takes down configuration refresh for every route."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/crd/kubernetes_tcp.go",
+          "lineRange": [268, 273],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "loadTCPServers dereferences *p.Name in the port-name comparison and *p.Port in the assignment without checking either pointer. An EndpointSlice with an unnamed port (nil Name) or without an explicit port number (nil Port) panics the TCP provider instead of being skipped."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/crd/kubernetes_udp.go",
+          "lineRange": [182, 187],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "loadUDPServers repeats the same unguarded dereference: svcPort.Name == *p.Name followed by port = *p.Port, with no nil check on the optional Name and Port fields of the EndpointSlice port, so a nil field panics the UDP provider."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/gateway/kubernetes.go",
+          "lineRange": [958, 963],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "getBackendAddresses resolves the backend port with svcPort.Name == *p.Name and port = *p.Port and never checks the pointers, so an EndpointSlice whose port carries no name or no number panics the Gateway API provider while resolving backend addresses."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/ingress-nginx/kubernetes.go",
+          "lineRange": [634, 639],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "getBackendAddresses compares servicePort.Name == *p.Name and assigns port = *p.Port unguarded. The same function already treats other optional EndpointSlice fields as nilable (ptr.Deref on the Serving condition), but the port name and value are dereferenced directly, so a nil one panics the ingress-nginx provider."
+        },
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "pkg/provider/kubernetes/ingress/kubernetes.go",
+          "lineRange": [681, 686],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "loadService dereferences *p.Name to compare against portName and *p.Port to read the port, with no nil check on either optional field, so an EndpointSlice with an unnamed port panics the Ingress provider."
+        }
+      ],
+      "tags": ["multi-file", "nil-dereference", "kubernetes", "wide-diff"],
+      "notes": "Wide-diff case: the identical unguarded dereference appears once in each of six provider files, so the case measures whether attention survives across a six-file change rather than stopping at the first file. Upstream added the nil checks in one commit; the reviewed diff is that commit read backwards and carries no explanatory prose."
+    },
+    {
+      "id": "laravel-eloquent-dictionary-key-not-normalized",
+      "language": "php",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/laravel/framework.git",
+      "upstreamOwner": "laravel",
+      "upstreamRepo": "framework",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "a03cd3c385d67314fbd663005590ea9eb2381302",
+      "fixCommittedAt": "2026-02-27T08:17:21-06:00",
+      "parentCommit": "9fcd342c5a57cc9ba325fa9746605e08b8ab9f48",
+      "reviewedPaths": [
+        "src/Illuminate/Database/Eloquent/Collection.php",
+        "src/Illuminate/Database/Eloquent/Relations/BelongsTo.php",
+        "src/Illuminate/Database/Eloquent/Relations/BelongsToMany.php",
+        "src/Illuminate/Database/Eloquent/Relations/Concerns/InteractsWithDictionary.php",
+        "src/Illuminate/Database/Eloquent/Relations/HasOneOrMany.php",
+        "src/Illuminate/Database/Eloquent/Relations/MorphTo.php"
+      ],
+      "reviewIntent": "Key eloquent relation and collection dictionaries directly on model attribute values",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/Illuminate/Database/Eloquent/Relations/Concerns/InteractsWithDictionary.php",
+          "lineRange": [20, 35],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "getDictionaryKey only handles objects and returns every other attribute unchanged, although its documented job is to produce an array key. Callers use the result directly as a PHP array offset, so a null key silently becomes the empty-string offset, a float key is truncated to an int (a deprecated implicit conversion since PHP 8.1) and a bool key becomes 0/1. Distinct model keys therefore collapse onto one dictionary entry."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/Illuminate/Database/Eloquent/Relations/BelongsTo.php",
+          "lineRange": [151, 177],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "match builds $dictionary[$attribute] from each result's related key and then looks up $dictionary[$attribute ?? ''] for each parent. A result whose owner key is null is stored under the empty-string offset, and a parent whose foreign key is null looks up that same offset, so parents with no foreign key are given an unrelated model as their loaded relation instead of the default."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "src/Illuminate/Database/Eloquent/Collection.php",
+          "lineRange": [664, 675],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "getDictionary keys the dictionary on the raw model key, so every model with a null key overwrites the previous one under the empty-string offset. merge, diff and intersect are all built on that dictionary, so unsaved models compare as equal to each other and merge drops all but the last of them."
+        }
+      ],
+      "tags": ["multi-file", "type-coercion", "orm", "wide-diff"],
+      "notes": "Six-file diff across the collection, the shared dictionary trait and four relation classes. The same coercion recurs in BelongsToMany, HasOneOrMany and MorphTo buildDictionary; those are deliberately left unlisted because they are consequences of the trait defect that is listed. Verified at the parent commit."
+    },
+    {
+      "id": "netty-kqueue-array-growth-operator-precedence",
+      "language": "java",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/netty/netty.git",
+      "upstreamOwner": "netty",
+      "upstreamRepo": "netty",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "e855de52f5f87eb67ae29a4dad71bb4ff160cbcc",
+      "fixCommittedAt": "2026-02-20T14:47:46-08:00",
+      "parentCommit": "578588f644a50d6f2ca1c860a01143e9df51e3a4",
+      "reviewedPaths": [
+        "transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/KQueueEventArray.java",
+        "transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/NativeLongArray.java"
+      ],
+      "reviewIntent": "Compute the new length when the native kqueue arrays outgrow their buffer",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/NativeLongArray.java",
+          "lineRange": [88, 105],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "reallocIfNeeded computes capacity + capacity >> 1, and + binds tighter than >>, so the expression is (capacity + capacity) >> 1, which is capacity again rather than the 50% growth the comment above it describes. Past 65536 the array reallocates a buffer of the same size, sets capacity to that unchanged value, and add() then writes at index == capacity: an out-of-bounds native store through Unsafe, or an IndexOutOfBoundsException without it."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "transport-classes-kqueue/src/main/java/io/netty/channel/kqueue/KQueueEventArray.java",
+          "lineRange": [100, 125],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "realloc uses the same capacity + capacity >> 1 expression, which Java parses as (capacity + capacity) >> 1 and evaluates to the current capacity. Once the event array is larger than 65536 kevents the reallocation allocates a buffer of exactly the previous size, so the array never grows on that branch and the copy loop keeps paying an allocation for no additional room."
+        }
+      ],
+      "tags": ["multi-file", "operator-precedence", "native-memory"],
+      "notes": "Small two-file diff: one changed expression per file, and the intent comment sitting above each of them is pre-existing context, not part of the change. Line ranges are from the parent commit."
+    },
+    {
+      "id": "pydantic-dataclass-field-flags-lost-in-translation",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/pydantic/pydantic.git",
+      "upstreamOwner": "pydantic",
+      "upstreamRepo": "pydantic",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "950a1c9eadd9b050a0a21febeb360ed469e0afbd",
+      "fixCommittedAt": "2026-01-27T10:12:10+01:00",
+      "parentCommit": "710f8540c90111bb38b4099f9b25c60683a7db5a",
+      "reviewedPaths": [
+        "pydantic/_internal/_dataclasses.py",
+        "pydantic/_internal/_signature.py"
+      ],
+      "reviewIntent": "Translate pydantic field metadata into stdlib dataclass fields and into the generated signature",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "pydantic/_internal/_dataclasses.py",
+          "lineRange": [208, 223],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "as_dataclass_field forwards kw_only to the stdlib field only when it is truthy. FieldInfo.kw_only is tri-state (bool or None for unset), so kw_only=False is indistinguishable from unset here and is dropped: a field that explicitly opts out of keyword-only cannot override a class-level kw_only=True, and the generated __init__ keeps it keyword-only. The neighbouring repr flag is forwarded with an identity check, so the two branches disagree about how an explicit False is treated."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "pydantic/_internal/_signature.py",
+          "lineRange": [67, 77],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "_process_param_defaults decides whether a field has a default factory by comparing default_factory against PydanticUndefined, but FieldInfo stores None when no factory was given (fields.py pops 'default_factory' with a None default, and is_required tests it against None). That check never holds, so a required field with no factory is given dataclasses._HAS_DEFAULT_FACTORY as its signature default instead of Signature.empty, and the signature advertises a default the field does not have."
+        }
+      ],
+      "tags": ["multi-file", "sentinel-confusion", "dataclasses"],
+      "notes": "Two files, two independent defects, both readable at the parent commit: a truthiness test on a tri-state flag, and a comparison against the wrong unset sentinel. The sentinel claim was checked against FieldInfo.__init__ and FieldInfo.is_required in pydantic/fields.py, which are outside the reviewed diff."
+    },
+    {
+      "id": "vite-null-byte-escape-replaces-only-first-occurrence",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/vitejs/vite.git",
+      "upstreamOwner": "vitejs",
+      "upstreamRepo": "vite",
+      "license": "MIT",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "833fc302f3f4a5030f49207b5fbf10422f3247a2",
+      "fixCommittedAt": "2026-06-30T08:33:53Z",
+      "parentCommit": "c94f3f2cf48049d9ee2e02b013c365e8da6ebaae",
+      "reviewedPaths": [
+        "packages/vite/src/node/plugins/css.ts",
+        "packages/vite/src/shared/utils.ts"
+      ],
+      "reviewIntent": "Escape the null byte in module ids before they are used as browser URLs and as lightningcss filenames",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "packages/vite/src/shared/utils.ts",
+          "lineRange": [11, 24],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "wrapId and unwrapId escape and restore the null byte with String#replace and a plain string pattern, which substitutes only the first occurrence. A module id that carries more than one null byte (a virtual id nested inside another) keeps its remaining raw null bytes in the /@id/ URL, and unwrapId restores only the first placeholder, so unwrapId(wrapId(id)) is not the id that went in and the id resolved on the way back does not match the one the plugin registered."
+        },
+        {
+          "category": "bug",
+          "severity": "medium",
+          "path": "packages/vite/src/node/plugins/css.ts",
+          "lineRange": [3223, 3227],
+          "matchMode": "path-semantic",
+          "tier": "logic",
+          "semanticSummary": "compileLightningCSS builds the filename it hands to lightningcss with the same single-occurrence String#replace, so an id holding a second null byte still reaches lightningcss with a raw null byte in it. The comment on the line above states why that matters: lightningcss treats the null byte as a string terminator, so the filename it reports in diagnostics and sourcemaps is truncated at that point."
+        }
+      ],
+      "tags": ["multi-file", "string-handling", "module-ids"],
+      "notes": "Deliberately the smallest multi-file case in the corpus: three one-line changes over two files. Both claims rest only on JavaScript's String#replace semantics with a string pattern and are checkable at the parent commit."
+    },
+    {
+      "id": "grpc-go-xds-regex-matcher-mutates-shared-regexp",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/grpc/grpc-go.git",
+      "upstreamOwner": "grpc",
+      "upstreamRepo": "grpc-go",
+      "license": "Apache-2.0",
+      "source": "upstream-fix-commit",
+      "capturedAt": "2026-07-27",
+      "fixCommit": "39f16539d2463c05d52b4c44137831fd5f73f7d9",
+      "fixCommittedAt": "2026-05-20T11:18:17+05:30",
+      "parentCommit": "1c8e0950eda84e87c020a7fd7099ecccd3b21218",
+      "reviewedPaths": [
+        "internal/grpcutil/regex.go",
+        "internal/xds/matcher/matcher_header.go",
+        "internal/xds/matcher/string_matcher.go",
+        "internal/xds/xdsclient/xdsresource/matcher_path.go",
+        "internal/xds/xdsclient/xdsresource/unmarshal_rds.go"
+      ],
+      "reviewIntent": "Route xDS regex route, path and header matching through one full-match helper instead of anchoring the compiled pattern",
+      "expectedFindings": [
+        {
+          "category": "bug",
+          "severity": "high",
+          "path": "internal/grpcutil/regex.go",
+          "lineRange": [24, 31],
+          "matchMode": "path-semantic",
+          "tier": "runtime-critical",
+          "semanticSummary": "FullMatchWithRegex calls re.Longest() on the caller's compiled pattern before every match. Longest mutates the Regexp, and regexp.Regexp is only safe for concurrent use by methods that do not modify it, so the shared xDS matchers that hold one compiled pattern for the lifetime of a route configuration (HeaderRegexMatcher.Match, StringMatcher.Match, pathRegexMatcher.match) mutate it from every RPC-handling goroutine at once. That is a data race on the request path, not a one-time setup cost."
+        }
+      ],
+      "tags": ["multi-file", "concurrency", "xds", "wide-diff"],
+      "notes": "Five-file diff whose defect sits in the helper the other four files call; the reviewed diff adds internal/grpcutil/regex.go as a new file, so the evidence is inside the change while the concurrency argument depends on how the callers hold the compiled pattern. Upstream removed the helper rather than fixing it."
+    }
+  ]
 }

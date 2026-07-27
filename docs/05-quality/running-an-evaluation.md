@@ -275,7 +275,7 @@ npm run eval:corpus:hydrate
 npm run eval:benchmark:debug
 ```
 
-**Cross-file corpus, all 30 cases:**
+**Cross-file corpus, all 36 cases:**
 
 ```bash
 node --import tsx scripts/hydrate-real-repo-corpus.ts --quiet

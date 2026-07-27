@@ -9,7 +9,7 @@ and recall on an exhaustive one are not the same quantity.
 | Default fixture pack | `eval/fixtures/sample-eval-cases.json` | 7 | **0** | none | False-positive suppression only |
 | Code Review Bench-style | `eval/benchmarks/code-review-bench-style/` | 59 | 133 | **required** | Recall/precision on real PRs, changed files only |
 | Proof-quality slices | `eval/fixtures/proof-quality-slices/` | 15 | 14 | none | Trustworthy recall on an exhaustive key |
-| Real-repository cross-file | `eval/corpora/real-repo-cross-file/manifest.json` | 30 | 42 | **required** | Cross-file recall on full checkouts |
+| Real-repository cross-file | `eval/corpora/real-repo-cross-file/manifest.json` | 36 | 58 | **required** | Cross-file recall on full checkouts, and review of multi-file diffs |
 | Fix-lane fixture | `eval/fixtures/typescript/fix-lane/repo/` | 1 (test-only) | — | none | Fix-lane judgment, via a hermetic test |
 
 ---
@@ -160,7 +160,7 @@ measured, so the defect classes reflect what the authors thought to test for.
 
 ## Real-repository cross-file corpus
 
-**What it is.** `eval/corpora/real-repo-cross-file/manifest.json` — 30 cases
+**What it is.** `eval/corpora/real-repo-cross-file/manifest.json` — 36 cases
 pinning **real upstream repositories, checked out in full** at the commit
 immediately before an upstream fix landed. Defined by `specs/17`.
 
@@ -177,8 +177,22 @@ A hydrated case here yields a working tree containing the repository's unchanged
 files, so a finding that depends on a callee body, an interface, or a constructor
 in an untouched file is reachable — exactly as it would be for a developer.
 
-**18 of the 42 expected findings are labeled `contextDepth: cross-file`**, plus
-one `caller` and one `cross-function`; only 2 are `local`.
+**18 of the 58 expected findings are labeled `contextDepth: cross-file`**, plus
+one `caller` and one `cross-function`; only 2 are `local`. (The labels are
+carried by security-category findings only, which is why the other 36 findings
+have none.)
+
+### Why multi-file cases exist
+
+The second load-bearing point, added after the first baseline. 29 of the cases
+change exactly one file, and on such a case task clustering, context packing,
+per-task budget on a wide diff and any dilution of attention across files are not
+merely weak — they are **never exercised**. Real pull requests are not
+single-file, so seven cases now carry reviewed diffs spanning 2 to 6 files. Two
+of them (`traefik-…-nil-check`, `laravel-eloquent-dictionary-key-not-normalized`)
+repeat the same defect in every file they touch, so a review that reports the
+first file and stops scores visibly differently from one that works the whole
+diff. See `specs/17` §Diff Shape.
 
 ### Shape
 
@@ -194,15 +208,18 @@ one `caller` and one `cross-function`; only 2 are `local`.
 
 ### Composition
 
-- 30 cases, 42 expected findings, **all `split: held-out`**.
-- 24 upstream projects, including fastify, gin, tokio, django, netty, rack,
-  werkzeug, starlette, undici, typeorm, aspnetcore, libuv, apisix, plug.
-- 13 languages: Go 6, Python 5, JavaScript 4, TypeScript 3, Ruby 3, Rust 2, and
-  one each of PHP, Java, Kotlin, C, C#, Lua, Elixir.
-- Licenses: MIT 17, Apache-2.0 7, BSD-3-Clause 6 (permissive allowlist enforced).
-- Tiers: 22 `security`, 19 `logic`, 1 `runtime-critical`. No nits.
-- Findings per case: 19 cases with one, 10 with two, 1 with three.
-- Expected-finding shape: all 42 are **`path-semantic`** (path required, no line
+- 36 cases, 58 expected findings, **all `split: held-out`**.
+- 29 upstream projects, including fastify, gin, tokio, django, netty, rack,
+  werkzeug, starlette, undici, typeorm, aspnetcore, libuv, apisix, plug, traefik,
+  laravel, vite, pydantic, grpc-go.
+- 13 languages: Go 8, Python 6, JavaScript 4, TypeScript 4, Ruby 3, PHP 2,
+  Rust 2, Java 2, and one each of Kotlin, C, C#, Lua, Elixir.
+- Licenses: MIT 21, Apache-2.0 9, BSD-3-Clause 6 (permissive allowlist enforced).
+- Tiers: 27 `logic`, 22 `security`, 9 `runtime-critical`. No nits.
+- Findings per case: 20 cases with one, 13 with two, 2 with three, 1 with six.
+- Reviewed diff shape: **29 single-file and 7 multi-file cases** (2, 2, 2, 3, 5,
+  6, 6 files), 55 reviewed files in total.
+- Expected-finding shape: all 58 are **`path-semantic`** (path required, no line
   gate) — though each still carries a `lineRange` field.
 - **10 no-finding zones**, one each on 10 cases, all line-ranged and all inside a
   reviewed path (see below).
@@ -269,13 +286,20 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
 
 **Known limitations.**
 
-- **The answer key is still curated.** 42 findings across 30 real repositories
+- **The answer key is still curated.** 58 findings across 29 real repositories
   cannot be exhaustive; recall is a lower bound and `adjustedPrecision` is the
-  precision to read.
+  precision to read. In the multi-file cases the incompleteness is deliberate in
+  places: `laravel-eloquent-dictionary-key-not-normalized` lists three of the six
+  files it touches, because the other three repeat the listed root cause.
+- **The published baseline predates the multi-file cases.** The 2026-07-26 run
+  scored 30 cases and 42 findings. Any comparison against a run on today's 36/58
+  corpus is a comparison of two different denominators.
 - **Checkouts are untrusted input.** Repository content is reviewed, never
   executed; the eligibility gate and redaction apply to it as to any repository.
-- **Cost.** Reviewing full repositories is the expensive corpus. A 30-case run
-  costs on the order of one to two dollars of provider spend.
+- **Cost.** Reviewing full repositories is the expensive corpus. The 30-case run
+  cost on the order of one to two dollars of provider spend; the corpus is now 36
+  cases, and the seven multi-file ones are the widest diffs in it, so budget more
+  rather than less.
 - **Held-out only** — there is currently no `dev` split to iterate on, so
   repeated tuning against this corpus erodes its held-out status.
 - **No fully clean case.** Every case carries a defect. The manifest schema

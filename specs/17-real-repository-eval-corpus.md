@@ -42,6 +42,28 @@ callee body, an interface, or a constructor in an unchanged file is reachable.
 - Hydrated cases are consumed through the existing evaluation fixture contract, so
   the matcher, judges, and metrics apply unchanged.
 
+## Diff Shape
+
+A real pull request is rarely one file. A corpus of single-file cases therefore
+cannot see task clustering, context packing, per-task budget on a wide diff, or
+any dilution of attention across files: those behaviours are not weak in such a
+run, they are **not exercised at all**, and every number the corpus has published
+is silent about them. The corpus therefore curates **diff shape** as a property,
+alongside language, defect class, and expected findings per case.
+
+- A case is **multi-file** when its reviewed diff carries new-side content in more
+  than one file. Since the diff is restricted to `reviewedPaths`, that is a
+  curation decision: a fix touching several files is captured with those files
+  declared, not narrowed to the one that carries the defect.
+- The defect itself **need not span files**. A realistic multi-file change with
+  one locatable defect already exercises planning, packing, and budget, which is
+  what this property measures. A genuinely cross-file defect is a bonus, and is
+  measured separately by `contextDepth`.
+- Composition today: **29 single-file and 7 multi-file cases** (2, 2, 2, 3, 5, 6
+  and 6 reviewed files), 55 reviewed files in total. Two of the multi-file cases
+  carry the same defect in every file they touch, so a review that reports the
+  first file and stops is visibly distinguishable from one that works the diff.
+
 ## Case Definition
 
 Each case records: a stable id, language, upstream owner/repository and clone URL,
@@ -145,6 +167,14 @@ manifest data, so a violation fails loading instead of silently inflating a scor
   against upstream is an explicit, operator-run step.
 
 ## Measured Baseline
+
+The baseline below was measured on the **thirty-case, forty-two-finding** corpus.
+The corpus has since grown to **thirty-six cases and fifty-eight findings** with
+the addition of the multi-file cases described above, so a run on today's corpus
+is not comparable to these numbers case-for-case; six of the new findings sit in
+one six-file case, which the stopping behaviour described here predicts will be
+found only in part. Re-measure before quoting a recall figure against the current
+corpus.
 
 Measured 2026-07-26 on the thirty-case, forty-two-finding corpus: recall 54.8%,
 adjusted precision 95.8%, one genuine false positive, five plausibility-confirmed
