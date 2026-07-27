@@ -99,8 +99,8 @@ again after each round of fixes. That is a measured recommendation rather than a
 process preference.
 
 A single discovery pass reports roughly one defect per file, because the reviewer's
-attention follows the diff. On the evaluation corpus, whose 80 expected findings sit
-across 47 distinct (case, file) pairs, that behaviour puts a **58.8% ceiling on what
+attention follows the diff. On the evaluation corpus, whose 74 expected findings sit
+across 42 distinct (case, file) pairs, that behaviour puts a **56.8% ceiling on what
 any one pass can score** — and the engine already measures at about 80% of that
 ceiling. The lever with the most headroom is therefore not a better single review,
 it is a second one.

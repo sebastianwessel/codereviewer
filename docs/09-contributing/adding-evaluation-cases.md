@@ -242,6 +242,7 @@ Add a case to `eval/corpora/real-repo-cross-file/manifest.json`:
 | `reviewIntent` (≤300 chars) must not name the defect | See anti-contamination below |
 | A `held-out` case's fix must post-date `modelTrainingCutoff` | Temporal contamination control |
 | No `held-out` case may predate the newest `dev` case | The split must be chronological |
+| `removedCommentDisclosureReview.acknowledgedComments` are trimmed and unique | Hydration matches them exactly against the flagged text; a padded or repeated entry would record a judgement covering nothing |
 
 ### Anti-contamination
 
@@ -252,9 +253,49 @@ input.
 
 Hydration goes further: it scans the **generated diff** for the same wording
 and fails the case, reporting the leaked text. An upstream fix that also added
-an advisory reference or a comment naming the defect puts the answer inside the
-model's input when read backwards. If that fires, either drop the case or
-choose `reviewedPaths` that exclude the disclosure.
+an advisory reference puts the answer inside the model's input when read
+backwards. If that fires, either drop the case or choose `reviewedPaths` that
+exclude the disclosure. The scan also runs on a diff reused from an existing
+checkout, so a case hydrated before a rule existed cannot keep scoring from
+cache.
+
+#### Removed comments give the defect away too
+
+Advisory vocabulary cannot catch a plain engineering comment, and the reviewed
+diff is the fix **read backwards** — so a comment the upstream fix *added* is a
+**removed** line the reviewer is shown. Hydration flags removed comment lines
+carrying prose (content starting with `//`, `#`, `*`, `/*`, `--` or `<!--` and
+holding five or more words) and **fails the case until every flagged comment is
+resolved**:
+
+```json
+"removedCommentDisclosureReview": {
+  "reviewedAt": "2026-07-27",
+  "verdict": "non-disclosing",
+  "rationale": "A licence header whose copyright year the fix bumped. It names no code and no behaviour, so it cannot give the expectation away.",
+  "acknowledgedComments": [
+    "* Copyright 2014-2026 Example s.r.o and contributors. Use of this source code is governed by the Apache 2.0 license."
+  ]
+}
+```
+
+Read each flagged comment against the case's own expectations before writing
+this. The rule is fuzzy on purpose — it flags licence headers and comments
+displaced by re-indentation as readily as a real disclosure — which is why it
+warns instead of hard-failing, and why the judgement is recorded rather than
+inferred. Rules worth knowing:
+
+- `verdict` has one value. A comment that *does* disclose has no resolution
+  other than **dropping the case**.
+- Comments are acknowledged **individually and exactly as reported**, so a
+  re-capture that changes or adds one fails until it is judged.
+- An acknowledgement the diff no longer removes also fails, so a resolution
+  cannot outlive its comment and blanket-cover the next one.
+- Narrowing `reviewedPaths` is the other way out when the disclosure sits in a
+  file the case does not need.
+
+Five cases were dropped this way on 2026-07-27; see
+`specs/17-real-repository-eval-corpus.md` §Anti-Contamination.
 
 `reviewedPaths` is also how you keep the fix commit's regression test — whose
 name and body are usually the answer — out of the reviewed diff.

@@ -59,8 +59,8 @@ alongside language, defect class, and expected findings per case.
   one locatable defect already exercises planning, packing, and budget, which is
   what this property measures. A genuinely cross-file defect is a bonus, and is
   measured separately by `contextDepth`.
-- Composition today: **29 single-file and 7 multi-file cases** (2, 2, 2, 3, 5, 6
-  and 6 reviewed files), 55 reviewed files in total. Two of the multi-file cases
+- Composition today: **24 single-file and 7 multi-file cases** (2, 2, 2, 3, 5, 6
+  and 6 reviewed files), 50 reviewed files in total. Two of the multi-file cases
   carry the same defect in every file they touch, so a review that reports the
   first file and stops is visibly distinguishable from one that works the diff.
 
@@ -197,6 +197,10 @@ scope. Measured against the current fixtures:
 | ≥2 in-diff expectations anywhere | **6 of 36** |
 | ≥2 in-diff expectations in the **same file** | **2 of 36** |
 
+Both counts were measured on the thirty-six-case corpus and have not been
+re-measured since five cases were dropped for removed-comment disclosure; the
+denominator is now thirty-one.
+
 **The current corpus therefore supports a pilot, not a measurement.** Two cases
 cannot establish anything about convergence, and a result drawn from them MUST NOT
 be reported as one. The pilot's only job is to establish whether the mechanism
@@ -253,11 +257,82 @@ manifest data, so a violation fails loading instead of silently inflating a scor
   the generated diff for answer-key wording and fails the case, reporting the leaked
   text so a curator can drop the case or choose reviewed paths that exclude the
   disclosure. Curation found this pattern in five candidate cases, one of which had
-  already entered the corpus.
+  already entered the corpus. The scan MUST run on the diff a measurement will
+  actually score, including one reused from an existing checkout: a stored slice
+  does not carry the case's disclosure resolution, so nothing about a cached case
+  invalidates it, and a case hydrated before a rule existed would otherwise be
+  served from cache indefinitely.
+- **Removed comments are the second route in, and advisory vocabulary cannot find
+  them.** The advisory pattern matches `CVE-…`, `GHSA-…`, NVD links, and the words
+  advisory, vulnerability and exploit. An engineer explaining a defect in a code
+  comment writes none of those. Because a case reviews `base = fixCommit`,
+  `head = parentCommit`, a comment the upstream fix **added** appears in the
+  reviewed diff as a **removed** line, so the reviewer is shown a deleted comment
+  that names the defect before it reads any code. The requirement and its evidence
+  are below.
 - **Dedup.** A token-normalized diff fingerprint is recorded per case so exact and
   near-duplicate captures are detectable.
 - **Provenance.** License, source, and capture date are required per case; a case
   whose license is not on the permissive allowlist is rejected.
+
+### The Removed-Comment Disclosure Warning
+
+Hydration MUST additionally flag **removed comment lines carrying prose**: a
+removed line whose content starts with a comment marker (`//`, `#`, `*`, `/*`,
+`--`, `<!--`) and holds at least five word-like tokens. Only line-initial markers
+count, because `//` and `#` also occur inside string literals and URLs and a rule
+that split on them would flag ordinary code; a disclosure appended to a code line
+is therefore **not** detected, and that limit is deliberate.
+
+This rule is fuzzy and MUST NOT hard-fail. Of the eight cases it flags on the
+thirty-six-case corpus, three are benign — a licence header whose copyright year
+the fix bumped, an unrelated comment displaced by re-indentation, and a doc
+comment for the fix's own helper that names nothing about the defect. A fuzzy rule
+wired to a hard failure would reject those and invite whoever hit it to weaken the
+rule until the corpus passed again. The advisory scan keeps its hard failure
+precisely because it is specific.
+
+The flag is instead **resolved per case and per comment in the manifest**, under
+`removedCommentDisclosureReview`: the review date, the verdict, a rationale, and
+the exact flagged comment texts. Requirements:
+
+- An unresolved flagged comment **fails hydration**, so an unreviewed case cannot
+  run silently.
+- Acknowledgement is per comment text, not per case, so a re-capture that changes
+  or adds a comment fails until that comment is judged.
+- An acknowledgement the reviewed diff no longer removes also fails: a resolution
+  that outlives its comment is a blanket approval waiting to cover whatever
+  appears next.
+- The verdict has exactly one value, `non-disclosing`. A disclosing comment has no
+  resolution other than dropping the case, so the field cannot record "disclosing"
+  and keep running.
+
+#### Why This Requirement Exists
+
+Measured 2026-07-27 over the committed corpus and the then-current baseline runs:
+three cases leaked by this route, the worst carrying a comment that stated its
+expectation almost verbatim. **Those cases scored 83.3% recall (10 of 12) against
+44.3% (101 of 228) for the rest of the corpus**, and excluding them moved the
+headline from 46.3% to 42.1%. Correlation is not proof that the comment caused
+each hit, but the mechanism is direct and the gap is large.
+
+Adjudicating all eight flagged cases against their own expectations found **five
+disclosing**, and those were removed from the manifest:
+`undici-coerced-header-value-skips-validation`,
+`netty-gzip-extra-field-length-never-applied`,
+`apisix-attach-consumer-label-leaves-client-headers`,
+`nats-server-no-auth-user-skips-connection-restrictions` and
+`nestjs-middleware-overlap-filter-uses-stateful-regex`. The last two were not
+among the three measured leakers and were caught by reading the flagged text: one
+stated in English the cross-file contract its expectation rests on, the other
+restated its whole expectation. The three benign cases carry a recorded
+resolution instead.
+
+**The corpus is therefore thirty-one cases and seventy-four findings from
+2026-07-27, and every recall figure published before that date — including every
+figure in this spec and in `docs/` — was measured against the old answer key.**
+Dropping cases changes the key, so those figures are not comparable to a run on
+today's corpus, and the comparison tooling refuses such a comparison outright.
 
 ## Cost And Safety
 
@@ -277,6 +352,10 @@ manifest data, so a violation fails loading instead of silently inflating a scor
   declared zone is counted and one outside it is not. No provider is involved.
 - Unit: manifest schema validation, including each anti-contamination rule (cutoff
   violation, non-permissive license, answer-key leakage, malformed commit sha);
+  the removed-comment disclosure rule — that it fires on a comment explaining the
+  defect, that it also flags a licence header and that hydration is quiet only
+  once a curator has resolved it, that an unresolved flag fails hydration, and
+  that a reused checkout is re-checked rather than trusted;
   case selection and filtering; the diff fingerprint; the repair and
   interrupted-hydration rebuild paths, exercised through a scripted git that
   reproduces which git operations are idempotent and which are not; and the pure
@@ -287,10 +366,12 @@ manifest data, so a violation fails loading instead of silently inflating a scor
 ## Measured Baseline
 
 The baseline below was measured on the **thirty-case, forty-two-finding** corpus.
-The corpus has since grown twice — first to thirty-six cases and fifty-eight
-findings with the multi-file cases described above, then to **thirty-six cases and
-eighty findings** by curating expectations per case (see *Expectations Per Case*
-below). A run on today's corpus is therefore not comparable to these numbers
+The corpus has since changed three times — first to thirty-six cases and
+fifty-eight findings with the multi-file cases described above, then to thirty-six
+cases and eighty findings by curating expectations per case (see *Expectations Per
+Case* below), then down to **thirty-one cases and seventy-four findings** when
+five cases were dropped for removed-comment disclosure (see *Anti-Contamination*).
+A run on today's corpus is therefore not comparable to these numbers
 case-for-case, and the comparison tooling enforces that: it refuses to compare two
 runs whose shared cases carry different answer-key digests. Re-measure before
 quoting a recall figure against the current corpus.
@@ -326,9 +407,9 @@ already hydrated buys statistical power for nothing. That makes expectations per
 case the cheapest lever the corpus has, and it is curated deliberately rather than
 left at whatever the capture happened to notice.
 
-Composition today: **eighty expected findings across thirty-six cases** — 11 cases
-with one expectation, 12 with two, 9 with three, 3 with four, and 1 with six. Ten
-of the added expectations are high-severity and sit at rank two or later, which the
+Composition today: **seventy-four expected findings across thirty-one cases** — 7
+cases with one expectation, 11 with two, 9 with three, 3 with four, and 1 with six.
+Ten of the added expectations are high-severity and sit at rank two or later, which the
 baseline decomposition above could not previously observe at all: every high in the
 old key was first-listed.
 
@@ -372,5 +453,8 @@ real code is unmeasured here**, in either direction.
   behind by an interrupted hydration is rebuilt rather than aborting the run.
 - Manifest data that violates the temporal cutoff, the license allowlist, or the
   answer-key exclusion fails validation with a configuration error.
+- A case whose reviewed diff removes a prose comment cannot be measured until a
+  curator has resolved every flagged comment in the manifest, whether the diff was
+  freshly generated or reused from an existing checkout.
 - Cross-file recall reported on this corpus is a property of the engine: the
   evidence for every cross-file expected finding is present in the checkout.

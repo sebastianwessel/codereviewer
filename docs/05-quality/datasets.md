@@ -160,7 +160,7 @@ measured, so the defect classes reflect what the authors thought to test for.
 
 ## Real-repository cross-file corpus
 
-**What it is.** `eval/corpora/real-repo-cross-file/manifest.json` — 36 cases
+**What it is.** `eval/corpora/real-repo-cross-file/manifest.json` — 31 cases
 pinning **real upstream repositories, checked out in full** at the commit
 immediately before an upstream fix landed. Defined by `specs/17`.
 
@@ -177,14 +177,14 @@ A hydrated case here yields a working tree containing the repository's unchanged
 files, so a finding that depends on a callee body, an interface, or a constructor
 in an untouched file is reachable — exactly as it would be for a developer.
 
-**18 of the 80 expected findings are labeled `contextDepth: cross-file`**, plus
+**15 of the 74 expected findings are labeled `contextDepth: cross-file`**, plus
 three `cross-function`, one `callee` and one `caller`; only 2 are `local`. (The
-labels are carried by security-category findings only, which is why the other 55
+labels are carried by security-category findings only, which is why the other 52
 findings have none.)
 
 ### Why multi-file cases exist
 
-The second load-bearing point, added after the first baseline. 29 of the cases
+The second load-bearing point, added after the first baseline. 24 of the cases
 change exactly one file, and on such a case task clustering, context packing,
 per-task budget on a wide diff and any dilution of attention across files are not
 merely weak — they are **never exercised**. Real pull requests are not
@@ -208,38 +208,42 @@ diff. See `specs/17` §Diff Shape.
 
 ### Composition
 
-- 36 cases, 80 expected findings, **all `split: held-out`**.
-- 29 upstream projects, including fastify, gin, tokio, django, netty, rack,
-  werkzeug, starlette, undici, typeorm, aspnetcore, libuv, apisix, plug, traefik,
-  laravel, vite, pydantic, grpc-go.
-- 13 languages: Go 8, Python 6, JavaScript 4, TypeScript 4, Ruby 3, PHP 2,
-  Rust 2, Java 2, and one each of Kotlin, C, C#, Lua, Elixir.
-- Licenses: MIT 21, Apache-2.0 9, BSD-3-Clause 6 (permissive allowlist enforced).
-- Tiers: 44 `logic`, 25 `security`, 11 `runtime-critical`. No nits.
-- Severities: 27 `high`, 40 `medium`, 13 `low`. No `critical`.
-- Findings per case: 11 cases with one, 12 with two, 9 with three, 3 with four,
+- 31 cases, 74 expected findings, **all `split: held-out`**.
+- 26 upstream projects, including fastify, gin, tokio, django, netty, rack,
+  werkzeug, starlette, typeorm, aspnetcore, libuv, plug, traefik, laravel, vite,
+  pydantic, grpc-go.
+- 12 languages: Go 7, Python 6, JavaScript 3, Ruby 3, TypeScript 3, PHP 2,
+  Rust 2, and one each of Kotlin, C, C#, Elixir, Java.
+- Licenses: MIT 19, Apache-2.0 6, BSD-3-Clause 6 (permissive allowlist enforced).
+- Tiers: 41 `logic`, 22 `security`, 11 `runtime-critical`. No nits.
+- Severities: 24 `high`, 38 `medium`, 12 `low`. No `critical`.
+- Findings per case: 7 cases with one, 11 with two, 9 with three, 3 with four,
   1 with six. Expectations per case is a curated property, not a by-product of
   capture — see `specs/17` §Expectations Per Case for why, and for the rule that
   no expectation may be promoted from engine output.
-- Reviewed diff shape: **29 single-file and 7 multi-file cases** (2, 2, 2, 3, 5,
-  6, 6 files), 55 reviewed files in total.
-- Expected-finding shape: all 80 are **`path-semantic`** (path required, no line
+- Reviewed diff shape: **24 single-file and 7 multi-file cases** (2, 2, 2, 3, 5,
+  6, 6 files), 50 reviewed files in total.
+- Expected-finding shape: all 74 are **`path-semantic`** (path required, no line
   gate) — though each still carries a `lineRange` field.
-- **10 no-finding zones**, one each on 10 cases, all line-ranged and all inside a
+- **8 no-finding zones**, one each on 8 cases, all line-ranged and all inside a
   reviewed path (see below).
+
+Five cases were **removed on 2026-07-27** because their reviewed diff deleted a
+comment that gave the defect away — see *Anti-contamination* below. Every recall
+figure published before that date was measured against the old answer key.
 
 ### No-finding zones on this corpus
 
 Every case here contains a known defect, so without declared clean regions
 `noFindingZoneFalsePositiveCount` was pinned at zero and answered nothing about
-false alarms. Ten cases now declare one line-ranged zone each, over code that was
+false alarms. Eight cases declare one line-ranged zone each, over code that was
 read at the parent commit and is structurally unrelated to the case's defect:
 delegating interface accessors (`golang-jwt`), pure serializers (`werkzeug`),
 date-formatting lookup tables (`plug`), a future constructor (`tokio-util`), a
-`FromIterator` impl (`axum`), a declarative config schema (`apisix`), a builder's
-constructor/`build`/getter surface (`nestjs`), the one-line HTTP verb predicates
-(`rack`), three mutex-guarded readers (`puma`), and a nil-skipping name lister
-(`gin`).
+`FromIterator` impl (`axum`), the one-line HTTP verb predicates (`rack`), three
+mutex-guarded readers (`puma`), and a nil-skipping name lister (`gin`). Two more
+zones went with the `apisix` and `nestjs` cases when those were removed for
+answer-key disclosure.
 
 Two invariants are enforced by test (`real-repo-corpus.schema.test.ts`), because
 a wrong zone manufactures false "false positives" rather than measuring them:
@@ -262,7 +266,8 @@ loading instead of silently inflating a score:
 | **Temporal cutoff** | The manifest declares `modelTrainingCutoff` (currently `2026-01-01`). A `held-out` case whose fix commit predates it is rejected. Re-setting the cutoff each model generation invalidates older held-out cases — that is the intended effect. |
 | **Chronological split** | Cases are `dev` or `held-out`. Improvements are decided on `held-out`. |
 | **Answer-key exclusion** | No field reaching the reviewed input may carry a CVE id, advisory text, or the fix commit message. |
-| **Answer-key exclusion in the generated diff** | Hydration scans the **generated diff** for answer-key wording and fails the case. An upstream fix that also added an advisory reference puts the answer inside the model's input when read backwards. Curation found this in five candidate cases — one had already entered the corpus. |
+| **Answer-key exclusion in the generated diff** | Hydration scans the **generated diff** for answer-key wording and fails the case, on a freshly generated diff and on one reused from an existing checkout alike. An upstream fix that also added an advisory reference puts the answer inside the model's input when read backwards. Curation found this in five candidate cases — one had already entered the corpus. |
+| **Removed-comment disclosure** | Advisory vocabulary cannot catch a plain engineering comment. A case reviews the fix backwards, so a comment the fix *added* is a **removed** line the reviewer is shown. Hydration flags removed comment lines carrying prose (a comment marker plus five or more words) and **fails the case until a curator resolves each flagged comment** in `removedCommentDisclosureReview`. The rule is fuzzy, so it warns rather than hard-fails; the advisory scan stays a hard failure because it is specific. |
 | **Dedup** | A token-normalized diff fingerprint is recorded per case. |
 | **Provenance** | License, source and capture date required; non-permissive licenses rejected. |
 
@@ -290,21 +295,22 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
 
 **Known limitations.**
 
-- **The answer key is still curated.** 80 findings across 29 real repositories
+- **The answer key is still curated.** 74 findings across 26 real repositories
   cannot be exhaustive; recall is a lower bound and `adjustedPrecision` is the
   precision to read. In the multi-file cases the incompleteness is deliberate in
   places: `laravel-eloquent-dictionary-key-not-normalized` lists three of the six
   files it touches, because the other three repeat the listed root cause.
-- **The published baseline predates both key expansions.** The 2026-07-26 run
+- **The published baseline predates every key change.** The 2026-07-26 run
   scored 30 cases and 42 findings; the key then grew to 58 findings with the
-  multi-file cases and to 80 by curating expectations per case. Any comparison
-  against a run on today's 36/80 corpus is a comparison of different
+  multi-file cases and to 80 by curating expectations per case, then shrank to 74
+  across 31 cases when five disclosing cases were removed. Any comparison
+  against a run on today's 31/74 corpus is a comparison of different
   denominators, and the comparison tooling refuses it outright: it compares the
   per-case answer-key digest and will not report a delta across a changed key.
 - **Checkouts are untrusted input.** Repository content is reviewed, never
   executed; the eligibility gate and redaction apply to it as to any repository.
 - **Cost.** Reviewing full repositories is the expensive corpus. The 30-case run
-  cost on the order of one to two dollars of provider spend; the corpus is now 36
+  cost on the order of one to two dollars of provider spend; the corpus is now 31
   cases, and the seven multi-file ones are the widest diffs in it, so budget more
   rather than less. The 2026-07 growth from 58 to 80 expected findings added no
   cost at all — provider spend follows cases, not expectations, which is exactly
@@ -315,7 +321,7 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
   requires `expectedFindings` to be non-empty, and the case model is a fix
   commit reviewed backwards from its parent, which has no meaning for a pull
   request that fixes nothing. A defect-free upstream change therefore cannot be
-  expressed here today; the ten zones are a partial substitute measured on
+  expressed here today; the eight zones are a partial substitute measured on
   regions, not on whole changes. What it would take is recorded in
   `specs/17-real-repository-eval-corpus.md` §No-Finding Zones And Clean Cases.
 

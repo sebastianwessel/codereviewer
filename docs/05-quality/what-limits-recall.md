@@ -46,6 +46,9 @@ matched **79.8% of the time** (79 of 99) — *higher* than a first one.
 
 Source: `reports/2026-07-27-enumeration-gap-and-improvement-plan.md`, nine runs,
 36 cases, 80 expectations, 720 expectation-instances, independently reproduced.
+That corpus is now 31 cases and 74 expectations: five cases were removed on
+2026-07-27 because their reviewed diff deleted a comment naming the defect, so
+every figure on this page predates the current answer key.
 
 Two consequences follow, and both correct earlier readings of this engine.
 
@@ -131,19 +134,22 @@ Source: `reports/2026-07-27-enumeration-gap-and-improvement-plan.md` §5.2.
 If a reviewer surfaces one defect per file per round, then the answer key itself
 sets a hard ceiling on what any single review can score.
 
-The real-repository corpus holds **80 expected findings across 47 distinct
-(case, file) pairs** — 23 files carry one expectation, 17 carry two, 5 carry
+The real-repository corpus holds **74 expected findings across 42 distinct
+(case, file) pairs** — 19 files carry one expectation, 16 carry two, 5 carry
 three and 2 carry four (computed directly from the committed corpus manifest,
 `eval/corpora/real-repo-cross-file/manifest.json`).
 
 | Rounds of review, one defect per file per round | Expectations reachable | Ceiling |
 | --- | ---: | ---: |
-| One | 47 / 80 | **58.8%** |
-| Two | 71 / 80 | **88.8%** |
-| Three | 78 / 80 | **97.5%** |
+| One | 42 / 74 | **56.8%** |
+| Two | 65 / 74 | **87.8%** |
+| Three | 72 / 74 | **97.3%** |
 
-Measured single-pass recall is **46–47%** — about **80% of the one-pass
-ceiling**, not 47% of some notional perfect score. That reframes the headline
+Measured single-pass recall was **46–47%** on the 36-case corpus this table no
+longer describes — about **80% of the one-pass ceiling**, not 47% of some
+notional perfect score. The ceiling moved only slightly when five cases were
+removed for answer-key disclosure ([datasets](datasets.md#real-repository-cross-file-corpus));
+the recall figure has not been re-measured against the new key. That reframes the headline
 considerably: the distance between the engine and its own structural limit is
 much smaller than the distance between the headline and 100%.
 

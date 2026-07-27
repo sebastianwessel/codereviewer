@@ -112,6 +112,37 @@ describe('real repository corpus manifest schema', () => {
     ).toThrow(/must not name the defect/u)
   })
 
+  // Hydration matches acknowledged text against the flagged comments as a set,
+  // and it matches exactly, so a padded or duplicated entry records a judgement
+  // that covers nothing while reading as though it did.
+  test('keeps a removed-comment resolution matchable against the flagged text', () => {
+    const reviewWith = (
+      acknowledgedComments: readonly string[]
+    ): Record<string, unknown> => ({
+      ...baseCase,
+      removedCommentDisclosureReview: {
+        reviewedAt: '2026-07-27',
+        verdict: 'non-disclosing',
+        rationale:
+          'A licence header whose copyright year the fix commit bumped; it names no code and no behaviour.',
+        acknowledgedComments
+      }
+    })
+
+    expect(
+      parseRealRepoCorpusManifest(manifestWith([reviewWith(['// a header'])]))
+        .cases[0]?.removedCommentDisclosureReview?.verdict
+    ).toBe('non-disclosing')
+    expect(() =>
+      parseRealRepoCorpusManifest(manifestWith([reviewWith(['  // a header'])]))
+    ).toThrow(/trimmed exactly as hydration reports it/u)
+    expect(() =>
+      parseRealRepoCorpusManifest(
+        manifestWith([reviewWith(['// a header', '// a header'])])
+      )
+    ).toThrow(/acknowledges the same removed comment twice/u)
+  })
+
   test('rejects duplicate case ids and duplicate fix commits', () => {
     expect(() =>
       parseRealRepoCorpusManifest(manifestWith([baseCase, baseCase]))

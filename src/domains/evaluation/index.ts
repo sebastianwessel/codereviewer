@@ -45,11 +45,20 @@ export {
   PermissiveLicenseSchema,
   RealRepoCorpusCaseSchema,
   RealRepoCorpusManifestSchema,
+  RemovedCommentDisclosureReviewSchema,
   type CorpusSplit,
   type RealRepoCorpusCase,
-  type RealRepoCorpusManifest
+  type RealRepoCorpusManifest,
+  type RemovedCommentDisclosureReview
 } from './real-repo-corpus.schema.js'
 export {
+  minimumDisclosureWordCount,
+  removedProseCommentsIn,
+  resolveRemovedCommentDisclosures,
+  type RemovedCommentDisclosureResolution
+} from './real-repo-diff-comment-disclosure.js'
+export {
+  assertReviewedDiffIsUncontaminated,
   buildRealRepoSlice,
   defaultRealRepoManifestPath,
   defaultRealRepoOutputSliceRoot,

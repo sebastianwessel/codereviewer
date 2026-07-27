@@ -9,6 +9,10 @@ import {
 import { materializeDiffFiles } from './benchmark-hydration.js'
 import { EvalSliceCaseSchema } from './eval-fixture.schema.js'
 import {
+  removedProseCommentsIn,
+  resolveRemovedCommentDisclosures
+} from './real-repo-diff-comment-disclosure.js'
+import {
   answerKeyLeakIn,
   parseRealRepoCorpusManifestJson,
   selectCorpusCases,
@@ -175,6 +179,59 @@ export const diffPathsOutsideReviewedSet = (input: {
   const reviewed = new Set(input.reviewedPaths)
 
   return input.diffPaths.filter((diffPath) => !reviewed.has(diffPath))
+}
+
+// Everything the reviewed diff must not contain, checked on the diff a run will
+// actually score. It runs for a rebuilt case AND for a reused one: a slice
+// hydrated before a rule existed would otherwise be served from cache forever,
+// and the disclosure record is not part of the slice, so editing it does not
+// invalidate the cache either.
+export const assertReviewedDiffIsUncontaminated = (input: {
+  readonly corpusCase: RealRepoCorpusCase
+  readonly diff: string
+  readonly log?: (message: string) => void
+}): void => {
+  // The manifest's own text is validated for answer-key wording, but the reviewed
+  // DIFF is generated from upstream and is what the model actually reads. An
+  // upstream fix that also added an advisory id puts the answer inside the
+  // model's input, and a case like that measures nothing while silently
+  // inflating recall.
+  const diffLeak = answerKeyLeakIn(input.diff)
+
+  if (diffLeak !== undefined) {
+    throw new Error(
+      `Corpus case "${input.corpusCase.id}": the reviewed diff names the defect, so the answer key is inside the model's input ("${diffLeak}"). Drop the case or choose reviewed paths that exclude the disclosure.`
+    )
+  }
+
+  // A comment the upstream fix added is a REMOVED line in this reversed diff, and
+  // advisory wording is not how an engineer writes one. Prose comments are too
+  // fuzzy to reject outright, so each one must be judged by a curator and the
+  // judgement recorded in the manifest; an unjudged one fails the case rather
+  // than scoring against an answer key the model was shown in English.
+  const flaggedComments = removedProseCommentsIn(input.diff)
+  const acknowledgedComments =
+    input.corpusCase.removedCommentDisclosureReview?.acknowledgedComments ?? []
+  const { unresolvedComments, staleAcknowledgements } =
+    resolveRemovedCommentDisclosures({ flaggedComments, acknowledgedComments })
+
+  if (unresolvedComments.length > 0) {
+    throw new Error(
+      `Corpus case "${input.corpusCase.id}": the reviewed diff removes ${unresolvedComments.length} prose comment(s) no curator has judged, and a comment the upstream fix added states the defect in English. Read each one against the case's expectations, then either drop the case or record it under removedCommentDisclosureReview.acknowledgedComments: ${unresolvedComments.map((comment) => `"${comment}"`).join(', ')}.`
+    )
+  }
+
+  if (staleAcknowledgements.length > 0) {
+    throw new Error(
+      `Corpus case "${input.corpusCase.id}": removedCommentDisclosureReview acknowledges comment(s) the reviewed diff no longer removes, so the resolution would blanket-cover whatever appears next. Remove them: ${staleAcknowledgements.map((comment) => `"${comment}"`).join(', ')}.`
+    )
+  }
+
+  if (flaggedComments.length > 0) {
+    input.log?.(
+      `${input.corpusCase.id}: ${flaggedComments.length} removed prose comment(s) reviewed as non-disclosing on ${input.corpusCase.removedCommentDisclosureReview?.reviewedAt ?? 'an unrecorded date'}`
+    )
+  }
 }
 
 export const buildRealRepoSlice = (input: {
@@ -476,19 +533,11 @@ const hydrateCase = async (
     )
   }
 
-  // The manifest's own text is validated for answer-key wording, but the reviewed
-  // DIFF is generated from upstream and is what the model actually reads. An
-  // upstream fix that also added an advisory id or a comment naming the defect
-  // puts the answer inside the model's input, and a case like that measures
-  // nothing while silently inflating recall. Reject it here rather than let it
-  // score.
-  const diffLeak = answerKeyLeakIn(diff)
-
-  if (diffLeak !== undefined) {
-    throw new Error(
-      `Corpus case "${input.corpusCase.id}": the reviewed diff names the defect, so the answer key is inside the model's input ("${diffLeak}"). Drop the case or choose reviewed paths that exclude the disclosure.`
-    )
-  }
+  assertReviewedDiffIsUncontaminated({
+    corpusCase: input.corpusCase,
+    diff,
+    ...(input.log === undefined ? {} : { log: input.log })
+  })
 
   // A declared path with no new-side content means the fix ADDED that file, so
   // the pre-fix tree has nothing to review there. Worth saying out loud, but not
@@ -605,6 +654,12 @@ export const hydrateRealRepoCorpus = async (
     })
 
     if (state === 'hydrated' && sliceDiff !== undefined) {
+      assertReviewedDiffIsUncontaminated({
+        corpusCase,
+        diff: sliceDiff,
+        ...(options.log === undefined ? {} : { log: options.log })
+      })
+
       const changedFileCount = materializeDiffFiles(sliceDiff).length
 
       cachedCaseCount += 1

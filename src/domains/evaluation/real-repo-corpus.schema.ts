@@ -82,6 +82,43 @@ const answerKeyFreeText = (maxLength: number) =>
       'Reviewed-input text must not name the defect (advisory id, vulnerability, or exploit wording)'
     )
 
+// A curator's resolution of the removed-comment disclosure warning raised by
+// hydration (spec 17 anti-contamination). The reviewed diff is the fix read
+// backwards, so a comment the fix ADDED shows up as a removed line; when that
+// comment explains the defect in prose, the case measures nothing.
+//
+// The warning is fuzzy by construction and cannot decide disclosure on its own,
+// so the decision is recorded here per case and per comment. `verdict` has one
+// value on purpose: a disclosing comment has no resolution other than dropping
+// the case, so there is no way to record "disclosing" and keep running. Who made
+// the call is the commit that added this record.
+export const RemovedCommentDisclosureReviewSchema = z.strictObject({
+  reviewedAt: z.iso.date(),
+  verdict: z.literal('non-disclosing'),
+  // Why every acknowledged comment fails to give the expectation away. Long
+  // enough that "checked" is not a valid answer.
+  rationale: z.string().min(40).max(1000),
+  // The exact flagged comment texts, trimmed as hydration reports them. Listing
+  // them individually is what keeps the resolution from covering a comment
+  // nobody read: a re-capture that changes or adds one fails until it is judged.
+  acknowledgedComments: z
+    .array(
+      z
+        .string()
+        .min(1)
+        .max(500)
+        .refine(
+          (value) => value === value.trim(),
+          'Acknowledged comment text must be trimmed exactly as hydration reports it'
+        )
+    )
+    .min(1)
+})
+
+export type RemovedCommentDisclosureReview = z.infer<
+  typeof RemovedCommentDisclosureReviewSchema
+>
+
 // Only https remotes. ssh/file/git remotes would pull local credentials or a
 // local path into the hydration command line.
 const RepositoryUrlSchema = z
@@ -119,6 +156,10 @@ export const RealRepoCorpusCaseSchema = z.strictObject({
   reviewIntent: answerKeyFreeText(300),
   expectedFindings: z.array(ExpectedFindingSchema).min(1),
   expectedNoFindingZones: z.array(ExpectedNoFindingZoneSchema).default([]),
+  // Present only for a case whose reviewed diff removes prose comments.
+  // Hydration fails such a case until this record covers every flagged comment.
+  removedCommentDisclosureReview:
+    RemovedCommentDisclosureReviewSchema.optional(),
   tags: z.array(z.string().min(1)).default([]),
   // Curator notes. Never rendered into slice metadata, never model-visible.
   notes: z.string().min(1).max(1000).optional()
@@ -187,6 +228,15 @@ export const parseRealRepoCorpusManifest = (
         `Corpus case "${corpusCase.id}" declares the same fix and parent commit.`
       )
     }
+
+    // Hydration matches acknowledgements against flagged comments as a set, so a
+    // duplicate entry silently inflates the record without covering anything.
+    assertUnique(
+      corpusCase.removedCommentDisclosureReview?.acknowledgedComments ?? [],
+      (comment) => comment,
+      (duplicate) =>
+        `Corpus case "${corpusCase.id}" acknowledges the same removed comment twice: "${duplicate}".`
+    )
 
     // A path-bearing expectation outside the reviewed diff can never be scored
     // fairly: the reviewer was not asked to look at that file.

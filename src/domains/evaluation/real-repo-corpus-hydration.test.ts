@@ -678,3 +678,127 @@ describe('answer-key leakage in the reviewed diff', () => {
     expect(answerKeyLeakIn('const x = decode(input)')).toBeUndefined()
   })
 })
+
+// The reviewed diff is the upstream fix read backwards, so a comment the fix
+// ADDED is a REMOVED line here. Advisory wording is not how an engineer writes
+// such a comment, so the advisory scan above cannot see it; the rule that can is
+// fuzzy, which is why a flagged comment must be resolved by a curator in the
+// manifest rather than excused by the rule.
+describe('removed comment disclosure in the reviewed diff', () => {
+  const disclosingComment =
+    '// No `g` flag: the same regex is reused for every route below.'
+  const copyrightHeader =
+    '* Copyright 2014-2026 JetBrains s.r.o and contributors. Use of this source code is governed by the Apache 2.0 license.'
+
+  const diffRemoving = (comment: string): string =>
+    [
+      'diff --git a/pkg/service.go b/pkg/service.go',
+      '--- a/pkg/service.go',
+      '+++ b/pkg/service.go',
+      '@@ -1,4 +1,3 @@',
+      ' package service',
+      `-${comment}`,
+      '-func lookup(id string, tenant string) *Row { return find(id, tenant) }',
+      '+func lookup(id string) *Row { return find(id) }',
+      ''
+    ].join('\n')
+
+  const writeManifest = async (
+    caseOverrides: Record<string, unknown>
+  ): Promise<void> => {
+    await writeFile(
+      path.join(repositoryRoot, manifestRelativePath),
+      JSON.stringify({
+        ...manifestFixture,
+        cases: [{ ...manifestFixture.cases[0], ...caseOverrides }]
+      })
+    )
+  }
+
+  test('fails a case whose removed prose comment nobody has judged', async () => {
+    await writeManifest({})
+
+    await expect(
+      hydrate(createFakeGit({ diff: diffRemoving(disclosingComment) }))
+    ).rejects.toThrow(/no curator has judged/u)
+  })
+
+  // The rule flags a licence header exactly as it flags a disclosure: it cannot
+  // tell them apart, and pretending otherwise is what would let a real
+  // disclosure through. Recording the judgement is what makes hydration quiet.
+  test('hydrates a case whose flagged comment a curator resolved as non-disclosing', async () => {
+    await writeManifest({
+      removedCommentDisclosureReview: {
+        reviewedAt: '2026-07-27',
+        verdict: 'non-disclosing',
+        rationale:
+          'A licence header whose copyright year the fix commit bumped. It names no code and no behaviour, so it cannot give the expectation away.',
+        acknowledgedComments: [copyrightHeader]
+      }
+    })
+
+    const result = await hydrate(
+      createFakeGit({ diff: diffRemoving(copyrightHeader) })
+    )
+
+    expect(result.hydratedCaseCount).toBe(1)
+  })
+
+  test('refuses a resolution that does not cover every flagged comment', async () => {
+    await writeManifest({
+      removedCommentDisclosureReview: {
+        reviewedAt: '2026-07-27',
+        verdict: 'non-disclosing',
+        rationale:
+          'A licence header whose copyright year the fix commit bumped. It names no code and no behaviour, so it cannot give the expectation away.',
+        acknowledgedComments: [copyrightHeader]
+      }
+    })
+
+    await expect(
+      hydrate(createFakeGit({ diff: diffRemoving(disclosingComment) }))
+    ).rejects.toThrow(/no curator has judged/u)
+  })
+
+  test('refuses an acknowledgement the reviewed diff no longer removes', async () => {
+    await writeManifest({
+      removedCommentDisclosureReview: {
+        reviewedAt: '2026-07-27',
+        verdict: 'non-disclosing',
+        rationale:
+          'A licence header whose copyright year the fix commit bumped. It names no code and no behaviour, so it cannot give the expectation away.',
+        acknowledgedComments: [copyrightHeader]
+      }
+    })
+
+    await expect(hydrate(createFakeGit())).rejects.toThrow(
+      /no longer removes/u
+    )
+  })
+
+  // A slice hydrated before this rule existed is served from cache, and the
+  // resolution is not part of the slice, so editing the manifest does not
+  // invalidate it either. Checking only on rebuild would let exactly the cases
+  // this rule exists for keep scoring.
+  test('re-checks a cached slice instead of trusting the checkout', async () => {
+    await writeManifest({
+      removedCommentDisclosureReview: {
+        reviewedAt: '2026-07-27',
+        verdict: 'non-disclosing',
+        rationale:
+          'Placeholder resolution used only to get the leaking slice onto disk for this test.',
+        acknowledgedComments: [disclosingComment]
+      }
+    })
+
+    const fakeGit = createFakeGit({ diff: diffRemoving(disclosingComment) })
+
+    expect((await hydrate(fakeGit)).hydratedCaseCount).toBe(1)
+
+    // The curator withdraws the resolution; the checkout and the slice are still
+    // intact, so the case would otherwise be reused as cached.
+    await writeManifest({})
+
+    await expect(hydrate(fakeGit)).rejects.toThrow(/no curator has judged/u)
+  })
+})

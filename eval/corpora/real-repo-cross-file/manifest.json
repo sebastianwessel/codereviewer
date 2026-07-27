@@ -315,37 +315,6 @@
       "notes": "Cross-file: the evidence sits in the unchanged server/leafnode.go. processLeafNodeConnect swaps c.perms.sub and c.perms.pub for a non-solicited leaf (lines 2282-2292), and leafReceiveAllowed / leafSendAllowed (lines 3393-3434) show that a leaf's send permission is taken from c.opts.Export and its receive permission from canSubscribeInternal. Nothing in msgtrace.go hints that c.perms means something different on a LEAF connection."
     },
     {
-      "id": "nats-server-no-auth-user-skips-connection-restrictions",
-      "language": "go",
-      "split": "held-out",
-      "repositoryUrl": "https://github.com/nats-io/nats-server.git",
-      "upstreamOwner": "nats-io",
-      "upstreamRepo": "nats-server",
-      "license": "Apache-2.0",
-      "source": "upstream-fix-commit",
-      "capturedAt": "2026-07-25",
-      "fixCommit": "46d982dff6f79e223584ea4054bf71cda77e4420",
-      "fixCommittedAt": "2026-06-29T16:17:21+01:00",
-      "parentCommit": "778a0c6c7d8866f953974eb561ebbab255f960a3",
-      "reviewedPaths": ["server/parser.go"],
-      "reviewIntent": "Register the configured no-auth user when a client opens with a protocol other than CONNECT",
-      "expectedFindings": [
-        {
-          "category": "security",
-          "severity": "high",
-          "path": "server/parser.go",
-          "lineRange": [180, 192],
-          "matchMode": "path-semantic",
-          "tier": "security",
-          "securityMechanism": "authorization",
-          "contextDepth": "cross-file",
-          "semanticSummary": "The no-auth-user fast path registers the configured user and marks the connection authenticated as soon as the name exists in s.users, applying none of the restrictions the CONNECT path applies to the same user record: the user's allowed connection types are never checked, and a user that must arrive through a trusted proxy is accepted without one. A client that simply omits CONNECT is therefore admitted as a user that configuration restricts to other transports."
-        }
-      ],
-      "tags": ["cross-file", "security", "authentication-bypass"],
-      "notes": "Cross-file: the contract this fast path breaks is written in the unchanged server/auth.go, where the CONNECT path rejects a user unless c.connectionTypeAllowed(user.AllowedConnectionTypes) holds (around lines 885-950) and refuses a user whose ProxyRequired is set without a trusted proxy (around line 1164). parser.go alone shows only a registration; whether anything is missing is undecidable without auth.go."
-    },
-    {
       "id": "casbin-conditional-role-transitive-check-drops-domain",
       "language": "go",
       "split": "held-out",
@@ -554,37 +523,6 @@
       ],
       "tags": ["cross-file", "http-semantics", "conditional-requests"],
       "notes": "Cross-file: src/werkzeug/http.py shows unquote_etag returning a (etag, weak) pair and stripping the W/ prefix (lines 1016-1038), which is what makes the [0] subscript a silent loss rather than a rename; and src/werkzeug/sansio/http.py shows is_resource_modified feeding if_range.etag into the entity-tag comparison that decides the 206 (lines 71-75). The reviewed file alone shows no consequence."
-    },
-    {
-      "id": "undici-coerced-header-value-skips-validation",
-      "language": "javascript",
-      "split": "held-out",
-      "repositoryUrl": "https://github.com/nodejs/undici.git",
-      "upstreamOwner": "nodejs",
-      "upstreamRepo": "undici",
-      "license": "MIT",
-      "source": "upstream-fix-commit",
-      "capturedAt": "2026-07-25",
-      "fixCommit": "354a151f615f03d72f6aff02f3ad18a7e99a72b5",
-      "fixCommittedAt": "2026-07-22T08:26:33+02:00",
-      "parentCommit": "d228fab8495360f8d9bafe7140cf9c44f7894d3d",
-      "reviewedPaths": ["lib/core/request.js"],
-      "reviewIntent": "Coerce non-string header values with a template literal before storing them on the request",
-      "expectedFindings": [
-        {
-          "category": "security",
-          "severity": "high",
-          "path": "lib/core/request.js",
-          "lineRange": [462, 487],
-          "matchMode": "path-semantic",
-          "tier": "security",
-          "securityMechanism": "injection",
-          "contextDepth": "cross-file",
-          "semanticSummary": "processHeader validates only values that are already strings; the array-element fallback and the final else branch coerce with a template literal and store the result unchecked. The object guard at the top does not cover functions, so a value with a crafted toString or Symbol.toPrimitive yields arbitrary characters, carriage return and line feed included, which are pushed onto the request headers and later written to the socket verbatim, splitting the request."
-        }
-      ],
-      "tags": ["cross-file", "security", "http-headers"],
-      "notes": "Cross-file: lib/core/util.js is where isValidHeaderValue is defined as the CR/LF rejector (headerCharRegex, lines 773-781) — the name alone does not say the check is what keeps newlines out — and lib/dispatcher/client-h1.js is where request.headers is serialised onto the wire without a further check. Neither is in the reviewed file, so the consequence of skipping the validator is not visible there."
     },
     {
       "id": "ws-close-frame-leaks-uninitialised-buffer-bytes",
@@ -850,44 +788,6 @@
       "notes": "The consequence is decidable only against the other readers of the counter in the same file: can_spawn_processor? around line 331, trigger_out_of_band_hook around line 295, pool_capacity at line 174, busy_threads at line 181, and the stats hash at line 148 that lib/puma/server.rb re-exports. The retiring branch itself reads as an ordinary early exit."
     },
     {
-      "id": "netty-gzip-extra-field-length-never-applied",
-      "language": "java",
-      "split": "held-out",
-      "repositoryUrl": "https://github.com/netty/netty.git",
-      "upstreamOwner": "netty",
-      "upstreamRepo": "netty",
-      "license": "Apache-2.0",
-      "source": "upstream-fix-commit",
-      "capturedAt": "2026-07-25",
-      "fixCommit": "a655e648bf3195eca5293bfd9b679fef8109c42c",
-      "fixCommittedAt": "2026-06-16T08:49:59+02:00",
-      "parentCommit": "6dabf563b6acdc30448f2b09685fbdcd5d88e39a",
-      "reviewedPaths": ["codec-compression/src/main/java/io/netty/handler/codec/compression/JdkZlibDecoder.java"],
-      "reviewIntent": "Read the gzip header's extra-field length from its two length bytes",
-      "expectedFindings": [
-        {
-          "category": "bug",
-          "severity": "medium",
-          "path": "codec-compression/src/main/java/io/netty/handler/codec/compression/JdkZlibDecoder.java",
-          "lineRange": [388, 408],
-          "matchMode": "path-semantic",
-          "tier": "logic",
-          "semanticSummary": "The extra-field length is accumulated into the xlen field with a bitwise or, but that field carries -1 as its 'no extra field' sentinel, so or-ing into all-ones leaves it -1 and the guard in the next state never skips the extra field: its bytes reach the inflater as deflate data. The two length bytes are also combined in the opposite order to the little-endian length the gzip format defines, so even a corrected guard would skip a byte-swapped count."
-        },
-        {
-          "category": "bug",
-          "severity": "low",
-          "path": "codec-compression/src/main/java/io/netty/handler/codec/compression/JdkZlibDecoder.java",
-          "lineRange": [320, 332],
-          "matchMode": "path-semantic",
-          "tier": "logic",
-          "semanticSummary": "The footer handler prepares for a following concatenated member by resetting the inflater, the CRC and the header state machine, but leaves the extra-field length holding the previous member's value. A second member that carries no extra field of its own then inherits that length and skips bytes belonging to its payload."
-        }
-      ],
-      "tags": ["bug", "codec", "gzip"],
-      "notes": "Self-contained against RFC 1952: the sentinel is declared at line 59 and the guard that consumes it sits at line 402, both inside the reviewed file. Kept deliberately as a non-security control case in a language the rest of the corpus does not cover."
-    },
-    {
       "id": "django-template-download-uses-server-supplied-filename",
       "language": "python",
       "split": "held-out",
@@ -966,45 +866,6 @@
       "notes": "The consequence sits a few dozen lines above the defect in the same file: the parsed ranges are validated around line 475, where a start outside the file raises the not-satisfiable error, and the single-range writer would otherwise seek to a negative offset. Nothing outside responses.py is needed."
     },
     {
-      "id": "nestjs-middleware-overlap-filter-uses-stateful-regex",
-      "language": "typescript",
-      "split": "held-out",
-      "repositoryUrl": "https://github.com/nestjs/nest.git",
-      "upstreamOwner": "nestjs",
-      "upstreamRepo": "nest",
-      "license": "MIT",
-      "source": "upstream-fix-commit",
-      "capturedAt": "2026-07-25",
-      "fixCommit": "6b0c9b21914132f71d9d312b0c3c80d28062c193",
-      "fixCommittedAt": "2026-07-18T19:58:14+05:30",
-      "parentCommit": "7cdb8f498e7723f5e2e89b6befc693bf07f171b0",
-      "reviewedPaths": ["packages/core/middleware/builder.ts"],
-      "reviewIntent": "Drop route entries that a parameterized route in the same set already covers",
-      "expectedFindings": [
-        {
-          "category": "bug",
-          "severity": "medium",
-          "path": "packages/core/middleware/builder.ts",
-          "lineRange": [109, 137],
-          "matchMode": "path-semantic",
-          "tier": "logic",
-          "semanticSummary": "Each parameterized route's pattern is compiled once with the global flag and the same object is reused for every route in the filter below. A global regular expression carries lastIndex across calls to test, so after the first successful match the next test resumes mid-string and fails the start anchor: overlap removal works for one route and silently keeps the rest, leaving a concrete route that a parameterized route already covers, whose middleware is then bound twice."
-        }
-      ],
-      "expectedNoFindingZones": [
-        {
-          "path": "packages/core/middleware/builder.ts",
-          "lineRange": [
-            17,
-            42
-          ],
-          "reason": "MiddlewareBuilder's own surface — the configuration Set, the constructor, apply, build and getHttpAdapter — is construction, spreading and a field read. The reviewed diff only touches removeOverlappedRoutes further down the file."
-        }
-      ],
-      "tags": ["bug", "middleware", "stateful-regex"],
-      "notes": "Self-contained: the pattern is anchored and only ever used with test, so the global flag contributes nothing except the lastIndex it introduces. Included as a plain-logic control case in a widely used framework."
-    },
-    {
       "id": "typeorm-cache-write-leaks-query-runner",
       "language": "typescript",
       "split": "held-out",
@@ -1039,6 +900,14 @@
           "semanticSummary": "clear hands its argument to the helper that creates a query runner whenever none was supplied, then returns the clearTable promise without releasing anything - not on failure and not on success. The interface declares that parameter optional and the shipped cache-clear command calls the method with nothing, so every call checks a pooled connection out for good. remove, directly below, shows the intended shape: it releases the runner exactly when it created it itself."
         }
       ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "Displaced by re-indentation, not removed: the upstream fix wrapped the body in try/finally, so every line of the block shifted and the identical comment is present on the new side of the same hunk. It also describes Spanner's lack of auto-generated columns, which has nothing to do with either expectation (an unreleased query runner on the failure path of storeInCache, and an unreleased runner in clear).",
+        "acknowledgedComments": [
+          "// Spanner does not support auto-generated columns"
+        ]
+      },
       "tags": ["bug", "resource-leak", "cache"],
       "notes": "Decidable inside the reviewed file: the runner is created at the top of the method and released on its last line, with three awaited statements in between and no error path. Kept as a resource-lifetime control case."
     },
@@ -1158,6 +1027,14 @@
           "semanticSummary": "Every allowed call cancels the pending eviction job for its key and stores a replacement, but the read and the store are separate operations on a shared map: two calls for one key that interleave between them both launch a job, and the second store overwrites the first without cancelling it. The orphan still fires, at the earlier refill instant, removing the limiter from the application-scoped registry. The next call rebuilds it with a full bucket, so concurrent requests win back budget early."
         }
       ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "A licence header whose copyright year the fix commit bumped from 2022 to 2026. It names no code, no phase and no ordering, and neither expectation (the interceptor phase sitting after authentication, and the eviction-job race) is discoverable from a copyright line.",
+        "acknowledgedComments": [
+          "* Copyright 2014-2026 JetBrains s.r.o and contributors. Use of this source code is governed by the Apache 2.0 license."
+        ]
+      },
       "tags": ["cross-file", "security", "rate-limit"],
       "notes": "Cross-file and verdict-flipping: the reviewed file shows only a phase name. The unchanged AuthenticationInterceptors.kt of ktor-server-auth inserts its Authenticate phase directly after Plugins (around lines 22-29) and completes the call through executeChallenges on failure, and ApplicationCallPipeline.kt fixes the phase order as Setup, Monitoring, Plugins, Call, Fallback. Only those two files show that 'before Call' means 'after authentication'."
     },
@@ -1220,47 +1097,6 @@
       ],
       "tags": ["cross-file", "security", "open-redirect"],
       "notes": "Cross-file: src/Middleware/Rewrite/src/UrlActions/RedirectAction.cs is where the normalized value is prepended with a slash and assigned to the Location header (around lines 46-52), RewriteAction.cs and RedirectRule.cs are the other two call sites, and src/Shared/ResultsHelpers/SharedUrlHelper.cs holds IsLocalUrl (around lines 33-59), the predicate this helper says it mirrors and which rejects both the double-slash and the slash-backslash shapes."
-    },
-    {
-      "id": "apisix-attach-consumer-label-leaves-client-headers",
-      "language": "lua",
-      "split": "held-out",
-      "repositoryUrl": "https://github.com/apache/apisix.git",
-      "upstreamOwner": "apache",
-      "upstreamRepo": "apisix",
-      "license": "Apache-2.0",
-      "source": "upstream-fix-commit",
-      "capturedAt": "2026-07-25",
-      "fixCommit": "d3f198486af31518e1bf039fc604d90008f732f5",
-      "fixCommittedAt": "2026-06-24T15:01:58+05:45",
-      "parentCommit": "d0451ff4a81c86c8e76eb5c3bf3ba42caeb006c4",
-      "reviewedPaths": ["apisix/plugins/attach-consumer-label.lua"],
-      "reviewIntent": "Attach the matched consumer's labels to the configured upstream headers",
-      "expectedFindings": [
-        {
-          "category": "security",
-          "severity": "high",
-          "path": "apisix/plugins/attach-consumer-label.lua",
-          "lineRange": [48, 66],
-          "matchMode": "path-semantic",
-          "tier": "security",
-          "securityMechanism": "authorization",
-          "contextDepth": "cross-file",
-          "semanticSummary": "before_proxy returns early when the request has no consumer, and again when the matched consumer has no labels, and on neither path does it touch the headers named in its own configuration. Those headers are what the upstream is meant to read as gateway-asserted consumer identity, so a client that sends them itself has them forwarded unchanged whenever the consumer or its labels are absent; only the mapping loop ever overwrites them."
-        }
-      ],
-      "expectedNoFindingZones": [
-        {
-          "path": "apisix/plugins/attach-consumer-label.lua",
-          "lineRange": [
-            22,
-            42
-          ],
-          "reason": "The plugin config JSON schema and the plugin module table are static declarations: an object of string properties constrained to a leading \"$\", minProperties 1, headers required. They execute no request logic, and the reviewed diff starts below them."
-        }
-      ],
-      "tags": ["cross-file", "security", "identity-headers"],
-      "notes": "Cross-file: apisix/core/request.lua (set_header and modify_header, around lines 122-184) is the only mechanism in the request path that overwrites or clears an inbound header, so the reviewed file's early returns mean the client's own values survive to the upstream. Nothing in the plugin says that its configured header names are also inbound-controllable."
     },
     {
       "id": "plug-cookie-encode-allows-attribute-separator",
@@ -1620,6 +1456,16 @@
           "semanticSummary": "FullMatchWithRegex calls re.Longest() on the caller's compiled pattern before every match. Longest mutates the Regexp, and regexp.Regexp is only safe for concurrent use by methods that do not modify it, so the shared xDS matchers that hold one compiled pattern for the lifetime of a route configuration (HeaderRegexMatcher.Match, StringMatcher.Match, pathRegexMatcher.match) mutate it from every RPC-handling goroutine at once. That is a data race on the request path, not a one-time setup cost."
         }
       ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-07-27",
+        "verdict": "non-disclosing",
+        "rationale": "The doc comment of CompileSafeRegex, the helper the upstream fix introduced. It describes that helper's own behaviour - compile once to catch syntax errors, then compile an anchored pattern - and says nothing about concurrency, mutation, Longest, or shared state, which is the whole of the expectation. It points at the replaced call site, which the removed and added code already show, without giving away why the replacement was needed.",
+        "acknowledgedComments": [
+          "// CompileSafeRegex attempts to compile the provided pattern as a regular",
+          "// expression. It first compiles the unanchored pattern to catch syntax errors",
+          "// and then compiles and returns the explicitly anchored pattern to guarantee"
+        ]
+      },
       "tags": ["multi-file", "concurrency", "xds", "wide-diff"],
       "notes": "Five-file diff whose defect sits in the helper the other four files call; the reviewed diff adds internal/grpcutil/regex.go as a new file, so the evidence is inside the change while the concurrency argument depends on how the callers hold the compiled pattern. Upstream removed the helper rather than fixing it."
     }
