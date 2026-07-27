@@ -435,7 +435,6 @@ type DiscoveryCallResult = {
 
 const runDiscoveryCall = async (
   runner: HolisticReviewRunner,
-  taskInput: TaskReviewInput,
   task: WorkflowReviewTask,
   reviewText: string,
   signal: AbortSignal | undefined,
@@ -445,7 +444,6 @@ const runDiscoveryCall = async (
     const review = ModelHolisticReviewResultSchema.parse(
       await runner(
         {
-          runId: taskInput.runId,
           taskId: task.id,
           paths: [...task.paths],
           reviewText
@@ -518,7 +516,6 @@ export const runModelBackedHolisticTaskReview = async (
 
   const general = await runDiscoveryCall(
     input.runners.holisticReview,
-    input.taskInput,
     input.task,
     reviewText,
     input.signal,
@@ -543,7 +540,6 @@ export const runModelBackedHolisticTaskReview = async (
     )
     const security = await runDiscoveryCall(
       input.runners.holisticReview,
-      input.taskInput,
       input.task,
       buildSecurityReviewText(input.taskInput, rawDiff),
       input.signal,

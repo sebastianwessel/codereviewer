@@ -33,7 +33,6 @@ const task: WorkflowReviewTask = {
 }
 
 const taskInput = TaskReviewInputSchema.parse({
-  runId: 'run-holistic',
   task,
   reviewedDiffRanges: [{ path: 'src/app.ts', startLine: 1, endLine: 1 }],
   evidence: [],

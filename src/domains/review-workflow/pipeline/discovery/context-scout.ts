@@ -167,7 +167,6 @@ export const runContextScout = async (
     const result = ModelContextScoutResultSchema.parse(
       await input.runScout(
         ContextScoutInputSchema.parse({
-          runId: input.taskInput.runId,
           taskId: input.task.id,
           paths: [...input.task.paths],
           reviewText: input.reviewText

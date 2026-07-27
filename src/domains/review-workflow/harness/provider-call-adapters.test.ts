@@ -73,7 +73,6 @@ describe('model provider call adapters', () => {
   test('logs and normalizes refutation output', async () => {
     const { entries, logger } = createLogger()
     const refutationInput = FindingRefutationBatchInputSchema.parse({
-      runId: 'run-provider-adapters',
       candidates: [candidate],
       reviewedDiffRanges: [],
       evidence: [evidence],

@@ -75,7 +75,6 @@ const createFindingRefutationBatchInput = (
         )
 
   return FindingRefutationBatchInputSchema.parse({
-    runId: input.workflowInput.runId,
     provenance: input.workflowInput.provenance,
     instructions: input.workflowInput.instructions,
     skills: input.workflowInput.skills,

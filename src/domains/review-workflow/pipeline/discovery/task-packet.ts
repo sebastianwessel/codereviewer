@@ -72,7 +72,6 @@ export const taskReviewInputFor = (
   }
 
   const taskInput = TaskReviewInputSchema.parse({
-    runId: input.runId,
     task,
     reviewedDiffRanges: (input.reviewedDiffRanges ?? []).filter((range) =>
       taskCoversPath(task, range.path)

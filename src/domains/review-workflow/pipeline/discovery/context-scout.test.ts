@@ -55,7 +55,6 @@ const task: WorkflowReviewTask = {
 }
 
 const taskInput = TaskReviewInputSchema.parse({
-  runId: 'run-scout',
   task,
   reviewedDiffRanges: [],
   evidence: [],

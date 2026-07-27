@@ -494,7 +494,6 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
 // probes (a structured packet buries the source and dilutes whole-file
 // reasoning).
 export const HolisticReviewInputSchema = z.strictObject({
-  runId: z.string().min(1),
   taskId: z.string().min(1),
   paths: z.array(RepositoryRelativePathSchema),
   reviewText: z.string().min(1)
@@ -533,13 +532,16 @@ export type HolisticReviewRunner = (
 // from outside themselves — both carried in `reviewText` — and no file bodies and
 // no tools. Its only product is a list of symbols to fetch.
 //
-// Field order is deliberate, for the same reason as
-// `FindingRefutationBatchInputSchema`: JSON.stringify follows declaration order,
-// so the fields shared across every scout call in a run (runId) come first and
-// the per-task payload last, giving consecutive calls the longest possible shared
-// prompt prefix for the provider's prompt cache.
+// A run identifier is deliberately NOT carried here. It was, and it sat first so
+// that consecutive calls in one run would share the longest prefix — but a run id
+// is a fresh UUID, so the shared prefix was only `{"runId":"run-<uuid>","taskId":"`,
+// roughly thirty tokens, while the provider needs at least 1024 identical leading
+// tokens before it caches anything. The field therefore bought no cache hit within
+// a run and guaranteed a miss across runs, which a probe confirmed at zero cached
+// tokens against 67,000 input tokens. Nothing ever read it back: it was written
+// into the prompt and never consumed. Run correlation belongs in telemetry, which
+// carries it already.
 export const ContextScoutInputSchema = z.strictObject({
-  runId: z.string().min(1),
   taskId: z.string().min(1),
   paths: z.array(RepositoryRelativePathSchema),
   reviewText: z.string().min(1)
@@ -665,7 +667,6 @@ export type ContextScoutRunner = (
 ) => Promise<ModelContextScoutResult>
 
 export const TaskReviewInputSchema = z.strictObject({
-  runId: z.string().min(1),
   task: WorkflowReviewTaskSchema,
   reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
   evidence: z.array(EvidenceRecordSchema),
@@ -765,13 +766,16 @@ export type ModelHolisticFinding = z.infer<typeof ModelHolisticFindingSchema>
 // task with 14 candidates sent that file 14 times; input tokens dominate this
 // engine's cost at roughly 23:1 over output. The shared context is now sent once.
 //
-// Field order is deliberate: everything identical across batches (run, provenance,
-// instructions, skills, digest) comes first, then per-task context, then the
-// candidates. JSON.stringify follows this declaration order, so consecutive batches
-// share the longest possible prompt prefix, which is what provider prompt caches key
-// on.
+// A run identifier is deliberately NOT carried here. It was, and it sat first so
+// that consecutive calls in one run would share the longest prefix — but a run id
+// is a fresh UUID, so the shared prefix was only `{"runId":"run-<uuid>","taskId":"`,
+// roughly thirty tokens, while the provider needs at least 1024 identical leading
+// tokens before it caches anything. The field therefore bought no cache hit within
+// a run and guaranteed a miss across runs, which a probe confirmed at zero cached
+// tokens against 67,000 input tokens. Nothing ever read it back: it was written
+// into the prompt and never consumed. Run correlation belongs in telemetry, which
+// carries it already.
 export const FindingRefutationBatchInputSchema = z.strictObject({
-  runId: z.string().min(1),
   provenance: WorkflowProvenanceInputSchema,
   instructions: z.array(ContextDocumentSchema),
   skills: z.array(SkillContextDocumentSchema),
