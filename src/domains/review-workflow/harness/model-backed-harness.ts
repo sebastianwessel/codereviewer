@@ -4,7 +4,8 @@ import {
   crossFileRetrievalInstructions,
   modelContextScoutInstructions,
   modelFindingRefuterInstructions,
-  modelHolisticReviewerInstructions
+  modelHolisticReviewerInstructions,
+  modelSemanticMergeInstructions
 } from '../pipeline/agent-instructions.js'
 import {
   createBoundedRetrievalTools,
@@ -20,7 +21,9 @@ import {
   HolisticReviewInputSchema,
   ModelContextScoutResultSchema,
   ModelFindingRefutationBatchResultSchema,
-  ModelHolisticReviewResultSchema
+  ModelHolisticReviewResultSchema,
+  ModelSemanticMergeResultSchema,
+  SemanticMergeInputSchema
 } from '../pipeline/agent-contracts.js'
 import {
   ReviewWorkflowInputSchema,
@@ -127,6 +130,19 @@ export const createModelBackedReviewHarness = (
         maxSteps: 1,
         instructions: modelContextScoutInstructions
       }),
+      // Spec 05: the semantic finding merge. Compact and tool-free like the
+      // scout, and deliberately its OWN agent rather than extra duties on the
+      // refuter: requiring unrelated judgements in one call is a measured cause
+      // of degraded refutation, which is the stage this engine's precision
+      // depends on.
+      semantic_merge: agent({
+        model: 'reviewer',
+        input: SemanticMergeInputSchema,
+        output: ModelSemanticMergeResultSchema,
+        builtinTools: false,
+        maxSteps: 1,
+        instructions: modelSemanticMergeInstructions
+      }),
       refute_finding: agent({
         model: 'reviewer',
         input: FindingRefutationBatchInputSchema,
@@ -170,6 +186,11 @@ export const createModelBackedReviewHarness = (
                       ctx.agents.context_scout(
                         scoutInput,
                         scoutSignal === undefined ? {} : { signal: scoutSignal }
+                      ),
+                    semanticMerge: (mergeInput, mergeSignal) =>
+                      ctx.agents.semantic_merge(
+                        mergeInput,
+                        mergeSignal === undefined ? {} : { signal: mergeSignal }
                       )
                   },
                   ...(contextRetriever === undefined ? {} : { contextRetriever }),

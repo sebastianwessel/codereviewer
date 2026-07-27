@@ -81,6 +81,39 @@ reviewer's packet. **Cross-file retrieval** (`review.crossFileRetrieval.enabled`
 instead gives the reviewer mediated `repo_read` / `repo_list` / `repo_grep` tools.
 Both are described in [Optional capabilities](../optional-capabilities/README.md).
 
+## Semantic finding merge
+
+Discovery can describe one defect more than once: a single call restates it at
+neighbouring lines, and any second call over the same code — the security pass
+today — never sees the first call's output. Deduplicating by the model-assigned
+id cannot catch that (the ids come from different calls) and neither can a
+`(path, line)` rule (the anchors differ).
+
+So once every candidate for the task exists, and before anything reaches
+refutation, the candidates for each file are grouped by whether they describe
+**the same underlying defect**, and each group is reduced to one.
+
+- **The grouping is decided by a model, per file, in its own call.** It reads the
+  candidate descriptions plus the file and returns *groups*. It is never asked
+  which candidate to discard.
+- **Position is not the test.** Two candidates one line apart are frequently one
+  defect; two candidates on the same line are frequently two defects, and a
+  reviewer needs both. Sameness requires a shared root cause *and* a shared code
+  element. Proximity counts for nothing in either direction.
+- **Uncertainty does not merge.** A wrong merge silently removes a real defect,
+  while a missed merge produces one redundant comment, so the instruction is to
+  leave candidates alone whenever the answer is not clear.
+- **The survivor is chosen deterministically in code**, never by the model:
+  highest severity, then the most specific location, then the earliest candidate.
+- **The others are recorded, not deleted.** Each stays in the run's candidate
+  list carrying a `duplicate` rejection that names the candidate it was merged
+  into, so the merge rate is visible in the report.
+
+**A file with fewer than two candidates produces no call at all.** With today's
+roughly one candidate per file the stage costs close to nothing; it becomes
+load-bearing as soon as a file is reviewed as several units, which produces
+duplicate candidates by construction.
+
 ```mermaid
 flowchart TD
   P["task packet"] --> S{"contextScout.enabled?"}
@@ -91,13 +124,19 @@ flowchart TD
   SE -- yes --> SP["security-only call (additive, ≤ 8 more)"]
   SE -- no --> C["candidates, deduped · ≤ 12 general (+ ≤ 8 security)"]
   SP --> C
+  C --> M{"≥ 2 candidates in one file?"}
+  M -- no --> O["candidates for refutation"]
+  M -- yes --> MM["merge call per file → groups"]
+  MM --> R["one representative per group, chosen in code"]
+  R --> O
 ```
 
 ## What it emits
 
 Candidate findings (id, task id, category, severity, title, description,
-location, `proposedBy: 'review-agent'`, no evidence ids yet) plus any recovered
-provider issues. Candidates are not findings and are never reported as such.
+location, `proposedBy: 'review-agent'`, no evidence ids yet), the `duplicate`
+rejections produced by the semantic merge, plus any recovered provider issues.
+Candidates are not findings and are never reported as such.
 
 ## What can go wrong
 
@@ -109,6 +148,8 @@ provider issues. Candidates are not findings and are never reported as such.
 | More than 12 valid findings | Excess is discarded by the cap |
 | A genuine provider failure (auth, budget, network exhaustion) | Fails the task and the run, writing partial artifacts |
 | The security pass reports a location the general pass already flagged | Its candidate is suppressed — the extra pass can only add |
+| The semantic merge call fails, or returns a group naming a candidate that does not exist | No grouping for that file, recorded as a **recovered** provider issue; every candidate survives |
+| The merge puts one candidate in two groups | Only the first group is honoured — an ambiguous merge resolves towards leaving candidates alone |
 
 Recovering from a bad response instead of failing is deliberate: letting one
 malformed response fail the whole task would silently discard every other finding

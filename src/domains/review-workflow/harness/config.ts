@@ -1,5 +1,9 @@
 import { type BuiltinToolName } from '@purista/harness'
 import { REPO_TOOL_IDS } from '../../context-retrieval/index.js'
+import {
+  HOLISTIC_MAX_CANDIDATES,
+  SECURITY_MAX_CANDIDATES
+} from '../pipeline/discovery/holistic-task-review.js'
 import { type CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
 
 const defaultMaxConcurrentTasks = 4
@@ -42,13 +46,27 @@ export const maxChildAgentCallsForReview = (
     (input.securityPassEnabled === true ? 2 : 1) +
     (input.contextScoutEnabled === true ? 1 : 0)
   const refutationCallsPerTask = 1 + refutationBatchSplitAllowance
+  // Spec 05: the semantic finding merge issues at most one call per FILE that
+  // carries two or more candidates, and a task's candidates are capped, so
+  // halving the cap is the exact ceiling for a task. It is derived from the caps
+  // rather than guessed because under-reserving is fatal (the workflow refuses
+  // the call) while over-reserving costs nothing: this budget is a ceiling, not
+  // a spend, and today's roughly one candidate per file means almost none of it
+  // is used.
+  const mergeCallsPerTask = Math.floor(
+    (HOLISTIC_MAX_CANDIDATES +
+      (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0)) /
+      2
+  )
   // Cross-file retrieval (spec 16) needs no reservation here: a mediated tool call
   // is an agent STEP, bounded by the agent's maxSteps, and never counts against the
   // workflow's child-agent call budget (which counts agent invocations).
   const holisticCalls = taskCount * discoveryCallsPerTask
   const refutationCalls = taskCount * refutationCallsPerTask
+  const mergeCalls = taskCount * mergeCallsPerTask
   const concurrencyBuffer = maxConcurrentTasks * 2
-  const derived = holisticCalls + refutationCalls + concurrencyBuffer
+  const derived =
+    holisticCalls + refutationCalls + mergeCalls + concurrencyBuffer
 
   return Math.min(
     maxChildAgentCallCap,
@@ -72,7 +90,12 @@ export const modelReviewWorkflowDelegation = (
   maxConcurrentTasks: number,
   maxChildAgentCalls = maxChildAgentCallsForReview({ maxConcurrentTasks })
 ) => ({
-  agents: ['holistic_review', 'context_scout', 'refute_finding'] as const,
+  agents: [
+    'holistic_review',
+    'context_scout',
+    'semantic_merge',
+    'refute_finding'
+  ] as const,
   modelAliases: ['reviewer'] as const,
   maxChildAgentCalls,
   maxParallelChildAgentCalls: maxConcurrentTasks

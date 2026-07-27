@@ -140,4 +140,63 @@ describe('workflow handler', () => {
       title: 'Changed branch returns stale state'
     })
   })
+
+  test('keeps a merged-away candidate out of refutation and admission, but on the record', async () => {
+    const mergedAway: CandidateFinding = {
+      ...candidate,
+      id: 'cand_handler2',
+      title: 'The same defect, stated again one line down',
+      location: { ...candidate.location, startLine: 13 }
+    }
+    const refutedCandidateIds: string[] = []
+
+    const output = await runReviewWorkflowHandler({
+      input: workflowInput,
+      signal: undefined,
+      logger: createNoopReviewLogger(),
+      maxConcurrentTasks: 1,
+      // A task result as the semantic finding merge leaves it: both candidates
+      // on the record, the non-representative one already terminal.
+      runTask: async () =>
+        TaskReviewResultSchema.parse({
+          candidates: [candidate, mergedAway],
+          rejectedFindings: [
+            {
+              candidateId: mergedAway.id,
+              status: 'rejected',
+              reason: 'duplicate',
+              message: `Merged into candidate ${candidate.id}.`,
+              severity: mergedAway.severity
+            }
+          ]
+        }),
+      refuteFinding: async (refutationInput) => {
+        refutedCandidateIds.push(
+          ...refutationInput.candidates.map((batched) => batched.id)
+        )
+
+        return {
+          verdicts: refutationInput.candidates.map((batched) => ({
+            candidateId: batched.id,
+            verdict: 'proved',
+            rationaleSummary: 'The active admission critic proved the claim.'
+          }))
+        }
+      }
+    })
+
+    // A candidate already known to be terminal must not spend an adjudication
+    // slot, and the group yields exactly one admitted finding.
+    expect(refutedCandidateIds).toEqual([candidate.id])
+    expect(output.admittedFindings).toHaveLength(1)
+    // It is recorded, not silently dropped: still a candidate of the run, and
+    // carrying a duplicate rejection that names what it was merged into.
+    expect(output.candidateFindings.map((entry) => entry.id)).toEqual([
+      candidate.id,
+      mergedAway.id
+    ])
+    expect(
+      output.rejectedFindings.filter((finding) => finding.reason === 'duplicate')
+    ).toMatchObject([{ candidateId: mergedAway.id }])
+  })
 })

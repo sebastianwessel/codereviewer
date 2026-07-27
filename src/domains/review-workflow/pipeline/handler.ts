@@ -191,11 +191,24 @@ export const runReviewWorkflowHandler = async (params: {
   const taskProviderIssues = queued.results.flatMap(
     (result) => result.providerIssues
   )
+  // Candidates a task itself decided are terminal before admission — today, the
+  // non-representative members of a semantic merge group (spec 05). They stay in
+  // `candidateFindings` so the report still shows what discovery produced and the
+  // rejection resolves to a candidate, but they are held out of refutation: a
+  // candidate already known to be terminal must not spend an adjudication slot.
+  const taskRejectedFindings = queued.results.flatMap(
+    (result) => result.rejectedFindings
+  )
+  const taskRejectedCandidateIds = new Set(
+    taskRejectedFindings.map((finding) => finding.candidateId)
+  )
   const mergedCandidates = mergeCandidates(input.candidates, taskCandidates)
   const prepared = await prepareCandidatesForAdmission({
     workflowInput: input,
     tasks,
-    candidates: mergedCandidates,
+    candidates: mergedCandidates.filter(
+      (candidate) => !taskRejectedCandidateIds.has(candidate.id)
+    ),
     sharedDigest: renderSharedDigest(shared.digest()),
     reviewEvidence: [...input.evidence, ...taskEvidenceRecords],
     ...(params.refuteFinding === undefined
@@ -225,7 +238,7 @@ export const runReviewWorkflowHandler = async (params: {
     providerIssues,
     contextLedgerEntries,
     evidence: [...prepared.evidence, ...taskEvidenceRecords],
-    preRejectedFindings: prepared.rejectedFindings,
+    preRejectedFindings: [...taskRejectedFindings, ...prepared.rejectedFindings],
     preAdmissionDecisions: prepared.admissionDecisions,
     taskEvents: queued.taskEvents,
     instructionHashes,

@@ -930,6 +930,70 @@ findings emitted at all. Leaving that clause in place would be a spec violation
 whatever the metric said. The measurement's role was to establish that implementing
 the spec costs neither recall nor precision, and it does not.
 
+## Semantic Finding Merge
+
+Discovery may produce several candidates that describe one underlying defect.
+This happens whenever more than one call examines overlapping code — the additive
+security pass, and any future decomposition of a file into multiple review units
+— and it also happens within a single call, which may restate one defect at
+neighbouring lines.
+
+Before admission, candidates for the same file MUST be grouped by whether they
+describe the **same underlying defect**, and each group MUST be reduced to one
+admitted finding.
+
+**Positional identity is not sufficient and MUST NOT be the test.** Two findings
+one line apart are frequently one defect; two findings on the same line are
+frequently two defects — a missing null check and a wrong comparison operator on
+one expression are distinct problems a reviewer needs both of. A line-distance
+threshold fails in both directions, and it fails silently in the direction that
+loses a real defect.
+
+The grouping decision is therefore semantic and is made by a model call that
+reads the candidate descriptions. That call:
+
+- Receives the candidates for one file, together with the file, and returns
+  **groups**. It MUST NOT be asked which candidate to discard.
+- MUST treat proximity as no evidence at all. Two candidates are the same defect
+  only when they share a root cause *and* a code element. Distinct defects that
+  happen to sit near each other are separate.
+- MUST default to NOT grouping when uncertain. The costs are asymmetric: a wrong
+  merge silently removes a real defect from the review, while a missed merge
+  produces a redundant comment. The visible failure is the acceptable one.
+- MUST remain generic and language-neutral, per the Non-Negotiable in spec 15.
+
+Selection of the representative candidate from a group is **deterministic and
+made in code**, not by the model: highest severity first, then the most specific
+location, then the lowest candidate index. Non-representative members of a group
+are recorded, not silently dropped, so the merge is auditable and its rate
+observable.
+
+This stage MUST be a separate model call from refutation. Refutation asks whether
+a finding is true; merging asks whether two findings are one. Combining unrelated
+judgements into one call is a documented cause of degraded refutation quality.
+
+The evaluation's own duplicate detection MUST remain independent of this
+mechanism. If scoring reused the product's merge, a defective merge would conceal
+itself.
+
+### Why This Exists
+
+Merging was previously deduplication by model-assigned `id` plus the security
+pass's additive `(path, line)` rule. Neither asks whether two findings describe
+the same defect, and the gap is measured: across nine archived runs, 89 of 164
+unlisted-real findings (54.3%) sat within three lines of a finding already
+matched in the same file. In one case the engine emitted six findings per file —
+three phrasings of one line, three of the next — for a single nil dereference,
+halving raw precision in the affected runs.
+
+It is also a prerequisite for decomposed discovery. Reviewing a file as several
+units and unioning the candidates produces duplicates by construction: the same
+defect described from two units, at two anchors, by two calls that never see each
+other's output. Merging by `id` cannot help because the ids come from different
+calls, and merging by `(path, line)` cannot help because the anchors differ.
+Without this stage a recall gain and triplicated findings are indistinguishable
+in the measurement.
+
 ## Admission Gate
 
 A candidate is admitted only when all checks pass:
@@ -1060,6 +1124,9 @@ provider messages, prompt text, source snippets, tool output, or secrets.
 | Provider missing error is actionable | provider-resolution unit test |
 | Harness workflow uses hermetic provider fixture | workflow integration test |
 | Admission rejects weak/internal candidates | admission and promotion matrix test |
+| Semantic merge groups restatements of one defect and keeps distinct defects on one line apart | semantic merge unit tests |
+| Semantic merge issues no call below two candidates and degrades to no grouping on failure | semantic merge unit tests |
+| Merged-away candidates stay on the record rather than disappearing | handler test |
 | Reports include admitted findings plus clearly marked artifact-only/refuted/provider-issue sections | report snapshot test |
 | Context ledger records included source chunks without raw content | context ledger unit and snapshot tests |
 | Completed reports include complete coverage certificate | runner and report schema tests |

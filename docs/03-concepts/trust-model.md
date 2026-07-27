@@ -79,6 +79,7 @@ itself a reportable defect when it is hiding one.
 | General discovery | `modelHolisticReviewerInstructions` |
 | Refutation | `modelFindingRefuterInstructions` |
 | Context scout | `modelContextScoutInstructions` |
+| Semantic finding merge | `modelSemanticMergeInstructions` |
 | Cross-file tool results | `crossFileRetrievalInstructions` |
 | Security pass | `securityReviewInstruction` in [`discovery/holistic-task-review.ts`](../../src/domains/review-workflow/pipeline/discovery/holistic-task-review.ts) |
 | Change-intent section | `renderChangeIntentSection` in the same file |

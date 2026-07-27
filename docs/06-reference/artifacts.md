@@ -73,7 +73,7 @@ listed there (it is the document carrying the list).
 | `run` | object | Same shape as `run-summary.json`. |
 | `coverage` | object | `status` (`complete`\|`incomplete`), file/byte counts, `incompleteReasons`, per-file `files[]`. A completed report requires `status: "complete"`. |
 | `admittedFindings` | array | Findings that passed refutation and the severity floor. |
-| `rejectedFindings` | array | Rejected candidates with a reason (e.g. `below-threshold`) — kept for auditability. |
+| `rejectedFindings` | array | Rejected candidates with a reason (e.g. `below-threshold`, or `duplicate` for a candidate the semantic finding merge grouped into another) — kept for auditability. |
 | `evidence` | array | Evidence records referenced by findings. |
 | `skippedFiles` | array | `path` + reason: `deleted`, `binary`, `too-large`, `too-many-files`, `excluded`, `unsupported`, `error`. |
 | `qualityGate` | object, optional | `passed`, `failingFindingIds`, `thresholds`, `baselineFilteringApplied`. |

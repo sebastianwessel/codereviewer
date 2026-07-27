@@ -25,9 +25,16 @@ describe('workflow harness config', () => {
       }
     })
     expect(modelReviewWorkflowDelegation(2)).toEqual({
-      // The scout is delegated to as its own agent (spec 18); selection and
-      // judgment stay in separate calls.
-      agents: ['holistic_review', 'context_scout', 'refute_finding'],
+      // The scout (spec 18) and the semantic finding merge (spec 05) are each
+      // delegated to as their own agent: selecting context, finding defects,
+      // deciding whether two findings are one, and judging whether a finding is
+      // true all stay in separate calls.
+      agents: [
+        'holistic_review',
+        'context_scout',
+        'semantic_merge',
+        'refute_finding'
+      ],
       modelAliases: ['reviewer'],
       maxChildAgentCalls: 16,
       maxParallelChildAgentCalls: 2
@@ -37,14 +44,16 @@ describe('workflow harness config', () => {
 
   test('derives bounded child-agent call budgets from review scale', () => {
     // taskCount holistic calls + taskCount * 4 (ONE batched refutation call per task
-    // plus a small allowance for budget-driven batch splits) + maxConcurrentTasks * 2:
-    // 8 + 8*4 + 2*2 = 44.
+    // plus a small allowance for budget-driven batch splits) + taskCount * 6 for the
+    // semantic finding merge (its ceiling: one call per file carrying at least two
+    // of a task's at most 12 candidates) + maxConcurrentTasks * 2:
+    // 8 + 8*4 + 8*6 + 2*2 = 92.
     expect(
       maxChildAgentCallsForReview({
         taskCount: 8,
         maxConcurrentTasks: 2
       })
-    ).toBe(44)
+    ).toBe(92)
 
     // Above the cap → clamped to the maximum child-agent call budget.
     expect(
@@ -118,28 +127,30 @@ describe('workflow harness config', () => {
   })
 
   test('reserves one extra call per task for the context scout', () => {
-    // Scout enabled: 8 tasks * (1 discovery + 1 scout) + 8*4 refutation + 2*2
-    // buffer = 16 + 32 + 4 = 52.
+    // Scout enabled: 8 tasks * (1 discovery + 1 scout) + 8*4 refutation + 8*6
+    // merge ceiling + 2*2 buffer = 16 + 32 + 48 + 4 = 100.
     expect(
       maxChildAgentCallsForReview({
         taskCount: 8,
         maxConcurrentTasks: 2,
         contextScoutEnabled: true
       })
-    ).toBe(52)
+    ).toBe(100)
   })
 
   test('grows the budget for the dedicated security pass second discovery call', () => {
     // With the security pass enabled each task issues 2 discovery calls. Refutation
     // stays at one batched call per task (plus the split allowance) no matter how
-    // many candidates the two passes raise: 8*2 + 8*4 + 2*2 = 16 + 32 + 4 = 52.
+    // many candidates the two passes raise, while the merge ceiling rises with the
+    // extra candidates the pass may add (12 + 8 candidates -> at most 10 files with
+    // two of them): 8*2 + 8*4 + 8*10 + 2*2 = 16 + 32 + 80 + 4 = 132.
     expect(
       maxChildAgentCallsForReview({
         taskCount: 8,
         maxConcurrentTasks: 2,
         securityPassEnabled: true
       })
-    ).toBe(52)
+    ).toBe(132)
   })
 
   test('enables only read/list/grep builtins for skill-backed review agents', () => {

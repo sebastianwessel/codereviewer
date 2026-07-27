@@ -3,8 +3,10 @@ import {
   ModelContextScoutResultSchema,
   ModelHolisticFindingSchema,
   ModelHolisticReviewResultSchema,
+  ModelSemanticMergeResultSchema,
   contextScoutRequests,
-  modelCategoryAliases
+  modelCategoryAliases,
+  semanticMergeGroups
 } from './agent-contracts.js'
 
 describe('ModelHolisticReviewResultSchema', () => {
@@ -255,5 +257,88 @@ describe('contextScoutRequests', () => {
         ]
       })
     ).toEqual([{ name: 'settleInvoice', path: 'src/billing.ts' }])
+  })
+})
+
+describe('semanticMergeGroups', () => {
+  const known = ['cand_1111111111111111', 'cand_2222222222222222', 'cand_3333333333333333']
+
+  test('reads an absent or empty group list as no grouping', () => {
+    // The conservative answer is the safe one here: no grouping costs at most a
+    // redundant comment, while a wrong merge deletes a real defect.
+    expect(
+      semanticMergeGroups(ModelSemanticMergeResultSchema.parse({}), known)
+    ).toEqual([])
+    expect(
+      semanticMergeGroups(
+        ModelSemanticMergeResultSchema.parse({ groups: [] }),
+        known
+      )
+    ).toEqual([])
+  })
+
+  test('normalizes the shapes a model actually returns', () => {
+    expect(
+      semanticMergeGroups(
+        {
+          groups: [
+            // A bare array of ids, and candidate objects instead of ids.
+            [known[0], known[1]],
+            [{ id: known[2] }, { candidateId: 'cand_4444444444444444' }]
+          ]
+        },
+        [...known, 'cand_4444444444444444']
+      )
+    ).toEqual([
+      [known[0], known[1]],
+      [known[2], 'cand_4444444444444444']
+    ])
+
+    expect(
+      semanticMergeGroups(
+        { groups: [{ ids: [known[0], known[1]] }] },
+        known
+      )
+    ).toEqual([[known[0], known[1]]])
+    expect(
+      semanticMergeGroups(
+        { groups: [{ candidate_ids: [known[0], known[1]] }] },
+        known
+      )
+    ).toEqual([[known[0], known[1]]])
+  })
+
+  test('drops invented ids, repeats, and anything left with fewer than two members', () => {
+    expect(
+      semanticMergeGroups(
+        {
+          groups: [
+            null,
+            'not a group',
+            { candidateIds: [] },
+            { candidateIds: [known[0]] },
+            { candidateIds: [known[0], 'cand_invented'] },
+            { candidateIds: [known[1], known[1], known[2]] }
+          ]
+        },
+        known
+      )
+    ).toEqual([[known[1], known[2]]])
+  })
+
+  test('honours only the first group that claims a candidate', () => {
+    // Overlapping groups make the reduction ambiguous, and an ambiguous merge
+    // must resolve towards leaving candidates alone.
+    expect(
+      semanticMergeGroups(
+        {
+          groups: [
+            { candidateIds: [known[0], known[1]] },
+            { candidateIds: [known[1], known[2]] }
+          ]
+        },
+        known
+      )
+    ).toEqual([[known[0], known[1]]])
   })
 })

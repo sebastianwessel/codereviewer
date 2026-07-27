@@ -17,6 +17,7 @@ The unit is the **review task**, not the file and not the finding.
 | Holistic discovery | 1 per task | Always (with a provider configured) |
 | Context scout | 1 per task | `review.contextScout.enabled` |
 | Dedicated security pass | 1 per task | `security.dedicatedPass.enabled` |
+| Semantic finding merge | 1 per file that has ≥ 2 candidates | Always — and today that is almost never, because discovery averages about one candidate per file |
 | **Refutation** | **1 per task** | Always, whenever the task produced candidates |
 | Change-intent summarizer | 1 per run | `contextSources.enabled` and the summary mode resolves to `model` |
 | Verification lane | 1 bounded agent loop per claim (≤ `verification.maxToolCallsPerClaim` tool calls) | `verification.enabled` |
@@ -32,6 +33,13 @@ A batch that does not fit the provider input budget, even after the packet
 sheds its optional context, is split in half and each half retried. Splitting
 is bounded and rare: an oversized task degrades into a few more calls rather
 than losing its candidates. Budget for it as `1 + a small allowance` per task.
+
+### The semantic merge only fires when it has something to merge
+
+The merge asks which of a file's candidates describe the same defect, so a file
+with fewer than two candidates issues no call at all. That is the common case
+today, which makes the stage close to free; it starts costing real calls only
+when discovery produces several candidates for one file.
 
 So the baseline cost of a default run is:
 

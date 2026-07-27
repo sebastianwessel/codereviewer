@@ -109,7 +109,10 @@ intent, trace control and data flow on every path, verify against the intent,
 then sweep defect classes — and returns findings that are converted into
 *candidate findings* (deduplicated, capped at 12 per task). One additional pass
 exists and is **off by default**: the dedicated security pass. It is purely
-additive and does not bypass anything downstream.
+additive and does not bypass anything downstream. Once every candidate for a task
+exists, a **semantic finding merge** groups the candidates that describe the same
+underlying defect — one extra call per file that has at least two candidates, and
+none at all otherwise — and keeps one representative per group.
 → [Details](pipeline/04-holistic-discovery.md)
 
 ### 5. Refutation

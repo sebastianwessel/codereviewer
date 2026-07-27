@@ -393,6 +393,99 @@ describe('runModelBackedHolisticTaskReview', () => {
   })
 })
 
+describe('semantic finding merge inside discovery', () => {
+  const restatement = (startLine: number, title: string) => ({
+    category: 'bug',
+    severity: 'high',
+    title,
+    description: `${title}, reported at line ${startLine}.`,
+    path: 'src/app.ts',
+    startLine
+  })
+
+  test('runs after every discovery candidate exists and records the merged-away member', async () => {
+    let mergeInput: { readonly candidates: readonly { readonly id: string }[] } | undefined
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([
+            restatement(10, 'Value dereferenced without a guard'),
+            restatement(11, 'Missing guard before the same property access')
+          ]),
+        semanticMerge: async (input) => {
+          mergeInput = input
+
+          return {
+            groups: [
+              { candidateIds: input.candidates.map((candidate) => candidate.id) }
+            ]
+          }
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // The merge sees BOTH discovery candidates, which is only possible after
+    // discovery has finished producing them, and it receives the file itself.
+    expect(mergeInput?.candidates).toHaveLength(2)
+    // Both candidates stay on the record; the non-representative one carries a
+    // duplicate rejection so downstream can hold it out of admission.
+    expect(result.candidates).toHaveLength(2)
+    expect(result.rejectedFindings).toHaveLength(1)
+    expect(result.rejectedFindings[0]?.reason).toBe('duplicate')
+  })
+
+  test('never calls the merge when the task produced a single candidate', async () => {
+    let mergeCalls = 0
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([restatement(10, 'The only defect in this file')]),
+        semanticMerge: async () => {
+          mergeCalls += 1
+
+          return { groups: [] }
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(mergeCalls).toBe(0)
+    expect(result.candidates).toHaveLength(1)
+    expect(result.rejectedFindings).toEqual([])
+  })
+
+  test('a failed merge costs the grouping, never the candidates', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([
+            restatement(10, 'One defect'),
+            restatement(20, 'A different defect')
+          ]),
+        semanticMerge: async () => {
+          throw new Error('Agent output validation failed')
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(2)
+    expect(result.rejectedFindings).toEqual([])
+    expect(result.providerIssues).toHaveLength(1)
+    expect(result.providerIssues[0]?.recovered).toBe(true)
+  })
+})
+
 // A file whose lines carry multi-byte UTF-8 characters and where every line names
 // its own absolute line number, so the rendered numbering can be checked against
 // the truth. The source chunk budget works in UTF-8 BYTES, so a byte-derived line

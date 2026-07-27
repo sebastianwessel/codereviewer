@@ -666,6 +666,142 @@ export type ContextScoutRunner = (
   signal: AbortSignal | undefined
 ) => Promise<ModelContextScoutResult>
 
+// Semantic finding merge input (spec 05). One call per FILE that carries two or
+// more candidates: the model reads the candidate descriptions plus the file and
+// answers only which candidates describe the same underlying defect.
+//
+// Field order is load-bearing for prompt caching. The packet is serialized in
+// declaration order, so everything that is stable for a given repository state
+// comes first — `taskId` is derived from the task's kind and paths, `path` names
+// the file, and `fileText` is the file itself, by far the longest section. The
+// candidates, the only part that changes when discovery phrases a defect
+// differently, come last, so two runs over the same file share the longest
+// possible prefix. A run identifier is deliberately absent for the reason
+// recorded on the scout and refutation packets below: a fresh UUID in front of
+// the packet cut the shared prefix to roughly thirty tokens against a
+// 1024-token minimum and bought a guaranteed cache miss.
+export const SemanticMergeInputSchema = z.strictObject({
+  taskId: z.string().min(1),
+  path: RepositoryRelativePathSchema,
+  fileText: z.string().min(1),
+  // Two is the floor by contract, not by convention: a merge call issued for a
+  // single candidate can only ever answer "no groups", so it is pure cost and a
+  // bug. Making it unrepresentable is cheaper than remembering to check.
+  candidates: z.array(CandidateFindingSchema).min(2)
+})
+
+export type SemanticMergeInput = z.infer<typeof SemanticMergeInputSchema>
+
+// Loose by design, exactly like the scout and refutation results: the provider
+// receives an opaque array and the item SHAPE is specified in the instructions,
+// because sending a rich item schema was measured to make structured output fail
+// on larger responses. Each entry is normalized by `ModelSemanticMergeGroupSchema`.
+//
+// `groups` defaults to an empty array rather than being required. Holistic
+// discovery requires its `findings` key so a response truncated by the output
+// budget cannot be read as "no defects", but the same argument inverts here: the
+// absence of grouping is the conservative answer this stage is required to fall
+// back to, and its worst outcome is one redundant comment.
+export const ModelSemanticMergeResultSchema = z.strictObject({
+  groups: z.array(z.unknown()).default([])
+})
+
+export type ModelSemanticMergeResult = z.infer<
+  typeof ModelSemanticMergeResultSchema
+>
+
+// Accepts a group member as a bare id string or as an object carrying one, since
+// a model asked for ids routinely answers with the candidate objects instead.
+const semanticMergeMemberId = (entry: unknown): unknown => {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    return entry
+  }
+
+  const record = entry as Record<string, unknown>
+
+  return record.id ?? record.candidateId ?? record.candidate_id
+}
+
+// One group inside a merge response: the ids of candidates that describe a
+// single underlying defect. Tolerant of the usual output drift (a bare array
+// instead of an object, field aliases, candidate objects instead of ids) because
+// an unparseable group costs a grouping that was correctly identified.
+export const ModelSemanticMergeGroupSchema = z.preprocess((value) => {
+  const members = Array.isArray(value)
+    ? value
+    : typeof value === 'object' && value !== null
+      ? ((value as Record<string, unknown>).candidateIds ??
+        (value as Record<string, unknown>).candidate_ids ??
+        (value as Record<string, unknown>).ids ??
+        (value as Record<string, unknown>).members ??
+        (value as Record<string, unknown>).candidates)
+      : value
+
+  return {
+    candidateIds: Array.isArray(members)
+      ? members.map(semanticMergeMemberId)
+      : members
+  }
+}, z.object({
+  candidateIds: z.array(z.string().min(1)).min(2)
+}))
+
+/**
+ * Resolves a merge response into the groups the reduction may act on.
+ *
+ * Everything discarded here is discarded towards NOT merging, which is the
+ * direction the spec requires when the answer is not trustworthy: an id the
+ * model invented does not exist to merge, a candidate named in two groups makes
+ * the reduction ambiguous (so only its first group is honoured), and a group of
+ * fewer than two known candidates cannot merge anything.
+ */
+export const semanticMergeGroups = (
+  result: ModelSemanticMergeResult,
+  knownCandidateIds: readonly string[]
+): readonly (readonly string[])[] => {
+  const known = new Set(knownCandidateIds)
+  const grouped = new Set<string>()
+  const groups: (readonly string[])[] = []
+
+  for (const raw of result.groups) {
+    const parsed = ModelSemanticMergeGroupSchema.safeParse(raw)
+
+    if (!parsed.success) {
+      continue
+    }
+
+    const members: string[] = []
+
+    for (const candidateId of parsed.data.candidateIds) {
+      if (!known.has(candidateId) || grouped.has(candidateId)) {
+        continue
+      }
+
+      grouped.add(candidateId)
+      members.push(candidateId)
+    }
+
+    if (members.length < 2) {
+      // Release the members again: a group that did not survive filtering must
+      // not consume ids a later, well-formed group could legitimately claim.
+      for (const candidateId of members) {
+        grouped.delete(candidateId)
+      }
+
+      continue
+    }
+
+    groups.push(members)
+  }
+
+  return groups
+}
+
+export type SemanticMergeRunner = (
+  input: SemanticMergeInput,
+  signal: AbortSignal | undefined
+) => Promise<ModelSemanticMergeResult>
+
 export const TaskReviewInputSchema = z.strictObject({
   task: WorkflowReviewTaskSchema,
   reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
@@ -680,7 +816,13 @@ export const TaskReviewInputSchema = z.strictObject({
 export const TaskReviewResultSchema = z.strictObject({
   candidates: z.array(CandidateFindingSchema),
   evidenceRecords: z.array(EvidenceRecordSchema).default([]),
-  providerIssues: ReviewReportSchema.shape.providerIssues.default([])
+  providerIssues: ReviewReportSchema.shape.providerIssues.default([]),
+  // Candidates the task itself decided are terminal before refutation ever sees
+  // them. The semantic finding merge (spec 05) fills this with the
+  // non-representative member of each group: the spec requires them to be
+  // recorded rather than silently dropped, so the merge stays auditable and its
+  // rate observable in the report instead of only in a debug log line.
+  rejectedFindings: z.array(RejectedFindingSchema).default([])
 })
 
 export const FindingRefutationResultSchema = z.strictObject({

@@ -18,6 +18,14 @@ export const severityMeetsThreshold = (
   threshold: z.infer<typeof SeveritySchema>
 ): boolean => severityOrder[severity] >= severityOrder[threshold]
 
+// Comparator that sorts the most severe first, derived from the same ordering as
+// the threshold check above so a ranking and a floor can never disagree about
+// which of two severities is higher.
+export const compareSeverityDescending = (
+  left: z.infer<typeof SeveritySchema>,
+  right: z.infer<typeof SeveritySchema>
+): number => severityOrder[right] - severityOrder[left]
+
 export const ReportFormatSchema = z.enum([
   'json',
   'markdown',

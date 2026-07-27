@@ -21,6 +21,7 @@ whole-file review and a per-candidate refutation pass.
 | CAP-INSTR-001 | Reviewer instructions | ACT-DEV | Yes | `04-configuration-and-providers.md` |
 | CAP-SKILL-001 | Mounted reviewer skills | ACT-DEV | Yes | `04-configuration-and-providers.md`, `07-security-privacy-operations.md` |
 | CAP-AI-001 | Holistic discovery | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
+| CAP-AI-005 | Semantic finding merge | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-AI-004 | Refutation | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
 | CAP-ADM-001 | Admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
@@ -151,6 +152,27 @@ whole-file review and a per-candidate refutation pass.
   become actionable on their own.
 - Verification: hermetic provider fixture tests for candidate creation, schema
   invalid output, and per-task candidate caps.
+
+### CAP-AI-005 Semantic Finding Merge
+
+- Trigger: after every discovery candidate for a task exists and before
+  admission, for each file that carries two or more candidates. A file with
+  fewer than two candidates issues no call.
+- Contracts: a model call receives the candidates for one file together with
+  that file and returns groups of candidates that describe the same underlying
+  defect. It is never asked which candidate to discard, it treats proximity as
+  no evidence, and it defaults to not grouping when uncertain. The
+  representative of a group is selected deterministically in code by highest
+  severity, then most specific location, then lowest candidate index.
+- Side effects: one provider call per merging file; a separate call from
+  refutation.
+- Final state: each group yields exactly one candidate that continues to
+  refutation and admission; non-representative members are recorded as
+  `duplicate` rejected findings rather than dropped. A failed merge call is a
+  recovered provider issue and leaves every candidate ungrouped.
+- Verification: scripted-runner unit tests for grouping, for two distinct
+  defects sharing a line, for the single-candidate no-call rule, and for
+  degradation on call failure.
 
 ### CAP-AI-004 Refutation
 

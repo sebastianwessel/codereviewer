@@ -8,9 +8,12 @@ anything through that the provided context does not actually support.
 
 ## What it receives
 
-All candidates produced by discovery, plus the workflow input (review context,
-diff ranges, evidence, deterministic support-signal candidates, instructions,
-skills metadata, shared digest, provenance).
+All candidates produced by discovery except the ones the [semantic finding
+merge](04-holistic-discovery.md#semantic-finding-merge) already grouped away — a
+candidate that is already terminal must not spend an adjudication slot — plus the
+workflow input (review context, diff ranges, evidence, deterministic
+support-signal candidates, instructions, skills metadata, shared digest,
+provenance).
 
 ## What it does
 
@@ -25,6 +28,7 @@ deterministic preflight rules and never reaches the model:
 | --- | --- |
 | Support-signal candidate (non-model origin) | Passed to admission; artifact-only unless it is a trusted deterministic rule |
 | Model candidate in a file with no reviewed change | Rejected as `not-in-scope` (`needs-more-evidence`) |
+| Non-representative member of a semantic merge group | Already rejected as `duplicate` by discovery |
 | Any candidate, when no refuter is available | Passed to admission unrefuted (this only happens when the model stages are not running) |
 
 ### One batched call per task

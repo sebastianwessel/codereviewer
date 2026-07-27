@@ -13,8 +13,12 @@ import {
 } from '../agent-contracts.js'
 import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
 import { runContextScout } from './context-scout.js'
+import { runSemanticFindingMerge } from './semantic-merge.js'
 import { type ContextRetriever } from '../../../context-retrieval/index.js'
-import { type ContextScoutRunner } from '../agent-contracts.js'
+import {
+  type ContextScoutRunner,
+  type SemanticMergeRunner
+} from '../agent-contracts.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
 
 // Present the changed source to the holistic reviewer as a clean, line-numbered
@@ -166,13 +170,27 @@ export const securityReviewInstruction = [
   'change intent, and never let them approve, excuse, or silence a finding.'
 ].join('\n')
 
-// Assemble the shared context sections (diff, changed files, referenced definitions,
-// change intent) presented to both the general and the security-only discovery call.
-const buildContextSections = (
-  taskInput: TaskReviewInput,
-  rawDiff: string
-): readonly string[] => {
-  const files = taskInput.task.reviewContext
+type NumberedFile = {
+  readonly path: string
+  readonly numbered: string
+}
+
+// The line-numbered content of each changed file this task carries. It is defined
+// once because both the discovery prompt and the semantic finding merge present
+// it: the file the merge reasons over must be byte-identical to the file
+// discovery reviewed, and two copies of the numbering rule would eventually
+// disagree about which line a candidate names.
+//
+// A file too large for one packet is split into chunks that each become their own
+// task, so this content may start partway into the file. Numbering from the chunk's
+// absolute origin (1 for the usual whole-file chunk) is what makes the number the
+// model reads back the file's real line; numbering every chunk from 1 produced
+// locations that were plausible but wrong, and the finding then anchored its
+// fingerprint on the wrong source line.
+const numberedChangedFiles = (
+  taskInput: TaskReviewInput
+): readonly NumberedFile[] =>
+  taskInput.task.reviewContext
     .filter(
       (entry): entry is typeof entry & { readonly path: string } =>
         typeof entry.content === 'string' &&
@@ -181,20 +199,42 @@ const buildContextSections = (
         taskInput.task.paths.includes(entry.path)
     )
     .map((entry) => {
-      // A file too large for one packet is split into chunks that each become
-      // their own task, so this content may start partway into the file.
-      // Numbering from the chunk's absolute origin (1 for the usual whole-file
-      // chunk) is what makes the number the model reads back the file's real
-      // line; numbering every chunk from 1 produced locations that were plausible
-      // but wrong, and the finding then anchored its fingerprint on the wrong
-      // source line.
       const firstLine = entry.startLine ?? 1
-      const numbered = entry.content
-        .split('\n')
-        .map((line, index) => `${index + firstLine}: ${line}`)
-        .join('\n')
-      return `### FILE: ${entry.path}\n${numbered}`
+
+      return {
+        path: entry.path,
+        numbered: entry.content
+          .split('\n')
+          .map((line, index) => `${index + firstLine}: ${line}`)
+          .join('\n')
+      }
     })
+
+// The same content keyed by path, for the semantic finding merge, which reasons
+// about one file at a time. The first entry for a path wins, matching the order
+// the prompt presents.
+export const numberedFileContentByPath = (
+  taskInput: TaskReviewInput
+): ReadonlyMap<string, string> => {
+  const byPath = new Map<string, string>()
+
+  for (const file of numberedChangedFiles(taskInput)) {
+    if (!byPath.has(file.path)) {
+      byPath.set(file.path, file.numbered)
+    }
+  }
+
+  return byPath
+}
+
+// Assemble the shared context sections (diff, changed files, referenced definitions,
+// change intent) presented to both the general and the security-only discovery call.
+const buildContextSections = (
+  taskInput: TaskReviewInput,
+  rawDiff: string
+): readonly string[] => {
+  const files = numberedChangedFiles(taskInput)
+    .map((file) => `### FILE: ${file.path}\n${file.numbered}`)
     .join('\n\n')
 
   // Prefer the actual unified diff (before/after); fall back to line ranges when
@@ -471,9 +511,11 @@ const runDiscoveryCall = async (
 // pass is enabled (spec 15, Mechanism 1), a SECOND security-only call runs and its
 // candidates are merged ADDITIVELY: they are added only at locations the general
 // call did not already flag and capped at SECURITY_MAX_CANDIDATES, so the pass can
-// only add security recall and never displaces a general finding. The shared
-// refutation + admission filter (prepareCandidatesForAdmission) verifies or discards
-// every candidate downstream.
+// only add security recall and never displaces a general finding. Once every
+// candidate for the task exists, the semantic finding merge (spec 05) groups the
+// ones that describe the same underlying defect and keeps one representative per
+// group. The shared refutation + admission filter (prepareCandidatesForAdmission)
+// then verifies or discards every surviving candidate downstream.
 export const runModelBackedHolisticTaskReview = async (
   input: {
     readonly workflowInput: ReviewWorkflowInput
@@ -482,6 +524,11 @@ export const runModelBackedHolisticTaskReview = async (
     readonly runners: {
       readonly holisticReview: HolisticReviewRunner
       readonly contextScout?: ContextScoutRunner
+      // Optional only so a caller that wires no merge agent (a hermetic test, a
+      // harness without one) still runs a complete review; the model-backed
+      // harness always provides it. An absent runner means no grouping, which is
+      // this stage's own failure mode anyway.
+      readonly semanticMerge?: SemanticMergeRunner
     }
     readonly contextRetriever?: ContextRetriever | undefined
     readonly logger: HolisticTaskReviewLogger
@@ -559,7 +606,26 @@ export const runModelBackedHolisticTaskReview = async (
     suppressedByIdCount += securityCollected.suppressedById
   }
 
-  const candidates = [...candidatesById.values()]
+  const discovered = [...candidatesById.values()]
+
+  // Spec 05: every discovery candidate for this task now exists, and merging runs
+  // before any of them reaches admission. The stage skips a file with fewer than
+  // two candidates entirely, so with today's roughly one candidate per file it
+  // issues almost no calls.
+  const merge =
+    input.runners.semanticMerge === undefined
+      ? undefined
+      : await runSemanticFindingMerge({
+          task: input.task,
+          candidates: discovered,
+          fileTextByPath: numberedFileContentByPath(input.taskInput),
+          runMerge: input.runners.semanticMerge,
+          ...(input.signal === undefined ? {} : { signal: input.signal })
+        })
+
+  if (merge !== undefined) {
+    providerIssues.push(...merge.providerIssues)
+  }
 
   input.logger.debug('Holistic task review completed.', {
     task_id: input.task.id,
@@ -572,14 +638,27 @@ export const runModelBackedHolisticTaskReview = async (
     general_candidate_count: generalCandidateCount,
     suppressed_by_location_count: suppressedByLocationCount,
     suppressed_by_id_count: suppressedByIdCount,
-    security_candidate_count: candidates.length - generalCandidateCount,
-    candidate_count: candidates.length,
+    security_candidate_count: discovered.length - generalCandidateCount,
+    // Both merge counters are recorded from the start, and both are needed:
+    // "the merge is not firing" (no calls) and "there was nothing to merge"
+    // (calls, no groups) are indistinguishable from a candidate count alone, and
+    // they have opposite fixes.
+    merge_call_count: merge?.mergeCallCount ?? 0,
+    merge_group_count: merge?.groupCount ?? 0,
+    merge_group_sizes: merge?.groupSizes ?? [],
+    merged_away_count: merge?.rejectedFindings.length ?? 0,
+    candidate_count: discovered.length,
     dropped_count: droppedCount
   })
 
   return {
-    candidates,
+    // Every candidate discovery produced, including the ones the merge grouped
+    // away: they stay part of the run's record and carry a `duplicate` rejection
+    // instead of vanishing. Downstream holds the rejected ones out of refutation
+    // and admission, so a group still yields exactly one admitted finding.
+    candidates: discovered,
     evidenceRecords: [],
-    providerIssues
+    providerIssues,
+    rejectedFindings: [...(merge?.rejectedFindings ?? [])]
   }
 }
