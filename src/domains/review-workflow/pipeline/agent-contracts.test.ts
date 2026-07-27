@@ -95,7 +95,7 @@ describe('ModelHolisticFindingSchema category normalization', () => {
   })
 })
 
-describe('ModelHolisticFindingSchema fixSummary', () => {
+describe('ModelHolisticFindingSchema fix fields', () => {
   // Discovery's fixSummary was pure dead weight: the prompt asked for it, this
   // schema accepted it, but the candidate mapping in holistic-task-review.ts never
   // read it (a fix proposal requires at least one evidence id, and discovery
@@ -107,6 +107,71 @@ describe('ModelHolisticFindingSchema fixSummary', () => {
     })
 
     expect(parsed).not.toHaveProperty('fixSummary')
+  })
+
+  // fixEdits was dead weight one step further gone than fixSummary: the discovery
+  // prompt never even asked for it, and the candidate mapping never read it. Only
+  // the REFUTER produces fix edits that reach a fix proposal - discovery must not
+  // grow a second, unvalidated path to the same field.
+  test('drops model-supplied fixEdits instead of carrying them through', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      category: 'bug',
+      fixEdits: [
+        {
+          path: 'src/pricing.ts',
+          startLine: 12,
+          endLine: 14,
+          replacement: 'if (rate === undefined) return 0'
+        }
+      ]
+    })
+
+    expect(parsed).not.toHaveProperty('fixEdits')
+  })
+
+  // Snake_case aliases were mapped in the preprocess step; that mapping is gone
+  // too, so the alias must not sneak the field back in either.
+  test('drops the fix_edits alias as well', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      category: 'bug',
+      fix_edits: [
+        {
+          path: 'src/pricing.ts',
+          start_line: 12,
+          end_line: 14,
+          replacement: 'if (rate === undefined) return 0'
+        }
+      ]
+    })
+
+    expect(parsed).not.toHaveProperty('fixEdits')
+    expect(parsed).not.toHaveProperty('fix_edits')
+  })
+
+  // The fields a holistic candidate is actually built from must keep parsing
+  // normally when a model volunteers fix edits alongside them.
+  test('still parses the candidate fields when fixEdits is present', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      category: 'bug',
+      severity: 'high',
+      title: 'Unchecked rate lookup',
+      description: 'A missing rate dereferences undefined.',
+      path: 'src/pricing.ts',
+      startLine: 12,
+      fixEdits: [
+        {
+          path: 'src/pricing.ts',
+          startLine: 12,
+          endLine: 14,
+          replacement: 'if (rate === undefined) return 0'
+        }
+      ]
+    })
+
+    expect(parsed.severity).toBe('high')
+    expect(parsed.path).toBe('src/pricing.ts')
+    expect(parsed.startLine).toBe(12)
+    expect(parsed).not.toHaveProperty('fixEdits')
   })
 })
 

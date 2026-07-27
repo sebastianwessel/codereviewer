@@ -9,27 +9,37 @@ Read [Metrics](metrics.md) first if the terms are unfamiliar, and
 
 ## Headline
 
-Measured **2026-07-26**, model `gpt-5.3-codex`, on the **real-repository corpus**:
-30 cases, 42 expected findings, 24 upstream repositories, 13 languages, each checked
-out in full at the commit before the upstream fix.
+Measured **2026-07-26** after the correctness and instrumentation work, model
+`gpt-5.3-codex`, metrics version `2026-07-26.max-cardinality-matching`, on the
+**real-repository corpus**: 30 cases, 42 expected findings, 24 upstream
+repositories, 13 languages, each checked out in full at the commit before the
+upstream fix. Three seeds.
 
 | Metric | Value | Notes |
 | --- | ---: | --- |
-| Recall | **54.8%** | mean of 3 seeds (50.0 / 54.8 / 59.5), sd 4.8pp |
-| Matched findings | 23 of 42 | mean of 21 / 23 / 25 |
-| Adjusted precision | **95.8–100%** | 100% in 2 of 3 seeds |
-| Genuine false positives | **0–1** per run | out of ~28 findings reported |
-| Unlisted-real findings | 4–7 per run | genuine defects the answer key never listed |
-| Severity accuracy | ~43% | the weakest metric |
-| Provider errors | 0% | |
-| Cost | ~$1.22 | per 30-case run, ~4.5 minutes |
+| Recall | **54.8%** | mean of 52.4 / 57.1 / 54.8, sd **2.4pp** |
+| Adjusted precision | **95.8–100%** | one genuine false positive across three runs |
+| Unlisted-real findings | 6–8 per run | genuine defects the answer key never listed |
+| **Line placement** | **97.2%** | 100 / 95.8 / 95.7, over 22–24 checks per run |
+| Severity accuracy | 39.1–45.8% | the weakest metric |
+| Rejected by admission | 0–2 per run | the gate discards almost nothing |
+| Cost | **$1.35** | $1.18 review + $0.17 scoring, per 30-case run |
 
-Recall by tier, median run: **runtime-critical 100%**, logic 57.9%, security 50.0%.
+**Line placement is measured, and it is good.** This was previously unknown in
+either direction. A reported line lands within tolerance of the expected range
+about 97% of the time, which clears the bar for posting findings as inline review
+comments. The scope is honest: only matched findings can be checked, so this
+measures placement on findings the engine found, not on ones it missed.
 
-**How to read this.** The engine is precision-strong and recall-moderate. When it
-reports something, it is almost always a real defect — across nine runs of this
-corpus it produced a single genuine false positive in total. It does not find
-everything: roughly two of every five known defects are missed.
+**Cost is now a total rather than a floor.** Judge spend was previously counted
+nowhere; it is 14% of review cost on this corpus. It scales with findings rather
+than file size, so it is a much larger share on small runs — 41–61% on a single
+case.
+
+**Variance halved.** The same configuration previously varied with a 4.8pp
+standard deviation; it is now 2.4pp. Part of that is the refutation retry removing
+a failure that cost a whole task its findings. Three seeds estimate a standard
+deviation imprecisely, so treat this as directional.
 
 ## What limits recall today
 

@@ -373,14 +373,6 @@ const truncateModelString = (value: unknown, maxLength: number): unknown =>
     ? value.slice(0, maxLength)
     : value
 
-const ModelFixEditSuggestionSchema = z.strictObject({
-  path: RepositoryRelativePathSchema,
-  startLine: z.preprocess(normalizeModelLineValue, z.int().min(1)),
-  endLine: z.preprocess(normalizeModelLineValue, z.int().min(1)),
-  replacement: z.string().min(1).max(4000),
-  description: z.string().min(1).max(500).optional()
-})
-
 const modelCategoryValues = CandidateFindingSchema.shape.category.options
 const modelSeverityValues = CandidateFindingSchema.shape.severity.options
 
@@ -456,8 +448,7 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
       modelLocationValue(record, 'line'),
     evidenceIds: record.evidenceIds ?? record.evidence_ids,
     contextRequests: record.contextRequests ?? record.context_requests,
-    requestedContext: record.requestedContext ?? record.requested_context,
-    fixEdits: record.fixEdits ?? record.fix_edits
+    requestedContext: record.requestedContext ?? record.requested_context
   }
 }, z.object({
   // Already resolved to a valid category (or left `undefined`) by
@@ -494,11 +485,6 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
       normalizeModelStringArray,
       z.array(z.string().min(1).max(300)).max(10).optional()
     )
-    .catch(undefined),
-  fixEdits: z
-    .array(ModelFixEditSuggestionSchema)
-    .max(5)
-    .optional()
     .catch(undefined)
 }))
 
