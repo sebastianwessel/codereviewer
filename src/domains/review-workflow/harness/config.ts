@@ -31,7 +31,6 @@ export const maxChildAgentCallsForReview = (
     readonly taskCount?: number
     readonly maxConcurrentTasks?: number
     readonly securityPassEnabled?: boolean
-    readonly contextScoutEnabled?: boolean
     readonly discoverySampleCount?: number
   } = {}
 ): number => {
@@ -45,11 +44,8 @@ export const maxChildAgentCallsForReview = (
   // adjudicates ALL of a task's candidates in a single batched call, so it costs
   // one call per task rather than one per candidate; a batch that exceeds the input
   // budget splits in half, so a small allowance is added for those splits.
-  // Spec 18: the context scout adds one compact call per task when enabled.
   const discoveryCallsPerTask =
-    discoverySampleCount +
-    (input.securityPassEnabled === true ? 1 : 0) +
-    (input.contextScoutEnabled === true ? 1 : 0)
+    discoverySampleCount + (input.securityPassEnabled === true ? 1 : 0)
   const refutationCallsPerTask = 1 + refutationBatchSplitAllowance
   // Spec 05: the semantic finding merge issues at most one call per FILE that
   // carries two or more candidates, and a task's candidates are capped, so
@@ -89,8 +85,8 @@ export const maxChildAgentCallsForReview = (
 // refuter would open its call appearing to have already asserted the very
 // candidates it must adjudicate, and holding its own verdicts for other tasks,
 // which contradicts its instruction to judge each candidate strictly on its own
-// merits. The merge and the scout would likewise see discovery's raw findings,
-// which neither of their prompts contemplates.
+// merits. The semantic merge would likewise see discovery's raw findings, which
+// its prompt does not contemplate.
 //
 // It lives in the DEFAULTS rather than on each invocation deliberately. Every
 // agent here is single-shot over a self-contained packet; none reads `history`,
@@ -100,7 +96,7 @@ export const maxChildAgentCallsForReview = (
 // this), where the reason is visible in review.
 //
 // This CHANGES MEASURED BEHAVIOUR. Every recall and precision figure this project
-// has recorded was produced by history-carrying refutation, merge, and scout
+// has recorded was produced by history-carrying refutation and merge
 // calls. Whether it helped or hurt is unknown and unmeasured; it is removed
 // because it contradicts what those stages are specified to do, not because it
 // was shown to be harmful.
@@ -123,12 +119,7 @@ export const modelReviewWorkflowDelegation = (
   maxConcurrentTasks: number,
   maxChildAgentCalls = maxChildAgentCallsForReview({ maxConcurrentTasks })
 ) => ({
-  agents: [
-    'holistic_review',
-    'context_scout',
-    'semantic_merge',
-    'refute_finding'
-  ] as const,
+  agents: ['holistic_review', 'semantic_merge', 'refute_finding'] as const,
   modelAliases: ['reviewer'] as const,
   maxChildAgentCalls,
   maxParallelChildAgentCalls: maxConcurrentTasks

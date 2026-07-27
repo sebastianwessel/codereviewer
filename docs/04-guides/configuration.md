@@ -369,7 +369,6 @@ All of these are off by default and each adds provider calls:
 ```json
 {
   "review": {
-    "contextScout": { "enabled": true, "maxSymbols": 8, "maxBytesPerSymbol": 4000 },
     "crossFileRetrieval": { "enabled": false }
   },
   "security": {

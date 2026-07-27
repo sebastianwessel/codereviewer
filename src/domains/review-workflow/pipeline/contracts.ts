@@ -45,16 +45,6 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   // union. `1` is the default and is today's single-call path exactly: same
   // packet, same field order, same number of calls.
   discoverySampleCount: z.int().min(1).max(5).default(1),
-  // Context scout (spec 18). When set, a cheap scout call per task names the
-  // out-of-change symbols this change depends on and their bodies are injected as
-  // referenced-definition context. Absent, no scout call is issued and the
-  // discovery packet is byte-for-byte what it is today.
-  contextScout: z
-    .strictObject({
-      maxSymbols: z.int().min(1),
-      maxBytesPerSymbol: z.int().min(1)
-    })
-    .optional(),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
   instructions: z.array(ContextDocumentSchema),

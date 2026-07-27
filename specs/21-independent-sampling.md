@@ -49,7 +49,7 @@ through refutation and admission unchanged.
   default, so a stage added later inherits it, and any stage that genuinely needs
   history MUST opt in at its own invocation where the reason is visible. See
   *Conversation History* below: this changes behaviour at `k = 1` and across
-  refutation, the semantic merge, and the context scout, and is deliberate.
+  refutation and the semantic merge, and is deliberate.
 - Failure of one sample MUST NOT fail the review. Remaining samples proceed and
   the reduced sample count is recorded.
 - The default is `k = 1` until measurement selects otherwise.
@@ -99,8 +99,8 @@ model itself**. This was never confined to discovery. A refutation call opened
 appearing to have already asserted the very candidates it was about to adjudicate
 and, from the second task onward, holding its own earlier verdicts, which is
 incompatible with the refuter's own instruction to judge each candidate strictly on
-its own merits. The semantic finding merge and the context scout carried the same
-freight.
+its own merits. The semantic finding merge carried the same freight, as did the
+context scout that has since been withdrawn.
 
 **No review agent call forwards prior conversation.** Blindness is the harness
 default rather than a per-invocation option, so a stage added later inherits it and

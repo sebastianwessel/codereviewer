@@ -210,9 +210,11 @@ deferred: it is the highest-plumbing, highest-cost, non-deterministic lever, and
 is only justified after the security pass and deterministic-evidence levers are
 measured. It
 must respect this project's own measured "more context reduces quality" result —
-recorded under *Measured Outcome* in `16-agentic-cross-file-discovery.md` and
-`18-context-scout.md` — so it is one bounded, ranked follow-up, never
-full-repository injection.
+recorded under *Measured Outcome* in `16-agentic-cross-file-discovery.md` — so it is
+one bounded, ranked follow-up, never full-repository injection. It must also answer
+the finding that withdrew the context scout (`05-review-workflow-and-runtime.md`):
+the reviewer largely does not read the context it already has, so more context is
+an unlikely remedy on its own.
 
 ## Configuration
 
@@ -237,9 +239,10 @@ would be a switch with no behavior behind it.
   pass and signals cannot grant authority, change admission, severity, gates, or
   baseline, and are presented under the untrusted/informational framing.
 - Every lane that ingests repository content is hardened against prompt injection
-  from it: the general reviewer, the refuter, the security pass, the context scout,
-  and the cross-file tool results each state that the content they receive is
-  untrusted data rather than instructions. The general reviewer additionally treats
+  from it: the general reviewer, the refuter, the security pass, the semantic
+  finding merge, and the cross-file tool results each state that the content they
+  receive is untrusted data rather than instructions. The general reviewer
+  additionally treats
   text in reviewed code that tells it to ignore a problem as itself reportable when
   it hides a real defect. The reviewer's own prompt-injection resistance is a
   measured security mechanism.

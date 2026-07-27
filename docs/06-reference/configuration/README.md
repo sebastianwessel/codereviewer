@@ -34,7 +34,7 @@ behavior:
 - an unknown key at any level is a validation error;
 - a key placed under the wrong parent is *also* an unknown key at that parent,
   and therefore an error — a real, common failure mode is putting
-  `crossFileRetrieval` or `contextScout` under `security` instead of `review`;
+  `crossFileRetrieval` under `security` instead of `review`;
 - a typo (`qualityGate.maxHighs`) fails the run rather than being silently
   ignored.
 

@@ -58,8 +58,8 @@ deterministic admission.
 
 This is **not** an optional capability. It is part of the general prompt and is on
 in every run. Every lane that ingests repository content carries the guard —
-the general reviewer, the refuter, the security pass, the context scout, the
-cross-file tool instructions, and the investigation agent.
+the general reviewer, the refuter, the security pass, the semantic finding merge,
+the cross-file tool instructions, and the investigation agent.
 
 The general reviewer's line, from
 [`src/domains/review-workflow/pipeline/agent-instructions.ts`](../../src/domains/review-workflow/pipeline/agent-instructions.ts):
@@ -78,7 +78,6 @@ itself a reportable defect when it is hiding one.
 | --- | --- |
 | General discovery | `modelHolisticReviewerInstructions` |
 | Refutation | `modelFindingRefuterInstructions` |
-| Context scout | `modelContextScoutInstructions` |
 | Semantic finding merge | `modelSemanticMergeInstructions` |
 | Cross-file tool results | `crossFileRetrievalInstructions` |
 | Security pass | `securityReviewInstruction` in [`discovery/holistic-task-review.ts`](../../src/domains/review-workflow/pipeline/discovery/holistic-task-review.ts) |

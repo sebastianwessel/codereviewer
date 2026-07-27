@@ -11,7 +11,6 @@ import type {
 import type { DiscoveryPosture } from '../../../shared/contracts/index.js'
 import {
   investigativeDiscoveryPostureInstructions,
-  modelContextScoutInstructions,
   modelFindingRefuterInstructions,
   modelHolisticReviewerInstructions,
   modelSemanticMergeInstructions
@@ -304,7 +303,6 @@ describe('discovery posture at the provider boundary', () => {
 // history is a property of how the harness invokes an agent, not of anything this
 // codebase's own modules can observe.
 const REVIEW_AGENT_STAGES = {
-  context_scout: modelContextScoutInstructions,
   semantic_merge: modelSemanticMergeInstructions,
   refute_finding: modelFindingRefuterInstructions,
   holistic_review: modelHolisticReviewerInstructions
@@ -349,12 +347,6 @@ class MarkedEveryStageProvider implements ModelProvider {
 
     const object = ((): unknown => {
       switch (stage) {
-        case 'context_scout':
-          return {
-            requests: [
-              { name: 'lookup', path: 'src/dep.ts', reason: marker }
-            ]
-          }
         case 'semantic_merge':
           return { groups: [] }
         case 'refute_finding':
@@ -407,12 +399,6 @@ const createHistoryFixtureRepository = async (): Promise<string> => {
     'export const b = (): number => lookup()\n',
     'utf8'
   )
-  await writeFile(
-    path.join(root, 'src', 'dep.ts'),
-    'export const lookup = (): number => -1\n',
-    'utf8'
-  )
-
   return root
 }
 
@@ -442,7 +428,6 @@ describe('conversation history at the provider boundary', () => {
         // something to inherit.
         reviewedPaths: ['src/a.ts', 'src/b.ts'],
         maxConcurrentTasks: 1,
-        contextScout: { maxSymbols: 2, maxBytesPerSymbol: 2000 },
         reviewContext: [
           {
             kind: 'file',
@@ -472,16 +457,11 @@ describe('conversation history at the provider boundary', () => {
     })
     await harness.shutdown()
 
-    // The run genuinely exercised all four stages; otherwise this test would pass
+    // The run genuinely exercised all three stages; otherwise this test would pass
     // by never issuing the calls that could have inherited anything.
     const stages = provider.requests.map(stageOfRequest)
     expect(new Set(stages)).toEqual(
-      new Set([
-        'context_scout',
-        'holistic_review',
-        'semantic_merge',
-        'refute_finding'
-      ])
+      new Set(['holistic_review', 'semantic_merge', 'refute_finding'])
     )
     // And more than one call per stage, so a later call of each stage existed to
     // inherit an earlier one's answer.
@@ -500,18 +480,14 @@ describe('conversation history at the provider boundary', () => {
 
       const serialized = JSON.stringify(request.messages)
 
-      // Belt and braces on the packet itself. A scout's requests and a refuter's
-      // verdicts are consumed in code and never travel in any later packet, so
-      // either marker appearing anywhere could only have come from the session.
-      expect(serialized).not.toContain('CONTEXT_SCOUT-MARKER-')
+      // Belt and braces on the packet itself. A refuter's verdicts are consumed
+      // in code and never travel in any later packet, so the marker appearing
+      // anywhere could only have come from the session.
       expect(serialized).not.toContain('REFUTE_FINDING-MARKER-')
 
       // Discovery's findings legitimately travel onward as candidates, so they are
       // only checked on the stages whose packets never carry candidates.
-      if (
-        stageOfRequest(request) === 'context_scout' ||
-        stageOfRequest(request) === 'holistic_review'
-      ) {
+      if (stageOfRequest(request) === 'holistic_review') {
         expect(serialized).not.toContain('HOLISTIC_REVIEW-MARKER-')
       }
     }

@@ -99,53 +99,19 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
-  test('context scout defaults to disabled with bounded symbol budgets', () => {
-    const defaults = CodeReviewerConfigSchema.parse({})
-    expect(defaults.review.contextScout).toEqual({
-      enabled: false,
-      maxSymbols: 8,
-      maxBytesPerSymbol: 4000
-    })
-
-    const enabled = CodeReviewerConfigSchema.parse({
-      review: { contextScout: { enabled: true, maxSymbols: 3 } }
-    })
-    expect(enabled.review.contextScout).toEqual({
-      enabled: true,
-      maxSymbols: 3,
-      maxBytesPerSymbol: 4000
-    })
-
-    // The per-symbol cap keeps one large callee from flooding the packet and
-    // pushing changed-file source out of it.
-    expect(
-      CodeReviewerConfigSchema.parse({
-        review: { contextScout: { enabled: true, maxBytesPerSymbol: 12000 } }
-      }).review.contextScout.maxBytesPerSymbol
-    ).toBe(12000)
-
-    // Both budgets are rations against context dilution, so out-of-range values
-    // fail validation instead of being silently clamped.
-    for (const invalid of [
-      { maxSymbols: 0 },
-      { maxSymbols: 41 },
-      { maxBytesPerSymbol: 499 },
-      { maxBytesPerSymbol: 40001 }
+  // The context scout was removed on 2026-07-27, along with its configuration.
+  // No compatibility shim is offered on purpose: a config that still enables it
+  // would otherwise run a review that silently does something different from
+  // what the file asks for. Failing loudly is the whole point, and it matches how
+  // the withdrawn discovery passes were handled.
+  test('a config still setting the removed context scout fails validation', () => {
+    for (const removed of [
+      { contextScout: { enabled: true, maxSymbols: 8, maxBytesPerSymbol: 4000 } },
+      { contextScout: { enabled: false } },
+      { contextScout: {} }
     ]) {
-      expect(() =>
-        CodeReviewerConfigSchema.parse({
-          review: { contextScout: { enabled: true, ...invalid } }
-        })
-      ).toThrow()
+      expect(() => CodeReviewerConfigSchema.parse({ review: removed })).toThrow()
     }
-  })
-
-  test('context scout rejects an unknown nested key', () => {
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        review: { contextScout: { on: true } }
-      })
-    ).toThrow()
   })
 
   test('discovery posture defaults to precise', () => {

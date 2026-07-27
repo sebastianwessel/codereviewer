@@ -151,25 +151,6 @@ one on.
 > [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md);
 > none earned its cost, and the limitation is still open.
 
-### Context scout
-
-```json
-{ "review": { "contextScout": { "enabled": true, "maxSymbols": 8, "maxBytesPerSymbol": 4000 } } }
-```
-
-Separates *choosing* context from *judging* code. A cheap scout call sees only
-the diff and an inventory of out-of-change symbols, names the symbols whose
-actual behavior the changed code's correctness depends on, and deterministic
-code fetches their bodies. The reviewer stays single-shot with no tools.
-
-A symbol the scout names is injected only if deterministic resolution finds it;
-an unresolvable request is dropped. The scout can never influence a finding, a
-severity or the gate.
-
-`maxSymbols` is a relevance ration, not a loop guard: the scout must rank and
-spend its budget on decisive symbols rather than dumping every callee into the
-packet.
-
 ### Cross-file retrieval
 
 ```json
@@ -215,8 +196,13 @@ class for the injection classes — finite attention.
    `promotionPolicy.modelWeakOrRefuted` to `rejected`, then raise
    `review.inlineSeverityThreshold`.
 2. **Missing security specifically?** `security.dedicatedPass`.
-3. **Missing defects that depend on unchanged code?** `contextScout` first;
-   `crossFileRetrieval` only if the scout is not enough.
+3. **Missing defects that depend on unchanged code?** There is no dial worth
+   recommending. `crossFileRetrieval` exists but measured **net negative** — see
+   its [page](../03-concepts/optional-capabilities/cross-file-retrieval.md). A
+   context scout that pre-selected the missing symbols was
+   [removed](../03-concepts/optional-capabilities/context-scout.md) after a
+   controlled experiment showed the reviewer largely does not read the context it
+   already has.
 4. **Still missing?** Raise `review.depth` to `thorough` so more source fits in
    each task.
 5. **Missing a second defect in files that already produced one?** No dial

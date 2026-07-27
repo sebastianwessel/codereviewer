@@ -24,7 +24,6 @@ whole-file review and a per-candidate refutation pass.
 | CAP-AI-004 | Refutation | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
 | CAP-AI-005 | Semantic finding merge | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-AI-006 | Agentic cross-file discovery (mediated repo read/list/grep during discovery, off by default) | ACT-MODEL, ACT-REVIEWER | Yes | `16-agentic-cross-file-discovery.md`, `04-configuration-and-providers.md` |
-| CAP-AI-007 | Context scout (separate context-selection call, off by default) | ACT-MODEL, ACT-REVIEWER | Yes | `18-context-scout.md`, `04-configuration-and-providers.md` |
 | CAP-AI-008 | Discovery posture (measured variant; default `precise`) | ACT-MODEL, ACT-REVIEWER | Yes | `20-discovery-posture.md`, `04-configuration-and-providers.md` |
 | CAP-AI-009 | Independent discovery sampling with union merge (measured variant; default `k = 1`) | ACT-MODEL, ACT-REVIEWER | Yes | `21-independent-sampling.md`, `05-review-workflow-and-runtime.md`, `04-configuration-and-providers.md` |
 | CAP-ADM-001 | Admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
@@ -209,17 +208,14 @@ whole-file review and a per-candidate refutation pass.
   same refutation and admission as any other candidate.
 - Verification: cross-file tool and discovery wiring tests.
 
-### CAP-AI-007 Context Scout
+### CAP-AI-007 Context Scout — withdrawn
 
-- Trigger: `review.contextScout.enabled`. Off by default.
-- Contracts: `18-context-scout.md`. A separate cheap call names out-of-change
-  symbols; deterministic resolution fetches their bodies and injects them as
-  referenced-definition context. The reviewer itself stays single-shot and
-  tool-free.
-- Side effects: one additional provider call per task and bounded repository reads.
-- Final state: a symbol deterministic resolution cannot find is never injected;
-  the scout can never influence a finding, a severity, or the gate.
-- Verification: context scout unit tests.
+Removed on 2026-07-27, together with `specs/18-context-scout.md` and the
+`review.contextScout` configuration block. The identifier is retired and not
+reused. The scout was a separate pre-review call that chose extra symbols to
+include in the discovery packet; it is removed on mechanism, not on a failed
+result, because its only measurement is void. The reasoning is recorded under
+*Withdrawal Of The Context Scout* in `05-review-workflow-and-runtime.md`.
 
 ### CAP-AI-008 Discovery Posture
 

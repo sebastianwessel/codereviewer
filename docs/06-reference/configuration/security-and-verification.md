@@ -4,8 +4,8 @@ The sandbox literals, the additive security review pass, and the two agentic
 post-review lanes. All three optional features are **off by default**; with them
 off the general review is byte-for-byte unchanged.
 
-Note the nesting: the cross-file retrieval and context scout settings live under
-`review`, **not** here. See [review.md](./review.md).
+Note the nesting: the cross-file retrieval settings live under `review`, **not**
+here. See [review.md](./review.md).
 
 ## `security`
 
@@ -89,6 +89,6 @@ quality gate. Results are written to `fix-report.json`
 
 ## Related
 
-- [review.md](./review.md) — `review.crossFileRetrieval`, `review.contextScout`
+- [review.md](./review.md) — `review.crossFileRetrieval`
 - [context-and-evaluation.md](./context-and-evaluation.md) — the other untrusted-input provider union
 - [Artifacts](../artifacts.md) — `verification-report.json`, `fix-report.json`

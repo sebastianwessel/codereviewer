@@ -49,14 +49,13 @@ Explicitly **not** implemented:
 
 ## Capabilities that ship switched off
 
-Several capabilities are implemented but disabled by default, and in the two
-most interesting cases that is **because measurement said so**, not because they
-are unfinished. Enabling them is a deliberate, measured choice.
+Several capabilities are implemented but disabled by default, and in the most
+interesting cases that is **because measurement said so**, not because they are
+unfinished. Enabling them is a deliberate, measured choice.
 
 | Config key | Default | Why it is off |
 | --- | --- | --- |
 | `review.crossFileRetrieval.enabled` | `false` | Agentic cross-file discovery — the discovery agent may read other files through mediated tools. **Measured net negative.** Built, hardened, and measured three times; recall fell each time (flat at four cases, 66.7% → 44.4% at nine, 68.8% → 56.3% at sixteen) while precision stayed perfect. |
-| `review.contextScout.enabled` | `false` | A cheap scout call picks which out-of-change symbol bodies to pre-fetch, keeping the reviewer single-shot and tool-free. Built as the answer to the above; **measured neutral**. |
 | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task. Additive by construction, but it costs an extra discovery call per task and has not cleared a held-out A/B showing net recall gain without an authorization regression. |
 | `contextSources.enabled` | `false` | External change-intent ingestion (ticket/PR context). Off unless you configure providers. |
 | `verification.enabled` | `false` | A separate agentic flow that verifies specific claims — see [two flows](../03-concepts/two-flows.md). |
@@ -73,8 +72,13 @@ alongside the layer, not before it. Similarly, the evaluation block has no
 reporter has no `sarif.redact` key, since it redacts unconditionally regardless.
 
 **Consequence of the defaults:** out of the box, discovery is a single
-general pass per review task, with no tools and no scout. That is the
-configuration the current quality figures describe.
+general pass per review task, with no tools and no pre-selected extra context.
+That is the configuration the current quality figures describe.
+
+A `review.contextScout` block once existed and was removed along with the
+capability; a config that still sets it now fails validation with exit code `2`.
+The record is in
+[context scout (removed)](../03-concepts/optional-capabilities/context-scout.md).
 
 Defaults that are **on**: `aiReview.requireRefutation` (a literal `true` — not a
 toggle), `aiReview.deterministicSignalMode: 'support'`, `baseline.enabled`,

@@ -167,11 +167,11 @@ of an argument for iteration, not as a forecast.
 
 ## What has been tried against it
 
-Six structural interventions have been built and measured. **Five of them
-failed**, three were removed outright, and the two capability gaps that remain
-switched-on-able ship off by default with a recorded verdict. What has actually
-moved the number has been prompt-level and scoring-level, at a fraction of the
-cost.
+Six structural interventions have been built. **Five were measured and failed**;
+the sixth, the context scout, was never validly measured at all. Four were removed
+outright, and the two that remain switched-on-able ship off by default with a
+recorded verdict. What has actually moved the number has been prompt-level and
+scoring-level, at a fraction of the cost.
 
 ### Structural interventions
 
@@ -180,7 +180,7 @@ cost.
 | **Enumeration sweep** | Re-asked the same question, minus what was already reported, within one conversation carrying the prior findings | 30-case / 42-finding corpus, 3 seeds: **54.8%** against a **54.8%** baseline, at **+40% cost** | **Removed** — code and config keys deleted |
 | **Diverse-lens pass** | Asked a *different* question over the same packet: concurrency, asynchrony, error paths, resource lifetime, contracts, edge cases | Same corpus, 3 seeds: **54.0%** against **54.8%**, at **+47% cost** | **Removed** |
 | **Cross-file retrieval** | Gave discovery mediated repository read/list/grep tools so it could fetch other files on demand | Three measurements on the corpus built to favour it: flat at 4 cases (2.5× cost), **66.7% → 44.4%** at 9 cases, **68.8% → 56.3%** at 16. Precision stayed 100%, so the loss is recall | **Net negative.** Retained, off by default, documented as *do not enable* |
-| **Context scout** | Separated retrieval from reasoning: a cheap call chooses which out-of-change symbol bodies to pre-fetch, deterministic code fetches them, the reviewer stays single-shot and tool-free | 2026-07-25, 16-case corpus, **+27% cost**: recall flat at 62.5%, precision held at 100%, four cases gained and four lost. It engaged on only 3 of 18 tasks | **Neutral.** Retained, off by default |
+| **Context scout** | Separated retrieval from reasoning: a cheap call chooses which out-of-change symbol bodies to pre-fetch, deterministic code fetches them, the reviewer stays single-shot and tool-free | **None. Its only A/B is void** — run against a build that did not implement its own spec, and predating the suppression of conversation history. It has no result in either direction | **[Removed](../03-concepts/optional-capabilities/context-scout.md)** on mechanism, not on a failed measurement |
 | **Dedicated security pass** | A second, security-only discovery call per task, merged additively | 2026-07-24, full benchmark, n=1, **+61% cost**: overall recall **24.8% → 29.3%** with 22 additional confirmed-real findings, but labeled security recall **14 → 12** and authorization **8 → 6** | **Mixed.** Retained, off by default; the security-specific lift it was built for is **unproven** |
 | **Un-anchored discovery pass** | The same question at bounded units **with the diff withheld** — built directly on the attention finding above | 36-case / 80-expectation corpus, base n=6 against enabled n=3: **+0.83pp** (46.25% → 47.08%), 95% CI **[−3.13, +4.79]**, **10 expectations gained and 9 lost**, **p = 0.82**, for **+136% cost** | **Removed** |
 
@@ -194,10 +194,13 @@ for the change — median 7 changed lines per case, median 2 hunks, 17 of 36 cas
 single-hunk — which is precisely where removing the anchor has the most to add.
 A pass that does not help there is not expected to help elsewhere.
 
-Detail on the three removals, including what a future attempt should avoid
-rebuilding, is kept in
+Detail on the three measured removals, including what a future attempt should
+avoid rebuilding, is kept in
 [Extra discovery passes (removed)](../03-concepts/optional-capabilities/extra-discovery-passes.md).
-The three retained switches are in the
+The fourth removal, the context scout, is the one without a valid measurement
+behind it and has
+[its own record](../03-concepts/optional-capabilities/context-scout.md).
+The retained switches are in the
 [optional capabilities decision table](../03-concepts/optional-capabilities/README.md#decision-table).
 
 ### What worked instead

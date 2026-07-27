@@ -15,7 +15,6 @@ The unit is the **review task**, not the file and not the finding.
 | Stage | Calls | Condition |
 | --- | --- | --- |
 | Holistic discovery | 1 per task | Always (with a provider configured) |
-| Context scout | 1 per task | `review.contextScout.enabled` |
 | Dedicated security pass | 1 per task | `security.dedicatedPass.enabled` |
 | Semantic finding merge | 1 per file that has ≥ 2 candidates | Always — and today that is almost never, because discovery averages about one candidate per file |
 | **Refutation** | **1 per task** | Always, whenever the task produced candidates |
@@ -94,7 +93,6 @@ full input tokens.
 | `aiReview.deterministicSignalMode: "disabled"` | Stops injecting deterministic support facts into the packet. Planning still uses them. |
 | `instructions.files` / `instructions.inline` | Added to **every** task packet, discovery and refutation alike. |
 | `contextSources.summary.maxBytes` | Caps the change-intent brief (default 4 000 bytes). |
-| `review.contextScout.maxBytesPerSymbol` | Caps each injected symbol body (default 4 000). |
 | `review.crossFileRetrieval.maxBytesPerRead` | Caps each retrieved file (default 24 000). |
 
 A single model-input packet is hard-capped at 360 000 bytes regardless of

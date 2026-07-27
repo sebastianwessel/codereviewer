@@ -442,6 +442,64 @@ establishes that withholding the diff, at this geometry, on the corpus most
 favourable to it, does not pay for itself. A future proposal should bring a
 different mechanism, not this one at a different unit size.
 
+### Withdrawal Of The Context Scout, Without A Valid Measurement
+
+The context scout was a **separate pre-review model call that chose which
+out-of-change symbols the reviewer should be shown**: it named symbols,
+deterministic code extracted their bodies, and those bodies were injected into the
+discovery packet as referenced-definition context while discovery itself stayed
+single-shot and tool-free. It had its own spec (18), its own `context_scout` agent,
+and a `review.contextScout` configuration block, off by default. All of it was
+removed on 2026-07-27, including the spec and the configuration keys; a config that
+still sets them fails validation with exit code 2, as with the withdrawn passes
+above.
+
+This withdrawal is different in kind from the two above, and the difference must not
+be smoothed over. **The scout's only A/B is void and may not be quoted in either
+direction.** It was run against a build that did not implement the spec it was being
+measured as — a symbol inventory the prompt required every request to draw from was
+never built, and the scout was handed the full line-numbered packet while its own
+prompt asserted it had no file bodies — and it also predates the suppression of
+conversation history recorded above. A void measurement is not a failed one. The
+scout was never validly tested, and it is **not** removed for having failed a test.
+
+It is removed on three grounds that hold independently of any measurement:
+
+1. **It adds context to a reviewer that is not reading the context it already
+   has.** The controlled experiment recorded above measured exactly that: only 16 of
+   76 candidates (21%) from the diff-bearing arm pointed at a line inside the unit
+   they were shown, and one 1251-line file returned the same finding at line 820
+   from all 31 of its units — including the unit whose packet did not contain line
+   820 at all. The reviewer answers the diff. Enlarging the packet of a reviewer
+   that is not reading its packet is an unlikely remedy.
+2. **The blind spot it was built for was closed by a different, cheaper change.**
+   The scout existed for cross-file and caller-dependent defects, which were the
+   dominant residual misses on the sixteen-case corpus. Those were recovered by a
+   single added prompt instruction — the untrusted-input guard, whose measurement is
+   in `15-security-focused-review.md` — at unchanged cost, and neither cross-file
+   retrieval (`16-agentic-cross-file-discovery.md`) nor the scout recovered them.
+   The honest size of that guard is roughly four points of recall on the larger
+   benchmark rather than the eighteen the small corpus first suggested, as spec 15
+   itself records; the point here is the direction and the mechanism, not the
+   magnitude. Framing beat retrieval.
+3. **It did not implement its own spec, and making it do so is real work.** An
+   alignment audit recorded six unmet requirements: the missing symbol inventory and
+   the contradicted "no file bodies" premise above; resolution by heuristic text
+   scan rather than the deterministic import/declaration facts the spec required; no
+   total byte cap across extracted bodies; and a section appended after budget
+   fitting, so `maxTaskInputBytes` could neither measure it nor shed it under
+   pressure. Closing those is the entry price of a *first* valid measurement of a
+   hypothesis that points 1 and 2 give reason to disbelieve.
+
+**What this does not establish.** It is not evidence that demand-driven or
+pre-assembled context is impossible, and it is not a measured verdict on separating
+context selection from judgment — that separation has still never been validly
+tested here. What is established is that this implementation was never validly
+measured and that the mechanism argues against it. Anyone proposing demand-driven
+context should bring a design that answers point 1 — some reason the reviewer will
+read what it is handed — rather than a better selector in front of the same
+reviewer.
+
 ## Refutation
 
 Every candidate finding passes a precision filter run by the `refute_finding`

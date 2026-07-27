@@ -18,7 +18,6 @@ figure is the mean across seeds, never the best observed run.
 | Capability | Config key | Default | What it buys | Cost | Measured verdict |
 | --- | --- | --- | --- | --- | --- |
 | [Change-intent context](change-intent-context.md) | `contextSources.enabled` | `false` | Orientation: the reviewer learns *why* the change was made, which should reduce misunderstanding-driven false positives | One summarizer call per run (`model` mode); zero with `digest` | **Unmeasured.** No A/B exists. Rationale is design, not evidence. Enable if your pipeline already has PR/ticket text; do not expect a measured recall number |
-| [Context scout](context-scout.md) | `review.contextScout.enabled` | `false` | Symbol *bodies* from unchanged files, chosen for this change, while the reviewer stays single-shot and tool-free | +27% | **Neutral.** 2026-07-25, 16-case corpus: recall flat at 62.5%, precision held at 100%, severity accuracy unchanged. Four cases gained, four lost — churn, not signal. It engaged on only 3 of 18 tasks |
 | [Cross-file retrieval](cross-file-retrieval.md) | `review.crossFileRetrieval.enabled` | `false` | Lets discovery read other-file code on demand through mediated tools | +71% … 2.5× | **Net negative — do not enable.** Three measurements on the corpus built to favour it: flat at 4 cases (2.5× cost), 66.7% → 44.4% at 9, 68.8% → 56.3% at 16. Precision stayed 100% throughout, so the loss is recall, not noise |
 | [Dedicated security pass](dedicated-security-pass.md) | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task (generic OWASP/CWE checklist), merged additively | +61% | **Mixed.** 2026-07-24, full benchmark, n=1: overall recall 24.8% → 29.3%, +22 unlisted-real findings (trustworthy, large denominator). But labeled security recall 14 → 12 and authorization 8 → 6. The **security-specific lift it was built for is unproven** |
 | [Investigative discovery posture](../../06-reference/configuration/review.md#reviewdiscoveryposture) | `review.discoveryPosture` | `"precise"` | Lowers the evidence bar discovery applies to itself before raising a candidate. Names no defect category and adds no call | None beyond a slightly longer prompt | **Unmeasured.** The A/B against `precise` has not been run. What is measured is the headroom it spends: under a 56% candidate increase, refutation's kill rate rose 1.3% → 16.0% while adjusted precision held (0.804 → 0.792) |
@@ -30,6 +29,11 @@ Two further discovery passes — an enumeration sweep and a diverse-lens pass �
 built, measured, and **removed**; their configuration keys no longer exist. See
 [extra discovery passes (removed)](extra-discovery-passes.md) for what they were
 and what the measurement did and did not establish.
+
+The **context scout** was removed too, and its `review.contextScout` key with it.
+It is the one removal without a failed measurement behind it: its only A/B was run
+against a non-conforming build and is **void**, so it went on mechanism instead —
+see [context scout (removed)](context-scout.md).
 
 ## How to read the verdicts
 
@@ -62,8 +66,7 @@ identical to a build without it, which is what makes the A/Bs above single-varia
 ```json
 {
   "review": {
-    "crossFileRetrieval": { "enabled": false },
-    "contextScout": { "enabled": false }
+    "crossFileRetrieval": { "enabled": false }
   },
   "security": { "dedicatedPass": { "enabled": false } },
   "contextSources": { "enabled": false },

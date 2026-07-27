@@ -118,8 +118,8 @@ provider-specific object as passthrough.
 | `discoveryPosture` | `"precise" \| "investigative"` | `"precise"` | How much self-evidence discovery demands before raising a candidate (`20-discovery-posture.md`). Adds no calls and changes neither the packet shape nor its field order. |
 | `discoverySampleCount` | integer 1..5 | `1` | Number of mutually blind discovery samples combined by union (`21-independent-sampling.md`). `1` is the single-call path. The upper bound is the published plateau. |
 
-`review.crossFileRetrieval` and `review.contextScout` are nested review blocks and
-are inventoried in their own sections below.
+`review.crossFileRetrieval` is a nested review block and is inventoried in its own
+section below.
 
 ## AI Review Config
 
@@ -478,25 +478,14 @@ Rules:
   baseline, admission, or the gate, and its findings pass the same refutation and
   admission as any other candidate.
 
-## Context Scout
+## Removed Configuration Blocks
 
-Controls the context scout (`18-context-scout.md`). Disabled by default.
-
-| Key | Type | Default |
-| --- | --- | --- |
-| `review.contextScout.enabled` | boolean | `false` |
-| `review.contextScout.maxSymbols` | integer (1-40) | `8` |
-| `review.contextScout.maxBytesPerSymbol` | integer (500-40000) | `4000` |
-
-Rules:
-
-- with it disabled, no scout call is issued and the discovery packet is unchanged;
-- when enabled, one compact scout call per task names out-of-change symbols and
-  deterministic resolution injects their bodies as referenced-definition context;
-  the discovery agent itself stays single-shot and receives no tools;
-- a symbol the scout names that deterministic resolution cannot find is never
-  injected, and injected content passes the same eligibility gate, redaction, and
-  containment as any other repository access.
+`review.contextScout` was removed on 2026-07-27 together with the context scout
+itself. No compatibility shim exists and none may be added: the schema is strict, so
+a config that still sets the block fails validation with exit code 2 and the user is
+told to remove it, rather than running a review that silently differs from what the
+file asks for. The withdrawal and its reasoning are recorded in
+`05-review-workflow-and-runtime.md`.
 
 ## Security
 

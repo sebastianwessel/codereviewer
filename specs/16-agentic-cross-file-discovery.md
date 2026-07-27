@@ -54,9 +54,11 @@ findings as today.
   need several lookups. The cap is therefore set generously; focus comes from the
   instruction to retrieve only what a specific suspicion requires, and from the
   retriever's own per-call byte/match caps. "More context reduces quality" — this
-  project's own measured result, recorded under *Measured Outcome* below and in
-  `18-context-scout.md` — is respected by demand-driven, targeted reads, never a
-  whole-repository dump.
+  project's own measured result, recorded under *Measured Outcome* below — is
+  respected by demand-driven, targeted reads, never a whole-repository dump. The
+  finding that withdrew the context scout (*Withdrawal Of The Context Scout* in
+  `05-review-workflow-and-runtime.md`) sharpens the same caution: the reviewer
+  largely does not read the context it already holds.
 - **Steps, not delegation budget.** A mediated tool call is an agent STEP, bounded by
   the discovery agent's step allowance (the cap plus headroom, so a model that hits
   the cap can still answer). It never counts against the workflow's child-agent call

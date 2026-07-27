@@ -265,7 +265,7 @@ reports what was spent rather than stopping it. See
 | Findings exist but no inline comments | `reporting.reviewComments.enabled` must be true, and only `inline` findings on the new side of a reviewed diff range become drafts. Lower `review.inlineSeverityThreshold` |
 | Misses a second defect in a file where it found one | Known limitation, no dial. Three passes built for it were measured and [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md) |
 | Misses security issues specifically | `security.dedicatedPass.enabled: true` |
-| Misses defects that depend on unchanged code | `review.contextScout.enabled: true` |
+| Misses defects that depend on unchanged code | No dial worth recommending. `review.crossFileRetrieval` measured net negative; the context scout was [removed](../03-concepts/optional-capabilities/context-scout.md) |
 | Two runs disagree | Expected. Model output is non-deterministic; a small difference between runs is noise. Measure on a corpus, not on one run — see the [quality docs](../05-quality/README.md) |
 
 Depth guidance and the full dial list: [tuning-noise-and-recall.md](../04-guides/tuning-noise-and-recall.md).

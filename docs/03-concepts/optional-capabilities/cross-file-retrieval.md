@@ -94,9 +94,11 @@ configuration change. Two hypotheses are worth testing first:
 
 The public literature names the same effect: tool use costs accuracy when context
 selection and reasoning happen in one step, and the recommended remedy is to
-pre-assemble context or delegate retrieval to a separate agent. That remedy is what
-the [context scout](context-scout.md) implements — and the scout, which separates
-selection from judgment, costs nothing and damages nothing while this one does.
+pre-assemble context or delegate retrieval to a separate agent. That remedy was
+built here as the [context scout](context-scout.md) — and then
+[removed](context-scout.md) without ever being validly measured, once a controlled
+experiment showed the reviewer largely does not read the context it already has.
+Neither approach to this blind spot has earned its place.
 
 ## Where it lives
 
@@ -106,5 +108,6 @@ selection from judgment, costs nothing and damages nothing while this one does.
 
 ## Related
 
-- [Context scout](context-scout.md) — the same job, separated into its own call
+- [Context scout (removed)](context-scout.md) — the same job separated into its own
+  call, removed on mechanism without a valid measurement
 - [Decision table](README.md)

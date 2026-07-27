@@ -3,8 +3,7 @@
 What is reviewed, how deeply, and how model output is promoted to a finding.
 
 Read the [strict-object rule and precedence](./README.md) first. Nesting matters:
-`crossFileRetrieval` and `contextScout` are nested **under `review`**, not under
-`security`.
+`crossFileRetrieval` is nested **under `review`**, not under `security`.
 
 ## `review`
 
@@ -94,19 +93,13 @@ other. Disabled, discovery is single-shot with no tools.
 | `review.crossFileRetrieval.maxToolCallsPerTask` | integer 1–500 | `100` | Runaway-loop guard on mediated tool calls per task. It is not a context ration — models self-limit well below it. |
 | `review.crossFileRetrieval.maxBytesPerRead` | integer 1000–200000 | `24000` | Per-read byte cap for cross-file reads. Large single reads measurably dilute a review. |
 
-### `review.contextScout`
+### `review.contextScout` — removed
 
-A cheap scout call that names out-of-change symbols the changed code depends on;
-deterministic code then resolves and injects their bodies. The reviewer itself
-stays single-shot with no tools. The scout only selects context — it can never
-influence a finding, a severity, or the gate, and a symbol it names is injected
-only if deterministic resolution finds it.
-
-| Key | Type | Default | What it does |
-| --- | --- | --- | --- |
-| `review.contextScout.enabled` | boolean | `false` | Master switch. |
-| `review.contextScout.maxSymbols` | integer 1–40 | `8` | Symbols one scout call may request. A relevance ration, not a loop guard. |
-| `review.contextScout.maxBytesPerSymbol` | integer 500–40000 | `4000` | Per-symbol byte cap on an extracted body. Budget pressure sheds scout context before changed-file source. |
+The context scout and its whole configuration block were removed on 2026-07-27.
+Because the schema is strict, a config that still sets `review.contextScout` —
+even to `{ "enabled": false }` — now fails validation with **exit code 2**. Delete
+the block. What it was and why it went:
+[context scout (removed)](../../03-concepts/optional-capabilities/context-scout.md).
 
 ## `aiReview`
 

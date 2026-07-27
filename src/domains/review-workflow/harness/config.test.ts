@@ -31,16 +31,10 @@ describe('workflow harness config', () => {
       }
     })
     expect(modelReviewWorkflowDelegation(2)).toEqual({
-      // The scout (spec 18) and the semantic finding merge (spec 05) are each
-      // delegated to as their own agent: selecting context, finding defects,
-      // deciding whether two findings are one, and judging whether a finding is
-      // true all stay in separate calls.
-      agents: [
-        'holistic_review',
-        'context_scout',
-        'semantic_merge',
-        'refute_finding'
-      ],
+      // The semantic finding merge (spec 05) is delegated to as its own agent:
+      // finding defects, deciding whether two findings are one, and judging
+      // whether a finding is true all stay in separate calls.
+      agents: ['holistic_review', 'semantic_merge', 'refute_finding'],
       modelAliases: ['reviewer'],
       maxChildAgentCalls: 16,
       maxParallelChildAgentCalls: 2
@@ -130,18 +124,6 @@ describe('workflow harness config', () => {
       }
       })
     ).toEqual({ builtinTools: false, maxSteps: 1 })
-  })
-
-  test('reserves one extra call per task for the context scout', () => {
-    // Scout enabled: 8 tasks * (1 discovery + 1 scout) + 8*4 refutation + 8*6
-    // merge ceiling + 2*2 buffer = 16 + 32 + 48 + 4 = 100.
-    expect(
-      maxChildAgentCallsForReview({
-        taskCount: 8,
-        maxConcurrentTasks: 2,
-        contextScoutEnabled: true
-      })
-    ).toBe(100)
   })
 
   test('grows the budget for the dedicated security pass second discovery call', () => {

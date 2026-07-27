@@ -36,29 +36,31 @@ src/
     configuration/
     provider-resolution/
     deterministic-signals/
-      structural/
-      diff/
-      scope/
     review-planning/
     context-retrieval/
     context-ingestion/
     verification/
     shared-context/
     review-workflow/
-    agentic-review/
-      discovery/
-      refutation/
+      harness/
+      pipeline/
+        discovery/
+      run/
     admission/
     reporting/
     evaluation/
-    security/
+    costs/
+    observability/
     drift/
   shared/
     contracts/
     errors/
+    glob/
+    hash/
+    json/
     redaction/
-    result/
     schema/
+    text/
 ```
 
 ## Ownership Rules
@@ -75,8 +77,7 @@ src/
 | `context-ingestion` | External change-intent context providers (inbox, changed-files), fragment redaction, and the digest/model summarizers producing one bounded change-intent brief. | Admission decisions, gate authority, network beyond the configured provider endpoint, or reading outside the repository root. |
 | `verification` | The agentic investigation flow: claim/verdict contracts, claim providers (claims-file, prior-findings, current-findings), the bounded `investigate_claim` agent using mediated read/list/grep, the deterministic fix apply-check and advisory `fixProposal` enrichment, and corroboration matching. | Shell, network, filesystem writes, publishing, gate authority, or changing the general review's discovery path. |
 | `shared-context` | Run-local admitted facts/findings/evidence references. | Filesystem scanning or provider calls. |
-| `review-workflow` | Public harness facade, focused review-runner run-start state, focused review-runner run observability/start logging, focused review-runner preflight for drift and telemetry setup, focused review-runner source-state preparation for repository intake and source reads, focused review-runner planning-state preparation for deterministic signals and task planning, focused review-runner context-assembly step lifecycle, focused review-runner repository input preparation, focused review-runner deterministic signal preparation, focused review-runner task planning, focused review-runner static-context loading, focused review-runner context-state/provenance/metrics preparation, focused review-runner completion-state preparation, focused review-runner success-result/report-metrics/completion-log assembly, focused review-runner quality-gate partial failure assembly, focused review-runner provider-state execution/live task-event recovery, focused review-runner provider failure classification and partial recovery, focused review-runner admission-state preparation with deterministic fallback observability, focused review-runner provider workflow invocation/usage accounting/provider-step observability, focused deterministic runner admission/task-event conversion, focused provider workflow output admission mapping, focused review-runner error/timeout signal and terminal-error classification, focused review-runner partial failure-state assembly, focused review-runner finalization for cost/warnings/resolved baseline, focused review-runner provenance hash projection, focused review-runner baseline loading/configured-state/schema validation/baseline-load observability, focused review-runner drift warning and gate-error shaping, focused review-runner observability recording, focused provided-candidate harness construction, focused model-backed harness construction, focused ai-harness runtime config/delegation policy, focused workflow session invocation/error normalization, focused shared workflow handler orchestration, focused public workflow contracts, focused task planning, bounded workflow task queue execution, workflow completion/admission assembly, review-runner budget derivation, review-runner context assembly, review-runner workflow-input assembly, review-runner result assembly, holistic discovery and refutation packet shaping, refutation orchestration, candidate-finding conversion, provider-call logging/normalization adapters, report-safe provider issue normalization, shared model packet-budget errors, compact model shared-digest rendering, model-agent instruction and IO-contract modules, shared mediated context artifact shaping, and model-origin admission review. | Low-level git parsing, path normalization, artifact rendering. |
-| `agentic-review` | Model-facing holistic candidate-finding generation and refutation output schemas. | Deterministic path authority, publication, provider package loading, or report rendering. |
+| `review-workflow` | The public harness facade and the review runner: run-start state, preflight, source and planning state, context assembly, provider execution and failure classification, admission and completion state, baseline loading, cost and warning finalization. Also the model-facing stages it drives — holistic discovery, semantic finding merge, refutation, candidate conversion — with their packet shaping, agent instructions, and IO contracts. | Low-level git parsing, path normalization, artifact rendering, deterministic path authority, publication, provider package loading, or report rendering. |
 | `admission` | Refutation-result validation, deterministic safety checks, promotion policy, and admitted/rejected decisions. | Candidate generation or output formatting. |
 | `reporting` | JSON/Markdown/SARIF artifacts, run summary rendering, and platform-neutral review-comment drafts with their platform detection and per-platform renderers. | Admission decisions, provider calls, or publishing. |
 | `evaluation` | Focused eval report contracts, focused Markdown report rendering, golden fixtures, metrics, benchmark runner, quality scoring, semantic-judge scoring metadata, and provider issue visibility in eval artifacts. | Production admission logic. |
@@ -116,9 +117,29 @@ the owning domain.
 - Cross-domain access must use exported domain entrypoints.
 - `shared` must not import from `domains`.
 - Optional provider packages must only be imported by `provider-resolution`.
-- `agentic-review` may request repository context only through
-  `context-retrieval`; it must not perform direct filesystem, shell, git,
-  network, or write operations.
+- `review-workflow` must not perform shell, git, network, or write operations,
+  and every repository path it reads must first be resolved inside the
+  repository root. See *Known Divergence* below on where that content is read.
+### Known Divergence: Where Repository Content Is Read
+
+The rule above is deliberately narrower than its predecessor, which required
+model-facing review to obtain repository context *only* through
+`context-retrieval`. That is not what the code does: `review-workflow` reads
+source directly through `node:fs/promises` in its context-assembly modules —
+task context, static context, and referenced definitions.
+
+The safety half of the original intent **is** met. Every one of those reads
+resolves its path inside the repository root first, and anything resolving
+outside is skipped, so no unvalidated path reaches the filesystem. What is not
+met is the layering half: retrieval policy lives in more than one place, so a
+future change to how repository content is selected or bounded has several sites
+to touch rather than one.
+
+This is recorded as an unmet architectural goal rather than written out of the
+spec, because consolidating those reads behind `context-retrieval` is a real
+improvement that nobody has done, and deleting the requirement would erase the
+reason to do it. It is not a security defect and should not be described as one.
+
 - Deterministic signal extractors must be removable without changing core
   finding/report schemas. They can improve evidence quality but cannot be a
   required product-specific static-analysis tool for external CI-equivalent checks.

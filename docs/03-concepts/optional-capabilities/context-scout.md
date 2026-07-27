@@ -1,121 +1,107 @@
-# Context Scout
+# Context Scout (Removed)
 
-> **Verdict: measured neutral.** It neither helped nor hurt. Safe to enable, but
-> there is no demonstrated reason to.
+The context scout was a **separate pre-review model call that chose which extra
+symbols the reviewer should be shown.** It named out-of-change symbols,
+deterministic code extracted their bodies, and those bodies were injected into the
+discovery packet as referenced-definition context — while discovery itself stayed
+single-shot and tool-free. It was **removed** on 2026-07-27: code, spec, and
+configuration key.
 
-Spec: [`specs/18-context-scout.md`](../../../specs/18-context-scout.md) — status
-*Approved (capability off by default; measured neutral)*, 2026-07-25.
+There is nothing to configure here. `review.contextScout` was deleted from the
+configuration schema, which is strict: a config file that still sets it now fails
+validation with exit code `2`. Remove the block.
 
-## The problem it addresses
+This page is the record of what it was and why it went, because the reasoning is
+easy to rediscover badly.
 
-Cross-file defects are the dominant remaining recall gap: of the five cases the
-reviewer misses on the 16-case real-repository corpus, **four depend on evidence
-outside the changed set**.
+## It was removed on mechanism, not on a failed measurement
 
-The obvious remedy — handing the discovery agent repository tools
-([cross-file retrieval](cross-file-retrieval.md)) — lost recall in all three of its
-measurements. The literature explains why: tool use costs accuracy when context
-selection and reasoning happen in one step; the recommended remedy is to
-pre-assemble context or delegate retrieval to a separate agent.
+**Its only A/B is void and may not be quoted in either direction — not as neutral,
+not as harmful, not as promising.** Two independent reasons:
 
-The scout applies that separation: **a cheap model call decides what extra code is
-relevant, deterministic code fetches it, and the reviewer stays single-shot and
-tool-free.**
+- It was measured against a build that **did not implement the spec it was being
+  measured as**. The symbol inventory the scout's own prompt required every request
+  to draw from was never built anywhere, and the scout was handed the full
+  line-numbered discovery packet while its prompt told it that it had no file
+  bodies.
+- It predates the harness-wide suppression of conversation history (2026-07-27), so
+  neither arm is comparable to a current run.
 
-## How it works
+A void measurement is not a failed one. **The scout was never validly tested.**
+Earlier versions of this page reported it as *measured neutral*; that verdict was
+withdrawn.
 
-```mermaid
-flowchart TD
-  A[task diff + inventory of externally-referenced symbols] --> B[SCOUT: one model call, no bodies, no tools]
-  B --> C[ranked symbol requests: name, path, reason]
-  C --> D[RESOLVE: deterministic]
-  D --> E{symbol found in that file?}
-  E -- no --> X[dropped, nothing invented]
-  E -- yes --> F[extract symbol BODY, byte-capped]
-  F --> G[injected as referenced-definition context]
-  G --> H[REVIEW: one call, no tools — unchanged]
-```
+## Why it was removed anyway
 
-1. **Scout.** One model call receives the diff and a compact inventory of the
-   symbols the changed files reference from outside themselves (name plus
-   declaring file, from existing deterministic import/declaration facts). It gets
-   **no file bodies and no tools**. It returns a bounded, ranked list with a short
-   reason each.
-2. **Resolve.** Deterministic code maps each requested symbol to a declaring file
-   and extracts that symbol's **body** — not merely its signature. Unresolvable
-   requests are dropped; nothing is invented. Every read goes through the mediated
-   retriever, so eligibility, redaction, and containment apply as always.
-3. **Review.** The bodies are injected as ordinary `referenced-definition` context,
-   which the discovery prompt already frames as context-only, never a review
-   target. Discovery runs exactly as it does today.
+Three reasons, each of which holds without any measurement of the scout itself.
 
-The scout never decides anything about findings. Its own output is untrusted
-input. Its prompt says so, and it is told that returning an **empty list is the
-common, expected, fully correct answer** for a self-contained change.
+### 1. It adds context to a reviewer that is not reading the context it already has
 
-### Why this is not cross-file retrieval again
+The decisive number comes from a controlled decomposition experiment run on
+2026-07-27, at production model, prompt, and temperature:
 
-Spec 16 gave the *reviewing* agent tools, so one agent both chose context and
-judged code. Here the reviewer's prompt shape and step count are unchanged; the
-only difference is that its `referenced-definition` section contains bodies chosen
-for *this* change instead of signature windows chosen by import frequency. If the
-scout also failed to help, the failure would be attributable to the *content* of
-the context rather than to tool-use behavior — which spec 16 could not separate.
+| | Diff shown | Diff withheld |
+| --- | ---: | ---: |
+| Candidates pointing at a line inside the unit they were shown | **16 / 76 (21%)** | 50 / 50 (100%) |
 
-## Configuration
+One 1251-line file returned the same finding at **line 820 from all 31 units it was
+reviewed in** — including the unit spanning lines 1201–1251, where line 820 is 400
+lines away and **was not in the packet at all**.
 
-| Key | Type | Default | Notes |
-| --- | --- | --- | --- |
-| `review.contextScout.enabled` | boolean | `false` | |
-| `review.contextScout.maxSymbols` | integer 1–40 | `8` | A relevance ration, not a loop guard: the reproducible failure mode of extra context is dilution, so the scout must rank and spend its budget on decisive symbols |
-| `review.contextScout.maxBytesPerSymbol` | integer 500–40000 | `4000` | Big enough for a whole ordinary function body, not a whole large file |
+The reviewer answers the diff. Giving more context to a reviewer that is not
+reading its current context is very unlikely to help — and that is precisely and
+only what the scout did.
 
-Budget pressure sheds scout context **before** it sheds changed-file source.
-Disabled, no scout call is issued and the referenced-definition section is produced
-exactly as before. Any scout failure degrades to no extra context — the scout is an
-aid, so a scout that errors costs context, never the review.
+### 2. The blind spot it targeted was closed by something else
 
-## Measured evidence
+The scout existed for cross-file and caller-dependent defects, the dominant
+residual misses on the 16-case corpus. Those were recovered by **a single added
+prompt instruction** — the
+[untrusted-input guard](../trust-model.md#the-shipped-prompt-injection-guard) — at
+identical cost. Neither [cross-file retrieval](cross-file-retrieval.md) nor the
+scout recovered them.
 
-2026-07-25, 16-case real-repository corpus, against the same-model baseline, single
-variable, zero provider errors in both arms.
+Be careful with the size of that win: the 62.5% → 81.3% first reported for the
+guard came from a 16-finding corpus whose seed-to-seed deviation is 4.4pp, and
+re-measuring on the 133-finding benchmark put the honest effect at about **+4pp**.
+What matters here is the direction and the mechanism, not the magnitude. **Framing
+beat retrieval.**
 
-| Metric | Baseline | With scout |
-| --- | --- | --- |
-| Recall | 62.5% (10 matched) | **62.5%** (10 matched) |
-| Adjusted precision | 100% | **100%** (0 genuine FP) |
-| Severity accuracy | 70% | **70%** |
-| Cost | — | **+27%** |
-| Cases gained / lost | — | 4 / 4 |
+### 3. It did not implement its own spec
 
-Four gained and four lost is churn, not signal — and the engagement data shows why:
+A spec audit found **six unmet requirements**, including the two named above plus:
 
-- The scout resolved a symbol on only **3 of 18 tasks**. On 13 of 16 cases it added
-  nothing at all, so a flip on those cases cannot be attributed to it.
-- Where it *did* engage it stayed focused: 1–3 symbols, 879–2255 bytes. That is
-  exactly the intended behavior, and the opposite of the 162KB single reads that
-  characterised the tool-enabled reviewer.
+| Required | What the implementation did |
+| --- | --- |
+| Resolution from deterministic import/declaration facts | Model-supplied path hint, declaring line found by heuristic text scan |
+| A **total** byte cap across extracted bodies | Only the per-symbol cap existed |
+| The packet obeys `maxTaskInputBytes`, shedding scout context before changed-file source | The section was appended *after* budget fitting, so it was never measured and never shed |
+| A cheap model call | It used the same model alias as the reviewer |
 
-## Verdict
+Closing those is the entry price of a *first* valid measurement — real work, spent
+to test a hypothesis reasons 1 and 2 give us cause to disbelieve.
 
-**Separating selection from judgment removed the harm; it has not yet produced a
-gain.** Read against [cross-file retrieval](cross-file-retrieval.md), that
-comparison is the informative result: giving the reviewer tools cost recall in
-every measurement, while moving the same job into a separate selection call costs
-nothing and damages nothing.
+## What this does not establish
 
-The actionable gap is **engagement, not safety**: either the scout is too
-conservative about asking, or these cases' evidence is not reachable by naming a
-symbol in an imported file. That is what a next iteration should attack, and a
-wider corpus should confirm, before this ships enabled.
+**This is not evidence that retrieval-style or demand-driven context is
+impossible.** Separating context selection from judgment has still never been
+validly tested in this project. What is established is narrower:
 
-## Where it lives
+- this particular implementation was never validly measured, so it has no verdict;
+- the mechanism argues against it, because the reviewer demonstrably under-reads
+  the context it is already given.
 
-- [`src/domains/review-workflow/pipeline/discovery/context-scout.ts`](../../../src/domains/review-workflow/pipeline/discovery/context-scout.ts)
-- `modelContextScoutInstructions` in [`agent-instructions.ts`](../../../src/domains/review-workflow/pipeline/agent-instructions.ts)
-- `ContextScoutConfigSchema` in [`config.schema.ts`](../../../src/shared/contracts/config/config.schema.ts)
+If you revisit this, bring a design that answers reason 1 first — some reason the
+reviewer will actually read what it is handed — rather than a better selector in
+front of the same reviewer. A better chooser upstream of a reviewer that answers
+the diff changes nothing about what the reviewer answers.
 
 ## Related
 
-- [Cross-file retrieval](cross-file-retrieval.md) — the mechanism this replaced
-- [Decision table](README.md)
+- [What limits recall](../../05-quality/what-limits-recall.md) — the enumeration
+  gap, why attention follows the diff, and every intervention measured against it
+- [Cross-file retrieval](cross-file-retrieval.md) — the *other* approach to the
+  same blind spot, measured and net negative; it still exists, off by default
+- [Extra discovery passes (removed)](extra-discovery-passes.md) — three further
+  removals, each with a real (failed) measurement behind it
+- [Optional capabilities](README.md) — what actually ships as a switch

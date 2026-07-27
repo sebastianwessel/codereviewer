@@ -115,14 +115,14 @@ admission as any other.
 Three further passes — an enumeration sweep, a diverse-lens second pass, and an
 un-anchored pass over bounded units with the diff withheld — were built, measured,
 and [removed](../optional-capabilities/extra-discovery-passes.md); none earned its
-cost.
+cost. A **context scout** that pre-selected extra symbol context was also
+[removed](../optional-capabilities/context-scout.md), on mechanism rather than on a
+measurement.
 
-Another opt-in, the **context scout** (`review.contextScout.enabled`), does not
-review anything: it is a cheap call that names out-of-change symbols the changed
-code depends on, which deterministic code then resolves and appends to the
-reviewer's packet. **Cross-file retrieval** (`review.crossFileRetrieval.enabled`)
-instead gives the reviewer mediated `repo_read` / `repo_list` / `repo_grep` tools.
-Both are described in [Optional capabilities](../optional-capabilities/README.md).
+One opt-in remains that changes what discovery is shown: **cross-file retrieval**
+(`review.crossFileRetrieval.enabled`) gives the reviewer mediated `repo_read` /
+`repo_list` / `repo_grep` tools. It is described in
+[Optional capabilities](../optional-capabilities/README.md).
 
 ## Semantic finding merge
 
@@ -164,7 +164,7 @@ that produced those candidates.
 ## No stage carries conversation
 
 The property stated for the reviewer above holds for **every** model call the
-review makes — discovery, the context scout, the semantic finding merge, and
+review makes — discovery, the semantic finding merge, and
 [refutation](05-refutation.md). Each is a single invocation that receives its
 instructions and its own packet, and no call is ever handed the output of a call
 that ran before it, whether for the same task or a different one.
@@ -174,17 +174,14 @@ default behaviour of a session is to accumulate. Before it was fixed, a call
 arrived carrying every earlier call's output attributed to the model itself.
 
 > **This is not a measured improvement.** Every recall and precision number
-> recorded for this engine was produced with the scout, merge, and refutation
+> recorded for this engine was produced with the merge and refutation
 > calls carrying that history. Whether it helped or hurt is unknown; it was
 > removed because it contradicts what those stages are specified to do, and any
 > effect on accuracy is unmeasured.
 
 ```mermaid
 flowchart TD
-  P["task packet"] --> S{"contextScout.enabled?"}
-  S -- yes --> SC["scout call → resolved symbol bodies appended"]
-  S -- no --> G
-  SC --> G["general discovery call × discoverySampleCount (blind samples, unioned)"]
+  P["task packet"] --> G["general discovery call × discoverySampleCount (blind samples, unioned)"]
   G --> SE{"security.dedicatedPass.enabled?"}
   SE -- yes --> SP["security-only call (additive, ≤ 8 more)"]
   SE -- no --> C["candidates, deduped · ≤ 12 general (+ ≤ 8 security)"]
@@ -232,7 +229,6 @@ it had, and in an evaluation would drop the case from the comparison entirely.
 | `review.discoveryPosture` | `precise` | How much self-evidence discovery demands before raising a candidate |
 | `review.discoverySampleCount` | `1` | Independent discovery samples per task, combined by union |
 | `security.dedicatedPass.enabled` | `false` | Adds the security-only call |
-| `review.contextScout.*` | disabled | Pre-selects extra symbol context |
 | `review.crossFileRetrieval.*` | disabled | Gives the reviewer mediated repo tools |
 | `instructions.*`, `skills.*` | — | Extra reviewer instructions and skills |
 

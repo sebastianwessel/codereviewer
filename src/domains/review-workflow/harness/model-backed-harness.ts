@@ -2,7 +2,6 @@ import { defineHarness } from '@purista/harness'
 import { createNoopReviewLogger } from '../../observability/index.js'
 import {
   holisticReviewerInstructionsFor,
-  modelContextScoutInstructions,
   modelFindingRefuterInstructions,
   modelSemanticMergeInstructions
 } from '../pipeline/agent-instructions.js'
@@ -15,10 +14,8 @@ import {
   runWithCrossFileDiscoveryTools
 } from '../pipeline/discovery/cross-file-tools.js'
 import {
-  ContextScoutInputSchema,
   FindingRefutationBatchInputSchema,
   HolisticReviewInputSchema,
-  ModelContextScoutResultSchema,
   ModelFindingRefutationBatchResultSchema,
   ModelHolisticReviewResultSchema,
   ModelSemanticMergeResultSchema,
@@ -122,21 +119,10 @@ export const createModelBackedReviewHarness = (
           crossFileRetrievalEnabled: crossFileEnabled
         })
       }),
-      // Spec 18: the scout only SELECTS context. It is deliberately a separate,
-      // compact agent — no tools and one step — so choosing context never competes
-      // with judging code inside one call.
-      context_scout: agent({
-        model: 'reviewer',
-        input: ContextScoutInputSchema,
-        output: ModelContextScoutResultSchema,
-        builtinTools: false,
-        maxSteps: 1,
-        instructions: modelContextScoutInstructions
-      }),
-      // Spec 05: the semantic finding merge. Compact and tool-free like the
-      // scout, and deliberately its OWN agent rather than extra duties on the
-      // refuter: requiring unrelated judgements in one call is a measured cause
-      // of degraded refutation, which is the stage this engine's precision
+      // Spec 05: the semantic finding merge. Compact and tool-free — one step,
+      // no tools — and deliberately its OWN agent rather than extra duties on
+      // the refuter: requiring unrelated judgements in one call is a measured
+      // cause of degraded refutation, which is the stage this engine's precision
       // depends on.
       semantic_merge: agent({
         model: 'reviewer',
@@ -191,18 +177,12 @@ export const createModelBackedReviewHarness = (
                           ? {}
                           : { signal: holisticSignal }
                       ),
-                    contextScout: (scoutInput, scoutSignal) =>
-                      ctx.agents.context_scout(
-                        scoutInput,
-                        scoutSignal === undefined ? {} : { signal: scoutSignal }
-                      ),
                     semanticMerge: (mergeInput, mergeSignal) =>
                       ctx.agents.semantic_merge(
                         mergeInput,
                         mergeSignal === undefined ? {} : { signal: mergeSignal }
                       )
                   },
-                  ...(contextRetriever === undefined ? {} : { contextRetriever }),
                   logger,
                   ...(signal === undefined ? {} : { signal })
                 })
