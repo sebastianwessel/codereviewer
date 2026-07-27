@@ -13,6 +13,8 @@ research_evidence:
   web_research_verified_at: "2026-06-20"
   source_index: specs/10-state-of-the-art-research-synthesis.md
 approved_updates:
+  - spec 17: expectations are classified in-diff or out-of-diff from the reviewed diff and recall is reported separately for each, after measuring 72.8% against 8.8% with 42.5% of the answer key in unchanged code
+  - spec 17: added a convergence round mapping with human-authored fixes, and recorded that the current fixtures support only a pilot (2 cases with two in-diff defects in one file)
   - added spec 20, discovery posture: a measured variant controlling how much self-evidence discovery demands before raising a candidate, default precise
   - added spec 21, independent sampling with union merge: k independent discovery samples combined by union through the semantic finding merge, consensus forbidden, default k=1
   - withdrew the un-anchored discovery pass (spec 19) after its A/B failed the decision rule fixed in advance; the measured outcome is recorded in spec 05 and in reports/2026-07-27-unanchored-pass-ab-result.md

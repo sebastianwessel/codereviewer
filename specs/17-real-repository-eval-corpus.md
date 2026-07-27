@@ -113,6 +113,87 @@ Adding clean cases is therefore a spec change (forward-diff cases with an empty
 answer key), not a curation task. The generic negative control remains the default
 fixture pack, whose seven cases are all clean by construction.
 
+## Diff Scope Of An Expectation
+
+Each expectation MUST be classified as **in-diff** or **out-of-diff**, and recall
+MUST be reported separately for the two populations. A single blended recall
+figure is not interpretable: its value depends on the ratio of the two
+populations in the fixture set rather than on reviewer quality.
+
+The classification is derived deterministically from the reviewed diff — an
+expectation is in-diff when any line of its `lineRange` appears among the diff's
+changed lines in head coordinates — and MUST be stored with the case so it is
+auditable and cannot drift. It MUST NOT be hand-assigned.
+
+### Why This Section Exists
+
+Measured 2026-07-27 over 18 archived runs
+(`reports/2026-07-27-in-diff-vs-out-of-diff-recall.md`):
+
+| population | recall |
+|---|---:|
+| in-diff | **72.8%** |
+| out-of-diff | **8.8%** |
+| blended, as previously reported | 45.6% |
+
+**42.5% of expectations (34 of 80) lie in unchanged code.** The corpus reviews
+`base = fixCommit`, `head = parentCommit`, so a defect the upstream fix commit did
+not touch is byte-identical in base and head and never enters the diff. It is
+pre-existing code the reviewer was never asked about.
+
+This also dissolves an earlier diagnosis. First-in-file recall (72.8%) and
+later-in-file recall (4.7%) were read as an enumeration defect; in-diff and
+out-of-diff recall are the same two numbers over nearly the same populations,
+because 30 of the 33 later-in-file expectations are out-of-diff. There is no
+separate enumeration failure to explain.
+
+Reporting the two populations separately is required precisely so that neither
+can be quietly favoured: it would be equally dishonest to headline 72.8% and drop
+the harder population as it was to blend them without saying so. Whether
+out-of-diff defects are in scope is a product decision, and this spec's job is to
+make that decision visible rather than to make it.
+
+## Convergence: Rounds To Clean
+
+A pull-request reviewer is used iteratively — review, fix, push, re-review — so
+single-pass exhaustiveness is not the only measure of its value. The corpus MUST
+therefore support a **round mapping**: for a case whose diff contains more than
+one defect, the order in which defects are expected to surface across successive
+review rounds, and the fix applied between rounds.
+
+Requirements:
+
+- A round's fix MUST be human-authored — the upstream maintainer's own fix, or a
+  patch reviewed by a human. It MUST NOT be generated from engine output, which
+  would convert the metric into similarity to the engine.
+- A fix MUST be confined to the defect it repairs and MUST NOT touch another
+  expectation's lines.
+- **Rounds to clean** — the number of review rounds after which no expectation for
+  a case remains unfound — is reported alongside single-pass recall, never instead
+  of it.
+
+### What The Corpus Can Support Today, And What It Cannot
+
+Convergence is only meaningful for defects **inside the diff**: an out-of-diff
+defect is absent from every round's diff, so no amount of fixing brings it into
+scope. Measured against the current fixtures:
+
+| | cases |
+|---|---:|
+| ≥2 in-diff expectations anywhere | **6 of 36** |
+| ≥2 in-diff expectations in the **same file** | **2 of 36** |
+
+**The current corpus therefore supports a pilot, not a measurement.** Two cases
+cannot establish anything about convergence, and a result drawn from them MUST NOT
+be reported as one. The pilot's only job is to establish whether the mechanism
+exists — whether repairing one defect lets a second, already inside the diff,
+surface — before fixtures are built to measure it.
+
+Closing that gap requires new cases in which **one diff introduces several
+defects**. Upstream fix commits that repair more than one defect at once are the
+natural source: reversed, they present as a change introducing several defects,
+all in-diff.
+
 ## Anti-Contamination
 
 The corpus encodes the policy in `06-evaluation-and-quality-gates.md` as validated
