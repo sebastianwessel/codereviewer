@@ -123,6 +123,23 @@ export const ContextScoutConfigSchema = z.strictObject({
 // prompt-cache prefix stability is a measured property of this engine.
 export const DiscoveryPostureSchema = z.enum(['precise', 'investigative'])
 
+// Independent discovery samples (spec 21). Discovery runs this many times for a
+// task, each sample blind to every other, and the candidates are combined by
+// UNION and then deduplicated by the semantic finding merge alone.
+//
+// The change exists because single-run recall and the union across runs differ by
+// roughly twenty points on the same corpus: the same defect is found in one run
+// and missed in the next. Union is the only permitted combination. Consensus,
+// majority voting, and agreement thresholds are forbidden, because agreement
+// between samples signals shared error rather than truth, and voting would delete
+// precisely the rare single-sample finding this exists to recover.
+//
+// The upper bound is the published plateau. Beyond it, measured recall stops
+// improving while cost keeps rising close to linearly in the sample count — the
+// cache probe found provider-side caching unreachable for a repeated identical
+// request, so an extra sample is very nearly an extra full-price call.
+const maxDiscoverySampleCount = 5
+
 export const ReviewConfigSchema = z.strictObject({
   mode: z.enum(['local', 'ci', 'pr', 'full']).default('local'),
   depth: z.enum(['fast', 'balanced', 'thorough']).default('balanced'),
@@ -147,7 +164,14 @@ export const ReviewConfigSchema = z.strictObject({
   }),
   // Spec 20. `precise` until measurement selects otherwise: the posture is a
   // measured variant, not a shipped recommendation.
-  discoveryPosture: DiscoveryPostureSchema.default('precise')
+  discoveryPosture: DiscoveryPostureSchema.default('precise'),
+  // Spec 21. `1` until measurement selects otherwise, and `1` is exactly today's
+  // single-call path: same packet, same field order, same call count.
+  discoverySampleCount: z
+    .int()
+    .min(1)
+    .max(maxDiscoverySampleCount)
+    .default(1)
 })
 
 export const ProviderConfigSchema = z
@@ -552,7 +576,8 @@ export const CodeReviewerConfigSchema = z.strictObject({
       maxSymbols: 8,
       maxBytesPerSymbol: 4000
     },
-    discoveryPosture: 'precise'
+    discoveryPosture: 'precise',
+    discoverySampleCount: 1
   }),
   provider: ProviderConfigSchema.optional(),
   instructions: InstructionsConfigSchema.default({

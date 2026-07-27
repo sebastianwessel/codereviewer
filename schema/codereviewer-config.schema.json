@@ -22,7 +22,8 @@
           "maxSymbols": 8,
           "maxBytesPerSymbol": 4000
         },
-        "discoveryPosture": "precise"
+        "discoveryPosture": "precise",
+        "discoverySampleCount": 1
       },
       "type": "object",
       "properties": {
@@ -169,6 +170,12 @@
             "precise",
             "investigative"
           ]
+        },
+        "discoverySampleCount": {
+          "default": 1,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
         }
       },
       "required": [
@@ -182,7 +189,8 @@
         "inlineSeverityThreshold",
         "crossFileRetrieval",
         "contextScout",
-        "discoveryPosture"
+        "discoveryPosture",
+        "discoverySampleCount"
       ],
       "additionalProperties": false
     },

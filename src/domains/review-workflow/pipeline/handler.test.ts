@@ -200,4 +200,43 @@ describe('workflow handler', () => {
     ).toMatchObject([{ candidateId: mergedAway.id }])
   })
 
+  test('records a reduced independent-sample count in the run’s warnings', async () => {
+    // Spec 21: losing a sample must not fail the review, but a run that sampled
+    // less than it was configured to must say so — otherwise a reduced run is
+    // indistinguishable from a complete one, in the report and in any comparison
+    // built on it.
+    const output = await runReviewWorkflowHandler({
+      input: workflowInput,
+      signal: undefined,
+      logger: createNoopReviewLogger(),
+      maxConcurrentTasks: 1,
+      runTask: async () =>
+        TaskReviewResultSchema.parse({
+          candidates: [candidate],
+          discoverySamples: { requested: 3, completed: 2 }
+        })
+    })
+
+    expect(output.warnings).toContain(
+      'Discovery completed 2 of 3 independent samples for one review task; the remaining samples failed.'
+    )
+  })
+
+  test('stays silent about sampling when every sample completed', async () => {
+    const output = await runReviewWorkflowHandler({
+      input: workflowInput,
+      signal: undefined,
+      logger: createNoopReviewLogger(),
+      maxConcurrentTasks: 1,
+      runTask: async () =>
+        TaskReviewResultSchema.parse({
+          candidates: [candidate],
+          discoverySamples: { requested: 3, completed: 3 }
+        })
+    })
+
+    expect(
+      output.warnings.filter((warning) => warning.includes('independent samples'))
+    ).toEqual([])
+  })
 })

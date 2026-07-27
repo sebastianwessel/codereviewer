@@ -10,7 +10,7 @@ import {
   type TaskReviewResult,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
-import { type ProviderIssue } from '../provider-issues.js'
+import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
 import { runContextScout } from './context-scout.js'
 import { runDiscoveryCall } from './discovery-call.js'
 import {
@@ -236,9 +236,117 @@ const candidateFromFinding = (
   })
 }
 
+// Runs the general discovery call `sampleCount` times over the SAME review text and
+// unions every sample's findings into the shared candidate map (spec 21).
+//
+// The samples are mutually blind, and that is the whole point. Each one is a fresh
+// agent invocation carrying nothing but the packet: no sample is shown another
+// sample's findings, reasoning, or output, and none of them is told that other
+// samples exist. Re-asking for more findings INSIDE one conversation that already
+// carries the previous answer is the withdrawn enumeration sweep, and it failed
+// because it anchors the reviewer on what it just said.
+//
+// Combination is by UNION and only by union. Consensus, majority voting, and
+// agreement thresholds are forbidden rather than merely unused: samples converge on
+// the same wrong answer, so agreement measures shared error rather than truth, and a
+// vote would discard exactly the rare finding that only one sample produced — which
+// is the entire recall this change exists to recover.
+//
+// The union is NOT deduplicated here. Two samples that phrase one defect differently
+// are collapsed downstream by the semantic finding merge (spec 05) and by nothing
+// else; there is deliberately no second deduplication mechanism and no fallback to
+// positional identity, which is wrong in both directions and silently wrong in the
+// direction that loses a defect. The one collapse that does happen here is candidate
+// IDENTITY: a candidate id is a hash of (task, path, line, title), so two samples
+// emitting the same finding produce the same candidate, not two. That is what "the
+// union of candidates" means, and it predates this change.
+//
+// Samples run one after another rather than concurrently. The number of model calls
+// a run may have in flight is configured for the run, and a sample is not a reason
+// to exceed it.
+const runDiscoverySamples = async (
+  input: {
+    readonly runDiscovery: HolisticReviewRunner
+    readonly task: WorkflowReviewTask
+    readonly reviewText: string
+    readonly sampleCount: number
+    readonly into: Map<string, CandidateFinding>
+    readonly signal?: AbortSignal | undefined
+  }
+): Promise<{
+  readonly completedSampleCount: number
+  readonly findingCount: number
+  readonly providerIssues: readonly ProviderIssue[]
+  readonly collected: CollectedCandidates
+}> => {
+  const providerIssues: ProviderIssue[] = []
+  const collected = { dropped: 0, suppressedByLocation: 0, suppressedById: 0 }
+  let completedSampleCount = 0
+  let findingCount = 0
+  let firstFailure: unknown
+
+  for (let sample = 0; sample < input.sampleCount; sample += 1) {
+    let result
+    try {
+      result = await runDiscoveryCall(
+        input.runDiscovery,
+        input.task,
+        input.reviewText,
+        input.signal,
+        'holistic_review'
+      )
+    } catch (error) {
+      // A lost sample costs that sample. The remaining ones still run, and the
+      // reduced count is recorded so a run that sampled less than it was asked to
+      // says so instead of looking like a complete one. `runDiscoveryCall` has
+      // already absorbed the failures it recognizes as costing a single response;
+      // what reaches here is the kind that would otherwise fail the task, and it
+      // is re-thrown below when NO sample survived, which keeps the single-sample
+      // path behaving exactly as it does today. When a sample IS absorbed, its
+      // failure is still surfaced as a recovered provider issue rather than
+      // swallowed: a degradation nobody can see is a degradation nobody fixes.
+      firstFailure = firstFailure ?? error
+      providerIssues.push(
+        providerIssueForError({
+          error,
+          stage: 'holistic_review',
+          recovered: true
+        })
+      )
+      continue
+    }
+
+    completedSampleCount += 1
+    findingCount += result.findings.length
+    providerIssues.push(...result.providerIssues)
+
+    const sampleCollected = collectCandidates({
+      findings: result.findings,
+      task: input.task,
+      into: input.into,
+      // Per SAMPLE, not across the union. A shared cap would let the first sample
+      // spend the whole budget and starve the later ones, which is the opposite of
+      // taking a union: the samples that were paid for would contribute nothing.
+      maxToAdd: HOLISTIC_MAX_CANDIDATES
+    })
+
+    collected.dropped += sampleCollected.dropped
+    collected.suppressedByLocation += sampleCollected.suppressedByLocation
+    collected.suppressedById += sampleCollected.suppressedById
+  }
+
+  if (completedSampleCount === 0) {
+    throw firstFailure
+  }
+
+  return { completedSampleCount, findingCount, providerIssues, collected }
+}
+
 // Holistic discovery: a recall-first whole-change review per task. It reads the full
 // changed files plus diff and enumerates concrete defects directly as candidates
-// (deduped by id, capped at HOLISTIC_MAX_CANDIDATES). When the dedicated security
+// (deduped by id, capped at HOLISTIC_MAX_CANDIDATES). Discovery may be sampled
+// independently more than once (spec 21); the samples are blind to each other and
+// their candidates are combined by union. When the dedicated security
 // pass is enabled (spec 15, Mechanism 1), a SECOND security-only call runs and its
 // candidates are merged ADDITIVELY: they are added only at locations the general
 // call did not already flag and capped at SECURITY_MAX_CANDIDATES, so the pass can
@@ -292,23 +400,23 @@ export const runModelBackedHolisticTaskReview = async (
       ? baseReviewText
       : `${baseReviewText}\n${scout.section}`
 
-  const general = await runDiscoveryCall(
-    input.runners.holisticReview,
-    input.task,
-    reviewText,
-    input.signal,
-    'holistic_review'
-  )
-  const providerIssues: ProviderIssue[] = [...general.providerIssues]
-  const collected = collectCandidates({
-    findings: general.findings,
+  // Spec 21: the dedicated security pass is deliberately NOT sampled. It is a
+  // separately gated, additive mechanism whose candidates are suppressed at every
+  // location the general pass already claimed, so sampling it would multiply an
+  // interaction between two optional features that no measurement covers.
+  const requestedSampleCount = input.workflowInput.discoverySampleCount
+  const general = await runDiscoverySamples({
+    runDiscovery: input.runners.holisticReview,
     task: input.task,
+    reviewText,
+    sampleCount: requestedSampleCount,
     into: candidatesById,
-    maxToAdd: HOLISTIC_MAX_CANDIDATES
+    ...(input.signal === undefined ? {} : { signal: input.signal })
   })
-  let droppedCount = collected.dropped
-  let suppressedByLocationCount = collected.suppressedByLocation
-  let suppressedByIdCount = collected.suppressedById
+  const providerIssues: ProviderIssue[] = [...general.providerIssues]
+  let droppedCount = general.collected.dropped
+  let suppressedByLocationCount = general.collected.suppressedByLocation
+  let suppressedByIdCount = general.collected.suppressedById
   const generalCandidateCount = candidatesById.size
 
   let securityFindingCount = 0
@@ -360,7 +468,9 @@ export const runModelBackedHolisticTaskReview = async (
 
   input.logger.debug('Holistic task review completed.', {
     task_id: input.task.id,
-    finding_count: general.findings.length,
+    finding_count: general.findingCount,
+    discovery_sample_count: requestedSampleCount,
+    completed_discovery_sample_count: general.completedSampleCount,
     security_pass_enabled: input.workflowInput.securityPassEnabled,
     scout_requested_count: scout?.requestedCount ?? 0,
     scout_resolved_count: scout?.resolvedCount ?? 0,
@@ -390,6 +500,10 @@ export const runModelBackedHolisticTaskReview = async (
     candidates: discovered,
     evidenceRecords: [],
     providerIssues,
-    rejectedFindings: [...(merge?.rejectedFindings ?? [])]
+    rejectedFindings: [...(merge?.rejectedFindings ?? [])],
+    discoverySamples: {
+      requested: requestedSampleCount,
+      completed: general.completedSampleCount
+    }
   }
 }

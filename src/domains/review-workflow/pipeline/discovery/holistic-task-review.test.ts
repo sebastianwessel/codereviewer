@@ -7,7 +7,10 @@ import {
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import { ReviewWorkflowInputSchema } from '../contracts.js'
-import { runModelBackedHolisticTaskReview } from './holistic-task-review.js'
+import {
+  HOLISTIC_MAX_CANDIDATES,
+  runModelBackedHolisticTaskReview
+} from './holistic-task-review.js'
 
 const configHash =
   '3333333333333333333333333333333333333333333333333333333333333333'
@@ -390,6 +393,319 @@ describe('runModelBackedHolisticTaskReview', () => {
       logger: { debug: () => {} }
     })
     expect(empty.candidates).toHaveLength(0)
+  })
+})
+
+// Spec 21: independent sampling with union merge.
+//
+// Every test here defends a property that is invisible in a diff and expensive to
+// lose: samples that can see each other stop being independent, a union that
+// quietly votes deletes the rare finding the change exists to recover, and a
+// second deduplication mechanism would re-create the restatement problem the
+// semantic merge was built to solve.
+describe('independent discovery samples', () => {
+  const findingAt = (startLine: number, title: string) => ({
+    category: 'bug',
+    severity: 'high',
+    title,
+    description: `${title}, reported at line ${startLine}.`,
+    path: 'src/app.ts',
+    startLine
+  })
+
+  const workflowInputWithSamples = (sampleCount: number) =>
+    ReviewWorkflowInputSchema.parse({
+      runId: 'run-holistic',
+      reviewedPaths: ['src/app.ts'],
+      discoverySampleCount: sampleCount,
+      evidence: [],
+      candidates: [],
+      instructions: [],
+      skills: [],
+      provenance: {
+        reviewer: 'review-agent',
+        modelProvider: 'openai',
+        modelName: 'holistic-test',
+        signalVersions: { typescript: '6.0.3' },
+        configHash
+      }
+    })
+
+  test('defaults to one sample and issues the packet unchanged', async () => {
+    const inputs: { readonly taskId: string; readonly reviewText: string }[] = []
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          inputs.push(holisticInput)
+
+          return holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // The default workflow input carries no sample count, so the schema default
+    // applies: exactly one call, exactly today's behaviour.
+    expect(inputs).toHaveLength(1)
+    // Field ORDER, not just field presence. The packet is serialized in
+    // declaration order and a provider-side prompt cache matches on leading
+    // tokens, so a reordered packet is a cache miss on every call.
+    expect(Object.keys(inputs[0]!)).toEqual(['taskId', 'paths', 'reviewText'])
+    expect(result.discoverySamples).toEqual({ requested: 1, completed: 1 })
+  })
+
+  test('k = 1 sends the identical packet whether the count is defaulted or set', async () => {
+    const packetFor = async (input: typeof workflowInput): Promise<string> => {
+      let captured = ''
+      await runModelBackedHolisticTaskReview({
+        workflowInput: input,
+        taskInput,
+        task,
+        runners: {
+          holisticReview: async (holisticInput) => {
+            captured = JSON.stringify(holisticInput)
+
+            return holisticResultWith([])
+          }
+        },
+        logger: { debug: () => {} }
+      })
+
+      return captured
+    }
+
+    // Serializing compares content AND field order in one assertion.
+    expect(await packetFor(workflowInputWithSamples(1))).toBe(
+      await packetFor(workflowInput)
+    )
+  })
+
+  test('issues one call per sample and hands every sample the identical packet', async () => {
+    const packets: string[] = []
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSamples(3),
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          packets.push(JSON.stringify(holisticInput))
+
+          return holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(packets).toHaveLength(3)
+    // Identical packets are the observable form of independence: a sample that
+    // was told anything about another sample would carry it here.
+    expect(new Set(packets).size).toBe(1)
+    expect(result.discoverySamples).toEqual({ requested: 3, completed: 3 })
+  })
+
+  test('no sample receives any other sample’s findings, reasoning, or output', async () => {
+    // Each sample answers with a marker no other sample could have invented, so a
+    // marker appearing in a later sample's input could only have come from an
+    // earlier sample's output.
+    const markers = ['MARKER-ALPHA', 'MARKER-BETA', 'MARKER-GAMMA'] as const
+    const seenInputs: string[] = []
+    let sample = 0
+
+    await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSamples(markers.length),
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          const serialized = JSON.stringify(holisticInput)
+
+          for (const marker of markers) {
+            expect(serialized).not.toContain(marker)
+          }
+
+          seenInputs.push(serialized)
+          const marker = markers[sample]!
+          sample += 1
+
+          return holisticResultWith([findingAt(10 + sample, marker)])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(seenInputs).toHaveLength(markers.length)
+  })
+
+  test('combines samples by union: a finding raised by exactly one sample survives', async () => {
+    // Two samples agree on one defect; the third is alone in seeing another. Any
+    // agreement threshold, majority vote, or consensus rule would delete the
+    // lonely one — which is precisely the finding independent sampling exists to
+    // recover, so its survival is the anti-consensus guarantee.
+    const agreed = findingAt(10, 'Both of the first two samples saw this')
+    const lonely = findingAt(40, 'Only the third sample saw this')
+    const samples = [[agreed], [agreed], [agreed, lonely]]
+    let sample = 0
+
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSamples(3),
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () => {
+          const findings = samples[sample]!
+          sample += 1
+
+          return holisticResultWith(findings)
+        },
+        // The merge is the only thing allowed to collapse the union, and here it
+        // finds nothing to collapse.
+        semanticMerge: async () => ({ groups: [] })
+      },
+      logger: { debug: () => {} }
+    })
+
+    const titles = result.candidates.map((candidate) => candidate.title).sort()
+    expect(titles).toEqual([agreed.title, lonely.title].sort())
+    // Surviving to admission means surviving unrejected: nothing held the
+    // single-sample finding back on the grounds that only one sample raised it.
+    expect(result.rejectedFindings).toEqual([])
+  })
+
+  test('holds no second deduplication mechanism: distinct defects at one line both survive', async () => {
+    // Positional identity is explicitly rejected as a dedup test (spec 05): two
+    // candidates on the SAME line are frequently two different defects, and a
+    // reviewer needs both. Sameness is the semantic merge's question alone.
+    const samples = [
+      [findingAt(10, 'A value is used without the guard it needs')],
+      [findingAt(10, 'The operator in that same expression is wrong')]
+    ]
+    let sample = 0
+
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSamples(2),
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () => {
+          const findings = samples[sample]!
+          sample += 1
+
+          return holisticResultWith(findings)
+        },
+        semanticMerge: async () => ({ groups: [] })
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(2)
+    expect(result.rejectedFindings).toEqual([])
+  })
+
+  test('collapses two samples that emit the same finding into one candidate identity', async () => {
+    // Not deduplication of distinct findings: a candidate id is a hash of task,
+    // path, line, and title, so two samples emitting the SAME finding describe one
+    // candidate rather than two. That is what a union of candidates means, and it
+    // predates sampling.
+    const same = findingAt(10, 'The same defect, seen twice')
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSamples(3),
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () => holisticResultWith([same])
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(1)
+  })
+
+  test('applies the candidate cap per sample so a later sample is not starved', async () => {
+    const firstSample = Array.from({ length: HOLISTIC_MAX_CANDIDATES }, (_, index) =>
+      findingAt(index + 1, `Defect ${index + 1} from the first sample`)
+    )
+    const secondSample = [findingAt(500, 'The only defect the second sample saw')]
+    const samples = [firstSample, secondSample]
+    let sample = 0
+
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSamples(2),
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () => {
+          const findings = samples[sample]!
+          sample += 1
+
+          return holisticResultWith(findings)
+        },
+        semanticMerge: async () => ({ groups: [] })
+      },
+      logger: { debug: () => {} }
+    })
+
+    // A cap shared across the union would have been exhausted by the first sample,
+    // and every later sample would have been paid for and then discarded.
+    expect(result.candidates).toHaveLength(HOLISTIC_MAX_CANDIDATES + 1)
+  })
+
+  test('one failed sample leaves a complete review and a recorded reduction', async () => {
+    const samples = [
+      [findingAt(10, 'Seen by the first sample')],
+      undefined,
+      [findingAt(20, 'Seen by the third sample')]
+    ]
+    let sample = 0
+
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSamples(3),
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () => {
+          const findings = samples[sample]
+          sample += 1
+
+          if (findings === undefined) {
+            throw new Error('connection reset by peer')
+          }
+
+          return holisticResultWith(findings)
+        },
+        semanticMerge: async () => ({ groups: [] })
+      },
+      logger: { debug: () => {} }
+    })
+
+    // The surviving samples' findings are all present, and the review says how
+    // many samples actually produced it.
+    expect(result.candidates).toHaveLength(2)
+    expect(result.discoverySamples).toEqual({ requested: 3, completed: 2 })
+    // Absorbed, not swallowed: the lost sample is still visible in the run.
+    expect(result.providerIssues).toHaveLength(1)
+    expect(result.providerIssues[0]?.recovered).toBe(true)
+  })
+
+  test('a review whose every sample fails still fails, with the original error', async () => {
+    // Tolerating a lost sample must not become tolerating a lost review: with no
+    // sample left, the task has no discovery at all and the failure is the same
+    // one the single-sample path raises today.
+    await expect(
+      runModelBackedHolisticTaskReview({
+        workflowInput: workflowInputWithSamples(3),
+        taskInput,
+        task,
+        runners: {
+          holisticReview: async () => {
+            throw new Error('connection reset by peer')
+          }
+        },
+        logger: { debug: () => {} }
+      })
+    ).rejects.toThrow(/connection reset/u)
   })
 })
 

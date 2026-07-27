@@ -120,7 +120,8 @@ describe('review runner workflow input', () => {
       review: {
         mode: 'pr',
         contextMaxBytes: 120000,
-        maxConcurrentTasks: 2
+        maxConcurrentTasks: 2,
+        discoverySampleCount: 3
       },
       provider: { id: 'openai', model: 'review-model' }
     })
@@ -158,6 +159,9 @@ describe('review runner workflow input', () => {
     // contextMaxBytes=120 000, input cap=360 000 → min(120 000, 360 000)=120 000
     expect(workflowInput.maxTaskInputBytes).toBe(120000)
     expect(workflowInput.maxConcurrentTasks).toBe(2)
+    // Spec 21: the configured sample count reaches the workflow, which is where
+    // discovery reads it.
+    expect(workflowInput.discoverySampleCount).toBe(3)
     // contextMaxBytes=120 000, depthContextCap(balanced)=120 000
     // → maxBytesPerRead = min(120 000, 120 000) = 120 000
     expect(workflowInput.contextRetrievalBudget).toEqual(

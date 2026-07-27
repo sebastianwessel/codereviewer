@@ -29,6 +29,12 @@ export const RunSummarySchema = z.strictObject({
   configHash: Sha256Schema,
   provider: z.string().optional(),
   model: z.string().optional(),
+  // Spec 21: the number of independent discovery samples this run applied per
+  // task. Recorded because the applied sample count decides what the run's recall
+  // can be, and a report that does not say how many samples produced it cannot be
+  // compared against one taken at a different count. Optional so a run summary
+  // built by something other than the review runner stays valid.
+  discoverySampleCount: z.int().min(1).optional(),
   durationMs: z.int().min(0),
   costUsd: z.number().min(0).optional(),
   inputTokens: z.int().min(0).optional(),

@@ -56,6 +56,10 @@ export const createReviewRunSummary = (
         provider: input.config.provider.id,
         model: input.config.provider.model
       }),
+  // Spec 21: the applied sample count, recorded in the run. Any reduction below it
+  // is recorded separately, in `warnings`, because a reduction is a degradation and
+  // belongs where a reader already looks for them.
+  discoverySampleCount: input.config.review.discoverySampleCount,
   durationMs: Math.max(
     0,
     input.completedAt.getTime() - input.startedAt.getTime()
