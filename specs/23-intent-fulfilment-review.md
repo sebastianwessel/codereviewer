@@ -68,6 +68,15 @@ document. **That ingestion MUST be reused, not reimplemented.**
 - Judgement, explanation, and any suggested follow-up MUST NOT share one model
   call. The measured over-rejection above is specifically what happens when they
   do.
+- The judgement call's output schema MUST carry **no free-text field**. Two calls
+  where the first still returns a rationale string satisfy the letter of the rule
+  and reproduce the mechanism it exists to prevent: the over-rejection is caused
+  by a model justifying a verdict in the same breath as reaching it, not by the
+  call count. Explanation reads an already-frozen judgement.
+- Obligations MUST be extracted from the redacted change-intent **fragments**, not
+  from the summarised brief. The brief is a paraphrase, and a citation into a
+  paraphrase does not identify where in the stated intent an obligation came
+  from.
 - Instructions MUST remain generic and language-neutral, per spec 15's
   Non-Negotiable.
 - The capability is **disabled by default** until measured.
@@ -126,7 +135,7 @@ recall compensates.
 | Every obligation cites its source in the stated intent | unit test |
 | Every satisfied obligation cites path and line | unit test |
 | Absent intent reports plainly and exits successfully | integration test |
-| Judgement and explanation do not share a model call | harness test |
+| Judgement and explanation do not share a model call, and the judgement schema carries no free text | harness test asserting distinct agents and distinct output schemas, plus a schema-shape assertion that the mapping output has no string field other than identifiers and enums |
 | Extra scope is reported without a defect severity | unit test |
 | Disabled by default | config schema test |
 | Instructions stay generic and language-neutral | prompt genericity guard |

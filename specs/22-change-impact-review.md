@@ -54,7 +54,16 @@ service, admission, reporting — MUST be reused. Only the analysis is new.
 ## Requirements
 
 - The command MUST reuse repository intake, provider resolution, configuration,
-  path service, admission, and reporting. It MUST NOT reimplement them.
+  path service, and reporting. It MUST NOT reimplement them.
+- The command MUST NOT extend the diff reviewer's admission gate. That gate
+  requires a finding to sit inside the reviewed paths, and a change-impact finding
+  is outside them by construction; admitting one there would either loosen the
+  diff reviewer's scope guard or add a mode flag, which is the same thing named.
+  Impact findings pass their own gate, composed from the shared primitives.
+- The command MUST reach repository content only through `context-retrieval` and
+  `repository-intake`. It MUST NOT open files directly. Spec 01 records
+  consolidating repository reads as an unmet goal; this capability must not add a
+  new divergent read site.
 - Dependent discovery MUST be bounded and MUST start from symbols named in the
   diff. Unbounded repository search is forbidden: added context measured
   net-negative here twice, and the failure mode is well documented externally.
@@ -125,7 +134,7 @@ capability must earn its cost against that, not against nothing.
 
 | Requirement | Test |
 | --- | --- |
-| Reuses intake, provider resolution, admission, reporting | integration test asserting no duplicated implementation |
+| Reuses intake, provider resolution, configuration, reporting, and reaches repository content only through `context-retrieval` | import-boundary test: the domain imports the shared entrypoints and contains no `node:fs`, `node:fs/promises`, or `node:child_process` |
 | Dependent discovery is bounded and diff-seeded | unit test |
 | A finding without a named dependent is rejected | admission test |
 | Reports no impact rather than manufacturing findings | unit test |
