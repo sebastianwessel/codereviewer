@@ -16,7 +16,11 @@ import {
 import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
 import { compileGlobMatchers, matchesAnyGlob } from '../../shared/glob/glob-matcher.js'
 import { sha256 } from '../../shared/hash/hash.js'
-import { parseGitDiffMaps, type DiffMap } from './git-diff.js'
+import {
+  parseDeletedFileContents,
+  parseGitDiffMaps,
+  type DiffMap
+} from './git-diff.js'
 
 const execFileAsync = promisify(execFile)
 const defaultMaxFileBytes = 500_000
@@ -41,6 +45,17 @@ export type RepositorySnapshot = {
   readonly mergeBaseRef?: string
 }
 
+// A path the change removes outright, with the content it had at the merge base.
+// Surfaced only when `includeDeletedPaths` is requested; see `RepositoryIntake`.
+export type DeletedFile = {
+  readonly path: string
+  readonly contentHash: string
+  readonly sizeBytes: number
+  // Pre-change content, reconstructed from the deletion hunk. Never read from the
+  // working tree, where the file no longer exists.
+  readonly content: string
+}
+
 export type RepositoryIntake = {
   readonly repositorySnapshot: RepositorySnapshot
   readonly changedFiles: readonly ChangedFile[]
@@ -49,6 +64,9 @@ export type RepositoryIntake = {
   // Raw unified diff text for the changed files (empty when unavailable, e.g.
   // explicit-file runs). Used by holistic discovery to show what changed.
   readonly rawDiff: string
+  // Deleted paths with their pre-change content. Always empty unless
+  // `includeDeletedPaths` is set, so every existing consumer is unaffected.
+  readonly deletedFiles: readonly DeletedFile[]
 }
 
 export type GitCommandRunner = (
@@ -81,6 +99,13 @@ export type CollectRepositoryIntakeOptions = {
   readonly runGit?: GitCommandRunner
   readonly fileSystem?: RepositoryIntakeFileSystem
   readonly signal?: AbortSignal
+  // Opt-in: also restrict the unified diff to the DELETED paths and return them
+  // as `deletedFiles` with their pre-change content. Off by default, because a
+  // deleted file has nothing to review and adding it to the diff would change
+  // what every existing consumer sees. Change-impact review needs it: a deleted
+  // exported symbol is the maximal contract change, and without this the
+  // capability would be blind to its strongest case (spec 22).
+  readonly includeDeletedPaths?: boolean
 }
 
 type GitChangedPath = {
@@ -485,11 +510,17 @@ const collectDiffMaps = async (
   options: CollectRepositoryIntakeOptions,
   runGit: GitCommandRunner,
   changedFiles: readonly ChangedFile[],
+  deletedPaths: readonly string[],
   mergeBase: string | undefined
 ): Promise<{ readonly diffMaps: readonly DiffMap[]; readonly rawDiff: string }> => {
+  const diffPaths = [
+    ...changedFiles.map((file) => file.path),
+    ...deletedPaths
+  ]
+
   if (
     options.explicitFiles !== undefined ||
-    changedFiles.length === 0 ||
+    diffPaths.length === 0 ||
     mergeBase === undefined ||
     options.headRef === undefined
   ) {
@@ -497,20 +528,43 @@ const collectDiffMaps = async (
   }
 
   const diffOutput = await runGit(
-    [
-      'diff',
-      '--unified=0',
-      mergeBase,
-      options.headRef,
-      '--',
-      ...changedFiles.map((file) => file.path)
-    ],
+    ['diff', '--unified=0', mergeBase, options.headRef, '--', ...diffPaths],
     createGitRunnerOptions(options.repositoryRoot, options.signal)
   )
 
   // Retain the raw unified diff alongside the parsed ranges: holistic discovery
   // needs the actual before/after hunks (what changed), not just line ranges.
   return { diffMaps: parseGitDiffMaps(diffOutput), rawDiff: diffOutput }
+}
+
+// Pairs each deleted path with the content reconstructed from its deletion hunk.
+// A path whose hunk is missing from the diff (for example because the diff was
+// unavailable for this run) is dropped rather than reported with empty content,
+// so a consumer can never mistake "not retrieved" for "the file was empty".
+const collectDeletedFiles = (
+  deletedPaths: readonly string[],
+  rawDiff: string
+): readonly DeletedFile[] => {
+  if (deletedPaths.length === 0 || rawDiff.length === 0) {
+    return []
+  }
+
+  const contentsByPath = parseDeletedFileContents(rawDiff)
+
+  return deletedPaths.flatMap((deletedPath) => {
+    const content = contentsByPath.get(deletedPath)
+
+    return content === undefined
+      ? []
+      : [
+          {
+            path: deletedPath,
+            content,
+            sizeBytes: Buffer.byteLength(content),
+            contentHash: sha256(content)
+          }
+        ]
+  })
 }
 
 const partitionIntakeRecords = (
@@ -574,10 +628,22 @@ export const collectRepositoryIntake = async (
       enforceRealPathContainment
     })
     const { changedFiles, skippedFiles } = partitionIntakeRecords(inspectedRecords)
+    // Deleted paths stay in `skippedFiles` regardless: they genuinely are skipped
+    // from review. `deletedFiles` is an additive second view for the consumers
+    // that need them, so opting in never removes information from an existing one.
+    const deletedPaths =
+      options.includeDeletedPaths === true
+        ? changedPaths
+            .filter((changedPath) => changedPath.status === 'deleted')
+            .map((changedPath) =>
+              normalizeInputPath(changedPath.path, pathFlavor)
+            )
+        : []
     const { diffMaps, rawDiff } = await collectDiffMaps(
       options,
       runGit,
       changedFiles,
+      deletedPaths,
       mergeBase
     )
 
@@ -591,7 +657,8 @@ export const collectRepositoryIntake = async (
       changedFiles,
       skippedFiles,
       diffMaps,
-      rawDiff
+      rawDiff,
+      deletedFiles: collectDeletedFiles(deletedPaths, rawDiff)
     }
   } catch (error) {
     throw normalizeError(error, {

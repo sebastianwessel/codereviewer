@@ -187,6 +187,41 @@ rather than the reverted commit. Apparent file-set disjointness is frequently a
 directory rename. "Follow-up" usually means extending the same hardening to a
 sibling, not repairing damage.
 
+## First Deterministic Run — What It Showed
+
+The deterministic core shipped 2026-07-27 and was run against this repository's own
+branch: 361 changed files, 28 deleted, 50 changed symbols (seed cap reached), 46
+symbols referenced elsewhere, **231 reference sites**, seconds of wall clock, zero
+provider cost.
+
+It works, and it is not yet good enough to enable. Bucketed by the kind of file a
+reference landed in:
+
+| destination | share |
+|---|---:|
+| source | **68.4%** |
+| tests | 13.0% |
+| documentation and specs | 10.0% |
+| evaluation fixture data | 7.4% |
+| other | 1.3% |
+
+**Roughly a third of reference sites are not dependents in any useful sense.** A
+symbol name appearing inside a JSON fixture, a specification paragraph, or a
+snapshot is textual coincidence, not a dependency. Identifier-boundary matching
+removed substring noise; it cannot distinguish code from prose that happens to
+contain the identifier.
+
+### Requirement added as a result
+
+Dependent discovery MUST restrict reference sites to files eligible for review
+under the configured include/exclude rules, and MUST exclude non-source
+destinations. A reference list a reader has to filter by hand fails this
+capability's own bar — beating a plain `grep` — because filtering by hand is what
+`grep` already makes them do.
+
+This is recorded from a real run rather than anticipated, and it is the kind of
+defect only running the thing surfaces.
+
 ## Verification Matrix
 
 | Requirement | Test |

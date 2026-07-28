@@ -16,5 +16,8 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"]
+  // `src/shared/testing/` holds assertions shared BETWEEN test suites. Nothing at
+  // runtime imports it, so shipping it in `dist/` would only add dead weight to
+  // the published package.
+  "exclude": ["src/**/*.test.ts", "src/shared/testing/**"]
 }

@@ -65,7 +65,8 @@ describe('review runner source state', () => {
         }
       ],
       diffMaps: [],
-      rawDiff: ''
+      rawDiff: '',
+      deletedFiles: []
     }
     const intakeState: ReviewRunnerRepositoryIntakeState = {
       intake,

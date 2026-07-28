@@ -21,8 +21,9 @@ the warning `config-file-missing`.
 | [security-and-verification.md](./security-and-verification.md) | `security`, `verification`, `fix` |
 | [reporting-and-observability.md](./reporting-and-observability.md) | `reporting`, `observability`, `costs` |
 | [context-and-evaluation.md](./context-and-evaluation.md) | `contextSources`, `evaluation` |
+| [change-impact.md](./change-impact.md) | `changeImpact` |
 
-All 18 top-level keys are covered. Every one of them is optional; omitting a
+All 19 top-level keys are covered. Every one of them is optional; omitting a
 key applies its whole default object.
 
 ## Strict objects: unknown or misplaced keys are hard failures

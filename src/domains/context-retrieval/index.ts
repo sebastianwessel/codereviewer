@@ -38,12 +38,38 @@ export const ContextRetrievalBudgetSchema = z.strictObject({
 
 export type ContextRetrievalBudget = z.infer<typeof ContextRetrievalBudgetSchema>
 
+// How a grep query is compared against a source line.
+//
+// `literal` is the historical behaviour: a plain substring test. It is the right
+// default for a model-driven search, where the query is often a phrase or a
+// fragment. It is the WRONG mode for a symbol lookup, because searching for
+// `get` also matches `forget` and `widget`.
+//
+// `identifier` requires the query to appear bounded by non-identifier characters
+// on both sides. The character class is deliberately language-neutral: letters,
+// digits, `_` and `$` are identifier characters in every language this engine
+// analyses, so the mode needs no per-language configuration.
+export type ContextRetrievalMatchMode = 'literal' | 'identifier'
+
+// One matched line, with the text that matched. Returning the text is what makes
+// a search result usable on its own: previously a caller received `path:line`
+// only and had to spend a second mediated read per hit to see what it had found.
+export type ContextRetrievalMatch = {
+  readonly path: string
+  readonly line: number
+  readonly text: string
+}
+
 export type ContextRetrievalResult = {
   readonly tool: 'read' | 'list' | 'grep'
   readonly path?: string
   readonly queryHash?: string
   readonly summary: string
   readonly content: string
+  // Structured matches, present only for `grep`. Additive: `content` keeps its
+  // historical `path:line` shape so every existing caller and every model-facing
+  // tool output is byte-identical.
+  readonly matches?: readonly ContextRetrievalMatch[]
   readonly ledgerEntry: ContextLedgerEntry
   readonly evidence: EvidenceRecord
 }
@@ -62,6 +88,12 @@ export type ContextRetriever = {
     readonly query: string
     readonly paths?: readonly string[]
     readonly taskId?: string
+    readonly matchMode?: ContextRetrievalMatchMode
+    // Tightens this one query's match cap below `budget.maxMatches`. A caller
+    // issuing many queries uses it so one heavily-referenced symbol cannot
+    // consume the share of the others. It can only tighten: a value above the
+    // budget's cap is clamped to it, so the budget stays the authority.
+    readonly maxMatchesPerQuery?: number
   }) => Promise<ContextRetrievalResult>
 }
 
@@ -81,6 +113,13 @@ export {
   type BoundedRetrievalTools,
   type RetrievalTools
 } from './bounded-tools.js'
+export {
+  lookupSymbolReferences,
+  type LookupSymbolReferencesInput,
+  type SymbolReferenceQuery,
+  type SymbolReferenceResult,
+  type SymbolReferenceSite
+} from './symbol-reference-lookup.js'
 export {
   RepoReadToolInputSchema,
   RepoListToolInputSchema,
@@ -119,6 +158,34 @@ const notFoundError = (portablePath: string): TypeError =>
 // the generic not-found error below.
 const isPathContainmentError = (error: unknown): error is TypeError =>
   error instanceof TypeError && /resolve inside the root/iu.test(error.message)
+
+// Identifier characters shared by every language this engine analyses. Kept as
+// one definition so the two lookarounds below can never disagree.
+const identifierCharacterClass = 'A-Za-z0-9_$'
+
+const escapeRegExp = (value: string): string =>
+  value.replaceAll(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+
+// A predicate rather than a shared RegExp object, so no `lastIndex` state can
+// leak between lines. The lookarounds (not `\b`) are what make the match work
+// for a query that begins or ends with a non-word character.
+const createLineMatcher = (
+  query: string,
+  matchMode: ContextRetrievalMatchMode
+): ((line: string) => boolean) => {
+  if (matchMode === 'literal') {
+    return (line) => line.includes(query)
+  }
+
+  const pattern = new RegExp(
+    `(?<![${identifierCharacterClass}])${escapeRegExp(
+      query
+    )}(?![${identifierCharacterClass}])`,
+    'u'
+  )
+
+  return (line) => pattern.test(line)
+}
 
 const portableChildPath = (directory: string, childName: string): string =>
   normalizeRepositoryRelativePath(path.posix.join(directory, childName))
@@ -345,7 +412,13 @@ export const createContextRetriever = (input: {
         summary: `Listed ${portablePath}; ${childSummaries.length} entries returned.`
       })
     },
-    grepRepository: async ({ query, paths, taskId }) => {
+    grepRepository: async ({
+      query,
+      paths,
+      taskId,
+      matchMode,
+      maxMatchesPerQuery
+    }) => {
       if (query.trim().length === 0) {
         throw new TypeError('Context retrieval query must not be empty.')
       }
@@ -356,13 +429,18 @@ export const createContextRetriever = (input: {
       const queryHash = sha256(query)
       const searchPaths =
         paths === undefined || paths.length === 0 ? ['.'] : [...paths]
-      const matches: string[] = []
+      const matchLimit =
+        maxMatchesPerQuery === undefined
+          ? budget.maxMatches
+          : Math.min(budget.maxMatches, maxMatchesPerQuery)
+      const lineMatches = createLineMatcher(query, matchMode ?? 'literal')
+      const matches: ContextRetrievalMatch[] = []
 
       const collectFileMatches = async (
         portablePath: string,
         absolutePath: string
       ): Promise<void> => {
-        if (matches.length >= budget.maxMatches) {
+        if (matches.length >= matchLimit) {
           return
         }
 
@@ -378,11 +456,19 @@ export const createContextRetriever = (input: {
         const lines = content.split(/\r\n|\n|\r/u)
 
         for (const [index, line] of lines.entries()) {
-          if (matches.length >= budget.maxMatches) {
+          if (matches.length >= matchLimit) {
             return
           }
-          if (line.includes(query)) {
-            matches.push(`${portablePath}:${index + 1}`)
+          if (lineMatches(line)) {
+            matches.push({
+              path: portablePath,
+              line: index + 1,
+              // Matching runs against the RAW line so which lines match is
+              // unchanged, but the text handed back is redacted with the same
+              // redactor the mediated read uses: a search result must never
+              // surface a secret a read of the same file would have masked.
+              text: redactor.redact(line)
+            })
           }
         }
       }
@@ -407,7 +493,7 @@ export const createContextRetriever = (input: {
         absolutePath: string,
         depth: number
       ): Promise<void> => {
-        if (matches.length >= budget.maxMatches || depth > budget.maxDepth) {
+        if (matches.length >= matchLimit || depth > budget.maxDepth) {
           return
         }
 
@@ -418,7 +504,7 @@ export const createContextRetriever = (input: {
         }
 
         for (const entry of entries) {
-          if (matches.length >= budget.maxMatches) {
+          if (matches.length >= matchLimit) {
             return
           }
 
@@ -442,7 +528,7 @@ export const createContextRetriever = (input: {
       }
 
       for (const requestedPath of searchPaths) {
-        if (matches.length >= budget.maxMatches) {
+        if (matches.length >= matchLimit) {
           break
         }
 
@@ -458,21 +544,29 @@ export const createContextRetriever = (input: {
         }
       }
 
-      const content = matches.join('\n')
+      // `content` keeps its historical `path:line` shape. The matched text is
+      // returned separately in `matches`, so a model-facing tool output and
+      // every existing caller stay byte-identical.
+      const content = matches
+        .map((match) => `${match.path}:${match.line}`)
+        .join('\n')
 
-      return recordResult({
-        tool: 'grep',
-        ...(taskId === undefined ? {} : { taskId }),
-        reason: 'context-retrieval-grep',
-        content,
-        bytesConsidered: Buffer.byteLength(content),
-        bytesIncluded: Buffer.byteLength(content),
-        summary: `Searched repository context for query hash ${queryHash.slice(
-          0,
-          16
-        )}; ${matches.length} matches returned.`,
-        queryHash
-      })
+      return {
+        ...recordResult({
+          tool: 'grep',
+          ...(taskId === undefined ? {} : { taskId }),
+          reason: 'context-retrieval-grep',
+          content,
+          bytesConsidered: Buffer.byteLength(content),
+          bytesIncluded: Buffer.byteLength(content),
+          summary: `Searched repository context for query hash ${queryHash.slice(
+            0,
+            16
+          )}; ${matches.length} matches returned.`,
+          queryHash
+        }),
+        matches
+      }
     }
   }
 }

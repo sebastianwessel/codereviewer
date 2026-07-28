@@ -320,6 +320,35 @@ export const VerificationConfigSchema = z.strictObject({
   maxMatches: z.int().min(1).default(20)
 })
 
+// Change-impact review (spec 22). Off by default until measured, and reached
+// only by the separate `impact check` command — never by `review`.
+//
+// The bounds below are the whole cost model of the current implementation: it
+// makes no provider call, so the only resource it can spend is repository
+// traversal. They are deliberately per-run and per-symbol rather than one global
+// pool, because a change touching forty symbols must not let the first symbol
+// consume the entire reference budget.
+//
+// There is deliberately no `blocking` key yet. Spec 22 requires blocking to be
+// configurable and non-blocking by default, but the current command has nothing
+// to block on — it reports references, not findings, and always exits 0. Adding
+// the key now would ship a toggle that silently does nothing, which is the same
+// mistake `SecurityConfigSchema` above records having already made once. Add it
+// in the same change that admits the first impact finding.
+export const ChangeImpactConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  // Upper bound on the changed symbols seeded from the diff. Each seed costs one
+  // repository search, so this is what bounds total traversal.
+  maxChangedSymbols: z.int().min(1).max(500).default(50),
+  // Per-symbol cap on reported reference sites. A symbol referenced more than
+  // this many times is reported truncated rather than dropped, so the report
+  // never silently understates how widely a symbol is used.
+  maxReferencesPerSymbol: z.int().min(1).max(500).default(25),
+  // Directory levels the reference search descends from the repository root.
+  // Mirrors the context-retrieval traversal bound of the same name.
+  maxSearchDepth: z.int().min(0).max(32).default(12)
+})
+
 // Agentic finding investigation-and-fix job (spec 12). Off by default. Reuses the
 // same investigation agent, mediated tools, and per-claim bounds as
 // `verification`; `enabled` is the single switch for the whole single pass
@@ -544,6 +573,12 @@ export const CodeReviewerConfigSchema = z.strictObject({
     maxBytesPerRead: 20000,
     maxMatches: 20
   }),
+  changeImpact: ChangeImpactConfigSchema.default({
+    enabled: false,
+    maxChangedSymbols: 50,
+    maxReferencesPerSymbol: 25,
+    maxSearchDepth: 12
+  }),
   fix: FixConfigSchema.default({
     enabled: false
   }),
@@ -611,6 +646,7 @@ export type VerificationConfig = z.infer<typeof VerificationConfigSchema>
 export type VerificationClaimProviderConfig = z.infer<
   typeof VerificationClaimProviderConfigSchema
 >
+export type ChangeImpactConfig = z.infer<typeof ChangeImpactConfigSchema>
 export type FixConfig = z.infer<typeof FixConfigSchema>
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>
 export type SecurityDedicatedPassConfig = z.infer<

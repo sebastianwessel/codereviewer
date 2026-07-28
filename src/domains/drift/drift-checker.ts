@@ -237,7 +237,8 @@ const implementedCliCommands = new Set([
   'review',
   'baseline',
   'eval',
-  'drift'
+  'drift',
+  'impact'
 ])
 const cliCommandPattern =
   /(?:`|^|\n)\s*(?:npx\s+tsx\s+src\/cli\/main\.ts|codereviewer)\s+([a-z][a-z-]*)/gu

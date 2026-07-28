@@ -23,10 +23,12 @@ below are parsed.
 | `eval recall-report` | Render the recall report from one or more eval reports. | `0`, `2` |
 | `eval slice-manifest` | Emit a manifest (with digest) for a benchmark slice directory. | `0`, `2`, `3` |
 | `drift check` | Run the drift gate. | `0`, `1`, `2`, `3` |
+| `impact check` | List the symbols a change touched and where they are referenced. | `0`, `2`, `3` |
 
 Anything else exits `2` with `{"code":"usage_error", ...}` on stderr and the
 message `Expected command: config validate, review, baseline write, eval run,
-eval compare, eval recall-report, eval slice-manifest, or drift check`.
+eval compare, eval recall-report, eval slice-manifest, drift check, or impact
+check`.
 
 See [exit-codes-and-error-codes.md](./exit-codes-and-error-codes.md) for the
 full mapping.
@@ -220,6 +222,106 @@ codereviewer drift check [--config <path>]
 check`, exit `2`). Stdout is the drift result JSON. Exit `1` when the drift gate
 fails — that is, when findings exist in a category listed in
 [`drift.failOn`](./configuration/quality-gate-and-baseline.md#drift).
+
+## `codereviewer impact check`
+
+```
+codereviewer impact check [--config <path>] [--base-ref <ref>] [--head-ref <ref>]
+```
+
+| Flag | Value | Notes |
+| --- | --- | --- |
+| `--config` | path | Config file path override. |
+| `--base-ref` | git ref | Overrides `review.baseRef`. |
+| `--head-ref` | git ref | Overrides `review.headRef`. |
+
+`impact` accepts no subcommand other than `check` (`Expected command: impact
+check`, exit `2`). Stdout is the report JSON; nothing is written to disk.
+
+**This command currently reports references, not impact findings.** It names the
+symbols the change touched and every place in the repository they are referenced.
+It does **not** say whether a reference actually relies on the part of the
+contract that changed, or what breaks if it does — deciding that is your job, and
+the report exists to put the call sites in front of you.
+
+Because of that, **the exit code is always `0`** when the command runs at all,
+whether or not anything was found. Only a configuration or usage failure (`2`) or
+a repository failure such as an unresolvable ref (`3`) changes it. Nothing here
+is a finding, nothing carries a severity, and nothing can block a pipeline.
+
+The command makes **no model provider call**. It costs nothing to run and its
+output is reproducible.
+
+It is **disabled by default**. With `changeImpact.enabled` left at `false` the
+command exits `0` and reports `"status": "disabled"` rather than an empty result,
+so a disabled run can never be mistaken for "nothing depends on your change".
+Enable it with:
+
+```json
+{ "changeImpact": { "enabled": true } }
+```
+
+### Report shape
+
+```json
+{
+  "schemaVersion": "1.0",
+  "status": "completed",
+  "generatedAt": "2026-07-28T00:00:00.000Z",
+  "scope": {
+    "baseRef": "main",
+    "headRef": "HEAD",
+    "mergeBaseRef": "9f1c2ab...",
+    "changedFileCount": 1,
+    "deletedFileCount": 1
+  },
+  "summary": {
+    "changedSymbolCount": 2,
+    "changedSymbolsTruncated": false,
+    "referencedSymbolCount": 2,
+    "referenceCount": 4
+  },
+  "symbols": [
+    {
+      "name": "legacyApi",
+      "kind": "export",
+      "language": "typescript",
+      "definitionPath": "src/legacy.ts",
+      "definitionLine": 1,
+      "changeKind": "deleted",
+      "references": [
+        {
+          "path": "src/caller.ts",
+          "line": 2,
+          "text": "import { legacyApi } from \"./legacy.js\""
+        }
+      ],
+      "referencesInDefinitionFile": 0,
+      "referencesTruncated": false
+    }
+  ],
+  "warnings": []
+}
+```
+
+- `symbols` lists one entry per changed symbol, in path then line order. A symbol
+  with an empty `references` array means nothing outside its own file refers to
+  it, which is a real result and not an omission.
+- `references` lists sites **outside** the defining file only. Sites inside it
+  are counted in `referencesInDefinitionFile` rather than listed, because a
+  symbol's own file is not a dependent.
+- `referencesTruncated` is `true` when `changeImpact.maxReferencesPerSymbol` cut
+  the list short, so a bounded list is never mistaken for a complete one. The
+  same applies to `summary.changedSymbolsTruncated` and
+  `changeImpact.maxChangedSymbols`.
+- `changeKind: "deleted"` means the symbol's whole file was removed. Every symbol
+  a deleted file declared is reported, since none of them survive.
+- Reference matching is **identifier-bounded**, not substring: seeding from `get`
+  does not match `forget` or `widget`. Matched line text is redacted with the
+  same redactor the mediated file read uses, and capped at 300 characters — the
+  text is there to recognise a reference, while `path` and `line` locate it.
+- Files in a language the deterministic signal extractors do not cover contribute
+  no symbols and produce a warning rather than an error.
 
 ## Related
 

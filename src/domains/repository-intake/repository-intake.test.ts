@@ -397,6 +397,116 @@ describe('repository intake', () => {
     expect(intake.repositorySnapshot.mergeBaseRef).toBeUndefined()
   })
 
+  // G1 (spec 22): a deleted exported symbol is the maximal contract change, but
+  // intake drops deleted paths into `skippedFiles` and restricts the unified diff
+  // to the surviving paths, so the deletion is invisible to every consumer.
+  describe('includeDeletedPaths', () => {
+    const deletedFixtureGit = (): Readonly<Record<string, string>> => ({
+      'merge-base main HEAD': `${mergeBaseSha}\n`,
+      [`diff --name-status ${mergeBaseSha} HEAD`]:
+        'M\tsrc/app.ts\nD\tsrc/gone.ts\n',
+      [`diff --unified=0 ${mergeBaseSha} HEAD -- src/app.ts`]:
+        'diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,0 +1,1 @@\n+export const value = 1\n',
+      [`diff --unified=0 ${mergeBaseSha} HEAD -- src/app.ts src/gone.ts`]:
+        'diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,0 +1,1 @@\n+export const value = 1\n' +
+        'diff --git a/src/gone.ts b/src/gone.ts\ndeleted file mode 100644\n--- a/src/gone.ts\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-export const removed = 1\n-const internal = 2\n'
+    })
+
+    // The byte-for-byte guarantee the option rests on: without it, nothing about
+    // the intake -- including the git argument vectors -- differs from before.
+    test('is off by default, and the default run issues the same git commands', async () => {
+      const repositoryRoot = await createFixtureRepository()
+      const issuedCommands: string[][] = []
+      const outputs = deletedFixtureGit()
+      const runGit: GitCommandRunner = async (args) => {
+        issuedCommands.push([...args])
+        const output = outputs[args.join(' ')]
+
+        if (output === undefined) {
+          throw new Error(`Unexpected git command: ${args.join(' ')}`)
+        }
+
+        return output
+      }
+
+      const intake = await collectRepositoryIntake({
+        repositoryRoot,
+        baseRef: 'main',
+        headRef: 'HEAD',
+        runGit
+      })
+
+      expect(issuedCommands).toEqual([
+        ['merge-base', 'main', 'HEAD'],
+        ['diff', '--name-status', mergeBaseSha, 'HEAD'],
+        ['diff', '--unified=0', mergeBaseSha, 'HEAD', '--', 'src/app.ts']
+      ])
+      expect(intake.deletedFiles).toEqual([])
+      expect(intake.skippedFiles).toEqual([
+        { path: 'src/gone.ts', reason: 'deleted' }
+      ])
+      expect(intake.diffMaps.map((diffMap) => diffMap.path)).toEqual([
+        'src/app.ts'
+      ])
+    })
+
+    test('surfaces deleted paths with their pre-change content when requested', async () => {
+      const repositoryRoot = await createFixtureRepository()
+      const runGit = scriptedGitRunner(deletedFixtureGit())
+
+      const intake = await collectRepositoryIntake({
+        repositoryRoot,
+        baseRef: 'main',
+        headRef: 'HEAD',
+        includeDeletedPaths: true,
+        runGit
+      })
+
+      expect(intake.deletedFiles).toEqual([
+        {
+          path: 'src/gone.ts',
+          content: 'export const removed = 1\nconst internal = 2',
+          sizeBytes: 43,
+          contentHash: expect.stringMatching(/^[0-9a-f]{64}$/u)
+        }
+      ])
+      // Opting in adds a view; it never removes one. The deleted path is still
+      // reported as skipped from review, and the surviving file is untouched.
+      expect(intake.skippedFiles).toEqual([
+        { path: 'src/gone.ts', reason: 'deleted' }
+      ])
+      expect(intake.changedFiles.map((file) => file.path)).toEqual([
+        'src/app.ts'
+      ])
+      expect(
+        intake.diffMaps.map((diffMap) => [diffMap.path, diffMap.changeKind])
+      ).toEqual([
+        ['src/app.ts', 'modified'],
+        ['src/gone.ts', 'deleted']
+      ])
+    })
+
+    test('reports no deleted files when the change deletes nothing', async () => {
+      const repositoryRoot = await createFixtureRepository()
+      const runGit = scriptedGitRunner({
+        'merge-base main HEAD': `${mergeBaseSha}\n`,
+        [`diff --name-status ${mergeBaseSha} HEAD`]: 'M\tsrc/app.ts\n',
+        [`diff --unified=0 ${mergeBaseSha} HEAD -- src/app.ts`]:
+          'diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,0 +1,1 @@\n+export const value = 1\n'
+      })
+
+      const intake = await collectRepositoryIntake({
+        repositoryRoot,
+        baseRef: 'main',
+        headRef: 'HEAD',
+        includeDeletedPaths: true,
+        runGit
+      })
+
+      expect(intake.deletedFiles).toEqual([])
+    })
+  })
+
   test('normalizes timeout-shaped git failures as repository errors', async () => {
     await expect(
       collectRepositoryIntake({

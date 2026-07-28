@@ -27,6 +27,8 @@ import {
   type EvalCaseFileReader,
   type EvalRegressionThresholds,
 } from '../domains/evaluation/index.js'
+import { runChangeImpact } from '../domains/change-impact/index.js'
+import { createContextRetriever } from '../domains/context-retrieval/index.js'
 import { runDriftCheck } from '../domains/drift/index.js'
 import {
   isReviewRunFailedError,
@@ -1161,6 +1163,89 @@ const runDrift = async (
   }
 }
 
+// `impact check` (spec 22). It makes NO provider call: the whole command is
+// deterministic, so it costs nothing to run and its output is reproducible.
+//
+// What it produces is a REFERENCE report, not findings. Spec 22 requires a
+// change-impact finding to name the contract element a dependent relies upon and
+// the consequence of the change; a deterministic reference list has neither, so
+// nothing here is admitted, given a severity, or allowed to block. The exit code
+// is therefore 0 whatever the report says, and only a configuration (2) or
+// repository (3) failure changes that. This command is also spec 22's own
+// falsifier: its removal criterion is that the capability must beat naming the
+// changed symbols and letting a human grep, and this IS that baseline.
+const runImpact = async (
+  args: readonly string[],
+  options: CliRunOptions
+): Promise<CliResult> => {
+  if (args[0] !== 'check') {
+    return usageError('Expected command: impact check')
+  }
+
+  const impactArgs = args.slice(1)
+  let loadedConfig: Awaited<ReturnType<typeof loadCodeReviewerConfig>>
+
+  // Configuration is loaded in its own scope so a malformed config file exits 2
+  // as a config error rather than being swept into the repository fallback the
+  // rest of the command needs for git failures.
+  try {
+    const configPath = parseConfigPath(impactArgs)
+    loadedConfig = await loadCodeReviewerConfig({
+      repositoryRoot: options.cwd,
+      environment: options.environment ?? {},
+      ...(configPath === undefined ? {} : { configPath })
+    })
+  } catch (error) {
+    return mapErrorResult(error, 'config')
+  }
+
+  try {
+    const baseRef = parseOptionValue(impactArgs, '--base-ref')
+    const headRef = parseOptionValue(impactArgs, '--head-ref')
+    // The mediated retriever is the only filesystem seam the run gets: path
+    // containment, symlink-realpath re-checking, the eligibility gate and
+    // redaction all apply to every file the symbol extraction sees. The read
+    // budget is sized to the review file cap, which is the same bound intake
+    // applies to how many files can be changed in one run.
+    const retriever = createContextRetriever({
+      repositoryRoot: options.cwd,
+      budget: {
+        maxReads: loadedConfig.config.review.maxFiles,
+        maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
+        maxSearches: 0
+      },
+      paths: {
+        include: loadedConfig.config.paths.include,
+        exclude: loadedConfig.config.paths.exclude
+      }
+    })
+    const report = await runChangeImpact({
+      repositoryRoot: options.cwd,
+      config: loadedConfig.config,
+      ...(baseRef === undefined ? {} : { baseRef }),
+      ...(headRef === undefined ? {} : { headRef }),
+      ...(options.now === undefined ? {} : { generatedAt: options.now() }),
+      readChangedFile: async (filePath) => {
+        try {
+          return (await retriever.readRepositoryFile({ path: filePath })).content
+        } catch {
+          // An ineligible, missing, or over-budget file is skipped and counted;
+          // one unreadable file must not fail the whole report.
+          return undefined
+        }
+      }
+    })
+
+    return {
+      exitCode: 0,
+      stdout: jsonResult(report),
+      stderr: ''
+    }
+  } catch (error) {
+    return mapErrorResult(error, 'repository')
+  }
+}
+
 export const runCli = async (
   args: readonly string[],
   options: CliRunOptions
@@ -1207,7 +1292,14 @@ export const runCli = async (
     )
   }
 
+  if (command === 'impact') {
+    return runImpact(
+      [subcommand, ...rest].filter((value): value is string => value !== undefined),
+      options
+    )
+  }
+
   return usageError(
-    'Expected command: config validate, review, baseline write, eval run, eval compare, eval recall-report, eval slice-manifest, or drift check'
+    'Expected command: config validate, review, baseline write, eval run, eval compare, eval recall-report, eval slice-manifest, drift check, or impact check'
   )
 }

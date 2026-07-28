@@ -341,3 +341,178 @@ describe('context retrieval', () => {
     }
   })
 })
+
+// G2 (spec 22): the identifier-aware, per-query-bounded lookup change-impact's
+// symbol reference search needs. Every addition is optional and defaulted, so the
+// existing call shape must keep producing exactly what it produced before.
+describe('context retrieval grep modes', () => {
+  const createSymbolFixtureRepo = async (): Promise<string> => {
+    const root = join(tmpdir(), `codereviewer-grep-modes-${crypto.randomUUID()}`)
+
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(
+      join(root, 'src', 'callers.ts'),
+      [
+        'import { get } from "./store.js"',
+        'const forget = 1',
+        'const widget = get()',
+        'export const target = get',
+        'const getter = 2'
+      ].join('\n')
+    )
+    await writeFile(
+      join(root, 'src', 'many.ts'),
+      ['get()', 'get()', 'get()', 'get()'].join('\n')
+    )
+
+    return root
+  }
+
+  test('the existing call shape is byte-identical: literal default, path:line content', async () => {
+    const root = await createSymbolFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const withoutOptions = await retriever.grepRepository({
+        query: 'get',
+        paths: ['src/callers.ts']
+      })
+      const withExplicitDefaults = createContextRetriever({
+        repositoryRoot: root
+      })
+      const withOptions = await withExplicitDefaults.grepRepository({
+        query: 'get',
+        paths: ['src/callers.ts'],
+        matchMode: 'literal'
+      })
+
+      // Every line containing `get` as a substring, in file order: the import,
+      // `forget`, `widget`/`get()`, `target`/`get`, and `getter`.
+      expect(withoutOptions.content).toBe(
+        [
+          'src/callers.ts:1',
+          'src/callers.ts:2',
+          'src/callers.ts:3',
+          'src/callers.ts:4',
+          'src/callers.ts:5'
+        ].join('\n')
+      )
+      expect(withOptions.content).toBe(withoutOptions.content)
+      expect(withoutOptions.summary).toBe(withOptions.summary)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('identifier mode rejects substring matches inside longer identifiers', async () => {
+    const root = await createSymbolFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const result = await retriever.grepRepository({
+        query: 'get',
+        paths: ['src/callers.ts'],
+        matchMode: 'identifier'
+      })
+
+      // Line 2 (`forget`) and line 5 (`getter`) are substring-only matches and
+      // must not be reported. Line 3 contains both `widget` and a real `get()`
+      // call, so it stays.
+      expect(result.content).toBe(
+        ['src/callers.ts:1', 'src/callers.ts:3', 'src/callers.ts:4'].join('\n')
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('grep returns the matched line text alongside path and line', async () => {
+    const root = await createSymbolFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const result = await retriever.grepRepository({
+        query: 'target',
+        paths: ['src/callers.ts'],
+        matchMode: 'identifier'
+      })
+
+      expect(result.matches).toEqual([
+        {
+          path: 'src/callers.ts',
+          line: 4,
+          text: 'export const target = get'
+        }
+      ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('matched text is redacted even though matching runs on the raw line', async () => {
+    const root = await createTempRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const result = await retriever.grepRepository({
+        query: 'sk-proj-secret-value',
+        paths: ['src/app.ts']
+      })
+
+      // The raw line still matched, proving matching is unredacted...
+      expect(result.content).toBe('src/app.ts:1')
+      // ...but the text handed back carries no secret.
+      expect(result.matches?.[0]?.text).not.toContain('sk-proj-secret-value')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('maxMatchesPerQuery tightens one query without touching the budget', async () => {
+    const root = await createSymbolFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxSearches: 2, maxMatches: 10 }
+      })
+      const tightened = await retriever.grepRepository({
+        query: 'get',
+        paths: ['src/many.ts'],
+        matchMode: 'identifier',
+        maxMatchesPerQuery: 2
+      })
+      const untouched = await retriever.grepRepository({
+        query: 'get',
+        paths: ['src/many.ts'],
+        matchMode: 'identifier'
+      })
+
+      expect(tightened.matches).toHaveLength(2)
+      expect(untouched.matches).toHaveLength(4)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('maxMatchesPerQuery can only tighten, never widen, the budget cap', async () => {
+    const root = await createSymbolFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxMatches: 1 }
+      })
+      const result = await retriever.grepRepository({
+        query: 'get',
+        paths: ['src/many.ts'],
+        matchMode: 'identifier',
+        maxMatchesPerQuery: 100
+      })
+
+      expect(result.matches).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})

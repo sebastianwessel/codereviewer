@@ -719,6 +719,46 @@
       ],
       "additionalProperties": false
     },
+    "changeImpact": {
+      "default": {
+        "enabled": false,
+        "maxChangedSymbols": 50,
+        "maxReferencesPerSymbol": 25,
+        "maxSearchDepth": 12
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "maxChangedSymbols": {
+          "default": 50,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "maxReferencesPerSymbol": {
+          "default": 25,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "maxSearchDepth": {
+          "default": 12,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 32
+        }
+      },
+      "required": [
+        "enabled",
+        "maxChangedSymbols",
+        "maxReferencesPerSymbol",
+        "maxSearchDepth"
+      ],
+      "additionalProperties": false
+    },
     "fix": {
       "default": {
         "enabled": false
@@ -1194,6 +1234,7 @@
     "promotionPolicy",
     "contextSources",
     "verification",
+    "changeImpact",
     "fix",
     "security",
     "reporting",

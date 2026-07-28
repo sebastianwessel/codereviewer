@@ -46,6 +46,14 @@ It is the one removal without a failed measurement behind it: its only A/B was r
 against a non-conforming build and is **void**, so it went on mechanism instead —
 see [context scout (removed)](context-scout.md).
 
+**Change-impact review** (`changeImpact.enabled`) is also off by default, but it
+does not belong in the table above: it is a separate command
+([`impact check`](../../06-reference/cli.md#codereviewer-impact-check)), not a
+capability inside `review`, and it makes no model call at all, so it has no cost
+and no recall figure to report. Today it names the symbols a change touched and
+where they are referenced. That is deliberately the floor a fuller capability
+would have to beat, so it ships as a useful baseline rather than as a lever.
+
 ## How to read the verdicts
 
 | Verdict | Means |
@@ -82,7 +90,8 @@ identical to a build without it, which is what makes the A/Bs above single-varia
   "security": { "dedicatedPass": { "enabled": false } },
   "contextSources": { "enabled": false },
   "verification": { "enabled": false },
-  "fix": { "enabled": false }
+  "fix": { "enabled": false },
+  "changeImpact": { "enabled": false }
 }
 ```
 

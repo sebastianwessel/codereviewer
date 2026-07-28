@@ -40,6 +40,7 @@ src/
     context-retrieval/
     context-ingestion/
     verification/
+    change-impact/
     shared-context/
     review-workflow/
       harness/
@@ -60,8 +61,13 @@ src/
     json/
     redaction/
     schema/
+    testing/
     text/
 ```
+
+`shared/testing/` holds assertions a spec requires more than one domain to
+satisfy. It is compiled out of the published build (`tsconfig.build.json`
+excludes it) because nothing at runtime may import it.
 
 ## Ownership Rules
 
@@ -76,6 +82,7 @@ src/
 | `context-retrieval` | Read/list/grep-style repository context tools exposed through bounded mediation to refutation and (when skills are enabled) holistic review. | Shell execution, filesystem writes, network access, provider loading, or admission. |
 | `context-ingestion` | External change-intent context providers (inbox, changed-files), fragment redaction, and the digest/model summarizers producing one bounded change-intent brief. | Admission decisions, gate authority, network beyond the configured provider endpoint, or reading outside the repository root. |
 | `verification` | The agentic investigation flow: claim/verdict contracts, claim providers (claims-file, prior-findings, current-findings), the bounded `investigate_claim` agent using mediated read/list/grep, the deterministic fix apply-check and advisory `fixProposal` enrichment, and corroboration matching. | Shell, network, filesystem writes, publishing, gate authority, or changing the general review's discovery path. |
+| `change-impact` | Change-impact review (spec 22): the changed-symbol seed derived from support-signal facts intersected with diff hunks, bounded dependent discovery over those symbols, and its own report contract, admission, and metrics. | Filesystem or git access of its own, the diff reviewer's admission gate, quality-gate authority, report rendering for the diff review, or provider package loading. |
 | `shared-context` | Run-local admitted facts/findings/evidence references. | Filesystem scanning or provider calls. |
 | `review-workflow` | The public harness facade and the review runner: run-start state, preflight, source and planning state, context assembly, provider execution and failure classification, admission and completion state, baseline loading, cost and warning finalization. Also the model-facing stages it drives — holistic discovery, semantic finding merge, refutation, candidate conversion — with their packet shaping, agent instructions, and IO contracts. | Low-level git parsing, path normalization, artifact rendering, deterministic path authority, publication, provider package loading, or report rendering. |
 | `admission` | Refutation-result validation, deterministic safety checks, promotion policy, and admitted/rejected decisions. | Candidate generation or output formatting. |
@@ -117,6 +124,8 @@ the owning domain.
 - Cross-domain access must use exported domain entrypoints.
 - `shared` must not import from `domains`.
 - Optional provider packages must only be imported by `provider-resolution`.
+- `change-impact` must not import from `review-workflow`, and `review-workflow`
+  must not import from it. It is reachable only from `src/cli/`.
 - `review-workflow` must not perform shell, git, network, or write operations,
   and every repository path it reads must first be resolved inside the
   repository root. See *Known Divergence* below on where that content is read.

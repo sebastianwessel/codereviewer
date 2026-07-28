@@ -187,6 +187,53 @@ describe('CodeReviewerConfigSchema', () => {
     expect(enabled.verification.maxMatches).toBe(20)
   })
 
+  test('change impact is disabled by default with bounded discovery limits', () => {
+    const disabled = CodeReviewerConfigSchema.parse({})
+    expect(disabled.changeImpact).toEqual({
+      enabled: false,
+      maxChangedSymbols: 50,
+      maxReferencesPerSymbol: 25,
+      maxSearchDepth: 12
+    })
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      changeImpact: {
+        enabled: true,
+        maxChangedSymbols: 10,
+        maxReferencesPerSymbol: 5,
+        maxSearchDepth: 3
+      }
+    })
+    expect(enabled.changeImpact).toEqual({
+      enabled: true,
+      maxChangedSymbols: 10,
+      maxReferencesPerSymbol: 5,
+      maxSearchDepth: 3
+    })
+  })
+
+  // Spec 22 requires blocking to be configurable and non-blocking by default,
+  // but the command currently reports references rather than findings and has
+  // nothing to block on. A `blocking` key would therefore be accepted and then
+  // silently ignored, which is the failure the security `signals` key was removed
+  // for. Rejecting it keeps the config honest until the key does something.
+  test('change impact rejects a blocking key it could not yet honour', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ changeImpact: { blocking: true } })
+    ).toThrow()
+  })
+
+  test('change impact rejects out-of-range discovery bounds', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ changeImpact: { maxChangedSymbols: 0 } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { maxReferencesPerSymbol: 1000 }
+      })
+    ).toThrow()
+  })
+
   test('verification rejects an unknown claim provider type', () => {
     expect(() =>
       CodeReviewerConfigSchema.parse({
