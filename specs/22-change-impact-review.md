@@ -130,6 +130,63 @@ Decision rule, fixed before the first measurement:
 That last bar is deliberately concrete. A deterministic caller list is cheap; this
 capability must earn its cost against that, not against nothing.
 
+## What Mining The First Fixtures Established
+
+A first pass screened **66,685 commit bodies across 27 repositories** and yielded
+**5 usable candidates with 7 expectations**. Three facts from that pass should
+shape how this corpus is built, and all three are cheaper to accept now than to
+rediscover later.
+
+### The binding constraint is commit-message convention, not defect rarity
+
+The evidence bar requires linking a later fix to the change that caused it. That
+link is only mechanically resolvable when a project writes the causing commit's
+**full sha** in the fix. Django mandates a literal `Regression in <sha>.` line and
+produced **4 of the 5** accepted candidates. Everywhere else the link is a pull
+request number, which resolves locally only for squash-merge repositories and is
+far noisier.
+
+Measured yield: roughly **1 usable case per 13,000 commits overall**, but about
+**1 per 1,000 in a repository with a sha-reference convention** and near zero
+without one.
+
+Consequence for curation: further mining SHOULD target projects with that
+discipline rather than pushing harder on the existing manifest. Any such project
+must clear the permissive-license allowlist before use, which the current
+manifest's repositories already have and new ones will not.
+
+### Severity skews low, and that collides with the admission threshold
+
+Change-impact damage usually surfaces as a **loud** failure — a crash, an
+exception, a broken build. Spec 05's severity rubric rates a signalled failure
+below a silent one, correctly, because a loud failure is detectable. **Four of the
+first seven expectations are therefore `low`**, and the default actionable
+severity threshold is `medium`.
+
+A `low` expectation can only be matched by a candidate the engine itself rated
+`medium` or above — a severity the answer key says is wrong. This is an unresolved
+tension between the rubric and this capability, **not** a licence to inflate
+severities in the corpus. It MUST be settled before the first measurement, and the
+resolution MUST NOT be to relabel fixtures to fit the gate.
+
+### The held-out window is structurally narrow
+
+A case is only contamination-safe when the **introducing** commit is after the
+training cutoff — but the **evidence** commit must be later still, and the
+observed fix-lag is 3–12 months. That lag eats most of any post-cutoff window, and
+will keep doing so. Only 2 of the first 5 candidates cleared it.
+
+Consequence: this corpus will lean on `dev`-split cases longer than spec 17's did,
+and results MUST be reported split by contamination risk rather than pooled.
+
+### Rejection patterns worth reusing
+
+Automated integration merges and dependency bumps quote unrelated pull-request
+bodies and are structurally worthless. Revert commits reference the merge base
+rather than the reverted commit. Apparent file-set disjointness is frequently a
+directory rename. "Follow-up" usually means extending the same hardening to a
+sibling, not repairing damage.
+
 ## Verification Matrix
 
 | Requirement | Test |
