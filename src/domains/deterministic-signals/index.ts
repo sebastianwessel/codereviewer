@@ -25,6 +25,7 @@ export {
   supportedSignalLanguageDefinitions,
   normalizeSignalPath
 } from './shared/deterministic-signal-utils.js'
+export { isLanguageTestFile } from './shared/test-discovery.js'
 export {
   supportedSignalLanguageForPath,
   routeFilesBySignalLanguage,

@@ -146,7 +146,9 @@ describe('change impact run', () => {
         changedSymbolCount: 2,
         changedSymbolsTruncated: false,
         referencedSymbolCount: 2,
-        referenceCount: 4
+        referenceCount: 4,
+        testReferenceCount: 0,
+        nonSourceReferenceCount: 0
       })
       expect(report.warnings).toEqual([])
       expect(() =>
@@ -188,6 +190,67 @@ describe('change impact run', () => {
       ])
       expect(report.summary.referencedSymbolCount).toBe(0)
       expect(report.summary.referenceCount).toBe(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Spec 22, "Requirement added as a result": the first real run put a third of
+  // its reference sites in prose and fixture data. This drives the same shapes
+  // through the whole composition rather than through `discoverDependents` alone,
+  // because the eligibility half of the requirement is only wired up here.
+  test('keeps prose and fixture data out of the reference list, and out of the headline count', async () => {
+    const root = await createRepo()
+
+    try {
+      await mkdir(join(root, 'docs'), { recursive: true })
+      await mkdir(join(root, 'eval'), { recursive: true })
+      await mkdir(join(root, 'vendor'), { recursive: true })
+      await writeFile(
+        join(root, 'docs', 'guide.md'),
+        'Call `fetchUser` to load a user.\n'
+      )
+      await writeFile(
+        join(root, 'eval', 'slice.json'),
+        '{ "snippet": "const x = fetchUser(1)" }\n'
+      )
+      await writeFile(
+        join(root, 'src', 'store.test.ts'),
+        'test("fetchUser", () => fetchUser("a"))\n'
+      )
+      // Eligible-by-extension but excluded by configuration: proves the two
+      // filters are independent and that the configured rules still bind.
+      await writeFile(
+        join(root, 'vendor', 'copy.ts'),
+        'export const b = fetchUser("c")\n'
+      )
+      const report = await runChangeImpact({
+        repositoryRoot: root,
+        config: CodeReviewerConfigSchema.parse({
+          changeImpact: { enabled: true },
+          paths: { exclude: ['vendor/**'] }
+        }),
+        baseRef: 'main',
+        headRef: 'HEAD',
+        generatedAt,
+        readChangedFile: readChangedFile(root),
+        runGit: scriptedGit(gitOutputs)
+      })
+      const fetchUser = report.symbols.find(
+        (symbol) => symbol.name === 'fetchUser'
+      )
+
+      expect(
+        fetchUser?.references.map((reference) => reference.path)
+      ).toEqual(['src/caller.ts', 'src/caller.ts'])
+      expect(
+        fetchUser?.testReferences.map((reference) => reference.path)
+      ).toEqual(['src/store.test.ts'])
+      // Withheld, not hidden: the markdown line and the JSON fixture line.
+      expect(fetchUser?.referencesInNonSourceFiles).toBe(2)
+      expect(report.summary.referenceCount).toBe(4)
+      expect(report.summary.testReferenceCount).toBe(1)
+      expect(report.summary.nonSourceReferenceCount).toBe(2)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

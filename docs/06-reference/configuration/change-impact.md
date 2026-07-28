@@ -42,6 +42,29 @@ is not a finding.
 defining its own copies, so the set of files it looks at matches the set `review`
 looks at. `--base-ref` and `--head-ref` override the two refs for one invocation.
 
+That applies to **reference destinations** as well as to the changed files:
+excluding a path from review also excludes it as a place a dependent can be
+found. There is no separate include/exclude key for reference search, and there
+will not be one — two definitions of "reviewable file" would be a defect of their
+own.
+
+## Which files can hold a dependent
+
+On top of the configured scope, a reference site is only reported when it lands in
+a file a supported language covers. Documentation, specification prose, fixture
+data, snapshots and other non-source files are **counted** in
+`referencesInNonSourceFiles` and `summary.nonSourceReferenceCount`, never listed:
+a symbol name inside a JSON fixture or a prose paragraph is textual coincidence,
+not a dependency.
+
+"Source" is not a configurable extension list. It is exactly the set of files the
+deterministic language support covers — the same set that decides which files can
+seed a changed symbol — so the two ends of the lookup can never disagree, and
+adding language support widens both at once.
+
+Test files are source, and are listed in `testReferences` rather than mixed into
+`references`. See [the report shape](../cli.md#report-shape) for why.
+
 ## Related
 
 - [CLI: `impact check`](../cli.md#codereviewer-impact-check)

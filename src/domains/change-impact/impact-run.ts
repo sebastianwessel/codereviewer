@@ -106,7 +106,7 @@ const disabledReport = (input: {
   readonly generatedAt: Date
 }): ChangeImpactReferenceReport =>
   ChangeImpactReferenceReportSchema.parse({
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     status: 'disabled',
     generatedAt: input.generatedAt.toISOString(),
     scope: {
@@ -119,7 +119,9 @@ const disabledReport = (input: {
       changedSymbolCount: 0,
       changedSymbolsTruncated: false,
       referencedSymbolCount: 0,
-      referenceCount: 0
+      referenceCount: 0,
+      testReferenceCount: 0,
+      nonSourceReferenceCount: 0
     },
     symbols: [],
     warnings: [
@@ -127,18 +129,34 @@ const disabledReport = (input: {
     ]
   })
 
+const sumOver = (
+  symbols: readonly ChangedSymbolReferences[],
+  select: (symbol: ChangedSymbolReferences) => number
+): number => symbols.reduce((total, symbol) => total + select(symbol), 0)
+
 const summarize = (
   symbols: readonly ChangedSymbolReferences[]
 ): {
   readonly referencedSymbolCount: number
   readonly referenceCount: number
+  readonly testReferenceCount: number
+  readonly nonSourceReferenceCount: number
 } => ({
+  // A symbol counts as referenced when something LISTED refers to it. Counting a
+  // symbol whose only matches were prose would restate the noise this filter
+  // exists to remove.
   referencedSymbolCount: symbols.filter(
-    (symbol) => symbol.references.length > 0
+    (symbol) =>
+      symbol.references.length > 0 || symbol.testReferences.length > 0
   ).length,
-  referenceCount: symbols.reduce(
-    (total, symbol) => total + symbol.references.length,
-    0
+  referenceCount: sumOver(symbols, (symbol) => symbol.references.length),
+  testReferenceCount: sumOver(
+    symbols,
+    (symbol) => symbol.testReferences.length
+  ),
+  nonSourceReferenceCount: sumOver(
+    symbols,
+    (symbol) => symbol.referencesInNonSourceFiles
   )
 })
 
@@ -198,7 +216,7 @@ export const runChangeImpact = async (
   }
 
   return ChangeImpactReferenceReportSchema.parse({
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     status: 'completed',
     generatedAt: generatedAt.toISOString(),
     scope: {

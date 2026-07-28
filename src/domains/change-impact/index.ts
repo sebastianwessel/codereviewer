@@ -25,3 +25,7 @@ export {
   runChangeImpact,
   type RunChangeImpactInput
 } from './impact-run.js'
+export {
+  classifyReferenceDestination,
+  type ReferenceDestinationKind
+} from './reference-destination.js'

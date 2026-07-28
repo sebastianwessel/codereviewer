@@ -241,6 +241,25 @@ against the same build as the later rounds. In the pilot, three archived runs ga
 0/3 for an expectation that six fresh round-one runs found twice; using the
 archive alone would have produced a false positive.
 
+### Measured Outcome, 2026-07-27
+
+The measurement was run on ten same-file multi-defect cases, three arms, twelve
+runs each, with round one re-measured on the current build. **The catch rate does
+not rise materially across rounds, and the rise that exists is scope narrowing
+rather than repair.** Round two gained +3.5pp per defect over round one (p=0.60),
+while the diff-narrowing control gained **+11.9pp** and beat round two on three of
+four cases, tying the fourth.
+
+Three of the ten cases are **structurally not convergeable**: repairing the found
+defect removes the remaining target from every later diff, because the fix hunk
+spans the sibling defect's lines or empties the reviewed diff. No number of rounds
+reaches them.
+
+Consequence for this spec: **rounds-to-clean remains worth reporting, but it must
+not be presented as a recall figure that supersedes the single-pass one.** The
+single-pass measurement is the honest headline. Detail in
+`reports/eval-results-ledger.md`.
+
 Closing that gap requires new cases in which **one diff introduces several
 defects**. Upstream fix commits that repair more than one defect at once are the
 natural source: reversed, they present as a change introducing several defects,

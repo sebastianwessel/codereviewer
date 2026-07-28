@@ -57,17 +57,34 @@ export const ChangedSymbolReferencesSchema = z.strictObject({
   definitionPath: RepositoryRelativePathSchema,
   definitionLine: z.int().min(1),
   changeKind: ChangedFileChangeKindSchema,
-  // Reference sites OUTSIDE the defining file. References inside it are counted
-  // separately below rather than listed: a symbol's own file is not a dependent.
+  // Production reference sites OUTSIDE the defining file: the dependents a reader
+  // is here for. References inside the defining file, in a test, and in a
+  // non-source destination are separated below rather than mixed in.
   references: z.array(SymbolReferenceSiteSchema),
+  // Test reference sites, listed rather than dropped. A test that calls a changed
+  // symbol IS a dependent and will break; it is a different KIND of dependent
+  // (breakage shows up in CI, not in production), so it gets its own bucket
+  // instead of diluting the production list.
+  testReferences: z.array(SymbolReferenceSiteSchema),
   referencesInDefinitionFile: z.int().min(0),
+  // Reference sites in files no language adapter recognises as source —
+  // documentation, specification prose, fixture data, snapshots. Counted, never
+  // listed: they are textual coincidence, not dependency. The count is here so
+  // the report cannot look cleaner than the search actually was.
+  referencesInNonSourceFiles: z.int().min(0),
   // True when the per-symbol cap cut the reference list short, so a reader can
-  // never mistake a bounded list for a complete one.
+  // never mistake a bounded list for a complete one. The cap applies to the
+  // search, ahead of the classification above, so a truncated list can be short
+  // in any of the four buckets.
   referencesTruncated: z.boolean()
 })
 
 export const ChangeImpactReferenceReportSchema = z.strictObject({
-  schemaVersion: z.literal('1.0'),
+  // 1.1 split the single reference list into production, test and non-source
+  // buckets. The literal is bumped rather than left alone because a consumer
+  // written against 1.0 would silently read `referenceCount` as "every reference"
+  // when it now means "production references".
+  schemaVersion: z.literal('1.1'),
   // `disabled` is a first-class outcome: the capability is off by default until
   // measured (spec 22), and saying so plainly beats emitting an empty report that
   // looks like "nothing depends on your change".
@@ -84,8 +101,18 @@ export const ChangeImpactReferenceReportSchema = z.strictObject({
     changedSymbolCount: z.int().min(0),
     // True when `changeImpact.maxChangedSymbols` bounded the seed.
     changedSymbolsTruncated: z.boolean(),
+    // Symbols with at least one LISTED reference — production or test. A symbol
+    // whose only references were withheld as non-source is not "referenced" for
+    // this purpose, because none of those references is a dependent.
     referencedSymbolCount: z.int().min(0),
-    referenceCount: z.int().min(0)
+    // Production reference sites. This is the headline number and it deliberately
+    // excludes tests and non-source destinations; the other two are reported
+    // beside it rather than folded into it.
+    referenceCount: z.int().min(0),
+    testReferenceCount: z.int().min(0),
+    // Withheld, not hidden: how many matches landed in files no language adapter
+    // recognises as source.
+    nonSourceReferenceCount: z.int().min(0)
   }),
   symbols: z.array(ChangedSymbolReferencesSchema),
   // Non-fatal conditions worth telling the user about, for example a language

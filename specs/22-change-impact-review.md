@@ -222,12 +222,67 @@ capability's own bar — beating a plain `grep` — because filtering by hand is
 This is recorded from a real run rather than anticipated, and it is the kind of
 defect only running the thing surfaces.
 
+### How that requirement is met
+
+Two filters, deliberately kept distinct because they answer different questions.
+
+**May this file be looked at?** The configured `paths.include`/`paths.exclude`
+rules, applied by `context-retrieval`'s existing eligibility gate during
+traversal. Nothing about "eligible file" is restated in this capability; a second
+definition of the reviewable surface would be a defect of its own.
+
+**Can this file hold a dependent?** A destination is a candidate only when a
+supported language covers it. That set is the deterministic language-support
+registry — the same registry that decides which files can seed a changed symbol —
+so the two ends of the lookup agree by construction, and adding language support
+widens both at once. A fixed extension list is forbidden by spec 15's
+Non-Negotiable and would rot; there is none.
+
+Three consequences, each a deliberate choice rather than a side effect:
+
+- **Test call sites are listed, in their own bucket.** A test that calls a changed
+  symbol is a real dependent and will break, so dropping it would lose signal.
+  It breaks in CI rather than in production, and on a large change test sites can
+  outnumber the production ones, so it does not share the production list either.
+  Test files are recognised by each language's own convention, reusing the same
+  predicate the test-mapping discovery uses.
+- **Withheld sites are counted, not hidden.** Non-source matches are reported per
+  symbol and in the summary. A report that silently dropped them would look
+  cleaner than the search actually was.
+- **The classification runs after the per-symbol cap**, not inside the search, so
+  the mediated filesystem seam keeps no policy hook and the withheld counts are
+  exact. The cost is that a heavily-referenced symbol can spend its cap on
+  non-source matches; `referencesTruncated` is what tells the reader that
+  happened.
+
+### Second Deterministic Run — After The Fix
+
+Both columns below are a fresh `main…HEAD` run on this repository, bucketed the
+same way — the "before" column re-measures the defect rather than reusing the
+first run's table above, whose range and cap-limited seed were different. Before,
+every site the reader saw was in one list:
+
+| destination | before | after |
+|---|---:|---:|
+| source (production) | 116 (70.3%) | 119 — **100%** of the primary list |
+| tests | 28 (17.0%) | 26 — listed in their own bucket |
+| documentation and specs | 4 (2.4%) | 0 — withheld and counted |
+| evaluation fixture data | 17 (10.3%) | 0 — withheld and counted |
+
+165 sites in one undifferentiated list became 119 production sites, 26 test sites
+beside them, and 21 withheld as non-source and reported as a count. The small
+movement inside the source and test buckets is this change's own diff moving the
+seed; the shape of the defect, and its removal, do not depend on it.
+
 ## Verification Matrix
 
 | Requirement | Test |
 | --- | --- |
 | Reuses intake, provider resolution, configuration, reporting, and reaches repository content only through `context-retrieval` | import-boundary test: the domain imports the shared entrypoints and contains no `node:fs`, `node:fs/promises`, or `node:child_process` |
 | Dependent discovery is bounded and diff-seeded | unit test |
+| Reference sites obey the configured include/exclude rules | unit test driving `paths.exclude` through discovery, plus an end-to-end test |
+| Non-source destinations are excluded, and reported rather than dropped | unit test over prose, fixture data and a snapshot; classifier test generated from the language registry |
+| Test call sites are reported separately rather than mixed in or lost | unit test, plus a CLI test over a real repository |
 | A finding without a named dependent is rejected | admission test |
 | Reports no impact rather than manufacturing findings | unit test |
 | Non-blocking by default | config schema test |

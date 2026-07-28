@@ -9,6 +9,79 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-27 — Convergence measured at scale: the loop does NOT raise the catch rate
+
+10 same-file multi-defect cases on the 37-case corpus. Three arms, 12 runs each,
+round one **re-measured on the current build**. $5.21 of a $12 ceiling.
+
+**Answer: no. The catch rate does not rise materially across rounds, and what rise
+there is comes from the diff shrinking, not from the repair.**
+
+| population | round 1 | round 2 | **control** |
+|---|---:|---:|---:|
+| per-defect (7 unrepaired targets) | 17.9% | 21.4% | **29.8%** |
+| per-case (≥1 target found) | 29.2% | 37.5% | **52.1%** |
+
+Run-level permutation test, 200k resamples:
+
+| comparison | Δ targets/run | p |
+|---|---:|---:|
+| round 1 → round 2 | +0.25 | **0.60** |
+| round 1 → control | +0.83 | 0.09 |
+| round 2 → control | +0.58 | 0.25 |
+
+**Zero percent of the round-2 lift is attributable to repair.** The control —
+first defect **left in the code**, merely removed from the reviewed scope — beats
+round 2 on three of four cases and ties the fourth. This is stronger than the
+pilot's "indistinguishable": the control is at least as good as repair everywhere.
+
+There is a hint repair may even *cost* a little: in `netty-kqueue`, the sibling
+expression being fixed appears to make the surviving buggy one less salient
+(10/12 → 8/12).
+
+### The control construction, which is what makes this trustworthy
+
+Base = parent tree **plus the complement of the fix slice**; head = the pristine
+parent tree with the first defect still present. That makes the control's diff
+**hunk-identical to round 2's** — only the head tree the reviewer reads differs.
+Every fix byte is the upstream maintainer's; no engine output was used.
+
+### Rounds to clean
+
+| outcome | cases |
+|---|---:|
+| clean after round 1 | **3 / 10** |
+| clean after round 2 | **0 / 10** |
+| clean after round 3 | **0 / 10** |
+| testable but not clean | 4 / 10 |
+| **structurally not convergeable** | **3 / 10** |
+
+Those last three are the important row: repairing the found defect **removes the
+target from every later diff**, because the fix hunk spans the sibling defect's
+lines or empties the reviewed diff entirely. No number of rounds reaches them.
+
+### What this settles
+
+**The single-pass figure is the honest headline. There is no iterative figure that
+beats it.** The mechanism already in this ledger is confirmed at scale: the
+reviewer reports roughly one defect per reviewed diff and re-aims when the diff
+changes. Two of the four arm cases produced *zero findings of any kind* once the
+diff shrank.
+
+Round 1 here is 54.9% per-defect, **not** comparable to the 64.4% headline: this
+population is the in-diff expectations of multi-defect cases only, which are the
+harder tail by construction.
+
+### Limits
+
+n=12 per arm, so what is established is that round 2 **does not beat** the
+control; "the control beats round 2" is not established (p=0.25). Six of ten cases
+were dropped — three because round one already found everything, three because the
+target can never re-enter a diff — so the tested four are the hard tail. Single
+model, single config.
+
+---
+
 ## 2026-07-27 — BASELINE ON THE CLEAN CORPUS (37 cases / 87 expectations)
 
 **Status: CURRENT.** First measurement against the post-contamination answer key.

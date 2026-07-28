@@ -144,8 +144,57 @@ describe('impact CLI', () => {
         changedSymbolCount: 2,
         changedSymbolsTruncated: false,
         referencedSymbolCount: 2,
-        referenceCount: 4
+        referenceCount: 4,
+        testReferenceCount: 0,
+        nonSourceReferenceCount: 0
       })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The defect the first real run exposed, driven through the command a user
+  // actually types: a README and a fixture mentioning the symbol must not appear
+  // as dependents, and the report must still admit they were found.
+  test('a documentation mention and a fixture mention are withheld, counted, and kept out of the list', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeConfig(root, { enabled: true })
+      await mkdir(join(root, 'eval'), { recursive: true })
+      await writeFile(
+        join(root, 'README.md'),
+        'Call `fetchUser` and then `legacyApi`.\n'
+      )
+      await writeFile(
+        join(root, 'eval', 'case.json'),
+        '{ "snippet": "fetchUser()" }\n'
+      )
+      await writeFile(
+        join(root, 'src', 'caller.test.ts'),
+        'test("fetchUser", () => fetchUser())\n'
+      )
+      const result = await runCli(
+        ['impact', 'check', '--base-ref', 'main~1', '--head-ref', 'HEAD'],
+        { cwd: root, environment: {} }
+      )
+      const report = parseReport(result.stdout)
+      const fetchUser = report.symbols.find(
+        (symbol) => symbol.name === 'fetchUser'
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(
+        fetchUser?.references.map((reference) => reference.path)
+      ).toEqual(['src/caller.ts', 'src/caller.ts'])
+      expect(
+        fetchUser?.testReferences.map((reference) => reference.path)
+      ).toEqual(['src/caller.test.ts'])
+      expect(fetchUser?.referencesInNonSourceFiles).toBe(2)
+      expect(report.summary.referenceCount).toBe(4)
+      expect(report.summary.testReferenceCount).toBe(1)
+      // The README mentions both symbols; the fixture mentions one.
+      expect(report.summary.nonSourceReferenceCount).toBe(3)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

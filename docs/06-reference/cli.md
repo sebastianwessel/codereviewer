@@ -265,7 +265,7 @@ Enable it with:
 
 ```json
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "1.1",
   "status": "completed",
   "generatedAt": "2026-07-28T00:00:00.000Z",
   "scope": {
@@ -279,7 +279,9 @@ Enable it with:
     "changedSymbolCount": 2,
     "changedSymbolsTruncated": false,
     "referencedSymbolCount": 2,
-    "referenceCount": 4
+    "referenceCount": 4,
+    "testReferenceCount": 1,
+    "nonSourceReferenceCount": 3
   },
   "symbols": [
     {
@@ -296,7 +298,15 @@ Enable it with:
           "text": "import { legacyApi } from \"./legacy.js\""
         }
       ],
+      "testReferences": [
+        {
+          "path": "src/caller.test.ts",
+          "line": 4,
+          "text": "expect(legacyApi()).toBe(1)"
+        }
+      ],
       "referencesInDefinitionFile": 0,
+      "referencesInNonSourceFiles": 3,
       "referencesTruncated": false
     }
   ],
@@ -307,19 +317,40 @@ Enable it with:
 - `symbols` lists one entry per changed symbol, in path then line order. A symbol
   with an empty `references` array means nothing outside its own file refers to
   it, which is a real result and not an omission.
-- `references` lists sites **outside** the defining file only. Sites inside it
-  are counted in `referencesInDefinitionFile` rather than listed, because a
-  symbol's own file is not a dependent.
+- `references` lists production sites **outside** the defining file only. Sites
+  inside it are counted in `referencesInDefinitionFile` rather than listed,
+  because a symbol's own file is not a dependent.
+- `testReferences` lists sites in test files, in the same shape. A test that
+  calls a changed symbol genuinely is a dependent — it breaks — so it is listed
+  in full; it sits in its own bucket because it breaks in CI rather than in
+  production, and because on a large change test call sites can outnumber the
+  production ones you are looking for. Test files are recognised by each
+  language's own convention (`*.test.ts`, `*_test.go`, `test_*.py`, `*Test.java`,
+  …).
+- `referencesInNonSourceFiles` counts matches in files no supported language
+  covers — documentation, specification prose, fixture data, snapshots. Those are
+  **counted but never listed**: a symbol name inside a JSON fixture or a prose
+  paragraph is textual coincidence, not a dependency. The count is reported so the
+  report cannot look cleaner than the search actually was.
 - `referencesTruncated` is `true` when `changeImpact.maxReferencesPerSymbol` cut
-  the list short, so a bounded list is never mistaken for a complete one. The
-  same applies to `summary.changedSymbolsTruncated` and
+  the list short, so a bounded list is never mistaken for a complete one. The cap
+  applies to the search, ahead of the split above, so a truncated result can be
+  short in any bucket. The same applies to `summary.changedSymbolsTruncated` and
   `changeImpact.maxChangedSymbols`.
+- `summary.referenceCount` counts production references only;
+  `testReferenceCount` and `nonSourceReferenceCount` are reported beside it rather
+  than folded into it. `referencedSymbolCount` counts symbols with at least one
+  **listed** reference.
 - `changeKind: "deleted"` means the symbol's whole file was removed. Every symbol
   a deleted file declared is reported, since none of them survive.
 - Reference matching is **identifier-bounded**, not substring: seeding from `get`
   does not match `forget` or `widget`. Matched line text is redacted with the
   same redactor the mediated file read uses, and capped at 300 characters — the
   text is there to recognise a reference, while `path` and `line` locate it.
+- Reference sites obey [`paths.include` and
+  `paths.exclude`](./configuration/review.md): the files searched for references
+  are the same files `review` would review. Excluding a directory from review
+  therefore also excludes it as a reference destination.
 - Files in a language the deterministic signal extractors do not cover contribute
   no symbols and produce a warning rather than an error.
 

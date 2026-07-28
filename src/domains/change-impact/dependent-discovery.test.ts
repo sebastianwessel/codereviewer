@@ -158,6 +158,118 @@ describe('dependent discovery', () => {
     }
   })
 
+  // Spec 22's added requirement, and the reason for it: the first real run put a
+  // third of its reference sites in prose, fixture data and snapshots. Those are
+  // textual coincidence, and a list a reader must filter by hand loses to the
+  // `grep` this capability has to beat.
+  test('withholds non-source destinations from the list and reports how many there were', async () => {
+    const root = await createRepo()
+
+    try {
+      await mkdir(join(root, 'docs'), { recursive: true })
+      await mkdir(join(root, 'eval'), { recursive: true })
+      await writeFile(
+        join(root, 'docs', 'guide.md'),
+        'Use fetchUser to load a user.\n'
+      )
+      await writeFile(
+        join(root, 'eval', 'slice.json'),
+        '{ "snippet": "const user = fetchUser(1)" }\n'
+      )
+      await writeFile(
+        join(root, 'src', 'store.snap'),
+        'exports[`fetchUser`] = `1`\n'
+      )
+      const symbols = await discoverDependents({
+        repositoryRoot: root,
+        changedSymbols: [changedSymbol('fetchUser', 1)],
+        maxReferencesPerSymbol: 25,
+        maxSearchDepth: 12
+      })
+
+      expect(symbols[0]?.references.map((reference) => reference.path)).toEqual([
+        'src/caller.ts',
+        'src/caller.ts'
+      ])
+      // The markdown line and the JSON line. The snapshot never reaches the
+      // classifier: `**/*.snap` is a default review exclude, so the eligibility
+      // gate prunes it during traversal — the two filters are independent.
+      expect(symbols[0]?.referencesInNonSourceFiles).toBe(2)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('lists a test call site in its own bucket rather than dropping it or mixing it in', async () => {
+    const root = await createRepo()
+
+    try {
+      await writeFile(
+        join(root, 'src', 'store.test.ts'),
+        [
+          'import { fetchUser } from "./store.js"',
+          'test("fetchUser", () => fetchUser("a"))'
+        ].join('\n')
+      )
+      const symbols = await discoverDependents({
+        repositoryRoot: root,
+        changedSymbols: [changedSymbol('fetchUser', 1)],
+        maxReferencesPerSymbol: 25,
+        maxSearchDepth: 12
+      })
+
+      // A test that calls the changed symbol IS a dependent — it breaks. It is
+      // listed in full, just not in the production list it would otherwise
+      // dominate.
+      expect(
+        symbols[0]?.testReferences.map((reference) => [
+          reference.path,
+          reference.line
+        ])
+      ).toEqual([
+        ['src/store.test.ts', 1],
+        ['src/store.test.ts', 2]
+      ])
+      expect(
+        symbols[0]?.references.every(
+          (reference) => reference.path === 'src/caller.ts'
+        )
+      ).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('honours the configured exclude rules rather than defining its own eligible set', async () => {
+    const root = await createRepo()
+
+    try {
+      await mkdir(join(root, 'vendor'), { recursive: true })
+      await writeFile(
+        join(root, 'vendor', 'copy.ts'),
+        'export const b = fetchUser("c")\n'
+      )
+      const symbols = await discoverDependents({
+        repositoryRoot: root,
+        changedSymbols: [changedSymbol('fetchUser', 1)],
+        maxReferencesPerSymbol: 25,
+        maxSearchDepth: 12,
+        paths: { exclude: ['vendor/**'] }
+      })
+
+      // `vendor/copy.ts` is a perfectly good source file. It is absent because
+      // the configured review scope excludes it, which is the same rule the diff
+      // reviewer applies — not a second notion of "eligible" maintained here.
+      expect(symbols[0]?.references.map((reference) => reference.path)).toEqual([
+        'src/caller.ts',
+        'src/caller.ts'
+      ])
+      expect(symbols[0]?.referencesInNonSourceFiles).toBe(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('carries the seed metadata through so a reference is attributable', async () => {
     const root = await createRepo()
 
