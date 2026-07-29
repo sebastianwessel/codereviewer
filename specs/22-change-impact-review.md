@@ -274,6 +274,104 @@ beside them, and 21 withheld as non-source and reported as a count. The small
 movement inside the source and test buckets is this change's own diff moving the
 seed; the shape of the defect, and its removal, do not depend on it.
 
+## Prior Art, And What It Changes
+
+Researched 2026-07-29. Full notes in the scratchpad research files; the
+decision-relevant findings are recorded here because several change the design.
+
+### Report at file granularity, not per site
+
+RIPPLE (Yadavally & Nguyen, *From Seed to Scope*, ICSE 2026,
+DOI 10.1145/3744916.3773265) is this spec's task done academically. Scoring the
+**identical predictions** at file granularity rather than method granularity moves
+precision **28.2% → 60.9%** and F1 **25.0 → 54.6**. This is free and it is the
+highest evidence-to-cost item found. Findings MUST therefore be reported per
+destination **file**, with the individual sites nested beneath.
+
+### Calibrate expectations: ~28%, not ~87%
+
+RIPPLE's deterministic dependence baseline — the direct analogue of our reference
+list — scores **7.6% precision / 64.7% recall**. Its full LLM layer reaches
+**28.2% precision at the cost of 44% of the recall**.
+
+**If our first measurement lands near 28% precision that is a normal result for
+this task, not a broken implementation.** The diff reviewer's ~87% adjusted
+precision is not the comparison; this is a harder problem with a far weaker
+published ceiling.
+
+### Adjudication is the entire precision lever
+
+Across 119,879 Maven upgrades and 293,817 clients, only **7.9% of clients are
+affected** by a breaking change (Ochoa et al., EMSE 2022, arXiv:2110.07889);
+Xavier et al. (SANER 2017) put client impact at **2.54%**. **Without step 3 the
+report is roughly 90% noise by construction.** The first run's prose-and-fixture
+noise was the shallow version of this problem; this is the deep one.
+
+### Most of the taxonomy needs no model at all
+
+Breaking-change tooling has already enumerated and validated the contract
+categories — japicmp publishes **63** compatibility constants each carrying
+`(binaryCompatible, sourceCompatible, semverLevel)`; Revapi ~90; `cargo-semver-checks`
+253 lints. Distilled to a language-neutral form this is roughly **8 axes and ~40
+categories**, of which **about 24 have a deterministic reliance predicate**.
+
+Those beat a grep with no model involved. **The model's job collapses to roughly
+ten named yes/no questions**, concentrated in nullability, ordering, error
+behaviour, mutation, and serialised values. Contract-delta detection MUST
+therefore be deterministic wherever the category admits it, and the model MUST be
+reserved for the residue.
+
+Calibration for that residue: japicmp scores **F1 0.86** and Revapi **F1 0.91**
+(Roseau, arXiv:2507.17369) — bytecode-complete, Java-specific, decade-old tools
+still misclassify 10–14% of the taxonomy they themselves define. A
+language-neutral layer will sit below that.
+
+### Behavioural changes are the majority, and they are visible in the hunk
+
+In npm, **68.1% of 1,519 breaking-change commits are behavioural rather than
+signature** (arXiv:2408.14431), ordered: option handling (231), defaults (203),
+return shape (79), error handling (42). All four are visible **inside the diff
+hunk** and need no repository context — which is fortunate, because everything
+that detects them reliably today either runs the test suite or uses symbolic
+execution.
+
+### Removals must be paired with additions before reporting
+
+A naive symbol diff reports a move, rename, extract, inline, push-down or pull-up
+as a **removal** — the most severe category — when the symbol is present under a
+new name. Refactoring-aware pairing of removals against additions is required
+before a removal may be reported.
+
+### Publish a known-not-reported list
+
+Go's `apidiff` documents the five breakages it deliberately does not detect. A
+documented list of what this capability knowingly misses is what stops a
+low-recall tool from reading as a broken one, and it is required.
+
+### There is no LLM prior art to beat
+
+A 2026 systematic review covering 43 breaking-change detection techniques reports
+**no LLM-based technique in the literature at all**. So this spec's removal bar —
+beat naming the changed symbols and letting the human grep — is not a modest
+target chosen for humility. **It is the only available baseline.**
+
+## Open Decision: Compatibility Class Instead Of Severity
+
+The recorded tension — four of seven mined expectations are `low` while the
+actionable threshold is `medium` — may be a **category error rather than a
+severity error**. None of japicmp, Revapi or `cargo-semver-checks` rates breaking
+changes by severity at all. They rate them on a **compatibility axis** and leave
+the consequence to the consumer. Revapi's third value, `Potentially Breaking`,
+means precisely "a human must look" — which is this spec's stated output shape,
+already validated in production tooling.
+
+Proposed resolution, for human decision: give change-impact findings a
+**compatibility class** — `breaks-on-build`, `breaks-at-runtime`, `may-break`,
+`no-impact` — rather than spec 05's severity, and gate on that. Spec 05's rubric
+stays intact and this capability stops passing through a gate calibrated for a
+different question. **This is not a licence to relabel fixtures to fit a gate**,
+which remains forbidden.
+
 ## Verification Matrix
 
 | Requirement | Test |

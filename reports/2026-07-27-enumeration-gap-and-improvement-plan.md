@@ -252,12 +252,30 @@ independent support for the §6 methodology change.
    instrumentation already exists.
 
    This is now the highest-priority diagnostic on the list, because the published
-   cost of a refutation stage is **large and wildly uneven**. "Sifting the Noise"
-   ([arXiv:2601.22952](https://arxiv.org/abs/2601.22952)) measured LLM agents
-   filtering SAST output: **92.1% of noise eliminated — but only 77.7% of true
-   positives retained**, i.e. **22% of genuine defects destroyed by the filter**.
-   The split by class is the alarming part: injection miss rate **<3%**,
-   cryptography miss rate **>77%**.
+   cost of a refutation stage is **large**.
+
+   > **CORRECTED 2026-07-29 — I misread this paper.** The original text here said
+   > "92.1% of noise eliminated but only 77.7% of true positives retained", and
+   > that 77.7 does not exist as a retention rate anywhere in the paper: **77.8 is
+   > an F1 column** (OpenHands + Claude on Vul4J) that I read as a retention rate.
+   > The "injection <3% / cryptography >77%" split was likewise **residual
+   > false-positive rates by CWE**, not true-positive loss.
+   >
+   > Re-derived from the paper's own Table 4 (Xiong & Zhang, *Sifting the Noise*,
+   > PACMSE 3, ISSTA 2026, Art. ISSTA009, DOI 10.1145/3832100), the reality is
+   > **worse and differently shaped**: across twelve configurations, noise removal
+   > and true-positive retention are near-perfectly anti-correlated. The
+   > best-filtering configuration removed **93.3%** of noise and retained
+   > **33.3%** of the real vulnerabilities; a gentler one removed 67.7% and
+   > retained 89.5%. **It is a frontier, not a point.**
+   >
+   > The sharpest demonstration is their post-cutoff table, where a **prompt change
+   > alone** took false-positive recall 36.4% → 77.3% while multiplying
+   > true-positive destruction from 1/28 to **9/28**.
+   >
+   > The conclusion drawn below is unaffected — our own refuter was measured at a
+   > 1.3% kill rate, so no filter-destroys-signal hazard was in play — but the
+   > figure was wrong and was repeated in several summaries before it was caught.
 
    We already record **crypto / XSS / SSRF at 0% recall**. A global refuter is
    the wrong shape for exactly those classes, and we have never checked whether
