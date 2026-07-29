@@ -349,6 +349,41 @@ export const ChangeImpactConfigSchema = z.strictObject({
   maxSearchDepth: z.int().min(0).max(32).default(12)
 })
 
+// Invariant-conformance review (spec 24). Off by default until measured, and
+// reached only by the separate `conformance check` command — never by `review`.
+//
+// The bounds are again the whole cost model: the deterministic core makes no
+// provider call, so the only resource it spends is repository traversal. Peer
+// derivation reads sibling files, which is the one place this capability can grow
+// expensive on a wide change, so the peer bounds are both per-declaration and
+// per-run.
+//
+// There is deliberately no `blocking` key. Spec 24 says the capability is
+// advisory only and MUST NOT be able to fail a pipeline, and the command always
+// exits 0. A `blocking` key would therefore be accepted and silently ignored —
+// the mistake `SecurityConfigSchema` above records having already made once and
+// undone. There is nothing to add later either: advisory-only is a spec
+// requirement here, not a maturity stage.
+export const InvariantConformanceConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  // Upper bound on the declarations the diff seeds. Each seed derives one peer
+  // set, so this is what bounds how many peer sets are built.
+  maxChangedDeclarations: z.int().min(1).max(500).default(50),
+  // Per-declaration cap on the peer set. A peer set larger than this is
+  // truncated in file-then-line order rather than dropped, so a large directory
+  // still yields a bounded, reproducible comparison.
+  maxPeersPerDeclaration: z.int().min(3).max(500).default(60),
+  // Run-wide cap on sibling files read for peer derivation. This is the
+  // traversal bound: peer derivation reads the changed file's directory, so a
+  // change spread over many directories would otherwise read the repository.
+  maxPeerFiles: z.int().min(1).max(2000).default(300),
+  // Caps on the two reported divergence lists. They are separate caps because
+  // the lists are counted separately and a flood of pre-existing divergences
+  // must never crowd out the change-attributed ones.
+  maxDivergences: z.int().min(1).max(500).default(50),
+  maxPreExistingDivergences: z.int().min(0).max(500).default(25)
+})
+
 // Agentic finding investigation-and-fix job (spec 12). Off by default. Reuses the
 // same investigation agent, mediated tools, and per-claim bounds as
 // `verification`; `enabled` is the single switch for the whole single pass
@@ -579,6 +614,14 @@ export const CodeReviewerConfigSchema = z.strictObject({
     maxReferencesPerSymbol: 25,
     maxSearchDepth: 12
   }),
+  invariantConformance: InvariantConformanceConfigSchema.default({
+    enabled: false,
+    maxChangedDeclarations: 50,
+    maxPeersPerDeclaration: 60,
+    maxPeerFiles: 300,
+    maxDivergences: 50,
+    maxPreExistingDivergences: 25
+  }),
   fix: FixConfigSchema.default({
     enabled: false
   }),
@@ -647,6 +690,9 @@ export type VerificationClaimProviderConfig = z.infer<
   typeof VerificationClaimProviderConfigSchema
 >
 export type ChangeImpactConfig = z.infer<typeof ChangeImpactConfigSchema>
+export type InvariantConformanceConfig = z.infer<
+  typeof InvariantConformanceConfigSchema
+>
 export type FixConfig = z.infer<typeof FixConfigSchema>
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>
 export type SecurityDedicatedPassConfig = z.infer<

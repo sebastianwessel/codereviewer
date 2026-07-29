@@ -41,6 +41,7 @@ src/
     context-ingestion/
     verification/
     change-impact/
+    invariant-conformance/
     shared-context/
     review-workflow/
       harness/
@@ -83,6 +84,7 @@ excludes it) because nothing at runtime may import it.
 | `context-ingestion` | External change-intent context providers (inbox, changed-files), fragment redaction, and the digest/model summarizers producing one bounded change-intent brief. | Admission decisions, gate authority, network beyond the configured provider endpoint, or reading outside the repository root. |
 | `verification` | The agentic investigation flow: claim/verdict contracts, claim providers (claims-file, prior-findings, current-findings), the bounded `investigate_claim` agent using mediated read/list/grep, the deterministic fix apply-check and advisory `fixProposal` enrichment, and corroboration matching. | Shell, network, filesystem writes, publishing, gate authority, or changing the general review's discovery path. |
 | `change-impact` | Change-impact review (spec 22): the changed-symbol seed derived from support-signal facts intersected with diff hunks, bounded dependent discovery over those symbols, and its own report contract, admission, and metrics. | Filesystem or git access of its own, the diff reviewer's admission gate, quality-gate authority, report rendering for the diff review, or provider package loading. |
+| `invariant-conformance` | Invariant-conformance review (spec 24): deterministic derivation of a changed declaration's peer set from support-signal facts, majority-pattern extraction over those peers, conformance adjudication, and its own divergence report contract separating change-attributed from pre-existing divergences. | Filesystem or git access of its own, the diff reviewer's admission gate or report schema, severity, quality-gate authority, or provider package loading. |
 | `shared-context` | Run-local admitted facts/findings/evidence references. | Filesystem scanning or provider calls. |
 | `review-workflow` | The public harness facade and the review runner: run-start state, preflight, source and planning state, context assembly, provider execution and failure classification, admission and completion state, baseline loading, cost and warning finalization. Also the model-facing stages it drives — holistic discovery, semantic finding merge, refutation, candidate conversion — with their packet shaping, agent instructions, and IO contracts. | Low-level git parsing, path normalization, artifact rendering, deterministic path authority, publication, provider package loading, or report rendering. |
 | `admission` | Refutation-result validation, deterministic safety checks, promotion policy, and admitted/rejected decisions. | Candidate generation or output formatting. |
@@ -126,6 +128,9 @@ the owning domain.
 - Optional provider packages must only be imported by `provider-resolution`.
 - `change-impact` must not import from `review-workflow`, and `review-workflow`
   must not import from it. It is reachable only from `src/cli/`.
+- `invariant-conformance` must not import from `review-workflow`, and
+  `review-workflow` must not import from it. It is reachable only from
+  `src/cli/`.
 - `review-workflow` must not perform shell, git, network, or write operations,
   and every repository path it reads must first be resolved inside the
   repository root. See *Known Divergence* below on where that content is read.

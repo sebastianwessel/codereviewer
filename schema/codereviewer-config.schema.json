@@ -759,6 +759,62 @@
       ],
       "additionalProperties": false
     },
+    "invariantConformance": {
+      "default": {
+        "enabled": false,
+        "maxChangedDeclarations": 50,
+        "maxPeersPerDeclaration": 60,
+        "maxPeerFiles": 300,
+        "maxDivergences": 50,
+        "maxPreExistingDivergences": 25
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "maxChangedDeclarations": {
+          "default": 50,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "maxPeersPerDeclaration": {
+          "default": 60,
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 500
+        },
+        "maxPeerFiles": {
+          "default": 300,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000
+        },
+        "maxDivergences": {
+          "default": 50,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "maxPreExistingDivergences": {
+          "default": 25,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 500
+        }
+      },
+      "required": [
+        "enabled",
+        "maxChangedDeclarations",
+        "maxPeersPerDeclaration",
+        "maxPeerFiles",
+        "maxDivergences",
+        "maxPreExistingDivergences"
+      ],
+      "additionalProperties": false
+    },
     "fix": {
       "default": {
         "enabled": false
@@ -1235,6 +1291,7 @@
     "contextSources",
     "verification",
     "changeImpact",
+    "invariantConformance",
     "fix",
     "security",
     "reporting",

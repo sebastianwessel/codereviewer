@@ -66,14 +66,18 @@ a reason to abandon the approach: our output is advisory and carries its peers.
 1. **Peer-set derivation — deterministic.** For each declaration the diff adds or
    modifies, derive its peer set from the repository: sibling declarations of the
    same kind in the same file, directory, or type. No model.
-2. **Pattern extraction — deterministic.** For each peer set, compute the calls,
+2. **Membership test — deterministic.** A declaration is compared against a peer
+   set only when it **holds at least one trait a majority of those peers also
+   hold**. A declaration that shares nothing with its structural neighbours is not
+   an odd member of their group; it is not a member of it, and it yields nothing.
+3. **Pattern extraction — deterministic.** For each peer set, compute the calls,
    guards and argument shapes that a **majority** of peers share and the changed
    declaration does not. A peer set with no majority pattern yields nothing.
-3. **Conformance adjudication — one model call per divergence.** Given the changed
+4. **Conformance adjudication — one model call per divergence.** Given the changed
    declaration, the named peers, and the specific divergence, decide whether the
    shared pattern is a **convention the change should follow** or an artefact of
    similarity. It MUST be able to answer *undetermined*.
-4. **Report the divergence and its peers.** Never a verdict on exploitability.
+5. **Report the divergence and its peers.** Never a verdict on exploitability.
 
 ## Requirements
 
@@ -83,6 +87,10 @@ a reason to abandon the approach: our output is advisory and carries its peers.
 - A finding MUST cite **at least three peer sites by path and line**. Below that
   threshold there is no pattern, only a coincidence, and the finding MUST be
   rejected. This is the analogue of spec 22's named-dependent rule.
+- A declaration MUST NOT be reported for lacking a majority pattern unless it
+  **shares at least one trait with a majority of its peers**. This is an
+  additional precondition and MUST NOT relax either gate above: the majority rule
+  and the three-cited-peer floor still apply to every divergence that survives it.
 - The model call MUST NOT be asked whether the code is vulnerable, exploitable, or
   insecure. It is asked whether the peers constitute a convention. The distinction
   is the difference between an answerable question and the false-positive machine
@@ -103,6 +111,58 @@ a reason to abandon the approach: our output is advisory and carries its peers.
   Non-Negotiable.
 - Failure MUST be recoverable and MUST NOT affect the diff review.
 - Disabled by default until measured.
+
+## Structural Grouping Is Not Membership
+
+A peer set is derived from **structure** — same declaration kind, same language,
+same nesting depth — because that is the only grouping available without a
+per-language semantic model. Structure is a proxy for *sibling*, and the proxy has
+a failure mode that the majority rule alone cannot see.
+
+**The majority rule requires the peers to agree with each other. It never asks
+whether the member belongs to the group they form.** Where a language puts every
+module-level declaration at the same nesting depth, one peer set holds every kind
+of declaration a module exports. The majority is then computed over one kind and
+charged against another, and the report says a declaration "does not" do something
+it was never in a position to do.
+
+The precondition follows from what *peer* means, and is stated in one sentence:
+
+> Report a member as lacking a majority pattern only if that member shares at
+> least one trait with a majority of its peers.
+
+**The quantifier is `majority of peers`, not `any peer`.** A pattern is already
+defined as what a majority holds; membership asks whether the member holds one of
+the traits that make the set a set, and re-using one definition keeps "what this
+group is about" from meaning two different things in the two halves of the same
+comparison. A single incidental overlap with one sibling is exactly the
+coincidence the three-cited-peer floor already refuses to treat as evidence. The
+cost is accepted and named: where a member belongs to a large sub-group rather
+than to the majority, this suppresses a divergence that `any peer` would report.
+The error is toward silence, which is the direction this spec's
+firing-rate-before-recall order already chose.
+
+### The measurement that motivated it
+
+Run over a real branch of a TypeScript repository, the deterministic arm produced
+**9 change-attributed and 4 pre-existing divergences, and every one was this
+shape** — an error class and a type alias grouped with schema builders and
+reported for not calling a schema builder, and a synchronous parser grouped with
+asynchronous functions. None shared a single trait with its peers. A control in
+another language — three sibling HTTP handlers that guard, plus an added fourth
+that does not but shares the group's other trait — produced the intended finding.
+
+With the precondition: **9 → 2 change-attributed, 4 → 0 pre-existing**, and the
+control unchanged. The two survivors are genuine members of their peer set
+diverging on a low-salience trait; they are the honest residue of the majority
+rule, not of the grouping, and trait salience is a separate question.
+
+**The measurement did not discriminate between the candidate quantifiers.** All
+of `any peer`, `three peers` and `majority of peers` produced identical counts,
+because the members being removed shared *zero* traits with their peers. The
+quantifier is therefore chosen on the argument above, not on this evidence, and
+the choice is recorded here so a future measurement that does discriminate is
+recognised as new information rather than as a contradiction.
 
 ## Findings Outside The Diff Are Permitted, Deliberately
 
@@ -153,6 +213,9 @@ recall on seeded fixtures; change-attributed versus pre-existing findings.
 | --- | --- |
 | Peer derivation and pattern extraction are deterministic and model-free | unit test |
 | A finding with fewer than three cited peers is rejected | admission test |
+| A member sharing no majority trait with its peers is not compared | regression test per grouping shape: a class among schema builders, a type alias among schema builders, a synchronous function among asynchronous ones |
+| A member that does share the group's trait is still reported for the missing pattern | control test in a second language |
+| The precondition does not relax the majority or citation gates | unit test asserting both still refuse a member that passes membership |
 | The model is never asked whether code is vulnerable or exploitable | instruction unit test asserting the absence of that framing |
 | Reports no divergence rather than manufacturing findings | unit test |
 | Pre-existing divergences are labelled and counted separately | report contract test |

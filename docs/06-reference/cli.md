@@ -24,11 +24,12 @@ below are parsed.
 | `eval slice-manifest` | Emit a manifest (with digest) for a benchmark slice directory. | `0`, `2`, `3` |
 | `drift check` | Run the drift gate. | `0`, `1`, `2`, `3` |
 | `impact check` | List the symbols a change touched and where they are referenced. | `0`, `2`, `3` |
+| `conformance check` | List where a changed declaration differs from a pattern its peers share. | `0`, `2`, `3` |
 
 Anything else exits `2` with `{"code":"usage_error", ...}` on stderr and the
 message `Expected command: config validate, review, baseline write, eval run,
-eval compare, eval recall-report, eval slice-manifest, drift check, or impact
-check`.
+eval compare, eval recall-report, eval slice-manifest, drift check, impact
+check, or conformance check`.
 
 See [exit-codes-and-error-codes.md](./exit-codes-and-error-codes.md) for the
 full mapping.
@@ -353,6 +354,146 @@ Enable it with:
   therefore also excludes it as a reference destination.
 - Files in a language the deterministic signal extractors do not cover contribute
   no symbols and produce a warning rather than an error.
+
+## `codereviewer conformance check`
+
+```
+codereviewer conformance check [--config <path>] [--base-ref <ref>] [--head-ref <ref>]
+```
+
+| Flag | Value | Notes |
+| --- | --- | --- |
+| `--config` | path | Config file path override. |
+| `--base-ref` | git ref | Overrides `review.baseRef`. |
+| `--head-ref` | git ref | Overrides `review.headRef`. |
+
+`conformance` accepts no subcommand other than `check` (`Expected command:
+conformance check`, exit `2`). Stdout is the report JSON; nothing is written to
+disk.
+
+**This command reports divergences, not defects.** A divergence is one sentence:
+*"thirteen of fifteen sibling declarations call `requireAuth`; this one does
+not."* That is a fact about your codebase, with the peers listed by path and line
+so you can check it yourself. It is **not** a claim that the code is wrong,
+insecure, or exploitable — deviating from a convention is frequently deliberate,
+and the command has no way to know which case yours is. Nothing here carries a
+severity, nothing is admitted, and nothing can block a pipeline.
+
+Because of that, **the exit code is always `0`** when the command runs at all,
+whether or not anything is found. Only a configuration or usage failure (`2`) or
+a repository failure such as an unresolvable ref (`3`) changes it.
+
+The command makes **no model provider call**. It costs nothing to run and its
+output is reproducible.
+
+It is **disabled by default**. With `invariantConformance.enabled` left at
+`false` the command exits `0` and reports `"status": "disabled"` rather than an
+empty result, so a disabled run can never be mistaken for "no divergences".
+Enable it with:
+
+```json
+{ "invariantConformance": { "enabled": true } }
+```
+
+### How a divergence is found
+
+Every step is deterministic and none of it involves a model.
+
+1. **Seed.** The declarations whose body the diff touched, from the same
+   deterministic signal extractors `review` uses.
+2. **Peer set.** Sibling declarations of the same kind, in the same language, at
+   the same nesting depth, in the changed declaration's own file and its own
+   directory. Nothing wider is searched.
+3. **Pattern.** For each peer set, the traits a **strict majority** of the peers
+   share. A trait is a called symbol, a symbol called inside a conditional, or
+   the first argument of a call.
+4. **Divergence.** A majority pattern one member does not hold — reported only if
+   **at least three peers** hold it. Below three there is no pattern, only a
+   coincidence, and nothing is reported.
+
+### Report shape
+
+```json
+{
+  "schemaVersion": "1.0",
+  "status": "completed",
+  "generatedAt": "2026-07-29T00:00:00.000Z",
+  "scope": {
+    "baseRef": "main",
+    "headRef": "HEAD",
+    "mergeBaseRef": "9f1c2ab...",
+    "changedFileCount": 1,
+    "peerFileCount": 2,
+    "peerFilesTruncated": false
+  },
+  "summary": {
+    "changedDeclarationCount": 1,
+    "changedDeclarationsTruncated": false,
+    "peerSetCount": 1,
+    "changeAttributedDivergenceCount": 1,
+    "preExistingDivergenceCount": 0,
+    "changeAttributedDivergencesTruncated": false,
+    "preExistingDivergencesTruncated": false
+  },
+  "changeAttributedDivergences": [
+    {
+      "id": "conf_1b2c3d...",
+      "attribution": "change-attributed",
+      "declaration": {
+        "path": "src/handlers/remove.ts",
+        "line": 1,
+        "endLine": 3,
+        "name": "removeOne",
+        "kind": "export",
+        "language": "typescript"
+      },
+      "pattern": { "kind": "call", "symbol": "requireAuth" },
+      "peerScope": "directory",
+      "peerCount": 3,
+      "citedPeerCount": 3,
+      "citedPeers": [
+        { "path": "src/handlers/read.ts", "line": 1, "name": "readOne" },
+        { "path": "src/handlers/read.ts", "line": 7, "name": "readAll" },
+        { "path": "src/handlers/write.ts", "line": 1, "name": "writeOne" }
+      ],
+      "peersTruncated": false,
+      "statement": "3 of 3 sibling declarations call requireAuth; removeOne does not.",
+      "question": "Is calling requireAuth a convention removeOne should follow, or do those peers merely resemble each other?"
+    }
+  ],
+  "preExistingDivergences": [],
+  "warnings": []
+}
+```
+
+- `statement` and `question` are the whole output contract: a substantiated fact,
+  and a question for you. There is no field in which a verdict could be recorded.
+- `citedPeers` is the evidence, and it always holds at least three entries. If
+  the statement looks wrong, open those three lines — that is what they are for.
+- `preExistingDivergences` holds divergences **the change did not cause**: a peer
+  set where the odd one out is untouched code. They are reported because "this
+  handler is the only one without an auth check" is worth knowing, and they are a
+  **separate array with its own count** so they can never inflate the
+  change-attributed number. Set `invariantConformance.maxPreExistingDivergences`
+  to `0` to suppress them.
+- `pattern.kind` is `call` (the peers call a symbol), `guard` (the peers call it
+  inside a conditional, and this declaration calls it outside one), or
+  `call-argument` (the peers call it with a particular first argument, and this
+  declaration passes something else). A declaration that omits a call entirely
+  reports one `call` divergence rather than restating it as all three.
+- `peerScope` says whether the peers came from the declaration's own file or its
+  directory. `peersTruncated` is `true` when
+  `invariantConformance.maxPeersPerDeclaration` bounded the comparison, so a
+  bounded majority is never mistaken for a complete one.
+- Peer files obey [`paths.include` and
+  `paths.exclude`](./configuration/review.md): a directory excluded from review
+  cannot supply a peer.
+- Files in a language the deterministic signal extractors do not cover contribute
+  no declarations and produce a warning rather than an error. For TypeScript and
+  JavaScript only **exported** declarations are visible, because that is what the
+  extractor reports; for Java only types are, not methods.
+- A changed declaration with no sibling in its file or directory produces no peer
+  set at all, and the run says so in `warnings` rather than reporting nothing.
 
 ## Related
 

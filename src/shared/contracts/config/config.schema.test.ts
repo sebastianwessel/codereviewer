@@ -234,6 +234,70 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
+  test('invariant conformance is disabled by default with bounded peer limits', () => {
+    const disabled = CodeReviewerConfigSchema.parse({})
+    expect(disabled.invariantConformance).toEqual({
+      enabled: false,
+      maxChangedDeclarations: 50,
+      maxPeersPerDeclaration: 60,
+      maxPeerFiles: 300,
+      maxDivergences: 50,
+      maxPreExistingDivergences: 25
+    })
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      invariantConformance: {
+        enabled: true,
+        maxChangedDeclarations: 5,
+        maxPeersPerDeclaration: 8,
+        maxPeerFiles: 20,
+        maxDivergences: 4,
+        maxPreExistingDivergences: 0
+      }
+    })
+    expect(enabled.invariantConformance).toEqual({
+      enabled: true,
+      maxChangedDeclarations: 5,
+      maxPeersPerDeclaration: 8,
+      maxPeerFiles: 20,
+      maxDivergences: 4,
+      maxPreExistingDivergences: 0
+    })
+  })
+
+  // Spec 24 says the capability is advisory only and MUST NOT be able to fail a
+  // pipeline, and `conformance check` always exits 0. A `blocking` key would
+  // therefore be accepted and then silently ignored — the failure the security
+  // `signals` key was removed for. Unlike `changeImpact`, there is no later
+  // change that adds it: advisory-only is a spec requirement, not a stage.
+  test('invariant conformance rejects a blocking key it must never honour', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        invariantConformance: { blocking: true }
+      })
+    ).toThrow()
+  })
+
+  test('invariant conformance rejects out-of-range peer bounds', () => {
+    // Below three peers a divergence could never cite the three sites spec 24
+    // requires, so the schema refuses to express that configuration at all.
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        invariantConformance: { maxPeersPerDeclaration: 2 }
+      })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        invariantConformance: { maxChangedDeclarations: 0 }
+      })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        invariantConformance: { maxPeerFiles: 5000 }
+      })
+    ).toThrow()
+  })
+
   test('verification rejects an unknown claim provider type', () => {
     expect(() =>
       CodeReviewerConfigSchema.parse({

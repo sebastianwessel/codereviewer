@@ -28,6 +28,7 @@ import {
   type EvalRegressionThresholds,
 } from '../domains/evaluation/index.js'
 import { runChangeImpact } from '../domains/change-impact/index.js'
+import { runInvariantConformance } from '../domains/invariant-conformance/index.js'
 import { createContextRetriever } from '../domains/context-retrieval/index.js'
 import { runDriftCheck } from '../domains/drift/index.js'
 import {
@@ -1246,6 +1247,109 @@ const runImpact = async (
   }
 }
 
+// `conformance check` (spec 24). Like `impact check` it makes NO provider call:
+// this wave is spec 24's deterministic baseline arm, so it costs nothing to run
+// and its output is reproducible.
+//
+// What it produces is a DIVERGENCE report, not findings. A divergence is "these N
+// peers do X; this declaration does not" — a substantiated fact plus a question,
+// with the peers listed so the reader judges. It carries no verdict, no severity
+// and no claim about exploitability, nothing is admitted, and spec 24 requires the
+// capability to be advisory only: it MUST NOT be able to fail a pipeline. The exit
+// code is therefore 0 whatever the report says, and only a configuration or usage
+// failure (2) or a repository failure (3) changes it.
+const runConformance = async (
+  args: readonly string[],
+  options: CliRunOptions
+): Promise<CliResult> => {
+  if (args[0] !== 'check') {
+    return usageError('Expected command: conformance check')
+  }
+
+  const conformanceArgs = args.slice(1)
+  let loadedConfig: Awaited<ReturnType<typeof loadCodeReviewerConfig>>
+
+  // Configuration is loaded in its own scope so a malformed config file exits 2
+  // as a config error rather than being swept into the repository fallback the
+  // rest of the command needs for git failures.
+  try {
+    const configPath = parseConfigPath(conformanceArgs)
+    loadedConfig = await loadCodeReviewerConfig({
+      repositoryRoot: options.cwd,
+      environment: options.environment ?? {},
+      ...(configPath === undefined ? {} : { configPath })
+    })
+  } catch (error) {
+    return mapErrorResult(error, 'config')
+  }
+
+  try {
+    const baseRef = parseOptionValue(conformanceArgs, '--base-ref')
+    const headRef = parseOptionValue(conformanceArgs, '--head-ref')
+    const { review, invariantConformance } = loadedConfig.config
+    // The mediated retriever is the only filesystem seam the run gets. The read
+    // budget is derived rather than guessed: at most one read per changed file,
+    // at most one directory listing per changed file, and at most `maxPeerFiles`
+    // sibling reads. `maxMatches` bounds how many entries one listing returns, so
+    // it must not sit below the peer-file cap or peers would be lost to a bound
+    // meant for model-facing search.
+    const retriever = createContextRetriever({
+      repositoryRoot: options.cwd,
+      budget: {
+        maxReads: review.maxFiles * 2 + invariantConformance.maxPeerFiles,
+        maxBytesPerRead: review.maxFileBytes,
+        maxMatches: invariantConformance.maxPeerFiles,
+        maxSearches: 0
+      },
+      paths: {
+        include: loadedConfig.config.paths.include,
+        exclude: loadedConfig.config.paths.exclude
+      }
+    })
+    const report = await runInvariantConformance({
+      repositoryRoot: options.cwd,
+      config: loadedConfig.config,
+      ...(baseRef === undefined ? {} : { baseRef }),
+      ...(headRef === undefined ? {} : { headRef }),
+      ...(options.now === undefined ? {} : { generatedAt: options.now() }),
+      readRepositoryFile: async (filePath) => {
+        try {
+          return (await retriever.readRepositoryFile({ path: filePath })).content
+        } catch {
+          // An ineligible, missing, or over-budget file is skipped and counted;
+          // one unreadable file must not fail the whole report.
+          return undefined
+        }
+      },
+      listDirectoryFiles: async (directoryPath) => {
+        try {
+          const listing = await retriever.listRepositoryDirectory({
+            path: directoryPath
+          })
+
+          // The mediated listing renders one `"<file|dir> <path>"` line per
+          // eligible entry. Peer derivation wants files only; a subdirectory is
+          // not a sibling of a declaration.
+          return listing.content
+            .split('\n')
+            .filter((line) => line.startsWith('file '))
+            .map((line) => line.slice('file '.length))
+        } catch {
+          return []
+        }
+      }
+    })
+
+    return {
+      exitCode: 0,
+      stdout: jsonResult(report),
+      stderr: ''
+    }
+  } catch (error) {
+    return mapErrorResult(error, 'repository')
+  }
+}
+
 export const runCli = async (
   args: readonly string[],
   options: CliRunOptions
@@ -1299,7 +1403,14 @@ export const runCli = async (
     )
   }
 
+  if (command === 'conformance') {
+    return runConformance(
+      [subcommand, ...rest].filter((value): value is string => value !== undefined),
+      options
+    )
+  }
+
   return usageError(
-    'Expected command: config validate, review, baseline write, eval run, eval compare, eval recall-report, eval slice-manifest, drift check, or impact check'
+    'Expected command: config validate, review, baseline write, eval run, eval compare, eval recall-report, eval slice-manifest, drift check, impact check, or conformance check'
   )
 }

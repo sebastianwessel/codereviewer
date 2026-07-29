@@ -54,6 +54,16 @@ and no recall figure to report. Today it names the symbols a change touched and
 where they are referenced. That is deliberately the floor a fuller capability
 would have to beat, so it ships as a useful baseline rather than as a lever.
 
+**Invariant-conformance review** (`invariantConformance.enabled`) is the same
+kind of thing: a separate command
+([`conformance check`](../../06-reference/cli.md#codereviewer-conformance-check)),
+off by default, no model call, no cost and no recall figure yet. It reports where
+a changed declaration does not hold a pattern a majority of its siblings hold —
+*"thirteen of fifteen call `requireAuth`; this one does not"* — with the peers
+cited by path and line. That is a **divergence, not a defect**: deviating from a
+convention is frequently deliberate, so the command states the fact, asks the
+question, and stops. It is also the floor the eventual model layer has to beat.
+
 ## How to read the verdicts
 
 | Verdict | Means |
@@ -91,7 +101,8 @@ identical to a build without it, which is what makes the A/Bs above single-varia
   "contextSources": { "enabled": false },
   "verification": { "enabled": false },
   "fix": { "enabled": false },
-  "changeImpact": { "enabled": false }
+  "changeImpact": { "enabled": false },
+  "invariantConformance": { "enabled": false }
 }
 ```
 
