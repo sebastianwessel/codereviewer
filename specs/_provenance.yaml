@@ -13,6 +13,7 @@ research_evidence:
   web_research_verified_at: "2026-06-20"
   source_index: specs/10-state-of-the-art-research-synthesis.md
 approved_updates:
+  - added spec 24, invariant-conformance review: reports where a change stops upholding a protective pattern its peers uphold, peers cited as evidence, advisory only, firing rate measured before recall
   - added spec 22, change-impact review: a separate command reporting which dependents outside the diff relied on a contract the change altered, evidence not verdict, non-blocking by default, with its own inverse-shape corpus
   - added spec 23, intent-fulfilment review: a separate advisory-only command mapping stated obligations to evidence in the change, reusing spec 11 ingestion, gated on false-satisfied rate rather than recall
   - spec 17: expectations are classified in-diff or out-of-diff from the reviewed diff and recall is reported separately for each, after measuring 72.8% against 8.8% with 42.5% of the answer key in unchanged code
