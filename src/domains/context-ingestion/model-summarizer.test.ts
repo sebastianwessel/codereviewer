@@ -69,6 +69,42 @@ describe('model summarizer', () => {
     expect(Buffer.byteLength(brief.text, 'utf8')).toBeLessThanOrEqual(50)
   })
 
+  test('invokes a class-based provider as a method, not through a detached reference', async () => {
+    // Regression: the summarizer read `provider.object` into a local and called
+    // it detached. Provider adapters are CLASSES that reach for `this` (the
+    // bundled OpenAI adapter reads `this.options` and `this.client`), so the call
+    // threw inside the adapter, `runContextIngestion` swallowed it into the
+    // deterministic digest, and the `model` summarization mode — the documented
+    // default whenever a provider is configured — never ran at all. A plain
+    // object literal cannot catch this; only a `this`-dependent provider can.
+    class ClassBasedProvider {
+      readonly id = 'class-based'
+      readonly genAiSystem = 'scripted'
+      private readonly brief = 'Intent: reject expired tokens.'
+
+      async object(): Promise<unknown> {
+        // Throws a TypeError when called detached, exactly like a real adapter.
+        return {
+          object: { brief: this.brief },
+          usage: { inputTokens: 5, outputTokens: 3 }
+        }
+      }
+    }
+
+    const modelAlias = {
+      model: 'gpt-x',
+      provider: new ClassBasedProvider()
+    } as unknown as ModelAlias
+
+    const brief = await createModelSummarizer({ modelAlias }).summarize(
+      [fragment],
+      { maxBytes: 4_000 }
+    )
+
+    expect(brief.mode).toBe('model')
+    expect(brief.text).toBe('Intent: reject expired tokens.')
+  })
+
   test('a provider without object support throws (caller falls back)', async () => {
     await expect(
       createModelSummarizer({ modelAlias: modelAliasWith(undefined) }).summarize(

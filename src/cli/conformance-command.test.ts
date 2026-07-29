@@ -4,10 +4,10 @@
 // because the CLI deliberately exposes no git seam — intake owns git, and the
 // point of this file is to exercise the command exactly as a user runs it.
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 import type { InvariantConformanceReport } from '../domains/invariant-conformance/index.js'
 import { runCli } from './index.js'
 
@@ -47,8 +47,10 @@ const unguardedHandler = (name: string): string =>
 
 // A base commit whose handler directory guards consistently, then a head commit
 // adding one handler that does not.
-const createRepository = async (): Promise<string> => {
-  const root = await mkdtemp(join(tmpdir(), 'codereviewer-conformance-cli-'))
+const buildRepositoryTemplate = async (): Promise<string> => {
+  const root = await mkdtemp(
+    join(tmpdir(), 'codereviewer-conformance-cli-template-')
+  )
 
   await mkdir(join(root, 'src', 'handlers'), { recursive: true })
   await writeFile(
@@ -76,10 +78,50 @@ const createRepository = async (): Promise<string> => {
   return root
 }
 
+// Building the template costs seven `git` spawns, and a spawn from a vitest
+// worker is an order of magnitude more expensive than one from a bare node
+// process (~1.3s per build, measured, against ~0.5s for the command itself).
+// Paying it once per file and copying the directory per test keeps every test
+// on its own writable repository — copying a repository, `.git` included,
+// yields a fully independent one, so the tests below that commit on top of it
+// stay isolated — while keeping the suite well clear of the timeout under
+// parallel worker load.
+let repositoryTemplate: string | undefined
+
+beforeAll(async () => {
+  repositoryTemplate = await buildRepositoryTemplate()
+})
+
+// The template is absent only when the build above failed, which vitest already
+// reports; cleaning up unconditionally would bury that failure under a second
+// error naming an undefined path.
+afterAll(async () => {
+  if (repositoryTemplate !== undefined) {
+    await rm(repositoryTemplate, { recursive: true, force: true })
+  }
+})
+
+const createRepository = async (): Promise<string> => {
+  if (repositoryTemplate === undefined) {
+    throw new Error('The repository template was not built.')
+  }
+
+  const root = await mkdtemp(join(tmpdir(), 'codereviewer-conformance-cli-'))
+
+  await cp(repositoryTemplate, root, { recursive: true })
+
+  return root
+}
+
 const parseReport = (stdout: string): InvariantConformanceReport =>
   JSON.parse(stdout) as InvariantConformanceReport
 
-describe('conformance CLI', () => {
+// Every test here drives the real CLI over a real repository on disk, so it is
+// bound by process spawns and filesystem work rather than by anything this
+// suite controls. The default 5s timeout leaves too little headroom on a loaded
+// or slower machine; the raise is scoped to this suite so the rest of the run
+// keeps failing fast.
+describe('conformance CLI', { timeout: 20_000 }, () => {
   test('rejects a subcommand other than check', async () => {
     const result = await runCli(['conformance', 'run'], {
       cwd: '/repo',

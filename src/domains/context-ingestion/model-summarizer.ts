@@ -60,15 +60,21 @@ export const createModelSummarizer = (input: {
 }): ContextSummarizer => ({
   mode: 'model',
   summarize: async (fragments, summarizeInput): Promise<ChangeIntentBrief> => {
-    const object = input.modelAlias.provider.object
-
-    if (object === undefined) {
+    if (input.modelAlias.provider.object === undefined) {
       throw new TypeError(
         'Change-intent summarizer requires a provider with object output support.'
       )
     }
 
-    const response = await object<{ readonly brief: string }>({
+    // Invoked as a METHOD on the provider, never through a detached local.
+    // Provider adapters are classes that reach for `this` (the bundled OpenAI
+    // adapter reads `this.options` and `this.client`), so a detached call throws
+    // inside the adapter, ingestion silently degrades to the deterministic digest,
+    // and the model summarization mode never actually runs. Every other model call
+    // in this codebase invokes the provider the same way, for the same reason.
+    const response = await input.modelAlias.provider.object<{
+      readonly brief: string
+    }>({
       model: input.modelAlias.model,
       messages: [
         { role: 'system', content: summarizerInstructions },
