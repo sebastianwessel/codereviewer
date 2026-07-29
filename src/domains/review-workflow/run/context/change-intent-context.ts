@@ -169,6 +169,21 @@ const warningForSummarizerUnavailable = (
   ]
 }
 
+// The call-time counterpart of the warning above. Resolution-time failure (no
+// callable model, resolution threw) was already classified and surfaced; a
+// summarizer that resolves and then throws mid-run -- provider outage, rate limit,
+// schema rejection -- produced nothing but a debug line, so a degraded run looked
+// exactly like one that chose the digest on purpose. That asymmetry is what let a
+// summarizer which threw on every real provider adapter go unnoticed.
+const warningForSummarizerFallback = (
+  reason: string | undefined
+): readonly string[] =>
+  reason === undefined
+    ? []
+    : [
+        `External change-intent model summarizer failed during the run (${reason}) The run used the deterministic digest instead.`
+      ]
+
 const ledgerDecisionFor = (
   mode: 'model' | 'digest',
   truncated: boolean
@@ -265,6 +280,7 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     ...warningForSummarizerUnavailable(
       summarizerSelection.modelSummarizerUnavailableReason
     ),
+    ...warningForSummarizerFallback(result.summarizerFallbackReason),
     ...providerWarnings
   ]
 

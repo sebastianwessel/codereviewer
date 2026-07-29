@@ -5,6 +5,7 @@ import type {
   ContextProvider,
   ContextSummarizer
 } from './contracts.js'
+import { normalizeError } from '../../shared/errors/error-normalizer.js'
 import { createInboxProvider } from './inbox-provider.js'
 import { createChangedFilesProvider } from './changed-files-provider.js'
 
@@ -20,6 +21,15 @@ export type ContextIngestionResult = {
   readonly brief: ChangeIntentBrief | undefined
   readonly fragmentCount: number
   readonly providerMetrics: readonly ProviderGatherMetric[]
+  // Set when the primary summarizer threw and the deterministic digest was used
+  // instead. Reported, never fatal: spec 11 requires a failed summarization not to
+  // fail the review, but silence is a different thing from resilience. A
+  // detached-method-call bug once made the model summarizer throw on every real
+  // provider adapter, so every run used the digest and shipped the raw external
+  // text into the prompt; nothing in the run said so, and that is why it survived.
+  // The caller renders this beside the resolution-time reason, so a degraded run
+  // is distinguishable from one that chose the digest deliberately.
+  readonly summarizerFallbackReason?: string
 }
 
 const buildProvider = (config: ContextProviderConfig): ContextProvider =>
@@ -105,6 +115,8 @@ export const runContextIngestion = async (input: {
     maxBytes: input.maxBytes,
     ...(input.signal === undefined ? {} : { signal: input.signal })
   }
+  let summarizerFallbackReason: string | undefined
+
   const brief = await input.summarizer
     .summarize(fragments, summarizeInput)
     .catch(async (error: unknown) => {
@@ -112,12 +124,24 @@ export const runContextIngestion = async (input: {
         throw error
       }
 
+      // Classified through the shared normalizer so the reported text matches how
+      // every other provider failure in this codebase reads.
+      const normalized = normalizeError(error, {
+        source: 'provider',
+        operation: 'change-intent-summarizer'
+      })
+
+      summarizerFallbackReason = `${normalized.code}: ${normalized.message}`
+
       return input.fallbackSummarizer.summarize(fragments, summarizeInput)
     })
 
   return {
     brief: brief.text.trim().length === 0 ? undefined : brief,
     fragmentCount: fragments.length,
-    providerMetrics
+    providerMetrics,
+    ...(summarizerFallbackReason === undefined
+      ? {}
+      : { summarizerFallbackReason })
   }
 }
