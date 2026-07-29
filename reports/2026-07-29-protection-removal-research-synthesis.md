@@ -195,6 +195,53 @@ viability.
 
 ---
 
+## CORRECTION — the design above is too narrow
+
+Written after probing the corpus rather than reasoning from the two examples that
+started this.
+
+The examples given were *"a removed PII filter"* and *"an added bearer-token
+log"*. I treated them as the specification and built a removal-shaped design
+around them, partly because that is where the research found a publishable gap.
+**That is letting what is researchable drive what is the product**, and it is the
+error to name here.
+
+Probing the 87 committed expectations by the *shape of the consequence* rather
+than by defect category (keyword-indicative, not a classification):
+
+| consequence shape | expectations |
+|---|---:|
+| widened scope — wildcard, broader catch, weaker role | **41** |
+| changed shared or default state that unchanged code reads | **26** |
+| weakened in place — value, operator or regex loosened | **24** |
+| new code missing a check its peers uphold | **17** |
+| made reachable or newly exposed | 2 |
+
+**Removal is not the dominant shape.** Weakening *in place* — an anchor dropped
+from a regex, `===` becoming `==`, a timeout raised, a role check loosened from
+`isAdmin` to `isAuthenticated` — deletes nothing a deletion-trigger would catch.
+
+### The three ways a change can hurt, of which the design covered one
+
+1. **It weakens an invariant's enforcement** — by removal *or* by loosening in
+   place. The design covered only removal.
+2. **It adds code that does not uphold an invariant its peers uphold.** A new
+   handler where fourteen siblings call `requireAuth` first and this one does not.
+3. **It changes something unchanged code depends on** — spec 22.
+
+Shape 2 was dismissed earlier because the missing-check literature (Chucky, Crix,
+IPPO) compares peers *within one version* rather than across two, and so was filed
+as "not differential". **For a pull-request reviewer that is a feature, not a
+disqualification**: the codebase's own peers are the specification, the peer set
+is deterministically derivable, and the output is evidence by construction —
+*"fourteen sibling handlers call this first; yours does not."*
+
+### What this means for the unit of analysis
+
+Not "the diff". **The codebase invariant the change interacts with.** The diff is
+how we find which invariants are in play; it is not the thing being judged. A
+detector keyed on deletion hunks answers a question narrower than the one asked.
+
 ## Also recorded
 
 **Spec 11 is an attack surface with a measured exploit.** An LLM-assisted
