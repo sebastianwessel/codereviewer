@@ -66,10 +66,26 @@ twice. That is a **divergence, not a defect**: deviating from a convention is
 frequently deliberate, so the command states the fact, asks the question, and
 stops.
 
-On this repository's own history the deterministic form reports **0.70 divergences
-per commit**, nearly all of them in untouched code and concentrated in two
-schema-heavy modules; the rate for divergences the change itself caused is 0.0125
-per commit. Read the first number before enabling it on a large codebase.
+**A previously published firing rate on this page was wrong and has been
+withdrawn.** It read *"0.70 divergences per commit, concentrated in two
+schema-heavy modules"*. That number was measured against a span reconstruction
+that truncated any declaration with a multi-line signature to its parameter list;
+such declarations extracted no traits and were dropped before the detector saw
+them. On this repository's own `src/cli/args.ts`, nine of ten exported
+declarations were invisible. The concentration in schema-heavy modules was a
+symptom: a single-line builder chain was one of the few shapes that survived.
+
+Re-measured on 2026-07-30 after the fix, over 20 consecutive commits of this
+repository: **79 changed declarations seen (3.95 per commit) and 0.000 divergences
+per commit**, change-attributed and pre-existing alike.
+
+Read that as *"the noise objection was a bug"*, **not** as *"it works"*. The
+detector now sees four times as many declarations and reports nothing at all,
+which is equally consistent with the gates correctly rejecting mere resemblance
+and with the gates being too strict to ever fire. Twenty commits of one repository
+cannot separate those, and this repository's style is unusually uniform. It has
+still never produced a positive on real code; the open question is now recall
+rather than noise.
 
 Its deterministic form makes no model call and costs nothing, and it is the floor
 the model layer has to beat. That model layer now exists as a second, separately
