@@ -9,6 +9,51 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-08-01 — CAVEAT on cross-file retrieval's withdrawal: reads were silently truncated
+
+Prompted by the question of whether any withdrawn approach was rejected because a
+cap bound rather than because the idea failed. Audit of every pre-existing stage-1
+limit; the intent limits are excluded by date, having been introduced the same day
+in `411c438`.
+
+**Cleared:** the per-task context budget never bound on the corpus every A/B used —
+0 of 57 changed files exceed even the default-depth 120KB (median 11.8KB, max
+113.8KB). No withdrawn intervention was measured against a chunked baseline. The
+packet budget above it refuses rather than truncates, by design.
+
+**Not cleared — spec 16, cross-file retrieval.** `maxBytesPerRead` (20–24KB) cuts a
+file mid-content with `subarray`, and the model-facing `RepoToolOutputSchema` is
+`{ summary, content }` with **no truncation field**. The summary said only *"Read
+&lt;path&gt; for investigation context."* A model receiving a file cut at an arbitrary
+line, with no indication it continued, can conclude a guard is absent when the guard
+was below the cut.
+
+That mechanism produces **exactly the signature the withdrawal recorded**: recall
+66.7% → 44.4% at nine cases and 68.8% → 56.3% at sixteen, with **precision holding
+at 100%** — the loss was purely recall, which is what silently missing content
+causes. It was never ruled out.
+
+**This does not overturn the verdict.** No re-measurement has been run, the cap was
+itself a response to a real observed harm (a 162KB single read losing a finding the
+same task found without retrieval), and dilution and truncation both cost recall. It
+means the verdict was reached against an implementation with a defect that plausibly
+contributed to it, which is a different claim from "the idea does not work".
+
+Fixed: a truncated read now appends an explicit marker to the content the model
+reads — including *"absence of something below this point is NOT evidence it is
+missing"* — and marks the summary. The ledger entry already carried
+`bytesConsidered`/`bytesIncluded`; only the model-facing output omitted them.
+
+**Spec 16 should be re-measured before its "net negative" verdict is treated as
+settled.** Two prior withdrawals in this project have already been voided by
+implementation defects found afterwards (spec 24's firing rate, spec 18's void A/B).
+
+Also caveated, separately and already recorded: spec 25 Arm B re-ranked the
+referenced-definition budget, which holds about three files, so ranking had little
+room to express a difference.
+
+---
+
 ## 2026-08-01 — Spec 23 measured on intent WRITTEN BEFORE THE CHANGE: the commit-message corpus was measuring nothing
 
 New corpus `.codereviewer/eval/intent-corpus-realistic/`: **28 cases over 15

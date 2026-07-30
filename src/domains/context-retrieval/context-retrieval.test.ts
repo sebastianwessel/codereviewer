@@ -1,8 +1,9 @@
-import { mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
 import { createContextRetriever } from './index.js'
+import { toRepoToolOutput } from './repo-tool-contracts.js'
 import type { ContextLedgerEntry } from '../review-planning/index.js'
 
 const createTempRepo = async (): Promise<string> => {
@@ -511,6 +512,55 @@ describe('context retrieval grep modes', () => {
       })
 
       expect(result.matches).toHaveLength(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('a truncated read tells the model it was truncated', () => {
+  // Cross-file retrieval was measured NET NEGATIVE and withdrawn on that
+  // measurement — recall 66.7% to 44.4% at nine cases, 68.8% to 56.3% at sixteen,
+  // precision holding at 100%. Silently truncated reads produce exactly that
+  // signature: the model concludes something is absent when it was below the cut.
+  // It was never ruled out as a cause, so the disclosure below is load-bearing.
+  test('marks the content and the summary when the byte limit cuts a file', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ctx-trunc-'))
+
+    try {
+      await writeFile(join(root, 'big.ts'), 'x'.repeat(5000), 'utf8')
+
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxBytesPerRead: 200 }
+      })
+      const output = toRepoToolOutput(
+        await retriever.readRepositoryFile({ path: 'big.ts' }),
+        false
+      )
+
+      expect(output.content).toContain('[TRUNCATED')
+      expect(output.content).toContain('NOT evidence it is missing')
+      expect(output.summary).toContain('TRUNCATED')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('says nothing when the whole file fits', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ctx-whole-'))
+
+    try {
+      await writeFile(join(root, 'small.ts'), 'export const a = 1\n', 'utf8')
+
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const output = toRepoToolOutput(
+        await retriever.readRepositoryFile({ path: 'small.ts' }),
+        false
+      )
+
+      expect(output.content).not.toContain('TRUNCATED')
+      expect(output.summary).not.toContain('TRUNCATED')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

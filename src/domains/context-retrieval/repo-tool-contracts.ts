@@ -55,10 +55,40 @@ const withLineNumbers = (content: string): string =>
     .map((line, index) => `${index + 1}: ${line}`)
     .join('\n')
 
+// A read that hit `maxBytesPerRead` is CUT MID-FILE. The model was never told.
+//
+// It received line-numbered content ending at an arbitrary line, with a summary
+// saying only "Read <path> for investigation context", and no way to know the file
+// continued. So "this function has no null check" could mean "the null check was
+// below the cut" — a confident conclusion drawn from a file the model believed it
+// had read in full.
+//
+// This is the failure shape found four times in this project's limits on
+// 2026-08-01: a cap whose binding produces a plausible answer rather than an error.
+// It matters more here than elsewhere because cross-file retrieval was MEASURED NET
+// NEGATIVE and withdrawn on that measurement — 66.7% to 44.4% recall at nine cases,
+// 68.8% to 56.3% at sixteen, with precision holding at 100%, i.e. the loss was
+// exactly recall. Silently truncated reads are a mechanism that produces that
+// signature, and it was never ruled out. The verdict now carries that caveat.
+//
+// The ledger entry already carried `bytesConsidered` and `bytesIncluded`; only the
+// model-facing output omitted it. This appends an unmissable marker to the content
+// itself rather than a field, because a field is something a model may ignore and a
+// trailing line in the text it is reading is not.
+const truncationNotice = (result: ContextRetrievalResult): string =>
+  result.ledgerEntry.decision === 'truncated'
+    ? `\n[TRUNCATED: this file is longer than the per-read limit. You have seen the first ${result.ledgerEntry.bytesIncluded} of ${result.ledgerEntry.bytesConsidered} bytes. Absence of something below this point is NOT evidence it is missing.]`
+    : ''
+
 export const toRepoToolOutput = (
   result: ContextRetrievalResult,
   lineNumbered: boolean
 ): RepoToolOutput => ({
-  summary: result.summary,
-  content: lineNumbered ? withLineNumbers(result.content) : result.content
+  summary:
+    result.ledgerEntry.decision === 'truncated'
+      ? `${result.summary} TRUNCATED at the per-read byte limit; the file continues.`
+      : result.summary,
+  content:
+    (lineNumbered ? withLineNumbers(result.content) : result.content) +
+    truncationNotice(result)
 })
