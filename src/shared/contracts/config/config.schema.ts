@@ -396,14 +396,26 @@ export const IntentFulfilmentConfigSchema = z.strictObject({
   // cannot make a small ticket expensive.
   maxObligations: z.int().min(1).max(100).default(100),
   // Cap on the redacted change-intent text handed to the extraction call. The
-  // ingestion providers already bound themselves per file; this bounds the sum,
+  // ingestion providers already bound themselves per file; this bounds the SUM,
   // because a pipeline can configure several of them.
   //
-  // Left at 20 000 deliberately: unlike the two above there is no measurement
-  // showing it binds — `intentTruncated` was false in all 34 runs of the
-  // commit-message corpus — and raising a limit on a guess is how the other two got
-  // their values. It warns when it binds, so evidence will arrive if it ever does.
-  maxIntentBytes: z.int().min(256).max(200_000).default(20_000),
+  // 20 000 was kept for one revision on the grounds that no measurement showed it
+  // binding. That was the wrong test: every corpus case used SINGLE-SOURCE intent —
+  // one commit message, or one specification slice — so the sum this limit exists
+  // to bound was never exercised. Absence of evidence from a corpus that cannot
+  // produce it is not evidence of absence, and a ticket plus a linked issue plus a
+  // review thread passes 20 KB without being unusual.
+  //
+  // The cost asymmetry also runs the other way from the two limits above. Those
+  // bound work that scales per obligation; this bounds ONE extraction call per run,
+  // so a larger value buys a bigger prompt once, while binding costs a silently
+  // incomplete checklist for the whole run. 100 KB is roughly 25 000 tokens on a
+  // single call — bounded, affordable, and far above any realistic stated intent.
+  //
+  // The ceiling stays at 200 000 so a pipeline that genuinely needs more has room
+  // without a schema change, and so a run that reaches even this default is a
+  // signal worth acting on rather than a wall.
+  maxIntentBytes: z.int().min(256).max(200_000).default(100_000),
   // Cap on the changed lines shown to each judgement call. The judgement may only
   // cite a line the change actually touched, so this is what bounds the evidence
   // surface a judgement is allowed to draw from — and therefore the limit whose
@@ -700,7 +712,7 @@ export const CodeReviewerConfigSchema = z.strictObject({
   intentFulfilment: IntentFulfilmentConfigSchema.default({
     enabled: false,
     maxObligations: 100,
-    maxIntentBytes: 20_000,
+    maxIntentBytes: 100_000,
     maxChangeLines: 5_000
   }),
   invariantConformance: InvariantConformanceConfigSchema.default({

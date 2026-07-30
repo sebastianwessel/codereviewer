@@ -245,7 +245,7 @@ describe('CodeReviewerConfigSchema', () => {
     expect(disabled.intentFulfilment).toEqual({
       enabled: false,
       maxObligations: 100,
-      maxIntentBytes: 20_000,
+      maxIntentBytes: 100_000,
       maxChangeLines: 5000
     })
 
