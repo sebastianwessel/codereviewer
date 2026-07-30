@@ -1,8 +1,10 @@
-// Spec 25: the two things a changed guard is allowed to contribute to a review.
+// Spec 25: a section stating that a conditional changed and what it precedes.
 //
-// Arm A — a section stating that a conditional changed and what it precedes.
-// Arm B — the names that region calls, as a ranking input for the existing
-//         referenced-definition budget (NOT extra bytes; see the spec amendment).
+// A second arm once read the same regions to re-rank the referenced-definition
+// budget toward their callees. It was measured on 2026-07-30 and removed: 44.8%
+// product recall against a 46.0% baseline, adjusted precision 90.7% against
+// 95.2%. `calleeNames` below survives because the section names what the region
+// calls, not because anything ranks on it.
 //
 // The section states structure and nothing else. It does not say a protection was
 // weakened, that the change is unsafe, or that anything is wrong: the trigger is
@@ -23,15 +25,9 @@ import type { ReviewedDiffRange } from '../../../admission/index.js'
 // would bury the section it is meant to sharpen.
 const MAX_REPORTED_REGIONS = 12
 
-// Ranking input only, so a long list buys nothing: the referenced-definition
-// budget admits at most six files.
-const MAX_PRIORITY_CALLEES = 24
-
 export type GuardedRegionContextResult = {
   // '' when nothing triggered, which is the common case and not an error.
   readonly sectionText: string
-  // De-duplicated, in the order the regions were found.
-  readonly priorityCalleeNames: readonly string[]
   readonly regionCount: number
 }
 
@@ -77,15 +73,13 @@ const describeRegion = (path: string, region: GuardedRegion): string => {
  * Guarded-region facts for one task's changed files.
  *
  * Returns an empty result when the diff touched no conditional inside a known
- * declaration — the common case. Both arms read this; which of them is switched
- * on is the caller's decision.
+ * declaration — the common case.
  */
 export const collectGuardedRegionContext = (
   input: CollectGuardedRegionContextInput
 ): GuardedRegionContextResult => {
   const taskPathSet = new Set(input.taskPaths)
   const described: string[] = []
-  const priorityCalleeNames: string[] = []
   let regionCount = 0
 
   for (const sourceFile of input.sourceFiles) {
@@ -120,21 +114,12 @@ export const collectGuardedRegionContext = (
         if (described.length < MAX_REPORTED_REGIONS) {
           described.push(describeRegion(sourceFile.path, region))
         }
-
-        for (const name of region.calleeNames) {
-          if (
-            !priorityCalleeNames.includes(name) &&
-            priorityCalleeNames.length < MAX_PRIORITY_CALLEES
-          ) {
-            priorityCalleeNames.push(name)
-          }
-        }
       }
     }
   }
 
   if (described.length === 0) {
-    return { sectionText: '', priorityCalleeNames: [], regionCount: 0 }
+    return { sectionText: '', regionCount: 0 }
   }
 
   const omitted =
@@ -151,7 +136,6 @@ export const collectGuardedRegionContext = (
       `deliberate change will appear here exactly like a mistaken one. Use it to ` +
       `decide where to look, never as evidence that something is a defect.\n` +
       `${described.join('\n')}${omitted}`,
-    priorityCalleeNames,
     regionCount
   }
 }

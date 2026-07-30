@@ -199,14 +199,6 @@ export type CollectReferencedDefinitionsInput = {
   // files and must never be injected as referenced definitions (they are reviewed
   // directly).
   readonly knownPaths: ReadonlySet<string>
-  // Spec 25 Arm B. Names called inside a region a changed conditional precedes.
-  // A dependency file that supplies one of these is admitted BEFORE files ranked
-  // only by import frequency. It changes the ORDER, never the budget: the same
-  // caps apply, so this arm adds no packet bytes and cannot raise cost.
-  //
-  // Empty (the default, and always when the arm is off) leaves the frequency
-  // ranking below byte-for-byte unchanged.
-  readonly priorityCalleeNames?: readonly string[]
   readonly readDependencyFile?: (absolutePath: string) => Promise<string>
 }
 
@@ -229,10 +221,6 @@ export const collectReferencedDefinitions = async (
   // Count import references per resolved unchanged dependency path so the most
   // frequently imported callees win the bounded budget.
   const referenceCounts = new Map<string, number>()
-  // Spec 25 Arm B: dependency paths that supply a name the changed conditional's
-  // governed region calls.
-  const priorityCalleeNames = new Set(input.priorityCalleeNames ?? [])
-  const priorityPaths = new Set<string>()
 
   for (const fact of input.facts) {
     if (
@@ -260,24 +248,10 @@ export const collectReferencedDefinitions = async (
     }
 
     referenceCounts.set(resolved, (referenceCounts.get(resolved) ?? 0) + 1)
-
-    if (priorityCalleeNames.has(fact.name)) {
-      priorityPaths.add(resolved)
-    }
   }
 
   const rankedPaths = [...referenceCounts.entries()]
     .sort((left, right) => {
-      // Spec 25 Arm B, applied before frequency: what the changed conditional
-      // governs outranks what the file merely imports most often. Inert when the
-      // arm is off, because `priorityPaths` is then empty and both sides score 0.
-      const leftPriority = priorityPaths.has(left[0]) ? 1 : 0
-      const rightPriority = priorityPaths.has(right[0]) ? 1 : 0
-
-      if (leftPriority !== rightPriority) {
-        return rightPriority - leftPriority
-      }
-
       if (right[1] !== left[1]) {
         return right[1] - left[1]
       }

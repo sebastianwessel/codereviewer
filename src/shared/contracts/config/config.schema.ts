@@ -65,20 +65,17 @@ const gitRefSchema = z
 // tool-call cap that CODE enforces. Its findings pass the SAME refutation and
 // admission as any other candidate. Disabled, discovery is single-shot with no
 // tools and the run is byte-for-byte unchanged.
-// Spec 25. Two independently switchable arms over one deterministic trigger: a
-// conditional line the diff changed, inside a declaration, with code after it.
+// Spec 25. One deterministic trigger: a conditional line the diff changed, inside
+// a declaration, with code after it. `signal` adds a structural section naming
+// what changed and what it precedes; it adds no file content.
 //
-// Both default off, and both are measured before either can default on. `signal`
-// adds a structural section naming what changed and what it precedes; it adds no
-// file content. `calleeRanking` adds no bytes at all — it re-orders the existing
-// referenced-definition budget so files defining the guarded region's callees are
-// admitted before files that merely happen to be imported most often.
+// Arm B (`calleeRanking`, which re-ranked the referenced-definition budget toward
+// the guarded region's callees) was MEASURED AND REMOVED on 2026-07-30: 44.8%
+// product recall against a 46.0% baseline, adjusted precision 90.7% against
+// 95.2%, and it lost to `signal` alone. It was the fourth failed attempt at
+// cross-file context here. Do not reintroduce it without a pre-registered rule.
 export const GuardedRegionContextConfigSchema = z.strictObject({
-  // Arm A.
-  signal: z.boolean().default(false),
-  // Arm B. Independent of `signal` so the measurement can separate framing from
-  // retrieval, which is the question three prior context interventions left open.
-  calleeRanking: z.boolean().default(false)
+  signal: z.boolean().default(false)
 })
 
 export const CrossFileRetrievalConfigSchema = z.strictObject({
@@ -115,8 +112,7 @@ export const ReviewConfigSchema = z.strictObject({
     maxBytesPerRead: 24000
   }),
   guardedRegionContext: GuardedRegionContextConfigSchema.default({
-    signal: false,
-    calleeRanking: false
+    signal: false
   })
 })
 
@@ -603,8 +599,7 @@ export const CodeReviewerConfigSchema = z.strictObject({
       maxBytesPerRead: 24000
     },
     guardedRegionContext: {
-      signal: false,
-      calleeRanking: false
+      signal: false
     }
   }),
   provider: ProviderConfigSchema.optional(),

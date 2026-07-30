@@ -530,18 +530,15 @@ export const assembleContext = async (
     }
 
     // Spec 25: the changed conditionals in this task's files, and what they
-    // precede. Computed once per task and read by both arms — Arm A renders the
-    // section, Arm B uses the callee names to rank R4 below. Cheap and pure, so
-    // it runs whenever either arm is on and yields '' when nothing triggered.
-    const guardedRegions =
-      guardedRegionConfig.signal || guardedRegionConfig.calleeRanking
-        ? collectGuardedRegionContext({
-            sourceFiles: input.sourceFiles,
-            facts: input.analysis.facts,
-            reviewedDiffRanges: input.reviewedDiffRanges ?? [],
-            taskPaths: task.paths
-          })
-        : undefined
+    // precede. Pure and cheap, and yields '' when nothing triggered.
+    const guardedRegions = guardedRegionConfig.signal
+      ? collectGuardedRegionContext({
+          sourceFiles: input.sourceFiles,
+          facts: input.analysis.facts,
+          reviewedDiffRanges: input.reviewedDiffRanges ?? [],
+          taskPaths: task.paths
+        })
+      : undefined
 
     // R4: collect bounded referenced-definition digests for unchanged files the
     // task's changed files import (relative imports only). Context only — these
@@ -555,12 +552,7 @@ export const assembleContext = async (
               repositoryRoot: input.repositoryRoot,
               taskPaths: task.paths,
               facts: input.analysis.facts,
-              knownPaths: allSourcePaths,
-              // Spec 25 Arm B: same budget, different order. Empty when the arm is
-              // off, which leaves R4's import-frequency ranking exactly as it was.
-              priorityCalleeNames: guardedRegionConfig.calleeRanking
-                ? (guardedRegions?.priorityCalleeNames ?? [])
-                : []
+              knownPaths: allSourcePaths
             })
           ).map((digest) => ({
             kind: 'referenced-definition' as const,

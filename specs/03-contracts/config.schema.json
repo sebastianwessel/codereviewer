@@ -18,8 +18,7 @@
           "maxBytesPerRead": 24000
         },
         "guardedRegionContext": {
-          "signal": false,
-          "calleeRanking": false
+          "signal": false
         }
       },
       "type": "object",
@@ -130,23 +129,17 @@
         },
         "guardedRegionContext": {
           "default": {
-            "signal": false,
-            "calleeRanking": false
+            "signal": false
           },
           "type": "object",
           "properties": {
             "signal": {
               "default": false,
               "type": "boolean"
-            },
-            "calleeRanking": {
-              "default": false,
-              "type": "boolean"
             }
           },
           "required": [
-            "signal",
-            "calleeRanking"
+            "signal"
           ],
           "additionalProperties": false
         }

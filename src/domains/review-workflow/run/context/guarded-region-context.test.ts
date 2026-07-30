@@ -43,7 +43,6 @@ describe('collectGuardedRegionContext', () => {
     expect(result.sectionText).toContain('`exportUsers`')
     expect(result.sectionText).toContain('precedes lines 3-5')
     expect(result.sectionText).toContain('dump, loadUsers, deny')
-    expect(result.priorityCalleeNames).toEqual(['dump', 'loadUsers', 'deny'])
   })
 
   test('the section tells the reviewer it is not evidence of a defect', () => {
@@ -94,11 +93,7 @@ describe('collectGuardedRegionContext', () => {
       taskPaths: ['src/handler.ts']
     })
 
-    expect(result).toEqual({
-      sectionText: '',
-      priorityCalleeNames: [],
-      regionCount: 0
-    })
+    expect(result).toEqual({ sectionText: '', regionCount: 0 })
   })
 
   test('yields nothing for a file outside the task', () => {

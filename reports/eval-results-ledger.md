@@ -9,6 +9,74 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-30 — Spec 25 guarded-region context: BOTH ARMS FAIL. Delete both.
+
+Three arms, one session, same corpus state, `real-repo-cross-file` (37 cases,
+**87 expectations**). Decision rule fixed in spec 25 **before** the run.
+Total spend **$5.33**.
+
+| arm | matched | product recall | adj. precision | genuine FP | unlisted real | cost |
+|---|---:|---:|---:|---:|---:|---:|
+| **0** baseline | 40/87 | **46.0%** | **95.2%** | 2 | 4 | $2.23 |
+| **A** signal | 42/87 | **48.3%** | 93.3% | 3 | 11 | $1.52 |
+| **B** signal + callee ranking | 39/87 | **44.8%** | 90.7% | 4 | 14 | $1.57 |
+
+Provider error rate 0.0% in all three arms.
+
+**Every pre-registered test fails.**
+
+- **Inside the noise band.** A is **+2.3pp**, B is **−1.2pp**; the band is
+  **±4.8pp**. On 87 expectations the whole effect is **two findings** for A and
+  **one** for B. That is not a result, it is the corpus breathing.
+- **Adjusted precision fell, in both arms, monotonically with added context**:
+  95.2% → 93.3% → 90.7%. Spec 25 makes "precision MUST NOT fall" a standalone
+  disqualifier, and this is a precision-first reviewer.
+- **B did not beat A** (44.8% against 48.3%), which was Arm B's own separate bar.
+
+Per spec 25 — *"Neither arm ships on a point estimate. Both are deleted outright
+if they fail"* — both arms are removed. No "off by default, revisit later".
+
+### The cost clause was inert, and cost at n=1 is not trustworthy
+
+No arm added packet bytes by design, and none raised cost — the **baseline was the
+most expensive arm** ($2.23 against $1.52 and $1.57). Cost here tracks
+nondeterministic refutation volume, not packet size. Do not read a cost ordering
+off single runs; the +25% referral clause never engaged and could not have.
+
+### Recorded as a HYPOTHESIS, explicitly NOT as a result
+
+**Unlisted real findings rose 4 → 11 → 14** while genuine false positives moved
+only 2 → 3 → 4. Both arms surfaced substantially more findings the plausibility
+judge accepted as real defects but which the answer key does not list.
+
+This is stated as a hypothesis for a **pre-registered** test and nothing more. The
+primary endpoint failed; reading a secondary movement as a win afterwards is the
+post-hoc rescue this ledger exists to prevent, and the same discipline was applied
+to the investigative arm's precision movement on 2026-07-27. It would need its own
+decision rule, fixed in advance, on a corpus whose key is complete enough to
+credit the findings.
+
+### What does NOT follow
+
+**Spec 24 is unaffected.** Spec 25 made retirement conditional on an arm winning;
+none did. The conformance capability stands or falls on its own firing-rate work.
+
+**This is not evidence that guard-shaped changes do not matter.** It is evidence
+that pointing the reviewer at them, and re-ranking retrieval toward them, do not
+move recall on this corpus. Four context interventions have now failed here
+(spec 16 cross-file, spec 18 scout, spec 19 un-anchored pass, spec 25 both arms)
+against one framing change that worked. The pattern is worth more than any of the
+individual results.
+
+### What invalidates this entry
+
+A corpus key change, or a fix to the answer key that credits the unlisted-real
+findings — the 87-expectation key is the denominator for every number above.
+Baselines measured on the earlier 30-case/42-expectation corpus (recall 54.8%) are
+**not comparable** and must not be differenced against arm 0.
+
+---
+
 ## 2026-07-30 — Conformance adjudication: both live controls pass. NOT a measurement.
 
 First live run of spec 24's adjudication layer, real provider, real model.

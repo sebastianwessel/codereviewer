@@ -49,18 +49,27 @@ other. Disabled, discovery is single-shot with no tools.
 
 ### `review.guardedRegionContext`
 
-Two independently switchable arms over one deterministic trigger: a **conditional
-line the diff changed**, inside a declaration, with code after it. The trigger is
-structural and language-neutral — it keys on position, not on any category of
-guard, so it fires the same way in every supported language.
+One deterministic trigger: a **conditional line the diff changed**, inside a
+declaration, with code after it. Structural and language-neutral — it keys on
+position, not on any category of guard, so it fires the same way in every
+supported language.
 
-Both arms are **off by default and unmeasured**. Do not enable them expecting a
-recall gain; they exist so spec 25's three-arm comparison can be run.
+**Off by default, and measured not to help.** On the 37-case real-repository
+corpus it moved product recall 46.0% → 48.3% — **two findings out of 87, inside
+the ±4.8pp noise band** — while adjusted precision **fell** 95.2% → 93.3%. Enable
+it only if you want the section for your own reading; do not expect a recall gain.
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
 | `review.guardedRegionContext.signal` | boolean | `false` | Adds a section naming each changed conditional, the lines it precedes, and what that region calls. Adds no file content. |
-| `review.guardedRegionContext.calleeRanking` | boolean | `false` | Spends the existing [referenced-definition](#) budget on files supplying the guarded region's callees before files ranked by import frequency. Adds **no bytes** — same 6 files / 12KB caps, different order. |
+
+#### `review.guardedRegionContext.calleeRanking` — removed
+
+A second arm re-ranked the referenced-definition budget toward the guarded
+region's callees. **Measured and removed on 2026-07-30**: 44.8% product recall
+against a 46.0% baseline, adjusted precision 90.7%, and it lost to `signal` alone.
+Because the schema is strict, a config that still sets it — even to `false` —
+fails validation with **exit code 2**. Delete the key.
 
 What the section does **not** do: it never says a protection was weakened, that
 the change is unsafe, or that anything is a defect. The trigger is lexical and

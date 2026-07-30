@@ -1,7 +1,38 @@
 # 25: Guarded-Region Context
 
-Status: Approved
+Status: Approved — **measured 2026-07-30, both arms failed their decision rule**
 Date: 2026-07-30
+
+## Outcome (2026-07-30)
+
+Three arms, one session, `real-repo-cross-file` (37 cases / 87 expectations).
+Total spend $5.33. Full entry in `reports/eval-results-ledger.md`.
+
+| arm | matched | product recall | adj. precision | genuine FP | unlisted real |
+|---|---:|---:|---:|---:|---:|
+| 0 baseline | 40/87 | 46.0% | 95.2% | 2 | 4 |
+| A signal | 42/87 | 48.3% | 93.3% | 3 | 11 |
+| B + callee ranking | 39/87 | 44.8% | 90.7% | 4 | 14 |
+
+**Neither arm met the decision rule below.** A moved +2.3pp against a ±4.8pp band
+— two findings — and its precision fell. B was worse than baseline, worse than A,
+and worst on precision.
+
+**Arm B is deleted**, per this spec's own rule and because it fails under every
+reading of the data.
+
+**Arm A is retained, off by default, on the approver's instruction**, and this
+spec records that this is a **departure from the rule fixed in advance**. Nothing
+here should be read as evidence that the section helps: it is measurably inside
+the noise and it costs precision. Any future claim for it needs a new
+pre-registered rule, not this run.
+
+Recorded as a hypothesis and explicitly not as a result: unlisted real findings
+rose 4 → 11 → 14 while genuine false positives moved only 2 → 3 → 4.
+
+The cost clause never engaged — the baseline was the most expensive arm ($2.23
+against $1.52 and $1.57), so cost here tracks nondeterministic refutation volume
+rather than packet size.
 
 ## Purpose
 
