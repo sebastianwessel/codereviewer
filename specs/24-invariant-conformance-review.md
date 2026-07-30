@@ -336,6 +336,41 @@ Until such fixtures exist, the capability's status is unchanged and must be
 described as it is: **wiring verified, both live control arms passing, and recall
 on real code unmeasured**, with the sole positive case synthetic.
 
+## Scope Limit: Declarations, Not Branches
+
+Tested 2026-07-30 against a real curated case rather than a synthetic control:
+`golang-jwt-zero-exp-parsed-as-absent-claim`, whose answer key states the defect in
+peer terms — *"every sibling parser here reports ErrInvalidType"*. Reconstructed as
+a two-commit repository presenting exactly the diff the corpus presents.
+
+**Result: no divergence reported.** One changed declaration, one peer set, zero
+findings, zero cost. The diagnosis is not a tuning shortfall:
+
+All three sibling parsers in that file — `parseNumericDate`, `parseClaimsString`,
+`parseString` — return `ErrInvalidType`, and so does the changed one. At
+**declaration** granularity the trait is present and there is nothing to report.
+The defect is that a single **branch** inside a type switch falls through without
+it.
+
+**This capability compares whole declarations. A declaration that upholds a pattern
+in three branches and abandons it in a fourth holds the trait, and is invisible.**
+
+That is a scope limit rather than a defect, but it was never stated and it is
+material: branch asymmetry is one of the larger defect shapes in the committed
+corpus. Two consequences follow.
+
+- **Recall on peer-shaped answer keys will be lower than their phrasing suggests.**
+  An expectation worded *"the sibling parsers do X"* is not necessarily a
+  declaration-level divergence, and must not be assumed to be one when a corpus is
+  assembled.
+- **Extending to branch granularity is a different capability**, not a parameter.
+  It would need intra-declaration control-flow structure, which the deterministic
+  layer does not have and cannot obtain language-neutrally from lexical traits.
+
+Note also that this case carries only three peers *including* the changed
+declaration, leaving two — below this spec's three-cited-peer floor. It would have
+been rejected on that ground regardless.
+
 ## Verification Matrix
 
 | Requirement | Test |
