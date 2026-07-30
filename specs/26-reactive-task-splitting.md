@@ -82,9 +82,18 @@ expected to be **cheaper** on the 63% of changes that never needed splitting.
 
 ## Measurement Plan
 
-Paired, on the 37-case real-repository corpus, against the recorded baseline (46.0%
-recall, 95.2% adjusted precision, ~$1.35). Run both arms against a **pinned engine**
-so they cannot differ by more than the arm.
+Paired, on the **21 crb-benchmark cases the change actually touches**, run against
+**pinned engines** so the arms cannot differ by more than the arm.
+
+The corpus choice is measured, not assumed. A free static precheck (recorded in the
+results ledger) found that on the 37-case real-repository corpus the two arms are
+byte-identical on **34 of 37 cases** — the old chunk threshold at `thorough` depth
+was 108,000 B and almost nothing there reached it. An effect confined to 3 cases
+cannot be resolved against a measured ±4.8pp band. On the crb benchmark 21 of 59
+cases are affected, matching the 37% measured over this repository's own commits;
+restricting the run to those 21 removes 38 cases that are identical between arms by
+construction and can therefore only dilute a paired comparison while costing full
+price.
 
 | arm | |
 |---|---|

@@ -1397,6 +1397,66 @@ which matches the 37% figure measured over this repository's own commits.
 dilute a paired comparison while costing full price.
 
 
+### Spec 26 reactive splitting — A/B, 21 affected crb cases (2026-08-01, $13.81)
+
+Pinned engines: arm 0 `5902de3` (proactive), arm 1 `c11579c` (reactive). Paired at
+expectation level, 71 expectations, 0 provider errors either arm.
+
+| | proactive | reactive |
+|---|---|---|
+| recall (paired) | 43.7% | **35.2%** |
+| adjusted precision | 83.8% | **96.2%** |
+| candidates refuted | 106 | 75 |
+| findings emitted | 113 | 84 |
+| cost | $7.41 | $6.40 (**−14%**) |
+
+Paired delta **−8.5pp**, 95% CI [−16.9, 0.0], discordant 10 (gained 2, lost 8),
+McNemar z −1.90, **p = 0.058**.
+
+**The provider refused ZERO packets** — no `context_length_exceeded`, no splits, on
+any of 21 cases including one carrying 1.2 MB of changed source. Spec 26's premise
+is therefore **confirmed and now measured, not assumed**: the old byte budget was
+splitting for no provider-side reason whatsoever.
+
+**But the recall loss is real and it is not about splitting.** Since reactive
+splitting never engaged, the only difference between the arms is TASK COUNT: the old
+budget's batching made several tasks per case, the new assembly makes one. Candidates
+fell 106 → 75 and findings 113 → 84 in step with it. Discovery yield is **per task**,
+not per defect present — the long-standing "one finding per file" behaviour, here
+measured as the binding constraint on recall.
+
+So the change trades recall for precision and cost by shrinking the number of looks
+the reviewer takes. **Do not ship it as the default until discovery yield stops being
+per-task**; the yield fix is the prerequisite, not a follow-up.
+
+### Spec 16 cross-file retrieval — REVERSES the earlier net-negative verdict (2026-08-01, $3.94)
+
+Same pinned engine `c11579c` both arms, 37-case real-repo corpus, 87 expectations,
+`maxToolCallsPerTask: 8`, `maxBytesPerRead: 24000` — the same cap as the original
+run. The only difference is that a truncated cross-file read now **discloses the cut
+to the model**.
+
+| | off | on |
+|---|---|---|
+| recall (paired) | 42.5% | **48.3%** |
+| adjusted precision | 97.4% | **100%** |
+| cost | $2.05 | $1.89 (**−7%**) |
+
+Paired delta **+5.7pp**, 95% CI [−1.1, 12.6], discordant 9 (gained 7, lost 2),
+McNemar z 1.67, **p = 0.096**.
+
+The earlier verdict (66.7% → 44.4% at 9 cases, 68.8% → 56.3% at 16) was recorded as
+net negative and the feature was left off by default. That verdict **does not
+survive**: the direction flips on a corpus four times larger, with precision rising
+to 100% and cost falling. Every `repo_read` had been cut at 24,000 bytes with the
+model told nothing — the exact mechanism that produces "recall falls, precision
+holds" — and the earlier measurement could not distinguish the feature from that bug.
+
+**Not yet conclusive**: +5.7pp is barely outside the measured ±4.8pp band at p = 0.096,
+on a single run. It refutes the negative verdict; it does not yet establish the
+positive one. Replicate before making it the default.
+
+
 ## Standing caveats for reading anything here
 
 - **Variance.** sd ≈ 4.8pp on this corpus. An effect below roughly 10pp cannot be
