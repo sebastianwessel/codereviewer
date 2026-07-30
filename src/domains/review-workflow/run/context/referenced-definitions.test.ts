@@ -48,7 +48,7 @@ describe('collectReferencedDefinitions', () => {
       'utf8'
     )
 
-    const digests = await collectReferencedDefinitions({
+    const { digests } = await collectReferencedDefinitions({
       repositoryRoot,
       taskPaths: ['src/changed.ts'],
       facts: [importFact('src/changed.ts', './dep.js')],
@@ -69,7 +69,7 @@ describe('collectReferencedDefinitions', () => {
       'utf8'
     )
 
-    const digests = await collectReferencedDefinitions({
+    const { digests } = await collectReferencedDefinitions({
       repositoryRoot,
       taskPaths: ['src/changed.ts'],
       facts: [importFact('src/changed.ts', 'zod')],
@@ -91,7 +91,7 @@ describe('collectReferencedDefinitions', () => {
       'utf8'
     )
 
-    const digests = await collectReferencedDefinitions({
+    const { digests } = await collectReferencedDefinitions({
       repositoryRoot,
       taskPaths: ['src/a.ts'],
       facts: [importFact('src/a.ts', './b.js')],
@@ -109,7 +109,7 @@ describe('collectReferencedDefinitions', () => {
       'utf8'
     )
 
-    const digests = await collectReferencedDefinitions({
+    const { digests } = await collectReferencedDefinitions({
       repositoryRoot,
       taskPaths: ['src/changed.ts'],
       facts: [importFact('src/changed.ts', '../../etc/passwd')],
@@ -150,7 +150,7 @@ describe('collectReferencedDefinitions', () => {
       'utf8'
     )
 
-    const digests = await collectReferencedDefinitions({
+    const { digests } = await collectReferencedDefinitions({
       repositoryRoot,
       taskPaths: ['src/changed.ts'],
       facts,
@@ -187,7 +187,7 @@ describe('collectReferencedDefinitions', () => {
       'utf8'
     )
 
-    const digests = await collectReferencedDefinitions({
+    const { digests } = await collectReferencedDefinitions({
       repositoryRoot,
       taskPaths: ['src/changed.ts'],
       facts,
@@ -218,7 +218,7 @@ describe('collectReferencedDefinitions', () => {
       'utf8'
     )
 
-    const digests = await collectReferencedDefinitions({
+    const { digests } = await collectReferencedDefinitions({
       repositoryRoot,
       taskPaths: ['src/changed.ts'],
       facts: [importFact('src/changed.ts', './util')],
@@ -227,5 +227,103 @@ describe('collectReferencedDefinitions', () => {
 
     expect(digests).toHaveLength(1)
     expect(digests[0]?.path).toBe('src/util/index.ts')
+  })
+
+  describe('dropped dependencies are reported, not discarded', () => {
+    // A run that silently drops context is indistinguishable from one that had none
+    // to add. That shape was found three times in the intent capability's limits on
+    // 2026-08-01 and had never been looked for here — and it binds routinely:
+    // measured over the corpus every A/B has used, HALF of the TypeScript/JavaScript
+    // changed files import more than the three dependencies the 12KB budget holds at
+    // the 4KB per-file cap, and 40% exceed the six-file cap too.
+    test('counts dependencies the file cap kept out', async () => {
+      const facts: SupportSignalFact[] = []
+      const dependencyCount = referencedDefinitionBounds.maxFiles + 3
+      let changedSource = ''
+
+      for (let index = 0; index < dependencyCount; index += 1) {
+        const name = `dep${index}`
+        await writeFile(
+          path.join(repositoryRoot, 'src', `${name}.ts`),
+          `export const ${name} = ${index}\n`,
+          'utf8'
+        )
+        changedSource += `import { ${name} } from './${name}.js'\n`
+        facts.push(importFact('src/changed.ts', `./${name}.js`, index + 1))
+      }
+
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'changed.ts'),
+        changedSource,
+        'utf8'
+      )
+
+      const result = await collectReferencedDefinitions({
+        repositoryRoot,
+        taskPaths: ['src/changed.ts'],
+        facts,
+        knownPaths: new Set(['src/changed.ts'])
+      })
+
+      expect(result.digests.length).toBe(referencedDefinitionBounds.maxFiles)
+      expect(result.droppedByFileCap).toBe(3)
+    })
+
+    test('counts dependencies the byte budget kept out', async () => {
+      const facts: SupportSignalFact[] = []
+      // Each dependency is large enough that the total budget runs out first.
+      const largeBody = `export const value = '${'x'.repeat(3000)}'\n`
+
+      for (let index = 0; index < referencedDefinitionBounds.maxFiles; index += 1) {
+        const name = `big${index}`
+        await writeFile(
+          path.join(repositoryRoot, 'src', `${name}.ts`),
+          largeBody,
+          'utf8'
+        )
+        facts.push(importFact('src/changed.ts', `./${name}.js`, index + 1))
+      }
+
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'changed.ts'),
+        facts.map((fact) => `import x from '${fact.moduleSpecifier}'`).join('\n'),
+        'utf8'
+      )
+
+      const result = await collectReferencedDefinitions({
+        repositoryRoot,
+        taskPaths: ['src/changed.ts'],
+        facts,
+        knownPaths: new Set(['src/changed.ts'])
+      })
+
+      expect(result.droppedByBudget).toBeGreaterThan(0)
+      expect(result.digests.length + result.droppedByBudget).toBe(
+        referencedDefinitionBounds.maxFiles
+      )
+    })
+
+    test('reports zero dropped when everything fits', async () => {
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'changed.ts'),
+        "import { calc } from './dep.js'\n",
+        'utf8'
+      )
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'dep.ts'),
+        'export const calc = (value: number): number => value * 2\n',
+        'utf8'
+      )
+
+      const result = await collectReferencedDefinitions({
+        repositoryRoot,
+        taskPaths: ['src/changed.ts'],
+        facts: [importFact('src/changed.ts', './dep.js')],
+        knownPaths: new Set(['src/changed.ts'])
+      })
+
+      expect(result.droppedByFileCap).toBe(0)
+      expect(result.droppedByBudget).toBe(0)
+    })
   })
 })

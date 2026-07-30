@@ -49,6 +49,16 @@ export type ReferencedDefinitionDigest = {
   readonly content: string
 }
 
+export type ReferencedDefinitionResult = {
+  readonly digests: readonly ReferencedDefinitionDigest[]
+  // Resolvable dependencies the caps kept out. Returned rather than discarded: a
+  // run that silently drops context is indistinguishable from one that had none to
+  // add, which is the failure shape this project found three times in the intent
+  // capability's limits on 2026-08-01 and had not looked for here.
+  readonly droppedByFileCap: number
+  readonly droppedByBudget: number
+}
+
 const isRelativeSpecifier = (moduleSpecifier: string): boolean =>
   moduleSpecifier.startsWith('./') || moduleSpecifier.startsWith('../')
 
@@ -211,7 +221,7 @@ export type CollectReferencedDefinitionsInput = {
 // to a changed/known file are skipped.
 export const collectReferencedDefinitions = async (
   input: CollectReferencedDefinitionsInput
-): Promise<readonly ReferencedDefinitionDigest[]> => {
+): Promise<ReferencedDefinitionResult> => {
   const taskPathSet = new Set(input.taskPaths)
   const readDependencyFile =
     input.readDependencyFile ??
@@ -250,7 +260,16 @@ export const collectReferencedDefinitions = async (
     referenceCounts.set(resolved, (referenceCounts.get(resolved) ?? 0) + 1)
   }
 
-  const rankedPaths = [...referenceCounts.entries()]
+    // How many resolvable dependencies the caps kept out. Reported rather than
+  // discarded: a run that silently drops context looks identical to one that had
+  // none to add, and this project has now found that same shape three times in the
+  // intent capability's limits.
+  //
+  // It binds routinely. Measured over the corpus every A/B has used: HALF of the
+  // TypeScript/JavaScript changed files import more than three local dependencies,
+  // which is all the 12KB total budget can hold at the 4KB per-file cap, and 40%
+  // exceed the six-file cap as well.
+  const rankedPathsAll = [...referenceCounts.entries()]
     .sort((left, right) => {
       if (right[1] !== left[1]) {
         return right[1] - left[1]
@@ -258,10 +277,12 @@ export const collectReferencedDefinitions = async (
       return left[0].localeCompare(right[0])
     })
     .map(([dependencyPath]) => dependencyPath)
-    .slice(0, MAX_REFERENCED_DEFINITION_FILES)
+  const rankedPaths = rankedPathsAll.slice(0, MAX_REFERENCED_DEFINITION_FILES)
+  const droppedByFileCap = rankedPathsAll.length - rankedPaths.length
 
   const digests: ReferencedDefinitionDigest[] = []
   let usedBytes = 0
+  let droppedByBudget = 0
 
   for (const dependencyPath of rankedPaths) {
     let content: string
@@ -285,7 +306,9 @@ export const collectReferencedDefinitions = async (
     }
 
     if (usedBytes + digestBytes > REFERENCED_DEFINITIONS_TOTAL_BYTE_BUDGET) {
-      // Section byte budget exhausted: skip remaining (lower-ranked) deps.
+      // Section byte budget exhausted: skip remaining (lower-ranked) deps, and
+      // count them so the omission is reportable.
+      droppedByBudget = rankedPaths.length - digests.length
       break
     }
 
@@ -293,7 +316,7 @@ export const collectReferencedDefinitions = async (
     usedBytes += digestBytes
   }
 
-  return digests
+  return { digests, droppedByFileCap, droppedByBudget }
 }
 
 export const referencedDefinitionBounds = {

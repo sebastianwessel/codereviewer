@@ -536,7 +536,7 @@ export const assembleContext = async (
               facts: input.analysis.facts,
               knownPaths: allSourcePaths
             })
-          ).map((digest) => ({
+          ).digests.map((digest) => ({
             kind: 'referenced-definition' as const,
             path: digest.path,
             content: digest.content
