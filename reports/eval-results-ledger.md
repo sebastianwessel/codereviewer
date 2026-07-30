@@ -9,6 +9,78 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-30 — 37 real repositories: a JS blind spot, and spec 24 does fire
+
+Deterministic, offline, **zero provider spend**. 37 hydrated slices, 4,974 source
+files, 10 languages. Full analysis:
+`reports/2026-07-30-signal-coverage-and-conformance-yield.md`.
+
+### The JavaScript extractor sees ESM exports and nothing else
+
+`fastify`'s `lib/route.js` — **701 lines of real JavaScript — produces zero
+facts.** Isolated: `export const`/`export function` yield a fact; a `function`
+declaration, `module.exports`, `exports.x`, and a `class` all yield **nothing**.
+Across four real JavaScript repositories (1,046 `.js` files) the extractor
+produced **6 declarations in total**.
+
+This is not confined to an optional capability. Deterministic facts feed three
+consumers, and each degrades *silently* — reporting "nothing to say" rather than
+"cannot see":
+
+- **stage 1**, where `deterministicSignalMode: 'support'` is the mode this project
+  has measured as materially better for recall;
+- **`impact check`**, whose changed symbols come from these facts;
+- **`conformance check`**, hence the zeros.
+
+The documentation asserted the opposite (*"Deep support signals exist for
+TypeScript/JavaScript"*) and has been corrected. A likely route to the error:
+`INV-ESM-001` requires **our own source** to be ESM-only, which is an invariant
+about what we write, not about what we can review.
+
+Correct and not a defect: C#, PHP, Elixir, C and Kotlin yield nothing because they
+are not supported languages.
+
+### Spec 24 is not gated into silence
+
+The question left open this morning. Every declaration marked changed, so this is
+the total divergence *population*, not a firing rate:
+
+| | |
+|---|---:|
+| declarations | 21,498 |
+| peer sets | 21,339 |
+| **divergences** | **849 (3.9%)** |
+| repositories yielding ≥1 | **18 / 37** |
+
+**But yield is strongly language-dependent, and that is a problem for a capability
+whose selling point is language-neutrality:** rust **17.0%**, typescript 14.2%,
+python 3.2%, ruby 2.8%, go **0.7%**. A 24× spread between Rust and Go is either a
+real property of those ecosystems or an artefact of how indentation and lexical
+traits behave per language, and **this measurement cannot separate them**. Settle
+it before recommending the capability anywhere.
+
+Naively scaling 3.9% by ~4 changed declarations per commit suggests ~0.16 per
+commit, inside the ≈0.5 criterion — recorded as an **estimate from a population
+rate, not a measurement**. It assumes changed declarations diverge at the same rate
+as all declarations, which is precisely what a real firing-rate run would test.
+
+### The honest firing-rate test could not be run — missing infrastructure
+
+Running each slice's real upstream PR diff is **impossible with the corpus as
+hydrated**: every slice repository holds exactly one commit, the `baseSha` in
+`slice.json` is absent from the shallow object store (verified on all 37), and a
+synthesised empty commit shares no merge base with `HEAD`. Hydrating with the base
+commit reachable would turn this into a one-command measurement, and is the single
+highest-value change to the corpus tooling.
+
+### What invalidates this entry
+
+The divergence counts come from treating every declaration as changed; they are an
+upper bound on what any real change could surface, not a prediction of one. No
+divergence here was adjudicated, so none is claimed to be worth showing a human.
+
+---
+
 ## 2026-07-30 — Spec 24 firing rate re-measured post-span-fix: 0.000/commit
 
 20 consecutive commits of this repository, `conformance check` with adjudication
