@@ -9,6 +9,74 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-30 — Spec 23 first measurement: NO SHIP VERDICT, sample cannot support one
+
+21 cases over 9 commits of this repository, spend **$0.7663** of a $3.00 ceiling.
+Full analysis: `reports/2026-07-30-intent-fulfilment-measurement.md`. Decision rule
+written down before any result was read.
+
+| arm | extraction faithful | unaddressed detection | false-satisfied | opportunities |
+|---|---:|---:|---:|---:|
+| **real** (commit message as intent, 58 obligations) | 94.8% | **not measurable** | 0.0% (0/47) | **0** |
+| **synthetic** (12 marked cases, 79 obligations) | 98.7% | **95.2%** (20/21) | 0.0% (0/56) | 21 |
+
+**No ship verdict, and that is the correct outcome rather than a disappointing
+one.** The real arm never exercised the deciding metric: all 58 real obligations
+were genuinely addressed, so `addressed` was always the right answer and a tool
+that returned it unconditionally would have scored identically. The synthetic arm
+passes on rate but has **21 opportunities to false-satisfy, not the 30** needed to
+bound the rate below 10% — it bounds it below ~14%.
+
+Nothing argues against the capability. Every signal is favourable. It stays off by
+default because favourable is not the same as demonstrated.
+
+**Why more of this repository's commits cannot fix it:** a commit message
+describes what the commit did, so an obligation drawn from one is almost always
+addressed by construction. Spec 23 predicted exactly this. Measuring
+false-satisfied needs intent written *before* the work — tickets and pull-request
+descriptions — which is also a harder input than a retrospective message.
+
+### Deletions are invisible — verified independently
+
+Re-run directly against the revert `52ff75d`, using its own commit message as
+intent, and the split is total:
+
+| obligation shape | result |
+|---|---|
+| *"Remove the guarded-region trigger…"* ×7 | **unaddressed** |
+| *"Remove the packet section…"*, *"Remove the config block"* | **undetermined** |
+| *"Keep declaration-analysis"*, *"Mark spec 25 Withdrawn"*, *"Make configs fail with exit 2"* ×6 | **addressed** |
+
+**Every removal obligation failed; every retention or addition obligation
+succeeded.** On a revert or cleanup change the tool tells a reviewer most of the
+work was not done.
+
+The cause is structural and spec-mandated: spec 23 requires an addressed
+obligation to cite a path and line, and `verifyJudgement` requires that line to be
+one the change touched. **A deletion has no such line.** Fixing it means amending
+spec 23, which is a human decision, not an implementation choice.
+
+Note the direction is the safe one — false *unaddressed*, never false *satisfied*,
+which is the trade spec 23 explicitly asks for. This is a usefulness problem on a
+common change shape, not a safety problem.
+
+### Two more findings, recorded not patched
+
+- **Non-scope disclaimers become obligations.** A commit message's *"Not changed,
+  and deliberately: …"* section became three obligations, answered inconsistently.
+- **Prose can satisfy an obligation.** In 5 of 103 addressed obligations the only
+  cited evidence was *text asserting the work was done* — a spec paragraph or a
+  code comment. All were truthful here. **A change that documents more than it
+  implements is untested and is the exact shape that produces a false satisfied.**
+
+### What invalidates this entry
+
+One run per case; extraction is visibly non-deterministic (the same commit gave 5
+and 4 obligations on two runs). Every case draws intent from a commit message
+written after the work.
+
+---
+
 ## 2026-07-30 — 37 real repositories: a JS blind spot, and spec 24 does fire
 
 Deterministic, offline, **zero provider spend**. 37 hydrated slices, 4,974 source
