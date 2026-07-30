@@ -112,6 +112,13 @@ export const IntentFulfilmentSummarySchema = z.strictObject({
   // the downgrade is visible. This is the metric spec 23 says decides whether the
   // capability is safe to show anyone.
   unevidencedAddressedCount: z.int().min(0),
+  // Spec 23's Second Amendment: addressed verdicts whose citations were judged
+  // positively inapt and downgraded to undetermined. Separate from
+  // `unevidencedAddressedCount` because the two catch different failures — that one
+  // a citation the change does not contain, this one a citation it DOES contain
+  // that is not evidence for the obligation. Defaulted so a report written before
+  // the amendment still parses.
+  inaptCitationCount: z.int().min(0).default(0),
   extraScopeFileCount: z.int().min(0)
 })
 

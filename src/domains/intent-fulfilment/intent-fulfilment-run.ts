@@ -29,6 +29,12 @@ import {
   type RepositoryIntake
 } from '../repository-intake/index.js'
 import {
+  applyCitationAptness,
+  citationAptnessInputFor,
+  type CitationAptness,
+  type CitationAptnessRunner
+} from './aptness.js'
+import {
   collectChangeSurface,
   type ChangeSurface,
   type ChangeSurfaceSourceFile
@@ -59,6 +65,13 @@ import { resolveIntentCitation, toIntentSources } from './intent-sources.js'
 export type IntentFulfilmentAgents = {
   readonly extractObligations: ObligationExtractionRunner
   readonly judge: FulfilmentJudgementRunner
+  // Spec 23's Second Amendment. REQUIRED, deliberately. It was optional for one
+  // iteration and three separate wiring sites silently omitted it — the lane, the
+  // CLI, and the run's own guard — so the stage never executed while every test
+  // passed and the report claimed a clean `inaptCitationCount: 0`. An optional
+  // stage on an agents contract is a stage that can be dropped without anything
+  // failing; required makes each omission a compile error instead.
+  readonly checkAptness: CitationAptnessRunner
   readonly explain: FulfilmentExplanationRunner
 }
 
@@ -413,6 +426,12 @@ export const runIntentFulfilment = async (
   })
   const obligations: Obligation[] = []
   let unevidencedAddressedCount = 0
+  // Spec 23's Second Amendment: `addressed` verdicts whose citations were judged
+  // positively inapt and downgraded. Counted separately from the structural
+  // downgrade above, because the two catch different failures — that one catches a
+  // citation the change does not contain, this one a citation the change contains
+  // that is not evidence for the obligation.
+  let inaptCitationCount = 0
   let failedJudgementCount = 0
 
   // Sequential, one call per obligation. Each call is its own session, so no
@@ -434,7 +453,7 @@ export const runIntentFulfilment = async (
       judged = { status: 'undetermined' }
     }
 
-    const verified = verifyJudgement(judged, surface)
+    let verified = verifyJudgement(judged, surface)
 
     // The false-satisfied guard firing: the model said `addressed` and not one of
     // its citations was a line the change touched. Spec 23 makes the rate of
@@ -443,6 +462,31 @@ export const runIntentFulfilment = async (
     // absorbed into the undetermined total without trace.
     if (judged.status === 'addressed' && verified.status !== 'addressed') {
       unevidencedAddressedCount += 1
+    }
+
+    // Spec 23's Second Amendment. Only reached for a verdict that already survived
+    // structural verification, and it can only ever weaken it. An aptness failure
+    // is a provider failure like any other: it leaves the verdict standing rather
+    // than suppressing a possibly-correct `addressed`.
+    if (verified.status === 'addressed') {
+      let aptness: CitationAptness = 'undetermined'
+
+      try {
+        aptness = await agents.checkAptness(
+          citationAptnessInputFor(entry.statement, verified.evidence),
+          input.signal
+        )
+      } catch {
+        aptness = 'undetermined'
+      }
+
+      const outcome = applyCitationAptness(verified, aptness)
+
+      verified = outcome.judgement
+
+      if (outcome.downgraded) {
+        inaptCitationCount += 1
+      }
     }
 
     obligations.push({
@@ -513,6 +557,7 @@ export const runIntentFulfilment = async (
       obligationsTruncated: cited.length > selected.length,
       uncitedObligationCount,
       unevidencedAddressedCount,
+      inaptCitationCount,
       extraScopeFileCount: extraScope.length
     },
     obligations,

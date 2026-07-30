@@ -3,6 +3,61 @@
 Status: Approved
 Date: 2026-07-27
 Amended: 2026-07-30 — a citation may name a removed line (see *Amendment* below)
+Amended: 2026-07-31 — a citation must be APT, not merely real (see *Second Amendment*)
+
+## Second Amendment (2026-07-31): a real address is not automatically evidence
+
+The 2026-07-30 amendment closed the deletion blind spot and, as predicted, opened a
+new route to the one error this spec calls the costly one. Measured over 34 cases:
+
+- **4 false-satisfied verdicts**, against 0 before;
+- **52 deletion-heavy behavioural opportunities, 3 taken (5.8%)**;
+- **33.3% of behavioural citations in deletion-heavy changes were inapt**.
+
+The decisive case, a planted behavioural obligation:
+
+> *"Make runs that request the withdrawn guarded-region context kind by name fail
+> intake with exit code 2."*
+
+Reported **addressed**, citing two **removed** lines — an enum member and a
+comparison against it — from a commit that removes the kind and adds no intake
+check and no exit path.
+
+**Every structural guard passed.** `unevidencedAddressedCount` and
+`uncitedObligationCount` were zero in all 34 runs. Both citations were real lines
+the change really touched. The existing check asks *"is this a line the change
+touched?"* and cannot ask *"is this line evidence for THIS claim?"* — and the
+failure lives entirely in the gap between those two questions.
+
+The measurement also shows the fix is reachable rather than speculative: on the one
+obligation judged four times, three runs cited deleted schema keys and one cited
+the added sentence *"now fails validation with exit code 2"*. **The apt citation
+was in scope every time.** The model can find it; nothing asked it to prefer it.
+
+### What this amendment requires
+
+- An `addressed` verdict MUST additionally survive an **aptness check**: given the
+  obligation and the already-verified citations, does the cited material *evidence
+  that obligation*, or is it merely a line the change happened to touch?
+- The aptness check MUST be a **separate model call over an already-frozen
+  judgement**, exactly as explanation is. It MUST NOT be folded into the judgement
+  call, because the measured over-rejection (26–36% rising to 73–88%) comes from a
+  model justifying a verdict in the same breath as reaching it.
+- Its output schema MUST carry **no free-text field** — enum and identifiers only,
+  for the same reason the judgement schema does.
+- An obligation whose citations are judged inapt MUST be **downgraded to
+  `undetermined`**, never to `unaddressed`: inaptness of the evidence is not
+  evidence that nothing addresses the obligation. It MUST be counted, so the rate
+  is visible rather than absorbed.
+- The check MUST be able to answer *undetermined* itself, and an undetermined
+  aptness answer MUST leave the `addressed` verdict standing. The check exists to
+  catch a specific, demonstrated failure, not to become a second gate that
+  suppresses correct verdicts — which is how a capability with 90% unaddressed
+  detection would be turned into one that reports nothing.
+
+The safety direction is unchanged and is the whole point: this can only make an
+`addressed` verdict weaker, never stronger, and can never turn `unaddressed` into
+`addressed`.
 
 ## Amendment (2026-07-30): a removed line is evidence
 

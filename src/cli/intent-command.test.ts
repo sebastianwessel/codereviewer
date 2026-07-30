@@ -270,9 +270,17 @@ describe('intent CLI', { timeout: 20_000 }, () => {
         'The mapping above is what the change covers.'
       )
       // Only reachable if the command actually handed the scripted factory to the
-      // lane instead of importing the real SDK provider. Three calls: extraction,
-      // one judgement, explanation.
-      expect(provider.requests).toHaveLength(3)
+      // lane instead of importing the real SDK provider. FOUR calls: extraction,
+      // one judgement, one citation-aptness check on the resulting `addressed`
+      // verdict (spec 23's Second Amendment), explanation.
+      //
+      // This count is load-bearing. The aptness stage was added as an OPTIONAL
+      // field on the agents contract and three separate wiring sites silently
+      // omitted it — the lane, this command, and the run's own guard — so the stage
+      // never executed while every test passed and every report claimed a clean
+      // `inaptCitationCount: 0`. The field is required now, and this assertion is
+      // the end-to-end proof that the call is really made.
+      expect(provider.requests).toHaveLength(4)
       expect(report.usage?.inputTokens).toBeGreaterThan(0)
       // No tool is offered: this capability judges a change it was handed, it does
       // not search a repository.
