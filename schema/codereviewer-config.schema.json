@@ -762,9 +762,9 @@
     "intentFulfilment": {
       "default": {
         "enabled": false,
-        "maxObligations": 20,
+        "maxObligations": 100,
         "maxIntentBytes": 20000,
-        "maxChangeLines": 400
+        "maxChangeLines": 5000
       },
       "type": "object",
       "properties": {
@@ -773,7 +773,7 @@
           "type": "boolean"
         },
         "maxObligations": {
-          "default": 20,
+          "default": 100,
           "type": "integer",
           "minimum": 1,
           "maximum": 100
@@ -785,7 +785,7 @@
           "maximum": 200000
         },
         "maxChangeLines": {
-          "default": 400,
+          "default": 5000,
           "type": "integer",
           "minimum": 1,
           "maximum": 5000

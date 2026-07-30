@@ -398,6 +398,10 @@ export const runIntentFulfilment = async (
   })
   const uncitedObligationCount = extracted.length - cited.length
   const selected = cited.slice(0, maxObligations)
+  // See the schema: true when the cap MAY have bound the list, not only when the
+  // model overran it — a compliant model never overruns a cap it was given.
+  const obligationsTruncated =
+    cited.length > selected.length || selected.length >= maxObligations
 
   if (uncitedObligationCount > 0) {
     warnings.push(
@@ -509,9 +513,25 @@ export const runIntentFulfilment = async (
     )
   }
 
+  // Every limit that bound this run says so. All three degrade the answer silently
+  // — a bounded change surface makes a judgement report `unaddressed` for evidence
+  // it was not shown, and a bounded checklist makes the outstanding list look
+  // shorter than it is — so a run that hit one must never read like a clean result.
   if (surface.truncated) {
     warnings.push(
-      `The change was larger than intentFulfilment.maxChangeLines (${input.config.intentFulfilment.maxChangeLines}); the obligations were judged against a bounded part of it.`
+      `The change was larger than intentFulfilment.maxChangeLines (${input.config.intentFulfilment.maxChangeLines}); the obligations were judged against a bounded part of it, so an obligation may be reported unaddressed only because its evidence was not shown.`
+    )
+  }
+
+  if (obligationsTruncated) {
+    warnings.push(
+      `The extraction returned as many obligations as intentFulfilment.maxObligations allows (${maxObligations}); the stated intent may hold more, so this checklist may be incomplete.`
+    )
+  }
+
+  if (intentTruncated) {
+    warnings.push(
+      `The stated intent was larger than intentFulfilment.maxIntentBytes (${input.config.intentFulfilment.maxIntentBytes}); obligations were extracted from a bounded part of it.`
     )
   }
 
@@ -571,8 +591,7 @@ export const runIntentFulfilment = async (
       // Returning exactly the cap does not PROVE more existed — the intent may hold
       // exactly that many. The flag is deliberately the weaker claim it can support:
       // more cannot be ruled out.
-      obligationsTruncated:
-        cited.length > selected.length || selected.length >= maxObligations,
+      obligationsTruncated,
       uncitedObligationCount,
       unevidencedAddressedCount,
       evidenceConcernCount,

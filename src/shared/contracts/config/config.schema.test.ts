@@ -234,13 +234,19 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
-  test('intent fulfilment is disabled by default with bounded spend limits', () => {
+  // The defaults are RUNAWAY GUARDS, not rations. Two of the three were rations
+  // until 2026-08-01 and both were measured to bind on real input: 24 of 28 runs
+  // returned exactly maxObligations, and 43% of this repository's last 60 commits
+  // exceed the old maxChangeLines of 400. Every one of these limits degrades the
+  // answer SILENTLY when it binds, so a value real input reaches makes the
+  // capability report "nothing left" because it could not see.
+  test('intent fulfilment is disabled by default with runaway-guard limits', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.intentFulfilment).toEqual({
       enabled: false,
-      maxObligations: 20,
+      maxObligations: 100,
       maxIntentBytes: 20_000,
-      maxChangeLines: 400
+      maxChangeLines: 5000
     })
 
     const enabled = CodeReviewerConfigSchema.parse({

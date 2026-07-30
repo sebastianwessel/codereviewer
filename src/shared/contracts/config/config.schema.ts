@@ -368,17 +368,47 @@ export const ChangeImpactConfigSchema = z.strictObject({
 // mistake `SecurityConfigSchema` above records having already made once.
 export const IntentFulfilmentConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
+  // EVERY LIMIT BELOW IS A RUNAWAY GUARD, NOT A RATION. The distinction is not
+  // stylistic: all three degrade the answer SILENTLY when they bind, so a limit set
+  // where real inputs reach it turns this capability into one that reports "nothing
+  // left to do" because it could not see, not because there was nothing.
+  //
+  // Two of the three were set as rations, and both were measured on 2026-08-01:
+  //
+  //   maxObligations was 20. On a 28-case corpus of real specification sections,
+  //   24 runs returned EXACTLY their cap. The checklist was being cut off routinely.
+  //
+  //   maxChangeLines was 400. Over this repository's last 60 commits, 43% change
+  //   more than 400 lines — median 350, p90 2809. On nearly half of real changes the
+  //   judgement saw a partial diff, and a judgement that cannot see the evidence
+  //   reports the obligation UNADDRESSED. Silently wrong, in the direction that
+  //   matters, on the capability's only question.
+  //
+  // The precedent for the shape is `maxToolCallsPerTask` above: "It exists to bound
+  // a model that never stops requesting reads, NOT to ration — a tight cap only
+  // starves the tasks that genuinely need several lookups."
+  //
   // Upper bound on obligations extracted from the stated intent, and therefore on
-  // judgement calls: one call judges one obligation, so this is the spend bound.
-  maxObligations: z.int().min(1).max(100).default(20),
+  // judgement calls: one call judges one obligation, so this is also the spend
+  // bound. Measured at ~$0.008 per obligation over 37 runs, so a ticket that
+  // genuinely states 100 requirements costs ~$0.80 — against ~$1.40 for one
+  // `review` run. The cost is set by the intent, not by this number: raising it
+  // cannot make a small ticket expensive.
+  maxObligations: z.int().min(1).max(100).default(100),
   // Cap on the redacted change-intent text handed to the extraction call. The
   // ingestion providers already bound themselves per file; this bounds the sum,
   // because a pipeline can configure several of them.
+  //
+  // Left at 20 000 deliberately: unlike the two above there is no measurement
+  // showing it binds — `intentTruncated` was false in all 34 runs of the
+  // commit-message corpus — and raising a limit on a guess is how the other two got
+  // their values. It warns when it binds, so evidence will arrive if it ever does.
   maxIntentBytes: z.int().min(256).max(200_000).default(20_000),
   // Cap on the changed lines shown to each judgement call. The judgement may only
   // cite a line the change actually touched, so this is what bounds the evidence
-  // surface a judgement is allowed to draw from.
-  maxChangeLines: z.int().min(1).max(5_000).default(400)
+  // surface a judgement is allowed to draw from — and therefore the limit whose
+  // binding does the most damage.
+  maxChangeLines: z.int().min(1).max(5_000).default(5_000)
 })
 
 // Conformance adjudication (spec 24, design step 4). Off by default, and off
@@ -669,9 +699,9 @@ export const CodeReviewerConfigSchema = z.strictObject({
   }),
   intentFulfilment: IntentFulfilmentConfigSchema.default({
     enabled: false,
-    maxObligations: 20,
+    maxObligations: 100,
     maxIntentBytes: 20_000,
-    maxChangeLines: 400
+    maxChangeLines: 5_000
   }),
   invariantConformance: InvariantConformanceConfigSchema.default({
     enabled: false,
