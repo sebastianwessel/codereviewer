@@ -54,6 +54,20 @@ export type ContextAssemblyResult = {
   readonly skillDefinitions: SkillsConfig
   readonly skillIds: readonly string[]
   readonly contextLedger: readonly ContextLedgerEntry[]
+  // Changed files whose content did not fit one task's context budget and were
+  // reviewed as several chunks instead of whole.
+  //
+  // Reported because it is a SILENT QUALITY CHANGE, not a silent wrong answer:
+  // every line is still reviewed, but not in one piece, and this project measured
+  // whole-file holistic review as out-recalling the chunked alternative. Nothing
+  // anywhere said when that substitution happened.
+  //
+  // It is not rare. Measured over this repository's last 60 commits, the total
+  // changed-file bytes exceed the DEFAULT balanced budget (120KB) on 37% of them,
+  // and the fast budget on 52%. The budgets are sized well below what current
+  // models accept — 240KB is roughly 60k tokens against context windows of 200k to
+  // over 1M — so the substitution is driven by a limit, not by a model constraint.
+  readonly chunkedFileCount: number
 }
 
 export type ReviewRunnerContextStateMetrics = {
@@ -384,6 +398,7 @@ export const assembleContext = async (
         ).slice(0, 16)}`
 
   const tasks: WorkflowReviewTask[] = []
+  const chunkedFilePaths = new Set<string>()
   const chunkBudget = sourceChunkBudgetFor(input.config)
   const testMappings = discoverDeterministicSignalTestMappings(input.sourceFiles)
   // Every changed/source file path: referenced-definition resolution must never
@@ -466,15 +481,21 @@ export const assembleContext = async (
     // Each chunk carries its absolute line span so the task built from it can be
     // reviewed and admitted against the file's real line numbers rather than
     // numbers counted from the start of the chunk.
-    const sourceContexts = taskSourceFiles.flatMap((file) =>
-      splitSourceIntoLineChunks(file.content, chunkBudget).map((chunk) => ({
+    const sourceContexts = taskSourceFiles.flatMap((file) => {
+      const chunks = splitSourceIntoLineChunks(file.content, chunkBudget)
+
+      if (chunks.length > 1) {
+        chunkedFilePaths.add(file.path)
+      }
+
+      return chunks.map((chunk) => ({
         kind: 'file' as const,
         path: file.path,
         content: chunk.content,
         startLine: chunk.startLine,
         endLine: chunk.endLine
       }))
-    )
+    })
     const batches: ContextInput[][] = []
     const supportSignalAttachedPaths = new Set<string>()
 
@@ -575,7 +596,8 @@ export const assembleContext = async (
     skills: staticContext.skills,
     skillDefinitions: staticContext.skillDefinitions,
     skillIds: staticContext.skillIds,
-    contextLedger
+    contextLedger,
+    chunkedFileCount: chunkedFilePaths.size
   }
 }
 

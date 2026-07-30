@@ -9,6 +9,153 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-08-01 — Spec 23's "extraction is the bottleneck" diagnosis was 60% a BINDING CAP. Re-measured uncapped: end-to-end recall 53.6% → 81.2%
+
+Detail: `reports/2026-08-01-intent-uncapped-remeasurement.md`. Capped runs preserved
+run-for-run under `.codereviewer/eval/intent-corpus-realistic/runs-2026-08-01-capped/`,
+which still reproduces its published figures exactly.
+
+The entry below reported **52.9% end-to-end outstanding recall** and concluded the
+extractor was too narrow to trust as a checklist. **24 of its 28 runs returned
+exactly their configured `maxObligations` cap** (8–12, against a product default of
+20), and `obligationsTruncated` reported `false` in all 28 and hid it. `76cfe3b`
+fixed the flag; this round re-runs all 28 cases at a cap of 40, changing nothing
+else. One case returned exactly 40 and was re-run at 60, where it returned 39. No
+scored run is truncated.
+
+### Single variable, and the movement is far outside the noise band
+
+| pre-written arm, 21 cases | capped (8–12) | **uncapped (40)** |
+|---|---:|---:|
+| reported obligations | 192 | **469** |
+| extraction fidelity | 100.0% (192/192) | **100.0% (469/469)** |
+| outstanding recall, of what it proposed | 83.3% (40/48) | **84.6% (88/104)** |
+| **outstanding recall, end-to-end** | **53.6% (37/69)** | **81.2% (56/69)** |
+| **outstanding precision** | **69.0% (40/58)** | **51.5% (88/171)** |
+| false-satisfied | 7.1% (8/112) | 6.0% (16/265) |
+
+Permissive reading of the decision clauses moves every figure and changes no
+conclusion: end-to-end 60.2% → **81.6%**, precision 76.6% → **57.4%**, false-satisfied
+8.8% → 8.5%.
+
+Denominator note: one item of the fixed human enumeration was **removed** as
+factually wrong (`pw05`'s genericity-guard item — the guard *is* applied to the new
+section text, from a new test file). Both rounds are restated on 69, which is why
+the capped figure reads 53.6% here and 52.9% in the entry below.
+
+### The answer, decomposed — extraction is NO LONGER the bottleneck
+
+| how a leftover was missed | capped | **uncapped** |
+|---|---:|---:|
+| extractor **never proposed** an obligation for it | **24** | **4** |
+| proposed and **wrongly judged addressed** | 8 | **9** |
+
+**The cap accounts for 27.6 of the 46.4-point shortfall (≈60%), and for 20 of the 24
+extraction misses.** Judgement misses are unchanged — exactly what a cap change
+should do to a stage the cap does not touch, and corroborating evidence that this is
+the cap rather than run-to-run drift. After the fix extraction is **4/69 (5.8%)** of
+misses and judgement is **9/69 (13.0%)**. The binding constraint is now **precision,
+51.5%**: roughly half the outstanding list is something an *earlier* change already
+did, which the reviewed diff cannot evidence. `pw11` alone contributes 18 such
+entries (33 obligations, 18 flagged, 0 genuinely outstanding).
+
+The false-satisfied shape is unchanged and unaffected by the cap: *an obligation
+about a thing that does not exist is credited to the nearest thing that does*, six of
+sixteen instances.
+
+### Post-hoc control reproduces exactly
+
+7 cases, 60 → 89 obligations on the same diffs, **0 genuinely outstanding** in both
+rounds, precision 0/6 → 0/7. A 1.5× larger sample does not make a commit message
+contain leftovers.
+
+### Recommendation, and it is a config change not a code change
+
+**Raise the `maxObligations` default from 20 to 40.** Eleven of 28 cases returned
+≥ 20, so 20 reproduces this defect on 39% of this corpus; the case re-run at 60
+returned 39, so 40 is near the natural ceiling for intent this dense; seventeen cases
+returned fewer than 20 and are unaffected. Cost per obligation is flat across the two
+rounds ($0.0123 → $0.0108 — one judgement call plus one aptness call each), so the
+change costs ~2× only on the runs where the cap was binding and nothing on the rest.
+`obligationsTruncated` now reports honestly, which is what makes a generous default
+safe.
+
+Spend: **$6.3431** of a $9.00 ceiling — $6.0231 for the 28 scored runs plus $0.3200
+for the superseded cap-40 run of `pw12`. 1.95× the capped round's cost for 2.21× the
+obligations.
+
+### Also found, recorded not patched
+
+The context redactor mangles a backticked configuration constant: spec 11's
+`` `task-context-change-intent` `` reached the extractor as `` `ta[REDACTED]` ``. A
+secret-pattern rule is firing on a hyphenated identifier in backticks. Harmless here;
+`src/` was not modified.
+
+### What invalidates this entry
+
+- One run per case, no variance band. The +27.6-point end-to-end move is far outside
+  the demonstrated ±10% extraction noise; the sub-figures are not.
+- The 4 remaining extraction misses are at the instrument's resolution limit, and one
+  of them was proposed in the capped run and missed here.
+- Precision 51.5% depends on the truth rule *"addressed means the demanded state
+  holds at head, whoever made it hold"*. A reader who thinks only work in the
+  reviewed diff should count would score it far higher.
+- The 69-item denominator is the capped round's, deliberately, so the comparison is
+  clean — but this round surfaced **39 obligations judged genuinely outstanding that
+  no item of that list names**. Neither round's end-to-end figure is an absolute
+  coverage rate; the difference between them is what is established.
+- Spec sections are unusually well-formed intent. 22 obligations per case is not a
+  forecast for a Jira ticket.
+
+---
+
+## 2026-08-01 — Stage 1's context budgets are sized for a previous generation of models
+
+Raised as a question about whether the caps are anachronistic. They are, and the
+consequence is bigger than the earlier per-file check suggested — that check
+measured single files, but a task packs SEVERAL changed files up to the budget, so
+the figure that matters is total changed bytes per change.
+
+Measured over this repository's last 60 commits:
+
+| | total changed-file bytes |
+|---|---:|
+| median | 72,089 |
+| p75 | 176,808 |
+| p90 | 329,660 |
+| max | 680,900 |
+
+| budget | exceeded by |
+|---|---:|
+| fast, 60 KB | **52% of commits** |
+| **balanced, 120 KB (the default)** | **37%** |
+| thorough, 240 KB | 12% |
+| packet ceiling, 360 KB | 7% |
+
+**On 37% of real changes the default budget splits the change across several
+tasks** — and this project measured whole-file holistic review as OUT-RECALLING the
+chunked alternative. So on more than a third of changes the reviewer performs a
+measurably worse variant of itself, decided by a limit rather than by a model
+constraint: 240 KB is roughly 60k tokens, against context windows of 200k to over
+1M.
+
+**This is a different severity from the truncation defects.** Chunking reviews every
+line, just not in one piece, so it degrades a result rather than producing a wrong
+one. It is a silent QUALITY change, not a silent wrong answer — which is why the fix
+here is visibility plus a measurement, not a refusal.
+
+`chunkedFileCount` is now reported. Nothing previously said when the substitution
+happened.
+
+**Deliberately NOT raised.** Stage 1 is the one capability that demonstrably works
+(46.0% recall, 95.2% adjusted precision), raising its budget changes the recorded
+baseline, and long-context attention degradation is real enough that bigger is not
+automatically better. That makes it an A/B, and the corpus and harness for it
+already exist. Raising it on reasoning alone would repeat the mistake that produced
+these values.
+
+---
+
 ## 2026-08-01 — CAVEAT on cross-file retrieval's withdrawal: reads were silently truncated
 
 Prompted by the question of whether any withdrawn approach was rejected because a
