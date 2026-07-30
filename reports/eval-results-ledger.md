@@ -9,6 +9,51 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-30 — Conformance adjudication: both live controls pass. NOT a measurement.
+
+First live run of spec 24's adjudication layer, real provider, real model.
+**Total spend $0.007.**
+
+| arm | divergences | requested | convention | incidental | reported |
+|---|---:|---:|---:|---:|---:|
+| **Negative** — this repository | 2 | 2 | **0** | **2** | **0** |
+| **Positive** — synthetic handler package | 1 | 1 | **1** | 0 | **1** |
+
+The negative arm's two divergences are the genuine ones the deterministic core
+produces here — *"4 of 7 sibling declarations call `string`"* and *"…call `min`"*.
+Both were rejected as incidental and the report is empty, which is the correct
+output for this repository.
+
+The positive arm survived with a reason that draws exactly the distinction the
+prompt asks for:
+
+> All cited siblings are HTTP handlers in the same file that follow the same
+> request-processing pattern (auth check gate, then response). That shared
+> role-level structure indicates a file-local handler convention rather than a
+> coincidental similarity.
+
+"Because of what they are" rather than "most of them do it" — the sentence the
+prompt was built around.
+
+### Why this is not a measurement, and must not be quoted as one
+
+- **n = 3 divergences.** Two negative, one positive, one run each. This is a
+  smoke test with real models, not an effect size.
+- **The positive control is synthetic** — written for this purpose. No case yet
+  exists where a *real* change removed a *real* convention in a *real* repository.
+- **Non-determinism is untested.** Single run per arm. Comparable systems show
+  ~50% of LLM-only findings appearing in only 1 of 5 identical scans, so a single
+  pass says nothing about stability.
+- Firing rate on benign refactors was measured for the deterministic arm only
+  (0.075 per commit); the adjudicated firing rate is unmeasured.
+
+**What is established:** the wiring is correct, the packet carries enough evidence
+for a real model to draw the distinction, and both directions work end to end.
+**What is not:** whether it holds on real fixtures, across seeds, or on codebases
+other than a synthetic control and one schema-heavy TypeScript repository.
+
+---
+
 ## 2026-07-27 — Convergence measured at scale: the loop does NOT raise the catch rate
 
 10 same-file multi-defect cases on the 37-case corpus. Three arms, 12 runs each,
