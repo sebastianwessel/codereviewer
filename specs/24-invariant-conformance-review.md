@@ -292,6 +292,50 @@ beat listing the divergences and letting the human read them.
 Metrics reported separately and never blended: firing rate on benign changes;
 recall on seeded fixtures; change-attributed versus pre-existing findings.
 
+## Fixture Minability — Measured, And Worse Than Predicted
+
+Attempted 2026-07-30 by scripted search over 191 non-merge commits of a real Go
+repository. **No usable fixture was produced, and the reason matters more than the
+count.**
+
+The signature searched for was the one this spec's own detector looks for: a commit
+that adds a call to exactly one declaration where at least three sibling
+declarations already hold it at the parent commit. It was predicted to be **cheap
+to mine because it is structural** — derivable from the diff plus the parent tree,
+with no dependence on commit-message convention, unlike the change-impact corpus
+which cost 66,685 commits screened for five cases.
+
+**That prediction was wrong.** 191 commits produced 97 raw matches. Excluding test
+files and peer sets large enough to be utilities rather than conventions left 12
+distinct candidates, and none of them is a conformance case. What the signature
+actually finds is *a symbol was added once and other functions also call it*, which
+describes the majority of commits in any codebase: assertion helpers in tests,
+reflection utilities, a getter shared by 57 functions, and calls appearing inside
+documentation commits.
+
+### Why this is evidence about the capability, not only about mining
+
+**The mining script failed in exactly the way the detector fails.** Its problem was
+telling a protective convention from a common utility. That is the same problem,
+in the same shape, as telling `requireAuth` from `min` — the trait-salience question
+adjudication exists to answer.
+
+A structural signature cannot isolate these fixtures for the same reason a
+structural peer set cannot isolate a real divergence: **frequency does not
+distinguish a practice from an idiom.** The difficulty is not a tuning shortfall in
+either place; it is intrinsic to the question.
+
+### Consequence for the measurement plan
+
+Fixture mining for this capability **requires judgement per candidate** — a reader
+deciding whether a peer set is a convention — and therefore cannot be scripted. It
+is closer in cost to the change-impact curation than to a mechanical sweep, which
+is the opposite of what was assumed when this measurement was planned.
+
+Until such fixtures exist, the capability's status is unchanged and must be
+described as it is: **wiring verified, both live control arms passing, and recall
+on real code unmeasured**, with the sole positive case synthetic.
+
 ## Verification Matrix
 
 | Requirement | Test |
