@@ -30,6 +30,7 @@ import {
   type GitCommandRunner,
   type RepositoryIntake
 } from '../repository-intake/index.js'
+import { supportedSignalLanguageForPath } from '../deterministic-signals/index.js'
 import {
   adjudicateDivergences,
   deterministicAdjudicationSummary
@@ -80,6 +81,19 @@ const DISABLED_WARNING =
 
 const UNSUPPORTED_LANGUAGE_WARNING =
   'Some changed files are in a language the deterministic signal extractors do not cover; no declarations were seeded from them.'
+
+// The same outcome — changed files, no seeded declarations — with the language
+// explanation ruled out.
+//
+// This exists because the unsupported-language message used to be emitted for
+// BOTH cases, on the strength of the outcome alone and without ever checking
+// coverage. A real run over four TypeScript files (a fully covered language)
+// reported that its files were in an uncovered language, which sends the reader
+// to investigate the one thing that is definitely not the cause. A diagnostic
+// that names a cause it has not established is worse than one that names none,
+// so this message states what was observed and stops there.
+const NO_SEEDED_DECLARATIONS_WARNING =
+  'Changed files were in covered languages but seeded no declarations to compare; nothing in them was extracted as a declaration.'
 
 const NO_PEERS_WARNING =
   'No changed declaration had a sibling declaration in its own file or directory, so no peer set could be built.'
@@ -291,12 +305,23 @@ export const runInvariantConformance = async (
   const usage =
     adjudicated === undefined ? undefined : input.adjudicationUsage?.()
   const warnings: string[] = []
-  const changedFileCount = collected.files.filter(
+  const changedFiles = collected.files.filter(
     (file) => file.hunks !== undefined
-  ).length
+  )
+  const changedFileCount = changedFiles.length
 
   if (changedFileCount > 0 && derived.changedDeclarationCount === 0) {
-    warnings.push(UNSUPPORTED_LANGUAGE_WARNING)
+    // Which of the two explanations applies is decided by asking the language
+    // router, not inferred from the outcome. See the constants above.
+    const hasUncoveredChangedFile = changedFiles.some(
+      (file) => supportedSignalLanguageForPath(file.path) === undefined
+    )
+
+    warnings.push(
+      hasUncoveredChangedFile
+        ? UNSUPPORTED_LANGUAGE_WARNING
+        : NO_SEEDED_DECLARATIONS_WARNING
+    )
   }
 
   if (derived.changedDeclarationCount > 0 && derived.peerSets.length === 0) {

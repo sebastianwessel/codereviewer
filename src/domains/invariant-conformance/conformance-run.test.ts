@@ -275,6 +275,38 @@ describe('invariant conformance run', () => {
     ])
   })
 
+  test('does not blame the language when the changed file is in a covered one', async () => {
+    // Regression. The unsupported-language warning above used to be emitted for
+    // ANY changed-files-but-no-declarations outcome, without checking coverage.
+    // A real run over four TypeScript files reported that its files were in an
+    // uncovered language, pointing the reader at the one explanation that was
+    // definitely wrong. The two cases must stay distinguishable, so this asserts
+    // the covered-language branch names no cause it has not established.
+    const root = await createRepository({
+      // Covered language, and nothing in it that the extractors seed as a
+      // declaration.
+      'src/constants.ts': 'const internalValue = 1\n\nexport default internalValue\n'
+    })
+    const report = await runInvariantConformance({
+      repositoryRoot: root,
+      config: enabledConfig,
+      baseRef: 'main',
+      headRef: 'HEAD',
+      generatedAt,
+      ...createSeams(root),
+      runGit: gitFor('src/constants.ts', 3)
+    })
+
+    expect(report.status).toBe('completed')
+    expect(report.summary.changedDeclarationCount).toBe(0)
+    expect(report.warnings).not.toContain(
+      'Some changed files are in a language the deterministic signal extractors do not cover; no declarations were seeded from them.'
+    )
+    expect(report.warnings).toContain(
+      'Changed files were in covered languages but seeded no declarations to compare; nothing in them was extracted as a declaration.'
+    )
+  })
+
   test('warns when a changed declaration has no sibling to compare against', async () => {
     const changed = handler('solo', ['  return load(request)'])
     const root = await createRepository({ 'src/solo.ts': changed })
