@@ -69,16 +69,21 @@ sixteen instances.
 rounds, precision 0/6 → 0/7. A 1.5× larger sample does not make a commit message
 contain leftovers.
 
-### Recommendation, and it is a config change not a code change
+### Recommendation: the default that landed mid-run (20 → 100) is SUPPORTED
 
-**Raise the `maxObligations` default from 20 to 40.** Eleven of 28 cases returned
-≥ 20, so 20 reproduces this defect on 39% of this corpus; the case re-run at 60
-returned 39, so 40 is near the natural ceiling for intent this dense; seventeen cases
-returned fewer than 20 and are unaffected. Cost per obligation is flat across the two
-rounds ($0.0123 → $0.0108 — one judgement call plus one aptness call each), so the
-change costs ~2× only on the runs where the cap was binding and nothing on the rest.
-`obligationsTruncated` now reports honestly, which is what makes a generous default
-safe.
+`8993ab7` raised `maxObligations` 20 → 100 while this measurement was running, and
+`70cde9b` then made the limit refuse (exit 4) instead of truncating. **This round
+supports both and proposes no further change.** Eleven of 28 cases returned ≥ 20, so
+20 reproduces this defect on 39% of this corpus; the case re-run at a cap of 60
+returned 39, so the extractor stops well below 40 unaided; seventeen cases returned
+fewer than 20 and cost the same at any cap. Cost per obligation is flat across the two
+rounds ($0.0123 → $0.0108 — one judgement call plus one aptness call each), so **the
+cap does not set the bill, the intent does**, and a generous default cannot make a
+thin ticket expensive. Refusal rather than truncation argues for a *higher* cap, not a
+lower one: a low cap is no longer a silent money-saver, it is a run that does not
+answer, and the refusal happens before any judgement call so nothing is spent on work
+that would be discarded. Unmeasured: anything between 40 and 100 — nothing here
+produced more than 39 obligations.
 
 Spend: **$6.3431** of a $9.00 ceiling — $6.0231 for the 28 scored runs plus $0.3200
 for the superseded cap-40 run of `pw12`. 1.95× the capped round's cost for 2.21× the
@@ -93,6 +98,17 @@ secret-pattern rule is firing on a hyphenated identifier in backticks. Harmless 
 
 ### What invalidates this entry
 
+- **The engine was not pinned.** `run-case.sh` executes `src/cli/main.ts` from the
+  working tree, and five commits landed on the branch during the sweep, so the runs
+  span `76cfe3b`..`a374d09`. Assessed and inert on three checks: every case config
+  sets all three limits explicitly so the default changes cannot reach them; the
+  refusal `70cde9b` introduced fires only at the cap and **no scored run reached its
+  cap** (max 39 at cap 60, 35 at cap 40), asserted from obligation counts rather than
+  from `obligationsTruncated`, which `70cde9b` pins to false; and
+  `intent-fulfilment` imports neither `context-retrieval` nor `review-workflow`. The
+  extraction packet, judgement call, aptness call and all three prompts are identical
+  across the run window. The clean form of this experiment pins the engine and this
+  one did not — fix `run-case.sh` before re-running.
 - One run per case, no variance band. The +27.6-point end-to-end move is far outside
   the demonstrated ±10% extraction noise; the sub-figures are not.
 - The 4 remaining extraction misses are at the instrument's resolution limit, and one

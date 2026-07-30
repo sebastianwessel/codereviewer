@@ -1,8 +1,10 @@
 # Intent-fulfilment review (spec 23) re-measured with an obligation cap that cannot bind
 
 Date: 2026-08-01
-Capability: `intent check` at `76cfe3b` — off by default, cannot gate, reports
-`outstandingCount` and never certifies completion.
+Capability: `intent check` — off by default, cannot gate, reports `outstandingCount`
+and never certifies completion. Runs span `76cfe3b`..`a374d09`; five commits landed
+on the branch mid-sweep and the section *"The repository changed under the runs"*
+below establishes that none of them reached the code these runs exercised.
 Corpus: `.codereviewer/eval/intent-corpus-realistic/` — identical to the
 2026-08-01 round in every respect except one field.
 Baseline: `reports/2026-08-01-intent-realistic-corpus-measurement.md`, preserved
@@ -24,10 +26,12 @@ weakness**. This round separates the two.
 
 `maxObligations` 8–12 → **40**, for all 28 cases, via `case-manifest.mjs` and
 `build.mjs`. Nothing else moved: same intent slices, same base/head pairs, same
-`src/` at `76cfe3b`, same truth rule, same metric definitions, same `score.mjs`
-logic for the primary reading. One case (`pw12`) returned exactly 40 and was
-re-run at 60, where it returned 39 with `obligationsTruncated: false`. **No scored
-run is truncated by either cap.**
+truth rule, same metric definitions, same `score.mjs` logic for the primary reading.
+One case (`pw12`) returned exactly 40 and was re-run at 60, where it returned 39.
+
+**No scored run reached its cap.** The maximum is 39 against a cap of 60 and 35
+against a cap of 40. That is asserted from the obligation counts rather than from
+`obligationsTruncated`, for a reason the confound section below explains.
 
 ---
 
@@ -208,36 +212,87 @@ something already done elsewhere, not three in ten.
 
 ---
 
+## The repository changed under the runs. Assessed, and inert — but stated first
+
+`run-case.sh` executes `src/cli/main.ts` from the **working tree**, not from the
+pinned worktree, so the runs are only single-variable if `src/` holds still. It did
+not. Five commits landed on the branch between the first case (17:31) and the last
+(18:16):
+
+| commit | time | touches the intent path? |
+| --- | --- | --- |
+| `8993ab7` spend limits were rations | 17:40:53 | **defaults only** (`maxChangeLines` 400→5000, `maxObligations` 20→100) plus warnings |
+| `eaf05b5` raise `maxIntentBytes` | 17:44:11 | **default only** |
+| `2ff7289` count dropped dependency context | 17:52:39 | no — `review-workflow` |
+| `70cde9b` limits refuse instead of truncating | 17:58:54 | **yes — the limit logic** |
+| `a374d09` disclose truncated cross-file reads | 18:04:21 | no — `context-retrieval` |
+
+Nine cases completed after `70cde9b`. **The confound is real and it is verifiably
+inert here**, on three independent checks:
+
+1. **The default changes cannot reach these runs.** Every case `config.json` sets
+   `maxObligations`, `maxIntentBytes` and `maxChangeLines` explicitly.
+2. **The refusal never fired.** `70cde9b` replaced `cited.slice(0, maxObligations)`
+   with `if (cited.length >= maxObligations) throw`. For a run below its cap the two
+   are the same statement. **No scored run reached its cap** — the maximum is 39
+   against a cap of 60 (`pw12`) and 35 against a cap of 40 (`pw05`) — so the branch
+   the commit changed was never taken. This check does not rely on
+   `obligationsTruncated`, which `70cde9b` pins to `false`; it relies on the
+   obligation counts, which are in the reports.
+3. **The other two commits are outside the import graph.** `intent-fulfilment`
+   imports `context-ingestion`, `costs`, `observability`, `provider-resolution`,
+   `repository-intake` and `shared` — never `context-retrieval`, never
+   `review-workflow`.
+
+Diffing `src/domains/intent-fulfilment/` across `76cfe3b..a374d09` confirms it:
+every change is the limit-refusal path and its new `intent-limits.ts`. The
+extraction packet, the judgement call, the aptness call and all three prompts are
+byte-identical across the whole run window.
+
+The methodological lesson stands regardless: `run-case.sh` should pin the engine as
+well as the repository under test, and it does not.
+
+---
+
 ## Recommendation for the `maxObligations` default
 
-**Raise it from 20 to 40.**
+**The default was already changed from 20 to 100 by `8993ab7`, mid-run. This
+measurement supports that value and I do not propose changing it again.** My own
+pre-registered instinct was 40; the evidence says 40 is defensible and 100 is
+better, for a reason 40 does not capture.
 
 Grounds, all measured here:
 
-1. **20 would still bind.** Eleven of the 28 cases returned ≥ 20 obligations
-   (`pw03` 20, `pw14` 20, `ph06` 25, `pw08` 26, `pw17` 31, `pw20` 31, `pw10` 33,
-   `pw11` 33, `pw09` 34, `pw05` 35, `pw12` 39). A default of 20 reproduces the
-   defect this round measured on 39% of this corpus.
-2. **40 is close to the natural ceiling for intent this dense.** `pw12` re-run at a
-   cap of **60** returned **39**. The extractor stops on its own well before 60; the
-   cap buys headroom rather than volume.
-3. **The cap only costs money when the intent genuinely holds that many
-   obligations.** Seventeen of 28 cases returned fewer than 20 and are unaffected by
-   the change. A three-line pull-request description will never approach it.
-4. **The measured price is linear and modest.** Cost per obligation is essentially
-   flat across the two rounds — $0.0123 capped, **$0.0108** uncapped — because each
-   obligation is one judgement call plus (on an `addressed` verdict) one aptness
-   call. Per-run cost on this corpus ranged **$0.0093–$0.7591**, mean $0.2151,
-   against $0.110 capped: roughly **2× on the cases where the cap was binding**, and
-   **unchanged on the cases where it was not**. Raising the default from 20 to 40
-   therefore costs at most ~2× on intent-dense inputs and nothing on ordinary ones.
-5. **`obligationsTruncated` now tells the truth**, so a user who sets a lower cap for
-   cost reasons can see when their checklist was cut short. That is what makes a
-   generous default safe rather than a blank cheque.
+1. **20 binds, and binding is exactly the defect this round measured.** Eleven of
+   the 28 cases returned ≥ 20 obligations (`pw03` 20, `pw14` 20, `ph06` 25, `pw08`
+   26, `pw17` 31, `pw20` 31, `pw10` 33, `pw11` 33, `pw09` 34, `pw05` 35, `pw12` 39).
+   A default of 20 reproduces the 27.6-point recall loss on **39% of this corpus**.
+2. **The extractor stops well below any of these numbers on its own.** `pw12`,
+   re-run at a cap of **60**, returned **39**. The densest intent in the corpus — a
+   64-line spec section of numbered MUST clauses — does not reach 40 unaided. A cap
+   above the natural ceiling buys headroom, not volume, and 40 leaves almost none.
+3. **The cap does not set the cost; the intent does.** Cost per obligation is flat
+   across the two rounds — $0.0123 capped, **$0.0108** uncapped — because each
+   obligation is one judgement call plus, on an `addressed` verdict, one aptness
+   call. Seventeen of 28 cases returned fewer than 20 and would cost the same at a
+   cap of 20, 40 or 100. Raising the cap **cannot** make a thin ticket expensive; a
+   ticket genuinely stating 100 requirements would cost ~$1.08, against $0.0093–
+   $0.7591 observed here (mean $0.2151, against $0.1104 capped).
+4. **`70cde9b` changed what a too-low cap costs, and that argues for a higher one,
+   not a lower one.** The limit now refuses with exit code 4 instead of returning a
+   short list. A cap set below the intent no longer produces a quietly incomplete
+   checklist — it produces a failed run. That removes the reason to keep the default
+   tight (a low cap is no longer a silent money-saver, it is a run that does not
+   answer) and it removes the risk of a high one (nothing is spent on obligations
+   that would be discarded, because the refusal happens before any judgement call).
+   With truncation gone, the only remaining cost of a generous default is the money
+   an intent that genuinely holds that many obligations was always going to cost.
 
-What this recommendation does **not** rest on: any claim that 40 is optimal. The
-evidence supports *"20 binds on this corpus and 40 does not"*, and nothing was
-measured between 20 and 40 or above 60.
+What this recommendation does **not** rest on: any measurement between 40 and 100.
+Nothing in this corpus produced more than 39 obligations, so **the behaviour of the
+extractor near 100 is unmeasured**. What is established is that 20 binds on 39% of
+this corpus, that 40 does not bind on any of it, and that the cap is not the thing
+that sets the bill.
 
 ---
 
@@ -309,6 +364,11 @@ eventually eat the thing the obligation is about. `src/` was not modified.
 - `pw11`'s 18 false-outstanding entries are one case judging one wave of a two-wave
   feature. It is 21% of the pre-written arm's false-outstanding total from a single
   case, and precision without it is 57.5% (88/153).
+- **The engine was not pinned.** Five commits landed on the branch during the sweep
+  and the runs therefore span `76cfe3b`..`a374d09`. The section above shows all five
+  are outside the code these runs exercised, on three independent checks — but the
+  clean form of this experiment pins the engine, and this one did not. Anyone
+  re-running it should fix `run-case.sh` first.
 
 ## Reproducing
 
