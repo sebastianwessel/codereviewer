@@ -543,8 +543,8 @@ describe('semantic finding merge inside discovery', () => {
 
 // A file whose lines carry multi-byte UTF-8 characters and where every line names
 // its own absolute line number, so the rendered numbering can be checked against
-// the truth. The source chunk budget works in UTF-8 BYTES, so a byte-derived line
-// origin would silently drift here while looking correct on pure ASCII.
+// the truth. Splitting cuts on UTF-8 BYTES, so a byte-derived line origin would
+// silently drift here while looking correct on pure ASCII.
 const multiByteSource = (lineCount: number): string =>
   `${Array.from(
     { length: lineCount },

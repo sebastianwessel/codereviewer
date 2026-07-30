@@ -111,7 +111,7 @@ provider-specific object as passthrough.
 | `maxConcurrentTasks` | integer 1..32 | `4` | Caps active review tasks and provider model calls. |
 | `maxFiles` | integer 1..10000 | `500` | Intake hard cap. |
 | `maxFileBytes` | integer 1..5000000 | `500000` | Files above cap are skipped. |
-| `contextMaxBytes` | integer 10000..10000000 | preset-defined | Per-packet model-bound context budget; explicit values override provider safety defaults. Budget pressure creates more tasks, not skipped source. |
+| `contextMaxBytes` | integer 10000..10000000 | *unset* | Lowers the packet ceiling and the cross-file per-read cap. Unset means the provider decides packet size. Never skips or truncates source. |
 | `inlineSeverityThreshold` | severity | `"high"` | Only affects reporter eligibility. |
 | `maxCostUsd` | number >= 0 | preset-defined | Hard stop only when token usage and configured/provider pricing are available; otherwise reported as unavailable. |
 | `runTimeoutMs` | integer 10000..7200000 | unset | Optional whole-run timeout. When unset, no hidden Harness run timeout is applied; provider calls still use `provider.timeoutMs`. |
@@ -137,18 +137,14 @@ instead of introducing stage-specific public settings. Under tight budgets the
 workflow removes optional digest and ambient review context before recording a
 recovered provider issue.
 
-> **SUPERSEDED by spec 26 (approved 2026-08-01).** The depth-scaled per-packet
-> budget below no longer bounds the review packet: assembly sends the change whole
-> and splits only when the provider refuses it. The depth values survive only as
-> cross-file retrieval caps, and the task-input packet cap is now an 8 MB runaway
-> guard rather than a 360,000-byte ration. Left here, unrewritten, so the change is
-> visible to review rather than silently folded in.
+When `contextMaxBytes` is not set explicitly, nothing bounds the review packet in
+advance: the change is sent whole and split only if the provider refuses it
+(spec 26). A serialized packet is still capped at 8,000,000 bytes as a runaway
+guard, which refuses rather than truncates.
 
-When a provider is configured and `contextMaxBytes` is not set explicitly, the
-per-packet model-bound context budget scales with depth so deeper reviews see
-more source per task: `fast` 60,000 bytes, `balanced` 120,000 bytes, `thorough`
-240,000 bytes (the provider task-input packet cap is 360,000 bytes). An explicit
-`contextMaxBytes` overrides these depth-scaled safety defaults.
+The depth-scaled values (`fast` 60,000, `balanced` 120,000, `thorough` 240,000
+bytes) survive only as cross-file retrieval per-read caps. An explicit
+`contextMaxBytes` lowers both the packet ceiling and that per-read cap.
 
 ## Provider Config
 
@@ -238,21 +234,20 @@ selected provider adapters expose reliable usage data at the task boundary.
 
 ## Context Budget Defaults
 
-> **SUPERSEDED by spec 26 (approved 2026-08-01).** These defaults no longer size the
-> review packet. `contextMaxBytes` when unset bounds nothing; when set explicitly it
-> lowers the packet ceiling and the cross-file per-read cap.
+`review.contextMaxBytes` is **unset by default, and should stay unset**: the
+provider then decides whether a packet is too large (spec 26). Setting it lowers
+the 8,000,000-byte packet ceiling and caps cross-file `maxBytesPerRead`.
 
-| Depth | `contextMaxBytes` |
+| Depth | Cross-file `maxBytesPerRead` when unset |
 | --- | --- |
-| `fast` | `100000` |
-| `balanced` | `200000` |
-| `thorough` | `500000` |
+| `fast` | `60000` |
+| `balanced` | `120000` |
+| `thorough` | `240000` |
 
-When no explicit `review.contextMaxBytes` is configured and a provider is
-enabled, each provider-backed task uses the lower of the depth default and
-`60000` bytes. Local deterministic review keeps the depth default. This is a
-conservative byte-level safety guard until tokenizer-aware packing is
-implemented.
+A byte-level packet budget was previously derived from depth. It was removed
+because bytes are a poor proxy for tokens and the values fired on 37% of this
+repository's last 60 commits, substituting several partial reviews for the
+whole-file review measured as better.
 
 Provider-backed task input also has a final serialized packet guard. The guard
 must fail before provider invocation when a packet exceeds budget. It must not

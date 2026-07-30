@@ -34,9 +34,9 @@ const taskFor = (path: string): ReviewTask => ({
   priority: 0
 })
 
-// A source file whose lines carry multi-byte UTF-8 characters, so byte budgets
-// and line numbers cannot be conflated. 200 such lines are far past the 4500-byte
-// source chunk budget that `contextMaxBytes: 10000` produces.
+// A source file whose lines carry multi-byte UTF-8 characters, so byte counts and
+// line numbers cannot be conflated: a span derived by counting bytes drifts here
+// while looking correct on pure ASCII.
 const multiByteSource = (lineCount: number): string =>
   `${Array.from(
     { length: lineCount },
