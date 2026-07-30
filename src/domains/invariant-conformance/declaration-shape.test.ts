@@ -41,11 +41,11 @@ describe('declaration traits', () => {
     )
 
     expect(keys).toEqual([
-      'call-argument:isAdmin(request)',
-      'call:deny',
-      'call:isAdmin',
-      'call:load',
-      'guard:isAdmin'
+      'call-argument:isAdmin(request)@surface/exit',
+      'call:deny@surface/exit',
+      'call:isAdmin@surface/exit',
+      'call:load@surface/exit',
+      'guard:isAdmin@surface/exit'
     ])
   })
 
@@ -63,11 +63,11 @@ describe('declaration traits', () => {
     // The object literal yields no argument trait: two peers passing different
     // expressions would otherwise be reported as sharing nothing useful.
     expect(keys).toEqual([
-      'call-argument:audit(request)',
-      'call-argument:requireRole("admin")',
-      'call:audit',
-      'call:configure',
-      'call:requireRole'
+      'call-argument:audit(request)@surface/exit',
+      'call-argument:requireRole("admin")@surface/exit',
+      'call:audit@surface/exit',
+      'call:configure@surface/exit',
+      'call:requireRole@surface/exit'
     ])
   })
 
@@ -79,7 +79,7 @@ describe('declaration traits', () => {
 
   test('records a method call by its method name', () => {
     expect(traitKeysOf('function f() {\n  client.send(payload)\n}')).toContain(
-      'call:send'
+      'call:send@surface/exit'
     )
   })
 
@@ -96,10 +96,10 @@ describe('declaration traits', () => {
     )
 
     expect(keys).toEqual([
-      'call-argument:kind(a)',
-      'call-argument:ready(a)',
-      'call:kind',
-      'call:ready'
+      'call-argument:kind(a)@surface/exit',
+      'call-argument:ready(a)@surface/exit',
+      'call:kind@surface/exit',
+      'call:ready@surface/exit'
     ])
   })
 
@@ -120,16 +120,16 @@ describe('declaration traits', () => {
     // `log` is a real call and its literal argument is real code, so both are
     // recorded. `requireAuth` is named twice and is a call neither time.
     expect(keys).toEqual([
-      'call-argument:log("requireAuth(request)")',
-      'call:log'
+      'call-argument:log("requireAuth(request)")@surface/exit',
+      'call:log@surface/exit'
     ])
-    expect(keys).not.toContain('call:requireAuth')
-    expect(keys).not.toContain('guard:requireAuth')
+    expect(keys.some((key) => key.startsWith('call:requireAuth'))).toBe(false)
+    expect(keys.some((key) => key.startsWith('guard:requireAuth'))).toBe(false)
   })
 
-  test('records the same call once however often the body repeats it', () => {
+  test('records the same call once however often the body repeats it at one position', () => {
     expect(traitKeysOf('function f() {\n  log()\n  log()\n  log()\n}')).toEqual([
-      'call:log'
+      'call:log@surface/exit'
     ])
   })
 
@@ -141,12 +141,142 @@ describe('declaration traits', () => {
         )
       )
     ).toEqual([
-      'call-argument:is_admin(request)',
-      'call:Denied',
-      'call:is_admin',
-      'call:load',
-      'guard:is_admin'
+      'call-argument:is_admin(request)@surface/exit',
+      'call:Denied@surface/exit',
+      'call:is_admin@surface/exit',
+      'call:load@surface/exit',
+      'guard:is_admin@surface/exit'
     ])
+  })
+})
+
+// Spec 24, "Positional Traits": a trait carries where it sits, so the same symbol
+// at materially different positions is not the same trait. Both dimensions come
+// from indentation; nothing here parses.
+describe('positional traits', () => {
+  test('separates a symbol used deep inside a nested block from the same symbol on the exit path', () => {
+    const onExitPath = traitKeysOf(
+      [
+        'function parse(value) {',
+        '  if (isKnown(value)) {',
+        '    return convert(value)',
+        '  }',
+        '  return fail(value)',
+        '}'
+      ].join('\n')
+    )
+    const nested = traitKeysOf(
+      [
+        'function parse(value) {',
+        '  for (const item of value) {',
+        '    if (!isText(item)) {',
+        '      return fail(item)',
+        '    }',
+        '    keep(item)',
+        '  }',
+        '  return done()',
+        '}'
+      ].join('\n')
+    )
+
+    expect(onExitPath).toContain('call:fail@surface/exit')
+    expect(nested).toContain('call:fail@nested/interior')
+    // The whole point: a set-membership comparison would have called these equal.
+    expect(nested).not.toContain('call:fail@surface/exit')
+  })
+
+  test('a nested block that ends the declaration is not the same position as one it continues past', () => {
+    const trailing = traitKeysOf(
+      [
+        'function walk(items) {',
+        '  for (const item of items) {',
+        '    if (item.ready) {',
+        '      release(item)',
+        '    }',
+        '  }',
+        '}'
+      ].join('\n')
+    )
+    const interrupted = traitKeysOf(
+      [
+        'function walk(items) {',
+        '  for (const item of items) {',
+        '    if (item.ready) {',
+        '      release(item)',
+        '    }',
+        '  }',
+        '  return report(items)',
+        '}'
+      ].join('\n')
+    )
+
+    expect(trailing).toContain('call:release@nested/exit')
+    expect(interrupted).toContain('call:release@nested/interior')
+  })
+
+  test('the same shape indented with tabs and with spaces yields the same positions', () => {
+    const spaces = traitKeysOf(
+      [
+        'function parse(value) {',
+        '  for (const item of value) {',
+        '    if (!ok(item)) {',
+        '      fail(item)',
+        '    }',
+        '  }',
+        '  return done()',
+        '}'
+      ].join('\n')
+    )
+    const tabs = traitKeysOf(
+      [
+        'function parse(value) {',
+        '\tfor (const item of value) {',
+        '\t\tif (!ok(item)) {',
+        '\t\t\tfail(item)',
+        '\t\t}',
+        '\t}',
+        '\treturn done()',
+        '}'
+      ].join('\n')
+    )
+
+    expect(tabs).toEqual(spaces)
+  })
+
+  // The band is deliberately wide enough to swallow formatting. Indentation cannot
+  // distinguish a nested block from a wrapped expression, and this repository's own
+  // schema builders wrap a fluent chain onto the next line — a finer split would
+  // report code style as divergence, which it was measured doing.
+  test('a wrapped continuation line is the same position as the unwrapped form', () => {
+    const inline = traitKeysOf(
+      ['const Schema = build({', '  path: text().min(1)', '})'].join('\n')
+    )
+    const wrapped = traitKeysOf(
+      [
+        'const Schema = build({',
+        '  path: text',
+        '    .min(1)',
+        '})'
+      ].join('\n')
+    )
+
+    expect(inline).toContain('call:min@surface/exit')
+    expect(wrapped).toContain('call:min@surface/exit')
+  })
+
+  // The same rule applied one level up, and it is measured rather than assumed:
+  // treating the header line as its own position produced only this difference in
+  // forty commits of this repository, and raised the firing rate by half.
+  test('a call on the header line and the same call wrapped onto the next are one position', () => {
+    const onHeader = traitKeysOf(
+      ['const Schema = build({', '  path: text()', '})'].join('\n')
+    )
+    const wrapped = traitKeysOf(
+      ['const Schema = z', '  .build({', '    path: text()', '  })'].join('\n')
+    )
+
+    expect(onHeader).toContain('call:build@surface/exit')
+    expect(wrapped).toContain('call:build@surface/exit')
   })
 })
 

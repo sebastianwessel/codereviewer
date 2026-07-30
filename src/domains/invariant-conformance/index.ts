@@ -12,13 +12,24 @@ export {
 } from './declaration-span.js'
 export {
   declarationTraitKey,
+  declarationTraitSubjectKey,
   describeDeclarationTrait,
+  describePositionedTrait,
   extractDeclarationTraits,
   isComparableDeclarationHeader,
   type DeclarationTrait,
   type DeclarationTraitKind,
+  type DeclarationTraitSubject,
   type ExtractDeclarationTraitsInput
 } from './declaration-shape.js'
+export {
+  describeTraitPosition,
+  traitPositionKey,
+  traitPositionsOfSpan,
+  type TraitDepthBand,
+  type TraitPosition,
+  type TraitTerminality
+} from './trait-position.js'
 export {
   derivePeerSets,
   type ConformanceSourceFile,

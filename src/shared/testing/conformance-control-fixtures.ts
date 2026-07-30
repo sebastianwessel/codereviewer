@@ -1,4 +1,9 @@
-// The two control fixtures spec 24's adjudication layer is judged against.
+// The control fixtures spec 24 is judged against.
+//
+// Two of them are the matched pair its adjudication layer is held to; the third is
+// the real curated case its "Positional Traits" requirement was written against,
+// reconstructed from upstream source. All three are frozen reproductions rather
+// than reads of live code, for the reason given below.
 //
 // They are a matched pair, and the pair is the point. A layer that rejects
 // everything passes a rejection-rate check perfectly and is worthless, so the
@@ -198,3 +203,151 @@ export const handlerPositiveControl: ConformanceControlFixture = {
     '3 of 3 sibling declarations call requireAuth; ExportUsers does not.'
   ]
 }
+
+// The reviewed file, verbatim. Tabs are Go's own indentation and are load-bearing
+// here: the depth of each `newError` call is exactly what the position model reads.
+const MAP_CLAIMS_AT_DEFECTIVE_COMMIT = `package jwt
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+// MapClaims is a claims type that uses the map[string]any for JSON
+// decoding. This is the default claims type if you don't supply one
+type MapClaims map[string]any
+
+// GetExpirationTime implements the Claims interface.
+func (m MapClaims) GetExpirationTime() (*NumericDate, error) {
+	return m.parseNumericDate("exp")
+}
+
+// GetNotBefore implements the Claims interface.
+func (m MapClaims) GetNotBefore() (*NumericDate, error) {
+	return m.parseNumericDate("nbf")
+}
+
+// GetIssuedAt implements the Claims interface.
+func (m MapClaims) GetIssuedAt() (*NumericDate, error) {
+	return m.parseNumericDate("iat")
+}
+
+// GetAudience implements the Claims interface.
+func (m MapClaims) GetAudience() (ClaimStrings, error) {
+	return m.parseClaimsString("aud")
+}
+
+// GetIssuer implements the Claims interface.
+func (m MapClaims) GetIssuer() (string, error) {
+	return m.parseString("iss")
+}
+
+// GetSubject implements the Claims interface.
+func (m MapClaims) GetSubject() (string, error) {
+	return m.parseString("sub")
+}
+
+// parseNumericDate tries to parse a key in the map claims type as a number
+// date. This will succeed, if the underlying type is either a [float64] or a
+// [json.Number]. Otherwise, nil will be returned.
+func (m MapClaims) parseNumericDate(key string) (*NumericDate, error) {
+	v, ok := m[key]
+	if !ok {
+		return nil, nil
+	}
+
+	switch exp := v.(type) {
+	case float64:
+		if exp == 0 {
+			return nil, nil
+		}
+
+		return newNumericDateFromSeconds(exp), nil
+	case json.Number:
+		v, _ := exp.Float64()
+
+		return newNumericDateFromSeconds(v), nil
+	}
+
+	return nil, newError(fmt.Sprintf("%s is invalid", key), ErrInvalidType)
+}
+
+// parseClaimsString tries to parse a key in the map claims type as a
+// [ClaimsStrings] type, which can either be a string or an array of string.
+func (m MapClaims) parseClaimsString(key string) (ClaimStrings, error) {
+	var cs []string
+	switch v := m[key].(type) {
+	case string:
+		cs = append(cs, v)
+	case []string:
+		cs = v
+	case []any:
+		for _, a := range v {
+			vs, ok := a.(string)
+			if !ok {
+				return nil, newError(fmt.Sprintf("%s is invalid", key), ErrInvalidType)
+			}
+			cs = append(cs, vs)
+		}
+	}
+
+	return cs, nil
+}
+
+// parseString tries to parse a key in the map claims type as a [string] type.
+// If the key does not exist, an empty string is returned. If the key has the
+// wrong type, an error is returned.
+func (m MapClaims) parseString(key string) (string, error) {
+	var (
+		ok  bool
+		raw any
+		iss string
+	)
+	raw, ok = m[key]
+	if !ok {
+		return "", nil
+	}
+
+	iss, ok = raw.(string)
+	if !ok {
+		return "", newError(fmt.Sprintf("%s is invalid", key), ErrInvalidType)
+	}
+
+	return iss, nil
+}
+`
+
+// THE POSITIONAL CASE — `golang-jwt-zero-exp-parsed-as-absent-claim`, reconstructed.
+//
+// `map_claims.go` of golang-jwt/jwt at commit 9a70137, verbatim: the parent of the
+// upstream fix, which is the state the corpus reviews. Spec 24's "Positional
+// Traits" section is written against this file, so the fixture is the file rather
+// than a reduction of it — including the six one-line accessors, which are not
+// decoration. They are declarations of the same kind at the same indentation
+// column, so they are peers of the three parsers, and they are why the peer set has
+// nine members rather than three.
+//
+// What it demonstrates: all three parsers report `ErrInvalidType` through
+// `newError`, but not from the same place. `parseNumericDate` and `parseString`
+// call it on the way out of the declaration; `parseClaimsString` calls it four
+// levels deep inside a loop inside a type switch, and its fall-through returns no
+// error at all. Before positional traits those were one trait and there was nothing
+// to compare. `positionalTraitCase.expectedTraitKeys` states the split the
+// implementation must produce, and the test asserts it.
+//
+// `expectedStatements` is EMPTY, and that is the measured result rather than an
+// omission — see the test beside the domain for the arithmetic that blocks it.
+export const positionalTraitCase: ConformanceControlFixture = {
+  files: [{ path: 'map_claims.go', content: MAP_CLAIMS_AT_DEFECTIVE_COMMIT }],
+  changedPaths: ['map_claims.go'],
+  expectedStatements: []
+}
+
+// The positioned `newError` trait of each parser, which is the whole of what spec
+// 24's "Positional Traits" asks this fixture to establish. Two on the exit path,
+// one buried in a nested block the declaration continues past.
+export const positionalTraitCaseTraitKeys = {
+  parseNumericDate: 'call:newError@surface/exit',
+  parseString: 'call:newError@surface/exit',
+  parseClaimsString: 'call:newError@nested/interior'
+} as const

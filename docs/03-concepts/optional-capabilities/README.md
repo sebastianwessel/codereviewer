@@ -60,9 +60,16 @@ kind of thing: a separate command
 off by default, and with no recall figure yet. It reports where a changed
 declaration does not hold a pattern a majority of its siblings hold — *"thirteen of
 fifteen call `requireAuth`; this one does not"* — with the peers cited by path and
-line. That is a **divergence, not a defect**: deviating from a convention is
+line. A pattern includes **where in a declaration it sits**, so a symbol used on the
+way out of one sibling and deep inside a loop in another is not the same thing
+twice. That is a **divergence, not a defect**: deviating from a convention is
 frequently deliberate, so the command states the fact, asks the question, and
 stops.
+
+On this repository's own history the deterministic form reports **0.70 divergences
+per commit**, nearly all of them in untouched code and concentrated in two
+schema-heavy modules; the rate for divergences the change itself caused is 0.0125
+per commit. Read the first number before enabling it on a large codebase.
 
 Its deterministic form makes no model call and costs nothing, and it is the floor
 the model layer has to beat. That model layer now exists as a second, separately

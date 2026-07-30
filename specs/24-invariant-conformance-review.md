@@ -401,6 +401,120 @@ adjudication exists to absorb, and it has demonstrated on live calls that it
 rejects library idioms while keeping role-based conventions. The firing-rate gate
 still applies and MUST be re-measured after this change.
 
+### Positional Traits As Implemented
+
+What follows records resolved facts; it adds no requirement.
+
+**The position, and why the buckets are this coarse.** A trait's key carries a
+`depth` band and a `terminality`, both read from the indentation of the blanked
+code lines the span already produces. Indentation *columns* are ranked into
+*levels* within each declaration, so a tab-indented Go body and a two-space
+TypeScript body of the same shape compare equal.
+
+| dimension | values | rule |
+|---|---|---|
+| depth | `surface` | the header line and levels 1-2 |
+| | `nested` | level 3 and deeper |
+| terminality | `exit` | nothing more than one level shallower follows inside the declaration |
+| | `interior` | the declaration returns to a materially shallower level afterwards |
+
+**Indentation cannot distinguish a nested block from a wrapped expression**, and
+that single fact sets both widths. A fluent chain split across lines, a call whose
+arguments do not fit, a multi-line literal — each adds a level that is formatting.
+So the band absorbs one wrap (level 2 is still `surface`), and terminality ignores a
+one-level dedent and the closing-bracket lines that a brace-scoped language emits on
+the way out. A finer model reports code style as divergence, which was measured:
+treating the header line as a band of its own produced, over forty commits of this
+repository, **only** divergences of the form "these peers write `z.strictObject({` on
+the declaration line and this one writes `z` then `.strictObject({`", and raised the
+firing rate from 0.90 to 1.375 reports per commit. It was dropped.
+
+**Terminality is constant over the `surface` band, structurally.** A span ends at
+the first line that returns to the header's column, so nothing inside a declaration
+is ever shallower than level 1 and a surface trait cannot be followed by anything
+materially shallower. Terminality therefore discriminates only within `nested` — a
+nested block that ends the declaration against one it continues past, which is
+exactly the shape the case below turns on. The two dimensions are stored separately
+regardless, because that constancy is a property of how a span is bounded rather
+than a claim about positions.
+
+**A divergence now has two shapes, and they are never phrased alike.** If the
+declaration does not hold the pattern's symbol anywhere, the statement is unchanged:
+*"3 of 3 sibling declarations call `requireAuth`; `ExportUsers` does not."* If it
+holds the symbol at a different position, the statement says so instead: *"7 of 12
+sibling declarations call `string` on the declaration's exit path; `ReviewReportSchema`
+does so inside a nested block."* Telling a reader a declaration "does not" do
+something it plainly does is how a reader stops reading. One divergence is emitted
+per trait subject, so a symbol that is a majority pattern at two positions at once
+cannot report one absence twice.
+
+### The Case It Was Written For: Necessary, Not Sufficient
+
+`golang-jwt-zero-exp-parsed-as-absent-claim`, reconstructed as a hermetic fixture
+from `map_claims.go` at the defective commit, verbatim.
+
+The requirement is met. The three parsers no longer hold one trait:
+
+| declaration | positioned trait |
+|---|---|
+| `parseNumericDate` | `call:newError@surface/exit` |
+| `parseString` | `call:newError@surface/exit` |
+| `parseClaimsString` | `call:newError@nested/interior` |
+
+**And the case still reports nothing.** Two peers hold the exit-path trait, and this
+spec requires at least three cited peers. Its own note on this case predicted
+exactly that — *"leaving two — below this spec's three-cited-peer floor"* — and the
+prediction is now measured rather than inferred. A second, independent bar sits
+behind it: Go puts every method of a file at the same indentation column, so the six
+one-line accessors in that file are peers too, and a pattern would need five of the
+eight peers where the parsers are three.
+
+So positional traits are **necessary and not sufficient** for this case. What
+remains is not a position problem, and no bucket width fixes it: the file does not
+contain three declarations that uphold the pattern. Reaching it would mean relaxing
+the citation floor, which is a MUST above and is not relaxed here.
+
+### Firing Rate, Re-Measured
+
+Deterministic arm, no adjudication, no spend. `conformance check` run per commit
+over two windows of this repository, each 40 non-merge commits, with the same code
+in both arms except for whether a trait key carries its position.
+
+| window | before | after | change-attributed, both arms |
+|---|---:|---:|---:|
+| 40 most recent commits | 1.00 / commit | **0.90 / commit** | 0.00 / commit |
+| the 40 before those | 0.50 / commit | **0.50 / commit** | 0.025 / commit |
+| combined | 0.75 / commit | **0.70 / commit** | 0.0125 / commit |
+
+**Positional traits did not raise the firing rate; they lowered it slightly.** The
+predicted extra noise did not appear, and the reason is visible in the diff between
+the two arms: splitting a trait by position also splits a *majority*, so patterns
+that were majorities only when two positions were pooled stop being reported. On
+the recent window that removed five divergences and added one, and the one it added
+is the intended shape.
+
+**The gate is nonetheless blown, and was blown before this change.** The criterion
+is roughly one report per two benign changes — 0.5 — and the measured rate is 0.70
+combined. This is a fact about the capability, not about positional traits.
+
+Three things qualify it, none of which rescues it:
+
+- **Every report is `pre-existing`.** Change-attributed divergences run at 0.0125
+  per commit across both windows and both arms, comfortably inside the gate. The
+  gate is failed entirely by the odd-one-out findings this spec deliberately permits
+  outside the diff, which are labelled and counted apart.
+- **The rate is dominated by one module.** All 36 reports on the recent window come
+  from two schema-heavy TypeScript files whose peer sets run to forty sibling
+  declarations, and they are the same three or four divergences re-reported on every
+  commit that touches those files.
+- **It is strongly range-dependent**, 0.5 against 1.0 across two adjacent windows of
+  the same repository. The **0.075 per commit** recorded earlier is therefore not
+  comparable to these numbers and must not be read as a regression: the pre-change
+  code measures 1.00 on the recent window and 0.50 on the older one, so that figure
+  came from a different range, a different arm, or both.
+
+Whether the capability survives is a decision about the gate, not about this change.
+
 That is a scope limit rather than a defect, but it was never stated and it is
 material: branch asymmetry is one of the larger defect shapes in the committed
 corpus. Two consequences follow.
@@ -440,3 +554,8 @@ been rejected on that ground regardless.
 | Reaches repository content only through the mediated seams | import-boundary test forbidding `node:fs` and `review-workflow` |
 | Disabled by default | config schema test |
 | Instructions stay generic and language-neutral | prompt genericity guard |
+| A trait carries its structural position, and the same symbol at materially different positions is not the same trait | unit test over both dimensions, plus the hermetic `map_claims.go` fixture asserting the three parsers' positioned traits |
+| Position is derived from indentation alone, with no parser and no per-language table | unit test asserting a tab-indented and a space-indented body of the same shape yield identical positions |
+| A wrap is not a position | unit tests: a chained call wrapped onto the next line, and a call on the header line against the same call wrapped, are one position |
+| A pattern the declaration holds elsewhere is stated as displaced, never as absent | divergence unit test asserting the statement |
+| A symbol that is a majority pattern at two positions is one divergence | divergence unit test |

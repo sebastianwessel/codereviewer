@@ -408,10 +408,43 @@ Every step is deterministic and none of it involves a model.
    directory. Nothing wider is searched.
 3. **Pattern.** For each peer set, the traits a **strict majority** of the peers
    share. A trait is a called symbol, a symbol called inside a conditional, or
-   the first argument of a call.
+   the first argument of a call — together with **where in the declaration it
+   sits**, so the same symbol used in two structurally different places is two
+   traits. See [Trait position](#trait-position) below.
 4. **Divergence.** A majority pattern one member does not hold — reported only if
    **at least three peers** hold it. Below three there is no pattern, only a
    coincidence, and nothing is reported.
+
+### Trait position
+
+A trait carries a coarse structural position, read from indentation alone. There is
+no parser and no per-language rule.
+
+| dimension | values |
+|---|---|
+| depth | `surface` — the declaration's header line and the two indentation levels under it. `nested` — three levels or deeper. |
+| terminality | `exit` — nothing materially shallower follows inside the declaration. `interior` — the declaration carries on at a shallower level afterwards. |
+
+The bands are wide on purpose. Indentation cannot tell a nested block from a
+wrapped expression, so a chained call split across lines, or a call written on the
+declaration's own line rather than the next one, is the **same** position — otherwise
+reformatting a file would produce divergences.
+
+A divergence therefore reads one of two ways:
+
+- the declaration never uses the symbol —
+  *"3 of 3 sibling declarations call `requireAuth`; `ExportUsers` does not."*
+- the declaration uses it somewhere structurally different —
+  *"7 of 12 sibling declarations call `string` on the declaration's exit path;
+  `ReviewReportSchema` does so inside a nested block."*
+
+One divergence is reported per symbol, so a pattern held at two positions at once
+is never reported twice.
+
+**What this does not do.** It compares whole declarations, positioned. It does not
+segment a declaration into branches, so a declaration that upholds a pattern in three
+branches of a switch and abandons it in a fourth still holds the trait — unless the
+fourth sits at a materially different depth.
 
 ### Adjudication: is the shared pattern a convention?
 

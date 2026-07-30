@@ -234,6 +234,98 @@ describe('majority pattern divergence', () => {
     ).toHaveLength(1)
   })
 
+  // Spec 24, "Positional Traits". The declaration is not missing the call — it
+  // makes it, three levels down inside a loop the declaration carries on past,
+  // while every peer makes it on the way out. A set-membership trait cannot see
+  // this, and the statement must not claim the declaration "does not" do something
+  // it plainly does.
+  test('reports a pattern the declaration holds at a materially different position', () => {
+    const changed = handler('changed', [
+      '  for (const item of request.items) {',
+      '    if (item.stale) {',
+      '      release(item)',
+      '    }',
+      '  }',
+      '  return load(request)'
+    ])
+    const peers = Array.from({ length: 4 }, (_unused, index) =>
+      handler(`peer${index}`, [
+        '  for (const item of request.items) {',
+        '    touch(item)',
+        '  }',
+        '  release(request)',
+        '  return load(request)'
+      ])
+    ).join('')
+    const result = divergencesFor([
+      { path: 'src/h/changed.ts', content: changed, hunks: wholeFileHunks(changed) },
+      { path: 'src/h/peers.ts', content: peers }
+    ])
+    const divergence = result.changeAttributed.find(
+      (candidate) => candidate.pattern.symbol === 'release'
+    )
+
+    expect(divergence?.statement).toBe(
+      "4 of 4 sibling declarations call release on the declaration's exit path; changed does so inside a nested block."
+    )
+    expect(divergence?.question).toContain('exit path')
+    expect(divergence?.citedPeerCount).toBe(4)
+  })
+
+  // The other half of the same rule: a symbol both sides use in the same band is
+  // still one trait, so re-indenting a body cannot invent a divergence.
+  test('does not report a position difference that is one level of wrapping', () => {
+    const changed = handler('changed', [
+      '  if (!requireAuth(request)) {',
+      '    return deny()',
+      '  }',
+      '  return load(request)'
+    ])
+    const peers = Array.from({ length: 4 }, (_unused, index) =>
+      handler(`peer${index}`, [
+        '  requireAuth(',
+        '    request',
+        '  )',
+        '  return load(request)'
+      ])
+    ).join('')
+    const result = divergencesFor([
+      { path: 'src/h/changed.ts', content: changed, hunks: wholeFileHunks(changed) },
+      { path: 'src/h/peers.ts', content: peers }
+    ])
+
+    expect(
+      result.changeAttributed.map((divergence) => divergence.pattern.symbol)
+    ).not.toContain('requireAuth')
+  })
+
+  // Positional traits let one symbol be a majority pattern at two positions at
+  // once. A declaration holding neither is one absence and is reported once.
+  test('a symbol the peers hold at two positions is still one divergence', () => {
+    const changed = handler('changed', ['  return load(request)'])
+    const peers = Array.from({ length: 4 }, (_unused, index) =>
+      handler(`peer${index}`, [
+        '  for (const item of request.items) {',
+        '    if (item.stale) {',
+        '      audit(item)',
+        '    }',
+        '  }',
+        '  audit(request)',
+        '  return load(request)'
+      ])
+    ).join('')
+    const result = divergencesFor([
+      { path: 'src/h/changed.ts', content: changed, hunks: wholeFileHunks(changed) },
+      { path: 'src/h/peers.ts', content: peers }
+    ])
+
+    expect(
+      result.changeAttributed.filter(
+        (divergence) => divergence.pattern.symbol === 'audit'
+      )
+    ).toHaveLength(1)
+  })
+
   test('bounds each list independently and reports the truncation', () => {
     const result = divergencesFor(conformingDirectory(4, ['  return load(request)']), {
       maxDivergences: 1,

@@ -30,9 +30,12 @@ import {
 } from './conformance-adjudication.js'
 import {
   declarationTraitKey,
+  declarationTraitSubjectKey,
   describeDeclarationTrait,
+  describePositionedTrait,
   type DeclarationTrait
 } from './declaration-shape.js'
+import { describeTraitPosition, type TraitPosition } from './trait-position.js'
 import type { PeerDeclaration, PeerSet } from './peer-sets.js'
 import {
   MINIMUM_CITED_PEERS,
@@ -54,6 +57,34 @@ const divergenceId = (
     `${declaration.path}:${declaration.span.startLine}:${traitKey}`
   ).slice(0, 24)}`
 
+// How the member relates to the pattern, which is what decides how the divergence
+// reads. Spec 24's positional traits split one shape into two: the declaration may
+// not use the symbol at all, or it may use it somewhere structurally different. A
+// reader told "does not call newError" about a declaration that plainly calls
+// newError would stop reading, so the two are never phrased alike.
+type MemberStanding =
+  | { readonly shape: 'absent' }
+  | { readonly shape: 'displaced'; readonly positions: readonly TraitPosition[] }
+
+const describePositions = (positions: readonly TraitPosition[]): string =>
+  [...new Set(positions.map(describeTraitPosition))].sort().join(' and ')
+
+// What the peers do, with a plural subject. `describeDeclarationTrait` phrases the
+// same fact for a single declaration ("calls X"), and the two are kept apart rather
+// than patched at the call site, because a statement is read by a human and
+// "4 of 4 sibling declarations calls X" reads as a defect in the tool.
+const peerPredicate = (trait: DeclarationTrait): string => {
+  if (trait.kind === 'guard') {
+    return `call ${trait.name} in a conditional`
+  }
+
+  if (trait.kind === 'call-argument') {
+    return `call ${trait.name} with ${trait.argument} as its first argument`
+  }
+
+  return `call ${trait.name}`
+}
+
 // The fact, phrased so it can be read without the schema. It states the
 // arithmetic ("13 of 15") because the majority IS the claim, and it stops there:
 // nothing about consequence, exploitability or correctness belongs in it.
@@ -61,27 +92,31 @@ const statementFor = (
   trait: DeclarationTrait,
   holders: number,
   peers: number,
-  declaration: PeerDeclaration
-): string => {
-  const subject = `${holders} of ${peers} sibling declarations`
-
-  if (trait.kind === 'guard') {
-    return `${subject} call ${trait.name} in a conditional; ${declaration.name} does not.`
-  }
-
-  if (trait.kind === 'call-argument') {
-    return `${subject} call ${trait.name} with ${trait.argument} as its first argument; ${declaration.name} does not.`
-  }
-
-  return `${subject} call ${trait.name}; ${declaration.name} does not.`
-}
+  declaration: PeerDeclaration,
+  standing: MemberStanding
+): string =>
+  standing.shape === 'displaced'
+    ? `${holders} of ${peers} sibling declarations ${peerPredicate(
+        trait
+      )} ${describeTraitPosition(trait.position)}; ${
+        declaration.name
+      } does so ${describePositions(standing.positions)}.`
+    : `${holders} of ${peers} sibling declarations ${peerPredicate(trait)}; ${
+        declaration.name
+      } does not.`
 
 // The question, which is the other half of what spec 24 requires the output to
 // be. It asks whether the shared pattern is a convention, never whether the code
 // is wrong.
-const questionFor = (trait: DeclarationTrait, declaration: PeerDeclaration): string =>
-  `Is calling ${trait.name}${
-    trait.kind === 'guard' ? ' as a check' : ''
+const questionFor = (
+  trait: DeclarationTrait,
+  declaration: PeerDeclaration,
+  standing: MemberStanding
+): string =>
+  `Is calling ${trait.name}${trait.kind === 'guard' ? ' as a check' : ''}${
+    standing.shape === 'displaced'
+      ? ` ${describeTraitPosition(trait.position)}`
+      : ''
   } a convention ${declaration.name} should follow, or do those peers merely resemble each other?`
 
 /**
@@ -116,6 +151,11 @@ type CandidateDivergence = {
 const MAX_SHARED_PEER_TRAITS = 12
 const MAX_DECLARATION_TRAITS = 12
 
+type HolderEntry = {
+  readonly trait: DeclarationTrait
+  readonly holders: PeerDeclaration[]
+}
+
 /**
  * Evaluates one member of a peer set against the majority patterns of the others.
  */
@@ -136,10 +176,28 @@ const divergencesForMember = (
   }
 
   const memberTraitKeys = new Set(member.traits.map(declarationTraitKey))
-  const holdersByKey = new Map<
-    string,
-    { readonly trait: DeclarationTrait; readonly holders: PeerDeclaration[] }
-  >()
+  // Where the member holds each trait SUBJECT, so a pattern it holds elsewhere is
+  // reported as displaced rather than as missing.
+  const memberPositionsBySubject = new Map<string, TraitPosition[]>()
+
+  for (const trait of member.traits) {
+    const subjectKey = declarationTraitSubjectKey(trait)
+    const positions = memberPositionsBySubject.get(subjectKey) ?? []
+
+    positions.push(trait.position)
+    memberPositionsBySubject.set(subjectKey, positions)
+  }
+
+  const standingFor = (trait: DeclarationTrait): MemberStanding => {
+    const positions = memberPositionsBySubject.get(
+      declarationTraitSubjectKey(trait)
+    )
+
+    return positions === undefined || positions.length === 0
+      ? { shape: 'absent' }
+      : { shape: 'displaced', positions }
+  }
+  const holdersByKey = new Map<string, HolderEntry>()
 
   for (const peer of peers) {
     for (const trait of peer.traits) {
@@ -175,12 +233,34 @@ const divergencesForMember = (
     return []
   }
 
-  const diverging = [...holdersByKey.entries()].filter(
+  const admissible = [...holdersByKey.entries()].filter(
     ([key, entry]) =>
       !memberTraitKeys.has(key) &&
       entry.holders.length >= MINIMUM_CITED_PEERS &&
       isMajorityOf(entry.holders.length, peers.length)
   )
+  // ONE DIVERGENCE PER TRAIT SUBJECT. Positional traits let the same symbol be a
+  // majority pattern at two positions at once — peers that both guard with `X` at
+  // the top and call it again inside a loop — and a member holding neither would
+  // otherwise be reported twice for one absence. The best-evidenced position is
+  // kept, so the extra dimension can sharpen a divergence but never multiply it.
+  const strongestBySubject = new Map<string, [string, HolderEntry]>()
+
+  for (const candidate of admissible) {
+    const subjectKey = declarationTraitSubjectKey(candidate[1].trait)
+    const existing = strongestBySubject.get(subjectKey)
+
+    if (
+      existing === undefined ||
+      candidate[1].holders.length > existing[1].holders.length ||
+      (candidate[1].holders.length === existing[1].holders.length &&
+        candidate[0].localeCompare(existing[0]) < 0)
+    ) {
+      strongestBySubject.set(subjectKey, candidate)
+    }
+  }
+
+  const diverging = [...strongestBySubject.values()]
   // A member that does not call `X` at all cannot call it as a guard or with a
   // particular argument either, so the more specific divergences are redundant
   // restatements of the plain one. Reporting all three would inflate the count
@@ -207,12 +287,21 @@ const divergencesForMember = (
         right.holders.length - left.holders.length ||
         leftKey.localeCompare(rightKey)
     )
-  const declarationTraits = [...member.traits]
-    .sort((left, right) =>
-      declarationTraitKey(left).localeCompare(declarationTraitKey(right))
+  // The two packet lists describe the group and the member by WHAT they do. The
+  // position is dropped here and de-duplicated away: a peer set that calls `respond`
+  // at two positions has not thereby acquired two shared practices, and listing the
+  // same phrase twice would spend the packet's bounded room restating one fact.
+  // Position is carried where it is the point — on the divergent trait, and in the
+  // statement.
+  const declarationTraits = [
+    ...new Set(
+      [...member.traits]
+        .sort((left, right) =>
+          declarationTraitKey(left).localeCompare(declarationTraitKey(right))
+        )
+        .map(describeDeclarationTrait)
     )
-    .slice(0, MAX_DECLARATION_TRAITS)
-    .map(describeDeclarationTrait)
+  ].slice(0, MAX_DECLARATION_TRAITS)
 
   return diverging
     .filter(
@@ -220,6 +309,7 @@ const divergencesForMember = (
         entry.trait.kind === 'call' || !missingCalls.has(entry.trait.name)
     )
     .map(([key, entry]) => {
+      const standing = standingFor(entry.trait)
       const divergence: ConformanceDivergence = {
         id: divergenceId(member, key),
         attribution: member.changeAttributed
@@ -249,9 +339,10 @@ const divergencesForMember = (
           entry.trait,
           entry.holders.length,
           peers.length,
-          member
+          member,
+          standing
         ),
-        question: questionFor(entry.trait, member)
+        question: questionFor(entry.trait, member, standing)
       }
 
       return {
@@ -261,13 +352,19 @@ const divergencesForMember = (
         adjudicationInput: conformanceAdjudicationInputFor(
           divergence,
           {
-            sharedPeerTraits: majorityTraits
-              .filter(([majorityKey]) => majorityKey !== key)
-              .slice(0, MAX_SHARED_PEER_TRAITS)
-              .map(([, majority]) => describeDeclarationTrait(majority.trait)),
+            sharedPeerTraits: [
+              ...new Set(
+                majorityTraits
+                  .filter(([majorityKey]) => majorityKey !== key)
+                  .map(([, majority]) => describeDeclarationTrait(majority.trait))
+              )
+            ].slice(0, MAX_SHARED_PEER_TRAITS),
             declarationTraits
           },
-          describeDeclarationTrait(entry.trait)
+          // Positioned, because for a displaced divergence the position IS the
+          // divergence and the unpositioned phrase would describe something the
+          // declaration also does.
+          describePositionedTrait(entry.trait)
         )
       }
     })

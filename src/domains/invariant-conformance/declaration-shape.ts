@@ -26,10 +26,22 @@
 // imprecision.
 
 import { blankNonCode, codeLinesOfSpan, type DeclarationSpan, type SourceLines } from './declaration-span.js'
+import {
+  describeTraitPosition,
+  traitPositionKey,
+  traitPositionsOfSpan,
+  type TraitPosition
+} from './trait-position.js'
 
 export type DeclarationTraitKind = 'call' | 'guard' | 'call-argument'
 
-export type DeclarationTrait = {
+// What a trait is, minus where it sits. Spec 24 compares traits including their
+// position, but the two questions "which symbol, used how" and "where in the
+// declaration" are separable, and several readers only want the first: the
+// adjudication packet describes a group by what its members do, and listing "calls
+// respond on the exit path" beside "calls respond inside a nested block" would
+// describe the group twice.
+export type DeclarationTraitSubject = {
   readonly kind: DeclarationTraitKind
   // The called symbol.
   readonly name: string
@@ -37,11 +49,32 @@ export type DeclarationTrait = {
   readonly argument?: string
 }
 
-/** Stable, comparable identity of a trait. */
-export const declarationTraitKey = (trait: DeclarationTrait): string =>
+export type DeclarationTrait = DeclarationTraitSubject & {
+  // Where in the declaration the trait was observed (spec 24, "Positional
+  // Traits"). Two declarations holding the same symbol at materially different
+  // positions do not hold the same trait.
+  readonly position: TraitPosition
+}
+
+/**
+ * Identity of a trait's subject, ignoring where it sits.
+ *
+ * This is what "the declaration mentions this symbol at all" means, and it is the
+ * question that separates a divergence of ABSENCE — the peers call it and this
+ * declaration never does — from a divergence of POSITION, where the declaration
+ * does call it but somewhere else entirely. The two read differently to a human and
+ * are stated differently.
+ */
+export const declarationTraitSubjectKey = (
+  trait: DeclarationTraitSubject
+): string =>
   trait.argument === undefined
     ? `${trait.kind}:${trait.name}`
     : `${trait.kind}:${trait.name}(${trait.argument})`
+
+/** Stable, comparable identity of a trait, including its structural position. */
+export const declarationTraitKey = (trait: DeclarationTrait): string =>
+  `${declarationTraitSubjectKey(trait)}@${traitPositionKey(trait.position)}`
 
 /**
  * The trait as a phrase, for the one reader that is not code: the adjudicator.
@@ -50,8 +83,13 @@ export const declarationTraitKey = (trait: DeclarationTrait): string =>
  * the adjudication packet is asked to judge whether a set of peers shares a
  * practice, so it presents each trait the same way the divergence statement does.
  * It states what the code does and nothing about whether that matters.
+ *
+ * The position is deliberately NOT part of this phrase; `describePositionedTrait`
+ * adds it where it is the point.
  */
-export const describeDeclarationTrait = (trait: DeclarationTrait): string => {
+export const describeDeclarationTrait = (
+  trait: DeclarationTraitSubject
+): string => {
   if (trait.kind === 'guard') {
     return `calls ${trait.name} in a conditional`
   }
@@ -62,6 +100,10 @@ export const describeDeclarationTrait = (trait: DeclarationTrait): string => {
 
   return `calls ${trait.name}`
 }
+
+/** The trait as a phrase, with the structural position that now distinguishes it. */
+export const describePositionedTrait = (trait: DeclarationTrait): string =>
+  `${describeDeclarationTrait(trait)} ${describeTraitPosition(trait.position)}`
 
 // Identifiers that are followed by `(` without being a call in at least one
 // supported language: `if (`, `catch (`, Python's `class Foo(Base):`, Go's
@@ -196,14 +238,17 @@ export type ExtractDeclarationTraitsInput = {
 
 /**
  * Extracts the trait set of one declaration. The result is de-duplicated by
- * trait key: a body calling `log` five times shares exactly the same trait with a
- * peer calling it once, because what is being compared is whether the convention
- * is upheld, not how often.
+ * trait key: a body calling `log` five times at the same position shares exactly
+ * the same trait with a peer calling it once, because what is being compared is
+ * whether the convention is upheld, not how often. Calling it at two materially
+ * different positions yields two traits, which is the whole of spec 24's
+ * "Positional Traits".
  */
 export const extractDeclarationTraits = (
   input: ExtractDeclarationTraitsInput
 ): readonly DeclarationTrait[] => {
   const codeLines = codeLinesOfSpan(input.lines, input.span)
+  const positions = traitPositionsOfSpan(codeLines, input.span.indentation)
   const byKey = new Map<string, DeclarationTrait>()
 
   const record = (trait: DeclarationTrait): void => {
@@ -215,6 +260,14 @@ export const extractDeclarationTraits = (
   }
 
   for (const [offset, line] of codeLines.entries()) {
+    const position = positions[offset]
+
+    // A line with no position is blank or fully blanked, so it carries no call
+    // either; the guard is here so a trait can never be recorded without one.
+    if (position === undefined) {
+      continue
+    }
+
     const isGuardLine = guardLinePattern.test(line)
     // Calls are located in the BLANKED line, so a name inside a comment or a
     // string is never one. The argument is then read from the RAW line at the
@@ -232,10 +285,10 @@ export const extractDeclarationTraits = (
         continue
       }
 
-      record({ kind: 'call', name })
+      record({ kind: 'call', name, position })
 
       if (isGuardLine) {
-        record({ kind: 'guard', name })
+        record({ kind: 'guard', name, position })
       }
 
       // The match ends on the opening parenthesis, so its last character is the
@@ -246,7 +299,7 @@ export const extractDeclarationTraits = (
       )
 
       if (argument !== undefined) {
-        record({ kind: 'call-argument', name, argument })
+        record({ kind: 'call-argument', name, argument, position })
       }
     }
   }
