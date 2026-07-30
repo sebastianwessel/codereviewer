@@ -9,6 +9,100 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-31 — Spec 23 re-measured after the amendment: the new false-satisfied route is REAL. NO SHIP, on evidence this time
+
+34 cases (12 real, 22 synthetic) over 12 commits, spend **$2.3277** of a $4.00
+ceiling. Full analysis: `reports/2026-07-31-intent-fulfilment-remeasurement.md`.
+Decision rule written down before any result was read, carrying forward
+2026-07-30's rule unchanged plus two new clauses (a deletion-heavy-behavioural
+sub-arm, and citation aptness as a separate non-gating axis).
+
+All 21 existing cases were re-run and re-scored; 13 new cases were added on four
+deletion-heavy commits (`52ff75d`, `ee0589e`, `2882f4c`, `a6e6c5c`), every synthetic
+plant a **behavioural** obligation.
+
+| arm | extraction faithful | unaddressed detection | false-satisfied | opportunities | inapt citations |
+|---|---:|---:|---:|---:|---:|
+| **real** (76 obligations) | 96.1% | **not measurable** | 0.0% (0/73) | **0** | 4.1% (3/73) |
+| **synthetic** (225 obligations) | 98.7% | 90.0% (72/80) | **2.8% (4/142)** | **80**, 4 taken | 8.0% (11/138) |
+
+**The deciding sub-arm: 52 deletion-heavy behavioural opportunities, 3 TAKEN
+(5.8%, 95% upper bound 14.2%).** The pre-registered bar for clearing the route was
+≥30 opportunities taken **zero** times. It was not cleared.
+
+### The answer to the question the amendment forced
+
+**Yes — the tool can be made to say "done" for a behavioural obligation the change
+did not satisfy, by citing deleted lines.** `s17-52ff75d-behaviour`/`obl_13`:
+
+> *"Make runs that request the withdrawn guarded-region context kind by name fail
+> intake with exit code 2 instead of assembling an empty section."*
+
+Reported **`addressed`** on exactly two citations, **both removed lines**
+(`agent-contracts.ts:49 'guarded-region'` and `context.ts:316 inputContext.kind ===
+'guarded-region'`). The commit adds no intake check and no exit path, and the kind
+is an internal enum with no user-facing way to name it. Two more false-satisfied
+verdicts came from added lines (`s32`/`obl_20` credited a *test* for a claim about
+runtime behaviour; `s33`/`obl_14` credited docs prose about **config** validation
+for a claim about **builds**), plus one non-behavioural (`s28`/`obl_7`).
+
+**`unevidencedAddressedCount` and `uncitedObligationCount` were 0 in all 34 runs and
+no run was truncated.** Every citation was a real line the change really touched.
+The structural guard cannot catch this: the failure is a valid address attached to
+the wrong claim.
+
+### What the amendment demonstrably fixed, stated beside the cost
+
+`r9-52ff75d` went from 5 addressed / 9 wrongly-unaddressed to **14 addressed / 0
+unaddressed**, all correct. `r7`/`obl_2` moved from a code-comment citation to the
+29 removed export lines. `s7`/`obl_1` and `s10`/`obl_6` (last round's near-miss)
+both became correct. The deletion blind spot is genuinely closed.
+
+The same change produced the three behavioural false-satisfied verdicts above and a
+**33.3% inapt-citation rate (4/12) on behavioural obligations in deletion-heavy
+changes**. Neither half of this trade should be quoted without the other.
+
+### Aptness on one obligation shape is a coin flip
+
+*"A config still setting the removed block fails validation with exit code 2"* was
+judged on `52ff75d` four times. Three runs cited removed schema keys, which show the
+key deleted and say nothing about exit code 2 (**inapt**). One cited the added docs
+line *"now fails validation with exit code 2"* (**apt**). The apt citation was in
+scope all four times. Same split on `ee0589e`: apt in `r13` and `s33`, inapt in
+`s21`.
+
+### Also reproduced, and still unfixed
+
+`r4-4731580`'s two explicit *"Not changed, and deliberately"* paragraphs became
+obligations again and were again answered `unaddressed` — both of the real arm's two
+false `unaddressed` verdicts. And extraction can collapse on a message that is
+mostly measurement narrative: `r10-a6e6c5c` extracted 3 obligations from a message
+stating 5; `s18` on the same commit extracted 1 of 5.
+
+### What invalidates this entry
+
+- One run per case, and extraction is visibly non-deterministic: the same
+  `52ff75d` message yielded 14, 12, 13, 13 and 15 real obligations across five
+  cases. No variance band for any figure.
+- The real arm again had **zero** opportunities to false-satisfy, so its 0.0% is
+  uninformative and says nothing about pre-written tickets or PR descriptions.
+- 4 events. The route's **existence** is established; its rate is bounded only
+  below 11.1% (per opportunity, synthetic).
+- The 52 DHB opportunities are 52 report rows from about 31 planted statements, and
+  they were engineered to be tempting. That is how to find a failure mode, not how
+  to estimate its frequency in the wild.
+- Two of ~31 plants turned out ambiguous once extracted (`s21`/`obl_8`,
+  `s21`/`obl_10`) and are recorded `unclassifiable`, not scored.
+- Three larger deletion-heavy commits with the same obligation shape (`a75e429`,
+  `4656955`, `fd31dc9`) were dropped for budget and remain unmeasured.
+- Twelve commits of one TypeScript repository, one provider, one day.
+
+The capability stays **off by default**. The difference from 2026-07-30 matters:
+that entry said no false-satisfied claim had been observed. This one says four have,
+and names the shape that produces them.
+
+---
+
 ## 2026-07-30 — Spec 23 amended: a removed line is evidence. Deletion blind spot closed, and a new risk opened
 
 Spec 23 was amended (its first post-implementation amendment) so an addressed
