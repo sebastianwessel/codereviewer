@@ -46,6 +46,20 @@ When you **do** set `contextMaxBytes`, it lowers that ceiling, and it also caps
 If the lowered ceiling binds, the run stops loudly rather than truncating: recovery
 is a larger value, unsetting it, or reduced scope.
 
+### `aiReview.maxFilesPerDiscoveryCall`
+
+How many changed files one discovery call may review. A task covering more is
+partitioned across several calls whose findings are unioned (spec 27).
+
+**Unset by default, meaning unlimited** — today's behaviour. It exists because
+discovery yield tracks *call count*, not defect count: a call returns roughly three
+to five candidates whether it is shown one file or forty. The spec 26 A/B measured
+identical code under identical prompts differing only in how many calls it was spread
+across, and saw 106 candidates against 75, 43.7% recall against 35.2%.
+
+Lower values raise recall and cost together and can lower precision. No default is
+set until the trade is measured.
+
 ### `review.crossFileRetrieval`
 
 Agentic cross-file discovery. When enabled, the discovery agent may call the

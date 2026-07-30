@@ -12,6 +12,7 @@ import {
 } from '../agent-contracts.js'
 import { type ProviderIssue } from '../provider-issues.js'
 import { runDiscoveryCall } from './discovery-call.js'
+import { partitionTaskForDiscovery } from './discovery-partition.js'
 import {
   buildContextSections,
   buildReviewText,
@@ -262,25 +263,53 @@ export const runModelBackedHolisticTaskReview = async (
   const candidatesById = new Map<string, CandidateFinding>()
   const rawDiff = input.workflowInput.reviewedDiffText
 
-  const general = await runDiscoveryCall({
-    runner: input.runners.holisticReview,
-    taskInput: input.taskInput,
-    // Rebuilt per task rather than prebuilt, so a task the provider refuses can be
-    // halved and each half prompted from its OWN context (spec 26).
-    buildText: (taskInput) => buildReviewText(taskInput, rawDiff),
-    signal: input.signal,
-    stage: 'holistic_review'
-  })
-  const providerIssues: ProviderIssue[] = [...general.providerIssues]
-  const generalCollected = collectCandidates({
-    findings: general.findings,
-    task: input.task,
-    into: candidatesById,
-    maxToAdd: HOLISTIC_MAX_CANDIDATES
-  })
-  let droppedCount = generalCollected.dropped
-  let suppressedByLocationCount = generalCollected.suppressedByLocation
-  let suppressedByIdCount = generalCollected.suppressedById
+  // Spec 27: yield tracks CALL COUNT, not defect count — a discovery call returns
+  // roughly three to five candidates whether shown one file or forty. Partitioning
+  // the task's files across several calls is therefore how yield scales with scope.
+  // With no limit configured this is exactly one partition, i.e. today's behaviour.
+  const partitions = partitionTaskForDiscovery(
+    input.task,
+    input.workflowInput.maxFilesPerDiscoveryCall
+  )
+  const providerIssues: ProviderIssue[] = []
+  let droppedCount = 0
+  let suppressedByLocationCount = 0
+  let suppressedByIdCount = 0
+  let generalFindingCount = 0
+  let generalSplitCount = 0
+
+  // Sequential: the partitions hit the same provider under the same rate limit, and
+  // firing them together would turn one large change into a burst.
+  for (const partition of partitions) {
+    const partitionInput = { ...input.taskInput, task: partition }
+    const general = await runDiscoveryCall({
+      runner: input.runners.holisticReview,
+      taskInput: partitionInput,
+      // Rebuilt per task rather than prebuilt, so a task the provider refuses can be
+      // halved and each half prompted from its OWN context (spec 26).
+      buildText: (taskInput) => buildReviewText(taskInput, rawDiff),
+      signal: input.signal,
+      stage: 'holistic_review'
+    })
+
+    providerIssues.push(...general.providerIssues)
+    generalFindingCount += general.findings.length
+    generalSplitCount += general.splitCount
+
+    // Collected against the PARTITION, not the parent task: a finding must stay
+    // restricted to the files its own call was shown, or admission would anchor it
+    // against content that call never read.
+    const collected = collectCandidates({
+      findings: general.findings,
+      task: partition,
+      into: candidatesById,
+      maxToAdd: HOLISTIC_MAX_CANDIDATES
+    })
+    droppedCount += collected.dropped
+    suppressedByLocationCount += collected.suppressedByLocation
+    suppressedByIdCount += collected.suppressedById
+  }
+
   const generalCandidateCount = candidatesById.size
 
   let securityFindingCount = 0
@@ -334,7 +363,8 @@ export const runModelBackedHolisticTaskReview = async (
 
   input.logger.debug('Holistic task review completed.', {
     task_id: input.task.id,
-    finding_count: general.findings.length,
+    finding_count: generalFindingCount,
+    discovery_call_count: partitions.length,
     security_pass_enabled: input.workflowInput.securityPassEnabled,
     security_finding_count: securityFindingCount,
     // Spec 26: how many times the provider refused a packet and it was halved.
@@ -342,7 +372,7 @@ export const runModelBackedHolisticTaskReview = async (
     // limit retry have different causes and different meanings, and one counter for
     // both would hide which was happening.
     context_overflow_split_count:
-      general.splitCount + securitySplitCount,
+      generalSplitCount + securitySplitCount,
     general_candidate_count: generalCandidateCount,
     suppressed_by_location_count: suppressedByLocationCount,
     suppressed_by_id_count: suppressedByIdCount,

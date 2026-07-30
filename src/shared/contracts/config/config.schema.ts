@@ -233,7 +233,19 @@ export const AiReviewConfigSchema = z.strictObject({
   // engine focused on impactful runtime/security defects and out of low-severity
   // nit noise (aligned with the low-noise product vision). Trusted
   // deterministic-rule findings are exempt. Lower to `low`/`info` to surface more.
-  actionableSeverityThreshold: SeveritySchema.default('medium')
+  actionableSeverityThreshold: SeveritySchema.default('medium'),
+  // Spec 27: how many changed files ONE discovery call may review. A task covering
+  // more is partitioned across several calls whose candidates are unioned.
+  //
+  // Discovery yield tracks CALL COUNT, not defect count: a call returns roughly
+  // three to five candidates whether it is shown one file or forty. The spec 26 A/B
+  // measured the same code, same prompts, differing only in how many calls it was
+  // spread across — 106 candidates against 75, and 43.7% recall against 35.2%.
+  //
+  // Unset means unlimited, which is today's behaviour. It stays the default until a
+  // value is MEASURED: shipping a chosen-by-feel limit is the exact failure this
+  // project has now corrected five times.
+  maxFilesPerDiscoveryCall: z.int().min(1).optional()
 })
 
 export const PromotionPolicyConfigSchema = z.strictObject({

@@ -6,13 +6,13 @@
 // recursing until the pieces are accepted — so the provider's own limit is the only
 // authority and no value has to be chosen correctly in advance.
 
-import { sha256 } from '../../../../shared/hash/hash.js'
 import { splitContentInHalf } from '../../../../shared/text/line-chunks.js'
 import {
   type ReviewContextDocument,
   type TaskReviewInput,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
+import { partitionReviewContext, subTaskFrom } from './task-context-split.js'
 
 // A runaway guard, NOT a ration. It exists so a provider that refuses every packet
 // — for a reason unrelated to size, or because a single indivisible document is
@@ -22,42 +22,6 @@ import {
 // deliberately the same shape as `maxToolCallsPerTask`, which bounds a model that
 // never stops requesting reads rather than rationing the reads it may make.
 export const MAX_REACTIVE_SPLIT_DEPTH = 6
-
-const isReviewTarget = (document: ReviewContextDocument): boolean =>
-  document.kind === 'file'
-
-// A split half needs its own task id: the halves are distinct tasks that run as
-// distinct calls, and reusing the parent's id would collide their candidates (which
-// are keyed by task id and location) and make the two halves indistinguishable in
-// the run record.
-const halfTaskId = (parentId: string, half: 'a' | 'b'): string =>
-  `task_${sha256(`${parentId}:split:${half}`).slice(0, 16)}`
-
-const taskFromDocuments = (
-  parent: WorkflowReviewTask,
-  half: 'a' | 'b',
-  documents: readonly ReviewContextDocument[]
-): WorkflowReviewTask => {
-  const paths = [
-    ...new Set(
-      documents
-        .filter(isReviewTarget)
-        .map((document) => document.path)
-        .filter((path): path is string => path !== undefined)
-    )
-  ].sort()
-
-  return {
-    ...parent,
-    id: halfTaskId(parent.id, half),
-    // Findings stay restricted to this half's OWN review targets. Keeping the
-    // parent's full path list would let a half report a finding in a file it was
-    // never shown, which admission would then anchor against content the model
-    // did not read.
-    paths: paths.length > 0 ? paths : [...parent.paths],
-    reviewContext: [...documents]
-  }
-}
 
 /**
  * Split a task's review context into two halves, or report that it cannot be split.
@@ -75,10 +39,7 @@ const taskFromDocuments = (
 export const splitTaskInHalf = (
   task: WorkflowReviewTask
 ): readonly [WorkflowReviewTask, WorkflowReviewTask] | undefined => {
-  const targets = task.reviewContext.filter(isReviewTarget)
-  const contextOnly = task.reviewContext.filter(
-    (document) => !isReviewTarget(document)
-  )
+  const { targets, contextOnly } = partitionReviewContext(task)
 
   const halves = ((): readonly [
     readonly ReviewContextDocument[],
@@ -114,24 +75,9 @@ export const splitTaskInHalf = (
     return undefined
   }
 
-  const attach = (
-    documents: readonly ReviewContextDocument[]
-  ): readonly ReviewContextDocument[] => {
-    const paths = new Set(
-      documents.map((document) => document.path).filter((path) => path !== undefined)
-    )
-
-    return [
-      ...documents,
-      ...contextOnly.filter(
-        (document) => document.path === undefined || paths.has(document.path)
-      )
-    ]
-  }
-
   return [
-    taskFromDocuments(task, 'a', attach(halves[0])),
-    taskFromDocuments(task, 'b', attach(halves[1]))
+    subTaskFrom(task, 'split:a', halves[0], contextOnly),
+    subTaskFrom(task, 'split:b', halves[1], contextOnly)
   ]
 }
 

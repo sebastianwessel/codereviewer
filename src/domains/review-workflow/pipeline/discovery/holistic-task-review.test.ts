@@ -723,3 +723,130 @@ describe('discovery call failure tolerance', () => {
     ).rejects.toThrow(/connection reset/u)
   })
 })
+
+describe('discovery partitioning end to end (spec 27)', () => {
+  const threeFileTask: WorkflowReviewTask = {
+    ...task,
+    id: 'task_three_files',
+    paths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
+    reviewContext: ['a', 'b', 'c'].map((name, index) => ({
+      kind: 'file' as const,
+      path: `src/${name}.ts`,
+      content: `export const ${name} = ${index}\n`,
+      startLine: 1,
+      endLine: 2,
+      ledgerEntryId: `ctx_000000000000000${index}`
+    }))
+  }
+  const threeFileInput = TaskReviewInputSchema.parse({
+    ...taskInput,
+    task: threeFileTask
+  })
+
+  const runWith = async (maxFilesPerDiscoveryCall: number | undefined) => {
+    const shown: string[][] = []
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: ReviewWorkflowInputSchema.parse({
+        runId: 'run-holistic',
+        reviewedPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        ...(maxFilesPerDiscoveryCall === undefined
+          ? {}
+          : { maxFilesPerDiscoveryCall }),
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'holistic-test',
+          signalVersions: { typescript: '6.0.3' },
+          configHash
+        }
+      }),
+      taskInput: threeFileInput,
+      task: threeFileTask,
+      runners: {
+        // Reports one finding in the FIRST file it was actually shown, which is how
+        // per-call yield behaves: roughly constant regardless of how much it sees.
+        holisticReview: async (holisticInput) => {
+          shown.push([...holisticInput.paths])
+          const first = holisticInput.paths[0] as string
+          return holisticResultWith([
+            {
+              category: 'bug',
+              severity: 'high',
+              title: `Defect in ${first}`,
+              description: 'One finding per call, as measured.',
+              path: first,
+              startLine: 1
+            }
+          ])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+    return { shown, result }
+  }
+
+  test('unlimited (the default) issues ONE call and yields one finding', async () => {
+    const { shown, result } = await runWith(undefined)
+
+    expect(shown).toEqual([['src/a.ts', 'src/b.ts', 'src/c.ts']])
+    // This is exactly the measured problem: three files, one look, one candidate.
+    expect(result.candidates).toHaveLength(1)
+  })
+
+  test('one file per call issues three calls and yields three findings', async () => {
+    const { shown, result } = await runWith(1)
+
+    expect(shown).toEqual([['src/a.ts'], ['src/b.ts'], ['src/c.ts']])
+    expect(result.candidates).toHaveLength(3)
+    expect(
+      result.candidates.map((candidate) => candidate.location.path).sort()
+    ).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts'])
+  })
+
+  test('a call may only report findings in the files it was shown', async () => {
+    // Guards the admission-safety requirement: a partition that reports outside its
+    // own paths must have that finding dropped, not anchored against unread content.
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: ReviewWorkflowInputSchema.parse({
+        runId: 'run-holistic',
+        reviewedPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        maxFilesPerDiscoveryCall: 1,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'holistic-test',
+          signalVersions: { typescript: '6.0.3' },
+          configHash
+        }
+      }),
+      taskInput: threeFileInput,
+      task: threeFileTask,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([
+            {
+              category: 'bug',
+              severity: 'high',
+              title: 'Reported outside this call’s scope',
+              description: 'Names a file this call was never shown.',
+              path: 'src/c.ts',
+              startLine: 1
+            }
+          ])
+      },
+      logger: { debug: () => {} }
+    })
+
+    // Only the call that was actually shown src/c.ts may raise it.
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0]?.location.path).toBe('src/c.ts')
+  })
+})

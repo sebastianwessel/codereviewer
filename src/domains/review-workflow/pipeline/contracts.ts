@@ -40,6 +40,8 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   // default: the disabled path runs a single discovery call per task, byte-for-byte
   // unchanged. The extra candidates flow through the same refutation + admission.
   securityPassEnabled: z.boolean().default(false),
+  // Spec 27. Absent means unlimited, which is today's behaviour.
+  maxFilesPerDiscoveryCall: z.int().min(1).optional(),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
   instructions: z.array(ContextDocumentSchema),

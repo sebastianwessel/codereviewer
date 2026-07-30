@@ -110,6 +110,12 @@ export const createWorkflowInput = (
   reviewedDiffRanges: input.reviewedDiffRanges.map((range) => ({ ...range })),
   reviewedDiffText: input.reviewedDiffText,
   securityPassEnabled: input.config.security.dedicatedPass.enabled,
+  ...(input.config.aiReview.maxFilesPerDiscoveryCall === undefined
+    ? {}
+    : {
+        maxFilesPerDiscoveryCall:
+          input.config.aiReview.maxFilesPerDiscoveryCall
+      }),
   evidence: [
     ...input.evidence.map((record) => ({ ...record })),
     ...contextEvidenceForTasks(input.tasks)
