@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'vitest'
 import {
+  guardedHandlerPeersSource,
+  unguardedHandlerSource
+} from '../../shared/testing/conformance-control-fixtures.js'
+import {
   ConformanceDivergenceSchema,
   MINIMUM_CITED_PEERS
 } from './conformance-report.js'
@@ -394,31 +398,12 @@ describe('peer-set membership precondition', () => {
     ).toEqual([])
   })
 
+  // The fixture is shared with the end-to-end control suite
+  // (`conformance-controls.test.ts`), so the deterministic core and the adjudication
+  // layer are held to the same case rather than to two copies that can drift.
   test('the control still fires: a handler that shares the group trait but drops the guard', () => {
-    const guarded = (name: string, load: string): string =>
-      [
-        `func ${name}(w http.ResponseWriter, r *http.Request) {`,
-        '\tif !requireAuth(r) {',
-        '\t\trespond(w, 401, "unauthorized")',
-        '\t\treturn',
-        '\t}',
-        `\trespond(w, 200, ${load}(r))`,
-        '}',
-        ''
-      ].join('\n')
-    const base = [
-      'package handlers',
-      '',
-      guarded('ListUsers', 'loadUsers'),
-      guarded('GetUser', 'loadUser'),
-      guarded('DeleteUser', 'removeUser')
-    ].join('\n')
-    const added = [
-      'func ExportUsers(w http.ResponseWriter, r *http.Request) {',
-      '\trespond(w, 200, exportAll(r))',
-      '}',
-      ''
-    ].join('\n')
+    const base = guardedHandlerPeersSource
+    const added = unguardedHandlerSource
     const content = `${base}\n${added}`
     const addedStartLine = base.split('\n').length + 1
     const result = divergencesFor([
@@ -476,5 +461,42 @@ describe('peer-set membership precondition', () => {
     expect(
       nonMajority.changeAttributed.map((divergence) => divergence.pattern.symbol)
     ).not.toContain('requireAuth')
+  })
+
+  // The adjudication packet describes the group by what a majority of the peers do.
+  // A schema-heavy module can agree on dozens of traits, and listing all of them
+  // spends input tokens describing the group in ever finer detail without changing
+  // what the group is — so both trait lists are bounded, strongest agreement first.
+  test('the adjudication packet bounds the trait lists it carries', () => {
+    const sharedCalls = Array.from(
+      { length: 20 },
+      (_unused, index) => `  shared${index}(request)`
+    )
+    const changed = handler('changed', [...sharedCalls, '  return 1'])
+    const peers = Array.from({ length: 4 }, (_unused, index) =>
+      handler(`peer${index}`, [
+        ...sharedCalls,
+        '  requireAuth(request)',
+        '  return 1'
+      ])
+    ).join('')
+    const result = divergencesFor([
+      {
+        path: 'src/wide/changed.ts',
+        content: changed,
+        hunks: wholeFileHunks(changed)
+      },
+      { path: 'src/wide/peers.ts', content: peers }
+    ])
+    const divergence = result.changeAttributed.find(
+      (candidate) => candidate.pattern.symbol === 'requireAuth'
+    )
+    const packet = result.adjudicationInputsById.get(divergence?.id ?? '')
+
+    expect(divergence).toBeDefined()
+    expect(packet?.sharedPeerTraits.length).toBe(12)
+    expect(packet?.declaration.traits.length).toBe(12)
+    // The bound truncates the packet, never the divergence's own evidence.
+    expect(divergence?.citedPeerCount).toBe(4)
   })
 })

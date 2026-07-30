@@ -1,13 +1,20 @@
 // End-to-end coverage of `conformance check` over a REAL git repository. It stays
-// hermetic and free: the command makes no provider call at all, so nothing here
-// costs money or varies run to run. Git is used rather than a scripted runner
-// because the CLI deliberately exposes no git seam — intake owns git, and the
+// hermetic and free: the command makes no provider call unless adjudication is
+// configured, and the tests that configure it hand in a SCRIPTED provider, so
+// nothing here costs money or varies run to run. Git is used rather than a scripted
+// runner because the CLI deliberately exposes no git seam — intake owns git, and the
 // point of this file is to exercise the command exactly as a user runs it.
 import { execFileSync } from 'node:child_process'
 import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import type {
+  JsonValue,
+  ModelProvider,
+  ObjectRequest,
+  ObjectResponse
+} from '@purista/harness'
 import type { InvariantConformanceReport } from '../domains/invariant-conformance/index.js'
 import { runCli } from './index.js'
 
@@ -17,13 +24,41 @@ const git = (root: string, args: readonly string[]): void => {
 
 const writeConfig = async (
   root: string,
-  invariantConformance: Record<string, unknown>
+  invariantConformance: Record<string, unknown>,
+  extra: Record<string, unknown> = {}
 ): Promise<void> => {
   await mkdir(join(root, '.codereviewer'), { recursive: true })
   await writeFile(
     join(root, '.codereviewer', 'config.json'),
-    JSON.stringify({ invariantConformance }, null, 2)
+    JSON.stringify({ invariantConformance, ...extra }, null, 2)
   )
+}
+
+// Answers one fixed verdict for every packet, and records the calls. Enough to
+// prove the command reached the adjudication lane and honoured its answer; what a
+// real model answers is measured by the domain's control suite and, ultimately, by
+// a live run.
+class FixedVerdictProvider implements ModelProvider {
+  readonly id = 'fixed-verdict'
+  readonly genAiSystem = 'scripted'
+  readonly requests: ObjectRequest[] = []
+
+  constructor(private readonly verdict: string) {}
+
+  async object<T extends JsonValue = JsonValue>(
+    request: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requests.push(request)
+
+    return {
+      object: {
+        verdict: this.verdict,
+        reason: 'The siblings all authorize before loading.'
+      } as unknown as T,
+      finishReason: 'stop',
+      usage: { inputTokens: 11, outputTokens: 3, totalTokens: 14 }
+    }
+  }
 }
 
 const guardedHandler = (name: string): string =>
@@ -344,6 +379,111 @@ describe('conformance CLI', { timeout: 20_000 }, () => {
       expect(report.summary.peerSetCount).toBe(1)
       expect(report.changeAttributedDivergences).toEqual([])
       expect(report.preExistingDivergences).toEqual([])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Adjudication is the only part of this capability that can spend money, so the
+  // command must not start it by accident and must not fail when it cannot run.
+  test('degrades to the deterministic arm when adjudication has no provider', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeConfig(root, { enabled: true, adjudication: { enabled: true } })
+      const result = await runCli(
+        ['conformance', 'check', '--base-ref', 'main~1', '--head-ref', 'HEAD'],
+        { cwd: root, environment: {} }
+      )
+      const report = parseReport(result.stdout)
+
+      expect(result.exitCode).toBe(0)
+      expect(report.summary.adjudication.mode).toBe('deterministic')
+      expect(report.warnings).toContain(
+        'Conformance adjudication is enabled but no model adjudicator was available; the deterministic divergences are reported unjudged.'
+      )
+      // The divergences are still reported, unjudged: a missing provider must not
+      // silently empty the report.
+      expect(report.summary.changeAttributedDivergenceCount).toBeGreaterThan(0)
+      expect(report.usage).toBeUndefined()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('reports only the adjudicated conventions, and accounts what they cost', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeConfig(
+        root,
+        { enabled: true, adjudication: { enabled: true } },
+        { provider: { id: 'openai', model: 'sentinel-model' } }
+      )
+      const provider = new FixedVerdictProvider('convention')
+      const result = await runCli(
+        ['conformance', 'check', '--base-ref', 'main~1', '--head-ref', 'HEAD'],
+        {
+          cwd: root,
+          environment: { OPENAI_API_KEY: 'sk-test' },
+          providerImport: async () => ({ openai: () => provider })
+        }
+      )
+      const report = parseReport(result.stdout)
+
+      expect(result.exitCode).toBe(0)
+      // Only reachable if the command actually handed the scripted factory to the
+      // adjudication lane instead of importing the real SDK provider.
+      expect(provider.requests.length).toBe(
+        report.summary.adjudication.requestedCount
+      )
+      expect(report.summary.adjudication.mode).toBe('model')
+      expect(report.summary.adjudication.conventionCount).toBe(
+        report.changeAttributedDivergences.length
+      )
+      expect(
+        report.changeAttributedDivergences.map(
+          (divergence) => divergence.adjudication?.verdict
+        )
+      ).toEqual(report.changeAttributedDivergences.map(() => 'convention'))
+      expect(report.usage?.inputTokens).toBeGreaterThan(0)
+      // No tool is offered to the adjudicator: it judges a divergence, it does not
+      // search a repository.
+      for (const request of provider.requests) {
+        expect(request.tools ?? []).toEqual([])
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('an incidental verdict empties the report and still exits 0', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeConfig(
+        root,
+        { enabled: true, adjudication: { enabled: true } },
+        { provider: { id: 'openai', model: 'sentinel-model' } }
+      )
+      const provider = new FixedVerdictProvider('incidental')
+      const result = await runCli(
+        ['conformance', 'check', '--base-ref', 'main~1', '--head-ref', 'HEAD'],
+        {
+          cwd: root,
+          environment: { OPENAI_API_KEY: 'sk-test' },
+          providerImport: async () => ({ openai: () => provider })
+        }
+      )
+      const report = parseReport(result.stdout)
+
+      expect(result.exitCode).toBe(0)
+      expect(report.changeAttributedDivergences).toEqual([])
+      expect(report.preExistingDivergences).toEqual([])
+      expect(report.summary.adjudication.incidentalCount).toBe(
+        provider.requests.length
+      )
+      expect(report.summary.adjudication.conventionCount).toBe(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

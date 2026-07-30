@@ -5,9 +5,10 @@ Configuration for the
 **separate command**, never a flag on `review`, and `review` ignores this key
 entirely.
 
-`conformance check` makes **no model provider call**, so nothing on this page
-controls spend. The only resource the command can consume is repository
-traversal, and the bounds below are what limit it.
+Everything on this page except `adjudication` bounds **repository traversal**, the
+only resource the deterministic part of the command consumes. `adjudication` is the
+one key that can spend money, and it is off by default: with it disabled
+`conformance check` makes no model provider call at all.
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
@@ -17,6 +18,8 @@ traversal, and the bounds below are what limit it.
 | `invariantConformance.maxPeerFiles` | integer 1–2000 | `300` | Run-wide cap on sibling files read to supply peers. This is the traversal bound: without it a change spread across many directories would read most of the repository. Exceeding it sets `scope.peerFilesTruncated`. |
 | `invariantConformance.maxDivergences` | integer 1–500 | `50` | Cap on the reported change-attributed divergences. |
 | `invariantConformance.maxPreExistingDivergences` | integer 0–500 | `25` | Cap on the reported pre-existing divergences. A separate cap, so a flood of divergences in untouched code can never crowd out the ones the change caused. Set it to `0` to suppress the list entirely. |
+| `invariantConformance.adjudication.enabled` | boolean | `false` | Ask a model, once per divergence, whether the shared pattern is a convention or an incidental resemblance. Only `convention` verdicts are reported. Requires a configured `provider`. |
+| `invariantConformance.adjudication.maxAdjudications` | integer 1–500 | `25` | Hard cap on model calls per run. Change-attributed divergences are judged first; anything beyond the cap is counted in `summary.adjudication.unadjudicatedCount` and **not reported**. |
 
 ```json
 {
@@ -26,6 +29,39 @@ traversal, and the bounds below are what limit it.
   }
 }
 ```
+
+## `adjudication`
+
+The deterministic steps can prove that a majority of a declaration's peers do
+something it does not. They cannot tell a **protective convention** from an
+**incidental resemblance** — a shared schema-builder call and a shared
+authorization check look identical to a lexical extractor. Adjudication asks a
+model that single question.
+
+```json
+{
+  "provider": { "id": "openai", "model": "your-model" },
+  "invariantConformance": {
+    "enabled": true,
+    "adjudication": { "enabled": true, "maxAdjudications": 25 }
+  }
+}
+```
+
+- It is enabled **separately** from `invariantConformance.enabled`, so turning the
+  capability on can never start a model call by itself.
+- The model gets **no tools and no repository access**: one divergence, its peers,
+  and the trait. It cannot search.
+- It is never asked whether the code is vulnerable, exploitable or insecure. See
+  [the CLI reference](../cli.md#adjudication-is-the-shared-pattern-a-convention)
+  for why that distinction is the whole design.
+- Cost is one call per divergence, bounded by `maxAdjudications` and reported in
+  the report's `usage`.
+- Adjudication can only make the report **shorter**. It removes divergences and
+  attaches the reason to the ones that stay; it can never add or alter one, and it
+  still cannot fail a pipeline.
+- With adjudication enabled and no usable provider, the command exits `0`, reports
+  the divergences unjudged, and warns.
 
 ## What it does not have
 

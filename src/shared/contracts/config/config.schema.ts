@@ -349,14 +349,31 @@ export const ChangeImpactConfigSchema = z.strictObject({
   maxSearchDepth: z.int().min(0).max(32).default(12)
 })
 
+// Conformance adjudication (spec 24, design step 4). Off by default, and off
+// independently of `invariantConformance.enabled`, because it is the only part of
+// this capability that costs money: one model call per divergence. With it
+// disabled the command runs spec 24's deterministic baseline arm, which the
+// adjudicated arm has to beat.
+//
+// `maxAdjudications` is the spend bound, and it is the only one this key needs:
+// the divergence lists are already capped, so this bounds calls per run in
+// absolute terms. Divergences beyond it are counted as unadjudicated and are NOT
+// reported — an unjudged divergence has not passed the filter, and the error
+// direction here is silence.
+export const ConformanceAdjudicationConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  maxAdjudications: z.int().min(1).max(500).default(25)
+})
+
 // Invariant-conformance review (spec 24). Off by default until measured, and
 // reached only by the separate `conformance check` command — never by `review`.
 //
-// The bounds are again the whole cost model: the deterministic core makes no
+// The bounds are again most of the cost model: the deterministic core makes no
 // provider call, so the only resource it spends is repository traversal. Peer
 // derivation reads sibling files, which is the one place this capability can grow
 // expensive on a wide change, so the peer bounds are both per-declaration and
-// per-run.
+// per-run. The one part that can spend money is `adjudication` below, bounded
+// separately and disabled separately.
 //
 // There is deliberately no `blocking` key. Spec 24 says the capability is
 // advisory only and MUST NOT be able to fail a pipeline, and the command always
@@ -381,7 +398,11 @@ export const InvariantConformanceConfigSchema = z.strictObject({
   // the lists are counted separately and a flood of pre-existing divergences
   // must never crowd out the change-attributed ones.
   maxDivergences: z.int().min(1).max(500).default(50),
-  maxPreExistingDivergences: z.int().min(0).max(500).default(25)
+  maxPreExistingDivergences: z.int().min(0).max(500).default(25),
+  adjudication: ConformanceAdjudicationConfigSchema.default({
+    enabled: false,
+    maxAdjudications: 25
+  })
 })
 
 // Agentic finding investigation-and-fix job (spec 12). Off by default. Reuses the
@@ -620,7 +641,8 @@ export const CodeReviewerConfigSchema = z.strictObject({
     maxPeersPerDeclaration: 60,
     maxPeerFiles: 300,
     maxDivergences: 50,
-    maxPreExistingDivergences: 25
+    maxPreExistingDivergences: 25,
+    adjudication: { enabled: false, maxAdjudications: 25 }
   }),
   fix: FixConfigSchema.default({
     enabled: false
@@ -692,6 +714,9 @@ export type VerificationClaimProviderConfig = z.infer<
 export type ChangeImpactConfig = z.infer<typeof ChangeImpactConfigSchema>
 export type InvariantConformanceConfig = z.infer<
   typeof InvariantConformanceConfigSchema
+>
+export type ConformanceAdjudicationConfig = z.infer<
+  typeof ConformanceAdjudicationConfigSchema
 >
 export type FixConfig = z.infer<typeof FixConfigSchema>
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>

@@ -43,6 +43,26 @@ export const declarationTraitKey = (trait: DeclarationTrait): string =>
     ? `${trait.kind}:${trait.name}`
     : `${trait.kind}:${trait.name}(${trait.argument})`
 
+/**
+ * The trait as a phrase, for the one reader that is not code: the adjudicator.
+ *
+ * A trait key (`guard:requireAuth`) is a comparison identity and reads as jargon;
+ * the adjudication packet is asked to judge whether a set of peers shares a
+ * practice, so it presents each trait the same way the divergence statement does.
+ * It states what the code does and nothing about whether that matters.
+ */
+export const describeDeclarationTrait = (trait: DeclarationTrait): string => {
+  if (trait.kind === 'guard') {
+    return `calls ${trait.name} in a conditional`
+  }
+
+  if (trait.kind === 'call-argument') {
+    return `calls ${trait.name} with ${trait.argument} as its first argument`
+  }
+
+  return `calls ${trait.name}`
+}
+
 // Identifiers that are followed by `(` without being a call in at least one
 // supported language: `if (`, `catch (`, Python's `class Foo(Base):`, Go's
 // grouped `var ( ... )` and `import ( ... )`, a JavaScript anonymous

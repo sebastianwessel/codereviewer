@@ -242,7 +242,8 @@ describe('CodeReviewerConfigSchema', () => {
       maxPeersPerDeclaration: 60,
       maxPeerFiles: 300,
       maxDivergences: 50,
-      maxPreExistingDivergences: 25
+      maxPreExistingDivergences: 25,
+      adjudication: { enabled: false, maxAdjudications: 25 }
     })
 
     const enabled = CodeReviewerConfigSchema.parse({
@@ -261,8 +262,42 @@ describe('CodeReviewerConfigSchema', () => {
       maxPeersPerDeclaration: 8,
       maxPeerFiles: 20,
       maxDivergences: 4,
-      maxPreExistingDivergences: 0
+      maxPreExistingDivergences: 0,
+      adjudication: { enabled: false, maxAdjudications: 25 }
     })
+  })
+
+  // The one part of spec 24 that can spend money, and the only reason the whole
+  // capability is not free. It is off independently of `enabled`, so turning the
+  // deterministic baseline arm on can never start a provider call by itself.
+  test('conformance adjudication is disabled independently of the capability', () => {
+    expect(
+      CodeReviewerConfigSchema.parse({
+        invariantConformance: { enabled: true }
+      }).invariantConformance.adjudication
+    ).toEqual({ enabled: false, maxAdjudications: 25 })
+
+    expect(
+      CodeReviewerConfigSchema.parse({
+        invariantConformance: {
+          enabled: true,
+          adjudication: { enabled: true, maxAdjudications: 4 }
+        }
+      }).invariantConformance.adjudication
+    ).toEqual({ enabled: true, maxAdjudications: 4 })
+
+    // A bound of zero would be a configuration that enables the arm and forbids
+    // every call it consists of.
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        invariantConformance: { adjudication: { maxAdjudications: 0 } }
+      })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        invariantConformance: { adjudication: { blocking: true } }
+      })
+    ).toThrow()
   })
 
   // Spec 24 says the capability is advisory only and MUST NOT be able to fail a

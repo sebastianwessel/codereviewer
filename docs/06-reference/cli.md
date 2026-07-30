@@ -383,8 +383,10 @@ Because of that, **the exit code is always `0`** when the command runs at all,
 whether or not anything is found. Only a configuration or usage failure (`2`) or
 a repository failure such as an unresolvable ref (`3`) changes it.
 
-The command makes **no model provider call**. It costs nothing to run and its
-output is reproducible.
+By default the command makes **no model provider call**: it costs nothing to run
+and its output is reproducible. One optional step
+([adjudication](#adjudication-is-the-shared-pattern-a-convention), off by
+default) issues one bounded model call per divergence.
 
 It is **disabled by default**. With `invariantConformance.enabled` left at
 `false` the command exits `0` and reports `"status": "disabled"` rather than an
@@ -411,6 +413,63 @@ Every step is deterministic and none of it involves a model.
    **at least three peers** hold it. Below three there is no pattern, only a
    coincidence, and nothing is reported.
 
+### Adjudication: is the shared pattern a convention?
+
+The steps above can prove that a majority of the peers do something this
+declaration does not. They cannot tell whether that something is a **practice the
+peers keep** or an **incidental resemblance**. On a schema-heavy module the shared
+trait is a library builder call; on a package of request handlers it is an
+authorization check. Both look identical to a lexical extractor.
+
+Adjudication asks a model that one question, per divergence, and is **off by
+default**:
+
+```json
+{
+  "invariantConformance": {
+    "enabled": true,
+    "adjudication": { "enabled": true, "maxAdjudications": 25 }
+  }
+}
+```
+
+It requires a configured [`provider`](./configuration/provider.md). With
+adjudication enabled and no usable provider the command still exits `0`, reports
+the divergences unjudged, and says so in `warnings`.
+
+What the model is asked, and what it is not:
+
+- It is asked **whether the named peers share a deliberate practice**. It is never
+  asked whether the code is vulnerable, exploitable or insecure — that question
+  produces an answer whether or not there is anything to find.
+- It gets **no tools and no repository access**. One divergence, its peers, the
+  trait, and what else the peers have in common. It cannot search.
+- It may answer `convention`, `incidental`, or `undetermined`.
+
+Only `convention` is reported. `incidental` and `undetermined` remove the
+divergence from the report and appear only as counts in `summary.adjudication`, so
+a short report is always explainable:
+
+| Count | Meaning |
+| --- | --- |
+| `requestedCount` | Divergences submitted for adjudication. |
+| `conventionCount` | Judged a convention, and therefore reported. |
+| `incidentalCount` | Judged an incidental resemblance, and not reported. |
+| `undeterminedCount` | The model could not decide. Not reported. |
+| `failedCount` | The call did not complete. Not reported. |
+| `unadjudicatedCount` | Beyond `maxAdjudications`, so never judged. Not reported. |
+
+`requestedCount` equals the four verdict counts added together, and
+`requestedCount + unadjudicatedCount` is every divergence the deterministic steps
+produced. `mode` is `deterministic` when no call was made and `model` when calls
+were.
+
+Everything unclear resolves towards **silence**: a malformed answer, a verdict the
+model did not state plainly, a convention asserted with no reason, a failed call
+and an exhausted bound all drop the divergence rather than report it. The change is
+therefore that adjudication can only ever make the report **shorter** — it can
+remove a divergence and attach a reason, never add or alter one.
+
 ### Report shape
 
 ```json
@@ -433,7 +492,16 @@ Every step is deterministic and none of it involves a model.
     "changeAttributedDivergenceCount": 1,
     "preExistingDivergenceCount": 0,
     "changeAttributedDivergencesTruncated": false,
-    "preExistingDivergencesTruncated": false
+    "preExistingDivergencesTruncated": false,
+    "adjudication": {
+      "mode": "model",
+      "requestedCount": 2,
+      "conventionCount": 1,
+      "incidentalCount": 1,
+      "undeterminedCount": 0,
+      "failedCount": 0,
+      "unadjudicatedCount": 0
+    }
   },
   "changeAttributedDivergences": [
     {
@@ -458,16 +526,29 @@ Every step is deterministic and none of it involves a model.
       ],
       "peersTruncated": false,
       "statement": "3 of 3 sibling declarations call requireAuth; removeOne does not.",
-      "question": "Is calling requireAuth a convention removeOne should follow, or do those peers merely resemble each other?"
+      "question": "Is calling requireAuth a convention removeOne should follow, or do those peers merely resemble each other?",
+      "adjudication": {
+        "verdict": "convention",
+        "reason": "The siblings all authorize the request before loading it."
+      }
     }
   ],
   "preExistingDivergences": [],
-  "warnings": []
+  "warnings": [],
+  "usage": { "inputTokens": 812, "outputTokens": 46, "costUsd": 0.0021 }
 }
 ```
 
 - `statement` and `question` are the whole output contract: a substantiated fact,
-  and a question for you. There is no field in which a verdict could be recorded.
+  and a question for you. There is no field in which a verdict on the CODE could be
+  recorded.
+- `adjudication` is present only when adjudication ran and answered `convention`.
+  Its `verdict` can hold no other value: `incidental` and `undetermined` are not
+  representable in a divergence entry, so neither can be misread as something
+  found. Divergences from a run with adjudication off carry no `adjudication` at
+  all, and `summary.adjudication.mode` is what says which arm ran.
+- `usage` is present only when adjudication issued a call. Nothing else in this
+  command spends anything.
 - `citedPeers` is the evidence, and it always holds at least three entries. If
   the statement looks wrong, open those three lines — that is what they are for.
 - `preExistingDivergences` holds divergences **the change did not cause**: a peer

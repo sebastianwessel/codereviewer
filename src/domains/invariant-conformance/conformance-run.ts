@@ -8,12 +8,20 @@
 // symlink re-checking, the eligibility gate and redaction all apply to every byte
 // this domain sees.
 //
-// This wave is the DETERMINISTIC BASELINE ARM spec 24's evaluation requires. Step
-// 3 of that evaluation says the model layer must beat listing the divergences and
-// letting a human read them; this is that list, so it has to be genuinely good and
-// it has to stay honest about being a baseline. Nothing here calls a model, and no
-// conformance adjudication happens: a divergence is reported exactly as the fact
-// it is, with no judgement about whether the shared pattern is a convention.
+// BOTH ARMS spec 24's evaluation requires run through this composition, and which
+// one ran is stated in `summary.adjudication.mode`.
+//
+// With no adjudicator supplied it is the DETERMINISTIC BASELINE ARM: nothing calls
+// a model, and a divergence is reported exactly as the fact it is, with no
+// judgement about whether the shared pattern is a convention. Step 3 of spec 24's
+// evaluation says the model layer must beat listing the divergences and letting a
+// human read them, so that list has to be genuinely good and has to stay
+// available.
+//
+// With an adjudicator supplied, the same divergences are filtered by design step
+// 4: one call per divergence, and only a `convention` verdict is reported. The
+// deterministic core is unchanged either way — the adjudicator cannot add a
+// divergence, only remove one — so the two arms are comparable by construction.
 
 import type { CodeReviewerConfig } from '../../shared/contracts/index.js'
 import {
@@ -23,7 +31,15 @@ import {
   type RepositoryIntake
 } from '../repository-intake/index.js'
 import {
+  adjudicateDivergences,
+  deterministicAdjudicationSummary
+} from './adjudicate-divergences.js'
+import type { ConformanceAdjudicationRunner } from './conformance-adjudication.js'
+import {
   InvariantConformanceReportSchema,
+  type ConformanceAdjudicationSummary,
+  type ConformanceDivergence,
+  type ConformanceUsage,
   type InvariantConformanceReport
 } from './conformance-report.js'
 import { collectDivergences } from './divergence.js'
@@ -46,6 +62,16 @@ export type RunInvariantConformanceInput = {
   // git invocation. Present only so a test can drive this composition
   // hermetically; production leaves it unset. This domain never invokes git.
   readonly runGit?: GitCommandRunner
+  // The conformance adjudicator (spec 24, design step 4). Absent runs the
+  // deterministic baseline arm. A seam rather than a provider resolved in here,
+  // because a composition that resolves its own provider cannot be driven
+  // hermetically, and every control test for this layer has to be.
+  readonly adjudicate?: ConformanceAdjudicationRunner
+  // Token usage and cost of the adjudication calls, read ONCE after they finish.
+  // Supplied by the same wiring that supplies the adjudicator, which owns the
+  // usage recorder and the price table; this composition only places the result in
+  // the report so there is exactly one place a report is assembled.
+  readonly adjudicationUsage?: () => ConformanceUsage | undefined
   readonly signal?: AbortSignal
 }
 
@@ -57,6 +83,9 @@ const UNSUPPORTED_LANGUAGE_WARNING =
 
 const NO_PEERS_WARNING =
   'No changed declaration had a sibling declaration in its own file or directory, so no peer set could be built.'
+
+const NO_ADJUDICATOR_WARNING =
+  'Conformance adjudication is enabled but no model adjudicator was available; the deterministic divergences are reported unjudged.'
 
 const directoryOf = (path: string): string => {
   const lastSlash = path.lastIndexOf('/')
@@ -192,7 +221,8 @@ const disabledReport = (input: {
       changeAttributedDivergenceCount: 0,
       preExistingDivergenceCount: 0,
       changeAttributedDivergencesTruncated: false,
-      preExistingDivergencesTruncated: false
+      preExistingDivergencesTruncated: false,
+      adjudication: deterministicAdjudicationSummary()
     },
     changeAttributedDivergences: [],
     preExistingDivergences: [],
@@ -235,6 +265,31 @@ export const runInvariantConformance = async (
     maxPreExistingDivergences:
       input.config.invariantConformance.maxPreExistingDivergences
   })
+  const adjudicationConfig = input.config.invariantConformance.adjudication
+  // The adjudicated arm runs only when the capability is configured for it AND an
+  // adjudicator was actually supplied. Both conditions are load-bearing: a
+  // provider that could not be resolved must degrade to the baseline arm rather
+  // than fail the run (spec 24, "Failure MUST be recoverable"), and an adjudicator
+  // supplied against a configuration that did not ask for one must not spend.
+  const adjudicated =
+    adjudicationConfig.enabled && input.adjudicate !== undefined
+      ? await adjudicateDivergences({
+          changeAttributed: divergences.changeAttributed,
+          preExisting: divergences.preExisting,
+          adjudicationInputsById: divergences.adjudicationInputsById,
+          adjudicate: input.adjudicate,
+          maxAdjudications: adjudicationConfig.maxAdjudications,
+          ...(input.signal === undefined ? {} : { signal: input.signal })
+        })
+      : undefined
+  const reportedChangeAttributed: readonly ConformanceDivergence[] =
+    adjudicated?.changeAttributed ?? divergences.changeAttributed
+  const reportedPreExisting: readonly ConformanceDivergence[] =
+    adjudicated?.preExisting ?? divergences.preExisting
+  const adjudicationSummary: ConformanceAdjudicationSummary =
+    adjudicated?.summary ?? deterministicAdjudicationSummary()
+  const usage =
+    adjudicated === undefined ? undefined : input.adjudicationUsage?.()
   const warnings: string[] = []
   const changedFileCount = collected.files.filter(
     (file) => file.hunks !== undefined
@@ -251,6 +306,27 @@ export const runInvariantConformance = async (
   if (collected.unreadableFileCount > 0) {
     warnings.push(
       `${collected.unreadableFileCount} file(s) could not be read for declaration extraction and were skipped.`
+    )
+  }
+
+  if (adjudicationConfig.enabled && input.adjudicate === undefined) {
+    warnings.push(NO_ADJUDICATOR_WARNING)
+  }
+
+  // Why the report is short. A filtered divergence leaves no entry behind, so
+  // without these lines an empty report reads the same whether the peers agreed
+  // with the change, the adjudicator called every pattern incidental, or the bound
+  // ran out before it looked. The counts are in the summary either way; these
+  // warnings surface the two cases a reader would otherwise have to go looking for.
+  if (adjudicationSummary.unadjudicatedCount > 0) {
+    warnings.push(
+      `${adjudicationSummary.unadjudicatedCount} divergence(s) were not adjudicated because the adjudication bound of ${adjudicationConfig.maxAdjudications} was reached, and are not reported.`
+    )
+  }
+
+  if (adjudicationSummary.failedCount > 0) {
+    warnings.push(
+      `${adjudicationSummary.failedCount} adjudication call(s) did not complete; those divergences are not reported.`
     )
   }
 
@@ -272,14 +348,19 @@ export const runInvariantConformance = async (
       changedDeclarationCount: derived.changedDeclarationCount,
       changedDeclarationsTruncated: derived.changedDeclarationsTruncated,
       peerSetCount: derived.peerSets.length,
-      changeAttributedDivergenceCount: divergences.changeAttributed.length,
-      preExistingDivergenceCount: divergences.preExisting.length,
+      // The counts describe what is REPORTED, so they always match the arrays
+      // below. What the adjudicator filtered out is in `adjudication`, where it
+      // cannot be mistaken for a divergence.
+      changeAttributedDivergenceCount: reportedChangeAttributed.length,
+      preExistingDivergenceCount: reportedPreExisting.length,
       changeAttributedDivergencesTruncated:
         divergences.changeAttributedTruncated,
-      preExistingDivergencesTruncated: divergences.preExistingTruncated
+      preExistingDivergencesTruncated: divergences.preExistingTruncated,
+      adjudication: adjudicationSummary
     },
-    changeAttributedDivergences: divergences.changeAttributed,
-    preExistingDivergences: divergences.preExisting,
-    warnings
+    changeAttributedDivergences: reportedChangeAttributed,
+    preExistingDivergences: reportedPreExisting,
+    warnings,
+    ...(usage === undefined ? {} : { usage })
   })
 }

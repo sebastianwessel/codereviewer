@@ -57,12 +57,20 @@ would have to beat, so it ships as a useful baseline rather than as a lever.
 **Invariant-conformance review** (`invariantConformance.enabled`) is the same
 kind of thing: a separate command
 ([`conformance check`](../../06-reference/cli.md#codereviewer-conformance-check)),
-off by default, no model call, no cost and no recall figure yet. It reports where
-a changed declaration does not hold a pattern a majority of its siblings hold —
-*"thirteen of fifteen call `requireAuth`; this one does not"* — with the peers
-cited by path and line. That is a **divergence, not a defect**: deviating from a
-convention is frequently deliberate, so the command states the fact, asks the
-question, and stops. It is also the floor the eventual model layer has to beat.
+off by default, and with no recall figure yet. It reports where a changed
+declaration does not hold a pattern a majority of its siblings hold — *"thirteen of
+fifteen call `requireAuth`; this one does not"* — with the peers cited by path and
+line. That is a **divergence, not a defect**: deviating from a convention is
+frequently deliberate, so the command states the fact, asks the question, and
+stops.
+
+Its deterministic form makes no model call and costs nothing, and it is the floor
+the model layer has to beat. That model layer now exists as a second, separately
+disabled switch (`invariantConformance.adjudication.enabled`): one call per
+divergence, asking only whether the peers share a deliberate practice, and
+reporting only the divergences it answers `convention` for. It can make the report
+shorter and never longer, and it has **no measurement yet** — the two arms are
+built so they can be compared, not because one has been shown to win.
 
 ## How to read the verdicts
 
@@ -102,7 +110,10 @@ identical to a build without it, which is what makes the A/Bs above single-varia
   "verification": { "enabled": false },
   "fix": { "enabled": false },
   "changeImpact": { "enabled": false },
-  "invariantConformance": { "enabled": false }
+  "invariantConformance": {
+    "enabled": false,
+    "adjudication": { "enabled": false }
+  }
 }
 ```
 

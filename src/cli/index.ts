@@ -28,7 +28,10 @@ import {
   type EvalRegressionThresholds,
 } from '../domains/evaluation/index.js'
 import { runChangeImpact } from '../domains/change-impact/index.js'
-import { runInvariantConformance } from '../domains/invariant-conformance/index.js'
+import {
+  createConformanceAdjudicationLane,
+  runInvariantConformance
+} from '../domains/invariant-conformance/index.js'
 import { createContextRetriever } from '../domains/context-retrieval/index.js'
 import { runDriftCheck } from '../domains/drift/index.js'
 import {
@@ -1247,17 +1250,22 @@ const runImpact = async (
   }
 }
 
-// `conformance check` (spec 24). Like `impact check` it makes NO provider call:
-// this wave is spec 24's deterministic baseline arm, so it costs nothing to run
-// and its output is reproducible.
+// `conformance check` (spec 24).
 //
-// What it produces is a DIVERGENCE report, not findings. A divergence is "these N
-// peers do X; this declaration does not" — a substantiated fact plus a question,
-// with the peers listed so the reader judges. It carries no verdict, no severity
-// and no claim about exploitability, nothing is admitted, and spec 24 requires the
-// capability to be advisory only: it MUST NOT be able to fail a pipeline. The exit
-// code is therefore 0 whatever the report says, and only a configuration or usage
-// failure (2) or a repository failure (3) changes it.
+// It makes no provider call unless `invariantConformance.adjudication.enabled` is
+// set, which is off by default: out of the box this is spec 24's deterministic
+// baseline arm, so it costs nothing to run and its output is reproducible. With
+// adjudication on it issues one bounded model call per divergence and reports only
+// the ones judged a convention.
+//
+// What it produces either way is a DIVERGENCE report, not findings. A divergence is
+// "these N peers do X; this declaration does not" — a substantiated fact plus a
+// question, with the peers listed so the reader judges. It carries no verdict, no
+// severity and no claim about exploitability, nothing is admitted, and spec 24
+// requires the capability to be advisory only: it MUST NOT be able to fail a
+// pipeline. The exit code is therefore 0 whatever the report says, and only a
+// configuration or usage failure (2) or a repository failure (3) changes it — an
+// adjudication that could not run is a warning in the report, never an exit code.
 const runConformance = async (
   args: readonly string[],
   options: CliRunOptions
@@ -1306,44 +1314,75 @@ const runConformance = async (
         exclude: loadedConfig.config.paths.exclude
       }
     })
-    const report = await runInvariantConformance({
-      repositoryRoot: options.cwd,
-      config: loadedConfig.config,
-      ...(baseRef === undefined ? {} : { baseRef }),
-      ...(headRef === undefined ? {} : { headRef }),
-      ...(options.now === undefined ? {} : { generatedAt: options.now() }),
-      readRepositoryFile: async (filePath) => {
-        try {
-          return (await retriever.readRepositoryFile({ path: filePath })).content
-        } catch {
-          // An ineligible, missing, or over-budget file is skipped and counted;
-          // one unreadable file must not fail the whole report.
-          return undefined
-        }
-      },
-      listDirectoryFiles: async (directoryPath) => {
-        try {
-          const listing = await retriever.listRepositoryDirectory({
-            path: directoryPath
-          })
-
-          // The mediated listing renders one `"<file|dir> <path>"` line per
-          // eligible entry. Peer derivation wants files only; a subdirectory is
-          // not a sibling of a declaration.
-          return listing.content
-            .split('\n')
-            .filter((line) => line.startsWith('file '))
-            .map((line) => line.slice('file '.length))
-        } catch {
-          return []
-        }
+    const logger = createReviewLogger({
+      level: loadedConfig.config.observability.logging.level,
+      ...(options.logSink === undefined ? {} : { out: options.logSink }),
+      bindings: {
+        component: 'cli',
+        command: 'conformance'
       }
     })
+    // Absent unless adjudication is enabled AND a provider resolves. Every other
+    // outcome degrades to the deterministic arm, which reports the reason as a
+    // warning rather than failing.
+    const adjudicationLane = await createConformanceAdjudicationLane({
+      config: loadedConfig.config,
+      environment: options.environment ?? {},
+      ...(options.providerImport === undefined
+        ? {}
+        : { providerImport: options.providerImport }),
+      logger
+    })
 
-    return {
-      exitCode: 0,
-      stdout: jsonResult(report),
-      stderr: ''
+    try {
+      const report = await runInvariantConformance({
+        repositoryRoot: options.cwd,
+        config: loadedConfig.config,
+        ...(baseRef === undefined ? {} : { baseRef }),
+        ...(headRef === undefined ? {} : { headRef }),
+        ...(options.now === undefined ? {} : { generatedAt: options.now() }),
+        ...(adjudicationLane === undefined
+          ? {}
+          : {
+              adjudicate: adjudicationLane.adjudicate,
+              adjudicationUsage: adjudicationLane.usage
+            }),
+        readRepositoryFile: async (filePath) => {
+          try {
+            return (await retriever.readRepositoryFile({ path: filePath }))
+              .content
+          } catch {
+            // An ineligible, missing, or over-budget file is skipped and counted;
+            // one unreadable file must not fail the whole report.
+            return undefined
+          }
+        },
+        listDirectoryFiles: async (directoryPath) => {
+          try {
+            const listing = await retriever.listRepositoryDirectory({
+              path: directoryPath
+            })
+
+            // The mediated listing renders one `"<file|dir> <path>"` line per
+            // eligible entry. Peer derivation wants files only; a subdirectory is
+            // not a sibling of a declaration.
+            return listing.content
+              .split('\n')
+              .filter((line) => line.startsWith('file '))
+              .map((line) => line.slice('file '.length))
+          } catch {
+            return []
+          }
+        }
+      })
+
+      return {
+        exitCode: 0,
+        stdout: jsonResult(report),
+        stderr: ''
+      }
+    } finally {
+      await adjudicationLane?.shutdown()
     }
   } catch (error) {
     return mapErrorResult(error, 'repository')

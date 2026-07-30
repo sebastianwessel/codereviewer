@@ -63,6 +63,29 @@ export const DeclarationSiteSchema = z.strictObject({
   name: z.string().min(1)
 })
 
+// The adjudication a REPORTED divergence carries, and the reason `undetermined`
+// cannot be mistaken for a violation anywhere downstream.
+//
+// `verdict` is a literal, not the three-value enum the model answers with. The
+// adjudicator can answer `convention`, `incidental` or `undetermined`, and only
+// the first has a representation here: an `incidental` or `undetermined` verdict
+// cannot be written into a divergence entry at all, because the schema would
+// reject it. That is deliberately stronger than filtering the lists and then
+// trusting the filter — a future caller that forgets the filter gets a parse
+// error, not a mislabelled divergence. The other two verdicts exist in the report
+// only as integer counts in `summary.adjudication`, where there is nothing for a
+// consumer to mistake for a divergence.
+//
+// The field is optional because a report produced by spec 24's deterministic
+// baseline arm carries no adjudication at all. Which arm ran is stated once, in
+// `summary.adjudication.mode`, rather than inferred from the presence of a field.
+export const ConformanceAdjudicationRecordSchema = z.strictObject({
+  verdict: z.literal('convention'),
+  // Short, and bounded: the model is asked for a sentence naming what the peers
+  // have in common, not for an argument.
+  reason: z.string().min(1).max(400)
+})
+
 export const ConformanceDivergenceSchema = z.strictObject({
   id: z.string().min(1),
   attribution: DivergenceAttributionSchema,
@@ -96,7 +119,51 @@ export const ConformanceDivergenceSchema = z.strictObject({
   // And the question. It is a field rather than a docs convention so the shape
   // spec 24 requires is structurally present in the artifact: nothing here
   // asserts what the divergence means.
-  question: z.string().min(1)
+  question: z.string().min(1),
+  // Present only when the adjudicated arm ran AND answered `convention`. See the
+  // schema above for why no other verdict is representable here.
+  adjudication: ConformanceAdjudicationRecordSchema.optional()
+})
+
+// How the adjudication layer spent itself, and what it filtered. Spec 24 requires
+// the command to be able to report nothing; these counts are what stops "nothing"
+// from being indistinguishable between "the peers agreed with the change", "the
+// model called every pattern incidental" and "the bound ran out".
+//
+// `requestedCount` equals `conventionCount + incidentalCount + undeterminedCount +
+// failedCount`, and `requestedCount + unadjudicatedCount` equals every divergence
+// the deterministic core produced within its own caps. Both identities are
+// asserted by a test, because a count a reader cannot reconcile is worse than no
+// count.
+export const ConformanceAdjudicationSummarySchema = z.strictObject({
+  // `deterministic` is spec 24's baseline arm: no model call, nothing filtered,
+  // every divergence reported as the fact it is.
+  mode: z.enum(['deterministic', 'model']),
+  requestedCount: z.int().min(0),
+  conventionCount: z.int().min(0),
+  incidentalCount: z.int().min(0),
+  undeterminedCount: z.int().min(0),
+  // Calls that threw. Counted apart from `undeterminedCount` so "the model did not
+  // decide" is never confused with "the call did not happen"; both outcomes filter
+  // the divergence out.
+  failedCount: z.int().min(0),
+  // Divergences the adjudication bound left unjudged. They are NOT reported.
+  unadjudicatedCount: z.int().min(0)
+})
+
+// Token usage and cost of the adjudication calls, when the adjudicated arm ran.
+//
+// Deliberately this capability's own schema rather than a reuse of the
+// verification lane's: spec 24 forbids sharing the diff reviewer's report schema,
+// and every field here is a provider-usage primitive rather than shared behaviour,
+// so a shared helper would couple two independent report contracts to buy nothing.
+export const ConformanceUsageSchema = z.strictObject({
+  inputTokens: z.int().min(0),
+  outputTokens: z.int().min(0),
+  // A SUBSET of `inputTokens`, already counted there.
+  cachedInputTokens: z.int().min(0).optional(),
+  reasoningTokens: z.int().min(0).optional(),
+  costUsd: z.number().min(0).optional()
 })
 
 export const InvariantConformanceReportSchema = z.strictObject({
@@ -123,15 +190,25 @@ export const InvariantConformanceReportSchema = z.strictObject({
     changeAttributedDivergenceCount: z.int().min(0),
     preExistingDivergenceCount: z.int().min(0),
     changeAttributedDivergencesTruncated: z.boolean(),
-    preExistingDivergencesTruncated: z.boolean()
+    preExistingDivergencesTruncated: z.boolean(),
+    adjudication: ConformanceAdjudicationSummarySchema
   }),
   changeAttributedDivergences: z.array(ConformanceDivergenceSchema),
   preExistingDivergences: z.array(ConformanceDivergenceSchema),
-  warnings: z.array(z.string())
+  warnings: z.array(z.string()),
+  // Present only when the adjudicated arm actually issued a call.
+  usage: ConformanceUsageSchema.optional()
 })
 
 export type DeclarationSite = z.infer<typeof DeclarationSiteSchema>
 export type ConformanceDivergence = z.infer<typeof ConformanceDivergenceSchema>
+export type ConformanceAdjudicationRecord = z.infer<
+  typeof ConformanceAdjudicationRecordSchema
+>
+export type ConformanceAdjudicationSummary = z.infer<
+  typeof ConformanceAdjudicationSummarySchema
+>
+export type ConformanceUsage = z.infer<typeof ConformanceUsageSchema>
 export type DivergenceAttribution = z.infer<typeof DivergenceAttributionSchema>
 export type InvariantConformanceReport = z.infer<
   typeof InvariantConformanceReportSchema

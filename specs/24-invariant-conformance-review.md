@@ -112,6 +112,91 @@ a reason to abandon the approach: our output is advisory and carries its peers.
 - Failure MUST be recoverable and MUST NOT affect the diff review.
 - Disabled by default until measured.
 
+## Adjudication As Implemented
+
+Design step 4 is implemented as one tool-free model call per divergence, wired so
+that **every unclear outcome makes the report shorter rather than longer**. What
+follows records the resolved facts; it adds no requirement.
+
+**The three verdicts, and the one-way valve.** The adjudicator answers
+`convention`, `incidental` or `undetermined`, plus a short reason. Only
+`convention` is reported, and it must be stated exactly and with a reason:
+a synonym, a sentence containing the word, a missing field, a malformed response,
+a call that throws, and a divergence beyond the call bound all resolve to
+"not reported". `undetermined` is the absorbing state, so the layer's failure
+modes fail towards silence — the direction this spec's firing-rate-before-recall
+order already chose.
+
+**`undetermined` cannot be read as a violation, structurally.** The verdict a
+reported divergence carries is typed as the literal `convention`, so `incidental`
+and `undetermined` have no representation in a divergence entry at all: a caller
+that skipped the filter gets a schema failure, not a mislabelled divergence. The
+other two verdicts exist in the report only as integer counts, where there is
+nothing for a consumer to mistake for a finding. The normalized verdict is
+additionally a discriminated union in which only the `convention` member carries a
+reason, so the code that attaches an adjudication cannot compile without having
+narrowed to it first. Three mechanisms, none of which relies on a downstream check.
+
+**What the model receives.** A packet built entirely from the already-extracted
+divergence: the language, the declaration kind, the peer scope, the peer counts,
+the divergent trait as a phrase, **what else a majority of the peers do**, the
+cited peers by path and line, the declaration's own traits, and the statement and
+question. No tool is attached, `builtinTools` is off, and the agent has one step,
+so there is no turn in which a search could be requested. The peers' other
+majority traits are the load-bearing addition: "these peers all build a schema" and
+"these peers all respond to a request" is the distinction being asked about, and it
+is invisible from the divergent trait alone.
+
+**Packet field order.** Stable, low-cardinality fields first; the statement and
+question last; no identifier anywhere. A run identifier is deliberately absent —
+in this repository a fresh UUID at the front of a packet cut the shared prefix to
+roughly thirty tokens against a 1024-token cache minimum and bought a guaranteed
+miss.
+
+**Why the report is short is always visible.** `summary.adjudication` carries
+`mode` (`deterministic` or `model`), `requestedCount`, `conventionCount`,
+`incidentalCount`, `undeterminedCount`, `failedCount` and `unadjudicatedCount`.
+`requestedCount` equals the four verdict counts summed, and
+`requestedCount + unadjudicatedCount` is every divergence the deterministic core
+produced within its caps. Without those counts an empty report reads identically
+whether the peers agreed with the change, the adjudicator called every pattern
+incidental, or the bound ran out before it looked.
+
+**Bounds and configuration.** `invariantConformance.adjudication.enabled` is off by
+default and off *independently* of `invariantConformance.enabled`, so enabling the
+deterministic arm can never start a provider call.
+`invariantConformance.adjudication.maxAdjudications` (default 25) caps calls per
+run; change-attributed divergences are submitted first. Adjudication with no
+configured or resolvable provider degrades to the deterministic arm with a warning,
+and the command still exits 0.
+
+### The Two Control Tests
+
+The acceptance bar for this layer is a **matched pair**, because a layer that
+rejects everything passes a rejection-rate check perfectly and is worthless.
+
+- **Negative control** — the two divergences this repository actually produces
+  ("4 of 7 sibling declarations call `string`; `ContextRetrievalBudgetSchema` does
+  not", and the same shape for `min` and `RepoToolOutputSchema`). Both are rejected
+  and absent from the report. They are the survivors this spec's measurement
+  section calls "the honest residue of the majority rule": genuine members of their
+  peer set diverging on a trait that is how a schema library is written rather than
+  a practice.
+- **Positive control** — three sibling handlers that guard plus an added fourth that
+  does not while sharing the group's other trait. It survives and is reported.
+
+Both are hermetic and cost nothing: the provider is scripted. Neither is vacuous,
+and that is asserted rather than assumed — with the layer bypassed all three
+divergences are present, with a reject-everything adjudicator the positive control
+disappears, and with an always-undetermined adjudicator nothing is reported.
+
+**What the control tests do not establish.** The scripted adjudicator decides from
+one generic feature of the packet and never sees which fixture it is judging, so the
+pair proves that the packet carries enough for a case-blind rule to separate a check
+from a construction call, and that the wiring reports exactly the `convention`
+verdicts. Whether a real model answers this way is a model property and is not
+measured here. The evaluation below — firing rate first — remains unrun.
+
 ## Structural Grouping Is Not Membership
 
 A peer set is derived from **structure** — same declaration kind, same language,
@@ -217,6 +302,13 @@ recall on seeded fixtures; change-attributed versus pre-existing findings.
 | A member that does share the group's trait is still reported for the missing pattern | control test in a second language |
 | The precondition does not relax the majority or citation gates | unit test asserting both still refuse a member that passes membership |
 | The model is never asked whether code is vulnerable or exploitable | instruction unit test asserting the absence of that framing |
+| The model receives a divergence, never a repository to search | agent test asserting no tool is offered, with `builtinTools` off and a single step |
+| An `undetermined` verdict is never reported as a divergence | schema test (the verdict literal), normalization test (every unusable answer resolves to `undetermined`), and end-to-end test with an always-undetermined adjudicator |
+| Only `convention` verdicts are reported, and the rest are counted | filter unit test asserting the count identities, plus the two control tests |
+| The two control tests, and that neither is vacuous | hermetic end-to-end pair: negative control rejected, positive control reported, plus a bypassed arm, a reject-everything arm and an always-undetermined arm |
+| Adjudication cannot add, relabel or alter a divergence | filter unit test |
+| A failed or unbounded adjudication degrades rather than failing | filter unit test and CLI test with no provider configured |
+| Adjudication is disabled independently of the capability | config schema test |
 | Reports no divergence rather than manufacturing findings | unit test |
 | Pre-existing divergences are labelled and counted separately | report contract test |
 | Cannot fail a pipeline | exit-code test over every report shape |

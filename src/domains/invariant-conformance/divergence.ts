@@ -25,7 +25,12 @@
 
 import { sha256 } from '../../shared/hash/hash.js'
 import {
+  conformanceAdjudicationInputFor,
+  type ConformanceAdjudicationInput
+} from './conformance-adjudication.js'
+import {
   declarationTraitKey,
+  describeDeclarationTrait,
   type DeclarationTrait
 } from './declaration-shape.js'
 import type { PeerDeclaration, PeerSet } from './peer-sets.js'
@@ -95,7 +100,21 @@ type CandidateDivergence = {
   // implying a severity.
   readonly citedPeerCount: number
   readonly traitKey: string
+  // The packet an adjudication call would send for this divergence, built here
+  // because this is the only place that knows the peer set's other majority traits.
+  // It is NOT part of the report contract: a divergence is a fact plus a question,
+  // and the trait lists below are working material for the one judgement the
+  // deterministic core cannot make.
+  readonly adjudicationInput: ConformanceAdjudicationInput
 }
+
+// Bounds on the two trait lists the adjudication packet carries. A schema-heavy
+// module can share dozens of majority traits, and a packet listing all of them
+// spends input tokens describing the group in ever finer detail without changing
+// what the group IS. Strongest agreement first, so what the cap drops is always
+// the weakest evidence.
+const MAX_SHARED_PEER_TRAITS = 12
+const MAX_DECLARATION_TRAITS = 12
 
 /**
  * Evaluates one member of a peer set against the majority patterns of the others.
@@ -171,16 +190,37 @@ const divergencesForMember = (
       .filter(([, entry]) => entry.trait.kind === 'call')
       .map(([, entry]) => entry.trait.name)
   )
+  // What a majority of these peers do, strongest agreement first. This is how the
+  // group identifies itself, and it is the difference between an answerable
+  // question and a guess: "these peers all build a schema" and "these peers all
+  // respond to a request" are the two cases the adjudicator exists to separate.
+  //
+  // A divergence's own trait is removed from its own packet, but the OTHER traits
+  // over the same symbol are kept on purpose. That a majority of the peers call the
+  // symbol in a conditional, or pass it the request, is how the symbol is used
+  // rather than a restatement that they use it — and it is the only signal in the
+  // packet that tells a check apart from one call in a construction chain.
+  const majorityTraits = [...holdersByKey.entries()]
+    .filter(([, entry]) => isMajorityOf(entry.holders.length, peers.length))
+    .sort(
+      ([leftKey, left], [rightKey, right]) =>
+        right.holders.length - left.holders.length ||
+        leftKey.localeCompare(rightKey)
+    )
+  const declarationTraits = [...member.traits]
+    .sort((left, right) =>
+      declarationTraitKey(left).localeCompare(declarationTraitKey(right))
+    )
+    .slice(0, MAX_DECLARATION_TRAITS)
+    .map(describeDeclarationTrait)
 
   return diverging
     .filter(
       ([, entry]) =>
         entry.trait.kind === 'call' || !missingCalls.has(entry.trait.name)
     )
-    .map(([key, entry]) => ({
-      traitKey: key,
-      citedPeerCount: entry.holders.length,
-      divergence: {
+    .map(([key, entry]) => {
+      const divergence: ConformanceDivergence = {
         id: divergenceId(member, key),
         attribution: member.changeAttributed
           ? ('change-attributed' as const)
@@ -213,7 +253,24 @@ const divergencesForMember = (
         ),
         question: questionFor(entry.trait, member)
       }
-    }))
+
+      return {
+        traitKey: key,
+        citedPeerCount: entry.holders.length,
+        divergence,
+        adjudicationInput: conformanceAdjudicationInputFor(
+          divergence,
+          {
+            sharedPeerTraits: majorityTraits
+              .filter(([majorityKey]) => majorityKey !== key)
+              .slice(0, MAX_SHARED_PEER_TRAITS)
+              .map(([, majority]) => describeDeclarationTrait(majority.trait)),
+            declarationTraits
+          },
+          describeDeclarationTrait(entry.trait)
+        )
+      }
+    })
 }
 
 // Strongest agreement first, then a stable tie-break on location and trait, so
@@ -240,6 +297,11 @@ export type CollectDivergencesResult = {
   readonly preExisting: readonly ConformanceDivergence[]
   readonly changeAttributedTruncated: boolean
   readonly preExistingTruncated: boolean
+  // The adjudication packet for each reported divergence, by divergence id. A map
+  // rather than a parallel array so a caller cannot pair a packet with the wrong
+  // divergence, and separate from the divergences so the deterministic arm can
+  // ignore it entirely.
+  readonly adjudicationInputsById: ReadonlyMap<string, ConformanceAdjudicationInput>
 }
 
 /**
@@ -279,6 +341,10 @@ export const collectDivergences = (
   const preExisting = sorted.filter(
     (candidate) => candidate.divergence.attribution === 'pre-existing'
   )
+  const reported = [
+    ...changeAttributed.slice(0, input.maxDivergences),
+    ...preExisting.slice(0, input.maxPreExistingDivergences)
+  ]
 
   return {
     changeAttributed: changeAttributed
@@ -288,6 +354,13 @@ export const collectDivergences = (
       .slice(0, input.maxPreExistingDivergences)
       .map((candidate) => candidate.divergence),
     changeAttributedTruncated: changeAttributed.length > input.maxDivergences,
-    preExistingTruncated: preExisting.length > input.maxPreExistingDivergences
+    preExistingTruncated: preExisting.length > input.maxPreExistingDivergences,
+    // Only the divergences that are actually reported get a packet: one beyond the
+    // caps is never adjudicated, so building its packet would be dead work.
+    adjudicationInputsById: new Map(
+      reported.map(
+        (candidate) => [candidate.divergence.id, candidate.adjudicationInput] as const
+      )
+    )
   }
 }

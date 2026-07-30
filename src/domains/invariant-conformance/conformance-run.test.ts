@@ -11,7 +11,10 @@ import path from 'node:path'
 import { afterEach, describe, expect, test } from 'vitest'
 import { CodeReviewerConfigSchema } from '../../shared/contracts/index.js'
 import type { GitCommandRunner } from '../repository-intake/index.js'
-import { InvariantConformanceReportSchema } from './conformance-report.js'
+import {
+  ConformanceDivergenceSchema,
+  InvariantConformanceReportSchema
+} from './conformance-report.js'
 import { runInvariantConformance } from './conformance-run.js'
 
 const mergeBaseSha = '9f1c2ab3d4e5f60718293a4b5c6d7e8f90a1b2c3'
@@ -355,7 +358,8 @@ describe('invariant conformance run', () => {
       'summary',
       'changeAttributedDivergences',
       'preExistingDivergences',
-      'warnings'
+      'warnings',
+      'usage'
     ])
     for (const forbidden of [
       'findings',
@@ -383,8 +387,62 @@ describe('invariant conformance run', () => {
       'citedPeers',
       'peersTruncated',
       'statement',
-      'question'
+      'question',
+      'adjudication'
     ])
+  })
+
+  // The structural half of the one-way valve. `adjudication.verdict` is a literal,
+  // so the two verdicts that must never read as a divergence have no representation
+  // in a divergence entry at all: a caller that skipped the filter gets a parse
+  // error rather than a report claiming an undetermined answer found something.
+  test('a divergence entry cannot carry any verdict except convention', () => {
+    const divergence = {
+      id: 'conf_x',
+      attribution: 'change-attributed',
+      declaration: {
+        path: 'src/a.ts',
+        line: 1,
+        endLine: 3,
+        name: 'a',
+        kind: 'declaration',
+        language: 'typescript'
+      },
+      pattern: { kind: 'call', symbol: 'requireAuth' },
+      peerScope: 'directory',
+      peerCount: 3,
+      citedPeerCount: 3,
+      citedPeers: [
+        { path: 'src/b.ts', line: 1, name: 'b' },
+        { path: 'src/c.ts', line: 1, name: 'c' },
+        { path: 'src/d.ts', line: 1, name: 'd' }
+      ],
+      peersTruncated: false,
+      statement: '3 of 3 sibling declarations call requireAuth; a does not.',
+      question: 'Is calling requireAuth a convention a should follow?'
+    }
+
+    expect(() =>
+      ConformanceDivergenceSchema.parse({
+        ...divergence,
+        adjudication: { verdict: 'convention', reason: 'The peers all load a record.' }
+      })
+    ).not.toThrow()
+    for (const verdict of ['undetermined', 'incidental']) {
+      expect(() =>
+        ConformanceDivergenceSchema.parse({
+          ...divergence,
+          adjudication: { verdict, reason: 'Not enough to decide.' }
+        })
+      ).toThrow()
+    }
+    // And a convention with no stated basis is not representable either.
+    expect(() =>
+      ConformanceDivergenceSchema.parse({
+        ...divergence,
+        adjudication: { verdict: 'convention' }
+      })
+    ).toThrow()
   })
 
   test('the two divergence lists are separate arrays, so neither can inflate the other', () => {
