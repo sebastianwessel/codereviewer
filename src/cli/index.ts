@@ -1409,6 +1409,7 @@ const runIntent = async (
               agents: {
                 extractObligations: lane.extractObligations,
                 judge: lane.judge,
+                checkAptness: lane.checkAptness,
                 explain: lane.explain
               },
               usage: lane.usage

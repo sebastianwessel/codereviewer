@@ -33,10 +33,17 @@ import {
   type FulfilmentExplanationRunner
 } from './explanation.js'
 import {
+  modelCitationAptnessInstructions,
   modelFulfilmentExplanationInstructions,
   modelFulfilmentJudgementInstructions,
   modelObligationExtractionInstructions
 } from './instructions.js'
+import {
+  CitationAptnessInputSchema,
+  ModelCitationAptnessSchema,
+  normalizeCitationAptness,
+  type CitationAptnessRunner
+} from './aptness.js'
 import {
   FulfilmentJudgementInputSchema,
   ModelFulfilmentJudgementSchema,
@@ -75,6 +82,14 @@ const buildIntentFulfilmentHarness = (input: {
         maxSteps: 1,
         instructions: modelFulfilmentJudgementInstructions
       }),
+      check_citation_aptness: agent({
+        model: 'intent',
+        input: CitationAptnessInputSchema,
+        output: ModelCitationAptnessSchema,
+        builtinTools: false,
+        maxSteps: 1,
+        instructions: modelCitationAptnessInstructions
+      }),
       explain_fulfilment: agent({
         model: 'intent',
         input: FulfilmentExplanationInputSchema,
@@ -89,12 +104,13 @@ const buildIntentFulfilmentHarness = (input: {
 export type HarnessIntentFulfilmentAgents = {
   readonly extractObligations: ObligationExtractionRunner
   readonly judge: FulfilmentJudgementRunner
+  readonly checkAptness: CitationAptnessRunner
   readonly explain: FulfilmentExplanationRunner
   readonly shutdown: () => Promise<void>
 }
 
 /**
- * Wires the three agents into the seams the run consumes.
+ * Wires the four agents into the seams the run consumes.
  *
  * Token usage accumulates in the usage-recorder-wrapped `modelAlias` the caller
  * passes, so these runners report no per-call usage of their own.
@@ -150,6 +166,24 @@ export const createHarnessIntentFulfilmentAgents = (input: {
     }
   }
 
+  // Its own session, like every other stage: sharing one would put a frozen
+  // judgement and the check on it in a single conversation, which is the coupling
+  // spec 23 forbids.
+  const checkAptness: CitationAptnessRunner = async (aptnessInput, signal) => {
+    const session = await harness.getSession(nextSessionId('aptness'))
+
+    try {
+      return normalizeCitationAptness(
+        await session.agents.check_citation_aptness.prompt(
+          aptnessInput,
+          signal === undefined ? {} : { signal }
+        )
+      )
+    } finally {
+      await session.close()
+    }
+  }
+
   const explain: FulfilmentExplanationRunner = async (
     explanationInput,
     signal
@@ -171,6 +205,7 @@ export const createHarnessIntentFulfilmentAgents = (input: {
   return {
     extractObligations,
     judge,
+    checkAptness,
     explain,
     shutdown: async () => {
       await harness.shutdown()

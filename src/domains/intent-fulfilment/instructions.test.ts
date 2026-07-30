@@ -14,6 +14,7 @@ import {
 } from '../../shared/testing/prompt-genericity-guard.js'
 import {
   modelFulfilmentExplanationInstructions,
+  modelCitationAptnessInstructions,
   modelFulfilmentJudgementInstructions,
   modelObligationExtractionInstructions
 } from './instructions.js'
@@ -21,6 +22,7 @@ import {
 const prompts: ReadonlyArray<readonly [string, string]> = [
   ['intent obligation extraction', modelObligationExtractionInstructions],
   ['intent fulfilment judgement', modelFulfilmentJudgementInstructions],
+  ['intent fulfilment citation aptness', modelCitationAptnessInstructions],
   ['intent fulfilment explanation', modelFulfilmentExplanationInstructions]
 ]
 
@@ -161,5 +163,45 @@ describe('prompt genericity guard', () => {
         }).map((violation) => violation.category)
       ).toContain('language name')
     }
+  })
+})
+
+describe('citation aptness instructions', () => {
+  test('names the measured failure shape without naming a stack', () => {
+    // The case this exists to catch: a behavioural obligation answered with lines
+    // that only delete a name. Spelling that out is what makes the check aim at a
+    // demonstrated failure rather than at style.
+    expect(modelCitationAptnessInstructions).toContain('BEHAVE')
+    expect(modelCitationAptnessInstructions).toContain(
+      'Deleting the mention of a thing is not the same as making the system behave differently'
+    )
+  })
+
+  test('sets the bar at positively-not-evidence, not at best-available', () => {
+    // The guard against this becoming a second gate. The capability measured 90%
+    // unaddressed detection; a check that suppressed whatever it merely disliked
+    // would trade that away to fix a 5.8% failure.
+    expect(modelCitationAptnessInstructions).toContain('Partial evidence is still evidence')
+    expect(modelCitationAptnessInstructions).toContain(
+      'must not answer "inapt" because you can imagine a better citation'
+    )
+  })
+
+  test('protects the removed side it was built to admit', () => {
+    // Without this the check would undo the First Amendment by reflex, rejecting
+    // every deletion citation and restoring the blind spot.
+    expect(modelCitationAptnessInstructions).toContain(
+      'Do not answer "inapt" merely because a citation is on the removed side'
+    )
+  })
+
+  test('states that it can only ever weaken a claim', () => {
+    expect(modelCitationAptnessInstructions).toContain(
+      'Nothing you say can make a claim stronger'
+    )
+  })
+
+  test('carries the untrusted-data guard every other prompt here carries', () => {
+    expect(modelCitationAptnessInstructions).toContain('UNTRUSTED DATA')
   })
 })

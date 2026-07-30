@@ -77,7 +77,12 @@ export const ObligationSchema = z.discriminatedUnion('status', [
     status: z.literal('addressed'),
     // At least one, always. See the header: this is the whole reason the entry is
     // a union member rather than an optional field.
-    evidence: z.array(ChangeCitationSchema).min(1)
+    evidence: z.array(ChangeCitationSchema).min(1),
+    // Present and true only when the aptness check judged the cited lines not to
+    // evidence this obligation. The verdict still says addressed: this records the
+    // doubt beside it rather than acting on it, at a measured ~38% precision that
+    // does not justify suppressing a verdict.
+    evidenceConcern: z.literal(true).optional()
   }),
   z.strictObject({ ...obligationBase, status: z.literal('unaddressed') }),
   z.strictObject({ ...obligationBase, status: z.literal('undetermined') })
@@ -112,6 +117,10 @@ export const IntentFulfilmentSummarySchema = z.strictObject({
   // the downgrade is visible. This is the metric spec 23 says decides whether the
   // capability is safe to show anyone.
   unevidencedAddressedCount: z.int().min(0),
+  // Spec 23's Second Amendment: addressed obligations carrying an evidence
+  // concern. These are ANNOTATIONS, not suppressions — the verdict is unchanged —
+  // because demoting on this signal was measured twice and rejected twice.
+  evidenceConcernCount: z.int().min(0).default(0),
   extraScopeFileCount: z.int().min(0)
 })
 

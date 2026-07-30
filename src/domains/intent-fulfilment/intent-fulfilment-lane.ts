@@ -15,6 +15,7 @@
 
 import type { Logger } from '@purista/harness'
 import type { CodeReviewerConfig } from '../../shared/contracts/index.js'
+import type { CitationAptnessRunner } from './aptness.js'
 import { createProviderUsageRecorder, summarizeRunCost } from '../costs/index.js'
 import {
   resolveProviderModelAlias,
@@ -29,6 +30,7 @@ import type { ObligationExtractionRunner } from './obligation-extraction.js'
 export type IntentFulfilmentLane = {
   readonly extractObligations: ObligationExtractionRunner
   readonly judge: FulfilmentJudgementRunner
+  readonly checkAptness: CitationAptnessRunner
   readonly explain: FulfilmentExplanationRunner
   // Read once, after the calls have finished. `undefined` when no call reported
   // any tokens, so a report never carries an all-zero usage block that reads as
@@ -93,6 +95,7 @@ export const createIntentFulfilmentLane = async (input: {
   return {
     extractObligations: agents.extractObligations,
     judge: agents.judge,
+    checkAptness: agents.checkAptness,
     explain: agents.explain,
     usage: () => {
       const usage = usageRecorder.usage()

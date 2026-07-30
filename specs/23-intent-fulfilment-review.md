@@ -3,13 +3,57 @@
 Status: Approved
 Date: 2026-07-27
 Amended: 2026-07-30 — a citation may name a removed line (see *Amendment* below)
-Second Amendment: 2026-07-31 — proposed, implemented, **measured and WITHDRAWN**
+Second Amendment: 2026-07-31 — two demoting designs rejected; **annotates, never demotes**
 
-## Second Amendment — WITHDRAWN on measurement (2026-07-31)
+## Second Amendment (2026-07-31): the aptness check ANNOTATES, it does not demote
 
-**The aptness check described below was built, measured over the full 34-case
-corpus, and removed the same day. It is recorded here rather than deleted, because
-the reason it failed is the useful part.**
+Three designs were tried for the same signal. **Two were rejected on measurement
+and the third is what this amendment requires.**
+
+**Design 1 — demote on every `addressed` verdict.** Built and measured over 34
+cases. It suppressed **five correct verdicts to remove one wrong one**, failing its
+pre-registered exchange rate by more than double, and it **missed the case it was
+written for**. Withdrawn.
+
+**Design 2 — demote, gated to verdicts citing only removed lines.** Refuted
+**offline, before any provider spend**, from the 34 stored runs. The gate engages on
+31.5% of `addressed` verdicts and **skips all four known false-satisfied ones**:
+three of the four cite added lines by their nature (a test line, documentation
+prose, a spec file) and can therefore never be all-removed. It would catch zero and
+still cost roughly 1.3 false downgrades. Not shipped.
+
+**Design 3 — annotate, and change no verdict.** This is the requirement.
+
+### What this amendment requires
+
+- The aptness check MUST run over an already-frozen judgement, in its own model
+  call, with **no free-text field** in its output — unchanged from the rejected
+  designs, and for the same measured reason (26–36% spurious rejection rising to
+  73–88% when a model justifies a verdict in the same breath as reaching it).
+- It MUST NOT alter any verdict. There is **no code path** by which it can: the
+  function that consumes its answer returns a boolean, not a judgement. A false
+  downgrade is therefore impossible by construction rather than merely rare.
+- An `addressed` obligation whose citations are judged inapt MUST carry an
+  **evidence concern** in the report, and the count MUST be reported.
+- It MUST run on every `addressed` verdict. Narrowing exists to reduce the cost of
+  demoting; with nothing demoted there is no cost to reduce, and narrowing would
+  only lose coverage.
+
+### Why this is the honest ceiling for this signal
+
+The check is **well calibrated and aimed at a rare event**: 2.0% false-inapt over
+68 hand-verified pairs, against ~92% of `addressed` verdicts already being aptly
+cited. Expected precision is ~38%. That is far too low to suppress a verdict and
+perfectly adequate to raise a flag a human can dismiss in a second.
+
+**What this does not do, stated plainly: a wrongly-certified obligation is still
+reported as addressed.** This amendment does not close the false-satisfied route. It
+makes the doubt visible beside the claim, which is the most 38% precision can
+honestly buy — and unlike both rejected designs, it cannot make the capability
+worse.
+
+### What the demoting designs measured (retained — the reason they were rejected)
+
 
 | | before | after |
 |---|---:|---:|
