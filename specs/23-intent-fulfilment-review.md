@@ -193,9 +193,36 @@ project made after implementation; the measurement that forced it is in
 
 ## Purpose
 
-Report how a change relates to its stated intent — the pull-request description, a
-linked ticket, a commit body — so a human can see at a glance what the change
-covers and what it does not.
+Report **what a change has not been shown to cover**, against its stated intent —
+the pull-request description, a linked ticket, a commit body — so a human can see
+at a glance what may still be outstanding.
+
+## The Output Is A Search Result, Not A Certificate
+
+This capability answers *"what is left?"*, never *"is this done?"*, and the
+distinction is a safety property rather than a turn of phrase.
+
+**It MUST NOT certify completion.** A report that says nothing is outstanding means
+*this run found nothing outstanding* — it does not mean the change is complete, and
+no part of the output may be phrased so a reader could take it that way.
+
+The reason is the failure mode named below: the expensive error is a confident
+*"that's handled"* on something that is not, because it stops a human looking. A
+report that never asserts completion **cannot make that error**. What remains is
+missing an item from the outstanding list, which costs a reviewer nothing they were
+not already going to do — and which this spec's Evaluation section already ranks as
+the cheap direction.
+
+That inverts the economics of every uncertain signal in the pipeline. An obligation
+whose evidence is doubtful belongs **on** the outstanding list, not suppressed from
+it: a doubtful item costs ten seconds to dismiss, while omitting it costs the thing
+this capability exists to prevent. `outstandingCount` is therefore the headline
+number, and it counts unaddressed, undetermined, and evidence-concern obligations
+alike.
+
+This framing is also why the capability is comfortable being advisory. If it finds
+something, that is useful; if it finds nothing, it has cost a little money and
+asserted nothing false. There is no state in which it misleads.
 
 ## Why This Is Advisory By Design, Not By Preference
 

@@ -558,6 +558,12 @@ export const runIntentFulfilment = async (
       uncitedObligationCount,
       unevidencedAddressedCount,
       evidenceConcernCount,
+      // Everything the run could not confirm. An evidence concern counts here even
+      // though its verdict stayed `addressed`: doubtful evidence is exactly the
+      // case a reviewer should still check, and putting it on this list costs a
+      // longer list rather than a suppressed verdict.
+      outstandingCount:
+        countOf('unaddressed') + countOf('undetermined') + evidenceConcernCount,
       extraScopeFileCount: extraScope.length
     },
     obligations,

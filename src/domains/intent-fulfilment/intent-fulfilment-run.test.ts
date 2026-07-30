@@ -544,3 +544,88 @@ describe('intent fulfilment run', () => {
     }
   })
 })
+
+describe('outstanding is the headline, and completion is never certified', () => {
+  test('counts unaddressed, undetermined and evidence-concern alike', async () => {
+    // Spec 23: the report answers "what is left?", never "is this done?". An
+    // obligation whose evidence is doubtful belongs ON this list — a doubtful item
+    // costs a reviewer ten seconds, while omitting it costs the thing the
+    // capability exists to prevent.
+    const root = await createRepository()
+
+    try {
+      const agents = scriptedAgents({
+        obligations: [
+          { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' },
+          { origin: 'inbox:tracker/A-1', line: 2, statement: 'Log every refusal.' }
+        ],
+        judgements: [
+          { status: 'addressed', evidence: [{ path: 'src/token.ts', line: 2 }] },
+          { status: 'unaddressed' }
+        ],
+        // The one addressed verdict is flagged, so all three are outstanding.
+        aptness: ['inapt']
+      })
+      const report = await run(root, { agents })
+
+      // One unaddressed, plus one addressed-but-doubted. Both are things a
+      // reviewer should still look at, which is what this list is for.
+      expect(report.summary.addressedCount).toBe(1)
+      expect(report.summary.unaddressedCount).toBe(1)
+      expect(report.summary.evidenceConcernCount).toBe(1)
+      expect(report.summary.outstandingCount).toBe(2)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a flagged obligation keeps its addressed verdict and its evidence', async () => {
+    // Annotating, not demoting: the concern adds the item to the outstanding list
+    // without suppressing the verdict or discarding what was found.
+    const root = await createRepository()
+
+    try {
+      const agents = scriptedAgents({
+        obligations: [
+          { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' }
+        ],
+        judgements: [
+          { status: 'addressed', evidence: [{ path: 'src/token.ts', line: 2 }] }
+        ],
+        aptness: ['inapt']
+      })
+      const report = await run(root, { agents })
+      const entry = report.obligations[0]
+
+      expect(entry?.status).toBe('addressed')
+      expect(entry?.status === 'addressed' && entry.evidence).toHaveLength(1)
+      expect(entry?.status === 'addressed' && entry.evidenceConcern).toBe(true)
+      expect(report.summary.outstandingCount).toBe(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('nothing outstanding is reported as a search result, not a clean bill', async () => {
+    const root = await createRepository()
+
+    try {
+      const agents = scriptedAgents({
+        obligations: [
+          { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' }
+        ],
+        judgements: [
+          { status: 'addressed', evidence: [{ path: 'src/token.ts', line: 2 }] }
+        ]
+      })
+      const report = await run(root, { agents })
+
+      expect(report.summary.outstandingCount).toBe(0)
+      // And there is no field anywhere asserting the change is complete: the
+      // report carries counts and citations, never a completion verdict.
+      expect(JSON.stringify(report)).not.toMatch(/"complete"|"fulfilled"|"satisfied"/u)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})

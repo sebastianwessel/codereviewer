@@ -121,6 +121,19 @@ export const IntentFulfilmentSummarySchema = z.strictObject({
   // concern. These are ANNOTATIONS, not suppressions — the verdict is unchanged —
   // because demoting on this signal was measured twice and rejected twice.
   evidenceConcernCount: z.int().min(0).default(0),
+  // THE HEADLINE NUMBER, and the reason this capability is shaped the way it is.
+  //
+  // Obligations this run could NOT confirm the change addresses: everything
+  // unaddressed, everything undetermined, and every addressed obligation whose
+  // evidence the aptness check doubted. It is a statement about what the SEARCH
+  // found, never a certification of the rest.
+  //
+  // Reading the report this way removes the one error spec 23 calls expensive. A
+  // false "this is done" makes a reviewer stop looking; a false "you might still
+  // owe this" costs them ten seconds. Since the report never asserts completion,
+  // it cannot assert it wrongly — the failure mode becomes a missed item on this
+  // list, which is the cheap direction spec 23 explicitly prefers.
+  outstandingCount: z.int().min(0).default(0),
   extraScopeFileCount: z.int().min(0)
 })
 
