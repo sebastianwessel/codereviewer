@@ -759,6 +759,46 @@
       ],
       "additionalProperties": false
     },
+    "intentFulfilment": {
+      "default": {
+        "enabled": false,
+        "maxObligations": 20,
+        "maxIntentBytes": 20000,
+        "maxChangeLines": 400
+      },
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "type": "boolean"
+        },
+        "maxObligations": {
+          "default": 20,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "maxIntentBytes": {
+          "default": 20000,
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 200000
+        },
+        "maxChangeLines": {
+          "default": 400,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        }
+      },
+      "required": [
+        "enabled",
+        "maxObligations",
+        "maxIntentBytes",
+        "maxChangeLines"
+      ],
+      "additionalProperties": false
+    },
     "invariantConformance": {
       "default": {
         "enabled": false,
@@ -1320,6 +1360,7 @@
     "contextSources",
     "verification",
     "changeImpact",
+    "intentFulfilment",
     "invariantConformance",
     "fix",
     "security",

@@ -22,9 +22,10 @@ the warning `config-file-missing`.
 | [reporting-and-observability.md](./reporting-and-observability.md) | `reporting`, `observability`, `costs` |
 | [context-and-evaluation.md](./context-and-evaluation.md) | `contextSources`, `evaluation` |
 | [change-impact.md](./change-impact.md) | `changeImpact` |
+| [intent-fulfilment.md](./intent-fulfilment.md) | `intentFulfilment` |
 | [invariant-conformance.md](./invariant-conformance.md) | `invariantConformance` |
 
-All 20 top-level keys are covered. Every one of them is optional; omitting a
+All 21 top-level keys are covered. Every one of them is optional; omitting a
 key applies its whole default object.
 
 ## Strict objects: unknown or misplaced keys are hard failures

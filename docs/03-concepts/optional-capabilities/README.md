@@ -54,6 +54,25 @@ and no recall figure to report. Today it names the symbols a change touched and
 where they are referenced. That is deliberately the floor a fuller capability
 would have to beat, so it ships as a useful baseline rather than as a lever.
 
+**Intent-fulfilment review** (`intentFulfilment.enabled`) is a separate command
+too ([`intent check`](../../06-reference/cli.md#codereviewer-intent-check)), off
+by default, with no recall figure yet. It reads the change's stated intent
+through the same [change-intent ingestion](change-intent-context.md) `review`
+uses, turns it into discrete obligations each citing the line of the ticket it
+came from, and says for each one either which changed lines address it or that
+nothing does. Unlike the two commands above it **does** spend: one extraction
+call, one judgement call per obligation, one explanation call.
+
+It can never gate, and that is a requirement rather than a default. Published
+measurement of models judging requirement conformance reports spurious rejection
+at **26–36%**, rising to **73–88%** when the same call is also asked to explain
+its judgement — so the judgement call here returns a status and cited lines with
+**no free-text field at all**, and the explanation is a separate call over an
+already-frozen mapping. The one output it must never produce is a confident
+"satisfied" that is not, because that stops a human looking; an `addressed`
+verdict whose cited lines are not lines the change touched is downgraded and
+counted.
+
 **Invariant-conformance review** (`invariantConformance.enabled`) is the same
 kind of thing: a separate command
 ([`conformance check`](../../06-reference/cli.md#codereviewer-conformance-check)),

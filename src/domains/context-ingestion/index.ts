@@ -13,7 +13,10 @@ export type {
 export { createDigestSummarizer } from './digest-summarizer.js'
 export { createModelSummarizer } from './model-summarizer.js'
 export {
+  gatherContextFragments,
   runContextIngestion,
+  type ContextGatherOptions,
+  type ContextGatherResult,
   type ContextIngestionResult,
   type ProviderGatherMetric
 } from './ingest.js'

@@ -234,6 +234,64 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
+  test('intent fulfilment is disabled by default with bounded spend limits', () => {
+    const disabled = CodeReviewerConfigSchema.parse({})
+    expect(disabled.intentFulfilment).toEqual({
+      enabled: false,
+      maxObligations: 20,
+      maxIntentBytes: 20_000,
+      maxChangeLines: 400
+    })
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      intentFulfilment: {
+        enabled: true,
+        maxObligations: 5,
+        maxIntentBytes: 1_000,
+        maxChangeLines: 50
+      }
+    })
+    expect(enabled.intentFulfilment).toEqual({
+      enabled: true,
+      maxObligations: 5,
+      maxIntentBytes: 1_000,
+      maxChangeLines: 50
+    })
+  })
+
+  // Spec 23 says the command MUST NOT be able to fail a pipeline on fulfilment
+  // grounds and states explicitly that this "is not configurable", because the
+  // underlying judgement is not accurate enough to gate on. A `blocking` key would
+  // therefore be accepted and then silently ignored — the failure the security
+  // `signals` key was removed for. Unlike `changeImpact`, there is no later change
+  // that adds it.
+  test('intent fulfilment rejects a blocking key it must never honour', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ intentFulfilment: { blocking: true } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        intentFulfilment: { failOnUnaddressed: true }
+      })
+    ).toThrow()
+  })
+
+  test('intent fulfilment rejects out-of-range spend bounds', () => {
+    // A bound of zero would enable the capability and forbid every call it
+    // consists of.
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ intentFulfilment: { maxObligations: 0 } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ intentFulfilment: { maxChangeLines: 0 } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        intentFulfilment: { maxIntentBytes: 500_000 }
+      })
+    ).toThrow()
+  })
+
   test('invariant conformance is disabled by default with bounded peer limits', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.invariantConformance).toEqual({

@@ -349,6 +349,38 @@ export const ChangeImpactConfigSchema = z.strictObject({
   maxSearchDepth: z.int().min(0).max(32).default(12)
 })
 
+// Intent-fulfilment review (spec 23). Off by default until measured, and reached
+// only by the separate `intent check` command — never by `review`.
+//
+// The bounds here are the whole cost model, and unlike change-impact this
+// capability does spend: one extraction call, one judgement call per obligation,
+// and one explanation call per run. `maxObligations` is therefore the primary
+// spend bound — it caps both how many obligations are reported and how many
+// judgement calls the run can issue.
+//
+// There is deliberately no `blocking` key, and unlike `changeImpact` there is no
+// later change that adds one. Spec 23 makes advisory-only a REQUIREMENT rather
+// than a default: "The command MUST NOT be able to fail a pipeline on fulfilment
+// grounds. This is not configurable", because the measured spurious-rejection
+// rate of model requirement-conformance judgement (26-36%, rising to 73-88% when
+// the same call also explains itself) is not accurate enough to gate on. A
+// `blocking` key would be accepted and then silently ignored, which is the
+// mistake `SecurityConfigSchema` above records having already made once.
+export const IntentFulfilmentConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  // Upper bound on obligations extracted from the stated intent, and therefore on
+  // judgement calls: one call judges one obligation, so this is the spend bound.
+  maxObligations: z.int().min(1).max(100).default(20),
+  // Cap on the redacted change-intent text handed to the extraction call. The
+  // ingestion providers already bound themselves per file; this bounds the sum,
+  // because a pipeline can configure several of them.
+  maxIntentBytes: z.int().min(256).max(200_000).default(20_000),
+  // Cap on the changed lines shown to each judgement call. The judgement may only
+  // cite a line the change actually touched, so this is what bounds the evidence
+  // surface a judgement is allowed to draw from.
+  maxChangeLines: z.int().min(1).max(5_000).default(400)
+})
+
 // Conformance adjudication (spec 24, design step 4). Off by default, and off
 // independently of `invariantConformance.enabled`, because it is the only part of
 // this capability that costs money: one model call per divergence. With it
@@ -635,6 +667,12 @@ export const CodeReviewerConfigSchema = z.strictObject({
     maxReferencesPerSymbol: 25,
     maxSearchDepth: 12
   }),
+  intentFulfilment: IntentFulfilmentConfigSchema.default({
+    enabled: false,
+    maxObligations: 20,
+    maxIntentBytes: 20_000,
+    maxChangeLines: 400
+  }),
   invariantConformance: InvariantConformanceConfigSchema.default({
     enabled: false,
     maxChangedDeclarations: 50,
@@ -712,6 +750,9 @@ export type VerificationClaimProviderConfig = z.infer<
   typeof VerificationClaimProviderConfigSchema
 >
 export type ChangeImpactConfig = z.infer<typeof ChangeImpactConfigSchema>
+export type IntentFulfilmentConfig = z.infer<
+  typeof IntentFulfilmentConfigSchema
+>
 export type InvariantConformanceConfig = z.infer<
   typeof InvariantConformanceConfigSchema
 >

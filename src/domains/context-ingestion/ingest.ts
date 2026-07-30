@@ -17,6 +17,15 @@ export type ProviderGatherMetric = {
   readonly failed: boolean
 }
 
+export type ContextGatherResult = {
+  // Every gathered fragment, already redacted. Exposed because spec 23 requires
+  // obligations to be extracted from the redacted FRAGMENTS rather than from the
+  // summarized brief: the brief is a paraphrase, and a citation into a paraphrase
+  // does not identify where in the stated intent an obligation came from.
+  readonly fragments: readonly ContextFragment[]
+  readonly providerMetrics: readonly ProviderGatherMetric[]
+}
+
 export type ContextIngestionResult = {
   readonly brief: ChangeIntentBrief | undefined
   readonly fragmentCount: number
@@ -46,27 +55,32 @@ const redactFragment = (
   body: redact(fragment.body)
 })
 
-/**
- * Runs the configured providers, redacts every gathered fragment, and summarizes
- * the result into a single change-intent brief. A provider that throws is
- * recorded as failed and skipped — a source failure never fails the review. When
- * no fragment is gathered the brief is undefined and the caller injects nothing.
- */
-export const runContextIngestion = async (input: {
+export type ContextGatherOptions = {
   readonly providers: readonly ContextProviderConfig[]
   readonly repositoryRoot: string
   readonly changedFiles: readonly {
     readonly path: string
     readonly content: string
   }[]
-  readonly summarizer: ContextSummarizer
-  // Used when the primary summarizer throws, so a failed model summarization
-  // degrades to the deterministic digest instead of failing the review.
-  readonly fallbackSummarizer?: ContextSummarizer
-  readonly maxBytes: number
   readonly redact: (value: string) => string
   readonly signal?: AbortSignal | undefined
-}): Promise<ContextIngestionResult> => {
+}
+
+/**
+ * Runs the configured providers and redacts every gathered fragment.
+ *
+ * This is the single gathering path for spec 11's change-intent context. It is
+ * exported so a consumer that needs the fragments themselves — spec 23's
+ * intent-fulfilment review, which must cite a line of the stated intent — reuses
+ * it instead of standing up a second ingestion path with its own provider
+ * composition and its own redaction.
+ *
+ * A provider that throws is recorded as failed and skipped: a source failure
+ * never fails the caller.
+ */
+export const gatherContextFragments = async (
+  input: ContextGatherOptions
+): Promise<ContextGatherResult> => {
   const gatherInput = {
     repositoryRoot: input.repositoryRoot,
     changedFiles: input.changedFiles,
@@ -106,6 +120,38 @@ export const runContextIngestion = async (input: {
       })
     }
   }
+
+  return { fragments, providerMetrics }
+}
+
+/**
+ * Runs the configured providers, redacts every gathered fragment, and summarizes
+ * the result into a single change-intent brief. A provider that throws is
+ * recorded as failed and skipped — a source failure never fails the review. When
+ * no fragment is gathered the brief is undefined and the caller injects nothing.
+ */
+export const runContextIngestion = async (input: {
+  readonly providers: readonly ContextProviderConfig[]
+  readonly repositoryRoot: string
+  readonly changedFiles: readonly {
+    readonly path: string
+    readonly content: string
+  }[]
+  readonly summarizer: ContextSummarizer
+  // Used when the primary summarizer throws, so a failed model summarization
+  // degrades to the deterministic digest instead of failing the review.
+  readonly fallbackSummarizer?: ContextSummarizer
+  readonly maxBytes: number
+  readonly redact: (value: string) => string
+  readonly signal?: AbortSignal | undefined
+}): Promise<ContextIngestionResult> => {
+  const { fragments, providerMetrics } = await gatherContextFragments({
+    providers: input.providers,
+    repositoryRoot: input.repositoryRoot,
+    changedFiles: input.changedFiles,
+    redact: input.redact,
+    ...(input.signal === undefined ? {} : { signal: input.signal })
+  })
 
   if (fragments.length === 0) {
     return { brief: undefined, fragmentCount: 0, providerMetrics }

@@ -24,12 +24,18 @@ below are parsed.
 | `eval slice-manifest` | Emit a manifest (with digest) for a benchmark slice directory. | `0`, `2`, `3` |
 | `drift check` | Run the drift gate. | `0`, `1`, `2`, `3` |
 | `impact check` | List the symbols a change touched and where they are referenced. | `0`, `2`, `3` |
+| `intent check` | Map the change's stated intent onto the change, obligation by obligation. | `0`, `2`, `3` |
 | `conformance check` | List where a changed declaration differs from a pattern its peers share. | `0`, `2`, `3` |
 
 Anything else exits `2` with `{"code":"usage_error", ...}` on stderr and the
 message `Expected command: config validate, review, baseline write, eval run,
 eval compare, eval recall-report, eval slice-manifest, drift check, impact
-check, or conformance check`.
+check, intent check, or conformance check`.
+
+`review` is the only command that can fail a pipeline on what it found.
+`impact check`, `intent check` and `conformance check` are advisory: they run
+independently of each other and of `review`, share none of each other's context
+or output, and always exit `0` when they run at all.
 
 See [exit-codes-and-error-codes.md](./exit-codes-and-error-codes.md) for the
 full mapping.
@@ -38,8 +44,8 @@ full mapping.
 
 | Rule | Detail |
 | --- | --- |
-| Unknown flags | **Silently ignored.** No command rejects an unrecognized flag, so a typo (`--base_ref`) is not an error — it is simply not applied. |
-| Flag/value form | `--flag value`. `--flag=value` is not supported (the whole token is treated as an unknown flag). |
+| Unknown flags | **Rejected before the command does any work**, with exit `2` and `{"code":"usage_error"}` naming the flag. Every command declares its own option set; a flag one command accepts is still unknown to another. A parser that ignored a flag it does not implement would let a run proceed as though the flag had been honoured, which this project paid for twice. |
+| Flag/value form | `--flag value`. `--flag=value` is not supported; it is checked on the flag name alone, so a known flag in the joined form is rejected by name rather than mistaken for an unknown one. |
 | Missing value | Throws a usage/config error → exit `2` with `code: "config_error"` (the CLI classifies raw `TypeError` from parsing as a config error). |
 | Repeated flags | Only `--file`, `--case`, and `eval recall-report --report` accept repetition. For all others the **first** occurrence wins (`indexOf`). |
 | Leading-dash values | Rejected for `--config`, `--log-level`, `--log-file`, `--case`, `eval recall-report --report`, `--review-mode`, `--review-depth`, `--max-concurrent-tasks`. Accepted (and passed through to validation) for `--base-ref`, `--head-ref`, `--file`, `--files`, `--slice-root`, `--base`, `--head`, `baseline write --report`. A git ref starting with `-` is later rejected by the schema. |
@@ -354,6 +360,177 @@ Enable it with:
   therefore also excludes it as a reference destination.
 - Files in a language the deterministic signal extractors do not cover contribute
   no symbols and produce a warning rather than an error.
+
+## `codereviewer intent check`
+
+```
+codereviewer intent check [--config <path>] [--base-ref <ref>] [--head-ref <ref>]
+```
+
+| Flag | Value | Notes |
+| --- | --- | --- |
+| `--config` | path | Config file path override. |
+| `--base-ref` | git ref | Overrides `review.baseRef`. |
+| `--head-ref` | git ref | Overrides `review.headRef`. |
+
+`intent` accepts no subcommand other than `check` (`Expected command: intent
+check`, exit `2`). Stdout is the report JSON; nothing is written to disk.
+
+**This command reports a mapping, not a verdict.** It reads the change's stated
+intent — the pull-request description, a linked ticket, a commit body, whatever
+[`contextSources`](./configuration/context-and-evaluation.md#contextsources)
+supplies — turns it into discrete obligations, and for each one says either
+"these changed lines address it" or "nothing here does". It does **not** say
+whether the change is complete, correct, or acceptable.
+
+Because of that, **the exit code is always `0`** when the command runs at all,
+including when every obligation is unaddressed. Only a configuration or usage
+failure (`2`) or a repository failure such as an unresolvable ref (`3`) changes
+it.
+
+### Why this one can never gate
+
+Advisory here is a **requirement**, not a default, and it is not configurable.
+
+- **Product.** A pull request need not fully implement a ticket. Partial work,
+  follow-ups, and deliberately deferred scope are normal, so a gate on ticket
+  completeness would block correct work routinely.
+- **Technical, and this is the binding reason.** Published measurement of models
+  judging requirement conformance reports systematic over-rejection: spurious
+  rejection at **26–36%**, rising to **73–88%** when the same call is also asked
+  to explain its judgement or propose a fix. A hard gate built on that would be
+  wrong most of the time it fired.
+
+The second figure is also why the command issues **three different kinds of
+call** rather than one. Obligations are extracted before any verdict exists;
+each judgement is a call whose output schema has **no free-text field at all** —
+a status and cited lines, nothing else — so a model cannot argue itself into a
+rejection while reaching one; and the explanation is a separate call that reads
+an already-frozen mapping and cannot change it.
+
+### What it costs
+
+One extraction call, one judgement call per obligation, and one explanation call
+per run. Bound it with
+[`intentFulfilment.maxObligations`](./configuration/intent-fulfilment.md).
+
+It is **disabled by default**. With `intentFulfilment.enabled` left at `false`
+the command exits `0` and reports `"status": "disabled"` rather than an empty
+result. Enable it with:
+
+```json
+{
+  "provider": { "id": "openai", "model": "your-model" },
+  "intentFulfilment": { "enabled": true },
+  "contextSources": {
+    "enabled": true,
+    "providers": [{ "type": "inbox", "dir": ".codereviewer/context" }]
+  }
+}
+```
+
+### When there is nothing to map
+
+Four of the five statuses say so plainly rather than emitting an empty mapping,
+and all of them exit `0`:
+
+| `status` | Means |
+| --- | --- |
+| `disabled` | `intentFulfilment.enabled` is `false`. |
+| `no-intent` | No change-intent source is configured, or the configured ones produced nothing. **Most changes have thin descriptions; this is the ordinary case.** |
+| `unusable-intent` | Intent was gathered but no checkable obligation could be read from it. |
+| `provider-unavailable` | Intent was gathered and no model was available to read it. |
+| `completed` | A mapping was produced. |
+
+### Report shape
+
+```json
+{
+  "schemaVersion": "1.0",
+  "status": "completed",
+  "generatedAt": "2026-07-30T00:00:00.000Z",
+  "scope": {
+    "baseRef": "main",
+    "headRef": "HEAD",
+    "mergeBaseRef": "9f1c2ab...",
+    "changedFileCount": 2,
+    "changedLineCount": 2,
+    "changedLinesTruncated": false,
+    "intentOrigins": ["inbox:tracker/A-1"],
+    "intentTruncated": false
+  },
+  "summary": {
+    "intentFragmentCount": 1,
+    "obligationCount": 2,
+    "addressedCount": 1,
+    "unaddressedCount": 1,
+    "undeterminedCount": 0,
+    "obligationsTruncated": false,
+    "uncitedObligationCount": 0,
+    "unevidencedAddressedCount": 0,
+    "extraScopeFileCount": 1
+  },
+  "obligations": [
+    {
+      "id": "obl_1",
+      "source": {
+        "origin": "inbox:tracker/A-1",
+        "line": 1,
+        "text": "Reject tokens older than five minutes."
+      },
+      "statement": "Reject old tokens.",
+      "status": "addressed",
+      "evidence": [
+        {
+          "path": "src/token.ts",
+          "line": 2,
+          "text": "export const rejectExpired = (age) => age > 300"
+        }
+      ]
+    },
+    {
+      "id": "obl_2",
+      "source": {
+        "origin": "inbox:tracker/A-1",
+        "line": 2,
+        "text": "Record every refusal in the audit log."
+      },
+      "statement": "Log every refusal.",
+      "status": "unaddressed"
+    }
+  ],
+  "extraScope": [{ "path": "src/unrelated.ts", "changedLineCount": 1 }],
+  "explanation": "The change rejects old tokens; the audit-log requirement is not addressed.",
+  "warnings": [],
+  "usage": { "inputTokens": 1840, "outputTokens": 96, "costUsd": 0.0034 }
+}
+```
+
+- **`source` is on every obligation, including the unaddressed ones.** It is the
+  origin and line of the stated intent the obligation was read out of, and the
+  `text` is resolved from that line rather than repeated back by the model. An
+  obligation whose citation does not resolve is **not reported at all**, and is
+  counted in `summary.uncitedObligationCount`. An obligation nobody wrote is not
+  an obligation.
+- **`evidence` exists only on `addressed`, and always holds at least one entry.**
+  Every cited line is checked against the lines the diff actually touched; an
+  `addressed` verdict whose citations do not survive that check is reported as
+  `undetermined` and counted in `summary.unevidencedAddressedCount`. A
+  satisfaction claim with nothing behind it is the most harmful thing this
+  command could print, because it tells you to stop looking.
+- `undetermined` means the judgement could not be made — including when the call
+  failed. It asserts nothing about the change in either direction.
+- **`extraScope` is neutral.** It lists changed files no obligation's evidence
+  cites. A change doing more than the ticket asked is normal and frequently
+  desirable, so the entry carries a path and a line count and nothing else —
+  there is no field in which a severity or a verdict could be recorded.
+- `explanation` is written by a **separate** model call that reads the frozen
+  mapping above. It is absent when that call did not run or returned nothing.
+- `intentOrigins` are the change-intent source labels the obligations were read
+  from, minted by the same ingestion `review` uses.
+- Changed files obey [`paths.include` and
+  `paths.exclude`](./configuration/review.md): a directory excluded from review
+  can neither be judged against an obligation nor appear in `extraScope`.
 
 ## `codereviewer conformance check`
 

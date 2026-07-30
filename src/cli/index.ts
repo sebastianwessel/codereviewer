@@ -29,6 +29,10 @@ import {
 } from '../domains/evaluation/index.js'
 import { runChangeImpact } from '../domains/change-impact/index.js'
 import {
+  createIntentFulfilmentLane,
+  runIntentFulfilment
+} from '../domains/intent-fulfilment/index.js'
+import {
   createConformanceAdjudicationLane,
   runInvariantConformance
 } from '../domains/invariant-conformance/index.js'
@@ -1305,6 +1309,135 @@ const runImpact = async (
   }
 }
 
+// `intent check` (spec 23).
+//
+// What it produces is a MAPPING between the stated intent and the change: the
+// obligations the intent states, each citing the line it was read from, and for
+// each one either the changed lines that address it or nothing. It is not a
+// verdict, nothing is admitted, nothing carries a severity, and spec 23 makes
+// advisory-only a REQUIREMENT rather than a default — "The command MUST NOT be
+// able to fail a pipeline on fulfilment grounds. This is not configurable" —
+// because published measurement puts spurious rejection of model requirement-
+// conformance judgement at 26-36%, rising to 73-88% when the same call also
+// explains itself. The exit code is therefore 0 whatever the report says,
+// INCLUDING when there is no intent to read, and only a configuration or usage
+// failure (2) or a repository failure (3) changes it.
+//
+// It is one of three independently runnable stages and shares no context or output
+// with the other two: `review` can block, `intent check` and `impact check` /
+// `conformance check` cannot.
+const runIntent = async (
+  args: readonly string[],
+  options: CliRunOptions
+): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, ['--base-ref', '--head-ref'])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
+  if (args[0] !== 'check') {
+    return usageError('Expected command: intent check')
+  }
+
+  const intentArgs = args.slice(1)
+  let loadedConfig: Awaited<ReturnType<typeof loadCodeReviewerConfig>>
+
+  // Configuration is loaded in its own scope so a malformed config file exits 2
+  // as a config error rather than being swept into the repository fallback the
+  // rest of the command needs for git failures.
+  try {
+    const configPath = parseConfigPath(intentArgs)
+    loadedConfig = await loadCodeReviewerConfig({
+      repositoryRoot: options.cwd,
+      environment: options.environment ?? {},
+      ...(configPath === undefined ? {} : { configPath })
+    })
+  } catch (error) {
+    return mapErrorResult(error, 'config')
+  }
+
+  try {
+    const baseRef = parseOptionValue(intentArgs, '--base-ref')
+    const headRef = parseOptionValue(intentArgs, '--head-ref')
+    // The mediated retriever is the only filesystem seam the run gets for
+    // repository content: path containment, symlink-realpath re-checking, the
+    // eligibility gate and redaction all apply to every changed file the run
+    // sees. Change-intent sources are read by spec 11's ingestion instead, which
+    // owns its own bounds and its own redaction.
+    const retriever = createContextRetriever({
+      repositoryRoot: options.cwd,
+      budget: {
+        maxReads: loadedConfig.config.review.maxFiles,
+        maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
+        maxSearches: 0
+      },
+      paths: {
+        include: loadedConfig.config.paths.include,
+        exclude: loadedConfig.config.paths.exclude
+      }
+    })
+    const logger = createReviewLogger({
+      level: loadedConfig.config.observability.logging.level,
+      ...(options.logSink === undefined ? {} : { out: options.logSink }),
+      bindings: {
+        component: 'cli',
+        command: 'intent'
+      }
+    })
+    // Absent unless the capability is enabled AND a provider resolves. Every other
+    // outcome reports `provider-unavailable` with a warning and still exits 0.
+    const lane = await createIntentFulfilmentLane({
+      config: loadedConfig.config,
+      environment: options.environment ?? {},
+      ...(options.providerImport === undefined
+        ? {}
+        : { providerImport: options.providerImport }),
+      logger
+    })
+
+    try {
+      const report = await runIntentFulfilment({
+        repositoryRoot: options.cwd,
+        config: loadedConfig.config,
+        ...(baseRef === undefined ? {} : { baseRef }),
+        ...(headRef === undefined ? {} : { headRef }),
+        ...(options.now === undefined ? {} : { generatedAt: options.now() }),
+        ...(lane === undefined
+          ? {}
+          : {
+              agents: {
+                extractObligations: lane.extractObligations,
+                judge: lane.judge,
+                explain: lane.explain
+              },
+              usage: lane.usage
+            }),
+        readChangedFile: async (filePath) => {
+          try {
+            return (await retriever.readRepositoryFile({ path: filePath }))
+              .content
+          } catch {
+            // An ineligible, missing, or over-budget file is skipped and counted;
+            // one unreadable file must not fail the whole report.
+            return undefined
+          }
+        }
+      })
+
+      return {
+        exitCode: 0,
+        stdout: jsonResult(report),
+        stderr: ''
+      }
+    } finally {
+      await lane?.shutdown()
+    }
+  } catch (error) {
+    return mapErrorResult(error, 'repository')
+  }
+}
+
 // `conformance check` (spec 24).
 //
 // It makes no provider call unless `invariantConformance.adjudication.enabled` is
@@ -1503,6 +1636,13 @@ export const runCli = async (
     )
   }
 
+  if (command === 'intent') {
+    return runIntent(
+      [subcommand, ...rest].filter((value): value is string => value !== undefined),
+      options
+    )
+  }
+
   if (command === 'conformance') {
     return runConformance(
       [subcommand, ...rest].filter((value): value is string => value !== undefined),
@@ -1511,6 +1651,6 @@ export const runCli = async (
   }
 
   return usageError(
-    'Expected command: config validate, review, baseline write, eval run, eval compare, eval recall-report, eval slice-manifest, drift check, impact check, or conformance check'
+    'Expected command: config validate, review, baseline write, eval run, eval compare, eval recall-report, eval slice-manifest, drift check, impact check, intent check, or conformance check'
   )
 }
