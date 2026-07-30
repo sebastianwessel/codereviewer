@@ -47,6 +47,32 @@ other. Disabled, discovery is single-shot with no tools.
 | `review.crossFileRetrieval.maxToolCallsPerTask` | integer 1–500 | `100` | Runaway-loop guard on mediated tool calls per task. It is not a context ration — models self-limit well below it. |
 | `review.crossFileRetrieval.maxBytesPerRead` | integer 1000–200000 | `24000` | Per-read byte cap for cross-file reads. Large single reads measurably dilute a review. |
 
+### `review.guardedRegionContext`
+
+Two independently switchable arms over one deterministic trigger: a **conditional
+line the diff changed**, inside a declaration, with code after it. The trigger is
+structural and language-neutral — it keys on position, not on any category of
+guard, so it fires the same way in every supported language.
+
+Both arms are **off by default and unmeasured**. Do not enable them expecting a
+recall gain; they exist so spec 25's three-arm comparison can be run.
+
+| Key | Type | Default | What it does |
+| --- | --- | --- | --- |
+| `review.guardedRegionContext.signal` | boolean | `false` | Adds a section naming each changed conditional, the lines it precedes, and what that region calls. Adds no file content. |
+| `review.guardedRegionContext.calleeRanking` | boolean | `false` | Spends the existing [referenced-definition](#) budget on files supplying the guarded region's callees before files ranked by import frequency. Adds **no bytes** — same 6 files / 12KB caps, different order. |
+
+What the section does **not** do: it never says a protection was weakened, that
+the change is unsafe, or that anything is a defect. The trigger is lexical and
+cannot know any of that. A deliberate change appears in it exactly like a
+mistaken one, and the section says so to the reviewer. Use it to decide where to
+look.
+
+Known limit: a guard **deleted outright** leaves no conditional in the new
+revision, so it does not trigger. The three largest weakening shapes — widened
+scope, loosening in place, and new code missing a check — all keep a conditional
+and do trigger.
+
 ### `review.contextScout` — removed
 
 The context scout and its whole configuration block were removed on 2026-07-27.

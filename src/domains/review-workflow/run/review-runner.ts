@@ -129,6 +129,9 @@ export const runReview = async (
       sourceFiles,
       analysis,
       tasks: reviewTasks,
+      // Spec 25: the trigger is a CHANGED conditional, so context assembly needs
+      // the lines the diff actually touched.
+      reviewedDiffRanges: effectiveDiffRanges,
       observability,
       logger
     })

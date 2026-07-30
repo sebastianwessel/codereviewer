@@ -16,6 +16,10 @@
           "enabled": false,
           "maxToolCallsPerTask": 100,
           "maxBytesPerRead": 24000
+        },
+        "guardedRegionContext": {
+          "signal": false,
+          "calleeRanking": false
         }
       },
       "type": "object",
@@ -123,6 +127,28 @@
             "maxBytesPerRead"
           ],
           "additionalProperties": false
+        },
+        "guardedRegionContext": {
+          "default": {
+            "signal": false,
+            "calleeRanking": false
+          },
+          "type": "object",
+          "properties": {
+            "signal": {
+              "default": false,
+              "type": "boolean"
+            },
+            "calleeRanking": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "signal",
+            "calleeRanking"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -134,7 +160,8 @@
         "maxFiles",
         "maxFileBytes",
         "inlineSeverityThreshold",
-        "crossFileRetrieval"
+        "crossFileRetrieval",
+        "guardedRegionContext"
       ],
       "additionalProperties": false
     },
@@ -766,7 +793,11 @@
         "maxPeersPerDeclaration": 60,
         "maxPeerFiles": 300,
         "maxDivergences": 50,
-        "maxPreExistingDivergences": 25
+        "maxPreExistingDivergences": 25,
+        "adjudication": {
+          "enabled": false,
+          "maxAdjudications": 25
+        }
       },
       "type": "object",
       "properties": {
@@ -803,6 +834,30 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 500
+        },
+        "adjudication": {
+          "default": {
+            "enabled": false,
+            "maxAdjudications": 25
+          },
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "maxAdjudications": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          "required": [
+            "enabled",
+            "maxAdjudications"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -811,7 +866,8 @@
         "maxPeersPerDeclaration",
         "maxPeerFiles",
         "maxDivergences",
-        "maxPreExistingDivergences"
+        "maxPreExistingDivergences",
+        "adjudication"
       ],
       "additionalProperties": false
     },

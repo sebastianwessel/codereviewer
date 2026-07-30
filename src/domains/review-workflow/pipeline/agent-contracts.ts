@@ -36,12 +36,17 @@ export const ReviewContextDocumentSchema = z.strictObject({
   // brief of external change-intent context (spec 11). Both are context only:
   // findings remain restricted to task.paths and these entries are not review
   // targets.
+  // 'guarded-region' carries spec 25's structural note: conditional lines the diff
+  // changed and the extent each precedes. Derived deterministically from the
+  // changed files already in the packet, so it adds no source the reviewer cannot
+  // already see — it says where to look, and asserts nothing about correctness.
   kind: z.enum([
     'file',
     'support-signal-output',
     'test-mapping',
     'referenced-definition',
-    'change-intent'
+    'change-intent',
+    'guarded-region'
   ]),
   path: RepositoryRelativePathSchema.optional(),
   // Absolute line span this document occupies in its source file. Set for 'file'

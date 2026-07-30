@@ -34,6 +34,7 @@ import {
   type SkillContextDocument
 } from './static-context.js'
 import { collectReferencedDefinitions } from './referenced-definitions.js'
+import { collectGuardedRegionContext } from './guarded-region-context.js'
 
 export type {
   InstructionContextDocument,
@@ -269,8 +270,13 @@ export const assembleContext = async (
     readonly sourceFiles: readonly SupportSignalSourceFile[]
     readonly analysis: DeterministicSignalExtraction
     readonly tasks: readonly ReviewTask[]
+    // Spec 25 needs the lines the diff actually touched: its trigger is a CHANGED
+    // conditional, and an unchanged one carries no information about this review.
+    // Defaulted so an explicit-file run, which has no diff, simply never triggers.
+    readonly reviewedDiffRanges?: readonly ReviewedDiffRange[]
   }
 ): Promise<ContextAssemblyResult> => {
+  const guardedRegionConfig = input.config.review.guardedRegionContext
   const staticContext = await loadStaticReviewContext({
     repositoryRoot: input.repositoryRoot,
     config: input.config
@@ -306,7 +312,8 @@ export const assembleContext = async (
         kind:
           inputContext.kind === 'test-mapping' ||
           inputContext.kind === 'referenced-definition' ||
-          inputContext.kind === 'change-intent'
+          inputContext.kind === 'change-intent' ||
+          inputContext.kind === 'guarded-region'
             ? 'support-signal-output'
             : inputContext.kind,
         ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
@@ -522,6 +529,20 @@ export const assembleContext = async (
       )
     }
 
+    // Spec 25: the changed conditionals in this task's files, and what they
+    // precede. Computed once per task and read by both arms — Arm A renders the
+    // section, Arm B uses the callee names to rank R4 below. Cheap and pure, so
+    // it runs whenever either arm is on and yields '' when nothing triggered.
+    const guardedRegions =
+      guardedRegionConfig.signal || guardedRegionConfig.calleeRanking
+        ? collectGuardedRegionContext({
+            sourceFiles: input.sourceFiles,
+            facts: input.analysis.facts,
+            reviewedDiffRanges: input.reviewedDiffRanges ?? [],
+            taskPaths: task.paths
+          })
+        : undefined
+
     // R4: collect bounded referenced-definition digests for unchanged files the
     // task's changed files import (relative imports only). Context only — these
     // never enter task.paths and are not review targets. `allSourcePaths` covers
@@ -534,13 +555,32 @@ export const assembleContext = async (
               repositoryRoot: input.repositoryRoot,
               taskPaths: task.paths,
               facts: input.analysis.facts,
-              knownPaths: allSourcePaths
+              knownPaths: allSourcePaths,
+              // Spec 25 Arm B: same budget, different order. Empty when the arm is
+              // off, which leaves R4's import-frequency ranking exactly as it was.
+              priorityCalleeNames: guardedRegionConfig.calleeRanking
+                ? (guardedRegions?.priorityCalleeNames ?? [])
+                : []
             })
           ).map((digest) => ({
             kind: 'referenced-definition' as const,
             path: digest.path,
             content: digest.content
           }))
+
+    // Spec 25 Arm A. Appended alongside the referenced definitions because both
+    // are derived context that must not influence task.paths.
+    const guardedRegionContexts: ContextInput[] =
+      guardedRegionConfig.signal &&
+      guardedRegions !== undefined &&
+      guardedRegions.sectionText.length > 0
+        ? [
+            {
+              kind: 'guarded-region' as const,
+              content: guardedRegions.sectionText
+            }
+          ]
+        : []
 
     batches.forEach((batch, index) => {
       const paths = workflowTaskPaths(batch, task.paths)
@@ -555,7 +595,7 @@ export const assembleContext = async (
           }),
           batch,
           paths,
-          referencedDefinitionContexts
+          [...guardedRegionContexts, ...referencedDefinitionContexts]
         )
       )
     })

@@ -65,6 +65,22 @@ const gitRefSchema = z
 // tool-call cap that CODE enforces. Its findings pass the SAME refutation and
 // admission as any other candidate. Disabled, discovery is single-shot with no
 // tools and the run is byte-for-byte unchanged.
+// Spec 25. Two independently switchable arms over one deterministic trigger: a
+// conditional line the diff changed, inside a declaration, with code after it.
+//
+// Both default off, and both are measured before either can default on. `signal`
+// adds a structural section naming what changed and what it precedes; it adds no
+// file content. `calleeRanking` adds no bytes at all — it re-orders the existing
+// referenced-definition budget so files defining the guarded region's callees are
+// admitted before files that merely happen to be imported most often.
+export const GuardedRegionContextConfigSchema = z.strictObject({
+  // Arm A.
+  signal: z.boolean().default(false),
+  // Arm B. Independent of `signal` so the measurement can separate framing from
+  // retrieval, which is the question three prior context interventions left open.
+  calleeRanking: z.boolean().default(false)
+})
+
 export const CrossFileRetrievalConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
   // Runaway-loop guard: the maximum mediated tool calls one discovery task may
@@ -97,6 +113,10 @@ export const ReviewConfigSchema = z.strictObject({
     enabled: false,
     maxToolCallsPerTask: 100,
     maxBytesPerRead: 24000
+  }),
+  guardedRegionContext: GuardedRegionContextConfigSchema.default({
+    signal: false,
+    calleeRanking: false
   })
 })
 
@@ -581,6 +601,10 @@ export const CodeReviewerConfigSchema = z.strictObject({
       enabled: false,
       maxToolCallsPerTask: 100,
       maxBytesPerRead: 24000
+    },
+    guardedRegionContext: {
+      signal: false,
+      calleeRanking: false
     }
   }),
   provider: ProviderConfigSchema.optional(),
