@@ -9,6 +9,82 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-08-01 — Spec 23 measured on intent WRITTEN BEFORE THE CHANGE: the commit-message corpus was measuring nothing
+
+New corpus `.codereviewer/eval/intent-corpus-realistic/`: **28 cases over 15
+commits**, 21 of them carrying intent that is a verbatim slice of a `specs/*.md`
+section as it existed at a **strict git ancestor** of the change under test
+(`build.mjs` asserts the ancestry and refuses a case that fails it). 7 control cases
+judge the **same diffs** against the commit's own message. **No synthetic cases and
+no planted obligations.** Spend **$3.9401** of a $6.00 ceiling. Full analysis:
+`reports/2026-08-01-intent-realistic-corpus-measurement.md`. Decision rule written
+down before the corpus was built.
+
+| | commit-message corpus, real arm | this corpus, post-hoc control | this corpus, **pre-written** |
+|---|---:|---:|---:|
+| cases / obligations | 12 / 80 | 7 / 60 | **21 / 192** |
+| **genuinely outstanding obligations** | **0** | **0** | **48** |
+| extraction faithful | 96.3% | 100.0% | **100.0% (192/192)** |
+| outstanding recall, reported | not measurable | not measurable | **83.3% (40/48)** |
+| outstanding recall, end-to-end | not measurable | not measurable | **52.9% (37/70)** |
+| outstanding precision | — | 0.0% (0/6) | **69.0% (40/58)** |
+| false-satisfied | 0.0% of nothing | 0.0% of nothing | 7.1% (8/112) |
+
+### The answer, and it is structural rather than a matter of degree
+
+A commit message is a report of work done, so its obligations are addressed by
+construction. Three prior rounds recorded **zero** opportunities to be wrong about an
+unaddressed obligation; the control arm here reproduces that exactly. **Caught in the
+act on one diff:** spec 25 names two trigger shapes and `4c1e9dd` implements one.
+Against the spec (`pw05`/`obl_3`) that clause is outstanding and the run reports it.
+Against the commit message (`ph06`/`obl_10`) the extractor reads *"…which is NOT
+implemented"* and produces *"do not implement the second trigger shape"* — which the
+change satisfies. The same gap is an unmet requirement under one intent and a
+satisfied one under the other.
+
+### Real, unplanted leftovers this corpus contains
+
+Spec 25's exit-path trigger clause; spec 15's whole Mechanism 2 and its held-out set
+and per-mechanism precision; spec 11's `platform` provider and both its transports;
+spec 22's contract delta, impact adjudication and missing blocking key; spec 24's
+conformance adjudication; spec 23's own evaluation corpus; spec 05's defence-in-depth
+severity rule; spec 13's observability step.
+
+### Where the capability is right and wrong
+
+- **Extraction accuracy is not the weak link**: 252/252 obligations across both arms
+  are faithful readings of the line they cite, `uncitedObligationCount` 0 in all 28
+  runs, no run truncated.
+- **Breadth is**: end-to-end recall 52.9% against reported-level 83.3% — the entire
+  gap is obligations the extractor never proposed. `pw09` proposed none of the seven
+  undone anti-contamination items.
+- **The false-satisfied shape, six of eight instances**: an obligation about an
+  artefact that does not exist is credited to the nearest artefact that does — a
+  requirement on the *evaluation* credited to the *implementation*, a held-out set
+  credited to the dev set, a constraint on an unbuilt model call credited to the
+  deterministic code around it.
+- **18 false-outstanding entries** are mostly obligations an EARLIER change already
+  satisfied, which this diff cannot evidence. Under spec 23's economics that is the
+  cheap direction, and it is ~3 in 10 outstanding entries.
+
+### What invalidates this entry
+
+- One run per case, no variance band; extraction non-determinism is ±10% on any count.
+- 22 obligations are conditional decision rules (*"adopt only if"*, *"retain as
+  configuration if"*). The primary scoring calls them **unclassifiable**; the
+  permissive reading gives 69 opportunities, recall 85.5%, precision 76.6%,
+  false-satisfied 8.8%. Both readings support the same verdict; neither is hidden.
+- A spec section is unusually well-formed intent. 100% extraction fidelity is an
+  upper bound, not a forecast for a real ticket.
+- The truth rule is *"addressed means the demanded state holds at head, whoever made
+  it hold"*. A reader who thinks only in-diff work should count would score precision
+  much higher.
+- 8 false-satisfied and 18 false-outstanding events establish direction and
+  mechanism, not a second digit. One repository, TypeScript, `gpt-5.3-codex`.
+- The capability remains **off by default**. Nothing here argues with that.
+
+---
+
 ## 2026-07-31 — Spec 23 citation-aptness check MEASURED: it works as designed and still costs more than it saves. WITHDRAW THE STAGE
 
 Same 34 cases, same corpus, `1ae0db3` with the aptness stage active. Spend
