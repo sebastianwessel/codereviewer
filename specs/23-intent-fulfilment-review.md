@@ -2,6 +2,39 @@
 
 Status: Approved
 Date: 2026-07-27
+Amended: 2026-07-30 — a citation may name a removed line (see *Amendment* below)
+
+## Amendment (2026-07-30): a removed line is evidence
+
+The original requirement said an addressed obligation must cite "path and line".
+Implemented literally against the added side, **that made deletions unprovable**:
+a deletion creates no line to point at, so *"remove the old caching layer"* could
+never be judged addressed no matter how completely it was done.
+
+Measured on this repository's own revert commit `52ff75d`, using its commit
+message as the stated intent:
+
+| obligation shape | count | result |
+|---|---:|---|
+| *"Remove X"* | 9 | **7 unaddressed, 2 undetermined — all wrong** |
+| *"Keep X"* / *"Make X"* | 6 | **6 addressed — all correct** |
+
+Every removal failed; every addition succeeded. On a revert, refactor or cleanup
+change — a large share of real work — the command told a reviewer that most of the
+change had not been made.
+
+The requirement's purpose is *"never claim something is done without showing me
+where"*. A removed line satisfies that purpose exactly: it is an exact address a
+reader can confirm in the diff. The rule was written with additions in mind, not
+with a judgement that deletions should not count.
+
+The amendment therefore widens what a citation may name and adds an obligation to
+disclose the side, so the safety property is unchanged: an addressed obligation
+still cannot survive without a verified, human-checkable address.
+
+Recorded date: 2026-07-30. This is the first amendment to an approved spec in this
+project made after implementation; the measurement that forced it is in
+`reports/eval-results-ledger.md`.
 
 ## Purpose
 
@@ -61,6 +94,11 @@ document. **That ingestion MUST be reused, not reimplemented.**
 - An obligation judged addressed MUST cite the change that addresses it — path and
   line. Unevidenced satisfaction claims are worse than silence, because they
   invite a reviewer to stop checking.
+- **A cited line MAY be one the change REMOVED, identified by its line number on
+  the pre-change side.** A removed line is evidence of the same kind as an added
+  one: it names an exact address a reader can confirm in the diff. The report MUST
+  state which side a citation is on, so *"done — this deleted line 42"* can never
+  be misread as *"done — this added line 42"*.
 - **Extra scope is reported neutrally.** A change doing more than the ticket asked
   is a normal and often desirable event, not a defect.
 - The command MUST handle **absent or unusable intent** by reporting that plainly

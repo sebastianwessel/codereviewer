@@ -44,7 +44,11 @@ export const ModelFulfilmentJudgementSchema = z.strictObject({
     .array(
       z.strictObject({
         path: z.string(),
-        line: z.coerce.number()
+        line: z.coerce.number(),
+        // Enum-valued and normalized in code like `status`, and deliberately
+        // optional: an answer that omits it still cites a real address, and the
+        // change surface resolves which side that address is on.
+        side: z.string().optional()
       })
     )
     .optional()
@@ -65,7 +69,11 @@ export const FulfilmentJudgementInputSchema = z.strictObject({
     z.strictObject({
       path: z.string().min(1),
       changedLines: z.array(
-        z.strictObject({ line: z.int().min(1), text: z.string() })
+        z.strictObject({
+          line: z.int().min(1),
+          side: z.enum(['added', 'removed']),
+          text: z.string()
+        })
       )
     })
   ),
@@ -86,7 +94,11 @@ export type FulfilmentJudgementInput = z.infer<
 export type FulfilmentJudgement =
   | {
       readonly status: 'addressed'
-      readonly evidence: readonly { readonly path: string; readonly line: number }[]
+      readonly evidence: readonly {
+        readonly path: string
+        readonly line: number
+        readonly side?: 'added' | 'removed'
+      }[]
     }
   | { readonly status: 'unaddressed' }
   | { readonly status: 'undetermined' }
@@ -141,7 +153,17 @@ export const normalizeFulfilmentJudgement = (
     const line = Math.trunc(citation.line)
     const path = citation.path.trim()
 
-    return path.length === 0 || line < 1 ? [] : [{ path, line }]
+    if (path.length === 0 || line < 1) {
+      return []
+    }
+
+    const side = statusKey(citation.side ?? '')
+
+    if (side === 'added' || side === 'removed') {
+      return [{ path, line, side }]
+    }
+
+    return [{ path, line }]
   })
 
   return evidence.length === 0 ? UNDETERMINED : { status: 'addressed', evidence }
@@ -157,6 +179,7 @@ export const fulfilmentJudgementInputFor = (
       path: file.path,
       changedLines: file.changedLines.map((changedLine) => ({
         line: changedLine.line,
+        side: changedLine.side,
         text: changedLine.text
       }))
     })),
@@ -196,17 +219,24 @@ export const verifyJudgement = (
   const evidence: ChangeCitation[] = []
 
   for (const citation of judgement.evidence) {
-    const key = `${citation.path}:${citation.line}`
+    const candidates = (byPath.get(citation.path)?.changedLines ?? []).filter(
+      (candidate) => candidate.line === citation.line
+    )
+    // A line number can exist on both sides of the same file, so an answer that
+    // names its side wins the tie. Without one the added side is preferred: it is
+    // the more common evidence and the one a bare citation almost always means.
+    const changedLine =
+      candidates.find((candidate) => candidate.side === citation.side) ??
+      candidates.find((candidate) => candidate.side === 'added') ??
+      candidates[0]
 
-    if (seen.has(key)) {
+    if (changedLine === undefined) {
       continue
     }
 
-    const changedLine = byPath
-      .get(citation.path)
-      ?.changedLines.find((candidate) => candidate.line === citation.line)
+    const key = `${citation.path}:${changedLine.side}:${changedLine.line}`
 
-    if (changedLine === undefined) {
+    if (seen.has(key)) {
       continue
     }
 
@@ -214,6 +244,7 @@ export const verifyJudgement = (
     evidence.push({
       path: citation.path,
       line: changedLine.line,
+      side: changedLine.side,
       text: changedLine.text.trim()
     })
   }

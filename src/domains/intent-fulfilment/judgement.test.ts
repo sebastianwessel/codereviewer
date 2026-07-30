@@ -97,7 +97,7 @@ describe('verifyJudgement', () => {
     ).toEqual({
       status: 'addressed',
       evidence: [
-        { path: 'src/token.ts', line: 2, text: 'const expired = check()' }
+        { path: 'src/token.ts', line: 2, side: 'added', text: 'const expired = check()' }
       ]
     })
   })
@@ -134,7 +134,7 @@ describe('verifyJudgement', () => {
     expect(verified).toEqual({
       status: 'addressed',
       evidence: [
-        { path: 'src/token.ts', line: 2, text: 'const expired = check()' }
+        { path: 'src/token.ts', line: 2, side: 'added', text: 'const expired = check()' }
       ]
     })
   })
@@ -156,7 +156,7 @@ describe('collectChangeSurface', () => {
     expect(surface.files).toEqual([
       {
         path: 'src/token.ts',
-        changedLines: [{ line: 2, text: 'const expired = check()' }]
+        changedLines: [{ line: 2, side: 'added', text: 'const expired = check()' }]
       }
     ])
     expect(surface.changedLineCount).toBe(1)
@@ -201,5 +201,81 @@ describe('collectChangeSurface', () => {
     expect(bounded.truncated).toBe(true)
     expect(bounded.changedLineCount).toBe(2)
     expect(bounded.files.map((file) => file.path)).toEqual(['src/new.ts'])
+  })
+})
+
+describe('removed lines as evidence (spec 23, 2026-07-30 amendment)', () => {
+  const removalSurface = collectChangeSurface({
+    files: [
+      {
+        path: 'src/cache.ts',
+        // The head side kept one line; the change deleted two others.
+        content: 'export const keep = 1\n',
+        hunks: [{ oldStartLine: 1, oldLineCount: 3, newStartLine: 1, newLineCount: 1 }],
+        isNewFile: false,
+        removedLines: [
+          { line: 2, text: 'const legacyCache = new Map()' },
+          { line: 3, text: '  legacyCache.set(key, value)' }
+        ]
+      }
+    ],
+    maxChangeLines: 50
+  })
+
+  test('a deleted line reaches the surface and is marked removed', () => {
+    // Before the amendment a pure deletion contributed nothing, so "remove the
+    // old caching layer" was unprovable however completely it was done.
+    expect(removalSurface.files[0]?.changedLines).toEqual([
+      { line: 1, side: 'added', text: 'export const keep = 1' },
+      { line: 2, side: 'removed', text: 'const legacyCache = new Map()' },
+      { line: 3, side: 'removed', text: '  legacyCache.set(key, value)' }
+    ])
+  })
+
+  test('an obligation can be addressed by citing a removed line', () => {
+    expect(
+      verifyJudgement(
+        { status: 'addressed', evidence: [{ path: 'src/cache.ts', line: 2 }] },
+        removalSurface
+      )
+    ).toEqual({
+      status: 'addressed',
+      evidence: [
+        {
+          path: 'src/cache.ts',
+          line: 2,
+          side: 'removed',
+          text: 'const legacyCache = new Map()'
+        }
+      ]
+    })
+  })
+
+  test('the side is still verified, not taken from the answer', () => {
+    // An answer claiming a line was ADDED when the surface says it was removed is
+    // corrected to what the change actually did. Spec 23 requires the report to
+    // disclose the side, so the disclosure has to come from the change.
+    const verified = verifyJudgement(
+      {
+        status: 'addressed',
+        evidence: [{ path: 'src/cache.ts', line: 2, side: 'added' }]
+      },
+      removalSurface
+    )
+
+    expect(verified.status === 'addressed' && verified.evidence[0]?.side).toBe(
+      'removed'
+    )
+  })
+
+  test('a line the change never touched is still rejected', () => {
+    // The safety property is unchanged: widening what may be cited must not
+    // widen it to lines outside the change.
+    expect(
+      verifyJudgement(
+        { status: 'addressed', evidence: [{ path: 'src/cache.ts', line: 99 }] },
+        removalSurface
+      )
+    ).toEqual({ status: 'undetermined' })
   })
 })

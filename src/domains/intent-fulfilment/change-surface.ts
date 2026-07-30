@@ -6,20 +6,30 @@
 //
 // Two things follow, and both are structural rather than advisory.
 //
-// 1. The judgement is shown the lines the diff ADDED OR MODIFIED, not whole
-//    files. A citation into an untouched line is not evidence that the change
-//    addressed anything, and a model shown whole files will produce one.
+// 1. The judgement is shown the lines the diff ADDED, MODIFIED OR REMOVED, not
+//    whole files. A citation into an untouched line is not evidence that the
+//    change addressed anything, and a model shown whole files will produce one.
+//    Removed lines were added by spec 23's 2026-07-30 amendment: without them a
+//    deletion is unprovable, because it creates no line to point at, and every
+//    "remove X" obligation came back wrong on a real revert commit.
 // 2. The same set is the verification surface. A cited `path:line` that is not
 //    in it is not a valid citation, so "addressed" cannot survive on a line the
 //    change never touched. That check is `verifyJudgement` in `judgement.ts`, and
 //    it reads the surface this module builds — one definition of "the change",
 //    used both to ask and to check.
 
-import type { DiffHunk } from '../repository-intake/index.js'
+import type { DiffHunk, RemovedLine } from '../repository-intake/index.js'
+
+// Which side of the change a citable line lives on. A removed line is numbered on
+// the PRE-change side, so the two are different address spaces and the side has to
+// travel with the number — spec 23 requires the report to disclose it, so that
+// "done, this deleted line 42" can never read as "done, this added line 42".
+export type ChangedLineSide = 'added' | 'removed'
 
 export type ChangedLine = {
   readonly line: number
   readonly text: string
+  readonly side: ChangedLineSide
 }
 
 export type ChangedFileSurface = {
@@ -42,14 +52,18 @@ export type ChangeSurfaceSourceFile = {
   // A new file has no pre-change side, so every one of its lines is changed and
   // the hunks are not consulted.
   readonly isNewFile: boolean
+  // Lines this change removed, numbered on the pre-change side. Absent for a file
+  // that removes nothing.
+  readonly removedLines?: readonly RemovedLine[]
 }
 
 const splitLines = (content: string): readonly string[] =>
   content.split(/\r\n|\n|\r/u)
 
 // New-side line numbers a hunk covers. A hunk with `newLineCount === 0` is a pure
-// deletion: it adds no line to cite, and citing the surviving line beside it would
-// attribute the deletion to code the change did not write.
+// deletion: it adds no line on the new side, which is precisely why the removed
+// lines are carried separately rather than by citing the surviving line beside it
+// — that would attribute the deletion to code the change did not write.
 const linesInHunks = (hunks: readonly DiffHunk[]): ReadonlySet<number> => {
   const lines = new Set<number>()
 
@@ -70,6 +84,10 @@ const linesInHunks = (hunks: readonly DiffHunk[]): ReadonlySet<number> => {
  * rather than dependent on iteration order. Blank changed lines are skipped: they
  * are citable addresses that show nothing, and admitting them would let an
  * "addressed" verdict rest on whitespace.
+ *
+ * Added lines come before removed lines within a file, and the budget is spent in
+ * that order. A pure deletion therefore still reaches the surface, while a change
+ * that both adds and removes spends its budget on the new code first.
  */
 export const collectChangeSurface = (input: {
   readonly files: readonly ChangeSurfaceSourceFile[]
@@ -102,7 +120,21 @@ export const collectChangeSurface = (input: {
       }
 
       remaining -= 1
-      changedLines.push({ line, text })
+      changedLines.push({ line, text, side: 'added' })
+    }
+
+    for (const removed of file.removedLines ?? []) {
+      if (removed.text.trim().length === 0) {
+        continue
+      }
+
+      if (remaining <= 0) {
+        truncated = true
+        break
+      }
+
+      remaining -= 1
+      changedLines.push({ line: removed.line, text: removed.text, side: 'removed' })
     }
 
     if (changedLines.length > 0) {

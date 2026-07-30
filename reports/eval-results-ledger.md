@@ -9,6 +9,55 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-30 — Spec 23 amended: a removed line is evidence. Deletion blind spot closed, and a new risk opened
+
+Spec 23 was amended (its first post-implementation amendment) so an addressed
+obligation may cite a line the change **removed**, identified on the pre-change
+side, with the report required to disclose which side a citation is on.
+
+Same revert commit, same intent, before and after:
+
+| | before | after |
+|---|---:|---:|
+| addressed | 6 | **14** |
+| unaddressed | 7 | **0** |
+| undetermined | 2 | **0** |
+
+Ground truth for this commit, established by hand in the first measurement, is
+that **all of its obligations were genuinely done**. The verdicts are now correct
+where they were previously wrong on every removal.
+
+### The new risk, stated because it is real
+
+**Removed lines are abundant in a deletion-heavy change, so a citation is now easy
+to satisfy.** Inspecting the run above, one obligation — *"make configs that still
+set the removed block fail validation with exit 2"* — was credited against
+*removed* lines of a generated schema file. That obligation is about **behaviour**,
+and deleted schema lines are weak evidence for it. The verdict happens to be
+correct; the evidence is not apt.
+
+So the amendment trades a systematic false-*unaddressed* on deletions for a
+plausible new route to false-*satisfied* on behavioural obligations in
+deletion-heavy changes. Spec 23 is explicit that false-satisfied is the costlier
+error, which makes this worth watching rather than shrugging at.
+
+**The measured false-satisfied rate (0/56, 21 opportunities) predates this change
+and no longer describes the current behaviour.** It must be re-measured, and the
+corpus needs deletion-heavy cases with behavioural obligations, which the current
+21 cases do not emphasise.
+
+### What did not change
+
+The safety property. A cited line still has to be one the change actually touched:
+`verifyJudgement` resolves every citation against the change surface, drops what
+does not match, and downgrades an `addressed` verdict left with no valid citation
+to `undetermined`. A test asserts a line the change never touched is still
+rejected, and another asserts the **side is taken from the change, not from the
+answer** — a model claiming a line was added when it was removed is corrected, so
+the required disclosure cannot be self-reported.
+
+---
+
 ## 2026-07-30 — Spec 23 first measurement: NO SHIP VERDICT, sample cannot support one
 
 21 cases over 9 commits of this repository, spend **$0.7663** of a $3.00 ceiling.

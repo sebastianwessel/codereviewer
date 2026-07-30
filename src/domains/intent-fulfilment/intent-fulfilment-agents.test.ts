@@ -37,7 +37,23 @@ import { ModelObligationExtractionSchema } from './obligation-extraction.js'
 //   `evidence[].path` - an identifier: the repository path of a changed file. It
 //                is verified against the change surface, so it cannot hold prose
 //                and survive.
-const ALLOWED_JUDGEMENT_STRING_FIELDS = ['evidence[].path', 'status']
+//   `evidence[].side` - an enum ('added' | 'removed'), added by spec 23's
+//                2026-07-30 amendment so a citation can name a REMOVED line.
+//                String-typed for the same provider-error reason as `status`, and
+//                normalized in code; anything that is not one of the two values is
+//                dropped and the side is resolved from the change surface instead.
+//                It can hold at most one of two words, so it cannot carry a
+//                rationale.
+//
+// Adding an entry here is a deliberate act. Each one must be an identifier or an
+// enum whose value set is closed in code — never somewhere a justification could
+// live, because a model justifying a verdict in the same breath as reaching it is
+// the exact mechanism this guard exists to prevent.
+const ALLOWED_JUDGEMENT_STRING_FIELDS = [
+  'evidence[].path',
+  'evidence[].side',
+  'status'
+]
 
 type JsonSchemaNode = {
   readonly type?: unknown
@@ -164,7 +180,7 @@ describe('intent-fulfilment harness agents', () => {
       await agents.judge(
         {
           changedFiles: [
-            { path: 'src/a.ts', changedLines: [{ line: 1, text: 'const a = 1' }] }
+            { path: 'src/a.ts', changedLines: [{ line: 1, side: 'added' as const, text: 'const a = 1' }] }
           ],
           obligation: 'do a thing'
         },
@@ -233,7 +249,7 @@ describe('intent-fulfilment harness agents', () => {
       await agents.judge(
         {
           changedFiles: [
-            { path: 'src/a.ts', changedLines: [{ line: 1, text: 'const a = 1' }] }
+            { path: 'src/a.ts', changedLines: [{ line: 1, side: 'added' as const, text: 'const a = 1' }] }
           ],
           obligation: 'do a thing'
         },

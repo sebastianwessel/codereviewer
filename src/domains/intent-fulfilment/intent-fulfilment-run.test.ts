@@ -214,6 +214,7 @@ describe('intent fulfilment run', () => {
             {
               path: 'src/token.ts',
               line: 2,
+              side: 'added',
               text: 'export const rejectExpired = () => false'
             }
           ]
@@ -335,7 +336,10 @@ describe('intent fulfilment run', () => {
       // scope is reported neutrally. A change doing more than the ticket asked is
       // a normal and often desirable event, not a defect."
       expect(report.extraScope).toEqual([
-        { path: 'src/unrelated.ts', changedLineCount: 1 }
+        // 2, not 1: the file's added line plus the line the change removed.
+        // Removed lines joined the change surface with spec 23's 2026-07-30
+        // amendment, and extra scope counts the whole surface for a file.
+        { path: 'src/unrelated.ts', changedLineCount: 2 }
       ])
       expect(report.summary.extraScopeFileCount).toBe(1)
       for (const entry of report.extraScope) {

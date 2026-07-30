@@ -23,6 +23,7 @@ import { createRedactor } from '../../shared/redaction/redactor.js'
 import { gatherContextFragments } from '../context-ingestion/index.js'
 import {
   collectRepositoryIntake,
+  parseRemovedLines,
   type DiffMap,
   type GitCommandRunner,
   type RepositoryIntake
@@ -110,9 +111,14 @@ const diffMapsByPath = (
 ): ReadonlyMap<string, DiffMap> =>
   new Map(intake.diffMaps.map((diffMap) => [diffMap.path, diffMap] as const))
 
-// Reads the head side of every changed file through the caller's mediated reader.
-// Deleted files are deliberately absent: they have no head-side line to cite, and
-// spec 23 requires an addressed obligation to cite the change that addresses it.
+// Reads the head side of every changed file through the caller's mediated reader,
+// and pairs it with the lines the change REMOVED.
+//
+// The removed lines come from the raw diff intake already holds, so no extra git
+// subcommand and no second filesystem read is needed. They matter because spec
+// 23's 2026-07-30 amendment lets an addressed obligation cite a removed line:
+// without them a deletion is unprovable, and every "remove X" obligation on a
+// real revert commit came back wrong.
 const collectSourceFiles = async (
   intake: RepositoryIntake,
   readChangedFile: RunIntentFulfilmentInput['readChangedFile']
@@ -121,6 +127,7 @@ const collectSourceFiles = async (
   readonly unreadableFileCount: number
 }> => {
   const byPath = diffMapsByPath(intake)
+  const removedByPath = parseRemovedLines(intake.rawDiff)
   const files: ChangeSurfaceSourceFile[] = []
   let unreadableFileCount = 0
 
@@ -138,10 +145,13 @@ const collectSourceFiles = async (
       continue
     }
 
+    const removedLines = removedByPath.get(changedFile.path) ?? []
+
     files.push({
       path: changedFile.path,
       content,
       hunks: diffMap.hunks,
+      ...(removedLines.length === 0 ? {} : { removedLines }),
       isNewFile: diffMap.changeKind === 'new'
     })
   }

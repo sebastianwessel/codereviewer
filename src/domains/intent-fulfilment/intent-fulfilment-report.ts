@@ -37,11 +37,17 @@ export const IntentCitationSchema = z.strictObject({
   text: z.string().min(1)
 })
 
-// A line of the CHANGE. Both fields are required: spec 23 asks for path and line,
-// and a path alone would let "addressed" point at a whole file.
+// A line of the CHANGE. Path and line are required: spec 23 asks for both, and a
+// path alone would let "addressed" point at a whole file.
+//
+// `side` is required too, per spec 23's 2026-07-30 amendment. A removed line is
+// numbered on the PRE-change side, so without the side a reader cannot tell
+// "done, this deleted line 42" from "done, this added line 42" — two different
+// lines, and the amendment makes disclosing which a MUST rather than a nicety.
 export const ChangeCitationSchema = z.strictObject({
   path: RepositoryRelativePathSchema,
   line: z.int().min(1),
+  side: z.enum(['added', 'removed']),
   text: z.string().min(1)
 })
 

@@ -73,6 +73,83 @@ const parseDiffPath = (line: string): string | undefined => {
 const parsePositiveInteger = (value: string | undefined): number =>
   value === undefined ? 1 : Number.parseInt(value, 10)
 
+export type RemovedLine = {
+  // 1-based line number on the PRE-change side. A removed line has no post-change
+  // number, which is exactly why it needs its own address space.
+  readonly line: number
+  readonly text: string
+}
+
+/**
+ * Every line the diff removes, per path, numbered on the pre-change side.
+ *
+ * Spec 23's 2026-07-30 amendment: an obligation judged addressed may cite a line
+ * the change REMOVED. Without this, a deletion is unprovable — it creates no line
+ * to point at — and *"remove the old caching layer"* could never be judged
+ * addressed however completely it was done. Measured on this repository's own
+ * revert commit, every one of nine removal obligations came back wrong.
+ *
+ * Unlike `parseDeletedFileContents` below, this covers MODIFIED files too. That
+ * function reconstructs whole files and must therefore refuse a partial old side;
+ * here a partial view is the point, because each removed line is cited
+ * individually rather than assembled into a document.
+ */
+export const parseRemovedLines = (
+  diffOutput: string
+): ReadonlyMap<string, readonly RemovedLine[]> => {
+  const removed = new Map<string, RemovedLine[]>()
+  let currentPath: string | undefined
+  // Tracks the pre-change line number as the hunk body is walked. Context lines
+  // and removals advance it; additions do not exist on the old side.
+  let oldLine = 0
+
+  for (const line of diffOutput.split(/\r?\n/)) {
+    const path = parseDiffPath(line)
+
+    if (path !== undefined) {
+      currentPath = path
+      oldLine = 0
+      continue
+    }
+
+    const hunk = hunkPattern.exec(line)
+
+    if (hunk !== null) {
+      oldLine = Number.parseInt(hunk[1] ?? '1', 10)
+      continue
+    }
+
+    if (currentPath === undefined || oldLine === 0) {
+      continue
+    }
+
+    // `---` and `+++` file headers start with the marker characters but are not
+    // hunk body lines; they are skipped because `oldLine` is still 0 above.
+    if (line.startsWith('-')) {
+      const text = line.slice(1)
+
+      if (text.trim().length > 0) {
+        const entries = removed.get(currentPath) ?? []
+        entries.push({ line: oldLine, text })
+        removed.set(currentPath, entries)
+      }
+
+      oldLine += 1
+      continue
+    }
+
+    if (line.startsWith('+')) {
+      continue
+    }
+
+    if (line.startsWith(' ') || line.length === 0) {
+      oldLine += 1
+    }
+  }
+
+  return removed
+}
+
 // Reconstructs the pre-change content of every file the diff deletes outright.
 //
 // A deletion hunk carries the file's ENTIRE old side as removed lines, so the
