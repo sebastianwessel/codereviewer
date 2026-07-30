@@ -156,6 +156,34 @@ invisible**, for CommonJS and ESM alike — that is a separate, already-recorded
 hole, and widening it here would change what every downstream consumer receives
 without a spec to justify it.
 
+### It fixes two consumers of three, and the third is worth naming
+
+Re-running the conformance probe over the same four repositories after the fix:
+
+| repo | files | declarations | peer sets | divergences |
+|---|---:|---:|---:|---:|
+| fastify (×2) | 46 / 45 | 11 / 11 | 11 / 11 | **0** |
+| undici | 201 | 38 | 34 | **0** |
+| ws | 23 | 4 | 3 | **0** |
+
+891 exported symbols became **64 conformance declarations and still zero
+divergences**. Two structural reasons, both specific to CommonJS and neither
+addressed by this fix:
+
+1. **A multi-export object puts every name on one line.**
+   `module.exports = { a, b, c }` emits three facts at the same line, and
+   `peer-sets.ts` deliberately excludes any line carrying more than one fact —
+   the rule that stops an ESM re-export barrel forming bogus peer sets. The whole
+   statement is therefore skipped.
+2. **A CommonJS export names a symbol at the assignment, not at its body.** The
+   span reconstructed from that line covers the assignment, so the declaration
+   carries few or no traits and `peer-sets.ts` drops trait-less declarations.
+
+So: **`review`'s support signals and `impact check` genuinely improve for
+CommonJS; `conformance check` does not.** Making it do so needs the export
+assignment resolved back to the declaration it names, which is a different piece
+of work and is not claimed here.
+
 ## What to do with this
 
 1. ~~Fix the JavaScript extractor.~~ **Done** — see the update above. What remains
