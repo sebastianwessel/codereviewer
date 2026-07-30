@@ -150,7 +150,7 @@ const appendEvalSummaryHeadline = (
     rows: [
       `| Findings | Product recall | ${formatPercent(metrics.productRecall)} |`,
       `| Findings | Recall (all tiers) | ${formatPercent(metrics.recall)} |`,
-      `| Findings | Unlisted real findings | ${formatInteger(metrics.unlistedRealFindingCount)} |`,
+      `| Findings | Unmatched but plausible | ${formatInteger(metrics.unlistedRealFindingCount)} |`,
       `| False positives | Adjusted precision | ${formatPercent(metrics.adjustedPrecision)} |`,
       `| False positives | Genuine false positives | ${formatInteger(metrics.genuineFalsePositiveCount)} |`,
       `| False positives | Duplicate findings | ${formatInteger(metrics.duplicateFindingCount)} |`,
@@ -197,7 +197,7 @@ const appendEvalSummaryMetrics = (
       `| Provider issue rate | ${formatPercent(report.metrics.providerIssueRate)} (${report.metrics.providerIssueCount} cases) |`,
       `| False positives | ${report.metrics.falsePositiveCount} |`,
       `| Genuine false positives | ${report.metrics.genuineFalsePositiveCount} |`,
-      `| Unlisted real findings | ${report.metrics.unlistedRealFindingCount} |`,
+      `| Unmatched but plausible | ${report.metrics.unlistedRealFindingCount} |`,
       `| Plausibility judge agreement | ${formatPlausibilityJudgeAgreement(report)} |`,
       `| Inconclusive matches | ${report.metrics.inconclusiveMatchCount} |`,
       `| Artifact-only recall | ${formatPercent(report.metrics.artifactOnlyRecall)} |`,

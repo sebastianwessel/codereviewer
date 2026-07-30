@@ -1297,7 +1297,7 @@ Fixtures: 2
 | --- | --- | ---: |
 | Findings | Product recall | 100.0% |
 | Findings | Recall (all tiers) | 100.0% |
-| Findings | Unlisted real findings | 0 |
+| Findings | Unmatched but plausible | 0 |
 | False positives | Adjusted precision | 50.0% |
 | False positives | Genuine false positives | 1 |
 | False positives | Duplicate findings | 0 |
@@ -1340,7 +1340,7 @@ Fixtures: 2
 | Provider issue rate | 0.0% (0 cases) |
 | False positives | 1 |
 | Genuine false positives | 1 |
-| Unlisted real findings | 0 |
+| Unmatched but plausible | 0 |
 | Plausibility judge agreement | not scored |
 | Inconclusive matches | 0 |
 | Artifact-only recall | 0.0% |

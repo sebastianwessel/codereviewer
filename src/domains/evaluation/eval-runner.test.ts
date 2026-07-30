@@ -2027,7 +2027,7 @@ describe('eval runner', () => {
     const summary = renderEvalSummary({ cases, report: result.report })
     expect(summary).toContain('| Adjusted precision | 100.0% |')
     expect(summary).toContain('| Genuine false positives | 0 |')
-    expect(summary).toContain('| Unlisted real findings | 1 |')
+    expect(summary).toContain('| Unmatched but plausible | 1 |')
     expect(summary).toContain(
       'Real but unlisted findings (credited by plausibility judge):'
     )

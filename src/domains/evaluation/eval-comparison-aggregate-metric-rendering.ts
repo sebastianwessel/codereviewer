@@ -167,7 +167,7 @@ export const appendEvalComparisonMetricDeltas = (
         head: input.head.metrics.genuineFalsePositiveCount
       }),
       formatEvalComparisonCountMetricDeltaRow({
-        metric: 'Unlisted real findings',
+        metric: 'Unmatched but plausible',
         base: input.base.metrics.unlistedRealFindingCount,
         head: input.head.metrics.unlistedRealFindingCount
       }),

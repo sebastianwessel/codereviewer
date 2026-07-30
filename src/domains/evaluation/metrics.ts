@@ -174,6 +174,23 @@ export const EvalMetricsSchema = z.strictObject({
   genuineFalsePositiveCount: z.int().min(0).default(0),
   // Unmatched findings the plausibility judge deemed genuine defects absent from
   // the fixture's expected list.
+  //
+  // READ THIS AS FRAGMENTATION, NOT AS KEY INCOMPLETENESS. Measured 2026-07-30
+  // over 29 such rows from three arms: 16 distinct findings, of which 0 were
+  // genuine unlisted defects and 13 were the engine restating a defect the key
+  // already lists. The cause is structural rather than a bug in any one layer -
+  // a key expectation may fold several defect sites into one entry (traefik
+  // expectation 0 names both `Name` and `Port` over lines 591-596) while
+  // precision is counted per finding, so one-to-one matching consumes the
+  // expectation with the first finding and the second is then, literally, an
+  // unlisted real defect.
+  //
+  // The practical consequence is that this counter REWARDS SPLITTING: an arm that
+  // reports one defect as two findings scores higher on it. In the spec 25 A/B
+  // the arm leading on this counter (14 against 4) was simultaneously the arm
+  // with the LOWEST recall. Do not read it as a discovery signal, and do not
+  // difference it across arms without reading
+  // `reports/2026-07-30-unlisted-real-diagnosis.md` first.
   unlistedRealFindingCount: z.int().min(0).default(0),
   noFindingZoneFalsePositiveCount: z.int().min(0),
   actionableRate: RateSchema,
