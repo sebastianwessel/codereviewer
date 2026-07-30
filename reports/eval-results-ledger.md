@@ -9,6 +9,43 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-30 — VOID: every spec 24 firing-rate measurement predates a span bug
+
+`declarationSpanAt` bounded a declaration by indentation alone, so a **multi-line
+signature** ended the span at the line closing its parameter list. The body was
+excluded, the declaration extracted no traits, and `peer-sets.ts` drops a
+trait-less declaration — so it never reached the capability at all.
+
+Measured on this repository's own `src/cli/args.ts`: **nine of ten exported
+declarations extracted ZERO traits**, and `conformance check` reported no changed
+declarations for a commit that plainly added two. After the fix the same file
+yields nine declarations carrying 4–14 traits each, and a range that previously
+produced 0 changed declarations now produces 3 with 3 peer sets.
+
+**Consequence: the recorded spec 24 firing rates are not measurements of spec 24.**
+They are measurements of a detector that could only see declarations whose
+signature fitted on one line. That includes:
+
+- the **0.70 / 0.75 per commit** combined rates, and the kill-criterion comparison
+  drawn from them
+- the earlier **0.075/commit** figure already recorded as unreproducible
+- the conclusion that noise originates from schema-heavy modules — which is now
+  *expected* rather than informative, because a single-line `z.strictObject({...})`
+  chain was one of the few shapes the broken span could see at all
+
+Nothing about spec 24 should be decided on those numbers. The firing rate has to
+be re-measured before its kill criterion means anything, and the capability's
+"no positive on real code" record is likewise not evidence about the design: the
+design was never actually run on most declarations.
+
+This does **not** rehabilitate spec 24. It says the case against it was never
+properly made either, and both directions are now open.
+
+Found by smoke-testing `conformance check` on this repository while verifying that
+the stage-3 commands were runnable — not by reading the code.
+
+---
+
 ## 2026-07-30 — "Unlisted real findings" measures FRAGMENTATION, not key gaps
 
 Offline diagnosis of the 29 unlisted-real rows the three spec-25 arms produced.
