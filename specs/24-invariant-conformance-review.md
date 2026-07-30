@@ -355,6 +355,52 @@ it.
 **This capability compares whole declarations. A declaration that upholds a pattern
 in three branches and abandons it in a fourth holds the trait, and is invisible.**
 
+### Refined Diagnosis: Traits Carry No Structural Position
+
+Closer reading of the same case sharpens this, and the sharper version is the one
+to design against. All three parsers contain the symbol, but not in the same
+place:
+
+| declaration | where the symbol appears |
+|---|---|
+| `parseNumericDate` | after the switch, **terminal statement** |
+| `parseString` | after the switch, **terminal statement** |
+| `parseClaimsString` | **inside a nested loop**; the fall-through returns no error |
+
+Two return the error on the exit path and one does not. That is a genuine
+conformance divergence, and it is invisible because **a trait is a set-membership
+fact rather than a structural one**: *"returns it on the fall-through"* and
+*"mentions it inside a nested loop"* are the same trait.
+
+## Positional Traits
+
+A trait MUST carry its **structural position** within the declaration, not only
+its presence. Two dimensions, both derivable from indentation the implementation
+already computes:
+
+- **depth** — nesting relative to the declaration's base indentation.
+- **terminality** — whether the trait sits on the declaration's exit path or
+  inside a nested block.
+
+Two declarations that hold the same symbol at materially different positions MUST
+NOT be treated as holding the same trait.
+
+The case above then yields the correct finding: *"2 of 3 sibling parsers return
+this as their terminal statement; this one does not."*
+
+**Why position rather than branch segmentation.** Segmenting a declaration into
+sibling branches was considered and is the larger change: it needs a model of
+which constructs open a branch, which is closer to parsing than to lexing.
+Position reuses machinery that exists, adds no per-language work, and generalises
+to the same shapes — a lock acquired and released only on the happy path, a value
+validated in one path and not another.
+
+**The accepted cost, recorded rather than assumed away.** More trait dimensions
+means more candidate divergences and therefore more noise. That is what
+adjudication exists to absorb, and it has demonstrated on live calls that it
+rejects library idioms while keeping role-based conventions. The firing-rate gate
+still applies and MUST be re-measured after this change.
+
 That is a scope limit rather than a defect, but it was never stated and it is
 material: branch asymmetry is one of the larger defect shapes in the committed
 corpus. Two consequences follow.
