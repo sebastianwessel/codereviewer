@@ -3,6 +3,62 @@
 // with an actionable message). No IO or runtime state lives here.
 import { ReviewLogLevelSchema } from '../domains/observability/index.js'
 
+// Options every command accepts, wherever it appears in the argument list.
+export const globalCliOptions: readonly string[] = [
+  '--config',
+  '--debug',
+  '--log-level',
+  '--log-file'
+]
+
+// The first `--option` in `args` that is not recognized, or undefined when they
+// all are.
+//
+// Every parser in this file locates its option by exact token match and silently
+// ignores anything it does not recognize. That is the right behaviour for a
+// parser and the wrong behaviour for a command line: a mistyped or unsupported
+// flag then changes nothing and the run proceeds as though it had been honoured.
+// This project has already paid for that twice — an A/B whose config flag never
+// reached the run and cost roughly $11.50 for a comparison of a build against
+// itself, and `eval run --help`, which ran a full default evaluation instead of
+// printing usage. A measurement harness that accepts a flag it does not
+// implement cannot be trusted, so unknown options are rejected before any
+// command does work.
+//
+// `--option=value` is accepted as a spelling and checked on the name alone, so a
+// command whose parsers only understand the space-separated form still rejects
+// the joined form by name rather than mistaking it for an unknown option.
+//
+// Note what is deliberately NOT treated as an option: a bare `-` or a token
+// starting with a single dash. Those are values (a git ref cannot start with
+// `-`, and paths are validated by their own parsers), and rejecting them here
+// would duplicate a check that already reports a better message.
+export const unknownCliOption = (
+  args: readonly string[],
+  commandOptions: readonly string[]
+): string | undefined => {
+  const known = new Set([...globalCliOptions, ...commandOptions])
+
+  for (const arg of args) {
+    if (!arg.startsWith('--')) {
+      continue
+    }
+
+    // `--` alone is the conventional end-of-options marker, not an option.
+    if (arg === '--') {
+      continue
+    }
+
+    const name = arg.split('=')[0] ?? arg
+
+    if (!known.has(name)) {
+      return name
+    }
+  }
+
+  return undefined
+}
+
 export const parseConfigPath = (args: readonly string[]): string | undefined => {
   const configIndex = args.indexOf('--config')
 

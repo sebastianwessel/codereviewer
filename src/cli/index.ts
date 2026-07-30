@@ -78,6 +78,7 @@ import type {
 } from '../shared/contracts/index.js'
 import {
   parseConfigPath,
+  unknownCliOption,
   parseEnumOption,
   parseExplicitFiles,
   parseIntegerOption,
@@ -138,6 +139,12 @@ const runConfigValidate = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, [])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
   try {
     const configPath = parseConfigPath(args)
     const config = await loadCodeReviewerConfig({
@@ -397,6 +404,12 @@ const runReview = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, ['--base-ref', '--head-ref', '--file', '--files'])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
   try {
     const logLevelOverride = parseLogLevelOverride(args)
     const logFileOverride = parseLogFileOverride(logLevelOverride.args)
@@ -624,6 +637,12 @@ const runBaselineWrite = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, ['--report'])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
   try {
     const configPath = parseConfigPath(args)
     const loadedConfig = await loadCodeReviewerConfig({
@@ -668,6 +687,12 @@ const runEval = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, ['--case', '--gate-profile', '--max-concurrent-tasks', '--review-depth', '--review-mode', '--slice-root'])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
   // Captured before ANYTHING else so `metrics.elapsedMs` reflects the whole
   // run: fixture loading, every case's review execution (which happens in the
   // `runEvalCase` calls below, entirely outside `runEvaluation`), and the
@@ -1030,6 +1055,12 @@ const runEvalRecallReport = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, ['--report'])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
   const reportPaths = parseOptionValues(args, '--report')
   const selectedReportPaths =
     reportPaths.length === 0
@@ -1071,6 +1102,12 @@ const runEvalCompare = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, ['--base', '--head'])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
   try {
     const basePath = parseOptionValue(args, '--base')
     const headPath = parseOptionValue(args, '--head')
@@ -1115,6 +1152,12 @@ const runEvalSliceManifest = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, ['--slice-root'])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
   try {
     const sliceRoot = parseOptionValue(args, '--slice-root')
 
@@ -1141,6 +1184,12 @@ const runDrift = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, [])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
   if (args[0] !== 'check') {
     return usageError('Expected command: drift check')
   }
@@ -1182,6 +1231,12 @@ const runImpact = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, ['--base-ref', '--head-ref'])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
   if (args[0] !== 'check') {
     return usageError('Expected command: impact check')
   }
@@ -1270,6 +1325,12 @@ const runConformance = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(args, ['--base-ref', '--head-ref'])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
   if (args[0] !== 'check') {
     return usageError('Expected command: conformance check')
   }

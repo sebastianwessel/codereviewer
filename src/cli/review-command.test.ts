@@ -139,7 +139,11 @@ describe('review CLI', () => {
       await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1;\n')
 
       const result = await runCli(
-        ['review', '--debug', '--file', 'src/app.ts', '--resume', 'run-debug-cli'],
+        // `--resume run-debug-cli` used to be passed here. It is parsed nowhere in
+        // `src/cli`, documented nowhere, and implemented nowhere: the assertion
+        // below only ever passed because unknown options were silently ignored,
+        // which is the behaviour `unknownCliOption` now removes.
+        ['review', '--debug', '--file', 'src/app.ts'],
         {
           cwd: root,
           environment: {},
