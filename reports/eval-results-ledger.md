@@ -9,6 +9,53 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-30 — Spec 24 firing rate re-measured post-span-fix: 0.000/commit
+
+20 consecutive commits of this repository, `conformance check` with adjudication
+enabled, immediately after the `declarationSpanAt` fix. Total spend **$0.0509**.
+
+| | before the span fix | after |
+|---|---:|---:|
+| changed declarations seen | — | **79 (3.95/commit)** |
+| change-attributed divergences | 0.0125/commit | **0.000/commit** |
+| pre-existing divergences | ~0.74/commit | **0.000/commit** |
+| **combined** | **0.70/commit** | **0.000/commit** |
+
+Gate is ≈0.5 per commit. **It is no longer blown; it is not approached.**
+
+The reversal is the point. The detector now sees **four times as many
+declarations** — 79 where the truncated span surfaced almost none — and reports
+**nothing at all**. That is consistent with the void notice below: the old noise
+came from the narrow set of shapes a truncated span could still see, single-line
+schema-builder chains that formed large peer sets of near-identical members. Give
+every declaration its real body and those bogus majorities dissolve.
+
+**Do not read this as the capability working.** Two readings fit equally well and
+this measurement cannot separate them:
+
+1. The gates (majority pattern, three-cited-peer floor, membership precondition)
+   are now correctly rejecting resemblance that was never a convention.
+2. The gates are too strict for real trait sets, and the capability will report
+   nothing on any codebase.
+
+Twenty commits of one repository producing zero reports is compatible with both.
+What it does settle is that the **noise objection is gone**: spec 24 was suspended
+because it fired 0.70 per commit against its own 0.5 kill criterion, and that
+number described a bug, not the design.
+
+**Still true and unchanged: no positive on real code, ever.** The only case it has
+ever caught is synthetic. The open question is now recall, not noise — the exact
+inverse of where this capability stood this morning.
+
+### What invalidates this entry
+
+One repository, one 20-commit window, and this repository's style is unusually
+uniform (heavy Zod schema builders, consistent arrow-function exports). A codebase
+with more varied conventions could produce a very different rate. Re-measure
+elsewhere before treating 0.000 as a property of the design.
+
+---
+
 ## 2026-07-30 — VOID: every spec 24 firing-rate measurement predates a span bug
 
 `declarationSpanAt` bounded a declaration by indentation alone, so a **multi-line
