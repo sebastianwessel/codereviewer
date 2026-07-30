@@ -197,6 +197,39 @@ Report **what a change has not been shown to cover**, against its stated intent 
 the pull-request description, a linked ticket, a commit body — so a human can see
 at a glance what may still be outstanding.
 
+## Limits Refuse; They Never Truncate
+
+Every input limit this capability has — the stated intent, the changed lines, the
+obligation count — MUST **refuse the run** when it binds. None may truncate.
+
+This is a correctness requirement, not a preference. A truncating limit answers a
+question it was not able to answer, and the caller cannot tell that from a real
+result:
+
+- bounding the changed lines makes a judgement report an obligation `unaddressed`
+  because its evidence was not shown — a wrong answer on the only question asked;
+- bounding the obligation list under-reports what is left, which is the single
+  direction this capability must not err in;
+- bounding the intent extracts a checklist from part of a ticket.
+
+All three shipped as silent truncation, and all three were measured to bind on
+ordinary input: 43% of this repository's last 60 commits exceed the old 400-line
+default, and 24 of 28 corpus runs returned exactly the obligation cap.
+
+The pattern to follow already existed in `packet-budget.ts`, which refuses an
+oversized packet with *"the packet was NOT TRUNCATED; split the review scope
+further or increase the budget"*. A limit whose binding produces a plausible answer
+instead of an error is a defect regardless of its value, and raising the value
+fixes only the symptom.
+
+**This does not conflict with the advisory rule below.** Refusing to run on input it
+cannot fully see is not failing a pipeline on FULFILMENT grounds; it is the same
+class as the configuration and repository errors this command already exits on.
+
+Context that is genuinely optional enrichment — the reviewer's referenced
+definitions — is the documented exception: dropping some of it degrades a result
+rather than invalidating one, so it MUST be reported but need not be fatal.
+
 ## The Output Is A Search Result, Not A Certificate
 
 This capability answers *"what is left?"*, never *"is this done?"*, and the

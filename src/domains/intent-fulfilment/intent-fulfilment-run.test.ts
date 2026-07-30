@@ -488,7 +488,11 @@ describe('intent fulfilment run', () => {
     }
   })
 
-  test('bounds the obligations it reports and judges', async () => {
+  test('REFUSES rather than reporting a checklist the cap cut short', async () => {
+    // This used to assert the cap silently bounded the list. Reporting the first
+    // `maxObligations` under-reports what is left, which is the one direction this
+    // command must not err in — so it now refuses, the way `packet-budget.ts`
+    // refuses an oversized packet rather than truncating it.
     const root = await createRepository()
 
     try {
@@ -499,16 +503,21 @@ describe('intent fulfilment run', () => {
         ],
         judgements: [{ status: 'unaddressed' }, { status: 'unaddressed' }]
       })
-      const report = await run(root, {
-        config: configWith({ intentFulfilment: { enabled: true, maxObligations: 1 } }),
-        agents
+
+      await expect(
+        run(root, {
+          config: configWith({
+            intentFulfilment: { enabled: true, maxObligations: 1 }
+          }),
+          agents
+        })
+      ).rejects.toMatchObject({
+        code: 'intent_too_many_obligations',
+        exitCode: 4
       })
 
-      expect(report.summary.obligationCount).toBe(1)
-      expect(report.summary.obligationsTruncated).toBe(true)
-      // The bound is a SPEND bound, so it has to cut calls and not only report
-      // entries.
-      expect(agents.judgementPackets).toHaveLength(1)
+      // And it refuses BEFORE spending on judgements it would have had to discard.
+      expect(agents.judgementPackets).toHaveLength(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -630,39 +639,11 @@ describe('outstanding is the headline, and completion is never certified', () =>
   })
 })
 
-describe('obligationsTruncated reports a binding cap, not just an overrun', () => {
-  test('is true when the extraction returned exactly the cap', async () => {
-    // The condition that actually occurs. The cap is passed into the extraction
-    // prompt, so a compliant model never returns more than it — the old
-    // `cited.length > selected.length` test could therefore essentially never
-    // fire, and 24 of 28 runs on the pre-written corpus returned exactly the cap
-    // while every one reported no truncation.
-    const root = await createRepository()
-
-    try {
-      const agents = scriptedAgents({
-        obligations: [
-          { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' },
-          { origin: 'inbox:tracker/A-1', line: 2, statement: 'Log every refusal.' }
-        ],
-        judgements: [{ status: 'unaddressed' }, { status: 'unaddressed' }]
-      })
-      const report = await run(root, {
-        agents,
-        config: configWith({
-          intentFulfilment: { enabled: true, maxObligations: 2 }
-        })
-      })
-
-      expect(report.summary.obligationCount).toBe(2)
-      expect(report.summary.obligationsTruncated).toBe(true)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('is false when the extraction stopped short of the cap', async () => {
-    // Below the cap, nothing was cut off and the checklist can be read as whole.
+describe('a limit that would bind refuses instead of truncating', () => {
+  test('reports no truncation, because truncation is now unreachable', async () => {
+    // `obligationsTruncated` is retained in the contract and is always false: any
+    // run that would have set it throws first. Kept rather than removed so a report
+    // written before this change still parses.
     const root = await createRepository()
 
     try {
@@ -672,16 +653,12 @@ describe('obligationsTruncated reports a binding cap, not just an overrun', () =
         ],
         judgements: [{ status: 'unaddressed' }]
       })
-      const report = await run(root, {
-        agents,
-        config: configWith({
-          intentFulfilment: { enabled: true, maxObligations: 5 }
-        })
-      })
+      const report = await run(root, { agents })
 
       expect(report.summary.obligationsTruncated).toBe(false)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   })
+
 })

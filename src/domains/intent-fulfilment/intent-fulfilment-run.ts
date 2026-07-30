@@ -29,6 +29,11 @@ import {
   type RepositoryIntake
 } from '../repository-intake/index.js'
 import {
+  intentChangeTooLargeError,
+  intentTooLargeError,
+  tooManyObligationsError
+} from './intent-limits.js'
+import {
   citationAptnessInputFor,
   isCitationConcern,
   type CitationAptness,
@@ -340,6 +345,20 @@ export const runIntentFulfilment = async (
     input.config.intentFulfilment.maxIntentBytes
   )
 
+  // REFUSE rather than extract obligations from part of a ticket: the checklist
+  // would silently omit requirements the intent states. See `intent-limits.ts`.
+  if (intentTruncated) {
+    throw intentTooLargeError({
+      intentBytes: fragments.reduce(
+        (total, fragment) => total + Buffer.byteLength(fragment.body, 'utf8'),
+        0
+      ),
+      maxIntentBytes: input.config.intentFulfilment.maxIntentBytes
+    })
+  }
+
+  // REFUSE rather than extract from part of a ticket. See `intent-limits.ts`.
+
   if (input.agents === undefined || sources.length === 0) {
     return emptyReport({
       status: input.agents === undefined ? 'provider-unavailable' : 'unusable-intent',
@@ -397,11 +416,17 @@ export const runIntentFulfilment = async (
     return source === undefined ? [] : [{ statement: obligation.statement, source }]
   })
   const uncitedObligationCount = extracted.length - cited.length
-  const selected = cited.slice(0, maxObligations)
-  // See the schema: true when the cap MAY have bound the list, not only when the
-  // model overran it — a compliant model never overruns a cap it was given.
-  const obligationsTruncated =
-    cited.length > selected.length || selected.length >= maxObligations
+  // REFUSE rather than report a short checklist. Reporting the first
+  // `maxObligations` under-reports what is left, which is the one direction this
+  // command must not err in — see `intent-limits.ts`.
+  if (cited.length >= maxObligations) {
+    throw tooManyObligationsError({
+      obligationCount: cited.length,
+      maxObligations
+    })
+  }
+
+  const selected = cited
 
   if (uncitedObligationCount > 0) {
     warnings.push(
@@ -428,6 +453,16 @@ export const runIntentFulfilment = async (
     files,
     maxChangeLines: input.config.intentFulfilment.maxChangeLines
   })
+
+  // REFUSE rather than judge against part of the change. A judgement that cannot
+  // see the evidence reports the obligation unaddressed, which is a wrong answer
+  // on this command's only question — see `intent-limits.ts`.
+  if (surface.truncated) {
+    throw intentChangeTooLargeError({
+      changedLineCount: surface.changedLineCount,
+      maxChangeLines: input.config.intentFulfilment.maxChangeLines
+    })
+  }
   const obligations: Obligation[] = []
   let unevidencedAddressedCount = 0
   // Spec 23's Second Amendment: `addressed` obligations carrying an evidence
@@ -517,17 +552,7 @@ export const runIntentFulfilment = async (
   // — a bounded change surface makes a judgement report `unaddressed` for evidence
   // it was not shown, and a bounded checklist makes the outstanding list look
   // shorter than it is — so a run that hit one must never read like a clean result.
-  if (surface.truncated) {
-    warnings.push(
-      `The change was larger than intentFulfilment.maxChangeLines (${input.config.intentFulfilment.maxChangeLines}); the obligations were judged against a bounded part of it, so an obligation may be reported unaddressed only because its evidence was not shown.`
-    )
-  }
 
-  if (obligationsTruncated) {
-    warnings.push(
-      `The extraction returned as many obligations as intentFulfilment.maxObligations allows (${maxObligations}); the stated intent may hold more, so this checklist may be incomplete.`
-    )
-  }
 
   if (intentTruncated) {
     warnings.push(
@@ -591,7 +616,8 @@ export const runIntentFulfilment = async (
       // Returning exactly the cap does not PROVE more existed — the intent may hold
       // exactly that many. The flag is deliberately the weaker claim it can support:
       // more cannot be ruled out.
-      obligationsTruncated,
+      // Always false: a run that would truncate throws instead.
+      obligationsTruncated: false,
       uncitedObligationCount,
       unevidencedAddressedCount,
       evidenceConcernCount,
