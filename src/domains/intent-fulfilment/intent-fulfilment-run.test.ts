@@ -18,10 +18,6 @@ import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { CodeReviewerConfigSchema } from '../../shared/contracts/index.js'
 import type { GitCommandRunner } from '../repository-intake/index.js'
-import type {
-  CitationAptness,
-  CitationAptnessInput
-} from './aptness.js'
 import type { FulfilmentJudgement } from './judgement.js'
 import type { ExtractedObligation } from './obligation-extraction.js'
 import {
@@ -116,27 +112,20 @@ const gitOutputs: Readonly<Record<string, string>> = {
 type ScriptedAgents = IntentFulfilmentAgents & {
   readonly judgementPackets: { readonly obligation: string }[]
   readonly explanationCalls: unknown[]
-  readonly aptnessPackets: CitationAptnessInput[]
 }
 
 const scriptedAgents = (script: {
   readonly obligations: readonly ExtractedObligation[]
   readonly judgements: readonly FulfilmentJudgement[]
   readonly explanation?: string
-  // Defaults to 'apt', so every existing case behaves exactly as it did before
-  // the aptness stage existed.
-  readonly aptness?: readonly CitationAptness[]
 }): ScriptedAgents => {
   const judgementPackets: { readonly obligation: string }[] = []
   const explanationCalls: unknown[] = []
-  const aptnessPackets: CitationAptnessInput[] = []
   let judged = 0
-  let aptnessChecked = 0
 
   return {
     judgementPackets,
     explanationCalls,
-    aptnessPackets,
     extractObligations: async () => [...script.obligations],
     judge: async (input) => {
       judgementPackets.push({ obligation: input.obligation })
@@ -144,13 +133,6 @@ const scriptedAgents = (script: {
       judged += 1
 
       return judgement
-    },
-    checkAptness: async (input) => {
-      aptnessPackets.push(input)
-      const aptness = script.aptness?.[aptnessChecked] ?? 'apt'
-      aptnessChecked += 1
-
-      return aptness
     },
     explain: async (input) => {
       explanationCalls.push(input)

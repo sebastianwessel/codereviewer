@@ -9,6 +9,101 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-31 — Spec 23 citation-aptness check MEASURED: it works as designed and still costs more than it saves. WITHDRAW THE STAGE
+
+Same 34 cases, same corpus, `1ae0db3` with the aptness stage active. Spend
+**$2.5174** live + **$0.1365** probe = **$2.6539** of a $5.00 ceiling. Full analysis:
+`reports/2026-07-31-intent-fulfilment-aptness-measurement.md`. Baseline:
+`reports/2026-07-31-intent-fulfilment-remeasurement.md`, preserved run-for-run under
+`.codereviewer/eval/intent-corpus/runs-2026-07-31-pre-aptness/`. Decision rule written
+down before any result was read: the previous six clauses unchanged, plus a
+**false-downgrade** definition, a pre-registered **exchange rate**, three hard floors,
+and an attribution rule for a downgrade the report does not label.
+
+| arm | extraction faithful | unaddressed detection | false-satisfied | opportunities | inapt citations |
+|---|---:|---:|---:|---:|---:|
+| **real** (80 obligations) | 96.3% | not measurable | 0.0% (0/75) | **0** | 2.7% (2/75) |
+| **synthetic** (223 obligations) | 99.6% | **92.5% (74/80)** | **2.2% (3/135)** | **80**, 3 taken | 6.1% (8/132) |
+
+**DHB sub-arm: 52 opportunities, 2 TAKEN** (was 3). Bound 11.6%. The pre-registered
+bar for clearing the route is still ≥30 opportunities taken **zero** times, so the
+route remains demonstrated and the capability stays **off by default**.
+
+### What the stage did, itemised — 8 downgrades, attribution EXACT
+
+`inaptCitationCount` sums to **8** and reconciles exactly with 8 hand-attributed rows
+(every case with other `undetermined` rows reports 0, and no run had a failed
+judgement). No counter bug.
+
+- **1 BENEFIT**: `s32`/`obl_20` — *"the declaration-analysis barrel refuses a stage-3
+  consumer at runtime"*, previously certified on an added line of a TEST, downgraded.
+  A false-satisfied verdict genuinely removed. **Not the deleted-line route.**
+- **1 correct-by-necessity**: `s24`/`obl_13` *"keep the numbers in the LEDGER"* — the
+  ledger is not in the diff, so no apt citation could exist.
+- **5 FALSE DOWNGRADES**: `r4`/`obl_4` and `s5`/`obl_4` (*"keep the field name
+  unchanged"*, same obligation on the same commit, both suppressed — the direct probe
+  reproduces this 3/3 and 2/3), `s12`/`obl_4` (*"update the test invariant"* —
+  suppressed while its two SIBLING assertions in the same test survived),
+  `s24`/`obl_14` (*"keep the numbers in the DOCS"*, where the docs table is added on
+  lines 58-67), `s28`/`obl_5` (*"keep Arm A off by default"*, where the added spec line
+  says exactly that).
+- **1 undecidable**, excluded.
+
+**Exchange rate FAILS: 2 × 1 = 2 < 5.**
+
+### The verdict it was built for SURVIVED
+
+`s17`/`obl_13` — *"make runs that request the withdrawn `guarded-region` context kind
+fail intake with exit code 2"* — is reported `addressed` again on the same two REMOVED
+lines, and `inaptCitationCount` for that case is **0**. The aptness call read exactly
+that citation and did not call it inapt. `s33`/`obl_14` and `s28`/`obl_7` also survived
+unchanged. **10 inapt citations and 3 false-satisfied verdicts were left standing.**
+
+### The mechanism, from a direct probe of the stage alone (68 hand-labelled pairs, $0.1162)
+
+| label | n | → apt | → undetermined | → **inapt** |
+|---|---:|---:|---:|---:|
+| apt | 50 | 46 | 3 | **1 (2.0%)** |
+| inapt | 14 | 4 | 8 | **2 (14.3%)** |
+| false-satisfied | 4 | 1 | 2 | **1** |
+
+The stage is **correctly calibrated and pointed at a rare event**. `addressed`
+verdicts are ~92% aptly cited, so a 2% false-inapt rate over ~200 apt citations
+produces ≈4 wrong downgrades while a 14% catch rate over ~18 bad ones produces ≈2.5
+right ones — expected downgrade precision ≈38%, which is what the live runs produced.
+Making the check stricter raises the cost faster than the benefit; the fix has to be
+**narrowing what it is asked about**, or **disclosing instead of suppressing**.
+
+### Recommendation
+
+**Withdraw the stage as it stands.** Two directions, both needing a spec decision, not
+an edit: (1) run it only on behavioural obligations cited exclusively to removed
+lines — four of the five false downgrades were preservation obligations whose evidence
+can only ever be an added line that mentions the thing; (2) annotate the citation
+instead of demoting the verdict, which cannot suppress anything.
+
+### What invalidates this entry
+
+- One run per case, no variance band. The five cases sharing `52ff75d`'s message
+  reported 14 / 16 / 23 / 20 / 14 obligation rows against 14 / 16 / 20 / 20 / 15 last
+  round on identical inputs.
+- 8 downgrade events. The **direction** and the **mechanism** are established; no rate
+  is claimed (the pre-registered floor for quoting one was 10 events).
+- **The DHB inapt rate moving 33.3% → 0.0% is NOT the stage's doing** and must never be
+  quoted as its benefit: the stage cannot improve a citation, and the judgement simply
+  happened to cite the apt docs line every time this round.
+- False-satisfied 4 → 3 is one attributable removal plus denominator movement
+  (142 → 135 reported-addressed) from extraction non-determinism.
+- A downgraded row's citation is dropped from the report, so two of the five
+  false-downgrade classifications lean on the pre-aptness citation for the same
+  statement plus what the diff contains; the probe on those exact citation sets
+  answered `undetermined`.
+- Real arm had **zero** opportunities to false-satisfy for the third round running.
+- Twelve commits of one TypeScript repository, one provider, engineered synthetic
+  mismatches.
+
+---
+
 ## 2026-07-31 — Spec 23 re-measured after the amendment: the new false-satisfied route is REAL. NO SHIP, on evidence this time
 
 34 cases (12 real, 22 synthetic) over 12 commits, spend **$2.3277** of a $4.00

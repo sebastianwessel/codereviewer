@@ -3,9 +3,65 @@
 Status: Approved
 Date: 2026-07-27
 Amended: 2026-07-30 — a citation may name a removed line (see *Amendment* below)
-Amended: 2026-07-31 — a citation must be APT, not merely real (see *Second Amendment*)
+Second Amendment: 2026-07-31 — proposed, implemented, **measured and WITHDRAWN**
 
-## Second Amendment (2026-07-31): a real address is not automatically evidence
+## Second Amendment — WITHDRAWN on measurement (2026-07-31)
+
+**The aptness check described below was built, measured over the full 34-case
+corpus, and removed the same day. It is recorded here rather than deleted, because
+the reason it failed is the useful part.**
+
+| | before | after |
+|---|---:|---:|
+| false-satisfied (synthetic) | 4 | 3 — **only 1 attributable to the check** |
+| **false downgrades** | 0 | **5 of 8 downgrades** |
+| unaddressed detection | 90.0% | 92.5% (no regression) |
+| deletion-heavy behavioural taken | 3 / 52 | 2 / 52 |
+
+It **failed its own pre-registered exchange rate** (`2 × removed ≥ produced`) by
+more than double: it suppressed **five correct verdicts to remove one wrong one**.
+
+**And it missed the case it was written for.** `s17/obl_13` — *"make runs that
+request the withdrawn context kind by name fail intake with exit code 2"*, the
+exact verdict this amendment existed to catch — came back `addressed` on the same
+removed lines, with `inaptCitationCount: 0`. The aptness call read that citation
+and declined to call it inapt.
+
+### Why, and this generalises
+
+A 68-pair direct probe found the check is **correctly calibrated** — 2.0%
+false-inapt on hand-verified apt evidence — and **pointed at a rare event**.
+Roughly **92% of `addressed` verdicts are already aptly cited**, so:
+
+- 2% of ~200 apt citations ≈ **4 wrong downgrades**
+- 14% of ~18 inapt citations ≈ **2.5 right ones**
+- expected downgrade precision ≈ **38%**, which is what the live runs produced
+
+**Making the check stricter makes it worse**, because the false-positive term grows
+with the large population and the true-positive term with the small one. This is
+the base-rate collapse this project has already recorded once, in the
+vulnerability-introducing-commit literature: a well-calibrated classifier aimed at
+a rare event produces mostly false alarms. It was not recognised as the same shape
+before building.
+
+Two directions remain untried and neither is implemented: **narrow the scope** (run
+only on behavioural obligations cited exclusively to removed lines, where the base
+rate is far higher), or **annotate rather than demote** (flag the citation as weak
+and leave the verdict alone).
+
+One thing that must **not** be claimed as its benefit: the deletion-heavy inapt
+rate falling 33.3% → 0.0%. The check cannot improve a citation, only reject it.
+
+### Consequence for the capability
+
+The false-satisfied route documented below is **open again and unmitigated**.
+`intent check` remains **off by default** with a measured, named failure mode —
+which is a better state than a mitigation that costs five good verdicts per bad one
+caught.
+
+---
+
+## Second Amendment as proposed (retained for the record)
 
 The 2026-07-30 amendment closed the deletion blind spot and, as predicted, opened a
 new route to the one error this spec calls the costly one. Measured over 34 cases:
