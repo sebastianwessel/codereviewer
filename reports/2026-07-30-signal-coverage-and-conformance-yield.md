@@ -117,21 +117,35 @@ Nothing here says any of the 849 is worth showing a human.
 
 ---
 
-## Why the honest firing-rate test could not be run
+## Why the honest firing-rate test could not be run — CORRECTED
 
-The intended test — run `conformance check` over each slice's real upstream
-pull-request diff — **is not possible with the corpus as hydrated**, and this is
-worth recording as missing infrastructure rather than as a result:
+**An earlier version of this section was wrong and is retracted.** It claimed the
+`baseSha` commit was *"absent from the shallow object store, verified on all 37"*.
+It is present on all 37 (`git cat-file -t <baseSha>` returns `commit`); the check
+that produced that claim was a faulty shell loop. The depth-2 fetch in
+`real-repo-corpus-hydration.ts` pulls the fix commit and its parent as designed.
 
-- every slice repository contains **exactly one commit**, so `HEAD~1` does not exist;
-- `slice.json` carries `baseSha` and `headSha`, but the base commit's objects are
-  **absent from the shallow object store** (`git cat-file -e <baseSha>` fails on all 37);
-- the empty tree is not a commit, and a synthesised empty commit shares no merge
-  base with `HEAD`, so `git merge-base` fails.
+The real obstacle is semantic:
 
-A hydration that kept the base commit reachable would make a genuine multi-repo,
-multi-language firing-rate measurement a one-command job. That is the single
-highest-value change to the corpus tooling.
+- the corpus checks out the **parent** (pre-fix) tree as `HEAD` and defines the
+  reviewed change as *the upstream fix reversed* — `baseSha` is the fix commit,
+  `headSha` the parent;
+- `conformance check` resolves its diff through **`git merge-base`**, and the
+  parent is an **ancestor** of the fix, so `merge-base(fix, parent) = parent =
+  HEAD`. It diffs `HEAD..HEAD` and correctly sees nothing.
+
+Re-run with the correct refs over all 37 slices: 37 completed, **0 changed files**
+and 0 divergences — an empty diff, not a detector result.
+
+Reversing the refs does not help: the working tree sits at the parent, so a
+`head-ref` the filesystem does not match would compare against the wrong content.
+
+**The reviewed change cannot be expressed as a ref pair under merge-base
+semantics.** Two ways out, both real work:
+
+1. let `conformance check` accept a diff directly, as the eval runner already does
+   with `slice.json.diff`; or
+2. hydrate the corpus forward — check out the fix and review `parent → fix`.
 
 ---
 
@@ -190,5 +204,6 @@ of work and is not claimed here.
    open is whether unexported top-level declarations should be visible at all,
    which is a spec question rather than a bug.
 2. **Settle the Rust-versus-Go spread** before recommending spec 24 anywhere.
-3. **Hydrate the corpus with reachable base commits**, then run the real
-   firing-rate test that this report had to substitute for.
+3. **Give `conformance check` a way to review the corpus's reviewed change** —
+   either a direct-diff input or a forward hydration. The base commits are
+   reachable; the reviewed change simply is not a ref pair.
