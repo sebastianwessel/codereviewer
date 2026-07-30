@@ -46,10 +46,62 @@ export type DeclarationSpan = {
   readonly indentation: number
 }
 
+// Net depth of SIGNATURE brackets a line contributes, over comment- and
+// string-blanked text so a bracket inside prose or a literal cannot count.
+//
+// Braces are deliberately excluded. `(` and `[` continue a signature — a
+// parameter list, a type argument list, an array type — whereas `{` opens a
+// BODY, and counting it would carry the span past the body's closing brace and
+// swallow the very line the indentation rule exists to exclude. With braces
+// counted, `export const handler = (request) => {` nets +1 on its own header and
+// the whole body would be consumed by the header branch below.
+const signatureBracketDelta = (codeLine: string): number => {
+  let delta = 0
+
+  for (const character of codeLine) {
+    if (character === '(' || character === '[') {
+      delta += 1
+    } else if (character === ')' || character === ']') {
+      delta -= 1
+    }
+  }
+
+  return delta
+}
+
 /**
  * Reconstructs the inclusive line span of the declaration whose header is at
  * `startLine`. A declaration with no indented lines after it (a one-line arrow
  * function, a Go type alias) spans exactly its header line.
+ *
+ * THE HEADER MAY SPAN SEVERAL LINES, AND THAT USED TO TRUNCATE THE SPAN.
+ *
+ * Indentation alone ends a span at the first line back at the header's column.
+ * For a multi-line signature the line that closes the parameter list is at that
+ * column:
+ *
+ *     export const unknownCliOption = (      <- header, column 0
+ *       args: readonly string[],             <- deeper, kept
+ *       commandOptions: readonly string[]    <- deeper, kept
+ *     ): string | undefined => {             <- column 0, ENDED THE SPAN
+ *       ...the entire body, excluded...
+ *
+ * The span became the parameter list, the body contributed no traits, and
+ * `peer-sets.ts` drops a declaration whose trait set is empty — so the
+ * declaration vanished from the capability entirely. Measured on this
+ * repository's `src/cli/args.ts`: nine of ten exported declarations extracted
+ * ZERO traits, and `conformance check` reported no changed declarations for a
+ * commit that plainly added two.
+ *
+ * Multi-line signatures are the dominant style here and common generally, so
+ * this was not an edge case; it is a plausible part of why spec 24 has never
+ * produced a positive on real code.
+ *
+ * The fix keeps indentation as the rule for the BODY and uses bracket depth only
+ * to carry the span across a still-open HEADER. That stays language-neutral:
+ * languages whose signatures do not wrap (Python's `def foo(a, b):`) balance
+ * their brackets on the header line, contribute a delta of zero, and take the
+ * indentation path exactly as before.
  */
 export const declarationSpanAt = (
   lines: SourceLines,
@@ -63,9 +115,24 @@ export const declarationSpanAt = (
 
   const indentation = indentationWidth(headerLine)
   let endLine = startLine
+  // Block-comment state is carried from the header onward. It starts closed: a
+  // declaration header the extractors reported is code, not commented-out text.
+  let blanked = blankNonCode(headerLine)
+  let insideBlockComment = blanked.insideBlockComment
+  let openDepth = signatureBracketDelta(blanked.text)
 
   for (let index = startLine; index < lines.length; index += 1) {
     const line = lines[index] ?? ''
+
+    // While the header's own brackets are unbalanced the declaration has not
+    // begun its body yet, so indentation says nothing about where it ends.
+    if (openDepth > 0) {
+      blanked = blankNonCode(line, insideBlockComment)
+      insideBlockComment = blanked.insideBlockComment
+      openDepth += signatureBracketDelta(blanked.text)
+      endLine = index + 1
+      continue
+    }
 
     // A blank line does not end a body; a declaration separated from its own
     // trailing blank line by nothing would otherwise stop one line early, and a
