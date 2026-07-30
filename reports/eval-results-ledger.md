@@ -1380,3 +1380,15 @@ The larger figure was mostly small-corpus noise. Plan against +3.8pp.
 - **Adjusted precision is an estimate, permanently.** Under an incomplete answer
   key, precision is not identifiable — raw precision is the lower bound and
   adjusted the upper. Report the pair.
+- **Every run recorded above was produced by an UNPINNED engine.** The harnesses
+  pinned the repository under test but invoked the engine from the live working
+  tree, so a commit landing mid-sweep changed the instrument mid-measurement —
+  which happened, five times, during the 2026-08-01 uncapped re-measurement.
+  Those particular runs were argued inert afterwards and by hand; nothing in any
+  scored artefact recorded which engine produced it, so no other entry here can
+  be checked at all. Fixed 2026-08-01 for all stages (`.codereviewer/eval/`:
+  `engine-pin.sh` pins a detached worktree at a SHA resolved once per sweep,
+  `pinned-run.sh` wraps every stage's CLI, and both scorers now refuse to pool
+  cases whose `engine.json` sidecars disagree). **Runs predating the fix carry no
+  sidecar and are reported as unknown-engine, not as agreeing.** Treat small
+  deltas above as correspondingly weaker.
