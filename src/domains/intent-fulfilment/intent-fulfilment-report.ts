@@ -105,7 +105,16 @@ export const IntentFulfilmentSummarySchema = z.strictObject({
   addressedCount: z.int().min(0),
   unaddressedCount: z.int().min(0),
   undeterminedCount: z.int().min(0),
-  // Bounded by `intentFulfilment.maxObligations`.
+  // True when `intentFulfilment.maxObligations` MAY have bound the list — either
+  // the extraction overran the cap, or it returned exactly the cap and so more
+  // cannot be ruled out.
+  //
+  // The weaker claim is deliberate. Returning exactly the cap does not prove the
+  // intent held more, but reporting `false` in that case is worse: it tells a
+  // reader the checklist is complete when the run was told where to stop. This
+  // flag previously only fired if the model overran a cap it had been given, which
+  // essentially never happens — 24 of 28 runs on the 2026-08-01 corpus returned
+  // exactly the cap and all 28 claimed no truncation.
   obligationsTruncated: z.boolean(),
   // Obligations the extraction proposed whose citation did not resolve to a line
   // of the stated intent, and which were therefore not reported at all. Counted

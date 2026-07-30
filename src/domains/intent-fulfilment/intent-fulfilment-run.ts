@@ -554,7 +554,25 @@ export const runIntentFulfilment = async (
       addressedCount: countOf('addressed'),
       unaddressedCount: countOf('unaddressed'),
       undeterminedCount: countOf('undetermined'),
-      obligationsTruncated: cited.length > selected.length,
+      // TRUE WHEN THE CAP MAY HAVE BOUND THE LIST, not when the model overran it.
+      //
+      // This used to read `cited.length > selected.length`, which is a condition
+      // that essentially cannot occur: the cap is passed INTO the extraction
+      // prompt, so a compliant model never returns more than `maxObligations` and
+      // the local slice never removes anything. A run cut short by the cap
+      // therefore reported `obligationsTruncated: false` — precisely backwards for
+      // the reader, who needs to know the checklist may be incomplete.
+      //
+      // Measured on the 2026-08-01 pre-written corpus: 24 of 28 runs returned
+      // EXACTLY the cap and every one claimed it was not truncated. That corpus's
+      // 52.9% end-to-end outstanding recall was read as an extraction weakness
+      // when a binding cap explains part of it, and nothing in the report said so.
+      //
+      // Returning exactly the cap does not PROVE more existed — the intent may hold
+      // exactly that many. The flag is deliberately the weaker claim it can support:
+      // more cannot be ruled out.
+      obligationsTruncated:
+        cited.length > selected.length || selected.length >= maxObligations,
       uncitedObligationCount,
       unevidencedAddressedCount,
       evidenceConcernCount,
