@@ -47,40 +47,24 @@ other. Disabled, discovery is single-shot with no tools.
 | `review.crossFileRetrieval.maxToolCallsPerTask` | integer 1–500 | `100` | Runaway-loop guard on mediated tool calls per task. It is not a context ration — models self-limit well below it. |
 | `review.crossFileRetrieval.maxBytesPerRead` | integer 1000–200000 | `24000` | Per-read byte cap for cross-file reads. Large single reads measurably dilute a review. |
 
-### `review.guardedRegionContext`
+### `review.guardedRegionContext` — removed
 
-One deterministic trigger: a **conditional line the diff changed**, inside a
-declaration, with code after it. Structural and language-neutral — it keys on
-position, not on any category of guard, so it fires the same way in every
-supported language.
+Spec 25's guarded-region context. Both arms were **measured on 2026-07-30 and
+removed**; the whole configuration block went with them. Because the schema is
+strict, a config that still sets `review.guardedRegionContext` — even to
+`{ "signal": false }` — now fails validation with **exit code 2**. Delete the
+block.
 
-**Off by default, and measured not to help.** On the 37-case real-repository
-corpus it moved product recall 46.0% → 48.3% — **two findings out of 87, inside
-the ±4.8pp noise band** — while adjusted precision **fell** 95.2% → 93.3%. Enable
-it only if you want the section for your own reading; do not expect a recall gain.
+On the 37-case real-repository corpus, against a 46.0% baseline at 95.2% adjusted
+precision:
 
-| Key | Type | Default | What it does |
-| --- | --- | --- | --- |
-| `review.guardedRegionContext.signal` | boolean | `false` | Adds a section naming each changed conditional, the lines it precedes, and what that region calls. Adds no file content. |
+| arm | product recall | adjusted precision |
+| --- | ---: | ---: |
+| `signal` — name the changed conditionals | 48.3% | 93.3% |
+| `signal` + `calleeRanking` | 44.8% | 90.7% |
 
-#### `review.guardedRegionContext.calleeRanking` — removed
-
-A second arm re-ranked the referenced-definition budget toward the guarded
-region's callees. **Measured and removed on 2026-07-30**: 44.8% product recall
-against a 46.0% baseline, adjusted precision 90.7%, and it lost to `signal` alone.
-Because the schema is strict, a config that still sets it — even to `false` —
-fails validation with **exit code 2**. Delete the key.
-
-What the section does **not** do: it never says a protection was weakened, that
-the change is unsafe, or that anything is a defect. The trigger is lexical and
-cannot know any of that. A deliberate change appears in it exactly like a
-mistaken one, and the section says so to the reviewer. Use it to decide where to
-look.
-
-Known limit: a guard **deleted outright** leaves no conditional in the new
-revision, so it does not trigger. The three largest weakening shapes — widened
-scope, loosening in place, and new code missing a check — all keep a conditional
-and do trigger.
+The recall movement is **two findings out of 87**, inside the ±4.8pp noise band,
+and precision fell in both arms. Neither is a result.
 
 ### `review.contextScout` — removed
 

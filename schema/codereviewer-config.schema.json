@@ -16,9 +16,6 @@
           "enabled": false,
           "maxToolCallsPerTask": 100,
           "maxBytesPerRead": 24000
-        },
-        "guardedRegionContext": {
-          "signal": false
         }
       },
       "type": "object",
@@ -126,22 +123,6 @@
             "maxBytesPerRead"
           ],
           "additionalProperties": false
-        },
-        "guardedRegionContext": {
-          "default": {
-            "signal": false
-          },
-          "type": "object",
-          "properties": {
-            "signal": {
-              "default": false,
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "signal"
-          ],
-          "additionalProperties": false
         }
       },
       "required": [
@@ -153,8 +134,7 @@
         "maxFiles",
         "maxFileBytes",
         "inlineSeverityThreshold",
-        "crossFileRetrieval",
-        "guardedRegionContext"
+        "crossFileRetrieval"
       ],
       "additionalProperties": false
     },

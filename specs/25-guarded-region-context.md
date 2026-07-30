@@ -1,6 +1,6 @@
 # 25: Guarded-Region Context
 
-Status: Approved — **measured 2026-07-30, both arms failed their decision rule**
+Status: **Withdrawn 2026-07-30** — measured, both arms failed, implementation removed
 Date: 2026-07-30
 
 ## Outcome (2026-07-30)
@@ -18,14 +18,21 @@ Total spend $5.33. Full entry in `reports/eval-results-ledger.md`.
 — two findings — and its precision fell. B was worse than baseline, worse than A,
 and worst on precision.
 
-**Arm B is deleted**, per this spec's own rule and because it fails under every
-reading of the data.
+**Both arms are deleted**, per this spec's own rule. The trigger, the section,
+the callee ranking, the `review.guardedRegionContext` configuration block and the
+`guarded-region` context kind are all removed; a config still setting the block
+fails validation with exit code 2 and no compatibility shim is permitted.
 
-**Arm A is retained, off by default, on the approver's instruction**, and this
-spec records that this is a **departure from the rule fixed in advance**. Nothing
-here should be read as evidence that the section helps: it is measurably inside
-the noise and it costs precision. Any future claim for it needs a new
-pre-registered rule, not this run.
+Arm A was briefly retained off by default and then removed on the approver's
+second instruction. That was the right call: a capability inside its own noise
+band that costs precision is a maintenance liability in a precision-first
+reviewer, and keeping it would have left the codebase asserting by its existence
+something the measurement does not support.
+
+**What survives is `declaration-analysis`.** Extracting declaration spans, lexical
+traits and trait positions out of `invariant-conformance` was needed so a stage-1
+caller could use them without importing a stage-3 domain. That extraction is
+correct independently of this result and spec 24 now depends on it.
 
 Recorded as a hypothesis and explicitly not as a result: unlisted real findings
 rose 4 → 11 → 14 while genuine false positives moved only 2 → 3 → 4.

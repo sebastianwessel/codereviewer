@@ -65,19 +65,6 @@ const gitRefSchema = z
 // tool-call cap that CODE enforces. Its findings pass the SAME refutation and
 // admission as any other candidate. Disabled, discovery is single-shot with no
 // tools and the run is byte-for-byte unchanged.
-// Spec 25. One deterministic trigger: a conditional line the diff changed, inside
-// a declaration, with code after it. `signal` adds a structural section naming
-// what changed and what it precedes; it adds no file content.
-//
-// Arm B (`calleeRanking`, which re-ranked the referenced-definition budget toward
-// the guarded region's callees) was MEASURED AND REMOVED on 2026-07-30: 44.8%
-// product recall against a 46.0% baseline, adjusted precision 90.7% against
-// 95.2%, and it lost to `signal` alone. It was the fourth failed attempt at
-// cross-file context here. Do not reintroduce it without a pre-registered rule.
-export const GuardedRegionContextConfigSchema = z.strictObject({
-  signal: z.boolean().default(false)
-})
-
 export const CrossFileRetrievalConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
   // Runaway-loop guard: the maximum mediated tool calls one discovery task may
@@ -110,9 +97,6 @@ export const ReviewConfigSchema = z.strictObject({
     enabled: false,
     maxToolCallsPerTask: 100,
     maxBytesPerRead: 24000
-  }),
-  guardedRegionContext: GuardedRegionContextConfigSchema.default({
-    signal: false
   })
 })
 
@@ -597,9 +581,6 @@ export const CodeReviewerConfigSchema = z.strictObject({
       enabled: false,
       maxToolCallsPerTask: 100,
       maxBytesPerRead: 24000
-    },
-    guardedRegionContext: {
-      signal: false
     }
   }),
   provider: ProviderConfigSchema.optional(),

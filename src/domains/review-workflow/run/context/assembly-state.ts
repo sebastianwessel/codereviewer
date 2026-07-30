@@ -1,7 +1,6 @@
 import type { Logger } from '@purista/harness'
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
 import type { DeterministicSignalExtraction, SupportSignalSourceFile } from '../../../deterministic-signals/index.js'
-import type { ReviewedDiffRange } from '../../../admission/index.js'
 import type { NoContentEventRecorder } from '../../../observability/index.js'
 import type { ReviewTask } from '../../../review-planning/index.js'
 import {
@@ -17,9 +16,6 @@ export const prepareReviewRunnerContextAssemblyState = async (input: {
   readonly sourceFiles: readonly SupportSignalSourceFile[]
   readonly analysis: DeterministicSignalExtraction
   readonly tasks: readonly ReviewTask[]
-  // Spec 25: the lines the diff touched, for the guarded-region trigger. Optional
-  // so an explicit-file run, which has no diff, simply never triggers.
-  readonly reviewedDiffRanges?: readonly ReviewedDiffRange[]
   readonly observability: NoContentEventRecorder
   readonly logger: Logger
   readonly prepareContextState?: PrepareContextState
@@ -34,10 +30,7 @@ export const prepareReviewRunnerContextAssemblyState = async (input: {
     config: input.config,
     sourceFiles: input.sourceFiles,
     analysis: input.analysis,
-    tasks: input.tasks,
-    ...(input.reviewedDiffRanges === undefined
-      ? {}
-      : { reviewedDiffRanges: input.reviewedDiffRanges })
+    tasks: input.tasks
   })
   contextAssemblyStep.end({
     ledgerEntryCount: contextState.metrics.ledgerEntryCount

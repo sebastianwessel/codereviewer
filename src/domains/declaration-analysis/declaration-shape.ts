@@ -227,50 +227,6 @@ const firstArgumentAt = (line: string, openIndex: number): string | undefined =>
     : argument
 }
 
-/**
- * Whether a blanked code line opens a conditional.
- *
- * Exported because spec 25 keys its trigger on the same shape this module already
- * uses to tell a `guard` trait from a `call`, and two copies of the pattern would
- * eventually disagree about what a conditional is. Note what this predicate does
- * NOT require: a call. `if (role === "admin")` loosened to `if (role)` carries no
- * call at all, and that shape — weakening in place — is the largest group in the
- * consequence survey, so a call-bearing test would miss most of it.
- */
-export const isConditionalLine = (codeLine: string): boolean =>
-  guardLinePattern.test(codeLine)
-
-/**
- * The names called on one blanked code line, in source order and de-duplicated.
- *
- * Shared with spec 25's guarded-region extraction so the definition of "a call"
- * cannot drift between the two readers. `excludedName` drops the enclosing
- * declaration's own name, for the same reason `extractDeclarationTraits` does: a
- * recursive call says nothing about what the declaration depends on.
- */
-export const callNamesIn = (
-  codeLine: string,
-  excludedName?: string
-): readonly string[] => {
-  const names: string[] = []
-
-  for (const match of codeLine.matchAll(callPattern)) {
-    const name = match[1] ?? ''
-
-    if (
-      nonCallKeywords.has(name) ||
-      name === excludedName ||
-      names.includes(name)
-    ) {
-      continue
-    }
-
-    names.push(name)
-  }
-
-  return names
-}
-
 export type ExtractDeclarationTraitsInput = {
   readonly lines: SourceLines
   readonly span: DeclarationSpan

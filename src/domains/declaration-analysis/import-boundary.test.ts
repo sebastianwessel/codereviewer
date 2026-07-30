@@ -81,7 +81,7 @@ describe('declaration-analysis import boundary', () => {
     const sources = (await readSources()).filter(isProductionSource)
 
     expect(sources.length).toBeGreaterThan(3)
-    expect(sources.some((source) => source.path === 'guarded-region.ts')).toBe(
+    expect(sources.some((source) => source.path === 'declaration-shape.ts')).toBe(
       true
     )
     expect(

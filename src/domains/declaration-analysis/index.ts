@@ -41,8 +41,3 @@ export {
   type TraitPosition,
   type TraitTerminality
 } from './trait-position.js'
-export {
-  findGuardedRegions,
-  type GuardedRegion,
-  type FindGuardedRegionsInput
-} from './guarded-region.js'

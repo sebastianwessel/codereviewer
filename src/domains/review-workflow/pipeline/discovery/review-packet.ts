@@ -203,22 +203,11 @@ export const buildContextSections = (
     .join('\n\n')
   const changeIntentSection = renderChangeIntentSection(changeIntent)
 
-  // Spec 25 Arm A. Already-rendered prose built deterministically from the changed
-  // files above; it is emitted verbatim because the assembling stage owns its
-  // wording, including the sentence telling the reviewer it asserts nothing.
-  const guardedRegionSection = taskInput.task.reviewContext
-    .filter(
-      (entry) => entry.kind === 'guarded-region' && entry.content.length > 0
-    )
-    .map((entry) => entry.content)
-    .join('\n')
-
   return [
     changeSection,
     `\n## Changed files (full content, line-numbered, for context)\n${
       files.length === 0 ? '(no file content provided)' : files
     }`,
-    guardedRegionSection,
     referencedDefinitionsSection,
     changeIntentSection
   ]

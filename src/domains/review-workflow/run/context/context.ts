@@ -34,7 +34,6 @@ import {
   type SkillContextDocument
 } from './static-context.js'
 import { collectReferencedDefinitions } from './referenced-definitions.js'
-import { collectGuardedRegionContext } from './guarded-region-context.js'
 
 export type {
   InstructionContextDocument,
@@ -270,13 +269,8 @@ export const assembleContext = async (
     readonly sourceFiles: readonly SupportSignalSourceFile[]
     readonly analysis: DeterministicSignalExtraction
     readonly tasks: readonly ReviewTask[]
-    // Spec 25 needs the lines the diff actually touched: its trigger is a CHANGED
-    // conditional, and an unchanged one carries no information about this review.
-    // Defaulted so an explicit-file run, which has no diff, simply never triggers.
-    readonly reviewedDiffRanges?: readonly ReviewedDiffRange[]
   }
 ): Promise<ContextAssemblyResult> => {
-  const guardedRegionConfig = input.config.review.guardedRegionContext
   const staticContext = await loadStaticReviewContext({
     repositoryRoot: input.repositoryRoot,
     config: input.config
@@ -312,8 +306,7 @@ export const assembleContext = async (
         kind:
           inputContext.kind === 'test-mapping' ||
           inputContext.kind === 'referenced-definition' ||
-          inputContext.kind === 'change-intent' ||
-          inputContext.kind === 'guarded-region'
+          inputContext.kind === 'change-intent'
             ? 'support-signal-output'
             : inputContext.kind,
         ...(inputContext.path === undefined ? {} : { path: inputContext.path }),
@@ -529,17 +522,6 @@ export const assembleContext = async (
       )
     }
 
-    // Spec 25: the changed conditionals in this task's files, and what they
-    // precede. Pure and cheap, and yields '' when nothing triggered.
-    const guardedRegions = guardedRegionConfig.signal
-      ? collectGuardedRegionContext({
-          sourceFiles: input.sourceFiles,
-          facts: input.analysis.facts,
-          reviewedDiffRanges: input.reviewedDiffRanges ?? [],
-          taskPaths: task.paths
-        })
-      : undefined
-
     // R4: collect bounded referenced-definition digests for unchanged files the
     // task's changed files import (relative imports only). Context only — these
     // never enter task.paths and are not review targets. `allSourcePaths` covers
@@ -560,20 +542,6 @@ export const assembleContext = async (
             content: digest.content
           }))
 
-    // Spec 25 Arm A. Appended alongside the referenced definitions because both
-    // are derived context that must not influence task.paths.
-    const guardedRegionContexts: ContextInput[] =
-      guardedRegionConfig.signal &&
-      guardedRegions !== undefined &&
-      guardedRegions.sectionText.length > 0
-        ? [
-            {
-              kind: 'guarded-region' as const,
-              content: guardedRegions.sectionText
-            }
-          ]
-        : []
-
     batches.forEach((batch, index) => {
       const paths = workflowTaskPaths(batch, task.paths)
 
@@ -587,7 +555,7 @@ export const assembleContext = async (
           }),
           batch,
           paths,
-          [...guardedRegionContexts, ...referencedDefinitionContexts]
+          referencedDefinitionContexts
         )
       )
     })
