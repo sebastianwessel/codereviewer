@@ -135,11 +135,32 @@ highest-value change to the corpus tooling.
 
 ---
 
+## Update — Finding 1 is fixed (same day)
+
+CommonJS exports now produce the same `export` fact an ESM export does:
+`module.exports = { a, b }`, `module.exports = name`, `exports.x`, and a named
+function or class expression. An anonymous `module.exports = function () {}` is
+deliberately still not recorded — it names nothing a peer set or a reference
+lookup could match, and inventing a placeholder would be worse than silence.
+
+Re-measured on the same four repositories:
+
+| | before | after |
+|---|---:|---:|
+| `fastify` `lib/route.js` (701 lines) | 0 facts | **3** |
+| four JS repos, exported symbols | **6** | **891 across 415 files** |
+
+Scope was kept deliberately like-for-like: a CommonJS export becomes an `export`
+fact, no new fact kind. **A top-level declaration that is never exported is still
+invisible**, for CommonJS and ESM alike — that is a separate, already-recorded
+hole, and widening it here would change what every downstream consumer receives
+without a spec to justify it.
+
 ## What to do with this
 
-1. **Fix the JavaScript extractor, or state the limitation accurately.** It
-   currently degrades the core reviewer on a large share of real JavaScript, and
-   the documentation tells readers the opposite.
+1. ~~Fix the JavaScript extractor.~~ **Done** — see the update above. What remains
+   open is whether unexported top-level declarations should be visible at all,
+   which is a spec question rather than a bug.
 2. **Settle the Rust-versus-Go spread** before recommending spec 24 anywhere.
 3. **Hydrate the corpus with reachable base commits**, then run the real
    firing-rate test that this report had to substitute for.

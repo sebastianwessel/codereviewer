@@ -190,6 +190,118 @@ const declaredExportName = (node: ts.Node): string | undefined => {
   return undefined
 }
 
+// The names a CommonJS assignment exports, or an empty list when the node is not
+// one.
+//
+// WHY THIS EXISTS. The extractor recognised ESM `export` and nothing else, so a
+// CommonJS file produced NO facts at all. Measured 2026-07-30 over four real
+// JavaScript repositories (1,046 `.js` files): six declarations in total, and
+// `fastify`'s 701-line `lib/route.js` produced zero. That is not a niche gap —
+// these facts feed the stage-1 support-signal packet, `impact check`'s changed
+// symbols, and `conformance check`'s declarations, so a CommonJS codebase
+// degraded all three SILENTLY, reporting "nothing to say" rather than "cannot
+// see".
+//
+// Scope is deliberately like-for-like: a CommonJS export becomes the same
+// `export` fact an ESM export would. No new fact kind, and unexported top-level
+// declarations stay invisible here exactly as they are for ESM — that is a
+// separate, already-recorded hole, and widening it here would change what every
+// downstream consumer receives without a spec.
+//
+// Applies to `.ts` as well as `.js`: a TypeScript file may use CommonJS, and the
+// parse is identical.
+const commonJsExportedNames = (node: ts.Node): readonly string[] => {
+  if (!ts.isExpressionStatement(node)) {
+    return []
+  }
+
+  const expression = node.expression
+
+  if (
+    !ts.isBinaryExpression(expression) ||
+    expression.operatorToken.kind !== ts.SyntaxKind.EqualsToken ||
+    !ts.isPropertyAccessExpression(expression.left)
+  ) {
+    return []
+  }
+
+  const target = expression.left
+  const isExportsIdentifier = (candidate: ts.Node): boolean =>
+    ts.isIdentifier(candidate) && candidate.text === 'exports'
+  // `module.exports`
+  const isModuleExports = (candidate: ts.Node): boolean =>
+    ts.isPropertyAccessExpression(candidate) &&
+    ts.isIdentifier(candidate.expression) &&
+    candidate.expression.text === 'module' &&
+    candidate.name.text === 'exports'
+
+  // `exports.name = ...` and `module.exports.name = ...` name themselves.
+  if (isExportsIdentifier(target.expression) || isModuleExports(target.expression)) {
+    return [target.name.text]
+  }
+
+  if (!isModuleExports(target)) {
+    return []
+  }
+
+  // `module.exports = ...`. The name has to come from the right-hand side.
+  const right = expression.right
+
+  if (ts.isObjectLiteralExpression(right)) {
+    // `module.exports = { a, b: impl }` — the canonical multi-export form.
+    return right.properties
+      .map((property) =>
+        property.name !== undefined && ts.isIdentifier(property.name)
+          ? property.name.text
+          : undefined
+      )
+      .filter((name): name is string => name !== undefined)
+  }
+
+  if (
+    (ts.isFunctionExpression(right) || ts.isClassExpression(right)) &&
+    right.name !== undefined
+  ) {
+    return [right.name.text]
+  }
+
+  if (ts.isIdentifier(right)) {
+    return [right.text]
+  }
+
+  // An anonymous `module.exports = function () {}` names nothing a peer set or a
+  // reference lookup could match on, so it is deliberately not recorded rather
+  // than invented as a placeholder.
+  return []
+}
+
+const collectCommonJsExportFacts = (
+  language: SupportedSignalLanguage,
+  node: ts.Node,
+  sourceFile: ts.SourceFile,
+  path: string,
+  contentHash: string
+): readonly SupportSignalFact[] => {
+  const names = commonJsExportedNames(node)
+
+  if (names.length === 0) {
+    return []
+  }
+
+  const line = lineFor(sourceFile, node)
+
+  return names.map((name) =>
+    createSupportSignalFact({
+      language,
+      kind: 'export',
+      path,
+      name,
+      line,
+      contentHash
+    })
+  )
+}
+
 const collectExportFacts = (
   language: SupportedSignalLanguage,
   node: ts.Node,
@@ -296,6 +408,15 @@ export const extractEcmascriptSignals = (
 
       facts.push(
         ...collectExportFacts(language, node, sourceFile, path, contentHash)
+      )
+      facts.push(
+        ...collectCommonJsExportFacts(
+          language,
+          node,
+          sourceFile,
+          path,
+          contentHash
+        )
       )
       ts.forEachChild(node, visit)
     }
