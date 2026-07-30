@@ -1370,6 +1370,33 @@ The larger figure was mostly small-corpus noise. Plan against +3.8pp.
 
 ---
 
+### Spec 26 measurability precheck (2026-08-01, $0)
+
+Before paying for the spec 26 A/B, a free static check of how many corpus cases the
+OLD engine would actually have split. Both corpora run at `thorough` depth, so the
+proactive chunk threshold was 108,000 B (`floor(min(240000, 360000) * 0.45)`).
+
+| corpus | cases | a file over the chunk budget | files summing over it (upper bound) | over the old 360 KB packet ceiling | **unaffected** |
+|---|---|---|---|---|---|
+| real-repo | 37 | 1 | 2 | 0 | **34 (92%)** |
+| crb benchmark | 59 | 9 | 12 | 7 | **38 (64%)** |
+
+The "summing" column is an upper bound: task planning already caps a task at 8 paths,
+so some of those cases never formed one oversized task.
+
+**The spec's measurement plan names the wrong corpus.** On the 37-case real-repo
+corpus the two arms are byte-identical on 34 of 37 cases; an effect confined to 3
+cases cannot be resolved against a measured ±4.8pp band, so that A/B would cost real
+money to produce a number that means nothing.
+
+The crb benchmark is the corpus where the change actually bites — 21 of 59 cases,
+which matches the 37% figure measured over this repository's own commits.
+
+**Cheaper and stronger still: run only the 21 affected cases**, in both arms. The
+38 unaffected cases are identical between arms by construction, so they can only
+dilute a paired comparison while costing full price.
+
+
 ## Standing caveats for reading anything here
 
 - **Variance.** sd ≈ 4.8pp on this corpus. An effect below roughly 10pp cannot be
