@@ -1457,6 +1457,52 @@ on a single run. It refutes the negative verdict; it does not yet establish the
 positive one. Replicate before making it the default.
 
 
+### Spec 27 discovery partitioning — `maxFilesPerDiscoveryCall: 1` (2026-08-01, $16.51)
+
+Same 21 crb cases, paired at expectation level, 71 expectations, 0 provider errors.
+Control is spec 26's arm 1 (an existing artefact, so it cost nothing to re-use).
+
+| | whole task (control) | per file | old proactive default |
+|---|---|---|---|
+| recall (paired) | 35.2% | **46.5%** | 43.7% |
+| raw precision | 45.5% | 26.2% | 41.3% |
+| adjusted precision | 96.2% | **97.1%** | 83.8% |
+| cost | $6.40 | **$16.51** | $7.41 |
+| wall clock | 9.4 min | 28.4 min | 13.6 min |
+
+vs control: **+11.3pp**, 95% CI [0.0, 22.5], discordant 18 (gained 13, lost 5),
+McNemar z 1.89, **p = 0.059**.
+vs the old proactive default: **+2.8pp**, CI [−8.5, 14.1], **p = 0.617**.
+
+**The mechanism is confirmed.** Recall responds strongly to how many discovery calls
+the same code is spread across, exactly as the spec 26 arms implied. Nothing about
+the prompt, the model, or the context changed — only the number of looks.
+
+**Raw precision fell 45.5% → 26.2% while ADJUSTED precision held at 97.1%.** Those
+move in opposite directions because the extra findings are overwhelmingly
+*real-but-unlisted* rather than false: the crb answer key is a curated subset, and
+raw precision counts an unlisted real defect as a false positive. Adjusted precision
+holding is the load-bearing number here.
+
+**But `1` is the wrong operating point.** It costs **+158%** over the control and
+**+123%** over the old proactive default, to land recall that is *not distinguishable*
+from that old default (p = 0.617). What it clearly does beat the old default on is
+adjusted precision, 83.8% → 97.1%.
+
+Pre-registered rules, applied honestly: recall moved outside the ±4.8pp band, so it
+is a result; adjusted precision did not fall, so that gate passes; cost rose
+materially, so **the trade must be argued rather than assumed — and at N=1 it does
+not carry.** The informative region is between 1 and unlimited, and it is unmeasured.
+
+**Engine caveat.** The control ran on `c11579c` and this arm on `4751277`, which
+differ by the spec 27 commit itself. The partitioning default is unset and its
+inertness is unit-tested (`partitionTaskForDiscovery(task, undefined)` returns the
+task unchanged, full suite identical), so the arms should differ only by the arm —
+but this rests on that test rather than on matching SHAs, which is exactly the
+distinction the provenance guard exists to make visible. Re-running the control on
+`4751277` (~$6.40) would remove the caveat.
+
+
 ## Standing caveats for reading anything here
 
 - **Variance.** sd ≈ 4.8pp on this corpus. An effect below roughly 10pp cannot be

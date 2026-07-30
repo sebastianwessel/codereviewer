@@ -104,3 +104,16 @@ Pre-registered, before any run:
 - `maxFilesPerDiscoveryCall: 1` is the strongest partitioning available and therefore
   an upper bound on the effect, not a proposed default. A default MUST NOT be set
   from this run alone.
+
+## Result (2026-08-01)
+
+Ran as specified. Recall **35.2% → 46.5%** (+11.3pp, CI [0.0, 22.5], gained 13 lost
+5, p = 0.059), adjusted precision **96.2% → 97.1%**, cost **+158%**.
+
+The mechanism is confirmed: only the number of looks changed, and recall moved with
+it. But `1` fails the cost gate — it lands recall indistinguishable from the OLD
+proactive default (43.7%, p = 0.617) while costing 2.2x that default. Its real
+advantage over the old default is adjusted precision, 83.8% → 97.1%.
+
+**No default is set.** The useful region is 2 ≤ N < unlimited and is unmeasured; a
+value MUST come from measuring it, not from interpolating between these two points.
