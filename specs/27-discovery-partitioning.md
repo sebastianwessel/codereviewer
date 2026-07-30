@@ -1,6 +1,6 @@
 # 27: Discovery Partitioning
 
-Status: **Draft — awaiting human approval**
+Status: **Approved** (human, 2026-08-01)
 Date: 2026-08-01
 
 ## Purpose
@@ -115,5 +115,22 @@ it. But `1` fails the cost gate — it lands recall indistinguishable from the O
 proactive default (43.7%, p = 0.617) while costing 2.2x that default. Its real
 advantage over the old default is adjusted precision, 83.8% → 97.1%.
 
-**No default is set.** The useful region is 2 ≤ N < unlimited and is unmeasured; a
-value MUST come from measuring it, not from interpolating between these two points.
+### The sweep, and the shipped default
+
+The useful region was then swept rather than interpolated:
+
+| setting | recall | adj precision | cost |
+|---|---|---|---|
+| unlimited | 35.2% | 96.2% | $6.40 |
+| 4 | 40.8% | 93.5% | $8.18 |
+| **2** | **46.5%** | **97.1%** | **$12.09** |
+| 1 | 46.5% | 97.1% | $16.51 |
+
+**The default is 2.** It matches the strongest setting exactly on both recall and
+adjusted precision at 27% less cost, and it is the only arm to reach conventional
+significance (p = 0.033, CI excluding zero, 11 gained against 3 lost). Below 2 there
+is nothing left to buy.
+
+Partitioning engages only above two changed files, so small changes are unaffected;
+the cost falls on large changes, which are the ones the unpartitioned reviewer served
+worst.

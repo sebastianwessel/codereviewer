@@ -57,6 +57,31 @@ cannot see that limitation at all; this one is built to.
 **Precision and false alarms held under a substantially harder corpus**, which is
 the more reassuring half of the result.
 
+## The 2026-08-01 change, and why the headline above understates the engine
+
+Everything above was measured before the largest quality change this project has
+made. In short:
+
+- The engine had been dividing changes into pieces to fit an assumed size limit.
+  Testing showed **that limit does not exist** — the model accepted a change carrying
+  over a megabyte of source without complaint.
+- Removing the division, however, made recall *fall*, which revealed the real
+  constraint: **the reviewer finds roughly one problem per call, regardless of how
+  much it is shown.** Recall tracks the number of calls, not the amount of code.
+- Dividing the change **deliberately** — two files per review call — then raised
+  defects found by about a third relative to reviewing everything at once, with false
+  alarms at their lowest measured level. That setting now ships as the default.
+
+This is the first change here whose improvement is strong enough to be conventionally
+significant rather than suggestive, and it is described in full in
+[What limits recall](what-limits-recall.md#the-central-finding-in-two-parts).
+
+Separately, the ability to consult *other* files in the repository — previously
+recorded here as unhelpful — was re-tested and **the earlier verdict was wrong**. It
+had been measuring a bug that cut files off mid-read without telling the reviewer.
+Corrected and re-run on a larger corpus, it improves results at slightly lower cost.
+Replication is pending before it becomes a default.
+
 ## What limits recall today
 
 **A single discovery pass reports about one defect per file, and the reason is that

@@ -1503,6 +1503,39 @@ distinction the provenance guard exists to make visible. Re-running the control 
 `4751277` (~$6.40) would remove the caveat.
 
 
+### Spec 27 sweep — the shippable operating point (2026-08-01, $36.78 for the sweep)
+
+Same 21 crb cases, same pinned engine, paired at expectation level against the
+whole-task control. `maxFilesPerDiscoveryCall` swept.
+
+| setting | recall | adj precision | cost | vs control |
+|---|---|---|---|---|
+| unlimited (control) | 35.2% | 96.2% | $6.40 | — |
+| **4** | 40.8% | 93.5% | $8.18 | +5.6pp, p = 0.248 |
+| **2** | **46.5%** | **97.1%** | $12.09 | **+11.3pp, CI [1.4, 21.1], p = 0.033** |
+| **1** | 46.5% | 97.1% | $16.51 | +11.3pp, CI [0.0, 22.5], p = 0.059 |
+| *(old proactive default)* | 43.7% | 83.8% | $7.41 | — |
+
+**2 is the knee, and it is the default.** It matches the strongest setting exactly on
+both recall and adjusted precision while costing **27% less**, and it is the **only
+arm in this entire investigation to reach conventional significance** (p = 0.033,
+confidence interval excluding zero, 11 expectations gained against 3 lost). Going
+below 2 buys nothing at all.
+
+Against the old proactive default it is **+2.8pp recall and +13.3pp adjusted
+precision** for +63% cost.
+
+**Cost applies where it should.** Partitioning only engages above two changed files,
+so a small change is untouched. These 21 cases were selected as the *largest* in the
+benchmark (137 KB – 1.2 MB of changed source); they are the worst case for cost and
+the best case for the gain, because a large change is exactly what the unpartitioned
+reviewer served worst.
+
+**Adjusted precision is non-monotonic** across the sweep (96.2 → 93.5 → 97.1 → 97.1).
+The dip at 4 is almost certainly noise at this sample size and should not be read as
+structure.
+
+
 ## Standing caveats for reading anything here
 
 - **Variance.** sd ≈ 4.8pp on this corpus. An effect below roughly 10pp cannot be

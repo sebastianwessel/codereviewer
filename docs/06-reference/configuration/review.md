@@ -51,14 +51,25 @@ is a larger value, unsetting it, or reduced scope.
 How many changed files one discovery call may review. A task covering more is
 partitioned across several calls whose findings are unioned (spec 27).
 
-**Unset by default, meaning unlimited** — today's behaviour. It exists because
-discovery yield tracks *call count*, not defect count: a call returns roughly three
-to five candidates whether it is shown one file or forty. The spec 26 A/B measured
-identical code under identical prompts differing only in how many calls it was spread
-across, and saw 106 candidates against 75, 43.7% recall against 35.2%.
+**Default `2`, chosen by measurement.** The reviewer finds roughly one problem per
+call regardless of how much code it is shown, so how many calls a change is spread
+across is the main lever on how many defects it finds.
 
-Lower values raise recall and cost together and can lower precision. No default is
-set until the trade is measured.
+A sweep on the largest benchmark changes:
+
+| Files per call | Defects found | False alarms | Relative cost |
+| --- | --- | --- | --- |
+| No limit | lowest | very low | baseline |
+| 4 | better | low | +28% |
+| **2** (default) | **best** | **lowest** | +89% |
+| 1 | no better than 2 | lowest | +158% |
+
+Two is where the curve flattens — one file per call finds nothing extra and costs
+half as much again. Partitioning engages only above this many changed files, so
+small changes are unaffected and the cost falls on large ones.
+
+Raise it to `4` to trade some recall for roughly a third of the extra cost, or set it
+very high to disable partitioning entirely.
 
 ### `review.crossFileRetrieval`
 

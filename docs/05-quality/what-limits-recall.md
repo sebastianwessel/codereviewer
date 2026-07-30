@@ -1,8 +1,12 @@
 # What Limits Recall
 
-This engine's recall is not limited by what it can understand. It is limited by
-**how many defects it will enumerate in one file**, and the investigation that
-established that is the most consequential measurement this project has run.
+This engine's recall is not limited by what it can understand, by how much it can
+be shown, or by how good the prompt is. It is limited by **how many separate looks
+it takes at the code**.
+
+One look produces roughly one answer. Show that look a single file or forty and it
+still produces roughly one answer. So recall is governed by the number of looks, and
+almost everything else is secondary.
 
 This page is the high-level account: what the engine is reliably good at, what
 the enumeration limit is and how it was proved, what ceiling it puts on any
@@ -75,7 +79,28 @@ combined.
 
 ---
 
-## The central finding: attention follows the diff
+## The central finding, in two parts
+
+Two experiments, four days apart, found the same thing from opposite directions.
+Together they are the most consequential result this project has produced.
+
+**Part one: one look yields one answer.** A review call reports on the thing the
+change points at, and then effectively stops. It is not running out of context or
+losing concentration part-way down a file — it answers the question it was anchored
+to and does not go looking for a second, unrelated problem.
+
+**Part two: yield therefore scales with looks, not with scope.** Give the same code
+to one call or spread it across many, and the number of defects found moves with the
+number of calls — not with how much code each call was shown, and not with how many
+defects are actually present.
+
+This is the whole ballgame. It explains why bigger context windows do not help, why
+better prompts help only a little, and why the single most effective lever available
+is deciding **how the change is divided up between calls**.
+
+The two parts are evidenced below.
+
+### Part one: attention follows the diff
 
 The obvious explanation for "one defect per file" is that the reviewer reads the
 start of a file and loses attention later. A controlled experiment on
@@ -127,7 +152,50 @@ scoring judge. And some of the gap is not addressable by decomposition at all:
 in one file two missed expectations sit inside the same 25-line function, where
 no window scheme of any size separates them.
 
-Source: `reports/2026-07-27-enumeration-gap-and-improvement-plan.md` §5.2.
+### Part two: yield follows the number of looks
+
+The second half arrived by accident, which is the best way for a result to arrive.
+
+A change was made for an unrelated reason: stop dividing a change into pieces to fit
+an assumed size limit, and instead send it whole and only divide it if the model
+actually complains. The model never complained once — not on a change carrying well
+over a megabyte of source. The size limit everyone had been designing around simply
+was not there.
+
+But recall dropped sharply. Nothing about the prompt, the model, or the information
+available had changed. The only thing that changed was that the same code was now
+being reviewed in fewer, larger calls instead of more, smaller ones. Findings fell in
+direct proportion to the number of calls.
+
+A follow-up confirmed it deliberately by pushing the other way — reviewing one file
+per call — and recall rose again, past where it had been.
+
+Three points on the same curve, same code, same prompts, same model:
+
+The effect was then mapped properly, by sweeping how many files a single call is
+allowed to cover, on the largest changes in the benchmark:
+
+| Files per call | Defects found | False alarms | Relative cost |
+| --- | --- | --- | --- |
+| No limit (whole change at once) | lowest | very low | baseline |
+| 4 | better | low | +28% |
+| **2** — *the default* | **best** | **lowest** | +89% |
+| 1 | best (no better than 2) | lowest | +158% |
+
+**Two files per call is where the curve flattens.** Going further — one file per call
+— finds nothing extra and costs half as much again. This is the setting the product
+ships with, and it is the only change measured in this project whose improvement is
+strong enough to be conventionally significant rather than merely suggestive.
+
+**The lesson is not "always use more calls."** The gain flattens, and past the knee
+the extra calls are pure cost. The lesson is that the number of looks is a real,
+controllable quality dial — the only one found so far that reliably moves recall —
+and that it had previously been set *by accident*, as a side effect of a size limit
+that turned out to be imaginary.
+
+Note where the cost lands. Partitioning only kicks in on changes touching more than
+two files, so an ordinary small change is unaffected. The extra cost falls on large
+changes, which are exactly the ones the reviewer previously handled worst.
 
 ---
 
@@ -179,11 +247,25 @@ in-diff expectations in one file**, against two before the 2026-07-27 capture.
 
 ## What has been tried against it
 
-Seven structural interventions have been built. **Six were measured and failed**;
-the seventh, the context scout, was never validly measured at all. Five were
-removed outright, and the two that remain switched-on-able ship off by default with
-a recorded verdict. What has actually moved the number has been prompt-level and
-scoring-level, at a fraction of the cost.
+Eight structural approaches have been built and measured. **Six failed.** Two
+worked, and both of those were found late — one of them only after a bug was fixed
+that had been quietly spoiling its original verdict.
+
+The pattern that separates the winners from the losers is sharp, and it is the
+practical takeaway of this whole page:
+
+> **An approach helps when it changes what each look sees. It does not help when it
+> takes another look at the same thing.**
+
+Every failed approach asked the reviewer to look again — a second sweep, a different
+lens, several independent samples. Each time, the second look re-derived what the
+first one found, because the anchoring that produced the first answer had not
+changed. Every successful approach changed the material in front of a given call.
+
+This also corrects an earlier conclusion recorded here, that "framing beats
+structure." That was true of the structural approaches tried at the time, all of
+which were repeat-looks. It is not true in general: structure works, provided it
+partitions rather than repeats.
 
 ### Structural interventions
 
@@ -191,10 +273,11 @@ scoring-level, at a fraction of the cost.
 | --- | --- | --- | --- |
 | **Enumeration sweep** | Re-asked the same question, minus what was already reported, within one conversation carrying the prior findings | 30-case / 42-finding corpus, 3 seeds: **54.8%** against a **54.8%** baseline, at **+40% cost** | **Removed** — code and config keys deleted |
 | **Diverse-lens pass** | Asked a *different* question over the same packet: concurrency, asynchrony, error paths, resource lifetime, contracts, edge cases | Same corpus, 3 seeds: **54.0%** against **54.8%**, at **+47% cost** | **Removed** |
-| **Cross-file retrieval** | Gave discovery mediated repository read/list/grep tools so it could fetch other files on demand | Three measurements on the corpus built to favour it: flat at 4 cases (2.5× cost), **66.7% → 44.4%** at 9 cases, **68.8% → 56.3%** at 16. Precision stayed 100%, so the loss is recall | **Net negative.** Retained, off by default, documented as *do not enable* |
+| **Cross-file retrieval** | Let the reviewer fetch other files in the repository on demand | Originally measured **net negative** on recall three times. That verdict **did not survive re-measurement**: it was measuring a bug, not the feature — see below | **Verdict reversed.** Positive on a corpus four times larger, at slightly lower cost. Replication pending before it becomes the default |
 | **Context scout** | Separated retrieval from reasoning: a cheap call chooses which out-of-change symbol bodies to pre-fetch, deterministic code fetches them, the reviewer stays single-shot and tool-free | **None. Its only A/B is void** — run against a build that did not implement its own spec, and predating the suppression of conversation history. It has no result in either direction | **[Removed](../03-concepts/optional-capabilities/context-scout.md)** on mechanism, not on a failed measurement |
 | **Dedicated security pass** | A second, security-only discovery call per task, merged additively | 2026-07-24, full benchmark, n=1, **+61% cost**: overall recall **24.8% → 29.3%** with 22 additional confirmed-real findings, but labeled security recall **14 → 12** and authorization **8 → 6** | **Mixed.** Retained, off by default; the security-specific lift it was built for is **unproven** |
 | **Un-anchored discovery pass** | The same question at bounded units **with the diff withheld** — built directly on the attention finding above | 36-case / 80-expectation corpus, base n=6 against enabled n=3: **+0.83pp** (46.25% → 47.08%), 95% CI **[−3.13, +4.79]**, **10 expectations gained and 9 lost**, **p = 0.82**, for **+136% cost** | **Removed** |
+| **Discovery partitioning** | Divided a change across several calls by **file**, so each call reviews less and the number of looks scales with the size of the change | Clearly positive: recall rose substantially with adjusted precision holding. Cost scales with the number of calls, so the setting matters | **Kept**, with the operating point chosen by measurement rather than by feel |
 | **Independent sampling** | Ran discovery *k* times per task, blind to each other, and kept the union — no vote, no agreement threshold | Same corpus, 3 seeds per arm at *k* = 3: **+2.08pp** (46.25% → 48.33%), 95% CI **[−1.67, +6.25]**, **p = 0.56**, while adjusted precision fell **0.819 → 0.628** and genuine false positives nearly tripled, for **+67% cost**. It also measured the union ceiling it was built to harvest at **~4pp, not the assumed ~20pp** | **[Removed](../03-concepts/optional-capabilities/independent-sampling.md)** |
 
 The last row is the important one, because the diagnosis behind it was correct
@@ -272,6 +355,50 @@ this problem should start from rather than repeat.
 - **The semantic merge is load-bearing the moment discovery is widened.** At
   19.3 collapses per run, roughly nineteen restatements of already-reported
   defects would otherwise have reached the reader.
+
+---
+
+## A failure mode that cost this project several wrong verdicts
+
+More than one idea recorded here as "measured and rejected" was not really measured
+at all. What was measured was a **limit that had been set by guesswork and that
+failed quietly.**
+
+The shape is always the same, and it is worth recognising because it is almost
+invisible from the outside:
+
+1. Somewhere there is a cap — how much of a file may be read, how much text may be
+   sent, how many items may be listed.
+2. The cap is chosen defensively, without measurement, usually against a vague fear
+   of cost.
+3. When it binds, nothing fails. The work simply continues with less than it asked
+   for, and produces a **plausible** answer rather than an error.
+4. Any experiment run in that regime measures the cap, not the idea.
+
+Cross-file retrieval is the clearest casualty. It was built to let the reviewer open
+other files, measured three times, found to *reduce* recall, and shelved with a
+"do not enable" note. The real story was that files were being cut off part-way
+through and the reviewer was never told — so it was confidently concluding that
+something was missing from code it had only partly seen. Fix the disclosure, re-run
+on a larger corpus, and the result reverses.
+
+The same pattern was found five separate times across the system in a single audit.
+In every case the correction was the same, and it is now the standing rule:
+
+> **A limit must refuse loudly, never quietly do less.** If something genuinely
+> cannot be done, the run should stop and say so. Silently degrading is worse than
+> failing, because failure is visible and degradation gets written down as a result.
+
+The practical consequences:
+
+- **Treat an old negative verdict as provisional** if the feature it tested touched
+  a limit that has since been corrected. A negative result is only as trustworthy as
+  the machinery that produced it.
+- **Prefer measuring what actually happens to guessing what will.** The largest
+  single limit in this system — the assumed cap on how much a model would accept —
+  turned out not to exist at all once it was tested rather than assumed.
+- **Be equally suspicious of your own positives.** The same audit found positive
+  results that were inflated by small corpora, and those are recorded here too.
 
 ---
 

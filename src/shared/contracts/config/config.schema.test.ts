@@ -21,7 +21,10 @@ describe('CodeReviewerConfigSchema', () => {
     expect(parsed.aiReview).toEqual({
       requireRefutation: true,
       deterministicSignalMode: 'support',
-      actionableSeverityThreshold: 'medium'
+      actionableSeverityThreshold: 'medium',
+      // Measured, not chosen: a 1 / 2 / 4 / unlimited sweep put 2 level with the
+      // strongest setting on both recall and precision at 27% less cost.
+      maxFilesPerDiscoveryCall: 2
     })
     expect(parsed.promotionPolicy).toEqual({
       modelWeakOrRefuted: 'artifact-only'

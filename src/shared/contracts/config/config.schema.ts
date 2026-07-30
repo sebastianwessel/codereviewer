@@ -242,10 +242,15 @@ export const AiReviewConfigSchema = z.strictObject({
   // measured the same code, same prompts, differing only in how many calls it was
   // spread across — 106 candidates against 75, and 43.7% recall against 35.2%.
   //
-  // Unset means unlimited, which is today's behaviour. It stays the default until a
-  // value is MEASURED: shipping a chosen-by-feel limit is the exact failure this
-  // project has now corrected five times.
-  maxFilesPerDiscoveryCall: z.int().min(1).optional()
+  // Default 2, chosen by MEASUREMENT rather than by feel — a sweep of 1 / 2 / 4 /
+  // unlimited on the 21 largest benchmark cases. 2 matched the strongest setting (1)
+  // exactly on both recall and adjusted precision while costing 27% less, and it is
+  // the only arm in the sweep whose recall gain was statistically significant.
+  //
+  // Partitioning only engages above this many changed files, so a typical small
+  // change is unaffected; the cost applies to large changes, which are precisely the
+  // ones the unpartitioned reviewer served worst.
+  maxFilesPerDiscoveryCall: z.int().min(1).default(2)
 })
 
 export const PromotionPolicyConfigSchema = z.strictObject({
@@ -698,7 +703,8 @@ export const CodeReviewerConfigSchema = z.strictObject({
   aiReview: AiReviewConfigSchema.default({
     requireRefutation: true,
     deterministicSignalMode: 'support',
-    actionableSeverityThreshold: 'medium'
+    actionableSeverityThreshold: 'medium',
+    maxFilesPerDiscoveryCall: 2
   }),
   promotionPolicy: PromotionPolicyConfigSchema.default({
     modelWeakOrRefuted: 'artifact-only'
