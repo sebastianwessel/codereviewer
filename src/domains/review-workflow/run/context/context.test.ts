@@ -13,9 +13,7 @@ import {
   prepareReviewRunnerContextState,
   readChangedSourceFiles,
   reviewedDiffRangesForDiffMaps,
-  reviewedLineRangesForSourceFiles,
-  splitSourceIntoLineChunks,
-  splitTextByUtf8Bytes
+  reviewedLineRangesForSourceFiles
 } from './context.js'
 
 const createTempDir = async (): Promise<string> => {
@@ -47,49 +45,6 @@ const multiByteSource = (lineCount: number): string =>
   ).join('\n')}\n`
 
 describe('review runner context assembly', () => {
-  test('splits text on UTF-8 character boundaries', () => {
-    expect(splitTextByUtf8Bytes('a🙂b', 2)).toEqual(['a', '🙂', 'b'])
-    expect(splitTextByUtf8Bytes('', 10)).toEqual([''])
-    expect(() => splitTextByUtf8Bytes('abc', 0)).toThrow(
-      'maxBytes must be greater than 0'
-    )
-  })
-
-  test('splits source on line boundaries and records each chunk’s absolute origin', () => {
-    // Multi-byte lines: the budget counts UTF-8 bytes, the origin counts lines.
-    // The file's trailing empty line rides along in the last chunk, which is why
-    // it ends at line 4.
-    expect(splitSourceIntoLineChunks('äa\nbä\ncä\n', 4)).toEqual([
-      { content: 'äa\n', startLine: 1, endLine: 1 },
-      { content: 'bä\n', startLine: 2, endLine: 2 },
-      { content: 'cä\n', startLine: 3, endLine: 4 }
-    ])
-    // A CRLF pair is one line break, so the second chunk starts at line 2 and not
-    // at line 3.
-    expect(splitSourceIntoLineChunks('aa\r\nbb\r\n', 4)).toEqual([
-      { content: 'aa\r\n', startLine: 1, endLine: 1 },
-      { content: 'bb\r\n', startLine: 2, endLine: 3 }
-    ])
-    // A single line longer than the budget is the one case that cannot be cut on a
-    // boundary. Its pieces keep that line's number, so the continuation chunk
-    // starts at line 1 again and the line after it is still numbered 2.
-    expect(splitSourceIntoLineChunks('aaaaa\nb\n', 4)).toEqual([
-      { content: 'aaaa', startLine: 1, endLine: 1 },
-      { content: 'a\nb\n', startLine: 1, endLine: 3 }
-    ])
-    // Content that fits stays a single chunk spanning the whole file, so the file's
-    // trailing empty line is counted exactly as `sourceLineCount` counts it.
-    expect(splitSourceIntoLineChunks('one\ntwo\n', 1000)).toEqual([
-      { content: 'one\ntwo\n', startLine: 1, endLine: 3 }
-    ])
-    expect(splitSourceIntoLineChunks('', 1000)).toEqual([
-      { content: '', startLine: 1, endLine: 1 }
-    ])
-    expect(() => splitSourceIntoLineChunks('abc', 0)).toThrow(
-      'maxBytes must be greater than 0'
-    )
-  })
-
   test('reads changed source files and derives reviewed ranges', async () => {
     const root = await createTempDir()
 
@@ -318,7 +273,10 @@ describe('review runner context assembly', () => {
     }
   })
 
-  test('splits large source into multiple workflow tasks without truncating content', async () => {
+  test('assembles a large file WHOLE, however small the configured context is', async () => {
+    // Spec 26: assembly does not split on a byte budget. `contextMaxBytes` is set
+    // well below the file here, and it must make no difference — before this, the
+    // same input produced two partial tasks in place of one whole-file review.
     const config = CodeReviewerConfigSchema.parse({
       review: { contextMaxBytes: 10000 }
     })
@@ -336,11 +294,12 @@ describe('review runner context assembly', () => {
       task.reviewContext.filter((context) => context.kind === 'file')
     )
 
-    expect(fileContexts).toHaveLength(2)
-    expect(fileContexts.map((context) => context.content).join('')).toBe(
-      largeSource
-    )
-    expect(result.contextLedger.filter((entry) => entry.kind === 'file')).toHaveLength(2)
+    expect(result.tasks).toHaveLength(1)
+    expect(fileContexts).toHaveLength(1)
+    expect(fileContexts[0]?.content).toBe(largeSource)
+    expect(
+      result.contextLedger.filter((entry) => entry.kind === 'file')
+    ).toHaveLength(1)
     expect(
       result.contextLedger
         .filter((entry) => entry.kind === 'file')
@@ -348,14 +307,14 @@ describe('review runner context assembly', () => {
     ).toBe(5000)
   })
 
-  test('gives every source chunk its absolute line origin, with multi-byte content', async () => {
+  test('gives a whole-file document the file’s full line span, with multi-byte content', async () => {
+    // The span still matters after spec 26: a task the PROVIDER refuses is halved
+    // reactively, and the halves offset their line numbers from this origin. A span
+    // derived by counting bytes (or assuming one byte per character) lands on the
+    // wrong line for multi-byte content, which is why the fixture is multi-byte.
     const config = CodeReviewerConfigSchema.parse({
       review: { contextMaxBytes: 10000 }
     })
-    // The splitter budgets in UTF-8 BYTES while line numbers count LINES, so the
-    // fixture is deliberately multi-byte: a chunk origin derived by counting
-    // bytes (or by assuming one byte per character) lands on the wrong line here
-    // but would look correct on pure ASCII.
     const sourceContent = multiByteSource(200)
 
     const result = await assembleContext({
@@ -370,29 +329,9 @@ describe('review runner context assembly', () => {
       task.reviewContext.filter((context) => context.kind === 'file')
     )
 
-    expect(fileContexts.length).toBeGreaterThan(1)
-    // Chunking must remain lossless: concatenating the chunks in order restores
-    // the file byte for byte (the fingerprint anchor resolver relies on this).
-    expect(fileContexts.map((context) => context.content).join('')).toBe(
-      sourceContent
-    )
-
-    const expectedLines = sourceContent.split('\n')
-    let expectedStartLine = 1
-
-    for (const context of fileContexts) {
-      expect(context.startLine).toBe(expectedStartLine)
-      // The chunk's first line must be the file's real line at that absolute
-      // number - this is the line the reviewer is shown under that number.
-      expect(context.content.split('\n')[0]).toBe(
-        expectedLines[expectedStartLine - 1]
-      )
-      expect(context.endLine).toBeGreaterThanOrEqual(context.startLine!)
-      // Chunks are contiguous: the next one resumes on the following line.
-      expectedStartLine = context.endLine! + 1
-    }
-
-    // The chunks together cover the file exactly, ending on its last line.
-    expect(fileContexts.at(-1)?.endLine).toBe(expectedLines.length)
+    expect(fileContexts).toHaveLength(1)
+    expect(fileContexts[0]?.content).toBe(sourceContent)
+    expect(fileContexts[0]?.startLine).toBe(1)
+    expect(fileContexts[0]?.endLine).toBe(sourceContent.split('\n').length)
   })
 })

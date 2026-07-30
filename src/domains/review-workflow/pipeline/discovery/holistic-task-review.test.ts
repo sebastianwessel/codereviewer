@@ -552,11 +552,14 @@ const multiByteSource = (lineCount: number): string =>
       `const größe${index + 1} = 'Grüße 🙂 ${'ü'.repeat(30)}' // Zeile ${index + 1}`
   ).join('\n')}\n`
 
-describe('line numbering across split source chunks', () => {
-  test('numbers a second chunk with the file’s absolute lines, so its findings carry the real line', async () => {
-    const config = CodeReviewerConfigSchema.parse({
-      review: { contextMaxBytes: 10000 }
-    })
+describe('reactive splitting when the provider refuses a packet', () => {
+  test('halves a refused task and numbers the second half with the file’s absolute lines', async () => {
+    // Spec 26 end to end. Assembly sends the file WHOLE; the provider refuses it as
+    // too large; the task is halved and each half retried. The property that must
+    // survive that is line origin: the second half is rendered from its absolute
+    // start, so a finding in it carries the file's real line rather than a number
+    // counted from the start of the half.
+    const config = CodeReviewerConfigSchema.parse({})
     const sourceContent = multiByteSource(200)
     const assembled = await assembleContext({
       repositoryRoot: '/unused',
@@ -578,24 +581,13 @@ describe('line numbering across split source chunks', () => {
       ]
     })
 
-    // The file exceeds the chunk budget, so it becomes several tasks; take the
-    // SECOND one, the first whose content does not start at line 1.
-    expect(assembled.tasks.length).toBeGreaterThan(1)
-    const secondChunkTask = assembled.tasks[1] as WorkflowReviewTask
-    const secondChunk = secondChunkTask.reviewContext.find(
-      (context) => context.kind === 'file'
-    )
-    expect(secondChunk?.startLine).toBeGreaterThan(1)
-
-    // Target a line a few lines into the second chunk. Every line states its own
-    // absolute number, so the expected rendering is known independently.
-    const targetLine = secondChunk!.startLine! + 3
-    const chunkTaskInput = TaskReviewInputSchema.parse({
+    // Assembly no longer splits: one whole-file task, whatever its size.
+    expect(assembled.tasks).toHaveLength(1)
+    const wholeTask = assembled.tasks[0] as WorkflowReviewTask
+    const wholeTaskInput = TaskReviewInputSchema.parse({
       ...taskInput,
-      task: secondChunkTask,
-      reviewedDiffRanges: [
-        { path: 'src/large.ts', startLine: 1, endLine: 200 }
-      ]
+      task: wholeTask,
+      reviewedDiffRanges: [{ path: 'src/large.ts', startLine: 1, endLine: 200 }]
     })
     const largeFileWorkflowInput = ReviewWorkflowInputSchema.parse({
       runId: 'run-holistic',
@@ -613,41 +605,83 @@ describe('line numbering across split source chunks', () => {
       }
     })
 
-    let captured = ''
+    // A line comfortably inside the SECOND half of the file.
+    const targetLine = 150
+    const seen: string[] = []
     const result = await runModelBackedHolisticTaskReview({
       workflowInput: largeFileWorkflowInput,
-      taskInput: chunkTaskInput,
-      task: secondChunkTask,
+      taskInput: wholeTaskInput,
+      task: wholeTask,
       runners: {
-        // Stands in for the model: it reports the line number the document showed
-        // it for the target source line, which is exactly how a real model
-        // derives the location it reports.
+        // Refuses the first, whole packet exactly the way the harness reports a
+        // provider context overflow — a normalised `reason`, never message text.
+        // Then behaves like a model on each half: it reports the line number the
+        // document actually showed it.
         holisticReview: async (holisticInput) => {
-          captured = holisticInput.reviewText
+          seen.push(holisticInput.reviewText)
+
+          if (seen.length === 1) {
+            throw Object.assign(
+              new Error('provider rejected the request'),
+              { reason: 'context_length_exceeded' }
+            )
+          }
+
           const shown = new RegExp(
             `^(\\d+): const größe${targetLine} =`,
             'mu'
           ).exec(holisticInput.reviewText)
 
-          return holisticResultWith([
-            {
-              category: 'bug',
-              severity: 'high',
-              title: 'Defect in the second chunk of a large file',
-              description: 'Reported at the line number the document showed.',
-              path: 'src/large.ts',
-              startLine: Number(shown?.[1] ?? 0)
-            }
-          ])
+          return holisticResultWith(
+            shown === null
+              ? []
+              : [
+                  {
+                    category: 'bug',
+                    severity: 'high',
+                    title: 'Defect in the second half of a large file',
+                    description: 'Reported at the line number the document showed.',
+                    path: 'src/large.ts',
+                    startLine: Number(shown[1])
+                  }
+                ]
+          )
         }
       },
       logger: { debug: () => {} }
     })
 
-    // The rendered document numbers the chunk from its absolute origin, not from
-    // 1, so the number the model reads back is the file's real line.
-    expect(captured).toContain(`${targetLine}: const größe${targetLine} =`)
+    // One refused packet, then two halves.
+    expect(seen).toHaveLength(3)
+    // Exactly one half contains the target line, and it renders it at its ABSOLUTE
+    // number — not at the number it would have if the half were numbered from 1.
+    const halvesShowingTarget = seen
+      .slice(1)
+      .filter((text) => text.includes(`${targetLine}: const größe${targetLine} =`))
+
+    expect(halvesShowingTarget).toHaveLength(1)
+    expect(result.candidates).toHaveLength(1)
     expect(result.candidates[0]?.location.startLine).toBe(targetLine)
+  })
+
+  test('a task that cannot be split further fails loudly instead of recursing', async () => {
+    // The terminal case spec 26 requires: bounded by DEPTH, and a refusal rather
+    // than a truncation or a silently dropped task.
+    await expect(
+      runModelBackedHolisticTaskReview({
+        workflowInput,
+        taskInput,
+        task,
+        runners: {
+          holisticReview: async () => {
+            throw Object.assign(new Error('provider rejected the request'), {
+              reason: 'context_length_exceeded'
+            })
+          }
+        },
+        logger: { debug: () => {} }
+      })
+    ).rejects.toThrow(/cannot be split further/u)
   })
 })
 

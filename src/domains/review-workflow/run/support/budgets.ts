@@ -1,33 +1,32 @@
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
 import type { ContextRetrievalBudget } from '../../../context-retrieval/index.js'
 
-const defaultContextBudgetsByDepth = {
-  fast: {
-    maxFiles: 50,
-    maxBytes: 100000
-  },
-  balanced: {
-    maxFiles: 200,
-    maxBytes: 200000
-  },
-  thorough: {
-    maxFiles: 500,
-    maxBytes: 500000
-  }
-} as const
-
-// Per-depth provider context caps: depth makes a meaningful difference so that
-// thorough reviews send substantially more source per task than fast ones.
+// Per-depth caps for BOUNDED CROSS-FILE READS (spec 16), the only thing these still
+// size. They no longer bound the review packet: spec 26 removed proactive splitting,
+// so how much source a task sends is decided by the provider, not by depth.
 const providerTaskContextMaxBytesByDepth = {
   fast: 60_000,
   balanced: 120_000,
   thorough: 240_000
 } as const
 
-// Hard ceiling on how many bytes a single model-input packet may contain
-// (context + metadata overhead). Kept above the largest per-depth context cap
-// so it never becomes the binding constraint at thorough depth.
-const defaultProviderTaskInputMaxBytes = 360_000
+// A RUNAWAY GUARD on a single model-input packet, not a context ration.
+//
+// Spec 26 makes the PROVIDER the only authority on how large a packet may be: the
+// change is sent whole and split only if the provider refuses it. A local ceiling
+// sized anywhere near a real context window would break that outright — it would
+// refuse before the provider was ever asked, and a guessed local value would be the
+// authority again, which is the exact failure spec 26 exists to remove.
+//
+// So this is deliberately set far beyond any current model: roughly 1M tokens is on
+// the order of 4MB of text, and this is about 2M tokens' worth. Nothing a real change
+// produces comes near it. What it still does is stop a pathological input from being
+// serialized into memory, and it REFUSES rather than truncating when it binds — the
+// property spec 26 requires it to keep.
+//
+// It sits just under the contract's own `maxTaskInputBytes` bound (10MB), which is
+// the outer limit an explicit configuration may request.
+const defaultProviderTaskInputMaxBytes = 8_000_000
 
 // Per-depth context-retrieval caps. Holistic discovery does not run an
 // investigation loop, but the workflow still exposes a bounded context retriever;
@@ -41,15 +40,6 @@ const defaultContextRetrievalCapsByDepth = {
 export type AiReviewRuntimeBudget = {
   readonly contextRetrievalBudget: ContextRetrievalBudget
 }
-
-export const contextBudgetFor = (config: CodeReviewerConfig): number =>
-  config.review.contextMaxBytes ??
-  (config.provider === undefined
-    ? defaultContextBudgetsByDepth[config.review.depth].maxBytes
-    : Math.min(
-        defaultContextBudgetsByDepth[config.review.depth].maxBytes,
-        providerTaskContextMaxBytesByDepth[config.review.depth]
-      ))
 
 export const taskInputBudgetFor = (
   config: CodeReviewerConfig
@@ -87,10 +77,3 @@ export const aiReviewBudgetFor = (
   }
 }
 
-export const sourceChunkBudgetFor = (config: CodeReviewerConfig): number => {
-  const contextBudget = contextBudgetFor(config)
-  const providerBudget = taskInputBudgetFor(config)
-  const packetBudget = providerBudget ?? contextBudget
-
-  return Math.max(1024, Math.floor(Math.min(contextBudget, packetBudget) * 0.45))
-}

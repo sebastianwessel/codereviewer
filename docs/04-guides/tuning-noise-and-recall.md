@@ -106,15 +106,16 @@ just noise.
 Depth sets byte budgets and shapes task planning. It does not change which
 files are reviewed.
 
-| Depth | Task planning | Context budget per run | Provider context per task | Retrieval caps (reads / searches / matches / traversal depth) |
-| --- | --- | --- | --- | --- |
-| `fast` | One task per changed file | 100 000 bytes | 60 000 bytes | 200 / 100 / 50 / 4 |
-| `balanced` (default) | Import-connected files clustered into one task, at most 8 paths per task | 200 000 bytes | 120 000 bytes | 1 200 / 600 / 150 / 8 |
-| `thorough` | Same clustering as `balanced` | 500 000 bytes | 240 000 bytes | 4 800 / 2 400 / 320 / 12 |
+| Depth | Task planning | Cross-file retrieval caps (reads / searches / matches / traversal depth / bytes per read) |
+| --- | --- | --- |
+| `fast` | One task per changed file | 200 / 100 / 50 / 4 / 60 000 B |
+| `balanced` (default) | Import-connected files clustered into one task, at most 8 paths per task | 1 200 / 600 / 150 / 8 / 120 000 B |
+| `thorough` | Same clustering as `balanced` | 4 800 / 2 400 / 320 / 12 / 240 000 B |
 
-A single model-input packet is additionally capped at 360 000 bytes.
-`review.contextMaxBytes` overrides the per-run context budget when set (it is
-still clamped by the per-depth provider cap).
+Depth no longer bounds the review packet. The change is sent whole, and split only
+if the provider refuses it as too large; a single serialized packet is capped at
+8 MB as a runaway guard. `review.contextMaxBytes` lowers that ceiling when set —
+leave it unset unless you have a specific reason.
 
 `fast` is not simply "cheaper": one task per file means more provider calls for
 the same change, each with less context. `balanced` and `thorough` differ only

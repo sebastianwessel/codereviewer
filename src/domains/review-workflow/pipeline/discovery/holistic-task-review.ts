@@ -262,15 +262,15 @@ export const runModelBackedHolisticTaskReview = async (
   const candidatesById = new Map<string, CandidateFinding>()
   const rawDiff = input.workflowInput.reviewedDiffText
 
-  const reviewText = buildReviewText(input.taskInput, rawDiff)
-
-  const general = await runDiscoveryCall(
-    input.runners.holisticReview,
-    input.task,
-    reviewText,
-    input.signal,
-    'holistic_review'
-  )
+  const general = await runDiscoveryCall({
+    runner: input.runners.holisticReview,
+    taskInput: input.taskInput,
+    // Rebuilt per task rather than prebuilt, so a task the provider refuses can be
+    // halved and each half prompted from its OWN context (spec 26).
+    buildText: (taskInput) => buildReviewText(taskInput, rawDiff),
+    signal: input.signal,
+    stage: 'holistic_review'
+  })
   const providerIssues: ProviderIssue[] = [...general.providerIssues]
   const generalCollected = collectCandidates({
     findings: general.findings,
@@ -284,19 +284,21 @@ export const runModelBackedHolisticTaskReview = async (
   const generalCandidateCount = candidatesById.size
 
   let securityFindingCount = 0
+  let securitySplitCount = 0
   if (input.workflowInput.securityPassEnabled) {
     const generalLocations = new Set(
       [...candidatesById.values()].map(locationKey)
     )
-    const security = await runDiscoveryCall(
-      input.runners.holisticReview,
-      input.task,
-      buildSecurityReviewText(input.taskInput, rawDiff),
-      input.signal,
-      'holistic_review_security'
-    )
+    const security = await runDiscoveryCall({
+      runner: input.runners.holisticReview,
+      taskInput: input.taskInput,
+      buildText: (taskInput) => buildSecurityReviewText(taskInput, rawDiff),
+      signal: input.signal,
+      stage: 'holistic_review_security'
+    })
     providerIssues.push(...security.providerIssues)
     securityFindingCount = security.findings.length
+    securitySplitCount = security.splitCount
     const securityCollected = collectCandidates({
       findings: security.findings,
       task: input.task,
@@ -335,6 +337,12 @@ export const runModelBackedHolisticTaskReview = async (
     finding_count: general.findings.length,
     security_pass_enabled: input.workflowInput.securityPassEnabled,
     security_finding_count: securityFindingCount,
+    // Spec 26: how many times the provider refused a packet and it was halved.
+    // Named apart from transient retry on purpose — an oversize split and a rate-
+    // limit retry have different causes and different meanings, and one counter for
+    // both would hide which was happening.
+    context_overflow_split_count:
+      general.splitCount + securitySplitCount,
     general_candidate_count: generalCandidateCount,
     suppressed_by_location_count: suppressedByLocationCount,
     suppressed_by_id_count: suppressedByIdCount,

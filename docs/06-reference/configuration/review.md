@@ -16,23 +16,35 @@ Read the [strict-object rule and precedence](./README.md) first. Nesting matters
 | `review.maxConcurrentTasks` | integer 1–32 | `4` | Caps concurrently active review tasks and provider calls. |
 | `review.maxFiles` | integer 1–10000 | `500` | Intake hard cap; files beyond it are skipped with reason `too-many-files`. |
 | `review.maxFileBytes` | integer 1–5000000 | `500000` | Files larger than this are skipped with reason `too-large`. |
-| `review.contextMaxBytes` | integer 10000–10000000 | *unset* | Per-packet model-bound context budget. When unset, resolved from `depth` (see below). An explicit value overrides the depth-scaled safety default. |
+| `review.contextMaxBytes` | integer 10000–10000000 | *unset* | Lowers the packet ceiling and the cross-file per-read cap. **Leave it unset**: the provider then decides whether a packet is too large (see below). |
 | `review.inlineSeverityThreshold` | severity | `"high"` | Minimum severity for a finding to be eligible for inline presentation. Reporting only — it does not affect admission or the gate. |
 | `review.maxCostUsd` | number ≥ 0 | *unset* | Hard stop when the accumulated run cost exceeds it (`cost_budget_exceeded`, exit `1`). Enforced **only** when token counts and prices are both available; otherwise the run records the warning `cost-unavailable` and no cap applies. When unset, no cost cap is enforced at all. |
 | `review.runTimeoutMs` | integer 10000–7200000 | *unset* | Whole-run timeout (`review_run_timeout`, exit `4`). When unset, no run-level timeout is imposed; individual provider calls still use [`provider.timeoutMs`](./provider.md). |
 
-### Effective `contextMaxBytes` when unset
+### What `contextMaxBytes` does when unset
 
-| `depth` | No provider configured | Provider configured |
-| --- | --- | --- |
-| `fast` | 100 000 | 60 000 |
-| `balanced` | 200 000 | 120 000 |
-| `thorough` | 500 000 | 240 000 |
+Nothing bounds the review packet in advance. The change is sent whole, and is split
+only if the **provider** refuses it as exceeding its context length — then the task
+is halved and each half retried (spec 26). This is the recommended setting: a byte
+budget chosen ahead of time is a guess about tokens, and the guess costs recall by
+substituting several partial reviews for one whole-file review.
 
-A serialized model-input packet is additionally capped at 360 000 bytes. The
-guard fails **before** the provider call (`task_packet_budget_exceeded`, exit
-`4`) rather than truncating source: recovery is task splitting, a larger budget,
-or reduced scope.
+A serialized model-input packet is still capped at 8 MB — roughly 2M tokens, far
+beyond any current model. That guard exists to stop a pathological packet being
+serialized into memory; it fails **before** the provider call
+(`task_packet_budget_exceeded`, exit `4`) rather than truncating source.
+
+When you **do** set `contextMaxBytes`, it lowers that ceiling, and it also caps
+`maxBytesPerRead` for cross-file retrieval:
+
+| `depth` | Cross-file `maxBytesPerRead` when unset |
+| --- | --- |
+| `fast` | 60 000 |
+| `balanced` | 120 000 |
+| `thorough` | 240 000 |
+
+If the lowered ceiling binds, the run stops loudly rather than truncating: recovery
+is a larger value, unsetting it, or reduced scope.
 
 ### `review.crossFileRetrieval`
 

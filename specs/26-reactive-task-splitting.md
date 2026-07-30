@@ -1,6 +1,6 @@
 # 26: Reactive Task Splitting
 
-Status: **Draft — awaiting human approval**
+Status: **Approved** (human, 2026-08-01)
 Date: 2026-08-01
 
 ## Purpose
@@ -118,6 +118,24 @@ Pre-registered, before any run:
 - A recall gain here is the *expected* direction, because it replaces a worse review
   mode with a better one on changes that never needed splitting. That expectation is
   a prediction and MUST NOT be reported as a result.
+
+## Amendment: The Hard Packet Ceiling Had To Be Re-Sized
+
+Implementation surfaced a conflict this spec did not anticipate. The requirement
+"the existing hard packet ceiling MUST remain a refusal" was written about its
+BEHAVIOUR, but the ceiling's VALUE (360 KB) was chosen back when assembly pre-split
+everything below it. Once assembly stops splitting, a 360 KB local ceiling refuses
+before the provider is ever asked — so a guessed local value would be the authority
+again, which is precisely what this spec exists to remove.
+
+The ceiling therefore keeps its behaviour and loses its ration. It is now
+**8 MB** — roughly 2M tokens against context windows of 200k to over 1M — which
+makes it a runaway guard on serializing a pathological packet into memory, not a
+limit on how much review may be sent. It still REFUSES rather than truncates.
+
+An explicitly configured `review.contextMaxBytes` still binds, because that is a
+deliberate operator choice rather than a default nobody selected. When it binds, the
+run stops loudly with an actionable message.
 
 ## Risk
 

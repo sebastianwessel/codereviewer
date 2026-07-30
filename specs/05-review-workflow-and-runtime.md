@@ -142,13 +142,17 @@ Task limits:
   rather than sent as one oversized worker packet;
 - per-task source, deterministic signal, instruction, and metadata packet must fit the
   configured model-bound task input budget before a provider call starts;
-- workflow context assembly must split source into exact included chunks when a
-  file or dependency cluster cannot fit in one packet. Large files and large
-  dependency clusters create more review tasks; they must not create skipped or
-  truncated required source;
+- workflow context assembly must NOT split source on a byte budget (spec 26,
+  approved 2026-08-01, supersedes the proactive-splitting requirement that stood
+  here). A change is one task unless the PROVIDER refuses the packet as exceeding
+  its context length, in which case the task is halved and each half retried. Large
+  files and large dependency clusters must never create skipped or truncated
+  required source;
 - every source chunk must carry the absolute line range it occupies in its file,
-  and chunks must be cut on line boundaries (a single line longer than the chunk
-  budget is the only exception and keeps one line number across its pieces).
+  and chunks must be cut on line boundaries (a single line longer than the split
+  size is the only exception and keeps one line number across its pieces). This
+  requirement is UNCHANGED by spec 26 and applies to reactively split halves
+  exactly as it applied to proactively cut chunks.
   Discovery must number a chunk's lines from that absolute origin, so a finding
   in the second chunk of a split file reports the file's real line and not a
   chunk-relative one. Chunk-relative numbering is a correctness defect, not a

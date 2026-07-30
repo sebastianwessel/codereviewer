@@ -48,8 +48,7 @@ const emptyAssembledContext: ContextAssemblyResult = {
   skills: [],
   skillDefinitions: {},
   skillIds: [],
-  contextLedger: [],
-      chunkedFileCount: 0
+  contextLedger: []
 }
 
 describe('prepareReviewRunnerChangeIntentContext — model summarizer availability', () => {

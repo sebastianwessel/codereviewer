@@ -7,6 +7,7 @@ import { utf8ByteLength } from '../../../../shared/text/utf8-bytes.js'
 import { uniqueSorted } from '../../../../shared/text/unique-sorted.js'
 import {
   reviewedLineRangeForContent,
+  sourceLineCount,
   type ReviewedDiffRange,
   type ReviewedLineRange
 } from '../../../admission/index.js'
@@ -23,7 +24,6 @@ import {
 import type { DiffMap } from '../../../repository-intake/index.js'
 import type { SkillsConfig } from '@purista/harness'
 import type { ReviewWorkflowInput } from '../../harness/workflow.js'
-import { sourceChunkBudgetFor } from '../support/budgets.js'
 import {
   provenanceHashesFromContextLedger,
   type ReviewRunnerProvenanceHashes
@@ -54,20 +54,6 @@ export type ContextAssemblyResult = {
   readonly skillDefinitions: SkillsConfig
   readonly skillIds: readonly string[]
   readonly contextLedger: readonly ContextLedgerEntry[]
-  // Changed files whose content did not fit one task's context budget and were
-  // reviewed as several chunks instead of whole.
-  //
-  // Reported because it is a SILENT QUALITY CHANGE, not a silent wrong answer:
-  // every line is still reviewed, but not in one piece, and this project measured
-  // whole-file holistic review as out-recalling the chunked alternative. Nothing
-  // anywhere said when that substitution happened.
-  //
-  // It is not rare. Measured over this repository's last 60 commits, the total
-  // changed-file bytes exceed the DEFAULT balanced budget (120KB) on 37% of them,
-  // and the fast budget on 52%. The budgets are sized well below what current
-  // models accept — 240KB is roughly 60k tokens against context windows of 200k to
-  // over 1M — so the substitution is driven by a limit, not by a model constraint.
-  readonly chunkedFileCount: number
 }
 
 export type ReviewRunnerContextStateMetrics = {
@@ -132,138 +118,6 @@ export const reviewedDiffRangesForDiffMaps = (
         changeKind: diffMap.changeKind
       }))
   )
-
-export const splitTextByUtf8Bytes = (
-  content: string,
-  maxBytes: number
-): readonly string[] => {
-  if (maxBytes < 1) {
-    throw new TypeError('maxBytes must be greater than 0.')
-  }
-
-  if (content.length === 0) {
-    return ['']
-  }
-
-  const chunks: string[] = []
-  let current = ''
-  let currentBytes = 0
-
-  for (const character of content) {
-    const characterBytes = utf8ByteLength(character)
-
-    if (currentBytes > 0 && currentBytes + characterBytes > maxBytes) {
-      chunks.push(current)
-      current = ''
-      currentBytes = 0
-    }
-
-    current += character
-    currentBytes += characterBytes
-  }
-
-  if (current.length > 0 || chunks.length === 0) {
-    chunks.push(current)
-  }
-
-  return chunks
-}
-
-// One source chunk plus the absolute line span it occupies in the original file.
-// The span is what makes a chunk reviewable on its own: discovery renders the
-// chunk as a line-numbered document and admission checks the reported location
-// against the lines the chunk actually contained.
-export type SourceLineChunk = {
-  readonly content: string
-  readonly startLine: number
-  readonly endLine: number
-}
-
-// Split content into line units that KEEP their terminator, so concatenating the
-// units restores the input byte for byte. A file ending in a newline yields a
-// final empty unit, which is the same trailing line `sourceLineCount` counts;
-// keeping it makes the last chunk's `endLine` equal the file's line count.
-const lineUnits = (content: string): readonly string[] => {
-  const units: string[] = []
-  let current = ''
-
-  for (let index = 0; index < content.length; index += 1) {
-    const character = content[index] as string
-
-    current += character
-
-    // A CR is only a line break when it does not start a CRLF pair; otherwise the
-    // pair would be counted as two lines and every following number would shift.
-    if (
-      character === '\n' ||
-      (character === '\r' && content[index + 1] !== '\n')
-    ) {
-      units.push(current)
-      current = ''
-    }
-  }
-
-  units.push(current)
-
-  return units
-}
-
-/**
- * Split source into byte-bounded chunks that each know where they start in the
- * original file.
- *
- * Chunks are cut on line boundaries so a chunk's first line is a whole line of
- * the file: discovery numbers a chunk's lines from `startLine`, and a cut in the
- * middle of a line would make every number after it ambiguous. A single line
- * longer than the budget cannot be cut on a boundary, so it is split by bytes and
- * every piece keeps that same line number, which leaves the lines after it
- * correctly numbered.
- *
- * Splitting stays lossless: concatenating the chunks of a path in order restores
- * the file, which the fingerprint anchor resolver depends on.
- */
-export const splitSourceIntoLineChunks = (
-  content: string,
-  maxBytes: number
-): readonly SourceLineChunk[] => {
-  if (maxBytes < 1) {
-    throw new TypeError('maxBytes must be greater than 0.')
-  }
-
-  const chunks: SourceLineChunk[] = []
-  let current = ''
-  let currentBytes = 0
-  let startLine = 1
-  let endLine = 1
-
-  for (const [index, unit] of lineUnits(content).entries()) {
-    const lineNumber = index + 1
-
-    for (const piece of splitTextByUtf8Bytes(unit, maxBytes)) {
-      const pieceBytes = utf8ByteLength(piece)
-
-      if (currentBytes > 0 && currentBytes + pieceBytes > maxBytes) {
-        chunks.push({ content: current, startLine, endLine })
-        current = ''
-        currentBytes = 0
-        startLine = lineNumber
-      }
-
-      current += piece
-      currentBytes += pieceBytes
-      endLine = lineNumber
-    }
-  }
-
-  if (current.length > 0 || chunks.length === 0) {
-    chunks.push({ content: current, startLine, endLine })
-  }
-
-  return chunks
-}
-
-const contextBytes = (contexts: readonly ContextInput[]): number =>
-  contexts.reduce((total, context) => total + utf8ByteLength(context.content), 0)
 
 const workflowTaskPaths = (
   contexts: readonly ContextInput[],
@@ -398,8 +252,6 @@ export const assembleContext = async (
         ).slice(0, 16)}`
 
   const tasks: WorkflowReviewTask[] = []
-  const chunkedFilePaths = new Set<string>()
-  const chunkBudget = sourceChunkBudgetFor(input.config)
   const testMappings = discoverDeterministicSignalTestMappings(input.sourceFiles)
   // Every changed/source file path: referenced-definition resolution must never
   // surface one of these (they are reviewed directly, not injected as context).
@@ -436,41 +288,12 @@ export const assembleContext = async (
 
     return utf8ByteLength(supportSignalContext) === 0
       ? []
-      : splitTextByUtf8Bytes(supportSignalContext, chunkBudget).map((chunk) => ({
-          kind: 'support-signal-output' as const,
-          content: chunk
-        }))
-  }
-
-  const packContexts = (
-    contexts: readonly ContextInput[]
-  ): readonly (readonly ContextInput[])[] => {
-    const batches: ContextInput[][] = []
-    let pending: ContextInput[] = []
-    let pendingBytes = 0
-
-    const flush = (): void => {
-      if (pending.length > 0) {
-        batches.push(pending)
-        pending = []
-        pendingBytes = 0
-      }
-    }
-
-    for (const context of contexts) {
-      const currentBytes = utf8ByteLength(context.content)
-
-      if (pending.length > 0 && pendingBytes + currentBytes > chunkBudget) {
-        flush()
-      }
-
-      pending.push(context)
-      pendingBytes += currentBytes
-    }
-
-    flush()
-
-    return batches
+      : [
+          {
+            kind: 'support-signal-output' as const,
+            content: supportSignalContext
+          }
+        ]
   }
 
   for (const task of input.tasks) {
@@ -478,70 +301,35 @@ export const assembleContext = async (
     const taskSourceFiles = input.sourceFiles.filter((sourceFile) =>
       taskPathSet.has(sourceFile.path)
     )
-    // Each chunk carries its absolute line span so the task built from it can be
-    // reviewed and admitted against the file's real line numbers rather than
-    // numbers counted from the start of the chunk.
-    const sourceContexts = taskSourceFiles.flatMap((file) => {
-      const chunks = splitSourceIntoLineChunks(file.content, chunkBudget)
-
-      if (chunks.length > 1) {
-        chunkedFilePaths.add(file.path)
-      }
-
-      return chunks.map((chunk) => ({
-        kind: 'file' as const,
-        path: file.path,
-        content: chunk.content,
-        startLine: chunk.startLine,
-        endLine: chunk.endLine
-      }))
-    })
-    const batches: ContextInput[][] = []
-    const supportSignalAttachedPaths = new Set<string>()
-
-    for (const batch of packContexts(sourceContexts)) {
-      const batchPaths = workflowTaskPaths(batch, task.paths)
-      const newSupportSignalPaths = batchPaths.filter(
-        (pathValue) => !supportSignalAttachedPaths.has(pathValue)
-      )
-      const supportSignalContexts = supportSignalContextsForPaths(
+    // Spec 26: assembly does NOT split. Each changed file is ONE document spanning
+    // the whole file, and the task is ONE batch, however large it comes out. The
+    // span is still recorded because a document that the PROVIDER later refuses is
+    // split reactively into pieces that must keep the file's real line numbers.
+    //
+    // What this replaces was a byte budget guessed in advance, and it was wrong in
+    // both directions at once: bytes are a poor proxy for tokens, so the guess erred
+    // by a content-dependent factor, and the value was small enough to fire on 37%
+    // of this repository's last 60 commits against context windows one to two orders
+    // of magnitude larger. Every one of those splits substituted several partial
+    // reviews for the whole-file holistic review this project MEASURED as better,
+    // and charged an extra discovery-plus-refutation pair for the privilege.
+    const sourceContexts = taskSourceFiles.map((file) => ({
+      kind: 'file' as const,
+      path: file.path,
+      content: file.content,
+      startLine: 1,
+      endLine: Math.max(1, sourceLineCount(file.content))
+    }))
+    const batch: ContextInput[] = [
+      ...sourceContexts,
+      ...supportSignalContextsForPaths(
         task,
-        new Set(newSupportSignalPaths)
+        sourceContexts.length === 0
+          ? taskPathSet
+          : new Set(workflowTaskPaths(sourceContexts, task.paths))
       )
-      const packedBatch = [...batch]
-      const standaloneSupportSignalContexts: ContextInput[] = []
-      let packedBytes = contextBytes(packedBatch)
-
-      for (const supportSignalContext of supportSignalContexts) {
-        const supportSignalBytes = utf8ByteLength(supportSignalContext.content)
-
-        if (packedBytes + supportSignalBytes <= chunkBudget) {
-          packedBatch.push(supportSignalContext)
-          packedBytes += supportSignalBytes
-        } else {
-          standaloneSupportSignalContexts.push(supportSignalContext)
-        }
-      }
-
-      batches.push(packedBatch)
-      batches.push(
-        ...packContexts(standaloneSupportSignalContexts).map((contextBatch) => [
-          ...contextBatch
-        ])
-      )
-
-      for (const pathValue of newSupportSignalPaths) {
-        supportSignalAttachedPaths.add(pathValue)
-      }
-    }
-
-    if (sourceContexts.length === 0) {
-      batches.push(
-        ...packContexts(supportSignalContextsForPaths(task, taskPathSet)).map(
-          (contextBatch) => [...contextBatch]
-        )
-      )
-    }
+    ]
+    const batches: ContextInput[][] = batch.length === 0 ? [] : [batch]
 
     // R4: collect bounded referenced-definition digests for unchanged files the
     // task's changed files import (relative imports only). Context only — these
@@ -596,8 +384,7 @@ export const assembleContext = async (
     skills: staticContext.skills,
     skillDefinitions: staticContext.skillDefinitions,
     skillIds: staticContext.skillIds,
-    contextLedger,
-    chunkedFileCount: chunkedFilePaths.size
+    contextLedger
   }
 }
 

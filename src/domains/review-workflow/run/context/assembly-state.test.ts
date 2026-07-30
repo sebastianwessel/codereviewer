@@ -96,8 +96,7 @@ describe('review runner context assembly state', () => {
         skills: [],
         skillDefinitions: {},
         skillIds: [],
-        contextLedger: [],
-      chunkedFileCount: 0
+        contextLedger: []
       },
       instructionHashes: ['instruction-hash'],
       skillHashes: ['skill-hash'],

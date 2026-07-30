@@ -2979,7 +2979,7 @@ describe('review workflow', () => {
     }
   })
 
-  test('runner applies provider-aware default task context budget', async () => {
+  test('runner sends a large file WHOLE, in one request, with nothing truncated', async () => {
     const root = join(tmpdir(), `codereviewer-provider-budget-${crypto.randomUUID()}`)
     const provider = new EmptyFindingProvider()
 
@@ -3040,7 +3040,11 @@ describe('review workflow', () => {
           .filter((entry) => entry.reason === 'task-context-source-chunk')
           .reduce((total, entry) => total + entry.bytesIncluded, 0)
       ).toBe(result.report.coverage.reviewableBytes)
-      expect(provider.requests.length).toBeGreaterThan(1)
+      // Spec 26: ~120KB of source, formerly chunked into several partial reviews by
+      // a guessed 120KB balanced budget, is now ONE whole-file review. The tail still
+      // reaches the provider — the point was never truncation, it was that the file
+      // arrived in pieces.
+      expect(provider.requests).toHaveLength(1)
       expect(JSON.stringify(provider.requests)).toContain(
         'tail-marker-should-not-reach-provider'
       )
@@ -3049,7 +3053,7 @@ describe('review workflow', () => {
     }
   })
 
-  test('runner batches full-scope provider review into compact task packets', async () => {
+  test('runner clusters many files into tasks by planning, not by byte budget', async () => {
     const root = join(tmpdir(), `codereviewer-provider-batch-${crypto.randomUUID()}`)
     const provider = new EmptyFindingProvider()
 
@@ -3073,8 +3077,7 @@ describe('review workflow', () => {
           maxRetries: 0
         },
         review: {
-          depth: 'balanced',
-          contextMaxBytes: 10000
+          depth: 'balanced'
         },
         aiReview: {
         },
@@ -3104,8 +3107,9 @@ describe('review workflow', () => {
         reviewableFileCount: 24,
         coveredFileCount: 24
       })
-      expect(provider.requests.length).toBeLessThan(24)
-      expect(provider.requests.length).toBeGreaterThan(1)
+      // How many requests there are is now decided by TASK PLANNING (how files
+      // cluster), never by a byte budget. Every file is still covered exactly once.
+      expect(provider.requests.length).toBeLessThanOrEqual(24)
       expect(
         result.contextLedger.filter(
           (entry) => entry.reason === 'task-context-source-chunk'
@@ -3128,7 +3132,13 @@ describe('review workflow', () => {
     }
   })
 
-  test('runner splits large provider task packets instead of trimming them', async () => {
+  test('an explicit packet ceiling REFUSES a too-large task rather than trimming it', async () => {
+    // Spec 26 keeps the hard packet ceiling as a REFUSAL. What changed is who
+    // normally decides: the default ceiling now sits far beyond any model, so the
+    // provider is the authority. An operator who sets an explicit ceiling is making
+    // a deliberate choice, and when it binds the run stops loudly with an actionable
+    // message — it does NOT truncate the packet and it does NOT silently substitute
+    // several partial reviews for the whole-file one.
     const root = join(tmpdir(), `codereviewer-packet-ledger-${crypto.randomUUID()}`)
     const provider = new EmptyFindingProvider()
 
@@ -3156,40 +3166,24 @@ describe('review workflow', () => {
         }
       })
 
-      const result = await runReview({
-        repositoryRoot: root,
-        config,
-        explicitFiles: ['src/large.ts'],
-        environment: {
-          OPENAI_API_KEY: 'sk-proj-secret-value'
-        },
-        runId: 'run-packet-ledger',
-        now: () => new Date('2026-06-20T00:00:00.000Z'),
-        providerImport: async () => ({
-          openai: () => provider
+      await expect(
+        runReview({
+          repositoryRoot: root,
+          config,
+          explicitFiles: ['src/large.ts'],
+          environment: {
+            OPENAI_API_KEY: 'sk-proj-secret-value'
+          },
+          runId: 'run-packet-ledger',
+          now: () => new Date('2026-06-20T00:00:00.000Z'),
+          providerImport: async () => ({
+            openai: () => provider
+          })
         })
-      })
+      ).rejects.toThrow(/was not truncated/u)
 
-      expect(result.report.run.warnings).toEqual(['cost-unavailable'])
-      expect(result.report.coverage.status).toBe('complete')
-      const taskContextEntry = result.contextLedger.find(
-        (entry) =>
-          entry.path === 'src/large.ts' &&
-          entry.reason === 'task-context-source-chunk'
-      )
-
-      expect(taskContextEntry).toEqual(
-        expect.objectContaining({
-          decision: 'included'
-        })
-      )
-      expect(
-        result.contextLedger
-          .filter((entry) => entry.reason === 'task-context-source-chunk')
-          .reduce((total, entry) => total + entry.bytesIncluded, 0)
-      ).toBe(result.report.coverage.reviewableBytes)
-      expect(provider.requests.length).toBeGreaterThan(1)
-      expect(JSON.stringify(provider.requests)).toContain('packet-tail-marker')
+      // The refusal happens before anything is sent: no partial review was issued.
+      expect(provider.requests).toHaveLength(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

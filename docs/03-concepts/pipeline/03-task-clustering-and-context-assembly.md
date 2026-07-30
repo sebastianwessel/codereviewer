@@ -48,38 +48,57 @@ bounded `reviewContext`. What goes in:
 | Section | Source | Notes |
 | --- | --- | --- |
 | Diff | Per-path segments of the raw unified diff | Falls back to reviewed line ranges when no raw diff exists (for example `--files` runs) |
-| Changed files | Full file content, line-numbered | Chunked when a file exceeds the chunk budget |
+| Changed files | Full file content, line-numbered | Sent WHOLE; split only if the provider refuses the packet |
 | Support-signal output | Serialized facts + test mappings | Only when `aiReview.deterministicSignalMode: 'support'` |
 | Referenced definitions | Bounded digests of imported, **unchanged** files | Context only — never review targets |
 | Change intent | External ticket/PR brief | Only when `contextSources.enabled` |
 
 Everything is redacted before it becomes a context document.
 
-### Byte budgets
+### Packet size: the provider decides, not a budget
 
-All budgets derive from `review.depth` (never from `review.mode`), and
-`review.contextMaxBytes` overrides the depth-derived context cap when set.
+The change is assembled **whole**. There is no byte budget that splits a file or a
+task in advance — the packet is sent, and it is split only if the provider itself
+refuses it as exceeding its context length (spec 26).
 
-| Depth | Context budget (provider configured) | Source chunk budget | Retrieval caps (reads / searches / matches / depth) |
-| --- | --- | --- | --- |
-| `fast` | 60 000 B | 27 000 B | 200 / 100 / 50 / 4 |
-| `balanced` | 120 000 B | 54 000 B | 1 200 / 600 / 150 / 8 |
-| `thorough` | 240 000 B | 108 000 B | 4 800 / 2 400 / 320 / 12 |
+This replaced a per-depth budget (60 / 120 / 240 KB) that was wrong in two ways at
+once: bytes are a poor proxy for tokens, so the guess erred by a content-dependent
+factor, and the values were small enough to fire on **37%** of this repository's
+last 60 commits against context windows of 200k to over 1M tokens. Every one of
+those splits substituted several partial reviews for the whole-file review this
+project measured as better, and charged an extra discovery-plus-refutation pair.
 
-- Without a configured provider the context budget is the larger
-  depth-only value (100 000 / 200 000 / 500 000 B).
-- The **packet ceiling** for one serialized model input is 360 000 B (or
-  `review.contextMaxBytes` when that is smaller). It sits above every per-depth
-  context cap so it is not the binding constraint at `thorough`.
-- The source chunk budget is 45 % of the effective budget; file content is split
-  into chunks of at most that size and packed into batches, so a very large file
-  becomes several workflow tasks rather than a truncated one.
-- Chunks are cut on line boundaries and each one records the absolute line range
-  it covers. The reviewer sees a chunk numbered from that origin, so a finding in
-  the second chunk of a split file carries the file's real line number, and
-  admission rejects a location outside the chunk the task was actually given.
-- The retrieval caps bound the mediated repository retriever, which is only
-  exercised by the optional cross-file capabilities.
+**Reactive splitting.** When a provider reports an oversized context, the task is
+halved and each half retried, recursing until the pieces are accepted:
+
+- Detection is the harness's normalised `context_length_exceeded` reason — never
+  provider message text, which differs per vendor and changes without notice. A
+  provider adapter that fails to classify its own overflow surfaces as an ordinary
+  loud model error, and the fix belongs in that adapter.
+- Halves are cut on line boundaries and keep their **absolute** line origin, so a
+  finding in the second half carries the file's real line number and admission
+  rejects a location outside the half the call was actually given.
+- Splitting is bounded by recursion **depth** (6), never by a byte size. A unit that
+  cannot be split further and is still refused fails loudly with
+  `review_task_indivisible` — it is never truncated or silently dropped.
+- The number of splits performed is reported (`context_overflow_split_count`), and
+  is deliberately counted apart from transient retry: an oversize split and a
+  rate-limit retry have different causes and different meanings.
+
+| Depth | Cross-file retrieval caps (reads / searches / matches / depth / bytes per read) |
+| --- | --- |
+| `fast` | 200 / 100 / 50 / 4 / 60 000 B |
+| `balanced` | 1 200 / 600 / 150 / 8 / 120 000 B |
+| `thorough` | 4 800 / 2 400 / 320 / 12 / 240 000 B |
+
+- These caps bound only the mediated repository retriever, exercised by the optional
+  cross-file capabilities. They no longer size the review packet.
+- The **packet ceiling** for one serialized model input is 8 MB — roughly 2M tokens,
+  far beyond any current model. It is a runaway guard against serializing a
+  pathological packet into memory, not a limit on how much review may be sent, and
+  it **refuses** rather than truncating when it binds.
+- An explicit `review.contextMaxBytes` still binds and lowers that ceiling, because
+  it is a deliberate operator choice. When it binds, the run stops loudly.
 
 ### Referenced definitions
 
@@ -136,7 +155,7 @@ success.
 | Key | Default | Effect |
 | --- | --- | --- |
 | `review.depth` | `balanced` | Clustering strategy and all byte budgets |
-| `review.contextMaxBytes` | unset | Overrides the depth-derived context cap (and lowers the packet ceiling if smaller) |
+| `review.contextMaxBytes` | unset | Lowers the packet ceiling and the per-read cap. Unset means the provider decides packet size |
 | `review.maxConcurrentTasks` | `4` | How many tasks run in parallel downstream |
 | `aiReview.deterministicSignalMode` | `support` | Whether facts, test mappings, and referenced definitions enter the packet |
 | `instructions.files` / `instructions.inline` | `[]` / `""` | Reviewer instructions added to every packet |

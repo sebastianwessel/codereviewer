@@ -137,6 +137,13 @@ instead of introducing stage-specific public settings. Under tight budgets the
 workflow removes optional digest and ambient review context before recording a
 recovered provider issue.
 
+> **SUPERSEDED by spec 26 (approved 2026-08-01).** The depth-scaled per-packet
+> budget below no longer bounds the review packet: assembly sends the change whole
+> and splits only when the provider refuses it. The depth values survive only as
+> cross-file retrieval caps, and the task-input packet cap is now an 8 MB runaway
+> guard rather than a 360,000-byte ration. Left here, unrewritten, so the change is
+> visible to review rather than silently folded in.
+
 When a provider is configured and `contextMaxBytes` is not set explicitly, the
 per-packet model-bound context budget scales with depth so deeper reviews see
 more source per task: `fast` 60,000 bytes, `balanced` 120,000 bytes, `thorough`
@@ -230,6 +237,10 @@ and run. Full per-task cost enforcement remains a required follow-up when the
 selected provider adapters expose reliable usage data at the task boundary.
 
 ## Context Budget Defaults
+
+> **SUPERSEDED by spec 26 (approved 2026-08-01).** These defaults no longer size the
+> review packet. `contextMaxBytes` when unset bounds nothing; when set explicitly it
+> lowers the packet ceiling and the cross-file per-read cap.
 
 | Depth | `contextMaxBytes` |
 | --- | --- |

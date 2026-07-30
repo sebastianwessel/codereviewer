@@ -155,7 +155,7 @@ describe('review runner workflow input', () => {
       aiReviewBudget: aiReviewBudgetFor(config)
     })
 
-    // contextMaxBytes=120 000, input cap=360 000 → min(120 000, 360 000)=120 000
+    // An EXPLICIT contextMaxBytes still binds: min(120 000, 8 000 000 guard)=120 000
     expect(workflowInput.maxTaskInputBytes).toBe(120000)
     expect(workflowInput.maxConcurrentTasks).toBe(2)
     // contextMaxBytes=120 000, depthContextCap(balanced)=120 000

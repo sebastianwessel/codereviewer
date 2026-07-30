@@ -87,16 +87,18 @@ full input tokens.
 
 | Setting | Effect on packet size |
 | --- | --- |
-| `review.depth` | Per-task provider context cap: `fast` 60 000 bytes, `balanced` 120 000, `thorough` 240 000. Per-run context budget: 100 000 / 200 000 / 500 000 bytes. |
-| `review.contextMaxBytes` | Overrides the per-run context budget; still clamped by the per-depth provider cap. |
+| `review.depth` | Sizes cross-file retrieval only. It no longer bounds the review packet: the change is sent whole and split only if the provider refuses it. |
+| `review.contextMaxBytes` | Lowers the packet ceiling and the cross-file per-read cap. Leave unset so the provider decides packet size. |
 | `review.maxFileBytes` | Files above this are skipped entirely (default 500 000). |
 | `aiReview.deterministicSignalMode: "disabled"` | Stops injecting deterministic support facts into the packet. Planning still uses them. |
 | `instructions.files` / `instructions.inline` | Added to **every** task packet, discovery and refutation alike. |
 | `contextSources.summary.maxBytes` | Caps the change-intent brief (default 4 000 bytes). |
 | `review.crossFileRetrieval.maxBytesPerRead` | Caps each retrieved file (default 24 000). |
 
-A single model-input packet is hard-capped at 360 000 bytes regardless of
-depth.
+A single model-input packet is hard-capped at 8 MB regardless of depth — a runaway
+guard far beyond any current model, not a cost lever. Note the cost direction here:
+proactive splitting used to charge an **extra** discovery-plus-refutation pair per
+split, so sending the change whole is generally cheaper as well as better.
 
 ---
 
