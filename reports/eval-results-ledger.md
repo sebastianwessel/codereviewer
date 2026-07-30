@@ -9,6 +9,89 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-07-30 — "Unlisted real findings" measures FRAGMENTATION, not key gaps
+
+Offline diagnosis of the 29 unlisted-real rows the three spec-25 arms produced.
+Full analysis: `reports/2026-07-30-unlisted-real-diagnosis.md`. No provider spend,
+no fixture touched.
+
+**16 distinct findings: 0 genuine-unlisted defects, 13 restatements, 2
+judge-errors, 1 deliberate exclusion.**
+
+**Recall is NOT understated. The denominator stays 87 and 46.0% is accurate.**
+This retracts the working hypothesis — repeated three times in this session — that
+the engine "finds more than the answer key knows" and that recall is a floor of
+unknown tightness. On this corpus it is not.
+
+### Independently verified before acceptance
+
+The load-bearing claim was re-checked directly against the run artifacts rather
+than taken from the analysis:
+
+| finding | arm0 | armA | armB |
+|---|---|---|---|
+| traefik `kubernetes_http.go:593` (+5 siblings) | **duplicate** | **unlisted-real** | **unlisted-real** |
+| fastify `lib/route.js:617` | matched | **unlisted-real** | **unlisted-real** |
+
+The same defect text lands in a different bucket in different arms. That is a
+matcher artifact and cannot be a property of the key.
+
+### Consequence for how arms are ranked
+
+armB leads on unlisted-real (14 against arm0's 4) while **trailing on recall**
+(44.8% against 46.0%). It did not discover more; it split defects into more
+findings and absorbed fewer as duplicates. **A metric that rewards fragmentation
+was being read as a discovery signal.**
+
+### A proposed fix that was checked and rejected
+
+The analysis recommended seeding the plausibility judge with the case's
+already-matched findings so it can recognise a restatement. **That is already
+implemented** — `judgeUnmatchedFindingsPlausibility` takes `matchedFindings` and
+seeds `creditedByPath` from them before judging anything. The judge sees them and
+answers "not the same defect" anyway, which is *defensible*: `*p.Name` at line 592
+and `*p.Port` at 593 are two distinct nil dereferences, and the judge is
+explicitly instructed that two real defects sitting near each other are not one
+defect.
+
+Widening `isDuplicateOfMatchedFinding`'s zero line tolerance was also rejected,
+for the reason already recorded in that function: it is a purely textual check
+with no view of what either finding says, so it would merge two genuinely
+different defects as readily as a restatement, silently discarding a true
+positive.
+
+**The real cause is neither.** The key folds several defect sites into one
+expectation — traefik expectation 0 names both `Name` and `Port` across lines
+591-596 — while precision is counted per finding. One-to-one matching consumes the
+expectation with the first finding, and the second is then literally an unlisted
+real defect. Every layer behaves correctly and the aggregate is still misleading.
+
+### What actually needs to change
+
+Not the matcher's semantics and not the key. The **name and the breakdown**: the
+counter asserts key incompleteness and measures something else. It needs to
+separate findings that fall inside an already-matched expectation's own declared
+`lineRange` (accounted territory) from those outside it (genuinely uncovered) —
+additive, reversible, and destroying no signal.
+
+### Also found
+
+- `eval-report.json` persists only finding titles — no body, no judge rationale —
+  which made this diagnosis interpretive rather than mechanical. Two verdicts
+  stayed at medium confidence for that reason alone.
+- `slim` expectation 0's `lineRange [25,36]` does not reach the title sink at line
+  57 that its own summary claims.
+- armB's credited pydantic finding states its mechanism **backwards** and the
+  plausibility judge accepted it.
+
+### What invalidates this entry
+
+A second classifier disagreeing on the two medium-confidence items (ws, pydantic).
+Even promoting both to genuine-unlisted moves the denominator to 89 and arm0 to
+44.9% — still not an understatement, so the headline is robust to that.
+
+---
+
 ## 2026-07-30 — Spec 25 guarded-region context: BOTH ARMS FAIL. Delete both.
 
 Three arms, one session, same corpus state, `real-repo-cross-file` (37 cases,
