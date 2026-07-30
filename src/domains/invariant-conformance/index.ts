@@ -1,35 +1,10 @@
 // Invariant-conformance review (spec 24). Reachable only from `src/cli/`: it must
 // not import from `review-workflow`, and `review-workflow` must not import from
 // it, so a failure here can never fail a diff review.
-export {
-  blankNonCode,
-  codeLinesOfSpan,
-  declarationSpanAt,
-  toSourceLines,
-  type BlankedLine,
-  type DeclarationSpan,
-  type SourceLines
-} from './declaration-span.js'
-export {
-  declarationTraitKey,
-  declarationTraitSubjectKey,
-  describeDeclarationTrait,
-  describePositionedTrait,
-  extractDeclarationTraits,
-  isComparableDeclarationHeader,
-  type DeclarationTrait,
-  type DeclarationTraitKind,
-  type DeclarationTraitSubject,
-  type ExtractDeclarationTraitsInput
-} from './declaration-shape.js'
-export {
-  describeTraitPosition,
-  traitPositionKey,
-  traitPositionsOfSpan,
-  type TraitDepthBand,
-  type TraitPosition,
-  type TraitTerminality
-} from './trait-position.js'
+// Declaration span, shape and position now live in `declaration-analysis` and are
+// NOT re-exported here. They are shared with the diff reviewer (spec 25), which
+// this domain is forbidden to touch, so re-exporting them would route a stage-1
+// import through a stage-3 barrel and defeat the boundary test below.
 export {
   derivePeerSets,
   type ConformanceSourceFile,

@@ -74,7 +74,7 @@ import {
 import { createHarnessConformanceAdjudicator } from './conformance-adjudication-agent.js'
 import type { InvariantConformanceReport } from './conformance-report.js'
 import { runInvariantConformance } from './conformance-run.js'
-import { describeDeclarationTrait } from './declaration-shape.js'
+import { describeDeclarationTrait } from '../declaration-analysis/declaration-shape.js'
 
 const mergeBaseSha = '9f1c2ab3d4e5f60718293a4b5c6d7e8f90a1b2c3'
 const generatedAt = new Date('2026-07-30T00:00:00.000Z')

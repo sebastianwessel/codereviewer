@@ -34,8 +34,8 @@ import {
   describeDeclarationTrait,
   describePositionedTrait,
   type DeclarationTrait
-} from './declaration-shape.js'
-import { describeTraitPosition, type TraitPosition } from './trait-position.js'
+} from '../declaration-analysis/declaration-shape.js'
+import { describeTraitPosition, type TraitPosition } from '../declaration-analysis/trait-position.js'
 import type { PeerDeclaration, PeerSet } from './peer-sets.js'
 import {
   MINIMUM_CITED_PEERS,

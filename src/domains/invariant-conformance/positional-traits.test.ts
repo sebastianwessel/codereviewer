@@ -37,7 +37,7 @@ import { MINIMUM_CITED_PEERS } from './conformance-report.js'
 import {
   declarationTraitKey,
   declarationTraitSubjectKey
-} from './declaration-shape.js'
+} from '../declaration-analysis/declaration-shape.js'
 import { collectDivergences } from './divergence.js'
 import { derivePeerSets, type PeerDeclaration } from './peer-sets.js'
 

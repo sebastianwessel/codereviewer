@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { declarationTraitKey } from './declaration-shape.js'
+import { declarationTraitKey } from '../declaration-analysis/declaration-shape.js'
 import { derivePeerSets, type ConformanceSourceFile } from './peer-sets.js'
 
 const bounds = {

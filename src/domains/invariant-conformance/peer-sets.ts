@@ -30,12 +30,12 @@ import {
   toSourceLines,
   type DeclarationSpan,
   type SourceLines
-} from './declaration-span.js'
+} from '../declaration-analysis/declaration-span.js'
 import {
   extractDeclarationTraits,
   isComparableDeclarationHeader,
   type DeclarationTrait
-} from './declaration-shape.js'
+} from '../declaration-analysis/declaration-shape.js'
 
 // The fact kinds that name a declaration with a body. `import` names a symbol the
 // file consumes rather than one it defines, and `module` is a package clause, not
