@@ -5,11 +5,6 @@ export {
   discoverDeterministicSignalTestMappings
 } from './deterministic-signal-registry.js'
 export {
-  extractEcmascriptSignals,
-  detectEcmascriptSignalFiles,
-  discoverEcmascriptSignalTestMappings
-} from './ecmascript/ecmascript-signal-extractor.js'
-export {
   extractPolyglotSignals,
   detectPolyglotSignalFiles,
   discoverPolyglotSignalTestMappings

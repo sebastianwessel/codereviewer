@@ -237,8 +237,10 @@ supply facts and never publish findings.
 
 - Language-neutral source/sink/sanitizer detection grounded in public rule catalogs
   (Semgrep registry, CodeQL CWE suites, OWASP dangerous-function lists), run on the
-  existing ast-grep AST (its pattern API supports the needed metavariable queries)
-  and the TypeScript AST for TS/JS.
+  existing ast-grep AST (its pattern API supports the needed metavariable queries).
+  One engine now covers every supported language, TS/JS included, so a detection
+  written once applies everywhere rather than needing a second implementation
+  against a language-specific AST.
 - Each detection emits a **support signal** and an `EvidenceRecord` populating the
   already-defined but unused contract fields: `ruleId`, `cwe`, `helpUri`,
   `relatedLocations`, ordered `dataFlow` (source → sink steps), and

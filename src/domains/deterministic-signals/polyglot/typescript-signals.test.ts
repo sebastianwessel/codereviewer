@@ -4,17 +4,17 @@ import type {
   SupportSignalSourceFile
 } from '../shared/deterministic-signal-types.js'
 import {
-  extractEcmascriptSignals,
-  detectEcmascriptSignalFiles,
-  discoverEcmascriptSignalTestMappings
-} from '../ecmascript/ecmascript-signal-extractor.js'
+  extractPolyglotSignals,
+  detectPolyglotSignalFiles,
+  discoverPolyglotSignalTestMappings
+} from './polyglot-signal-extractor.js'
 
 const detectTypeScriptFiles = (files: readonly SupportSignalFile[]) =>
-  detectEcmascriptSignalFiles('typescript', files)
+  detectPolyglotSignalFiles('typescript', files)
 const analyzeTypeScriptFiles = (files: readonly SupportSignalSourceFile[]) =>
-  extractEcmascriptSignals('typescript', files)
+  extractPolyglotSignals('typescript', files)
 const discoverTypeScriptTests = (files: readonly SupportSignalFile[]) =>
-  discoverEcmascriptSignalTestMappings('typescript', files)
+  discoverPolyglotSignalTestMappings('typescript', files)
 
 describe('TypeScript deterministic support signal extractor', () => {
   test('detects supported TypeScript file extensions', () => {

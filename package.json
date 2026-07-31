@@ -83,13 +83,13 @@
     "@ast-grep/napi": "^0.45.0",
     "@purista/harness": "^1.7.1",
     "@types/node": "^26.1.2",
-    "typescript": "^6.0.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@purista/harness-openai": "^1.7.1",
     "@vitest/coverage-v8": "^4.1.10",
     "tsx": "^4.23.1",
+    "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
   "peerDependencies": {

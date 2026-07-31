@@ -18,8 +18,15 @@ extracted from is a hard error, not a warning.
 
 | Language | Engine |
 | --- | --- |
-| TypeScript, JavaScript | TypeScript compiler |
-| Python, Go, Rust, Java, Ruby | `ast-grep` |
+| TypeScript, JavaScript, Python, Go, Rust, Java, Ruby | `ast-grep` |
+
+TypeScript and JavaScript used to have an engine of their own, built on the
+TypeScript compiler API. It used that compiler purely as a PARSER and reached an
+internal, undocumented field for diagnostics — two of seven languages as a special
+case, resting on a private API, in a tool whose contracts are language-neutral.
+The consolidation was verified fact-for-fact against the engine it replaced: exact
+parity on 505 TypeScript files, and 15 differing facts out of 14,694 on 1,897
+real-world JavaScript files (see below).
 
 Anything else is simply not analysed; it is still reviewed by the model.
 

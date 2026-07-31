@@ -35,8 +35,8 @@ and resources, and data leaks/privacy.
 
 ## Local structural analysis is support, not a second SAST
 
-The engine does parse your changed files locally (TypeScript/JavaScript through
-the TypeScript compiler; Python, Go, Rust, Java, and Ruby through ast-grep). That
+The engine does parse your changed files locally (TypeScript, JavaScript, Python,
+Go, Rust, Java and Ruby, all through ast-grep). That
 stage produces **deterministic support signals** — line anchors, symbol spans,
 import/reference hints, related test/config hints, de-duplication keys, and
 contradiction checks.

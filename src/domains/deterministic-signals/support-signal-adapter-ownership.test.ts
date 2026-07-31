@@ -1,15 +1,14 @@
 import { describe, expect, test } from 'vitest'
 import {
-  extractEcmascriptSignals,
   extractPolyglotSignals,
   type SupportedSignalLanguage,
   type SupportSignalSourceFile
 } from './index.js'
 
 const analyzeTypeScriptFiles = (files: readonly SupportSignalSourceFile[]) =>
-  extractEcmascriptSignals('typescript', files)
+  extractPolyglotSignals('typescript', files)
 const analyzeJavaScriptFiles = (files: readonly SupportSignalSourceFile[]) =>
-  extractEcmascriptSignals('javascript', files)
+  extractPolyglotSignals('javascript', files)
 const analyzePythonFiles = (files: readonly SupportSignalSourceFile[]) =>
   extractPolyglotSignals('python', files)
 const analyzeGoFiles = (files: readonly SupportSignalSourceFile[]) =>

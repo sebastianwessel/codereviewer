@@ -95,7 +95,7 @@ parsing, hashing or error normalization inside a domain.
 | --- | --- |
 | `configuration/` | Config loading, layer merging, `.env` parsing, environment mapping, the redacted config summary |
 | `repository-intake/` | The read-only git surface (`merge-base` and two `diff` shapes), changed-path discovery, diff hunk maps, file loading and size caps |
-| `deterministic-signals/` | Language-neutral AST-based support signals, with language adapters under `ast-grep/`, `ecmascript/`, `typescript/`, `polyglot/` |
+| `deterministic-signals/` | Language-neutral AST-based support signals: one `ast-grep/` parser and one `polyglot/` extractor covering all seven languages |
 | `review-planning/` | Task planning and clustering, the task queue, the context ledger, the skill index |
 | `context-ingestion/` | Optional external change-intent context: inbox and changed-files providers, frontmatter parsing, deterministic digest and model summarizers |
 | `context-retrieval/` | The mediated repository tools (`read`, `list`, `grep`), their eligibility gate and their bounded tool-call wrapper |

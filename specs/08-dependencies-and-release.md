@@ -15,7 +15,7 @@ resolved packages in the committed lockfile, read on 2026-07-31.
 | `@purista/harness-bedrock` | Optional Bedrock adapter; optional peer, not installed here | `^1.6.0` | not installed | Apache-2.0 | `>=24.15.0` |
 | `@purista/harness-azure-foundry` | Optional Azure adapter; optional peer, not installed here | `^1.6.0` | not installed | Apache-2.0 | `>=24.15.0` |
 | `zod` | Runtime schemas | `^4.4.3` | `4.4.3` | MIT | not declared |
-| `typescript` | Compiler | `^6.0.3` | `6.0.3` | Apache-2.0 | `>=14.17` |
+| `typescript` | Compiler and typechecker; development only | `^7.0.2` | `7.0.2` | Apache-2.0 | `>=20.0.0` |
 | `vitest` | Test runner | `^4.1.10` | `4.1.10` | MIT | `^20.0.0 || ^22.0.0 || >=24.0.0` |
 | `@vitest/coverage-v8` | Test coverage provider | `^4.1.10` | `4.1.10` | MIT | not declared |
 | `tsx` | Dev runner | `^4.23.1` | `4.23.1` | MIT | `>=18.0.0` |
@@ -27,15 +27,17 @@ resolved packages in the committed lockfile, read on 2026-07-31.
 | `@ast-grep/lang-java` | Java dynamic AST grammar | `^0.0.7` | `0.0.7` | ISC | not declared |
 | `@ast-grep/lang-ruby` | Ruby dynamic AST grammar | `^0.0.7` | `0.0.7` | ISC | not declared |
 
-Two packages sit in `dependencies` that would normally be development-only. Both
-placements are deliberate and are recorded here rather than left as observations.
+One package sits in `dependencies` that would normally be development-only. The
+placement is deliberate and recorded here rather than left as an observation.
 
-`typescript` is a RUNTIME dependency because two shipped modules import the
-compiler API to execute:
-`src/domains/deterministic-signals/ecmascript/ecmascript-signal-extractor.ts` and
-`src/domains/deterministic-signals/deterministic-signal-metadata.ts`. It is used
-as a parser, not as a build tool. Moving it to `devDependencies` would break
-deterministic signal extraction for every consumer.
+`typescript` is a `devDependency`. It was a RUNTIME dependency until the
+deterministic-signal engines were consolidated: a separate ECMAScript extractor
+imported the compiler API to execute, using it purely as a parser and reaching the
+internal `parseDiagnostics` field through a cast. That extractor is gone, ast-grep
+covers TS/JS natively, and no shipped module imports `typescript` any more —
+verified against `dist/`. This removes about 24 MB from every consumer's install
+(measured: ~111 MB to ~87 MB) and removes the project's dependence on a private
+compiler API.
 
 `@types/node` is a RUNTIME dependency because the published declarations require
 it. Three shipped declarations name `Buffer` in a public type position — `sha256`,
@@ -50,9 +52,20 @@ is verified by a consumer typecheck in the `PR checks` workflow, not by assertio
 
 ## Compatibility Exceptions
 
-| Package | Latest | Pinned to | Why |
-| --- | --- | --- | --- |
-| `typescript` | `7.0.2` | `^6.0.3` | TypeScript 7 is the Go port and ships **no stable programmatic compiler API**; one is targeted for 7.1. The two modules above import that API at runtime, so 7.0 risks breaking deterministic signal extraction in the published package. Revisit at 7.1. |
+None. Every dependency is at its latest stable version.
+
+TypeScript 7 was briefly held back and the reason is worth keeping, because it
+shows what the engine consolidation actually bought. TypeScript 7 is the Go port
+and ships **no stable programmatic compiler API** — one is targeted for 7.1 — and
+this project imported that API at runtime, inside the published package, to
+extract ECMAScript signals. Upgrading would have risked breaking signal
+extraction for every consumer.
+
+Consolidating the extractors onto ast-grep removed that import, which demoted
+TypeScript from a runtime parser to an ordinary build tool and made the upgrade
+routine. Verified on `7.0.2`: typecheck, 1 532 tests, build, schema check and
+drift check all pass, and a published consumer compiles against the emitted
+declarations on TypeScript 6 **and** 7.
 
 The optional provider-adapter peer ranges stay at `^1.6.0` even though the
 resolved adapters are `1.7.1`. A peer range states what a host tolerates, and

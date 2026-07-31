@@ -83,8 +83,8 @@ knob that changes budgets and clustering is `review.depth`.
 
 Each changed file is parsed — never executed — into *facts* (imports, exports,
 declarations, public symbols, modules), *evidence records*, and test mappings.
-TypeScript/JavaScript go through the TypeScript compiler; Python, Go, Rust, Java
-and Ruby go through `ast-grep`. These signals are support, not detection: they
+All seven supported languages — TypeScript, JavaScript, Python, Go, Rust, Java
+and Ruby — go through the same `ast-grep` engine. These signals are support, not detection: they
 supply the import graph that clustering needs and a structural summary for the
 model packet. They do not, today, produce findings on their own.
 → [Details](pipeline/02-deterministic-support-signals.md)
