@@ -63,12 +63,14 @@ describe('CodeReviewerConfigSchema', () => {
     })
   })
 
-  test('cross-file retrieval defaults to disabled with a loop-guard tool budget', () => {
+  test('cross-file retrieval defaults to ON, with no proactive per-read cap', () => {
     const defaults = CodeReviewerConfigSchema.parse({})
+    // Enabled: two runs put it ahead on recall, false alarms, cost and reliability.
+    // maxBytesPerRead ABSENT: spec 28 removed the guessed 24,000-byte cut, which had
+    // truncated files mid-read and caused three measurements to blame the feature.
     expect(defaults.review.crossFileRetrieval).toEqual({
-      enabled: false,
-      maxToolCallsPerTask: 100,
-      maxBytesPerRead: 24000
+      enabled: true,
+      maxToolCallsPerTask: 100
     })
 
     const enabled = CodeReviewerConfigSchema.parse({
@@ -76,12 +78,11 @@ describe('CodeReviewerConfigSchema', () => {
     })
     expect(enabled.review.crossFileRetrieval).toEqual({
       enabled: true,
-      maxToolCallsPerTask: 6,
-      maxBytesPerRead: 24000
+      maxToolCallsPerTask: 6
     })
 
-    // The per-read cap bounds how much ONE retrieved file can add to a discovery
-    // prompt; a single oversized read measurably diluted a review.
+    // An explicit cap is a deliberate operator choice and still binds — and when it
+    // does, the cut is disclosed to the reviewer rather than silent.
     expect(
       CodeReviewerConfigSchema.parse({
         review: { crossFileRetrieval: { enabled: true, maxBytesPerRead: 8000 } }

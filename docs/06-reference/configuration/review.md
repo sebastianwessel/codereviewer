@@ -83,6 +83,11 @@ ahead on defects found, false alarms, cost and reliability alike. No specific ga
 claimed — the recall difference alone is within noise — but nothing measured argues
 against it.
 
+`maxBytesPerRead` is **unset by default**: a read is not cut in advance. The reviewer
+narrows a large file itself, using `repo_grep` to locate what it needs and then
+re-reading that line range. Setting the value is a deliberate operator choice and
+still binds, with the cut disclosed to the reviewer rather than silent.
+
 Agentic cross-file discovery. When enabled, the discovery agent may call the
 mediated `repo_read` / `repo_list` / `repo_grep` tools to inspect files outside
 the changed set. Its candidates pass the same refutation and admission as any

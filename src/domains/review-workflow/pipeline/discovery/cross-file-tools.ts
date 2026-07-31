@@ -59,7 +59,9 @@ export const crossFileDiscoveryToolDefinitions = {
     handler: async (_ctx: unknown, rawInput: unknown) =>
       toRepoToolOutput(
         await activeCrossFileTools().read({
-          path: RepoReadToolInputSchema.parse(rawInput).path
+          // Spec 28: the range the model asked for is passed through, so it can
+          // narrow a large file itself instead of receiving a prefix we chose.
+          ...RepoReadToolInputSchema.parse(rawInput)
         }),
         true
       )

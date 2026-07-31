@@ -92,12 +92,19 @@ export const CrossFileRetrievalConfigSchema = z.strictObject({
   // (0-7 calls when 8 were allowed, never exhausting it), so a tight cap only
   // starves the tasks that genuinely need several lookups.
   maxToolCallsPerTask: z.int().min(1).max(500).default(100),
-  // Per-read byte cap for cross-file reads specifically. Retrieval reads whole
-  // files, and a single large one measurably dilutes the review: a task that read
-  // 162KB in one call lost a finding the same task made without retrieval. This cap
-  // keeps a retrieved file to a useful excerpt; the model can grep to locate the
-  // part it needs rather than pulling an entire large file into the prompt.
-  maxBytesPerRead: z.int().min(1000).max(200000).default(24000)
+  // Optional per-read byte cap. UNSET by default (spec 28): no proactive cut.
+  //
+  // It used to default to 24,000 — roughly 600 lines — chosen defensively and never
+  // measured. It cut files mid-read while telling the model nothing, and three
+  // separate measurements recorded cross-file retrieval as harmful when what they
+  // were measuring was the cap. The files most worth consulting are precisely the
+  // large ones it truncated.
+  //
+  // The reviewer now narrows a read itself, by line range, after locating what it
+  // needs with grep. When a real limit binds, the provider says so and the read
+  // budget is reduced on retry. Setting this is a deliberate operator choice and
+  // still binds, with the cut disclosed.
+  maxBytesPerRead: z.int().min(1000).max(4000000).optional()
 })
 
 export const ReviewConfigSchema = z.strictObject({
@@ -114,8 +121,7 @@ export const ReviewConfigSchema = z.strictObject({
   runTimeoutMs: z.int().min(10000).max(7200000).optional(),
   crossFileRetrieval: CrossFileRetrievalConfigSchema.default({
     enabled: true,
-    maxToolCallsPerTask: 100,
-    maxBytesPerRead: 24000
+    maxToolCallsPerTask: 100
   })
 })
 
@@ -678,21 +684,15 @@ export const CostConfigSchema = z.strictObject({
 })
 
 export const CodeReviewerConfigSchema = z.strictObject({
-  review: ReviewConfigSchema.default({
-    mode: 'local',
-    depth: 'balanced',
-    baseRef: 'main',
-    headRef: 'HEAD',
-    maxConcurrentTasks: 4,
-    maxFiles: 500,
-    maxFileBytes: 500000,
-    inlineSeverityThreshold: 'high',
-    crossFileRetrieval: {
-      enabled: false,
-      maxToolCallsPerTask: 100,
-      maxBytesPerRead: 24000
-    }
-  }),
+  // `.prefault({})`, not `.default({...})` with every field restated.
+  //
+  // Zod's `.default(value)` returns that value VERBATIM without parsing it, so a
+  // restated literal becomes a SECOND source of truth that silently wins. Changing
+  // `crossFileRetrieval` on the field itself had no effect at all until this was
+  // fixed: the schema said one thing, the engine did another, and nothing failed.
+  // `.prefault({})` parses `{}` through the schema, so each field's own default is
+  // the single source of truth.
+  review: ReviewConfigSchema.prefault({}),
   provider: ProviderConfigSchema.optional(),
   instructions: InstructionsConfigSchema.default({
     files: [],

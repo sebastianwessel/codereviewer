@@ -26,7 +26,13 @@ export const ContextRetrievalBudgetSchema = z.strictObject({
   usedReads: z.int().min(0).default(0),
   maxSearches: z.int().min(0).default(2),
   usedSearches: z.int().min(0).default(0),
-  maxBytesPerRead: z.int().min(1).default(20000),
+  // A RUNAWAY GUARD against materialising a pathological file, NOT a context
+  // ration (spec 28). Sized against memory, far beyond any plausible source file.
+  // The previous value was chosen defensively, cut files mid-read, and caused three
+  // measurements to record cross-file retrieval as harmful when they were measuring
+  // the cap. The reviewer narrows a read by LINE RANGE instead; when a real limit
+  // binds, the provider says so and the read budget is reduced on retry.
+  maxBytesPerRead: z.int().min(1).default(4_000_000),
   maxMatches: z.int().min(1).default(20),
   // Caps how many directory levels a recursive `grep` traversal descends from
   // each requested search root. Depth 0 is the requested root directory
@@ -79,6 +85,9 @@ export type ContextRetriever = {
   readonly readRepositoryFile: (input: {
     readonly path: string
     readonly taskId?: string
+    // Spec 28: the caller narrows the read deliberately. Absent means the whole file.
+    readonly startLine?: number
+    readonly endLine?: number
   }) => Promise<ContextRetrievalResult>
   readonly listRepositoryDirectory: (input: {
     readonly path: string
@@ -341,7 +350,7 @@ export const createContextRetriever = (input: {
 
   return {
     budget: () => ({ ...budget }),
-    readRepositoryFile: async ({ path: requestedPath, taskId }) => {
+    readRepositoryFile: async ({ path: requestedPath, taskId, startLine, endLine }) => {
       const { portablePath, absolutePath } = await resolveEligibleExisting(
         requestedPath
       )
@@ -352,8 +361,26 @@ export const createContextRetriever = (input: {
       budget.usedReads += 1
       const content = await readFile(absolutePath, 'utf8')
       const redacted = redactor.redact(content)
-      const included = Buffer.from(redacted).subarray(0, budget.maxBytesPerRead)
+      // Spec 28: an explicitly requested line range is served exactly. This is the
+      // reviewer narrowing its own read after locating what it needs, which is the
+      // whole point — a prefix chosen by us is the worst possible guess, because the
+      // definition worth consulting is rarely at the top of a file.
+      const lines = redacted.split(/\r\n|\n|\r/u)
+      const ranged =
+        startLine === undefined && endLine === undefined
+          ? redacted
+          : lines
+              .slice(
+                Math.max(0, (startLine ?? 1) - 1),
+                endLine === undefined ? lines.length : endLine
+              )
+              .join('\n')
+      const included = Buffer.from(ranged).subarray(0, budget.maxBytesPerRead)
       const includedText = included.toString('utf8')
+      const rangeNote =
+        startLine === undefined && endLine === undefined
+          ? ''
+          : ` Lines ${startLine ?? 1}-${endLine ?? lines.length} of ${lines.length}.`
 
       return recordResult({
         tool: 'read',
@@ -361,9 +388,9 @@ export const createContextRetriever = (input: {
         ...(taskId === undefined ? {} : { taskId }),
         reason: 'context-retrieval-read',
         content: includedText,
-        bytesConsidered: Buffer.byteLength(redacted),
+        bytesConsidered: Buffer.byteLength(ranged),
         bytesIncluded: Buffer.byteLength(includedText),
-        summary: `Read ${portablePath} for investigation context. Preview hash ${sha256(
+        summary: `Read ${portablePath} for investigation context.${rangeNote} File has ${lines.length} lines. Preview hash ${sha256(
           linePreview(includedText)
         ).slice(0, 16)}.`,
         redactionApplied: redacted !== content

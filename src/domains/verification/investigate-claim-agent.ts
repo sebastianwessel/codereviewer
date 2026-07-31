@@ -84,7 +84,9 @@ const buildInvestigateClaimHarness = (input: {
         handler: async (ctx, rawInput) =>
           toRepoToolOutput(
             await activeToolsFor(input.registry, ctx.sessionId).read({
-              path: RepoReadToolInputSchema.parse(rawInput).path
+              // Spec 28: the range the model asked for is passed through, so it can
+          // narrow a large file itself instead of receiving a prefix we chose.
+          ...RepoReadToolInputSchema.parse(rawInput)
             }),
             true
           )

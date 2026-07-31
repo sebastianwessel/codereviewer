@@ -13,7 +13,20 @@ import { z } from 'zod'
 import type { ContextRetrievalResult } from './index.js'
 
 export const RepoReadToolInputSchema = z.strictObject({
-  path: z.string().min(1).describe('Repository-relative path of the file to read.')
+  path: z.string().min(1).describe('Repository-relative path of the file to read.'),
+  // Spec 28: the reviewer narrows the read itself instead of us guessing a prefix
+  // for it. A prefix is the worst possible guess — the definition worth consulting
+  // is rarely at the top of a file — so `repo_grep` locates it and this reads it.
+  startLine: z
+    .int()
+    .min(1)
+    .optional()
+    .describe('Optional first line to read (1-based). Omit to start at the top.'),
+  endLine: z
+    .int()
+    .min(1)
+    .optional()
+    .describe('Optional last line to read (1-based, inclusive). Omit to read to the end.')
 })
 
 export const RepoListToolInputSchema = z.strictObject({
@@ -39,7 +52,7 @@ export const RepoToolOutputSchema = z.strictObject({
 export type RepoToolOutput = z.infer<typeof RepoToolOutputSchema>
 
 export const REPO_TOOL_DESCRIPTIONS = {
-  read: 'Read a repository file (bounded, line-numbered). Input: { path }.',
+  read: 'Read a repository file (line-numbered). Input: { path, startLine?, endLine? }. Large files report their total line count — use repo_grep to locate what you need, then re-read that line range rather than reading the whole file.',
   list: 'List a repository directory. Input: { path }. Excluded and secret paths are never listed.',
   grep: 'Search the repository for a literal substring (recursive, bounded). Input: { query, paths? }.'
 } as const
@@ -77,7 +90,7 @@ const withLineNumbers = (content: string): string =>
 // trailing line in the text it is reading is not.
 const truncationNotice = (result: ContextRetrievalResult): string =>
   result.ledgerEntry.decision === 'truncated'
-    ? `\n[TRUNCATED: this file is longer than the per-read limit. You have seen the first ${result.ledgerEntry.bytesIncluded} of ${result.ledgerEntry.bytesConsidered} bytes. Absence of something below this point is NOT evidence it is missing.]`
+    ? `\n[TRUNCATED: you have seen the first ${result.ledgerEntry.bytesIncluded} of ${result.ledgerEntry.bytesConsidered} bytes. Absence of something below this point is NOT evidence it is missing. Use repo_grep to locate what you need, then repo_read the same path with startLine/endLine to read that range in full.]`
     : ''
 
 export const toRepoToolOutput = (
