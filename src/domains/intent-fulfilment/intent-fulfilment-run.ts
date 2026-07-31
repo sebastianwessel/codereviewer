@@ -357,8 +357,6 @@ export const runIntentFulfilment = async (
     })
   }
 
-  // REFUSE rather than extract from part of a ticket. See `intent-limits.ts`.
-
   if (input.agents === undefined || sources.length === 0) {
     return emptyReport({
       status: input.agents === undefined ? 'provider-unavailable' : 'unusable-intent',
@@ -548,17 +546,11 @@ export const runIntentFulfilment = async (
     )
   }
 
-  // Every limit that bound this run says so. All three degrade the answer silently
-  // — a bounded change surface makes a judgement report `unaddressed` for evidence
-  // it was not shown, and a bounded checklist makes the outstanding list look
-  // shorter than it is — so a run that hit one must never read like a clean result.
-
-
-  if (intentTruncated) {
-    warnings.push(
-      `The stated intent was larger than intentFulfilment.maxIntentBytes (${input.config.intentFulfilment.maxIntentBytes}); obligations were extracted from a bounded part of it.`
-    )
-  }
+  // NO "a limit bound this run" WARNING EXISTS HERE, DELIBERATELY. All three limits
+  // refuse above rather than truncate, so a run that reaches this point hit none of
+  // them. A warning describing a bounded intent or a bounded checklist could
+  // therefore never fire, and a branch that cannot fire is one nobody can trust.
+  // See `intent-limits.ts` for why refusing is the whole point.
 
   // The explanation is a SEPARATE call over the frozen mapping above, and it runs
   // last for that reason: everything it reads is already decided and it has no

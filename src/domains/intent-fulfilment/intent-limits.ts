@@ -47,8 +47,36 @@ import {
   type StructuredError
 } from '../../shared/errors/error-normalizer.js'
 
-const RECOVERY =
-  'Nothing was truncated. Raise the limit in intentFulfilment, or reduce the input.'
+// The schema ceilings from `IntentFulfilmentConfigSchema`. They are restated here
+// rather than read off the zod object because zod's internal check shape is not a
+// stable API; `intent-limits.test.ts` pins each one against the schema, so a
+// ceiling that moves fails a test instead of quietly producing wrong advice again.
+//
+// WHY THIS MATTERS. Every one of these errors used to end with "Raise the limit in
+// intentFulfilment", and for two of the three that is impossible: `maxObligations`
+// and `maxChangeLines` DEFAULT to their ceiling, so an operator hitting them on a
+// default configuration has no higher value to set. Advice that cannot work is
+// worse than none — it sends someone editing a setting instead of doing the thing
+// that would actually let the run finish.
+const MAX_OBLIGATIONS_CEILING = 100
+const MAX_INTENT_BYTES_CEILING = 200_000
+const MAX_CHANGE_LINES_CEILING = 5_000
+
+// Recovery advice that depends on whether headroom is left. Below the ceiling,
+// raising the limit is the cheap fix and is offered first; AT the ceiling it is not
+// offered at all, and the only remedy that can work is the one that shrinks the
+// input.
+const recoveryFor = (input: {
+  readonly key: 'maxObligations' | 'maxIntentBytes' | 'maxChangeLines'
+  readonly configured: number
+  readonly ceiling: number
+  readonly reduceInput: string
+}): string =>
+  input.configured < input.ceiling
+    ? `Nothing was truncated. Raise intentFulfilment.${input.key} ` +
+      `(up to ${input.ceiling}), or ${input.reduceInput}.`
+    : `Nothing was truncated. intentFulfilment.${input.key} is already at its ` +
+      `maximum (${input.ceiling}) and cannot be raised, so ${input.reduceInput}.`
 
 export const intentChangeTooLargeError = (input: {
   readonly changedLineCount: number
@@ -60,7 +88,15 @@ export const intentChangeTooLargeError = (input: {
       `The change has more citable lines (${input.changedLineCount}) than ` +
       `intentFulfilment.maxChangeLines allows (${input.maxChangeLines}). ` +
       'Judging it against part of the change would report obligations as ' +
-      `unaddressed whose evidence was simply not shown. ${RECOVERY}`,
+      'unaddressed whose evidence was simply not shown. ' +
+      recoveryFor({
+        key: 'maxChangeLines',
+        configured: input.maxChangeLines,
+        ceiling: MAX_CHANGE_LINES_CEILING,
+        reduceInput:
+          'check a smaller change: narrow the base/head range to fewer commits, ' +
+          'or split the change into separately reviewable ones'
+      }),
     category: 'config',
     recoverable: true,
     exitCode: 4,
@@ -80,7 +116,15 @@ export const intentTooLargeError = (input: {
       `The stated intent is larger (${input.intentBytes} bytes) than ` +
       `intentFulfilment.maxIntentBytes allows (${input.maxIntentBytes}). ` +
       'Extracting obligations from part of it would produce a checklist missing ' +
-      `requirements the intent states. ${RECOVERY}`,
+      'requirements the intent states. ' +
+      recoveryFor({
+        key: 'maxIntentBytes',
+        configured: input.maxIntentBytes,
+        ceiling: MAX_INTENT_BYTES_CEILING,
+        reduceInput:
+          'hand in less stated intent: point contextSources at fewer providers, ' +
+          'or at the section under review rather than the whole document'
+      }),
     category: 'config',
     recoverable: true,
     exitCode: 4,
@@ -101,7 +145,16 @@ export const tooManyObligationsError = (input: {
       `(${input.obligationCount}) as intentFulfilment.maxObligations allows ` +
       `(${input.maxObligations}). Reporting the first ${input.maxObligations} ` +
       'would under-report what is left, which is the one direction this command ' +
-      `must not err in. ${RECOVERY}`,
+      'must not err in. ' +
+      recoveryFor({
+        key: 'maxObligations',
+        configured: input.maxObligations,
+        ceiling: MAX_OBLIGATIONS_CEILING,
+        reduceInput:
+          'check the change against a smaller slice of the stated intent: point ' +
+          'contextSources at the section under review rather than the whole ' +
+          'document, and run the remaining sections separately'
+      }),
     category: 'config',
     recoverable: true,
     exitCode: 4,

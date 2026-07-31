@@ -15,6 +15,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
 import { CodeReviewerConfigSchema } from '../../shared/contracts/index.js'
 import type { GitCommandRunner } from '../repository-intake/index.js'
@@ -661,4 +662,70 @@ describe('a limit that would bind refuses instead of truncating', () => {
     }
   })
 
+  test('REFUSES rather than extracting obligations from part of the stated intent', async () => {
+    // The behaviour the removed warning below contradicted. Two tickets past
+    // `maxIntentBytes` refuse the run outright; nothing is extracted, so nothing
+    // can report a checklist read from half a ticket.
+    const root = await createRepository()
+
+    try {
+      await writeFile(
+        join(root, '.codereviewer', 'context', 'long-ticket.md'),
+        [
+          '---',
+          'source: tracker',
+          'id: A-2',
+          'title: A ticket past the byte budget',
+          '---',
+          ...Array.from(
+            { length: 40 },
+            (_, index) => `Requirement ${index + 1} states something checkable.`
+          ),
+          ''
+        ].join('\n')
+      )
+
+      const agents = scriptedAgents({ obligations: [], judgements: [] })
+
+      await expect(
+        run(root, {
+          config: configWith({
+            intentFulfilment: { enabled: true, maxIntentBytes: 256 }
+          }),
+          agents
+        })
+      ).rejects.toMatchObject({
+        code: 'intent_text_too_large',
+        exitCode: 4
+      })
+
+      // And it refuses BEFORE spending on a single judgement.
+      expect(agents.judgementPackets).toHaveLength(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('carries no warning branch for a truncated intent, because none can fire', async () => {
+    // Dead-branch regression guard, and the only kind of test an unreachable branch
+    // admits. A warning saying obligations were "extracted from a bounded part" of
+    // the intent sat ~200 lines BELOW the refusal above, on the same condition the
+    // refusal throws on — so it could never run. An unreachable warning is a claim
+    // nobody can test, and a reader who finds it reasonably concludes the intent can
+    // still be silently truncated here, which is the exact belief spec 23's
+    // refuse-never-truncate rule exists to remove.
+    const source = await readFile(
+      fileURLToPath(new URL('./intent-fulfilment-run.ts', import.meta.url)),
+      'utf8'
+    )
+
+    // Guards against the test passing because the scan read the wrong file.
+    expect(source).toContain('export const runIntentFulfilment')
+    // The refusal itself must survive the removal.
+    expect(source).toContain('throw intentTooLargeError(')
+    expect(source).not.toMatch(/bounded part of it/u)
+    expect(source).not.toMatch(/obligations were extracted from/u)
+    // Exactly one `intentTruncated` branch remains, and it is the one that throws.
+    expect([...source.matchAll(/if \(intentTruncated\)/gu)]).toHaveLength(1)
+  })
 })

@@ -61,6 +61,12 @@ type SummarizerUnavailableReason =
   // ...) threw. `code`/`message` come from the same normalizer the fix lane and
   // provider-recovery paths use, so this failure is classified the same way.
   | { readonly kind: 'resolution-failed'; readonly code: string; readonly message: string }
+  // The operator EXPLICITLY asked for a model summary and a provider is configured,
+  // but model-backed review is switched off, so the digest ran instead. Its siblings
+  // above are genuine failures; this one is a configuration conflict — and it was
+  // the one silent case, because it shared an early return with the two paths where
+  // the digest IS the deliberate choice.
+  | { readonly kind: 'ai-review-disabled' }
 
 type SummarizerSelection = {
   readonly summarizer: ContextSummarizer
@@ -86,12 +92,20 @@ const selectSummarizer = async (input: {
     input.config.contextSources.summary.mode ??
     (input.config.provider !== undefined ? 'model' : 'digest')
 
-  if (
-    requested !== 'model' ||
-    input.config.provider === undefined ||
-    input.config.aiReview.enabled === false
-  ) {
+  if (requested !== 'model' || input.config.provider === undefined) {
+    // The digest was the deliberate choice: it was asked for, or there is no
+    // provider to summarize with. Reporting a degradation here would cry wolf.
     return { summarizer: createDigestSummarizer() }
+  }
+
+  if (input.config.aiReview.enabled === false) {
+    // Asked for a model summary, provider present, model review off. The operator
+    // gets the digest and is told why, rather than silently receiving something
+    // other than what was configured.
+    return {
+      summarizer: createDigestSummarizer(),
+      modelSummarizerUnavailableReason: { kind: 'ai-review-disabled' }
+    }
   }
 
   try {
@@ -161,6 +175,12 @@ const warningForSummarizerUnavailable = (
   if (reason.kind === 'no-callable-model') {
     return [
       'External change-intent model summarizer resolved no callable model; the run used the deterministic digest instead.'
+    ]
+  }
+
+  if (reason.kind === 'ai-review-disabled') {
+    return [
+      'External change-intent model summarizer was requested but aiReview.enabled is false; the run used the deterministic digest instead.'
     ]
   }
 
@@ -276,6 +296,21 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
   // warning (prepended below) is not one of those providers.
   const providerWarnings = warningsForFailedProviders(result.providerMetrics)
   const failedProviders = providerWarnings.length
+
+  // Spec 11 requires per-provider observability. A single aggregate step reduced
+  // every provider to one failure COUNT, so "which provider went quiet" and "which
+  // one carried the change intent" were both unanswerable after the fact. Only ids,
+  // counts and byte totals are recorded — never gathered content, which is untrusted
+  // external text.
+  for (const metric of result.providerMetrics) {
+    input.logger.debug('Context ingestion provider completed.', {
+      provider_id: metric.id,
+      provider_type: metric.type,
+      fragment_count: metric.fragmentCount,
+      bytes: metric.bytes,
+      failed: metric.failed
+    })
+  }
   const warnings = [
     ...warningForSummarizerUnavailable(
       summarizerSelection.modelSummarizerUnavailableReason

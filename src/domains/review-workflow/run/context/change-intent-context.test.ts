@@ -65,6 +65,64 @@ describe('prepareReviewRunnerChangeIntentContext — model summarizer availabili
     await rm(root, { recursive: true, force: true })
   })
 
+  test('says so when a model summary was asked for but model review is off', async () => {
+    // This path used to be silent. It shared an early return with the two cases
+    // where the digest IS the deliberate choice (digest requested, no provider), so
+    // an operator who explicitly configured a model summary and had aiReview off
+    // received the digest with nothing said about it.
+    const config = CodeReviewerConfigSchema.parse({
+      provider: { id: 'openai', model: 'gpt-x' },
+      aiReview: { enabled: false },
+      contextSources: {
+        enabled: true,
+        providers: [{ type: 'inbox', dir: '.codereviewer/context' }],
+        summary: { mode: 'model' }
+      }
+    })
+    const { logger } = createCapturingLogger()
+
+    const result = await prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: root,
+      config,
+      assembledContext: emptyAssembledContext,
+      sourceFiles: [],
+      environment: {},
+      observability: createNoContentEventRecorder(),
+      logger
+    })
+
+    expect(result.warnings).toEqual([
+      'External change-intent model summarizer was requested but aiReview.enabled is false; the run used the deterministic digest instead.'
+    ])
+  })
+
+  test('stays quiet when the digest is the deliberate choice', async () => {
+    // The counterweight: a warning that fires on a setting the operator chose on
+    // purpose trains people to ignore warnings.
+    const config = CodeReviewerConfigSchema.parse({
+      provider: { id: 'openai', model: 'gpt-x' },
+      aiReview: { enabled: false },
+      contextSources: {
+        enabled: true,
+        providers: [{ type: 'inbox', dir: '.codereviewer/context' }],
+        summary: { mode: 'digest' }
+      }
+    })
+    const { logger } = createCapturingLogger()
+
+    const result = await prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: root,
+      config,
+      assembledContext: emptyAssembledContext,
+      sourceFiles: [],
+      environment: {},
+      observability: createNoContentEventRecorder(),
+      logger
+    })
+
+    expect(result.warnings).toEqual([])
+  })
+
   test('reports the classified reason when resolving the model summarizer throws', async () => {
     const config = CodeReviewerConfigSchema.parse({
       provider: { id: 'openai', model: 'gpt-x' },

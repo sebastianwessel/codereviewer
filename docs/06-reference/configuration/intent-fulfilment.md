@@ -12,9 +12,16 @@ except `enabled` is a bound on that spend.
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
 | `intentFulfilment.enabled` | boolean | `false` | Master switch. With `false`, `intent check` exits `0` and reports `"status": "disabled"` instead of an empty result. |
-| `intentFulfilment.maxObligations` | integer 1–100 | `20` | Cap on the obligations read out of the stated intent, and therefore on judgement calls — one call judges one obligation. This is the primary spend bound. Exceeding it sets `summary.obligationsTruncated`. |
-| `intentFulfilment.maxIntentBytes` | integer 256–200000 | `20000` | Cap on the redacted change-intent text handed to the extraction call. The ingestion providers bound themselves per file; this bounds the sum, because a pipeline can configure several of them. Truncation happens on a line boundary and sets `scope.intentTruncated`. |
-| `intentFulfilment.maxChangeLines` | integer 1–5000 | `400` | Cap on the changed lines each judgement call sees. A judgement may only cite a line the change touched, so this also bounds the evidence a judgement can draw on. Exceeding it sets `scope.changedLinesTruncated` and adds a warning. |
+| `intentFulfilment.maxObligations` | integer 1–100 | `100` | Cap on the obligations read out of the stated intent, and therefore on judgement calls — one call judges one obligation. This is the primary spend bound. |
+| `intentFulfilment.maxIntentBytes` | integer 256–200000 | `100000` | Cap on the redacted change-intent text handed to the extraction call. The ingestion providers bound themselves per file; this bounds the sum, because a pipeline can configure several of them. |
+| `intentFulfilment.maxChangeLines` | integer 1–5000 | `5000` | Cap on the changed lines each judgement call sees. A judgement may only cite a line the change touched, so this also bounds the evidence a judgement can draw on. |
+
+**These limits refuse; they never truncate.** Exceeding one stops the run with a
+specific error and exit code `4`, naming the bound and the offending input. Nothing
+is silently reviewed in part: a partial answer that looks complete is worse than a
+refusal, because only the refusal is visible. The error also says what you can
+actually do about it — and where a limit is already at its maximum, it says that
+rather than advising you to raise it.
 
 ```json
 {
