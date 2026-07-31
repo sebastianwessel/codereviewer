@@ -91,9 +91,16 @@ export const gatherContextFragments = async (
   const providerMetrics: ProviderGatherMetric[] = []
 
   for (const config of input.providers) {
-    const provider = buildProvider(config)
+    // CONSTRUCTION IS INSIDE THE TRY. It used to sit outside it, so a provider that
+    // threw while being built took the whole ingestion down with it — breaking the
+    // contract three lines of doc comment above ("a source failure never fails the
+    // caller") for the one failure mode the caller can do least about.
+    let providerId: string = config.type
 
     try {
+      const provider = buildProvider(config)
+      providerId = provider.id
+
       const gathered = await provider.gather(gatherInput)
       const redacted = gathered.map((fragment) =>
         redactFragment(fragment, input.redact)
@@ -110,9 +117,11 @@ export const gatherContextFragments = async (
         failed: false
       })
     } catch {
-      // A provider failure is non-fatal: record it and continue.
+      // A provider failure is non-fatal: record it and continue. `providerId` falls
+      // back to the configured type when the failure happened before the provider
+      // existed to name itself.
       providerMetrics.push({
-        id: provider.id,
+        id: providerId,
         type: config.type,
         fragmentCount: 0,
         bytes: 0,

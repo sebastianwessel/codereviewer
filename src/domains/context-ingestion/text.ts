@@ -1,28 +1,9 @@
-/** Truncate to at most `maxBytes` UTF-8 bytes without splitting a code point. */
-export const truncateToUtf8Bytes = (text: string, maxBytes: number): string => {
-  if (maxBytes <= 0) {
-    return ''
-  }
+// Re-exported so this domain keeps one import site for its text helpers. The
+// implementation is the shared one: this file used to carry its own binary search
+// over UTF-16 code-unit indices, which could cut between the halves of a surrogate
+// pair and emit a lone surrogate, while its doc comment promised the opposite.
+export { sliceUtf8Bytes as truncateToUtf8Bytes } from '../../shared/text/utf8-bytes.js'
 
-  if (Buffer.byteLength(text, 'utf8') <= maxBytes) {
-    return text
-  }
-
-  let low = 0
-  let high = text.length
-
-  while (low < high) {
-    const mid = Math.ceil((low + high) / 2)
-
-    if (Buffer.byteLength(text.slice(0, mid), 'utf8') <= maxBytes) {
-      low = mid
-    } else {
-      high = mid - 1
-    }
-  }
-
-  return text.slice(0, low)
-}
 
 // Minimal glob matcher for the changed-files provider. Supports `**`, `*`, and
 // `?` against POSIX-style repository paths.

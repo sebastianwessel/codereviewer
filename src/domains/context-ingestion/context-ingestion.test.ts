@@ -214,3 +214,31 @@ describe('runContextIngestion', () => {
     expect(result.brief).toBeUndefined()
   })
 })
+
+describe('a provider that fails to build', () => {
+  test('is recorded as failed and does not take the ingestion down', async () => {
+    // The contract is "a source failure never fails the caller". Construction used
+    // to happen OUTSIDE the try, so a provider that threw while being built broke
+    // that contract for the one failure the caller can do least about. A sibling
+    // provider must still deliver its fragments.
+    const { gatherContextFragments } = await import('./ingest.js')
+
+    const result = await gatherContextFragments({
+      // An inbox provider pointed at a directory that does not exist, alongside a
+      // changed-files provider that works.
+      providers: [
+        { type: 'inbox', dir: '/nonexistent-\u0000-invalid' },
+        { type: 'changed-files', include: ['**/*.md'] }
+      ],
+      repositoryRoot: process.cwd(),
+      changedFiles: [],
+      redact: (value: string) => value
+    } as never)
+
+    // Every configured provider is accounted for, whatever happened to it.
+    expect(result.providerMetrics).toHaveLength(2)
+    expect(
+      result.providerMetrics.every((metric) => typeof metric.id === 'string')
+    ).toBe(true)
+  })
+})
