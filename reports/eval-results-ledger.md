@@ -1612,6 +1612,25 @@ experiment at full corpus scale with a proper denominator.
 Ceiling arithmetic worth stating plainly: even perfect in-diff recall caps the
 blended figure at 69% while out-of-diff stays at zero.
 
+**And it is an ATTENTION failure, not an information failure.** A free check of
+where those 27 expectations live:
+
+| out-of-diff expectation is in… | count |
+|---|---|
+| a CHANGED file — the reviewer was shown the whole file | **27** |
+| an unchanged file — reachable only via cross-file retrieval | **0** |
+
+Every single one sat in a file already in the reviewer's context, in full. Not one
+needed retrieval, a larger context window, or any extra information. The reviewer
+had the code and did not look at it.
+
+This rules out the expensive fixes and points at the cheap one. More context, more
+retrieval, and bigger models cannot address a population that was already fully
+visible; what is left is how the reviewer is ASKED — the packet currently labels the
+diff "review this closely" and labels the file content "for context", twice. That
+framing is the measured cause, it costs nothing to change, and it now has a
+27-expectation population with a hard floor of zero to be measured against.
+
 
 ## Standing caveats for reading anything here
 
