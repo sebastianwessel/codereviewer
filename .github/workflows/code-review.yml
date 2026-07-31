@@ -1,0 +1,113 @@
+# Reviews a pull request with this repository's own engine and reports back in
+# one comment that is kept current.
+#
+# Guide: docs/04-guides/github-integration.md
+#
+# The logic lives in `scripts/github/`, not here. A workflow whose behaviour is
+# inline shell cannot be unit-tested, and the cases this has to get right — a
+# fork pull request, an unset secret, a provider outage, a failing gate — are
+# exactly the ones nobody exercises by hand. This file resolves a checkout and
+# runs one entry point.
+#
+# NOTHING from the pull-request title or body is interpolated into a `run:`
+# script or into `env:`. That text is attacker-controlled, and `${{ ... }}`
+# interpolation into a shell is a remote-code-execution primitive. The entry
+# point reads the event payload from disk instead.
+name: code-review
+
+on:
+  pull_request:
+    # `synchronize` is what re-runs the review on every push to the branch, and
+    # it is the reason the summary comment has to be edited rather than added.
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Least privilege at the top; the one job that needs to write widens it.
+permissions:
+  contents: read
+
+# One review in flight per pull request. A push that lands while an earlier
+# review is running cancels it, so two runs can never race to create the
+# summary comment.
+concurrency:
+  group: code-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Code review
+    # Drafts are not reviewed: they cannot be merged, and every run costs money.
+    # Marking a pull request ready fires `ready_for_review`, which runs this.
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      # Read the code under review.
+      contents: read
+      # Write the summary comment and the inline review comments. Nothing else
+      # is requested: no `security-events`, no `checks`, no `issues`. Uploading
+      # SARIF to code scanning needs `security-events: write` — add it, and the
+      # upload step, only if you want that surface.
+      pull-requests: write
+    steps:
+      # Pinned by tag for readability. Pin by commit digest in a release
+      # pipeline; see docs/04-guides/github-integration.md.
+      - name: Check out the pull-request head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The head commit, not the merge commit: inline review comments anchor
+          # to line numbers in the head, and a merge commit's numbers can differ.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # The engine resolves `git merge-base` before diffing, so a shallow
+          # checkout fails with `merge_base_unavailable` (exit 3).
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Review, and report on the pull request
+        env:
+          # The default token. It is read-only on a fork pull request, which the
+          # entry point detects and reports rather than failing on.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # Which stages run, and how they report. See
+          # scripts/github/codereviewer.github.json.
+          CODEREVIEWER_GITHUB_CONFIG: scripts/github/codereviewer.github.json
+
+          # Provider selection lives in repository variables so the model can be
+          # changed without editing this file. Credentials live in secrets.
+          CODEREVIEWER_PROVIDER_ID: ${{ vars.CODEREVIEWER_PROVIDER_ID }}
+          CODEREVIEWER_PROVIDER_MODEL: ${{ vars.CODEREVIEWER_PROVIDER_MODEL }}
+          CODEREVIEWER_PROVIDER_BASE_URL: ${{ vars.CODEREVIEWER_PROVIDER_BASE_URL }}
+          CODEREVIEWER_PROVIDER_REASONING_EFFORT: ${{ vars.CODEREVIEWER_PROVIDER_REASONING_EFFORT }}
+
+          # Set the one pair your provider needs; the rest expand to empty and
+          # are ignored. A secret is never printed, and the run reports missing
+          # credentials by NAME only.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AZURE_AI_ENDPOINT: ${{ secrets.AZURE_AI_ENDPOINT }}
+          AZURE_AI_API_KEY: ${{ secrets.AZURE_AI_API_KEY }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+          # Logs are silent by default: the engine must not print prompts,
+          # source, or tool output into a public job log.
+          CODEREVIEWER_LOG_LEVEL: silent
+        run: node --import tsx scripts/github/main.ts
+
+      - name: Upload the run artifacts
+        # `always()` so a failed gate and a failed run both keep their evidence.
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codereviewer-run-${{ github.event.pull_request.number }}
+          path: .codereviewer/runs/
+          if-no-files-found: ignore
+          retention-days: 14

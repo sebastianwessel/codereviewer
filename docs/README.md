@@ -15,10 +15,10 @@ If you read nothing else, read [What it is](01-overview/what-it-is.md) and
 | Evaluating whether this is worth your time | [What it is](01-overview/what-it-is.md) → [Status and limitations](01-overview/status-and-limitations.md) → [Current results](05-quality/current-results.md) |
 | Trying to run it | [Install and run](02-getting-started/install-and-run.md) → [Your first review](02-getting-started/first-review.md) → [Reading a report](02-getting-started/reading-a-report.md) |
 | Deciding whether to trust the numbers | [Why the numbers are believable](05-quality/README.md) → [Metrics](05-quality/metrics.md) → [Judges](05-quality/judges-and-calibration.md) |
-| Putting it in CI | [CI/CD](04-guides/ci-cd.md) → [Exit codes](06-reference/exit-codes-and-error-codes.md) → [Controlling cost](04-guides/controlling-cost.md) |
+| Putting it in CI | [CI/CD](04-guides/ci-cd.md) → [GitHub PRs](04-guides/github-integration.md) → [Exit codes](06-reference/exit-codes-and-error-codes.md) → [Controlling cost](04-guides/controlling-cost.md) |
 | Wondering how it actually works | [Review lifecycle](03-concepts/review-lifecycle.md) → the pipeline pages in order |
 | Reviewing it for security | [Threat model](07-security/threat-model.md) → [Prompt injection](07-security/prompt-injection-and-untrusted-input.md) |
-| Contributing | [Repo map](09-contributing/repo-map.md) → [Spec-driven workflow](09-contributing/spec-driven-workflow.md) |
+| Contributing | [Repo map](09-contributing/repo-map.md) → [Spec-driven workflow](09-contributing/spec-driven-workflow.md) → [Releasing](09-contributing/releasing.md) |
 
 The sections are numbered in reading order: each assumes the ones before it.
 
@@ -59,7 +59,7 @@ afford a recall-oriented first stage. See
   - [The two flows](03-concepts/two-flows.md) · [Trust model](03-concepts/trust-model.md)
   - [Optional capabilities](03-concepts/optional-capabilities/README.md) — **read the decision table before turning anything on**
 - **[04 Guides](04-guides/)** — task-oriented recipes
-  - [Configuration](04-guides/configuration.md) · [Providers](04-guides/providers.md) · [Instructions and skills](04-guides/instructions-and-skills.md) · [Tuning noise and recall](04-guides/tuning-noise-and-recall.md) · [Controlling cost](04-guides/controlling-cost.md) · [CI/CD](04-guides/ci-cd.md)
+  - [Configuration](04-guides/configuration.md) · [Providers](04-guides/providers.md) · [Instructions and skills](04-guides/instructions-and-skills.md) · [Tuning noise and recall](04-guides/tuning-noise-and-recall.md) · [Controlling cost](04-guides/controlling-cost.md) · [CI/CD](04-guides/ci-cd.md) · [GitHub PR integration](04-guides/github-integration.md)
 - **[05 Quality](05-quality/)** — how review quality is measured, and what it measures at
   - [Why you should believe the numbers](05-quality/README.md) · [Metrics](05-quality/metrics.md) · [Judges and calibration](05-quality/judges-and-calibration.md) · [Datasets](05-quality/datasets.md) · [**Current results**](05-quality/current-results.md) · [**What limits recall**](05-quality/what-limits-recall.md) · [Running an evaluation](05-quality/running-an-evaluation.md) · [Comparing runs](05-quality/comparing-runs.md)
 - **[06 Reference](06-reference/)** — exhaustive lookup
@@ -69,7 +69,7 @@ afford a recall-oriented first stage. See
 - **[08 Operations](08-operations/)**
   - [Troubleshooting](08-operations/troubleshooting.md) · [Partial and failed runs](08-operations/partial-and-failed-runs.md)
 - **[09 Contributing](09-contributing/)**
-  - [Repo map](09-contributing/repo-map.md) · [Spec-driven workflow](09-contributing/spec-driven-workflow.md) · [Running tests and checks](09-contributing/running-tests-and-checks.md) · [Adding evaluation cases](09-contributing/adding-evaluation-cases.md)
+  - [Repo map](09-contributing/repo-map.md) · [Spec-driven workflow](09-contributing/spec-driven-workflow.md) · [Running tests and checks](09-contributing/running-tests-and-checks.md) · [Adding evaluation cases](09-contributing/adding-evaluation-cases.md) · [Releasing](09-contributing/releasing.md)
 
 ## How quality is measured
 

@@ -5,11 +5,11 @@ and confirm the setup — before you review anything real.
 
 ---
 
-## There is no package to install
+## There is no package to install yet
 
-The project is **not published to npm** (`package.json` is `"private": true` at
-version `0.1.0`). `npm install -g` and `npx` do not work. You run it from a git
-checkout.
+The project is **not published to npm**. The release pipeline exists and the
+package builds a clean tarball, but no version has been released, so
+`npm install -g` and `npx` do not work. You run it from a git checkout.
 
 ---
 

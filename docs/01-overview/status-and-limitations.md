@@ -5,13 +5,20 @@ off. Read this before you adopt the tool or quote a number from it.
 
 ---
 
-## It is not published
+## It is not published yet
 
-`package.json` declares `"private": true` at version `0.1.0`, and there is no
-publish step. **There is no npm package.**
+The package is now *publishable* — `private` is gone, the metadata is complete,
+and a release workflow publishes on a version bump — but **nothing has been
+published**. Version `0.1.0` is not on the registry, so:
 
 - `npm install -g @sebastianwessel/codereviewer` does not work.
 - `npx @sebastianwessel/codereviewer …` does not work.
+
+The first release is deliberately blocked on a **licence**: the repository
+declares none, and the release gate fails without both a `LICENSE` file and a
+`license` field. A public package with no licence is all-rights-reserved, which
+is not a default anyone should inherit by accident. See
+[releasing.md](../09-contributing/releasing.md).
 
 The only supported way to run it today is **from a source checkout** — see
 [Install and run](../02-getting-started/install-and-run.md). The package does

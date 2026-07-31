@@ -1,0 +1,405 @@
+// The single pull-request comment this integration maintains.
+//
+// IT IS ONE COMMENT, EDITED IN PLACE. A pull request that is pushed to ten times
+// must end with one current comment, not ten stale ones, so the body opens with
+// a hidden marker and a later run finds that marker and edits the comment it is
+// on. The marker is the identity: nothing else about the body is stable, and
+// matching on a heading or on the author alone would collide with any other
+// tool.
+//
+// The marker is written FIRST, before any content, for two reasons. Truncation
+// works from the end, so an over-long body can never lose its own identity; and
+// untrusted text later in the body cannot forge a marker because `sanitizeText`
+// escapes every `<`.
+import {
+  MAX_ISSUE_COMMENT_BODY,
+  sanitizeLine,
+  sanitizeText
+} from './sanitize.js'
+import type {
+  ConformanceDigest,
+  ImpactDigest,
+  IntentDigest,
+  ReviewDigest,
+  Severity
+} from './report-digest.js'
+import { severityOrder } from './report-digest.js'
+import type { StageOutcome } from './stage-outcomes.js'
+import { stageDefinitions } from './stage-outcomes.js'
+
+const MARKER_PREFIX = 'codereviewer:review-summary'
+
+// Bounded so a key cannot smuggle markup into the marker it is interpolated
+// into. A key is an operator choice (one comment per workflow, e.g. `default`
+// and `nightly`), not user input, but the marker is the integration's identity
+// and validating it costs nothing.
+const validKey = /^[A-Za-z0-9._-]{1,64}$/u
+
+export const summaryCommentMarker = (key: string): string => {
+  if (!validKey.test(key)) {
+    throw new TypeError(
+      `Comment key must match ${String(validKey)}, received "${key}".`
+    )
+  }
+
+  return `<!-- ${MARKER_PREFIX}:${key} -->`
+}
+
+export type SummaryCommentInput = {
+  readonly markerKey: string
+  readonly outcomes: readonly StageOutcome[]
+  readonly review?: ReviewDigest
+  readonly intent?: IntentDigest
+  readonly impact?: ImpactDigest
+  readonly conformance?: ConformanceDigest
+  readonly headSha: string
+  /** Link back to the workflow run holding the full artifacts. */
+  readonly runUrl?: string
+  /** Number of inline review comments posted, when inline posting ran. */
+  readonly inlineCommentCount?: number
+  /**
+   * Operational notes: a fork that could not be reviewed, inline comments that
+   * could not be posted, a stage that was skipped. Rendered verbatim (after
+   * sanitizing) because each one explains why the reader is seeing less than
+   * they expected.
+   */
+  readonly notes: readonly string[]
+}
+
+const MAX_LISTED_FINDINGS = 50
+const MAX_LISTED_OBLIGATIONS = 20
+const MAX_LISTED_SYMBOLS = 15
+const MAX_LISTED_DIVERGENCES = 10
+const MAX_TITLE = 200
+const MAX_DESCRIPTION = 700
+
+const statusLabels: Readonly<Record<string, string>> = {
+  passed: 'ok',
+  'gate-failed': 'blocked',
+  failed: 'error',
+  skipped: 'skipped'
+}
+
+const verdictHeadline = (input: SummaryCommentInput): string => {
+  const review = input.outcomes.find((outcome) => outcome.id === 'review')
+
+  if (review === undefined || review.status === 'skipped') {
+    return 'Code review did not run'
+  }
+
+  if (review.status === 'failed') {
+    return 'Code review could not complete'
+  }
+
+  if (review.status === 'gate-failed') {
+    return 'Code review: quality gate failed'
+  }
+
+  const findingCount = input.review?.findings.length ?? 0
+
+  return findingCount === 0
+    ? 'Code review: no findings'
+    : `Code review: quality gate passed, ${findingCount} finding${findingCount === 1 ? '' : 's'} to read`
+}
+
+const stageTable = (input: SummaryCommentInput): string => {
+  const rows = stageDefinitions.map((stage) => {
+    const outcome = input.outcomes.find((entry) => entry.id === stage.id)
+    const status = outcome === undefined ? 'skipped' : outcome.status
+    const label = statusLabels[status] ?? status
+    const detail =
+      outcome?.message === undefined
+        ? stage.contribution
+        : `${stage.contribution} — ${outcome.message}`
+
+    return `| ${stage.label} | ${stage.kind} | ${label} | ${sanitizeLine(detail, 240)} |`
+  })
+
+  return [
+    '| Stage | Role | Result | What it contributes |',
+    '| --- | --- | --- | --- |',
+    ...rows
+  ].join('\n')
+}
+
+const findingsSection = (review: ReviewDigest): string | undefined => {
+  if (review.findings.length === 0) {
+    return undefined
+  }
+
+  const ordered = [...review.findings].sort(
+    (left, right) =>
+      severityOrder.indexOf(left.severity) - severityOrder.indexOf(right.severity)
+  )
+  const shown = ordered.slice(0, MAX_LISTED_FINDINGS)
+  const blocking = new Set(review.failingFindingIds)
+  const lines = shown.map((finding) => {
+    const marker = blocking.has(finding.id) ? ' **(blocks the gate)**' : ''
+    const baseline =
+      finding.baselineStatus === 'existing' ? ' _(pre-existing)_' : ''
+
+    return [
+      `- **${finding.severity}** · ${sanitizeLine(finding.category, 40)} · \`${sanitizeLine(finding.path, 200)}:${finding.startLine}\`${marker}${baseline}`,
+      `  ${sanitizeLine(finding.title, MAX_TITLE)}`,
+      ...(finding.description.length === 0
+        ? []
+        : [`  ${sanitizeText(finding.description, MAX_DESCRIPTION).replaceAll('\n', ' ')}`])
+    ].join('\n')
+  })
+  const counts = severityOrder
+    .filter((severity: Severity) => review.severityCounts[severity] > 0)
+    .map((severity) => `${review.severityCounts[severity]} ${severity}`)
+    .join(', ')
+  const truncated =
+    ordered.length > shown.length
+      ? [
+          `\n_${ordered.length - shown.length} further findings are in the run artifacts._`
+        ]
+      : []
+
+  return [
+    `### Findings (${review.findings.length})`,
+    '',
+    counts.length === 0 ? '' : `${counts}.`,
+    '',
+    ...lines,
+    ...truncated
+  ]
+    .filter((line) => line !== '')
+    .join('\n')
+}
+
+const intentSection = (intent: IntentDigest): string | undefined => {
+  if (intent.status === 'disabled') {
+    return undefined
+  }
+
+  if (intent.status !== 'completed') {
+    const explanation: Readonly<Record<string, string>> = {
+      'no-intent':
+        'The pull-request description stated no intent to check the change against.',
+      'unusable-intent':
+        'The pull-request description was read, but no checkable obligation could be extracted from it.',
+      'provider-unavailable':
+        'No model was available to read the stated intent.'
+    }
+
+    return [
+      '### Intent',
+      '',
+      explanation[intent.status] ?? `Status: ${sanitizeLine(intent.status, 80)}.`
+    ].join('\n')
+  }
+
+  const shown = intent.unevidenced.slice(0, MAX_LISTED_OBLIGATIONS)
+  const list = shown.map(
+    (obligation) =>
+      `- ${sanitizeLine(obligation.statement, 300)} _(${sanitizeLine(obligation.status, 40)})_`
+  )
+
+  return [
+    '### Intent',
+    '',
+    `${intent.obligationCount} obligation${intent.obligationCount === 1 ? '' : 's'} read from the description: ${intent.evidencedCount} evidenced by the change, ${intent.notEvidencedCount} not.`,
+    '',
+    ...(list.length === 0
+      ? ['Every stated obligation is evidenced by a changed line.']
+      : [
+          'Nothing in this change evidences these. That is a statement about the diff, not a claim that the work is undone — partial work is normal, and an obligation satisfied elsewhere leaves no trace here.',
+          '',
+          ...list,
+          ...(intent.unevidenced.length > shown.length
+            ? [`- _…and ${intent.unevidenced.length - shown.length} more._`]
+            : [])
+        ]),
+    ...(intent.explanation === undefined
+      ? []
+      : ['', sanitizeText(intent.explanation, 1200)])
+  ].join('\n')
+}
+
+const impactSection = (impact: ImpactDigest): string | undefined => {
+  if (impact.status !== 'completed' || impact.symbols.length === 0) {
+    return undefined
+  }
+
+  const shown = impact.symbols.slice(0, MAX_LISTED_SYMBOLS)
+  const rows = shown.map(
+    (symbol) =>
+      `| \`${sanitizeLine(symbol.name, 120)}\` | \`${sanitizeLine(symbol.definitionPath, 200)}\` | ${symbol.referenceCount} | ${symbol.testReferenceCount} |`
+  )
+
+  return [
+    '### Impact',
+    '',
+    `${impact.changedSymbolCount} changed symbol${impact.changedSymbolCount === 1 ? '' : 's'}, ${impact.referenceCount} production reference${impact.referenceCount === 1 ? '' : 's'} outside the defining file.`,
+    '',
+    '| Symbol | Defined in | Callers | Test callers |',
+    '| --- | --- | --- | --- |',
+    ...rows,
+    ...(impact.symbols.length > shown.length
+      ? ['', `_…and ${impact.symbols.length - shown.length} more in the artifacts._`]
+      : [])
+  ].join('\n')
+}
+
+const conformanceSection = (
+  conformance: ConformanceDigest
+): string | undefined => {
+  if (conformance.status !== 'completed' || conformance.divergences.length === 0) {
+    return undefined
+  }
+
+  const shown = conformance.divergences.slice(0, MAX_LISTED_DIVERGENCES)
+  const list = shown.map((divergence) =>
+    [
+      `- \`${sanitizeLine(divergence.path, 200)}:${divergence.line}\` — ${sanitizeLine(divergence.statement, 300)}`,
+      ...(divergence.question.length === 0
+        ? []
+        : [`  ${sanitizeLine(divergence.question, 240)}`])
+    ].join('\n')
+  )
+
+  return [
+    '### Conformance',
+    '',
+    `${conformance.changeAttributedCount} declaration${conformance.changeAttributedCount === 1 ? '' : 's'} in this change diverge from a convention their peers hold. This is a fact and a question, not a verdict.`,
+    '',
+    ...list,
+    ...(conformance.divergences.length > shown.length
+      ? [`- _…and ${conformance.divergences.length - shown.length} more._`]
+      : []),
+    ...(conformance.preExistingCount > 0
+      ? [
+          '',
+          `_${conformance.preExistingCount} further divergence${conformance.preExistingCount === 1 ? '' : 's'} pre-date this change and are listed only in the artifacts._`
+        ]
+      : [])
+  ].join('\n')
+}
+
+const detailsSection = (input: SummaryCommentInput): string => {
+  const rows: string[] = [
+    `- Head commit: \`${sanitizeLine(input.headSha, 64)}\``
+  ]
+
+  if (input.review !== undefined) {
+    rows.push(`- Run id: \`${sanitizeLine(input.review.runId, 120)}\``)
+    rows.push(`- Coverage: ${sanitizeLine(input.review.coverageStatus, 40)}`)
+
+    if (input.review.skippedFileCount > 0) {
+      rows.push(`- Skipped files: ${input.review.skippedFileCount}`)
+    }
+
+    if (input.review.costUsd !== undefined) {
+      rows.push(`- Cost: $${input.review.costUsd.toFixed(4)}`)
+    }
+
+    for (const warning of input.review.warnings.slice(0, 10)) {
+      rows.push(`- Warning: ${sanitizeLine(warning, 300)}`)
+    }
+
+    for (const issue of input.review.providerIssues.slice(0, 10)) {
+      rows.push(`- Provider issue: ${sanitizeLine(issue, 300)}`)
+    }
+  }
+
+  if (input.inlineCommentCount !== undefined) {
+    rows.push(`- Inline comments posted: ${input.inlineCommentCount}`)
+  }
+
+  if (input.runUrl !== undefined) {
+    rows.push(`- [Full artifacts](${sanitizeLine(input.runUrl, 400)})`)
+  }
+
+  return ['<details><summary>Run details</summary>', '', ...rows, '</details>'].join(
+    '\n'
+  )
+}
+
+/**
+ * Assemble the sections that fit inside GitHub's comment-body limit.
+ *
+ * Sections are added in priority order and a section that would overflow is
+ * dropped whole rather than cut mid-sentence, because half a finding is worse
+ * than a pointer to the artifacts.
+ */
+const assemble = (marker: string, sections: readonly string[]): string => {
+  const separator = '\n\n'
+  const overflowNote =
+    '_This comment reached GitHub\'s size limit. The remaining detail is in the run artifacts._'
+  let body = marker
+  let dropped = false
+
+  for (const section of sections) {
+    const candidate = `${body}${separator}${section}`
+
+    if (
+      candidate.length + separator.length + overflowNote.length >
+      MAX_ISSUE_COMMENT_BODY
+    ) {
+      dropped = true
+      continue
+    }
+
+    body = candidate
+  }
+
+  return dropped ? `${body}${separator}${overflowNote}` : body
+}
+
+export const renderSummaryComment = (input: SummaryCommentInput): string => {
+  const marker = summaryCommentMarker(input.markerKey)
+  const notes = input.notes.map((note) => `> ${sanitizeLine(note, 500)}`)
+  const sections: readonly (string | undefined)[] = [
+    `## ${verdictHeadline(input)}`,
+    notes.length === 0 ? undefined : notes.join('\n>\n'),
+    stageTable(input),
+    input.review === undefined ? undefined : findingsSection(input.review),
+    input.intent === undefined ? undefined : intentSection(input.intent),
+    input.impact === undefined ? undefined : impactSection(input.impact),
+    input.conformance === undefined
+      ? undefined
+      : conformanceSection(input.conformance),
+    detailsSection(input)
+  ]
+
+  return assemble(
+    marker,
+    sections.filter((section): section is string => section !== undefined)
+  )
+}
+
+export type IssueComment = {
+  readonly id: number
+  readonly body?: string | null
+  readonly user?: { readonly login?: string; readonly type?: string } | null
+}
+
+/**
+ * The comment a previous run of this workflow created, or `undefined` when there
+ * is none to edit.
+ *
+ * The author filter is a safety property, not a nicety. `pull-requests: write`
+ * can edit anybody's comment, so matching on the marker alone would let a user
+ * who pastes the marker into their own comment have it silently overwritten by
+ * the next run. Candidates are therefore restricted to the acting identity when
+ * one is known, and to bot authors otherwise.
+ *
+ * The OLDEST match wins, so two runs racing to create the comment converge on
+ * the same one instead of alternating.
+ */
+export const selectSummaryComment = (
+  comments: readonly IssueComment[],
+  marker: string,
+  expectedAuthorLogin?: string
+): IssueComment | undefined =>
+  comments
+    .filter((comment) => (comment.body ?? '').includes(marker))
+    .filter((comment) =>
+      expectedAuthorLogin === undefined
+        ? comment.user?.type === 'Bot'
+        : comment.user?.login?.toLowerCase() ===
+          expectedAuthorLogin.toLowerCase()
+    )
+    .sort((left, right) => left.id - right.id)[0]

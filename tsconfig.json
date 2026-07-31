@@ -16,5 +16,9 @@
     "sourceMap": true,
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "vitest.config.ts"]
+  // `scripts/github/**` is the GitHub Action entry point. It is executed from
+  // source rather than built, which is exactly why it belongs here: nothing else
+  // would ever type-check it. `tsconfig.build.json` restates `include` as
+  // `src/**/*.ts`, so widening this one does not put it in the published build.
+  "include": ["src/**/*.ts", "scripts/github/**/*.ts", "vitest.config.ts"]
 }

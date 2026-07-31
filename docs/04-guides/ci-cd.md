@@ -8,10 +8,12 @@ Bitbucket Pipelines.
 
 ## Before you write a pipeline: two facts
 
-**1. The package is not published.** `package.json` sets `"private": true` and
-there is no registry artifact. There is no `npm install -g`, no `npx` form and
-no published binary. Every CI job must check out this repository and run it
-from source.
+**1. The package is not published yet.** There is no registry artifact, so no
+`npm install -g`, no `npx` form and no published binary. Every CI job must check
+out this repository and run it from source. A release workflow is in place and
+publishes on a version bump; until the first release lands, the recipes below
+are the only way to run it in CI. For this repository's own PR reviews, see
+[GitHub PR integration](github-integration.md).
 
 **2. The engine reviews the current working directory.** The repository root is
 `process.cwd()` at CLI entry, and every read and write must resolve under it.
