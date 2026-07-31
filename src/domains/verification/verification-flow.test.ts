@@ -7,7 +7,10 @@ import {
   type Claim
 } from '../../shared/contracts/verification/verification.schema.js'
 import type { ClaimProvider } from './contracts.js'
-import type { ModelVerdict } from './verification-report.js'
+import {
+  VerificationReportSchema,
+  type ModelVerdict
+} from './verification-report.js'
 import { isToolCallBudgetExceededError } from '../context-retrieval/index.js'
 import {
   runVerificationFlow,
@@ -307,6 +310,50 @@ describe('runVerificationFlow', () => {
     expect(report.claimCount).toBe(0)
     expect(report.warnings).toEqual([])
     expect(usage).toBeUndefined()
+  })
+
+  test('records a durable context-ledger entry in the report for every mediated tool call', async () => {
+    const verify: ClaimAgentRunner = async ({ claim, tools }) => {
+      await tools.read({ path: 'app.ts' })
+
+      return {
+        verdict: {
+          status: 'confirmed',
+          rationale: `read app.ts for ${claim.id}`,
+          citedEvidenceIds: []
+        }
+      }
+    }
+
+    const { report } = await runVerificationFlow({
+      ...baseFlowInput(repositoryRoot),
+      providers: [
+        staticProvider([
+          makeClaim({ id: 'claim_led1' }),
+          makeClaim({ id: 'claim_led2' })
+        ])
+      ],
+      investigateClaim: verify
+    })
+
+    // One entry per read, across every claim: each claim gets its own retriever,
+    // so a per-claim sink would leave the report holding nothing.
+    expect(report.contextLedger).toHaveLength(2)
+    const [entry] = report.contextLedger
+    expect(entry?.kind).toBe('tool-result')
+    expect(entry?.path).toBe('app.ts')
+    expect(entry?.reason).toBe('context-retrieval-read')
+    expect(entry?.decision).toBe('included')
+    expect(entry?.bytesIncluded).toBeGreaterThan(0)
+    // No source content is disclosed: the entry carries a hash, not the file.
+    expect(entry?.contentHash).toMatch(/^[a-f0-9]{64}$/u)
+
+    // The entries survive serialization into the run artifact this lane writes
+    // (`verification-report.json`), which is what makes the read auditable.
+    const roundTripped = VerificationReportSchema.parse(
+      JSON.parse(JSON.stringify(report))
+    )
+    expect(roundTripped.contextLedger).toEqual(report.contextLedger)
   })
 
   test('a pre-aborted run ends every claim uncertain without invoking the agent', async () => {

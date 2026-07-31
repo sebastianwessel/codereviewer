@@ -30,6 +30,7 @@ import {
   isToolCallBudgetExceededError,
   type RetrievalTools
 } from '../context-retrieval/index.js'
+import type { ContextLedgerEntry } from '../review-planning/index.js'
 import type { ClaimProvider } from './contracts.js'
 import { fingerprintsForClaim } from './claim-fingerprints.js'
 import {
@@ -178,12 +179,18 @@ export const runVerificationFlow = async (
   const claims = await gatherClaims(input, warnings)
   const verdicts: Verdict[] = []
   const observations: ClaimObservation[] = []
+  // One ledger for the whole flow, so every mediated tool call across every claim
+  // is recorded in the report this lane writes (spec 12 "Tools"). Without a sink
+  // the retriever's entries are created and dropped, and the evidence ids the
+  // verdicts cite name records no artifact holds.
+  const contextLedger: ContextLedgerEntry[] = []
   let usage: RunTokenUsage | undefined
 
   for (const claim of claims) {
     const startedAt = Date.now()
     const retriever = createContextRetriever({
       repositoryRoot: input.repositoryRoot,
+      ledgerEntries: contextLedger,
       budget: {
         maxBytesPerRead: input.maxBytesPerRead,
         maxMatches: input.maxMatches,
@@ -295,7 +302,8 @@ export const runVerificationFlow = async (
     verdicts,
     observations,
     warnings,
-    claimCount: claims.length
+    claimCount: claims.length,
+    contextLedger
   })
 
   return {

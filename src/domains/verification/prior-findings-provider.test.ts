@@ -4,6 +4,9 @@ import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import type { AdmittedFinding } from '../../shared/contracts/findings/finding.schema.js'
 import type { ReviewReport } from '../../shared/contracts/report/review-report.schema.js'
+import { ClaimSchema } from '../../shared/contracts/verification/verification.schema.js'
+import { buildBaselineEntries, renderBaselineJson } from '../admission/index.js'
+import { fingerprintsForClaim } from './claim-fingerprints.js'
 import { createPriorFindingsProvider } from './prior-findings-provider.js'
 import { MAX_CLAIMS_PER_PROVIDER } from './contracts.js'
 
@@ -106,6 +109,47 @@ describe('prior-findings provider', () => {
     }
   })
 
+  test('turns each baseline entry into a prior-finding claim carrying its fingerprints', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-prior-'))
+
+    try {
+      // Exactly what the baseline writer emits: fingerprints and nothing else.
+      const baseline = buildBaselineEntries([
+        { fingerprints: [{ algorithm: 'v1', value: 'abc1' }] },
+        { fingerprints: [{ algorithm: 'v1', value: 'abc2' }] }
+      ])
+      await mkdir(path.join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        path.join(root, '.codereviewer', 'baseline.json'),
+        renderBaselineJson(baseline)
+      )
+
+      const provider = createPriorFindingsProvider({
+        type: 'prior-findings',
+        report: '.codereviewer/baseline.json'
+      })
+
+      const claims = await provider.gather(gatherInput(root))
+      expect(claims).toHaveLength(2)
+      const claim = claims[0]
+      expect(claim?.kind).toBe('prior-finding')
+      expect(claim?.source).toBe('prior-finding')
+      // A baseline discloses no location, and the claim must not invent one.
+      expect(claim?.location).toBeUndefined()
+      expect(claim?.question).toContain('v1:abc1')
+      // The carried fingerprints are what let the verdict be matched back to the
+      // baselined finding.
+      expect(claim?.evidenceRefs).toEqual([{ key: 'fingerprint:v1', value: 'abc1' }])
+      expect(fingerprintsForClaim(ClaimSchema.parse(claim))).toEqual([
+        { algorithm: 'v1', value: 'abc1' }
+      ])
+      // Distinct entries yield distinct claim ids.
+      expect(claims[1]?.id).not.toBe(claim?.id)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('yields no claims when the prior report is missing', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-prior-'))
 
@@ -132,7 +176,30 @@ describe('prior-findings provider', () => {
         report: 'report.json'
       })
 
-      await expect(provider.gather(gatherInput(root))).rejects.toThrow()
+      await expect(provider.gather(gatherInput(root))).rejects.toThrow(
+        /neither a review report nor a baseline file/u
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a file matching neither shape fails loudly and names the shape it is not', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-prior-'))
+
+    try {
+      // A JSON array, so it is read as a baseline candidate — and rejected as one
+      // rather than being silently misread as a report.
+      await writeFile(path.join(root, 'unknown.json'), JSON.stringify([{ nope: true }]))
+
+      const provider = createPriorFindingsProvider({
+        type: 'prior-findings',
+        report: 'unknown.json'
+      })
+
+      await expect(provider.gather(gatherInput(root))).rejects.toThrow(
+        /"unknown\.json" is a JSON array but is not a valid baseline file/u
+      )
     } finally {
       await rm(root, { recursive: true, force: true })
     }

@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 import { FixEditSchema } from '../../shared/contracts/findings/finding.schema.js'
+import { ContextLedgerEntrySchema } from '../review-planning/index.js'
 import {
   ClaimIdSchema,
   ClaimKindSchema,
@@ -119,6 +120,13 @@ export const VerificationReportSchema = z.strictObject({
   // Advisory per-finding results of the fix lane (judgment + fix outcome). A
   // signal only; it never changes a finding's severity, admission, or the gate.
   fixOutcomes: z.array(FixOutcomeSchema).default([]),
+  // The context ledger for every mediated tool call the investigation agent made
+  // (spec 12 "Tools": each call "records a context-ledger entry"). It lives in
+  // this report because that is the artifact this lane writes: without it the
+  // entries the retriever creates would be discarded and the evidence ids in
+  // `Verdict.citedEvidenceIds` would name records no artifact holds. Entries are
+  // no-content by construction — path, byte counts, and a content hash only.
+  contextLedger: z.array(ContextLedgerEntrySchema).default([]),
   // Token usage and cost of the verification model calls, when a provider ran.
   usage: VerificationUsageSchema.optional()
 })

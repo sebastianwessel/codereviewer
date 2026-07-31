@@ -26,21 +26,31 @@ const claim = {
 
 // A minimal fake provider that concludes immediately with a verdict — enough to
 // drive runVerificationRun's success path (provider resolution, the harness
-// agent, and usage/cost accounting) without a network call.
-const verdictProvider: ModelProvider = {
-  id: 'openai',
-  genAiSystem: 'openai',
-  object: async <T extends JsonValue = JsonValue>(
-    _request: ObjectRequest<T>
-  ): Promise<ObjectResponse<T>> => ({
-    object: {
-      status: 'confirmed',
-      rationale: 'the reported insecure call is still present',
-      citedEvidenceIds: []
-    } as unknown as T,
-    finishReason: 'stop',
-    usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 }
-  })
+// agent, and usage/cost accounting) without a network call. `calls` records how
+// often the model was reached, so a test can assert a bound fired before it.
+const createVerdictProvider = (): ModelProvider & { calls: () => number } => {
+  let calls = 0
+
+  return {
+    id: 'openai',
+    genAiSystem: 'openai',
+    object: async <T extends JsonValue = JsonValue>(
+      _request: ObjectRequest<T>
+    ): Promise<ObjectResponse<T>> => {
+      calls += 1
+
+      return {
+        object: {
+          status: 'confirmed',
+          rationale: 'the reported insecure call is still present',
+          citedEvidenceIds: []
+        } as unknown as T,
+        finishReason: 'stop',
+        usage: { inputTokens: 12, outputTokens: 4, totalTokens: 16 }
+      }
+    },
+    calls: () => calls
+  }
 }
 
 describe('runVerificationRun', () => {
@@ -115,6 +125,7 @@ describe('runVerificationRun', () => {
   })
 
   test('runs the flow and accounts token usage on the success path', async () => {
+    const verdictProvider = createVerdictProvider()
     const result = await runVerificationRun({
       config: baseConfig({
         provider: { id: 'openai', model: 'gpt-x' },
@@ -136,5 +147,31 @@ describe('runVerificationRun', () => {
     expect(result.report.usage?.inputTokens).toBeGreaterThan(0)
     expect(result.report.usage?.costUsd).toBeGreaterThan(0)
     expect(result.claims).toHaveLength(1)
+  })
+
+  test('honours the caller-supplied abort signal end to end', async () => {
+    // The run-timeout bound of spec 12 is only reachable if the signal a caller
+    // passes to the entry point survives every layer down to the investigator.
+    // This asserts that whole path: an aborted run ends the claim `uncertain`
+    // with the `aborted` reason and never reaches the model.
+    const verdictProvider = createVerdictProvider()
+    const result = await runVerificationRun({
+      config: baseConfig({
+        provider: { id: 'openai', model: 'gpt-x' },
+        verification: {
+          enabled: true,
+          providers: [{ type: 'claims-file', path: '.codereviewer/claims.json' }]
+        }
+      }),
+      repositoryRoot: root,
+      environment: { OPENAI_API_KEY: 'sk-test' },
+      providerImport: async () => ({ openai: () => verdictProvider }),
+      signal: AbortSignal.abort()
+    })
+
+    expect(result.report.verdicts).toHaveLength(1)
+    expect(result.report.verdicts[0]?.status).toBe('uncertain')
+    expect(result.report.observations[0]?.boundReason).toBe('aborted')
+    expect(verdictProvider.calls()).toBe(0)
   })
 })
