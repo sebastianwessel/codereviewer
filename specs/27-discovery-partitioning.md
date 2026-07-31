@@ -1,7 +1,7 @@
 # 27: Discovery Partitioning
 
-Status: **Approved** (human, 2026-08-01)
-Date: 2026-08-01
+Status: **Approved** (human, 2026-07-31)
+Date: 2026-07-31
 
 ## Purpose
 

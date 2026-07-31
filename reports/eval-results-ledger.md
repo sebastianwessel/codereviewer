@@ -1563,7 +1563,15 @@ Two runs, both positive in direction, neither significant, the second much weake
 The honest reading: the original **net-negative verdict is refuted** — it was
 measuring silently truncated reads — but a positive effect is **not established**.
 Adjusted precision reached 100% in both runs at neutral cost, so it is best described
-as neutral-to-slightly-positive. **It stays off by default.**
+as neutral-to-slightly-positive.
+
+**Superseded the same day: it is now ON by default.** A third run, at the shipped
+partitioning default on the 37-case corpus, again favoured it on every dimension
+(recall 43.7% → 46.0%, adjusted precision 95.0% → 100%, cost $2.31 → $2.20), and the
+replication is recorded below. Significance is the bar for *claiming* a benefit, not
+for permitting a default that is free, harmless and directionally positive three
+times. No specific improvement is claimed; if a regression appears this is the first
+switch to flip.
 
 
 ## Standing caveats for reading anything here

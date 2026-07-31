@@ -118,11 +118,17 @@ type HolisticTaskReviewLogger = {
   ) => void
 }
 
-// Upper bound on candidates emitted per task. Holistic discovery favors recall,
-// but every candidate costs one downstream refutation call, so we bound it. The
-// refutation filter (not this cap) is what controls precision. Exported so the
-// child-agent budget (harness/config.ts) can reserve one refutation call per
-// candidate — under-reserving starves refutation and leaks unfiltered findings.
+// Upper bound on candidates emitted per DISCOVERY CALL — per partition, not per
+// task, since spec 27 spread a task's files across several calls. Holistic discovery
+// favors recall, and the refutation filter (not this cap) is what controls precision.
+//
+// Measurement says the cap does not bind: yield is ~1.2 findings per file that gets
+// attention, so a call rarely approaches 12. Raising it would change nothing.
+//
+// Exported for the child-agent call budget (harness/config.ts), which uses it for the
+// semantic-merge ceiling. Refutation is BATCHED per task and no longer reserves one
+// call per candidate, so do not restore that reading — under-reserving makes the
+// workflow refuse a call mid-run.
 export const HOLISTIC_MAX_CANDIDATES = 12
 
 // Upper bound on ADDITIONAL candidates the dedicated security pass may add per task

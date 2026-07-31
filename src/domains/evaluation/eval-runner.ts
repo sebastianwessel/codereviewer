@@ -910,7 +910,7 @@ const computeCaseResult = async (
         artifactOnlyFalsePositiveFindings: [],
         refutationResults: [],
         inlineFindingCount: 0,
-        warnings: [``],
+        warnings: [],
         durationMs: 0,
         inputTokens: 0,
         cachedInputTokens: 0,

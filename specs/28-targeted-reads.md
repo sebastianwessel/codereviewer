@@ -1,7 +1,7 @@
 # 28: Targeted Reads Instead Of A Guessed Read Cap
 
-Status: **Draft — awaiting human approval**
-Date: 2026-08-01
+Status: **Approved** (human, 2026-07-31)
+Date: 2026-07-31
 
 ## Purpose
 

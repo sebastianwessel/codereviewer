@@ -119,10 +119,7 @@ export const ReviewConfigSchema = z.strictObject({
   inlineSeverityThreshold: SeveritySchema.default('high'),
   maxCostUsd: z.number().min(0).optional(),
   runTimeoutMs: z.int().min(10000).max(7200000).optional(),
-  crossFileRetrieval: CrossFileRetrievalConfigSchema.default({
-    enabled: true,
-    maxToolCallsPerTask: 100
-  })
+  crossFileRetrieval: CrossFileRetrievalConfigSchema.prefault({})
 })
 
 export const ProviderConfigSchema = z
@@ -235,7 +232,7 @@ export const SecurityConfigSchema = z.strictObject({
   allowNetwork: z.literal(false).default(false),
   allowFilesystemWrite: z.literal(false).default(false),
   captureContentTelemetry: z.literal(false).default(false),
-  dedicatedPass: SecurityDedicatedPassConfigSchema.default({ enabled: false })
+  dedicatedPass: SecurityDedicatedPassConfigSchema.prefault({})
 })
 
 export const QualityGateConfigSchema = z.strictObject({
@@ -324,7 +321,7 @@ export const ContextSummaryConfigSchema = z.strictObject({
 export const ContextSourcesConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
   providers: z.array(ContextProviderConfigSchema).default([]),
-  summary: ContextSummaryConfigSchema.default({ maxBytes: 4_000 })
+  summary: ContextSummaryConfigSchema.prefault({})
 })
 
 // Agentic verification flow (spec 12). Off by default: with `enabled: false` no
@@ -516,10 +513,7 @@ export const InvariantConformanceConfigSchema = z.strictObject({
   // must never crowd out the change-attributed ones.
   maxDivergences: z.int().min(1).max(500).default(50),
   maxPreExistingDivergences: z.int().min(0).max(500).default(25),
-  adjudication: ConformanceAdjudicationConfigSchema.default({
-    enabled: false,
-    maxAdjudications: 25
-  })
+  adjudication: ConformanceAdjudicationConfigSchema.prefault({})
 })
 
 // Agentic finding investigation-and-fix job (spec 12). Off by default. Reuses the
@@ -572,15 +566,8 @@ export const ReviewCommentsConfigSchema = z.strictObject({
 
 export const ReportingConfigSchema = z.strictObject({
   formats: z.array(ReportFormatSchema).default(['json', 'markdown', 'sarif']),
-  sarif: SarifReportingConfigSchema.default({
-    target: 'generic',
-    category: 'codereviewer',
-    maxResults: 5000
-  }),
-  reviewComments: ReviewCommentsConfigSchema.default({
-    enabled: false,
-    platform: 'auto'
-  })
+  sarif: SarifReportingConfigSchema.prefault({}),
+  reviewComments: ReviewCommentsConfigSchema.prefault({})
 })
 
 // Mirrors `EvalRegressionThresholdsSchema`
@@ -623,7 +610,7 @@ export const EvalRegressionGateConfigSchema = z.strictObject({
   // Per-field overrides layered on top of the resolved profile; any key set
   // here wins over that profile's value for the same key, so a project can
   // keep the stable default shape while tightening (or loosening) one signal.
-  overrides: EvalRegressionGateOverridesSchema.default({})
+  overrides: EvalRegressionGateOverridesSchema.prefault({})
 })
 
 export const EvaluationConfigSchema = z.strictObject({
@@ -635,10 +622,7 @@ export const EvaluationConfigSchema = z.strictObject({
   // `eval run` CLI flags, not config, so an `enabled` flag would be accepted and
   // then silently ignored (see specs/06-evaluation-and-quality-gates.md).
   minJudgeAgreement: z.number().min(0).max(1).default(0.9),
-  regressionGate: EvalRegressionGateConfigSchema.default({
-    profile: 'stable',
-    overrides: {}
-  })
+  regressionGate: EvalRegressionGateConfigSchema.prefault({})
 })
 
 export const OpenTelemetryConfigSchema = z
@@ -665,14 +649,8 @@ export const LoggingConfigSchema = z.strictObject({
 })
 
 export const ObservabilityConfigSchema = z.strictObject({
-  logging: LoggingConfigSchema.default({
-    level: 'silent'
-  }),
-  openTelemetry: OpenTelemetryConfigSchema.default({
-    enabled: false,
-    headers: {},
-    serviceName: 'codereviewer'
-  })
+  logging: LoggingConfigSchema.prefault({}),
+  openTelemetry: OpenTelemetryConfigSchema.prefault({})
 })
 
 export const CostConfigSchema = z.strictObject({
@@ -684,128 +662,40 @@ export const CostConfigSchema = z.strictObject({
   outputPerMillion: z.number().min(0).optional()
 })
 
+// EVERY nested block below uses `.prefault({})`, never `.default({...})`.
+//
+// Zod's `.default(value)` returns that value VERBATIM without parsing it, so a
+// restated literal becomes a SECOND source of truth that silently wins. This bit:
+// `crossFileRetrieval.enabled` was changed to `true` on the field itself and the
+// engine kept using `false`, because the restated literal here still said `false`.
+// The schema said one thing, the engine did another, tests passed, nothing failed.
+//
+// `.prefault({})` parses `{}` through the schema, so each field's own default is the
+// single source of truth. Converting all 29 blocks was verified to leave the parsed
+// default configuration byte-identical — the literals were pure duplication, which is
+// exactly why the drift was invisible.
 export const CodeReviewerConfigSchema = z.strictObject({
-  // `.prefault({})`, not `.default({...})` with every field restated.
-  //
-  // Zod's `.default(value)` returns that value VERBATIM without parsing it, so a
-  // restated literal becomes a SECOND source of truth that silently wins. Changing
-  // `crossFileRetrieval` on the field itself had no effect at all until this was
-  // fixed: the schema said one thing, the engine did another, and nothing failed.
-  // `.prefault({})` parses `{}` through the schema, so each field's own default is
-  // the single source of truth.
   review: ReviewConfigSchema.prefault({}),
   provider: ProviderConfigSchema.optional(),
-  instructions: InstructionsConfigSchema.default({
-    files: [],
-    inline: ''
-  }),
-  skills: SkillsConfigSchema.default({
-    enabled: false,
-    directories: ['.codereviewer/skills'],
-    allowTools: ['read', 'list', 'grep']
-  }),
-  paths: PathsConfigSchema.default({
-    include: ['**/*'],
-    exclude: [...defaultReviewExcludePatterns],
-    artifactDir: '.codereviewer/runs'
-  }),
-  baseline: BaselineConfigSchema.default({
-    enabled: true,
-    path: '.codereviewer/baseline.json',
-    failOnNewOnly: true,
-    includeResolvedInReport: true
-  }),
-  qualityGate: QualityGateConfigSchema.default({
-    maxCritical: 0,
-    maxHigh: 0,
-    failOnProviderError: true
-  }),
-  aiReview: AiReviewConfigSchema.default({
-    requireRefutation: true,
-    deterministicSignalMode: 'support',
-    actionableSeverityThreshold: 'medium',
-    maxFilesPerDiscoveryCall: 2
-  }),
-  promotionPolicy: PromotionPolicyConfigSchema.default({
-    modelWeakOrRefuted: 'artifact-only'
-  }),
-  contextSources: ContextSourcesConfigSchema.default({
-    enabled: false,
-    providers: [],
-    summary: { maxBytes: 4_000 }
-  }),
-  verification: VerificationConfigSchema.default({
-    enabled: false,
-    providers: [],
-    maxToolCallsPerClaim: 12,
-    maxBytesPerRead: 20000,
-    maxMatches: 20
-  }),
-  changeImpact: ChangeImpactConfigSchema.default({
-    enabled: false,
-    maxChangedSymbols: 50,
-    maxReferencesPerSymbol: 25,
-    maxSearchDepth: 12
-  }),
-  intentFulfilment: IntentFulfilmentConfigSchema.default({
-    enabled: false,
-    maxObligations: 100,
-    maxIntentBytes: 100_000,
-    maxChangeLines: 5_000
-  }),
-  invariantConformance: InvariantConformanceConfigSchema.default({
-    enabled: false,
-    maxChangedDeclarations: 50,
-    maxPeersPerDeclaration: 60,
-    maxPeerFiles: 300,
-    maxDivergences: 50,
-    maxPreExistingDivergences: 25,
-    adjudication: { enabled: false, maxAdjudications: 25 }
-  }),
-  fix: FixConfigSchema.default({
-    enabled: false
-  }),
-  security: SecurityConfigSchema.default({
-    allowShell: false,
-    allowNetwork: false,
-    allowFilesystemWrite: false,
-    captureContentTelemetry: false,
-    dedicatedPass: { enabled: false }
-  }),
-  reporting: ReportingConfigSchema.default({
-    formats: ['json', 'markdown', 'sarif'],
-    sarif: {
-      target: 'generic',
-      category: 'codereviewer',
-      maxResults: 5000
-    },
-    reviewComments: {
-      enabled: false,
-      platform: 'auto'
-    }
-  }),
-  evaluation: EvaluationConfigSchema.default({
-    minJudgeAgreement: 0.9,
-    regressionGate: { profile: 'stable', overrides: {} }
-  }),
-  drift: DriftConfigSchema.default({
-    enabled: true,
-    failOn: ['generated-artifact-drift', 'security-drift'],
-    includeDocs: true,
-    includeSpecs: true,
-    includeGenerated: true
-  }),
-  observability: ObservabilityConfigSchema.default({
-    logging: {
-      level: 'silent'
-    },
-    openTelemetry: {
-      enabled: false,
-      headers: {},
-      serviceName: 'codereviewer'
-    }
-  }),
-  costs: CostConfigSchema.default({})
+  instructions: InstructionsConfigSchema.prefault({}),
+  skills: SkillsConfigSchema.prefault({}),
+  paths: PathsConfigSchema.prefault({}),
+  baseline: BaselineConfigSchema.prefault({}),
+  qualityGate: QualityGateConfigSchema.prefault({}),
+  aiReview: AiReviewConfigSchema.prefault({}),
+  promotionPolicy: PromotionPolicyConfigSchema.prefault({}),
+  contextSources: ContextSourcesConfigSchema.prefault({}),
+  verification: VerificationConfigSchema.prefault({}),
+  changeImpact: ChangeImpactConfigSchema.prefault({}),
+  intentFulfilment: IntentFulfilmentConfigSchema.prefault({}),
+  invariantConformance: InvariantConformanceConfigSchema.prefault({}),
+  fix: FixConfigSchema.prefault({}),
+  security: SecurityConfigSchema.prefault({}),
+  reporting: ReportingConfigSchema.prefault({}),
+  evaluation: EvaluationConfigSchema.prefault({}),
+  drift: DriftConfigSchema.prefault({}),
+  observability: ObservabilityConfigSchema.prefault({}),
+  costs: CostConfigSchema.prefault({})
 })
 
 export type Severity = z.infer<typeof SeveritySchema>
