@@ -3,21 +3,6 @@
   "type": "object",
   "properties": {
     "review": {
-      "default": {
-        "mode": "local",
-        "depth": "balanced",
-        "baseRef": "main",
-        "headRef": "HEAD",
-        "maxConcurrentTasks": 4,
-        "maxFiles": 500,
-        "maxFileBytes": 500000,
-        "inlineSeverityThreshold": "high",
-        "crossFileRetrieval": {
-          "enabled": false,
-          "maxToolCallsPerTask": 100,
-          "maxBytesPerRead": 24000
-        }
-      },
       "type": "object",
       "properties": {
         "mode": {
@@ -94,14 +79,13 @@
         },
         "crossFileRetrieval": {
           "default": {
-            "enabled": false,
-            "maxToolCallsPerTask": 100,
-            "maxBytesPerRead": 24000
+            "enabled": true,
+            "maxToolCallsPerTask": 100
           },
           "type": "object",
           "properties": {
             "enabled": {
-              "default": false,
+              "default": true,
               "type": "boolean"
             },
             "maxToolCallsPerTask": {
@@ -111,16 +95,14 @@
               "maximum": 500
             },
             "maxBytesPerRead": {
-              "default": 24000,
               "type": "integer",
               "minimum": 1000,
-              "maximum": 200000
+              "maximum": 4000000
             }
           },
           "required": [
             "enabled",
-            "maxToolCallsPerTask",
-            "maxBytesPerRead"
+            "maxToolCallsPerTask"
           ],
           "additionalProperties": false
         }
@@ -448,7 +430,8 @@
       "default": {
         "requireRefutation": true,
         "deterministicSignalMode": "support",
-        "actionableSeverityThreshold": "medium"
+        "actionableSeverityThreshold": "medium",
+        "maxFilesPerDiscoveryCall": 2
       },
       "type": "object",
       "properties": {
@@ -478,12 +461,19 @@
             "low",
             "info"
           ]
+        },
+        "maxFilesPerDiscoveryCall": {
+          "default": 2,
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
         }
       },
       "required": [
         "requireRefutation",
         "deterministicSignalMode",
-        "actionableSeverityThreshold"
+        "actionableSeverityThreshold",
+        "maxFilesPerDiscoveryCall"
       ],
       "additionalProperties": false
     },

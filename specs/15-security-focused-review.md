@@ -2,6 +2,8 @@
 
 Status: Approved
 Date: 2026-07-24
+Amended: 2026-08-01 — the security pass is partitioned with the general pass
+(spec 27); its own A/B result is transcribed here
 
 ## Purpose
 
@@ -112,18 +114,33 @@ folding it into the shared prompt is the wrong integration. The dedicated pass f
 this by giving security a **separate discovery call** so it cannot compete for the
 general call's attention.
 
-- When enabled, each review task issues a **second discovery call** whose reviewText
-  is security-only: it applies the generic OWASP/CWE **checklist** across the
-  mechanisms above to the same changed code, diff, and change-intent context, and
-  instructs the model to report only concrete, evidenced security defects.
+- When enabled, each review task issues a **second, security-only discovery call**
+  whose reviewText applies the generic OWASP/CWE **checklist** across the mechanisms
+  above to the same changed code, diff, and change-intent context, and instructs the
+  model to report only concrete, evidenced security defects. Its method is
+  source→sink: identify the trust boundary, trace each untrusted value to every
+  sensitive sink it reaches, and report only where a concrete input or path reaches a
+  sink unsafely or a required authorization check is missing, bypassable, or
+  asymmetric.
+- **The security pass MUST be partitioned exactly as the general pass is** (spec 27).
+  A task whose files are spread across several discovery calls issues one security
+  call per partition, over that partition's files. Spec 27's partitioning requirement
+  is unqualified, and a security call that reviewed the whole task while the general
+  pass reviewed slices would be both the largest packet in the run and the one call
+  denied the attention benefit the whole mechanism rests on. Enabling the pass
+  therefore doubles the discovery calls a task issues, whatever its partition count.
 - The pass reuses the existing model-backed holistic discovery and refutation
   infrastructure — it is a second call of the same discovery agent with a
   security-focused reviewText, not a new agent, role, or pipeline.
 - Its candidates are **additive**: they merge with the general pass's candidates and
   are never substituted for them, so the pass can only *add* security findings and
   can never reduce the general reviewer's recall (the attention tradeoff above is
-  removed by construction). A security candidate at a location the general pass
-  already flagged is dropped as a duplicate, so the merge adds no report noise.
+  removed by construction). A security candidate at a `path:startLine` any general
+  call already flagged is dropped as a duplicate, so the merge adds no report noise.
+  Suppressions are counted and reported by cause — duplicate location versus
+  duplicate candidate identity versus unparseable — so whether the pass is
+  contributing new findings or restating the general pass's is visible rather than
+  inferred.
 - Its candidates pass the **same** untrusted refutation and deterministic admission
   as any other candidate. The pass never bypasses scope, location, baseline,
   severity, or the gate. It raises recall on the classes the general discovery pass
@@ -135,6 +152,41 @@ general call's attention.
   per task; it is quarantined like every other model lane and never changes the
   general review's guarantees. It ships enabled-by-default only if a held-out A/B
   demonstrates a net recall gain without an authorization regression.
+
+### Measured Outcome Of The Dedicated Security Pass
+
+Paired A/B, 2026-07-24, full `crb-*` benchmark, **one seed per arm**. Transcribed
+here from the user documentation for the pass, where it was recorded first.
+
+| | pass off | pass on |
+|---|---|---|
+| overall recall | 24.8% | **29.3%** |
+| product recall | 29.8% | **34.6%** |
+| unlisted-real findings | 45 | **67** |
+| adjusted precision | 97.1% | 95.1% |
+| genuine false positives | 1 | 2 |
+| **labeled security total** | **14/41** | **12/41** |
+| **authorization** | **8/22** | **6/22** |
+| cost | $22.48 | $36.18 (**+61%**) |
+
+**Overall recall rose while labeled security recall fell.** The overall gain has the
+large denominator and is the trustworthy signal. The security drop is not the pass
+hurting — the pass is additive by construction, so within one run it can only add
+security findings; the 8→6 authorization movement is between two *different
+general-pass runs*, and that pass's own run-to-run variance on a denominator of 22
+(matched counts swing 6–9 on noise) swamps the additive contribution.
+
+**That does not rescue the claim either: an uninterpretable number is not a positive
+one.** The security-specific lift this mechanism was built for is **unproven at
+n = 1**, at +61% cost. Proving it needs a multi-seed A/B (≥3 seeds per arm) to average
+out the authorization noise, and that has not been run. This is why the pass stays off
+by default; the ship condition stated above — a held-out net recall gain without an
+authorization regression — is not met.
+
+Like every figure on this page, it predates the harness-wide suppression of
+conversation history on 2026-07-27 and is not comparable to a current run. It also
+predates spec 27 partitioning, so it measured one security call per task rather than
+one per partition.
 
 ### Measured Outcome Of The Injection Hardening
 
@@ -210,8 +262,9 @@ deferred: it is the highest-plumbing, highest-cost, non-deterministic lever, and
 is only justified after the security pass and deterministic-evidence levers are
 measured. It
 must respect this project's own measured "more context reduces quality" result —
-recorded under *Measured Outcome* in `16-agentic-cross-file-discovery.md` — so it is
-one bounded, ranked follow-up, never full-repository injection. It must also answer
+recorded under *Withdrawal Of The Context Scout* in
+`05-review-workflow-and-runtime.md` — so it is one bounded, ranked follow-up, never
+full-repository injection. It must also answer
 the finding that withdrew the context scout (`05-review-workflow-and-runtime.md`):
 the reviewer largely does not read the context it already has, so more context is
 an unlikely remedy on its own.
@@ -219,10 +272,19 @@ an unlikely remedy on its own.
 ## Configuration
 
 A `security` block, disabled by default. Keys are defined in
-`04-configuration-and-providers.md`: `dedicatedPass.enabled`, and any bounds.
-Invalid configuration fails validation with exit code 2. With the block disabled,
-no security pass runs and the general review is byte-for-byte unchanged (the same
-task set, the same single discovery call per task).
+`04-configuration-and-providers.md`: `dedicatedPass.enabled`. Invalid configuration
+fails validation with exit code 2. With the block disabled, no security pass runs and
+the general review is byte-for-byte unchanged (the same task set, the same general
+discovery calls, no second call).
+
+The pass's candidate bound is **not** configurable and is set in code: a security
+call may add at most **8** candidates, against the general call's **12**, because it
+targets a narrow class set at locations the general pass did not already flag. Both
+caps are per discovery CALL, so a partitioned task's ceiling scales with its partition
+count. The bound is deliberately code-side: every candidate costs one downstream
+refutation call, and the workflow's child-agent reservation is derived from these
+constants — a configurable value would let a user under-reserve refutation and leak
+unfiltered findings.
 
 Mechanism 2 (deterministic security-signal evidence) has no implementation yet, so
 it has no config key today. A `security.signals.enabled` key is introduced in the
@@ -285,7 +347,9 @@ would be a switch with no behavior behind it.
 
 ## Known Divergences From This Spec
 
-Recorded on 2026-07-27 by an alignment audit. **These are unmet requirements, not
+Recorded on 2026-07-27 by an alignment audit and re-checked on 2026-08-01, when
+Mechanism 1's own A/B result was transcribed into this spec and its candidate bound
+named under *Configuration*, retiring two rows. **These are unmet requirements, not
 amendments.** Everything above stands as written; this section exists so the gap is
 visible rather than silent.
 
@@ -295,5 +359,4 @@ visible rather than silent.
 | *Mechanism 2* in full | Not implemented. This is already stated under *Configuration*: no detector, no rule catalog, and the `cwe`/`dataFlow`/`ruleId`/`securitySeverity` evidence fields exist on the contract but are never populated. The `security.signals` config key is correctly absent. |
 | *Mechanisms*: `prompt-injection` as a measured security mechanism | The enum value exists; no committed expected finding carries it, so the mechanism has an empty denominator. |
 | *Measurement First*: a contaminated `dev` set and a separate `held-out` set | Every case in the real-repository corpus manifest is labelled `held-out`. The chronological-split validation therefore has nothing to compare and passes vacuously, and the final acceptance criterion above cannot currently be satisfied as written. |
-| *Mechanism 1*'s own measured outcome | Not recorded in this spec. The A/B exists and is recorded in the user documentation for the dedicated pass; its headline is that overall recall rose while **labelled security recall fell**, at materially higher cost, so the security-specific lift the mechanism was built for is unproven at n=1. That result belongs in this spec and should be transcribed here by its owner, alongside the standing caveat that it too predates the 2026-07-27 conversation-history suppression. |
-| *Configuration*: "and any bounds" | The pass is capped in code at a fixed number of additional candidates per task. The bound is real and enforced; this spec names no bound at all. |
+| *Observability, Safety, Privacy*: the security pass is no-content, reporting "mechanism, rule id, CWE, counts" | Counts and durations are recorded; **mechanism, rule id, and CWE are not**, because nothing in the implementation produces them — those fields belong to Mechanism 2, which does not exist. The requirement is unmeetable as written until Mechanism 2 ships. |

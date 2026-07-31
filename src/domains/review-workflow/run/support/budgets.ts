@@ -1,14 +1,8 @@
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
-import type { ContextRetrievalBudget } from '../../../context-retrieval/index.js'
-
-// Per-depth caps for BOUNDED CROSS-FILE READS (spec 16), the only thing these still
-// size. They no longer bound the review packet: spec 26 removed proactive splitting,
-// so how much source a task sends is decided by the provider, not by depth.
-const providerTaskContextMaxBytesByDepth = {
-  fast: 60_000,
-  balanced: 120_000,
-  thorough: 240_000
-} as const
+import {
+  ContextRetrievalBudgetSchema,
+  type ContextRetrievalBudget
+} from '../../../context-retrieval/index.js'
 
 // A RUNAWAY GUARD on a single model-input packet, not a context ration.
 //
@@ -55,13 +49,15 @@ export const aiReviewBudgetFor = (
   config: CodeReviewerConfig
 ): AiReviewRuntimeBudget => {
   const caps = defaultContextRetrievalCapsByDepth[config.review.depth]
-  const depthContextCap = providerTaskContextMaxBytesByDepth[config.review.depth]
-  const maxBytesPerRead = Math.max(
-    1,
-    Math.min(
-      config.review.contextMaxBytes ?? depthContextCap,
-      depthContextCap
-    )
+  // Spec 28: a read is NOT cut in advance. This was sized from the per-depth context
+  // cap (60/120/240 KB), which is exactly the "sized against a context window" value
+  // the spec forbids — and making the config field optional changed the schema
+  // without changing this, so every read was still being cut at 120 KB by default.
+  //
+  // The runaway guard on the retrieval budget applies instead; an explicitly
+  // configured `crossFileRetrieval.maxBytesPerRead` still overrides it downstream.
+  const maxBytesPerRead = ContextRetrievalBudgetSchema.shape.maxBytesPerRead.parse(
+    undefined
   )
 
   return {

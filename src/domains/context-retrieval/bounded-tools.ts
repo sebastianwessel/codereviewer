@@ -30,7 +30,16 @@ export const isToolCallBudgetExceededError = (
   error instanceof ToolCallBudgetExceededError
 
 export type RetrievalTools = {
-  read(input: { readonly path: string }): Promise<ContextRetrievalResult>
+  // Spec 28: the range MUST reach the retriever. It used to stop here — the tool
+  // description advertised `startLine`/`endLine` and the truncation notice told the
+  // model to re-read a range, while this layer forwarded only `path`. The remedy the
+  // model was instructed to use did nothing, so a model that hit a cut re-read the
+  // identical prefix and burned its budget doing it.
+  read(input: {
+    readonly path: string
+    readonly startLine?: number
+    readonly endLine?: number
+  }): Promise<ContextRetrievalResult>
   list(input: { readonly path: string }): Promise<ContextRetrievalResult>
   grep(input: {
     readonly query: string
@@ -78,7 +87,15 @@ export const createBoundedRetrievalTools = (input: {
     tools: {
       read: (readInput) =>
         runToolCall(() =>
-          input.retriever.readRepositoryFile({ path: readInput.path })
+          input.retriever.readRepositoryFile({
+            path: readInput.path,
+            ...(readInput.startLine === undefined
+              ? {}
+              : { startLine: readInput.startLine }),
+            ...(readInput.endLine === undefined
+              ? {}
+              : { endLine: readInput.endLine })
+          })
         ),
       list: (listInput) =>
         runToolCall(() =>

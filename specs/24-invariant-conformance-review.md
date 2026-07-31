@@ -229,6 +229,14 @@ firing-rate-before-recall order already chose.
 
 ### The measurement that motivated it
 
+**Caveat, added 2026-08-01:** these counts predate the `declarationSpanAt` span fix,
+so they were produced by a detector that could only see declarations whose signature
+fitted on one line. The ledger's void notice names the firing rates specifically and
+not these counts, so they are not voided — but the ratios below are drawn from a
+biased sample of declarations and MUST NOT be quoted as a measurement of the
+precondition's effect. The argument the precondition rests on is structural, and does
+not depend on them.
+
 Run over a real branch of a TypeScript repository, the deterministic arm produced
 **9 change-attributed and 4 pre-existing divergences, and every one was this
 shape** — an error class and a type alias grouped with schema builders and
@@ -474,7 +482,36 @@ remains is not a position problem, and no bucket width fixes it: the file does n
 contain three declarations that uphold the pattern. Reaching it would mean relaxing
 the citation floor, which is a MUST above and is not relaxed here.
 
-### Firing Rate, Re-Measured
+### Firing Rate, Re-Measured — VOID, AND SUPERSEDED
+
+**Every number in this subsection is void.** `declarationSpanAt` bounded a
+declaration by indentation alone, so a declaration whose signature spanned more than
+one line had its span end at the closing parenthesis of its parameter list. The body
+was excluded, the declaration extracted no traits, and a trait-less declaration is
+dropped before it reaches this capability. Measured on this repository's own
+`src/cli/args.ts`, **nine of ten exported declarations extracted zero traits**. So
+these rates are not measurements of spec 24; they are measurements of a detector that
+could only see declarations whose signature fitted on one line — which is also why
+they appeared to originate in schema-heavy modules, since a single-line
+`z.strictObject({...})` chain was one of the few shapes that detector could see.
+
+**Re-measured immediately after the span fix** (results ledger, 2026-07-30): 20
+consecutive commits, adjudication enabled, $0.0509 total. The detector now sees four
+times as many declarations — **79, 3.95 per commit** — and reports **0.000 per
+commit**, change-attributed and pre-existing alike. Against a gate of roughly 0.5 per
+commit: **the gate is not blown; it is not approached.** The conclusion below that
+"the gate is nonetheless blown" is withdrawn along with the numbers that produced it.
+
+This does not rehabilitate the capability. It means the case against it was never
+properly made either: the design was never run on most declarations. Both directions
+are open, and the re-measurement is itself one repository, one 20-commit window, in a
+codebase with unusually uniform style.
+
+The subsection is kept rather than deleted because the reasoning it records — that
+splitting a trait by position also splits a majority, and that the failure was
+dominated by `pre-existing` reports rather than change-attributed ones — is what a
+future re-measurement has to re-test, and because this project keeps its mistakes
+visible.
 
 Deterministic arm, no adjudication, no spend. `conformance check` run per commit
 over two windows of this repository, each 40 non-merge commits, with the same code
@@ -530,6 +567,42 @@ corpus. Two consequences follow.
 Note also that this case carries only three peers *including* the changed
 declaration, leaving two — below this spec's three-cited-peer floor. It would have
 been rejected on that ground regardless.
+
+## Divergence Population Across 37 Real Repositories
+
+Deterministic, offline, zero provider spend (results ledger, 2026-07-30): 37 hydrated
+slices, 4 974 source files, 10 languages, **every declaration marked changed** — so
+this is the total divergence *population*, not a firing rate.
+
+| | |
+|---|---:|
+| declarations | 21 498 |
+| peer sets | 21 339 |
+| **divergences** | **849 (3.9%)** |
+| repositories yielding ≥1 | **18 / 37** |
+
+Two things follow, and the second is the serious one.
+
+**The capability is not gated into silence.** On real code outside this repository it
+does fire, at a rate that naively scaled by ~4 changed declarations per commit lands
+around 0.16 per commit — inside the ≈0.5 criterion. That is an **estimate from a
+population rate, not a measurement**: it assumes changed declarations diverge at the
+same rate as all declarations, which is exactly what a real firing-rate run would
+test.
+
+**Yield is strongly language-dependent, which is a problem for a capability whose
+selling point is language-neutrality:** rust 17.0%, typescript 14.2%, python 3.2%,
+ruby 2.8%, go 0.7%. A 24× spread between Rust and Go is either a real property of
+those ecosystems or an artefact of how indentation and lexical traits behave per
+language, and this measurement **cannot separate them**. It MUST be settled before
+the capability is recommended anywhere.
+
+**And the seed can be blind.** Peer derivation rests on the deterministic
+language-support registry. The JavaScript extractor recognises ESM exports and
+nothing else — across four real JavaScript repositories (1 046 `.js` files) it
+produced **6 declarations in total** — so `conformance check` reports "nothing to
+say" on a JavaScript repository when the truthful answer is "cannot see". A zero from
+this capability is only as meaningful as the extractor behind it.
 
 ## Verification Matrix
 

@@ -158,12 +158,12 @@ describe('review runner workflow input', () => {
     // An EXPLICIT contextMaxBytes still binds: min(120 000, 8 000 000 guard)=120 000
     expect(workflowInput.maxTaskInputBytes).toBe(120000)
     expect(workflowInput.maxConcurrentTasks).toBe(2)
-    // Spec 28: no cross-file cap is configured, so nothing tightens the read and the
-    // depth-derived value stands. The reviewer narrows a large file by line range
+    // Spec 28: no cross-file cap is configured, so NOTHING cuts a read in advance —
+    // the runaway guard stands. The reviewer narrows a large file by line range
     // instead of receiving a prefix we chose for it.
     expect(workflowInput.contextRetrievalBudget).toEqual(
       expect.objectContaining({
-        maxBytesPerRead: 120000
+        maxBytesPerRead: 4_000_000
       })
     )
     expect(workflowInput.evidence.map((record) => record.id)).toEqual([

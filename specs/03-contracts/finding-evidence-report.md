@@ -1,7 +1,7 @@
 # 03: Finding, Evidence, And Report Contracts
 
 Status: Approved
-Date: 2026-07-20
+Date: 2026-07-31
 
 ## Contract Source Rule
 
@@ -389,6 +389,7 @@ JSON file to callers, but that JSON self-entry is not embedded in `report.json`.
 | `repositoryRootHash` | yes | SHA-256 of normalized root path, not raw path |
 | `baseRef` | no | string |
 | `headRef` | no | string |
+| `mergeBaseRef` | no | string (resolved merge base the diff was taken against, present when intake resolved one) |
 | `configHash` | yes | SHA-256 |
 | `provider` | no | provider ID |
 | `model` | no | string |
@@ -516,10 +517,16 @@ artifact metadata contract as other non-JSON formats.
 
 ## Compatibility
 
-`schemaVersion` changes:
+`ReviewReport.schemaVersion` is the literal `"1.0"`. R1 has shipped no other
+version: the holistic-discovery architecture is what `1.0` describes, so no
+increment was owed for it.
 
-- the holistic-discovery refactor is a breaking contract change and must
-  increment the report schema before implementation lands;
-- pre-refactor reports, config, and internal candidate artifacts are rejected
-  rather than translated;
-- report readers must reject unknown major versions.
+`schemaVersion` rules:
+
+- pre-holistic-discovery reports, config, and internal candidate artifacts are
+  rejected rather than translated; no runtime translation layer exists or may be
+  added in R1;
+- report readers must reject unknown major versions;
+- before public release, a breaking contract change requires a spec update and
+  regenerated schemas; after public release it additionally requires a
+  `schemaVersion` increment and a breaking-change record.

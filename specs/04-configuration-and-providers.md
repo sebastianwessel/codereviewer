@@ -1,7 +1,7 @@
 # 04: Configuration And Providers
 
 Status: Approved
-Date: 2026-07-22
+Date: 2026-07-31
 
 ## Configuration Files
 
@@ -73,9 +73,21 @@ for review commands.
 Implementation must define `CodeReviewerConfigSchema` in Zod and generate a JSON
 Schema artifact with `npm run generate:schemas`. The generated config schema
 path is `schema/codereviewer-config.schema.json` and must be committed because
-it is a public configuration contract. Unknown top-level keys are errors.
-Unknown nested keys are errors unless the schema explicitly marks a
-provider-specific object as passthrough.
+it is a public configuration contract; the same document is regenerated into
+`specs/03-contracts/config.schema.json`, and `npm run generate:schemas:check`
+fails when either copy drifts from the Zod source.
+
+Every object in `CodeReviewerConfigSchema` is a Zod `strictObject`. Unknown
+top-level keys are errors, unknown nested keys are errors, and no object is
+passthrough.
+
+`CodeReviewerConfigSchema.review` MUST use `.prefault({})` rather than a restated
+default literal. Zod's `.default(value)` returns that value verbatim without
+parsing it, so a restated literal becomes a second source of truth that silently
+wins over the field defaults — a change to `crossFileRetrieval` on the field
+itself had no effect at all until this was fixed. `.prefault({})` parses `{}`
+through the schema, making each field's own default the single source of truth.
+This is why the generated JSON Schema carries no `default` object on `review`.
 
 ### Top-Level Shape
 
@@ -98,6 +110,9 @@ provider-specific object as passthrough.
 | `promotionPolicy` | no | object | non-actionable model output disposition |
 | `contextSources` | no | object | external change-intent context disabled |
 | `verification` | no | object | agentic claim verification disabled |
+| `changeImpact` | no | object | change-impact review disabled |
+| `intentFulfilment` | no | object | intent-fulfilment review disabled |
+| `invariantConformance` | no | object | invariant-conformance review disabled |
 | `fix` | no | object | agentic finding investigation and fix disabled |
 
 ## Review Config
@@ -105,16 +120,16 @@ provider-specific object as passthrough.
 | Key | Type | Default | Rule |
 | --- | --- | --- | --- |
 | `mode` | `"local" | "ci" | "pr" | "full"` | `"local"` | `pr` does not publish in R1. |
-| `depth` | `"fast" | "balanced" | "thorough"` | `"balanced"` | Controls budgets only. |
+| `depth` | `"fast" | "balanced" | "thorough"` | `"balanced"` | Selects the task-planning shape and the context-retrieval caps, nothing else. `fast` plans one task per changed file; `balanced` and `thorough` plan dependency-cluster tasks. Depth does not set cost, timeout, or concurrency. |
 | `baseRef` | string | `"main"` | Must not start with `-`. |
 | `headRef` | string | `"HEAD"` | Must not start with `-`. |
 | `maxConcurrentTasks` | integer 1..32 | `4` | Caps active review tasks and provider model calls. |
 | `maxFiles` | integer 1..10000 | `500` | Intake hard cap. |
 | `maxFileBytes` | integer 1..5000000 | `500000` | Files above cap are skipped. |
-| `contextMaxBytes` | integer 10000..10000000 | *unset* | Lowers the packet ceiling and the cross-file per-read cap. Unset means the provider decides packet size. Never skips or truncates source. |
+| `contextMaxBytes` | integer 10000..10000000 | *unset* | Lowers the 8,000,000-byte packet ceiling and the depth-derived cross-file per-read cap. Unset means nothing bounds the packet in advance and the provider decides (spec 26). Never skips or truncates source. |
 | `inlineSeverityThreshold` | severity | `"high"` | Only affects reporter eligibility. |
-| `maxCostUsd` | number >= 0 | preset-defined | Hard stop only when token usage and configured/provider pricing are available; otherwise reported as unavailable. |
-| `runTimeoutMs` | integer 10000..7200000 | unset | Optional whole-run timeout. When unset, no hidden Harness run timeout is applied; provider calls still use `provider.timeoutMs`. |
+| `maxCostUsd` | number >= 0 | *unset* | Checked once, after the run's work completes and before the success result is built: the run fails when the computed run cost exceeds it. It is not a mid-run stop, and it is skipped entirely when cost is unavailable. |
+| `runTimeoutMs` | integer 10000..7200000 | *unset* | Optional whole-run timeout. When unset, no hidden Harness run timeout is applied; provider calls still use `provider.timeoutMs`. |
 
 `review.crossFileRetrieval` is a nested review block and is inventoried in its own
 section below.
@@ -127,15 +142,20 @@ or publishing.
 
 | Key | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `enabled` | boolean | `true` when provider is configured | When false, no provider-backed review runs. |
+| `enabled` | boolean | *unset* | A provider-backed review runs when `provider` is configured and this is not explicitly `false`. Set it to `false` to run the deterministic path with a provider still configured. |
 | `requireRefutation` | boolean (always `true`) | `true` | Every model candidate must survive the refutation pass before admission. |
 | `actionableSeverityThreshold` | severity | `medium` | Minimum severity for a MODEL-origin finding to be admitted as actionable. Below this it is rejected as `below-threshold` (still recorded as a rejected finding). Trusted deterministic-rule findings are exempt. Keeps the engine focused on impactful runtime/security defects over low-severity nits. |
 | `deterministicSignalMode` | `"support" | "disabled"` | `"support"` | `support` injects deterministic facts as model context (materially improves recall). `disabled` keeps facts for free task clustering and admission contradiction checks but does NOT inject support-signal context into model packets — lower token cost, lower recall. Override with `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`. |
+| `maxFilesPerDiscoveryCall` | integer >= 1 | `2` | How many changed files ONE discovery call may review (spec 27). A task covering more is partitioned across several calls whose candidates are unioned; every partition receives the same shared context the undivided task would have. Partitioning engages only above this many changed files, so a small change is unaffected. When the dedicated security pass is on, it is partitioned on the same terms. |
 
 Holistic discovery and refutation packets reuse the provider task-input budget
-instead of introducing stage-specific public settings. Under tight budgets the
-workflow removes optional digest and ambient review context before recording a
-recovered provider issue.
+instead of introducing stage-specific public settings. When a packet exceeds that
+budget, optional context is dropped in a fixed order before the packet is refused:
+a discovery packet drops the shared digest; a refutation packet drops the shared
+digest, then the support signals, then the ambient review context. Nothing else is
+dropped and nothing is ever truncated — a packet still over budget fails with
+`task_packet_budget_exceeded` (exit code `4`, recoverable). At the default
+8,000,000-byte ceiling this path is not reached by any realistic change.
 
 When `contextMaxBytes` is not set explicitly, nothing bounds the review packet in
 advance: the change is sent whole and split only if the provider refuses it
@@ -143,8 +163,13 @@ advance: the change is sent whole and split only if the provider refuses it
 guard, which refuses rather than truncates.
 
 The depth-scaled values (`fast` 60,000, `balanced` 120,000, `thorough` 240,000
-bytes) survive only as cross-file retrieval per-read caps. An explicit
-`contextMaxBytes` lowers both the packet ceiling and that per-read cap.
+bytes) survive only as the cross-file retrieval per-read cap applied when
+`crossFileRetrieval.maxBytesPerRead` is unset. An explicit `contextMaxBytes`
+lowers both the packet ceiling and that per-read cap.
+
+`maxFilesPerDiscoveryCall` is a partitioning rule, not a byte budget. It never
+splits a packet by size, so it does not reintroduce the proactive byte splitting
+spec 26 removed.
 
 ## Provider Config
 
@@ -189,25 +214,31 @@ Provider resolver rules:
   required for reasoning models with function tools. `provider.reasoningEffort`
   is forwarded as `reasoning.effort`; chat-completions would drop it.
 
-Local development tests use `openai-compatible` by default when provider-backed
-tests are explicitly enabled. `provider.baseUrl` must be configurable by config
-file and by `CODEREVIEWER_PROVIDER_BASE_URL`.
+Provider-backed tests are opt-in and excluded from `npm test`. They live in
+`*.live.test.ts`, run only through `npm run test:live`, and each skips itself
+unless both `CODEREVIEWER_PROVIDER_ID` and `CODEREVIEWER_PROVIDER_MODEL` are
+present in the environment; no provider is assumed as a default.
+`provider.baseUrl` must be configurable by config file and by
+`CODEREVIEWER_PROVIDER_BASE_URL`.
 
 ## Depth Budget Defaults
 
-| Depth | `maxCostUsd` | `runTimeoutMs` | `maxConcurrentTasks` |
-| --- | --- | --- | --- |
-| `fast` | `1` | `300000` | `4` |
-| `balanced` | `3` | `900000` | `4` |
-| `thorough` | `10` | `3600000` | `2` |
+`review.depth` does not set cost, timeout, or concurrency. `maxCostUsd` and
+`runTimeoutMs` are unset unless configured, and `maxConcurrentTasks` defaults to
+`4` at every depth. The only per-depth defaults are the context-retrieval caps:
 
-R1 cost reporting is intentionally conservative. If provider usage metadata is
-unavailable, cost enforcement can use configured `costs.inputPerMillion` and
-`costs.outputPerMillion` values, or the bundled OpenAI model pricing snapshot,
-only when token counts are available. Explicit `costs` values override bundled
-pricing. If token counts or prices are unavailable, cost is omitted and
-`maxCostUsd` is not enforceable; the run summary must include warning code
-`cost-unavailable`.
+| Depth | `maxReads` | `maxSearches` | `maxMatches` | `maxDepth` | cross-file `maxBytesPerRead` |
+| --- | --- | --- | --- | --- | --- |
+| `fast` | `200` | `100` | `50` | `4` | `60000` |
+| `balanced` | `1200` | `600` | `150` | `8` | `120000` |
+| `thorough` | `4800` | `2400` | `320` | `12` | `240000` |
+
+R1 cost reporting is intentionally conservative. Cost is computed only from token
+counts: prices come from configured `costs.*` values, or, for
+`provider.id = "openai"`, from the bundled model pricing snapshot. Explicit
+`costs` values override bundled pricing. When token counts or prices are
+unavailable, cost is omitted, `maxCostUsd` is not enforced, and the run summary
+must include warning code `cost-unavailable`.
 
 When a provider surfaces prompt-cache usage, the cached input tokens (a subset
 of the input tokens, already counted in the input aggregate) are re-priced at
@@ -216,8 +247,8 @@ known; otherwise they fall back to the full input price (no fabricated
 discount). The cached input token count is surfaced in the run summary as
 `cachedInputTokens`.
 
-Provider-backed tasks should record detailed token/cost metadata when the
-adapter exposes it:
+Provider-backed tasks record detailed token/cost metadata whenever the adapter
+exposes it:
 
 | Field | Type | Rule |
 | --- | --- | --- |
@@ -234,27 +265,33 @@ selected provider adapters expose reliable usage data at the task boundary.
 
 ## Context Budget Defaults
 
-`review.contextMaxBytes` is **unset by default, and should stay unset**: the
-provider then decides whether a packet is too large (spec 26). Setting it lowers
-the 8,000,000-byte packet ceiling and caps cross-file `maxBytesPerRead`.
+`review.contextMaxBytes` is unset by default and MUST stay unset unless an
+operator deliberately wants a local ceiling: the provider decides whether a packet
+is too large (spec 26). When set it lowers both the 8,000,000-byte packet ceiling
+and the depth-derived cross-file `maxBytesPerRead`, and it MUST refuse rather than
+truncate when it binds.
 
-| Depth | Cross-file `maxBytesPerRead` when unset |
-| --- | --- |
-| `fast` | `60000` |
-| `balanced` | `120000` |
-| `thorough` | `240000` |
+The per-depth cross-file `maxBytesPerRead` values applied when
+`crossFileRetrieval.maxBytesPerRead` is unset are listed in *Depth Budget
+Defaults* above.
 
 A byte-level packet budget was previously derived from depth. It was removed
 because bytes are a poor proxy for tokens and the values fired on 37% of this
 repository's last 60 commits, substituting several partial reviews for the
 whole-file review measured as better.
 
-Provider-backed task input also has a final serialized packet guard. The guard
-must fail before provider invocation when a packet exceeds budget. It must not
+Provider-backed task input has a final serialized packet guard fixed at
+8,000,000 bytes, lowered only by an explicit `review.contextMaxBytes`. The guard
+must fail before provider invocation when a packet exceeds it. It must not
 truncate source, instructions, skills, evidence, deterministic signal output, or
-metadata.
-The recovery is deterministic task splitting, increasing configured budget, or
-removing non-required scope before rerun.
+metadata. The guard is a runaway guard against serializing a pathological packet,
+not a context ration: it is deliberately sized far beyond any model context so it
+cannot refuse before the provider has been asked.
+
+The recovery is reactive splitting (spec 26): an oversized-context failure
+reported by the provider halves the task and retries each half, bounded on
+recursion depth. A unit that cannot be split further and is still refused fails
+loudly and is never truncated.
 
 Context caps are deterministic packetization controls and conservative
 provider-safety defaults. They are not review-scope caps. Source inside the
@@ -380,18 +417,18 @@ Controls external change-intent context ingestion
 | --- | --- | --- |
 | `contextSources.enabled` | boolean | `false` |
 | `contextSources.providers` | array of provider objects | `[]` |
-| `contextSources.summary.mode` | `"model" \| "digest"` | `"model"` when a provider is configured, else `"digest"` |
-| `contextSources.summary.maxBytes` | integer | bounded change-intent-brief cap |
+| `contextSources.summary.mode` | `"model" \| "digest"` | *unset*; resolved at runtime to `"model"` when a provider is configured, else `"digest"` |
+| `contextSources.summary.maxBytes` | integer 256..20000 | `4000` |
 
 Each provider object is discriminated by `type`. The initial phase accepts the
 two no-network providers; the network providers (`platform`, `mcp`) are later
 phases (`11-external-context-ingestion.md`) and are added to this list when their
 implementations and the required security controls ship.
 
-| `type` | Required keys | Purpose |
+| `type` | Keys and defaults | Purpose |
 | --- | --- | --- |
-| `inbox` | `dir` | Read frontmatter-markdown context files a pipeline wrote before the run. No network. |
-| `changed-files` | `include` | Surface PR-changed repository files matching globs as intent context. No network. |
+| `inbox` | `dir` (`.codereviewer/context`), `maxFiles` 1..200 (`20`), `maxFileBytes` 1..1000000 (`64000`) | Read frontmatter-markdown context files a pipeline wrote before the run. No network. |
+| `changed-files` | `include` (non-empty glob array, `["**/*.md"]`), `maxFiles` 1..200 (`20`), `maxFileBytes` 1..1000000 (`64000`) | Surface PR-changed repository files matching globs as intent context. No network. |
 
 Rules:
 
@@ -416,9 +453,9 @@ default.
 | --- | --- | --- |
 | `verification.enabled` | boolean | `false` |
 | `verification.providers` | array of claim-provider objects | `[]` |
-| `verification.maxToolCallsPerClaim` | integer | bounded default |
-| `verification.maxBytesPerRead` | integer | bounded default |
-| `verification.maxMatches` | integer | bounded default |
+| `verification.maxToolCallsPerClaim` | integer 1..50 | `12` |
+| `verification.maxBytesPerRead` | integer >= 1 | `20000` |
+| `verification.maxMatches` | integer >= 1 | `20` |
 
 Claim-provider objects are discriminated by `type`:
 
@@ -436,6 +473,103 @@ Rules:
 - an unknown `type` or a missing required key fails config validation (exit 2);
 - the later-phase `analyzer` (SARIF) and `comment` claim providers are added to
   this list when their adapters ship.
+
+## Change Impact
+
+Controls change-impact review (`22-change-impact-review.md`). Disabled by default
+and reached only by `codereviewer impact check` — never by `review`.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `changeImpact.enabled` | boolean | `false` |
+| `changeImpact.maxChangedSymbols` | integer 1..500 | `50` |
+| `changeImpact.maxReferencesPerSymbol` | integer 1..500 | `25` |
+| `changeImpact.maxSearchDepth` | integer 0..32 | `12` |
+
+Rules:
+
+- with it disabled, `impact check` still exits `0` and writes an empty report
+  carrying the warning `Change-impact review is disabled. Set changeImpact.enabled
+  to true to run it.`;
+- the command makes no provider call, so these bounds are its whole cost model:
+  they bound repository traversal only;
+- the bounds are per-run and per-symbol rather than one global pool, so a change
+  touching many symbols cannot let the first symbol consume the entire reference
+  budget;
+- a symbol referenced more than `maxReferencesPerSymbol` times is reported
+  truncated rather than dropped, so the report never silently understates how
+  widely a symbol is used;
+- there is deliberately no `blocking` key. The command reports references, not
+  findings, and always exits `0`; the key is added in the same change that admits
+  the first impact finding.
+
+## Intent Fulfilment
+
+Controls intent-fulfilment review (`23-intent-fulfilment-review.md`). Disabled by
+default and reached only by `codereviewer intent check` — never by `review`.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `intentFulfilment.enabled` | boolean | `false` |
+| `intentFulfilment.maxObligations` | integer 1..100 | `100` |
+| `intentFulfilment.maxIntentBytes` | integer 256..200000 | `100000` |
+| `intentFulfilment.maxChangeLines` | integer 1..5000 | `5000` |
+
+Rules:
+
+- with it disabled, `intent check` still exits `0` and writes an empty report
+  carrying the warning `Intent-fulfilment review is disabled. Set
+  intentFulfilment.enabled to true to run it.`;
+- every limit here is a runaway guard, not a ration. All three degrade the answer
+  silently when they bind, so a value set where real inputs reach it turns the
+  command into one that reports "nothing left to do" because it could not see;
+- `maxObligations` caps both reported obligations and judgement calls (one call
+  per obligation) and is therefore the spend bound;
+- `maxIntentBytes` caps the summed redacted change-intent text handed to the one
+  extraction call per run; the ingestion providers already bound themselves per
+  file, this bounds the sum across several of them;
+- `maxChangeLines` caps the changed lines each judgement call may cite, and is the
+  limit whose binding does the most damage;
+- there is deliberately no `blocking` key, and none is added later. Spec 23 makes
+  advisory-only a requirement, not a default, so a `blocking` key would be accepted
+  and then silently ignored.
+
+## Invariant Conformance
+
+Controls invariant-conformance review (`24-invariant-conformance-review.md`).
+Disabled by default and reached only by `codereviewer conformance check` — never by
+`review`.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `invariantConformance.enabled` | boolean | `false` |
+| `invariantConformance.maxChangedDeclarations` | integer 1..500 | `50` |
+| `invariantConformance.maxPeersPerDeclaration` | integer 3..500 | `60` |
+| `invariantConformance.maxPeerFiles` | integer 1..2000 | `300` |
+| `invariantConformance.maxDivergences` | integer 1..500 | `50` |
+| `invariantConformance.maxPreExistingDivergences` | integer 0..500 | `25` |
+| `invariantConformance.adjudication.enabled` | boolean | `false` |
+| `invariantConformance.adjudication.maxAdjudications` | integer 1..500 | `25` |
+
+Rules:
+
+- with it disabled, `conformance check` still exits `0` and writes an empty report
+  carrying the warning `Invariant-conformance review is disabled. Set
+  invariantConformance.enabled to true to run it.`;
+- the deterministic core makes no provider call; its bounds limit repository
+  traversal only. Peer derivation reads sibling files, so its bounds are both
+  per-declaration and per-run;
+- a peer set larger than `maxPeersPerDeclaration` is truncated in file-then-line
+  order rather than dropped, so a large directory still yields a bounded,
+  reproducible comparison;
+- `maxDivergences` and `maxPreExistingDivergences` are separate caps so a flood of
+  pre-existing divergences cannot crowd out the change-attributed ones;
+- `adjudication` is the only part that spends money — one model call per divergence
+  — and is disabled independently of `enabled`, so the deterministic baseline arm is
+  what an adjudicated arm has to beat. Divergences beyond `maxAdjudications` are
+  counted as unadjudicated and are not reported;
+- there is deliberately no `blocking` key, and none is added later. Advisory-only is
+  a spec 24 requirement, not a maturity stage, and the command always exits `0`.
 
 ## Fix
 
@@ -462,13 +596,13 @@ Rules:
 ## Cross-File Retrieval
 
 Controls agentic cross-file discovery (`16-agentic-cross-file-discovery.md`).
-Disabled by default.
+Enabled by default.
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `review.crossFileRetrieval.enabled` | boolean | `false` |
-| `review.crossFileRetrieval.maxToolCallsPerTask` | integer (1-500) | `100` |
-| `review.crossFileRetrieval.maxBytesPerRead` | integer (1000-200000) | `24000` |
+| `review.crossFileRetrieval.enabled` | boolean | `true` |
+| `review.crossFileRetrieval.maxToolCallsPerTask` | integer 1..500 | `100` |
+| `review.crossFileRetrieval.maxBytesPerRead` | integer 1000..4000000 | *unset* |
 
 Rules:
 
@@ -478,17 +612,38 @@ Rules:
   tools; `maxToolCallsPerTask` is a runaway-loop guard enforced in code, not a
   context ration, and the context retriever's own eligibility, redaction, and
   byte/match caps still apply;
+- `maxBytesPerRead` is unset by default (spec 28). Setting it is a deliberate
+  operator choice and it then binds every cross-file read, with the cut disclosed
+  in the read's own summary. Unset, the per-read cap is the depth-derived value in
+  *Depth Budget Defaults*, and the reviewer narrows a read itself by passing an
+  optional `startLine`/`endLine` line range to `repo_read` after locating what it
+  needs with `repo_grep`;
 - retrieved content is untrusted repository data: it cannot bypass scope, severity,
   baseline, admission, or the gate, and its findings pass the same refutation and
   admission as any other candidate.
 
+`enabled` defaults to `true` even though the recall gain is **not** statistically
+significant. Two independent runs put it ahead on every measured dimension —
+recall +5.7pp then +2.3pp, adjusted precision 100% both times, cost down both
+times, zero provider errors — but neither run reached significance, so no specific
+recall improvement is claimed. The earlier net-negative verdict is refuted: it was
+measuring reads silently truncated at the old 24,000-byte cap.
+
 ## Removed Configuration Blocks
 
-`review.contextScout` was removed on 2026-07-27 together with the context scout
-itself. No compatibility shim exists and none may be added: the schema is strict, so
-a config that still sets the block fails validation with exit code 2 and the user is
-told to remove it, rather than running a review that silently differs from what the
-file asks for. The withdrawal and its reasoning are recorded in
+These keys were removed with the capabilities they controlled and MUST NOT be
+reintroduced as compatibility shims. Because every config object is strict, a
+config that still sets one fails validation with exit code `2` and the user is told
+to remove it, rather than running a review that silently differs from what the file
+asks for.
+
+| Removed key | Removed | Withdrawn capability |
+| --- | --- | --- |
+| `review.contextScout` | 2026-07-27 | Context scout (spec 18) |
+| `review.discoveryPosture` | 2026-07-27 | Discovery posture (spec 20) |
+| `review.discoverySampleCount` | 2026-07-27 | Independent sampling (spec 21) |
+
+The withdrawals are recorded in `_provenance.yaml` and their reasoning in
 `05-review-workflow-and-runtime.md`.
 
 ## Security

@@ -49,18 +49,22 @@ checklist_walk:
       evidence:
         - specs/05-review-workflow-and-runtime.md
         - specs/06-evaluation-and-quality-gates.md
+        - specs/17-real-repository-eval-corpus.md
       gaps: []
     security_abuse:
       applicability: relevant
       checklist: checklist-security-abuse.md
       evidence:
         - specs/07-security-privacy-operations.md
+        - specs/15-security-focused-review.md
+        - specs/16-agentic-cross-file-discovery.md
       gaps: []
     secrets_privacy:
       applicability: relevant
       checklist: checklist-secrets-privacy.md
       evidence:
         - specs/07-security-privacy-operations.md
+        - specs/11-external-context-ingestion.md
       gaps: []
     performance_capacity:
       applicability: relevant
@@ -68,6 +72,8 @@ checklist_walk:
       evidence:
         - specs/04-configuration-and-providers.md
         - specs/06-evaluation-and-quality-gates.md
+        - specs/26-reactive-task-splitting.md
+        - specs/27-discovery-partitioning.md
       gaps: []
     runtime_platform:
       applicability: relevant
@@ -125,7 +131,23 @@ checklist_walk:
         - specs/06-evaluation-and-quality-gates.md
         - specs/07-security-privacy-operations.md
         - specs/10-state-of-the-art-research-synthesis.md
-      gaps: []
+        - specs/12-verification-flow.md
+        - specs/15-security-focused-review.md
+        - specs/16-agentic-cross-file-discovery.md
+        - specs/22-change-impact-review.md
+        - specs/23-intent-fulfilment-review.md
+        - specs/24-invariant-conformance-review.md
+        - specs/26-reactive-task-splitting.md
+        - specs/27-discovery-partitioning.md
+        - specs/28-targeted-reads.md
+      gaps:
+        - >-
+          specs/28-targeted-reads.md is Draft, not Approved, while the behaviour
+          it describes is implemented. Its requirement that an oversized-context
+          failure reduce the cross-file read budget and retry BEFORE the task is
+          split has no implementation; discovery splits the task instead, which
+          the spec itself notes cannot help when the overflow came from a tool
+          result.
     operations_release:
       applicability: relevant
       checklist: checklist-operations-release.md
@@ -144,18 +166,27 @@ checklist_walk:
 
 ## Known Draft Gaps
 
-No author-known spec gaps remain. Readiness review can still find issues; this
-self-audit is not approval.
+One gap is recorded under `ai_automation` above and is repeated here so it is not
+read only in the machine block: `28-targeted-reads.md` is Draft while the
+behaviour it describes ships, and its read-budget-reduction-then-retry
+requirement is unimplemented.
+
+It is not a blocking finding for this self-audit's own scope, and this audit is
+not approval. Readiness review can still find further issues.
 
 ## Authoring Assumptions
 
 - R1 intentionally focuses on local CLI and CI artifact behavior.
 - PR publishing, automatic fixes, hosted service, browser UI, and database
   persistence are future specs.
-- Provider adapter package names and versions are based on npm metadata
-  retrieved on 2026-06-22.
+- Provider adapter package names, ranges, and resolved versions are read from the
+  committed `package.json` and lockfile, refreshed on 2026-07-31 in
+  `08-dependencies-and-release.md`.
 - State-of-practice review, reporting, evaluation, security, and supply-chain
   sources were retrieved or verified on 2026-06-20.
+- Accuracy figures quoted in `05-review-workflow-and-runtime.md` and
+  `06-evaluation-and-quality-gates.md` are audit trail, not current performance.
+  Only runs from 2026-08-01 onward were produced by a pinned engine.
 
 ## Readiness Handoff
 

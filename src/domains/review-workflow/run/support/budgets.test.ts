@@ -42,7 +42,7 @@ describe('review runner budgets', () => {
     expect(taskInputBudgetFor(explicit)).toBe(30000)
   })
 
-  test('derives AI review retrieval budget from per-depth caps', () => {
+  test('derives retrieval caps from depth, but never sizes a read in advance', () => {
     const fastBudget = aiReviewBudgetFor(
       CodeReviewerConfigSchema.parse({ review: { depth: 'fast' } })
     )
@@ -64,7 +64,7 @@ describe('review runner budgets', () => {
         usedReads: 0,
         maxSearches: 100,
         usedSearches: 0,
-        maxBytesPerRead: 60000,
+        maxBytesPerRead: 4_000_000,
         maxMatches: 50,
         maxDepth: 4
       }
@@ -75,7 +75,7 @@ describe('review runner budgets', () => {
         usedReads: 0,
         maxSearches: 600,
         usedSearches: 0,
-        maxBytesPerRead: 120000,
+        maxBytesPerRead: 4_000_000,
         maxMatches: 150,
         maxDepth: 8
       }
@@ -86,19 +86,22 @@ describe('review runner budgets', () => {
         usedReads: 0,
         maxSearches: 2400,
         usedSearches: 0,
-        maxBytesPerRead: 240000,
+        maxBytesPerRead: 4_000_000,
         maxMatches: 320,
         maxDepth: 12
       }
     })
-    // explicit contextMaxBytes caps maxBytesPerRead at balanced depth (default)
+    // Spec 28: contextMaxBytes no longer sizes a READ. Nothing cuts a read in
+    // advance — the runaway guard stands until an explicit cross-file cap overrides
+    // it downstream. Sizing this from a depth context cap is precisely what the spec
+    // forbids, and it was still happening after the config field was made optional.
     expect(explicitContextBudget).toEqual({
       contextRetrievalBudget: {
         maxReads: 1200,
         usedReads: 0,
         maxSearches: 600,
         usedSearches: 0,
-        maxBytesPerRead: 10000,
+        maxBytesPerRead: 4_000_000,
         maxMatches: 150,
         maxDepth: 8
       }

@@ -5,25 +5,32 @@ Date: 2026-06-22
 
 ## Dependency Evidence
 
-Retrieved on 2026-06-22 with `npm view`.
+Ranges are the committed `package.json`; versions, licenses, and engines are the
+resolved packages in the committed lockfile, read on 2026-07-31.
 
-| Package | Role | Current Version | License | Engine |
-| --- | --- | --- | --- | --- |
-| `@purista/harness` | Workflow/agent runtime | `1.5.2` | Apache-2.0 | `>=24.15.0` |
-| `@purista/harness-openai` | Optional OpenAI adapter; dev-installed for this repository's local OpenAI eval/review setup | `1.5.2` | Apache-2.0 | `>=24.15.0` |
-| `@purista/harness-bedrock` | Optional Bedrock adapter | `1.5.2` | Apache-2.0 | `>=24.15.0` |
-| `@purista/harness-azure-foundry` | Optional Azure adapter | `1.5.2` | Apache-2.0 | `>=24.15.0` |
-| `zod` | Runtime schemas | `4.4.3` | MIT | not declared |
-| `typescript` | Compiler | `6.0.3` | Apache-2.0 | not declared |
-| `vitest` | Test runner | `4.1.9` | MIT | `^20.0.0 || ^22.0.0 || >=24.0.0` |
-| `@vitest/coverage-v8` | Test coverage provider | `4.1.9` | MIT | not declared |
-| `tsx` | Dev runner | `4.22.4` | MIT | `>=18.0.0` |
-| `@types/node` | Node types | `26.0.0` | MIT | not declared |
-| `@ast-grep/napi` | Optional local structural parsing layer for deterministic support signals | `0.44.0` | MIT | `>= 10` |
-| `@ast-grep/lang-python` | Python dynamic AST grammar | `0.0.6` | ISC | not declared |
-| `@ast-grep/lang-go` | Go dynamic AST grammar | `0.0.6` | ISC | not declared |
-| `@ast-grep/lang-rust` | Rust dynamic AST grammar | `0.0.7` | ISC | not declared |
-| `@ast-grep/lang-java` | Java dynamic AST grammar | `0.0.7` | ISC | not declared |
+| Package | Role | Declared Range | Resolved Version | License | Engine |
+| --- | --- | --- | --- | --- | --- |
+| `@purista/harness` | Workflow/agent runtime | `^1.6.0` | `1.6.0` | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness-openai` | Optional OpenAI adapter; optional peer, and dev-installed for this repository's local OpenAI eval/review setup | `^1.6.0` | `1.6.0` | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness-bedrock` | Optional Bedrock adapter; optional peer, not installed here | `^1.6.0` | not installed | Apache-2.0 | `>=24.15.0` |
+| `@purista/harness-azure-foundry` | Optional Azure adapter; optional peer, not installed here | `^1.6.0` | not installed | Apache-2.0 | `>=24.15.0` |
+| `zod` | Runtime schemas | `^4.4.3` | `4.4.3` | MIT | not declared |
+| `typescript` | Compiler | `^6.0.3` | `6.0.3` | Apache-2.0 | `>=14.17` |
+| `vitest` | Test runner | `^4.1.9` | `4.1.9` | MIT | `^20.0.0 || ^22.0.0 || >=24.0.0` |
+| `@vitest/coverage-v8` | Test coverage provider | `^4.1.9` | `4.1.9` | MIT | not declared |
+| `tsx` | Dev runner | `^4.22.4` | `4.22.4` | MIT | `>=18.0.0` |
+| `@types/node` | Node types | `^26.0.0` | `26.0.0` | MIT | not declared |
+| `@ast-grep/napi` | Optional local structural parsing layer for deterministic support signals | `^0.44.0` | `0.44.0` | MIT | `>= 10` |
+| `@ast-grep/lang-python` | Python dynamic AST grammar | `^0.0.6` | `0.0.6` | ISC | not declared |
+| `@ast-grep/lang-go` | Go dynamic AST grammar | `^0.0.6` | `0.0.6` | ISC | not declared |
+| `@ast-grep/lang-rust` | Rust dynamic AST grammar | `^0.0.7` | `0.0.7` | ISC | not declared |
+| `@ast-grep/lang-java` | Java dynamic AST grammar | `^0.0.7` | `0.0.7` | ISC | not declared |
+| `@ast-grep/lang-ruby` | Ruby dynamic AST grammar | `^0.0.7` | `0.0.7` | ISC | not declared |
+
+`typescript` is declared in `dependencies`, not `devDependencies`. This spec
+records the placement as observed; no requirement here justifies a compiler in
+the runtime dependency set, so it needs either a recorded rationale or a move to
+`devDependencies`.
 
 ## Version Policy
 
@@ -32,7 +39,10 @@ Retrieved on 2026-06-22 with `npm view`.
 - Do not use canary, beta, RC, or next releases in `R1`.
 - Provider adapter packages remain outside base dependencies. They may be
   declared only as optional peers so consumers can install exactly the adapter
-  required by their configured provider.
+  required by their configured provider. All three adapters are declared in
+  `peerDependencies` with `peerDependenciesMeta.optional = true`; the OpenAI
+  adapter is additionally a `devDependency` of this repository so its own
+  provider-backed eval and review runs can execute.
 - Generic structural parsing dependencies may be base dependencies only when
   they are required for deterministic support signals and pass Linux/Windows
   install verification. Language-native tool integrations that invoke external
@@ -42,8 +52,9 @@ Retrieved on 2026-06-22 with `npm view`.
 
 ## Runtime Version
 
-Node.js `24.15.0` is the minimum because `@purista/harness@1.5.2` declares
-`>=24.15.0`. `.nvmrc` must contain `24.15.0`.
+Node.js `24.15.0` is the minimum because `@purista/harness@1.6.0` declares
+`>=24.15.0`. `.nvmrc` must contain `24.15.0`, and `package.json` `engines.node`
+must declare `>=24.15.0`.
 
 ## Supply Chain Requirements
 
@@ -107,10 +118,16 @@ R1 rollback is package-version rollback:
 
 | Script | Command Semantics |
 | --- | --- |
-| `generate:schemas` | Generate `schema/codereviewer-config.schema.json` from Zod contract sources and fail if the generated file differs from the committed file in CI. |
+| `generate:schemas` | Generate `schema/codereviewer-config.schema.json` from Zod contract sources and write it. |
+| `generate:schemas:check` | Run the same generator in check mode and fail when the generated file differs from the committed one. This is the script CI and the generated-artifact drift gate rely on; `generate:schemas` alone would silently rewrite the file instead of failing. |
 | `typecheck` | Run TypeScript with no emit. |
 | `test` | Run hermetic Vitest tests. |
 | `build` | Build ESM output into `dist/`. |
+
+Additional committed scripts exist for provider-backed evaluation
+(`eval:hydrate`, `eval:benchmark`, `eval:benchmark:debug`, `eval:corpus`,
+`eval:corpus:hydrate`) and are required by
+`06-evaluation-and-quality-gates.md`, which owns their semantics.
 
 ## Research Sources
 

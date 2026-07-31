@@ -222,6 +222,23 @@ further or increase the budget"*. A limit whose binding produces a plausible ans
 instead of an error is a defect regardless of its value, and raising the value
 fixes only the symptom.
 
+Each refusal MUST name its own error code, the value that bound, and the input that
+exceeded it: `intent_text_too_large`, `intent_too_many_obligations`,
+`intent_change_too_large`. Refusal exits **4** — distinct from configuration/usage
+(2) and repository failure (3), and distinct from the fulfilment result, which never
+changes the exit code at all.
+
+The three limits are **runaway guards, not rations**, and their defaults are set so
+that ordinary input does not reach them: at most **100** obligations, **100 000**
+bytes of stated intent, **5 000** citable changed lines. Two of the three were
+originally set as rations (20 obligations, 400 changed lines) and both were measured
+to bind routinely. A value at which real input refuses the run is not a safe limit; it
+is the same defect wearing an error message.
+
+`maxObligations` also bounds spend — one judgement call per obligation, measured at
+about $0.008 each over 37 runs — but the cost is set by the intent, not by the limit:
+raising it cannot make a small ticket expensive.
+
 **This does not conflict with the advisory rule below.** Refusing to run on input it
 cannot fully see is not failing a pipeline on FULFILMENT grounds; it is the same
 class as the configuration and repository errors this command already exits on.

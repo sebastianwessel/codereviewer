@@ -7,6 +7,7 @@ import {
 } from '../../../context-retrieval/index.js'
 import {
   crossFileDiscoveryToolDefinitions,
+  reduceActiveReadBudget,
   runWithCrossFileDiscoveryTools
 } from './cross-file-tools.js'
 
@@ -45,7 +46,7 @@ describe('cross-file discovery tools', () => {
       maxToolCalls: 4
     })
 
-    const output = await runWithCrossFileDiscoveryTools(bounded.tools, () =>
+    const output = await runWithCrossFileDiscoveryTools(bounded.tools, () => false, () =>
       runRead('src/dep.ts')
     )
 
@@ -68,9 +69,7 @@ describe('cross-file discovery tools', () => {
       maxToolCalls: 2
     })
 
-    const error = await runWithCrossFileDiscoveryTools(
-      bounded.tools,
-      async () => {
+    const error = await runWithCrossFileDiscoveryTools(bounded.tools, () => false, async () => {
         await crossFileDiscoveryToolDefinitions.repo_read.handler(undefined, {
           path: 'src/a.ts'
         })
@@ -104,17 +103,55 @@ describe('cross-file discovery tools', () => {
     // Interleave two scopes: each tool call must resolve the bounded tools of its
     // OWN task, so concurrent discovery tasks never consume each other's budget.
     const [firstOutput, secondOutput] = await Promise.all([
-      runWithCrossFileDiscoveryTools(first.tools, async () => {
+      runWithCrossFileDiscoveryTools(first.tools, () => false, async () => {
         const output = await runRead('src/first.ts')
         await runRead('src/first-again.ts')
         return output
       }),
-      runWithCrossFileDiscoveryTools(second.tools, () => runRead('src/second.ts'))
+      runWithCrossFileDiscoveryTools(second.tools, () => false, () => runRead('src/second.ts'))
     ])
 
     expect(firstOutput.content).toContain('src/first.ts')
     expect(secondOutput.content).toContain('src/second.ts')
     expect(first.toolCallCount()).toBe(2)
     expect(second.toolCallCount()).toBe(1)
+  })
+})
+
+describe('read-budget reduction on context overflow (spec 28)', () => {
+  test('reduces the ACTIVE task’s read budget, and reports when it cannot', async () => {
+    // Proves the hook is reachable from inside a task scope. An unwired hook is the
+    // failure this project keeps hitting: the schema says one thing, the engine does
+    // another, and nothing fails.
+    let reductions = 0
+    const result = await runWithCrossFileDiscoveryTools(
+      {
+        read: async () => {
+          throw new Error('unused')
+        },
+        list: async () => {
+          throw new Error('unused')
+        },
+        grep: async () => {
+          throw new Error('unused')
+        }
+      },
+      () => {
+        reductions += 1
+        return reductions <= 2
+      },
+      async () => [
+        reduceActiveReadBudget(),
+        reduceActiveReadBudget(),
+        reduceActiveReadBudget()
+      ]
+    )
+
+    expect(result).toEqual([true, true, false])
+  })
+
+  test('reports false outside any task scope, so an overflow goes to splitting', async () => {
+    // A call with no tools has no reads to shrink; its overflow is about the packet.
+    expect(reduceActiveReadBudget()).toBe(false)
   })
 })

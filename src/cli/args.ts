@@ -78,10 +78,38 @@ export const parseConfigPath = (args: readonly string[]): string | undefined => 
   return configPath
 }
 
+// `--name=value` is accepted everywhere `--name value` is.
+//
+// The unknown-option check has always tolerated the `=` form (it compares the part
+// before `=`), while the value parsers matched whole tokens only. So
+// `--slice-root=some/path` passed validation and was then IGNORED, and the run
+// silently scored the DEFAULT corpus instead. A measurement that quietly answers a
+// different question than the one asked is the exact failure this project keeps
+// finding; an unsupported spelling must fail loudly, not be dropped.
+const inlineOptionValue = (
+  args: readonly string[],
+  optionName: string
+): string | undefined => {
+  const prefix = `${optionName}=`
+  const match = args.find((arg) => arg.startsWith(prefix))
+
+  return match === undefined ? undefined : match.slice(prefix.length)
+}
+
 export const parseOptionValue = (
   args: readonly string[],
   optionName: string
 ): string | undefined => {
+  const inline = inlineOptionValue(args, optionName)
+
+  if (inline !== undefined) {
+    if (inline.length === 0) {
+      throw new TypeError(`${optionName} requires a value`)
+    }
+
+    return inline
+  }
+
   const optionIndex = args.indexOf(optionName)
 
   if (optionIndex === -1) {
@@ -101,9 +129,23 @@ export const parseOptionValues = (
   optionName: string
 ): readonly string[] => {
   const values: string[] = []
+  const prefix = `${optionName}=`
 
   for (let index = 0; index < args.length; index += 1) {
-    if (args[index] !== optionName) {
+    const arg = args[index] as string
+
+    if (arg.startsWith(prefix)) {
+      const inline = arg.slice(prefix.length)
+
+      if (inline.length === 0) {
+        throw new TypeError(`${optionName} requires a value`)
+      }
+
+      values.push(inline)
+      continue
+    }
+
+    if (arg !== optionName) {
       continue
     }
 

@@ -82,6 +82,16 @@ export type ContextRetrievalResult = {
 
 export type ContextRetriever = {
   readonly budget: () => ContextRetrievalBudget
+  /**
+   * Halve the per-read byte allowance, reporting whether a reduction was possible.
+   *
+   * Spec 28: nothing caps a read in advance, so an oversized context is discovered
+   * by hitting the provider's real limit. When that happens on a tool-enabled call,
+   * the retry must fetch LESS — splitting the task instead would refetch the same
+   * file and overflow identically. Returns false at the floor, which is the caller's
+   * signal to stop reducing and fail or split instead.
+   */
+  readonly reduceReadBudget: () => boolean
   readonly readRepositoryFile: (input: {
     readonly path: string
     readonly taskId?: string
@@ -350,6 +360,22 @@ export const createContextRetriever = (input: {
 
   return {
     budget: () => ({ ...budget }),
+    reduceReadBudget: () => {
+      // A floor rather than zero: below this a read returns too little to be worth
+      // the round trip, and continuing to halve would loop toward nothing.
+      const floor = 4_000
+
+      if (budget.maxBytesPerRead <= floor) {
+        return false
+      }
+
+      budget.maxBytesPerRead = Math.max(
+        floor,
+        Math.floor(budget.maxBytesPerRead / 2)
+      )
+
+      return true
+    },
     readRepositoryFile: async ({ path: requestedPath, taskId, startLine, endLine }) => {
       const { portablePath, absolutePath } = await resolveEligibleExisting(
         requestedPath

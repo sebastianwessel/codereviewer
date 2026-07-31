@@ -198,7 +198,8 @@ with an origin label. Zero or more providers are configured.
   - `digest`: deterministic ordered per-origin bounded truncation. No provider
     call, fully reproducible.
 - The digest mode is used when no provider is configured, when `digest` is
-  selected, and as the fallback when a `model` summarization call fails. A failed
+  selected, when no model provider is configured, when the AI review lane itself is
+  disabled, and as the fallback when a `model` summarization call fails. A failed
   summarization never fails the review.
 - The brief must not exceed the configured byte cap. Truncation is deterministic
   and recorded. Only the brief is injected; raw fragments are not.
@@ -208,9 +209,11 @@ with an origin label. Zero or more providers are configured.
 - The brief is injected as exactly one review-context document of kind
   `change-intent`.
 - A `change-intent` document is context only. It is never a review target, never
-  contributes a task path, and never seeds a candidate finding. A finding whose
-  location points at the change-intent document is discarded, matching the
-  `referenced-definition` rule.
+  contributes a task path, and never seeds a candidate finding. It carries **no
+  path at all**, so it cannot be named as a finding location in the first place —
+  a stronger guarantee than the `referenced-definition` rule, which discards a
+  finding after the fact. Discovery independently drops any candidate whose path is
+  not one of the task's own paths.
 - The document is recorded in the context ledger with a stable reason
   (`task-context-change-intent`), byte counts, and a content hash.
 - The document is presented to the model under an explicit header marking it as
@@ -247,10 +250,15 @@ reviewer prompt and the summarizer must enforce these principles:
   warning and the review continues without it. A provider failure never fails the
   review run.
 - Evaluation and benchmark runs use no context providers so results stay
-  reproducible.
-- Ingestion is bounded by per-provider file/byte caps, a total fetch timeout, and
-  a request cap, consistent with the denial-of-service controls in
-  `07-security-privacy-operations.md`.
+  reproducible. This is a property of the committed evaluation configuration, not of
+  code: nothing forces `contextSources` off for an eval run.
+- Ingestion is bounded per provider by a maximum file count and a per-file byte cap
+  (`inbox`: 20 files, 64 000 bytes each; `changed-files`: the same caps over globs
+  defaulting to `**/*.md`), and the brief by `summary.maxBytes` (default 4 000). A
+  **total fetch timeout and a request cap** are denial-of-service controls for a
+  network provider (`07-security-privacy-operations.md`); both shipped providers are
+  filesystem-only, so neither exists yet and both MUST land with the first network
+  provider.
 
 ## Configuration
 
@@ -268,6 +276,18 @@ standard schema validation.
   pull-request, ticket, or file text appears in logs, traces, or events.
 - The summarizer records mode, input byte count, output byte count, and whether
   truncation occurred.
+
+The implementation currently emits one aggregate `context_ingestion` step rather than
+these per-provider records; see *Known Divergences From This Spec*.
+
+## Reuse By Other Commands
+
+`gatherContextFragments` — the provider composition below the summarizer — is a
+second entry point into this domain, used by spec 23's `intent check` to obtain the
+same redacted fragments **without** the brief. That is deliberate: obligations MUST be
+extracted from the fragments, not from a paraphrase, so the intent lane must be able
+to stop before summarization. The providers, their bounds, and their redaction are
+shared; nothing is reimplemented.
 
 ## Errors And Degradation
 
@@ -339,3 +359,15 @@ checks (host allowlist, no literal secret) that warrant a dedicated
   model summarizer degrades to the digest and is proven by a test.
 - The reviewer prompt and the summarizer enforce the change-intent principles in
   "Reviewer Use Of Change Intent"; both are locked by tests.
+
+## Known Divergences From This Spec
+
+Recorded 2026-08-01 by an alignment audit. **These are unmet requirements, not
+amendments.** Everything above stands as written; this section exists so the gap is
+visible rather than silent.
+
+| Requirement | State of the implementation |
+| --- | --- |
+| *Observability*: a per-provider no-content event carrying origin label, bytes gathered, status, and duration | One aggregate `context_ingestion` step is emitted: `providerCount`/`summaryMode` at start, `fragmentCount`/`failedProviders`/`injected`/`briefBytes` at end. Per-provider metrics (id, type, fragment count, bytes) are computed and then reduced to a *count of failures*. Origin label, per-provider bytes, and per-provider duration reach nothing. |
+| *Observability*: the summarizer records input byte count and whether truncation occurred | Neither is emitted. Output bytes (`briefBytes`) and the mode are. |
+| *Errors And Degradation*: a degraded run must be distinguishable from one that chose the digest deliberately | Two degradation paths are warned (summarizer resolution failure, call-time failure). A third is **silent**: when the AI review lane is disabled the digest is forced with no warning at all — the exact shape this section exists to remove. |

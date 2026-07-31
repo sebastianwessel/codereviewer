@@ -1,7 +1,7 @@
 # 00: Stack
 
 Status: Approved
-Date: 2026-07-27
+Date: 2026-07-31
 
 ## Runtime Stack
 
@@ -31,7 +31,10 @@ tree without the lockfile also changing.
 | CLI `codereviewer eval recall-report` | Public R1 | `evaluation` | Eval contract | Renders a recall breakdown from eval report artifacts. |
 | CLI `codereviewer eval slice-manifest` | Public R1 | `evaluation` | Eval contract | Emits a corpus slice manifest for a selected case set. |
 | CLI `codereviewer baseline write` | Public R1 | `admission`, `reporting` | Baseline file contract | Writes the configured baseline from a completed report; never invoked by `review`. |
-| CLI `codereviewer drift` | Public R1 | `drift` | Drift categories | Runs the deterministic drift checks and exits by `drift.failOn`. |
+| CLI `codereviewer drift check` | Public R1 | `drift` | Drift categories | Runs the deterministic drift checks and exits by `drift.failOn`. |
+| CLI `codereviewer impact check` | Public R1 | `change-impact` | Change-impact report contract | Reports dependents of changed symbols as JSON. Advisory: it exits `0` whatever it reports, and only setup/repository errors change the code. Never invoked by `review`. |
+| CLI `codereviewer intent check` | Public R1 | `intent-fulfilment` | Intent-fulfilment report contract | Maps stated obligations to evidence in the change as JSON. Advisory: it exits `0` whatever it reports, and only setup/repository errors change the code. Never invoked by `review`. |
+| CLI `codereviewer conformance check` | Public R1 | `invariant-conformance` | Divergence report contract | Reports peer-pattern divergences as JSON. Advisory: it exits `0` whatever it reports, and only setup/repository errors change the code. Never invoked by `review`. |
 | Library `src/index.ts` | Public R1 | root package | exported TypeScript types | Re-exports stable types/helpers with no side effects. |
 | Config file `.codereviewer/config.json` | Public R1 | `configuration` | `03-contracts/config.schema.json` | Strict JSON config, merged with env and CLI flags. |
 | Report JSON `report.json` | Public R1 | `reporting` | `03-contracts/review-report.schema.json` | Canonical machine-readable run output. |
@@ -48,6 +51,10 @@ execution_semantics:
   default_network: selected_provider_only
   default_shell: denied
   default_filesystem_write: run_artifact_directory_only
+  other_filesystem_writes:
+    baseline_write_command: baseline.path
+    eval_run_command: eval_report_and_slice_artifacts
+  source_writes: never
   external_provider_tests: opt_in_only
   default_tests: hermetic_provider_fixtures
   timeout_sources:

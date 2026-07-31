@@ -7,10 +7,14 @@ Date: 2026-07-21
 
 1. Parse CLI args.
 2. Load and validate config.
-3. Load root `.env` when present and merge process env.
+3. Load root `.env` when present and merge it over process env: a value in `.env`
+   overrides the same name in the process environment. `codereviewer eval run` is
+   the one command that does not load `.env`, per `06-evaluation-and-quality-gates.md`.
 4. Resolve repository root from CLI or current working directory.
-5. Run deterministic drift/security preflight checks. These run first, so a hard
-   drift error stops before repository IO and before any network-capable path.
+5. Run deterministic drift/security preflight checks, then configure optional
+   no-content telemetry. Preflight runs first, so a hard drift error stops before
+   repository IO and before any network-capable path; telemetry is configured
+   inside the same step, after the drift gate passes and before intake.
 6. Collect repository intake, including the raw unified diff.
 7. Build deterministic support signals.
 8. Plan review tasks.
@@ -23,7 +27,8 @@ Date: 2026-07-21
     disabled and never fails the run on a provider error.
 11. Load configured baseline data.
 12. Resolve provider when model-backed review is enabled.
-13. Run holistic discovery: a recall-first whole-file review per task, plus the
+13. Run holistic discovery: a recall-first whole-file review over each of the
+    task's discovery partitions (`27-discovery-partitioning.md`), plus the
     optional dedicated security pass (`15-security-focused-review.md`) when enabled. That
     pass is additive and cannot displace a candidate the primary review raised.
 14. Merge candidates that describe one defect, per Semantic Finding Merge below.
@@ -31,13 +36,15 @@ Date: 2026-07-21
 16. Admit or reject candidates against the admission gate.
 17. Match actionable admitted findings against baseline.
 18. Evaluate optional quality gate.
-19. Run the optional fix lane and the optional verification flow when configured
-    (`12-verification-flow.md`). Both are advisory: neither changes admission,
-    severity, or the gate.
-20. Create the run directory, render reports and run artifacts, and record the run
+19. Record available token/cost metadata, then compute the coverage certificate.
+    An incomplete certificate fails the run with `coverage_incomplete`, and a run
+    over `review.maxCostUsd` fails with `cost_budget_exceeded`; both are category
+    `quality-gate`, exit code 1.
+20. Run the optional fix lane and the optional verification flow when configured
+    (`12-verification-flow.md`). Both run in the CLI on the completed report, and
+    both are advisory: neither changes admission, severity, or the gate.
+21. Create the run directory, render reports and run artifacts, and record the run
     in the run index.
-21. Record available token/cost metadata and optional no-content telemetry
-    configuration.
 22. Exit with mapped code.
 
 Runtime artifacts and logs must remain redacted. Source snippets, prompt text,
@@ -129,23 +136,38 @@ Generic signal requirements:
 Task grouping:
 
 - one task per changed file for `fast`;
-- bounded dependency/context-cluster tasks for `balanced`;
-- dependency/context-cluster plus bounded semantic-risk tasks for `thorough`.
-  Semantic-risk tasks must reuse bounded path/evidence clusters and must not
-  create a single all-changed-files sweep.
+- bounded dependency/context-cluster tasks for `balanced` and `thorough` — the
+  two depths use the same clustering rule, and depth changes retrieval and
+  context budgets rather than the shape of the plan;
+- planning emits exactly two task kinds, `file` and `dependency-cluster`, and
+  exactly one round. There is no all-changed-files sweep task.
 
 Task limits:
 
 - hard cap `maxConcurrentTasks`;
 - dependency clusters must be split into bounded task packets. Connected import
-  components larger than the task path cap must be split deterministically
-  rather than sent as one oversized worker packet;
+  components larger than the task path cap of 8 paths must be split
+  deterministically rather than sent as one oversized worker packet;
 - per-task source, deterministic signal, instruction, and metadata packet must fit the
   configured model-bound task input budget before a provider call starts;
-- workflow context assembly must NOT split source on a byte budget. A change is one
-  task unless the provider refuses the packet as exceeding its context length, in
-  which case the task is halved and each half retried (spec 26). Large files and
-  large dependency clusters must never create skipped or truncated required source;
+- workflow context assembly must NOT split source on a byte budget. Each changed
+  file is one document spanning the whole file and the task is one batch, however
+  large it comes out. A task is split only when the provider refuses the packet
+  with the normalised reason `context_length_exceeded`, in which case the task is
+  halved and each half retried (spec 26). Large files and large dependency
+  clusters must never create skipped or truncated required source;
+- reactive splitting MUST be bounded by recursion DEPTH, never by a byte size.
+  The bound is 6, which permits up to 64 pieces. A unit that is still refused and
+  cannot be halved further MUST fail loudly with `review_task_indivisible`,
+  category `provider`, recoverable, exit code 4. Nothing is truncated and the
+  task is not silently dropped;
+- the local packet ceiling is a runaway guard, not a ration. It is 8 MB — far
+  beyond any current model context — and it REFUSES with
+  `task_packet_budget_exceeded` rather than shortening the packet. An explicitly
+  configured `review.contextMaxBytes` still binds below it and still refuses. The
+  discovery packet may shed only the shared digest before refusing; source,
+  instructions, skills, evidence, deterministic signal output, and metadata are
+  never shortened;
 - every source chunk must carry the absolute line range it occupies in its file,
   and chunks must be cut on line boundaries (a single line longer than the split
   size is the only exception and keeps one line number across its pieces). This
@@ -189,12 +211,24 @@ Task limits:
   builder keeps agent definitions, delegation, and typed `ctx.agents.*`
   invocation; adapters own consistent provider-call logging metadata and
   output normalization for holistic discovery and refutation calls.
-- Harness agent step policy is role-specific. The context-heavy semantic agents
-  `review_task` and `refute_finding` may use the mounted read/list/grep skill
-  tools with a bounded four-step loop when skills are enabled, and stay
-  single-step/tool-free when no skills are mounted. This gives discovery and
-  refutation roles enough harness budget to inspect mounted review guidance
-  without broad repository or shell access.
+- Harness agent step policy is role-specific and is derived by one shared helper;
+  hardcoded per-agent `maxSteps` or builtin-tool settings in the harness builder
+  are forbidden. The harness declares exactly three agents: `holistic_review`,
+  `semantic_merge`, and `refute_finding`.
+  - `holistic_review` and `refute_finding` are single-step and tool-free when no
+    skills are mounted, and may use the mounted read/list/grep skill tools with a
+    bounded four-step loop when skills are enabled. This gives discovery and
+    refutation roles enough harness budget to inspect mounted review guidance
+    without broad repository or shell access.
+  - `holistic_review` additionally receives the mediated `repo_read`/`repo_list`/
+    `repo_grep` tools when `review.crossFileRetrieval.enabled`
+    (`16-agentic-cross-file-discovery.md`). Its step allowance is then
+    `maxToolCallsPerTask` plus a headroom of 3, so a model that spends its whole
+    tool budget still has steps left to answer. Too tight an allowance makes the
+    agent loop raise `iterations_exceeded`, which costs the task every finding it
+    had — the opposite of an additive mode.
+  - `semantic_merge` is always single-step and tool-free, whether or not skills
+    are mounted. It reads only the candidates and the file it is handed.
 - Review-runner budget derivation is a focused review-workflow boundary. The
   helper owns existing context, task input, source chunk, and AI review
   retrieval budget policy derived from config depth, provider presence,
@@ -225,21 +259,32 @@ Task limits:
 | --- | --- |
 | `id` | `task_<hash>` |
 | `round` | integer >= 1 |
-| `kind` | `file | dependency-cluster | policy` |
-| `paths` | repository-relative path array |
-| `signalIds` | deterministic signal IDs in scope |
+| `kind` | `file | dependency-cluster` |
+| `paths` | repository-relative path array, at least one |
+| `factIds` | deterministic support-signal fact IDs in scope |
 | `evidenceIds` | evidence IDs in scope |
+| `candidateIds` | support-signal seed candidate IDs in scope |
 | `contextEntryIds` | ledger entry IDs included in task context |
-| `priority` | deterministic integer |
+| `intentId` | optional contract ID |
+| `objective` | optional bounded string |
+| `focusAreas` | optional bounded string array |
+| `riskAreas` | optional bounded string array |
+| `verificationQuestions` | optional bounded string array |
+| `priority` | deterministic integer >= 0 |
+
+A discovery partition and a reactively split half are each a sub-task derived
+from a parent `ReviewTask`. A sub-task MUST carry its own synthetic `id`, derived
+from the parent id and the subset it covers, because sub-tasks run as distinct
+calls: reusing the parent id would collide their candidates, which are keyed by
+task id and location, and would make the calls indistinguishable in the run
+record. A sub-task's `paths` MUST be narrowed to its own review targets.
 
 `TaskReviewInput` fields:
 
 | Field | Type |
 | --- | --- |
-| `runId` | string |
-| `task` | `ReviewTask` |
+| `task` | `ReviewTask` plus its `reviewContext` documents |
 | `reviewedDiffRanges` | reviewed changed ranges in task scope |
-| `reviewedDiffText` | the task's raw unified-diff segment so the holistic reviewer sees the actual diff |
 | `evidence` | evidence records in task scope |
 | `candidates` | support-signal seed candidates in task scope |
 | `instructions` | redacted instruction documents |
@@ -247,16 +292,20 @@ Task limits:
 | `sharedDigest` | compact admitted shared-context digest with relevant-entry filtering, per-summary truncation, and recency-preserving byte cap |
 | `provenance` | workflow provenance input |
 
+`runId` and the raw unified-diff text are run-wide, not task-scoped: they live on
+the workflow input, and the discovery prompt cuts the task's own diff segments
+out of the run-wide diff blob by file header. A partition therefore sees only the
+diff segments for the files it was shown.
+
 Task queue rules:
 
 - tasks are leased in deterministic `round`, `priority`, `id` order;
 - later rounds must not be claimed while an earlier round still has planned or
   running tasks;
 - no more than `maxConcurrentTasks` tasks may be running at one time;
-- same-round task groups may be clustered before leasing when the clustered
-  packet fits `maxTaskInputBytes`; the cluster inherits the earliest priority in
-  the group and remains in the same round; oversized clusters fall back to their
-  original individual tasks;
+- clustering is a planning decision, not a leasing one. Tasks are leased one at a
+  time in the order above, exactly as planning emitted them; the queue MUST NOT
+  re-group tasks at lease time;
 - provider-backed task execution must use a rolling worker pool: as soon as one
   worker finishes a task, the next eligible task in the same round may start
   without waiting for slower sibling tasks;
@@ -264,14 +313,29 @@ Task queue rules:
   the task queue and Harness child-agent delegation boundary so active model
   calls cannot exceed the configured cap;
 - provider-backed workflows must also enforce a scale-derived total
-  child-agent call cap at the Harness delegation boundary. The cap is derived
-  from planned task count (one holistic discovery call per task, plus one for
-  each enabled optional pass),
-  one batched refutation call per task plus a small allowance for batches that
-  split under budget pressure, and a small concurrency buffer. It must never
-  use an effectively unbounded constant. The
-  R1 hard ceiling is 2048 child agent calls per run, with a minimum floor of 16
-  for small reviews;
+  child-agent call cap at the Harness delegation boundary. It must never use an
+  effectively unbounded constant. The cap is derived from planned task count
+  multiplied by the per-task worst case, which MUST track discovery partitioning
+  rather than be re-guessed: under-reserving is fatal (the workflow refuses a
+  call mid-run) while over-reserving costs nothing, because this is a ceiling and
+  not a spend. The per-task terms are
+  - partitions per task, being the task path cap divided by
+    `aiReview.maxFilesPerDiscoveryCall` and rounded up, or 1 when the key is
+    unset;
+  - one discovery call per partition, doubled when the dedicated security pass is
+    enabled;
+  - one batched refutation call per partition — refutation groups by task id and
+    every partition carries its own — plus a small allowance for batches that
+    split under budget pressure;
+  - the semantic finding merge ceiling, being half the per-call candidate caps
+    times the partition count, since a merge call is issued at most once per file
+    carrying two or more candidates;
+  - plus a small concurrency buffer.
+
+  Mediated cross-file tool calls need no reservation: a tool call is an agent
+  STEP bounded by the agent's `maxSteps`, and this budget counts agent
+  invocations. The R1 hard ceiling is 2048 child agent calls per run, with a
+  minimum floor of 16 for small reviews;
 - task state transitions are append-only: `planned -> running -> completed`
   or `planned -> running -> failed`;
 - worker inputs contain only task-scoped context, evidence, deterministic signals,
@@ -289,17 +353,20 @@ Task queue rules:
 
 ## Holistic Discovery
 
-Provider-backed review runs **one** recall-first whole-file review per task — one
-framing, one prompt, asked once. The `holistic_review` agent emits candidate
-findings directly; they are deduped by candidate id before refutation.
+Provider-backed review runs **one** recall-first whole-file review per discovery
+partition — one framing, one prompt, asked once over each slice of the task's
+changed files. The `holistic_review` agent emits candidate findings directly;
+they are deduped by candidate id before refutation.
 
 This spec previously required a second, serial diverse-lens pass. That pass was
 implemented and measured, and it did not earn its cost (see the measured outcome
 below), so the requirement is withdrawn rather than left as an unmet mandate.
 
-That framing is asked exactly once per task. Drawing it several times independently
-and unioning the candidates was specified, built, and measured; it is withdrawn (see
-the measured outcome below).
+That framing is asked exactly once over any given material. Drawing it several times
+independently over the SAME material and unioning the candidates was specified,
+built, and measured; it is withdrawn (see the measured outcome below). Partitioning
+is not that: partitioned calls see different material, which is the whole reason it
+behaves differently.
 
 - The review input is the task's unified-diff segment plus the full
   line-numbered changed files, alongside deterministic support signals,
@@ -327,25 +394,98 @@ the measured outcome below).
   changed lines or merely exposed elsewhere in the same changed file.
 - The reviewer must report concrete defects only. Style, naming, formatting,
   documentation, and cleanup-only concerns are out of scope.
-- Candidate findings are capped per task.
+- Candidate findings are capped per discovery CALL, not per task: the general
+  pass may add at most 12 candidates per call and the dedicated security pass at
+  most 8, so a partitioned task's ceiling scales with its partition count. The
+  cap is not what binds in practice — a call typically returns far fewer — and
+  refutation, not this cap, is what controls precision.
 - Candidate findings are untrusted until they pass refutation and admission.
   Raw candidates do not influence later workers before they pass the configured
   safe digest boundary.
 
+### Discovery Call Failure Policy
+
+Every discovery call shares one failure policy, so the general pass and the
+dedicated security pass cannot drift apart on what "this call failed" means.
+
+Three named failures are properties of ONE model response rather than of the run,
+and MUST cost that response and nothing more: the agent exhausting its step
+allowance, output that fails the agent's own schema, and a structured object the
+provider adapter could not parse at all. A call that fails this way yields no
+findings and MUST be surfaced as a RECOVERED provider issue, so the degradation
+stays visible instead of silent.
+
+Letting any of them propagate would fail the whole task and lose every finding it
+had — and, in an evaluation, silently drop the case from the comparison, which is
+how a measurement starts lying. Malformed structured-object JSON belongs in this
+set specifically because it is what a response truncated mid-array looks like: one
+over-long file must degrade to a recorded provider issue rather than parse as a
+clean review.
+
+Any other failure propagates. A hard provider failure already carries its own
+retry policy in the provider layer and MUST NOT be retried again here.
+
+### Discovery Partitioning
+
+A task's review targets are partitioned across several discovery calls, sized by
+`aiReview.maxFilesPerDiscoveryCall` (default 2). The requirements are stated in
+`27-discovery-partitioning.md`; what this spec fixes is how the pipeline honours
+them:
+
+- Partitioning is by **file count**, never by bytes. A byte rule would reintroduce
+  the content-dependent guess spec 26 removed.
+- A task whose review targets fit the limit produces exactly one partition, so a
+  small change is byte-for-byte unaffected. Callers always iterate the partitions
+  and never branch on whether partitioning applied.
+- Each partition is its own sub-task with its own synthetic task id, and its
+  `paths` are narrowed to the files that partition was shown. A finding MUST stay
+  restricted to those files, because admission would otherwise anchor a finding
+  against content the call never read.
+- Every partition MUST receive the shared context the undivided task would have
+  had. A context-only document reaches a partition when it has no path (change
+  intent describes the whole change), when its path is one of that partition's
+  own files, or when its path is not a review target of the parent at all —
+  which is the case that carries referenced definitions, since those are by
+  construction unchanged dependency files deliberately excluded from `task.paths`.
+- The dedicated security pass is partitioned on the same terms as the general
+  pass. A security call reviewing the whole task while the general pass reviewed
+  slices would be both the largest packet in the run and the one call not getting
+  the attention benefit partitioning exists to produce.
+- Partitions are issued sequentially. They hit the same provider under the same
+  rate limit, and firing them together would turn one large change into a burst.
+- Candidates from every partition are unioned into one per-task set before the
+  semantic finding merge runs, so the merge still sees every candidate for a file
+  at once.
+- The number of discovery calls actually issued MUST be reported, together with
+  the number of reactive splits, and the two counts MUST stay distinguishable: an
+  oversize split and a rate-limit retry have different causes and different
+  meanings, and one counter for both would hide which was happening.
+
 ### Standing Caveat On Every Figure Below
 
-**Every accuracy figure quoted anywhere in this spec predates the harness-wide
-suppression of conversation history** (2026-07-27; see *Conversation History*
-under *Harness Runtime* below). Those runs were produced by discovery, refutation,
-merge, and scout calls that each opened carrying the output of every call that had
-finished before them. A current run is not comparable to any of them, in either
-direction, and the direction of the effect is unmeasured.
+**The current headline for this stage is recall 43.7% at adjusted precision 95.0%
+for $2.31 per run**, measured on 2026-08-01 on the 37-case real-repository corpus
+with a pinned engine at the shipped defaults (`reports/eval-results-ledger.md`).
+That figure supersedes every earlier one on this page for quoting purposes.
+
+Two caveats apply to everything else quoted here, and neither may be glossed:
+
+- **Every figure dated before 2026-07-27 predates the harness-wide suppression of
+  conversation history** (see *Conversation History* under *Harness Runtime*
+  below). Those runs were produced by discovery, refutation, merge, and scout
+  calls that each opened carrying the output of every call that had finished
+  before them. The paired re-baseline measured the effect on recall as nil, so
+  those numbers are not wrong — but they were measured on a different pipeline.
+- **Every run recorded before 2026-08-01 was produced by an UNPINNED engine.**
+  The eval harnesses pinned the repository under test but invoked the engine from
+  the live working tree, so a commit landing mid-sweep changed the instrument
+  mid-measurement. Nothing in any scored artifact from that period records which
+  engine produced it, so those runs are unknown-engine rather than agreeing, and
+  small deltas from them are correspondingly weaker.
 
 The figures are retained because each records the outcome of a decision that was
 taken on the evidence available at the time — they are the audit trail for a
-withdrawal or an adoption, not a description of today's accuracy. None of them may
-be quoted as the engine's current recall or precision until a post-change run
-re-establishes a baseline.
+withdrawal or an adoption, not a description of today's accuracy.
 
 ### Measured Outcome Of The Withdrawn Second Pass
 
@@ -634,7 +774,20 @@ sharing a call must not make one candidate's verdict depend on another's.
 - The refuter may use only the provided candidates, `reviewedDiffRanges`,
   evidence, review context, support-signal candidates, instructions, skill
   metadata, shared digest, and provenance. It receives no direct repository
-  tools beyond the bounded mounted skill read/list/grep loop.
+  tools beyond the bounded mounted skill read/list/grep loop, and it never
+  receives the mediated cross-file tools discovery may have.
+- The external change-intent brief MUST be withheld from the refutation packet,
+  even though discovery receives it. It is attacker-controlled — whoever opens
+  the pull request or edits the ticket writes it — and the framing that
+  countermands it lives in the discovery prompt and does not travel with the
+  document. Refutation's own instructions make `reviewContext` evidentiary: a
+  candidate can be proved from it and refuted when contradicted by it, so a brief
+  phrased as a fact rather than an instruction is precisely the shape the refuter
+  is told to act on. Refutation is also where a successful injection is silent, in
+  that a refuted finding produces no output at all and nothing in the report shows
+  what was suppressed. The accepted cost, recorded rather than assumed away: this
+  may raise refutation false positives for genuinely deliberate changes, and that
+  is unmeasured.
 - Each verdict carries the `candidateId` it belongs to. A verdict whose id
   matches no candidate in the batch is discarded, and a candidate the model did
   not adjudicate is treated as `needs-more-evidence`: absence of a verdict is
@@ -772,7 +925,10 @@ Rules:
   reviewable byte length and all entries are `included`;
 - provider task-packet overflow is a hard pre-call failure. The workflow must
   fail with `task_packet_budget_exceeded` rather than shortening source,
-  instructions, skills, evidence, deterministic signal output, or metadata;
+  instructions, skills, evidence, deterministic signal output, or metadata. This
+  is the local runaway guard and an explicitly configured `contextMaxBytes`; a
+  refusal raised by the PROVIDER instead triggers reactive splitting, and only
+  fails the run as `review_task_indivisible` when nothing is left to halve;
 - mandatory instruction and skill content must be included exactly or fail
   before provider invocation. Automatic instruction summarization is forbidden
   in R1 because it changes reviewer semantics;
@@ -819,10 +975,11 @@ Rules:
 - Use workflows for orchestration.
 - Use Zod schemas for task input, candidate finding output, refutation output,
   internal candidate findings, evidence, admission decisions, and report output.
-- Provider-backed structured outputs must use object-root schemas. The review
-  worker returns `{ findings: [...] }` (candidate findings) and the refuter
-  returns a verdict object. Candidates are untrusted until they pass refutation
-  and admission.
+- Provider-backed structured outputs must use object-root schemas.
+  `holistic_review` returns `{ findings: [...] }` (candidate findings),
+  `semantic_merge` returns `{ groups: [...] }`, and `refute_finding` returns
+  `{ verdicts: [...] }` with one entry per candidate it was given. Candidates are
+  untrusted until they pass refutation and admission.
 - Tests use fake or hermetic provider fixtures; default tests must not call external
   models.
 - Product review must not claim provider-backed completion when no provider was
@@ -859,11 +1016,10 @@ Rules:
   evidence-backed findings, active refutation, and concrete suggested
   remediation. Prompt output must be parsed through Zod and treated as untrusted
   until admitted.
-- The task-reviewer prompt must include a benchmark-derived semantic bug
-  checklist before returning no findings: falsy zero handling, wrong variable
-  reuse, nullable or optional access without guards, non-deterministic
-  hash/order assumptions, numeric operations on datetime or non-numeric keys,
-  and unsynchronized shared mutable state.
+- The task-reviewer prompt must walk the four-step method and the defect-class
+  sweep defined under *Holistic Discovery* before it may return no findings, and
+  must assign severity by the *Severity Rubric* below. `{"findings": []}` is
+  permitted only after all four steps have been completed.
 - The task-reviewer prompt must constrain candidate-finding generation to
   concrete semantic correctness, security, reliability, data-integrity, or
   maintainability defects visible in the bounded task packet. It must return no
@@ -880,7 +1036,7 @@ Rules:
 - Once tasks are assembled, provider-backed workflow input must not duplicate
   run-wide source context outside the task packets. Task packets are the model
   boundary.
-- Provider-backed workflows orchestrate queued `review_task` worker calls
+- Provider-backed workflows orchestrate queued `holistic_review` worker calls
   through a bounded rolling worker pool, update workflow-local shared context
   after each completed task, pass compact shared digests to later workers, and
   then run refutation, candidate admission, baseline matching, and quality
@@ -966,7 +1122,13 @@ Rules:
   catch this: a chunk-relative number from a split file still lands inside the
   file. A file that fits in one chunk has a chunk range equal to its whole-file
   range, so this check never changes single-chunk admission; a task with no chunk
-  provenance for the path (for example a deterministic candidate) is not checked;
+  provenance for the path is not checked. Two consequences must be stated rather
+  than left to be discovered: since assembly stopped splitting on a byte budget
+  (spec 26) every file is one chunk spanning the whole file, so the check is
+  currently inert on ordinary runs; and a discovery partition or a reactively
+  split half carries a synthetic task id that owns no chunk provenance, so the
+  check is skipped for it. What keeps a split half's lines honest is therefore the
+  absolute-origin numbering requirement above, not this check;
 - `reporterEligibility = inline` is allowed only for findings whose line range is
   valid in reviewed head-file content, whose location can be anchored on the new
   side of the change, and whose severity meets the configured inline threshold;
@@ -1227,10 +1389,14 @@ the spec costs neither recall nor precision, and it does not.
 ## Semantic Finding Merge
 
 Discovery may produce several candidates that describe one underlying defect.
-This happens whenever more than one call examines overlapping code — the additive
-security pass, and any future decomposition of a file into overlapping review
-units — and it also happens within a single call, which may restate one defect at
+This happens whenever more than one call examines the same code — the additive
+security pass over a partition the general pass also reviewed, a reactively split
+half, and any future decomposition of a file into overlapping review units — and
+it also happens within a single call, which may restate one defect at
 neighbouring lines.
+
+The merge runs once every candidate for a task exists, over the union of every
+partition's candidates, and before any of them reaches refutation or admission.
 
 Before admission, candidates for the same file MUST be grouped by whether they
 describe the **same underlying defect**, and each group MUST be reduced to one
@@ -1381,10 +1547,25 @@ Errors use structured type:
 | --- | --- |
 | `code` | stable string |
 | `message` | redacted string |
-| `category` | `config | repository | provider | admission | report | internal` |
+| `category` | `config | repository | provider | quality-gate | admission | report | internal` |
 | `recoverable` | boolean |
 | `exitCode` | integer |
 | `details` | redacted object |
+
+Category determines exit code and recoverability, and nothing else may set them:
+
+| Category | Exit code | Recoverable |
+| --- | --- | --- |
+| `quality-gate` | 1 | yes |
+| `config` | 2 | yes |
+| `repository` | 3 | yes |
+| `provider` | 4 | yes |
+| `admission` | 5 | no |
+| `report` | 5 | no |
+| `internal` | 5 | no |
+
+`quality-gate` exists because a failed quality, cost, coverage, or drift gate is a
+meaningful completion signal rather than a crash.
 
 Raw thrown errors from providers, git, filesystem, or tools must be normalized
 before logging or reporting.
@@ -1395,7 +1576,8 @@ Terminal failures preserve the original normalized cause in redacted `details`.
 
 Provider task failures after task execution starts must surface as a partial run
 state. The CLI writes `run-summary.json`, `context-ledger.json`,
-`shared-context.json`, and `error.json` under the run artifact directory, returns
+`shared-context.json`, `observability.json`, and `error.json` under the run
+artifact directory, records the run in the run index with status `failed`, returns
 the provider exit code, and includes `artifactDir` in stderr. `error.json` stores
 only normalized/redacted fields. Task event messages must never include raw
 provider messages, prompt text, source snippets, tool output, or secrets.
@@ -1432,6 +1614,12 @@ provider messages, prompt text, source snippets, tool output, or secrets.
 | Context ledger records included source chunks without raw content | context ledger unit and snapshot tests |
 | Completed reports include complete coverage certificate | runner and report schema tests |
 | Packet overflow fails before provider call without trimming | workflow regression test |
+| A task within `maxFilesPerDiscoveryCall` produces exactly one partition and leaves the run unchanged | discovery partition unit tests |
+| A partitioned task narrows each partition's paths and routes referenced definitions, change intent, and support signals to every partition | discovery partition and sub-task unit tests |
+| A provider `context_length_exceeded` halves the task and retries each half; an indivisible unit fails with `review_task_indivisible` | reactive split unit tests |
+| Split halves keep their absolute line origins so a finding reports the file's real line | source chunk numbering unit tests |
+| The child-agent call budget scales with `maxFilesPerDiscoveryCall` and never under-reserves | harness config unit tests |
+| The change-intent brief reaches discovery and never reaches refutation | refutation packet unit tests |
 | Baseline marks new/existing/resolved findings deterministically | baseline fixture tests |
 | No raw source in default logs | log snapshot/redaction test |
 | Provider task failure writes artifact-ready partial state | runner partial-failure regression test |

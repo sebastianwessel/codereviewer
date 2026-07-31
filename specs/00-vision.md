@@ -1,7 +1,7 @@
 # 00: Vision
 
 Status: Approved
-Date: 2026-06-20
+Date: 2026-07-31
 
 ## Product Vision
 
@@ -25,7 +25,12 @@ already run CodeQL, linters, formatters, tests, and build checks.
 - resolves OpenAI/OpenAI-compatible, AWS Bedrock, and Azure providers through
   optional adapter packages only when configured;
 - runs deterministic evaluation fixtures and quality gates;
+- offers three separate advisory commands — `impact check`, `intent check`, and
+  `conformance check` — that are off by default, never run inside `review`, and
+  cannot fail a pipeline on their own findings;
 - denies publishing, shell execution, broad network access, and fix application.
+  The optional fix lane produces apply-checked edit suggestions in memory only:
+  it never writes a source file.
 
 ## Success Criteria
 

@@ -46,6 +46,23 @@ export const investigateClaimInstructions = [
 // of provider tool-call formatting.
 type ToolsRegistry = Map<string, RetrievalTools>
 
+// Spec 28: forwards the line range the model asked for, omitting absent bounds
+// entirely rather than passing `undefined` (this project runs
+// `exactOptionalPropertyTypes`, so the two are not interchangeable).
+const readInputFrom = (rawInput: unknown): {
+  readonly path: string
+  readonly startLine?: number
+  readonly endLine?: number
+} => {
+  const parsed = RepoReadToolInputSchema.parse(rawInput)
+
+  return {
+    path: parsed.path,
+    ...(parsed.startLine === undefined ? {} : { startLine: parsed.startLine }),
+    ...(parsed.endLine === undefined ? {} : { endLine: parsed.endLine })
+  }
+}
+
 const activeToolsFor = (
   registry: ToolsRegistry,
   sessionId: string
@@ -83,11 +100,9 @@ const buildInvestigateClaimHarness = (input: {
         output: RepoToolOutputSchema,
         handler: async (ctx, rawInput) =>
           toRepoToolOutput(
-            await activeToolsFor(input.registry, ctx.sessionId).read({
-              // Spec 28: the range the model asked for is passed through, so it can
-          // narrow a large file itself instead of receiving a prefix we chose.
-          ...RepoReadToolInputSchema.parse(rawInput)
-            }),
+            await activeToolsFor(input.registry, ctx.sessionId).read(
+              readInputFrom(rawInput)
+            ),
             true
           )
       },

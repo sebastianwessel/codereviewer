@@ -12,6 +12,7 @@ import {
 import { createIndivisibleTaskError } from '../packet-budget.js'
 import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
 import { isContextLengthExceeded } from './context-overflow.js'
+import { reduceActiveReadBudget } from './cross-file-tools.js'
 import { MAX_REACTIVE_SPLIT_DEPTH, splitTaskInputInHalf } from './reactive-split.js'
 
 // Two ways a discovery CALL can fail without the review being broken: the agent
@@ -84,6 +85,14 @@ export const runDiscoveryCall = async (
     return { findings: review.findings, providerIssues: [], splitCount: 0 }
   } catch (error) {
     if (isContextLengthExceeded(error)) {
+      // Reads first, splitting second. When the overflow came from a tool result,
+      // splitting the task does not help: the halves fetch the same file and
+      // overflow identically. Shrinking what a read returns is the only thing that
+      // makes the next attempt smaller.
+      if (reduceActiveReadBudget()) {
+        return await runDiscoveryCall({ ...input, depth })
+      }
+
       return await splitAndRetry({ ...input, depth, error })
     }
 

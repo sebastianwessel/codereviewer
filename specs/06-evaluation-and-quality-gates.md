@@ -58,11 +58,15 @@ case ID. The flag may be repeated. If no loaded case matches, the command exits
 with usage error `2`.
 
 `codereviewer eval run --max-concurrent-tasks <1-32>` overrides
-`review.maxConcurrentTasks` only for the eval invocation. The override exists so
-provider-backed benchmark runs can be serialized without changing the
+`review.maxConcurrentTasks` only for the eval invocation, without changing the
 repository config. Benchmark npm scripts that use provider-backed semantic
-judging should pass `--max-concurrent-tasks 1` to avoid transient timeout noise
-from parallel provider calls on large captured slices.
+judging pass `--max-concurrent-tasks 1` to reduce transient timeout noise from
+parallel provider calls on large captured slices.
+
+The scope of that flag must not be overstated: it bounds the tasks WITHIN one
+case. Eval cases themselves execute concurrently and there is no run-level
+concurrency cap, so `--max-concurrent-tasks 1` does not serialize a run. Judge
+and plausibility-judge scoring inside a run is sequential by construction.
 
 R1 also supports benchmark-style self-contained slices that follow the same
 `repo/` layout and use the canonical `expectedFindings[]` contract. These
@@ -202,7 +206,13 @@ an assumption:
   finding and a false positive.
 - Judge agreement is measured against a committed calibration set of human-labeled
   pairs covering clear matches, clear non-matches, and near-misses. A run whose
-  agreement falls below the configured minimum reports itself as untrustworthy.
+  agreement falls below the configured minimum reports itself as untrustworthy by
+  setting `scoring.judgeTrustworthy = false`. The minimum is
+  `evaluation.minJudgeAgreement`, default `0.9`, and the SAME key governs the
+  plausibility judge's own calibration below — there is deliberately one
+  reliability bar, not two.
+- A run that scored no calibration pair at all reports `judgeTrustworthy = false`.
+  Absence of a reliability measurement is not evidence of reliability.
 
 ### Provider Requirement
 
@@ -252,8 +262,16 @@ only ever credited by an affirmative `plausible` decision.
 
 Reliability mirrors the match judge: the plausibility judge is scored against a
 committed calibration set of findings labeled genuine or spurious against sample
-code, producing a plausibility agreement metric; a run below the configured
-minimum marks its adjusted precision untrustworthy.
+code, producing `plausibilityJudgeAgreement`; a run below
+`evaluation.minJudgeAgreement`, or one that scored no calibration pair, sets
+`scoring.adjustedPrecisionTrustworthy = false`.
+
+Unlike the match judge, the plausibility judge is not required. When no
+plausibility judge is available the stage is a no-op: no finding is reclassified,
+`unlistedRealFindingCount` is `0`, and `adjustedPrecision` therefore equals raw
+`precision`. That is the conservative direction — it can only understate
+precision, never inflate it — but it means an adjusted-precision figure must not
+be compared between a run that had a plausibility judge and one that did not.
 
 ### Restatement Collapsing
 
@@ -320,6 +338,7 @@ artifact revealing that. Every report also records `provenance`:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `provenance.answerKeyDigest` | sha256-family digest string | A stable digest over the expected-finding CONTENT (category, severity, path, effective match mode, declared `lineRange`, semantic summary) of every case in `selection.selectedCaseIds`. Deliberately scoped to expected-finding content only — it excludes `expectedNoFindingZones`, `changedFiles`, `tags`, and other case metadata, none of which change what recall or precision are scored against. Computed by the eval domain itself from the cases it actually scored; a caller cannot supply or override it. Cases are sorted by id before hashing (order-insensitive across cases, since selection order carries no meaning), but expected findings keep their original order WITHIN a case (order-sensitive, since `expectedIndex` is part of the matching contract). Reports saved before this field existed default to a fixed sentinel digest, mirroring how `metricsVersion` itself defaults for old reports. |
+| `provenance.answerKeyDigestByCase` | map of case id to digest string | The same expected-finding content digest, computed per case rather than pooled, so a comparison can name exactly which shared cases moved underneath it. Computed by the eval domain from the cases it scored; a caller cannot supply or override it. Empty for reports saved before the field existed. |
 | `provenance.configHash` | digest string | A digest over the effective (file + environment + CLI-override merged) configuration the run used, supplied by the CLI. Comparison does NOT refuse across a `configHash` mismatch: a maintainer legitimately compares two runs under different configurations to measure the effect of changing one. The hash exists so an archived run can be read back and its configuration identity checked, not to gate diffing. Defaults to `"unspecified"` when the caller does not supply one (e.g. a direct unit-test call to the eval runner). |
 | `provenance.providerId` | string, omitted when no provider | The provider identity (`ProviderConfig.id`) the run's semantic judge was built from. Omitted for a fully offline run (no expected findings, no judge needed). |
 | `provenance.modelName` | string, omitted when no provider | The model name (`ProviderConfig.model`) the run's semantic judge was built from. Omitted under the same condition as `providerId`. |
@@ -341,9 +360,8 @@ that never existed. Comparison tolerates a difference that pooling cannot.
 
 ## Metrics
 
-| Metric | Definition |
-| --- | --- |
-| `parseValidity` | Fraction of outputs validating against schemas. |
+### How A Metric May Be Read
+
 Model-backed evaluation is non-deterministic, so a single run does not establish a
 result. The run-to-run band must be measured before a change is judged against it.
 On the real-repository corpus, four seeds of one identical configuration produced
@@ -352,18 +370,33 @@ recall 81.3%, 87.5%, 81.3%, and 75.0% — a mean of 81.3% with a standard deviat
 92.3% to 100%, and zero to one genuine false positive. A change measured on a single
 seed must therefore move recall by more than roughly twice that deviation before it
 can be distinguished from noise, and a smaller claimed effect requires several seeds.
+Later measurement on an expanded corpus found a comparable band of about 4.8 points.
 
 Two consequences follow, and both are requirements rather than advice. A headline
 figure is the MEAN across seeds, never the best observed run. And a quality claim
 that rests on one seed must be reported with the band, because quoting the top of a
 range as the result overstates the engine.
 
-Those four seeds, and every other accuracy figure recorded anywhere in this
-repository, were measured before the harness-wide suppression of conversation
-history on 2026-07-27 (see *Conversation History* in `05-review-workflow-and-runtime.md`).
-They are cited here for the run-to-run **variance** they establish, which is what
-this section is about; none of them is a current recall figure, and none may be
-quoted as one until a post-change run re-establishes a baseline.
+Those four seeds are cited here for the run-to-run **variance** they establish,
+which is what this subsection is about. They are not a current recall figure and
+must not be quoted as one, for two independent reasons recorded in
+`reports/eval-results-ledger.md`: they predate the harness-wide suppression of
+conversation history on 2026-07-27 (see *Conversation History* in
+`05-review-workflow-and-runtime.md`), and like every run before 2026-08-01 they
+were produced by an UNPINNED engine — the harness pinned the repository under
+test but invoked the engine from the live working tree, and no scored artifact
+from that period records which engine produced it. Both scorers now refuse to pool
+cases whose engine sidecars disagree, and runs with no sidecar are reported as
+unknown-engine rather than as agreeing.
+
+The blended recall figure is not interpretable on its own on the real-repository
+corpus, because a large share of its expectations lie in unchanged code and the
+blended number then depends on that ratio rather than on reviewer quality. Read
+the in-diff and out-of-diff figures alongside it.
+
+Adjusted precision is an estimate, permanently. Under an incomplete answer key
+precision is not identifiable: raw `precision` is the lower bound and
+`adjustedPrecision` the upper. Report the pair.
 
 Rates computed over MATCHED findings — `severityAccuracy`, `lineAccuracy`, and the
 severity-weighted scores — are not comparable between two runs whose recall differs.
@@ -374,6 +407,17 @@ be made on the INTERSECTION of findings matched in both runs, and any headline
 movement in these rates must be reported as composition rather than as a quality
 change until that paired check is done.
 
+Empty denominators do not share one convention, and the difference is deliberate.
+Recall, precision, adjusted precision, the artifact-only rates, `recallByTier`, and
+`productRecall` use an empty value of `1`. The security recall metrics and all four
+fix-lane rates use `0`. `lineAccuracy`, `linePlacementRate`, and `severityAccuracy`
+use `null`, because a rate over no checks is undefined rather than zero.
+
+### Metric Definitions
+
+| Metric | Definition |
+| --- | --- |
+| `parseValidity` | Fraction of outputs validating against schemas. |
 | `recall` | Expected findings matched by actionable admitted findings divided by expected findings. Model-origin actionable findings require a `proved` refutation verdict; trusted deterministic-rule findings are refutation-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. |
 | `precision` | Actionable admitted findings matched to expected findings divided by actionable admitted findings. Model-origin actionable findings require a `proved` refutation verdict; trusted deterministic-rule findings are refutation-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. |
 | `f1` | Harmonic mean of precision and recall. |
@@ -387,9 +431,13 @@ change until that paired check is done.
 | `linePlacementRate` | **Diagnostic only; never gates.** Fraction of MATCHED findings, across every match mode, whose produced location falls within the expected `lineRange` (same 3-line tolerance as `lineAccuracy`'s overlap rule). Unlike `lineAccuracy`, an expectation enters this denominator whenever it declares a `lineRange`, regardless of `matchMode` — chiefly `path-semantic`, which is the entire primary real-repository corpus and was therefore invisible to any line-quality measurement at all. This is a DIFFERENT measurement from `lineAccuracy`, not a broader version feeding the same number: it exists to answer a diagnostic question (are reported line numbers roughly right on real code) and must never be read into the regression gate or any pass/fail decision. `null` on an empty denominator, for the same reason as `lineAccuracy`. |
 | `linePlacementCheckCount` | Denominator of `linePlacementRate`. |
 | `severityAccuracy` | Fraction of matched findings with exact severity. Both sides of the comparison are governed by the severity rubric in `05-review-workflow-and-runtime.md`; read it with "Severity Measurement" below, which states why the bare rate cannot be read as a quality figure. |
+| `lineCheckCount` | Denominator of `lineAccuracy`. |
+| `severityCheckCount` | Denominator of `severityAccuracy`. |
 | `falsePositiveCount` | Actionable admitted findings not matched to expected findings (raw; includes real-but-unlisted defects). |
+| `noFindingZoneFalsePositiveCount` | Actionable admitted findings inside an `ExpectedNoFindingZone` that match no expected finding. |
+| `duplicateFindingCount` | Admitted findings at the same path and overlapping line range as an already-matched finding. Review noise, not separate false positives. |
 | `genuineFalsePositiveCount` | Unmatched admitted findings the plausibility judge deemed spurious, plus any whose plausibility judgment could not be completed (fail-closed). The trustworthy false-positive count. |
-| `unlistedRealFindingCount` | Unmatched admitted findings the plausibility judge deemed genuine defects absent from the fixture's expected list. |
+| `unlistedRealFindingCount` | Unmatched admitted findings the plausibility judge deemed genuine defects absent from the fixture's expected list. It REWARDS fragmentation — a reviewer that splits one defect across two findings scores two — so it must not be differenced across arms as if it were a defect count. |
 | `adjustedPrecision` | Matched findings divided by matched plus `genuineFalsePositiveCount`. Precision that does not penalise real defects the fixture omitted. The trustworthy precision figure. |
 | `plausibilityJudgeAgreement` | Fraction of plausibility-calibration findings whose judge decision matched the label. A run below the configured minimum marks `adjustedPrecision` untrustworthy. |
 | `plausibilityJudgeAgreementPairCount` | Denominator of `plausibilityJudgeAgreement`. |
@@ -420,6 +468,18 @@ change until that paired check is done.
 | `commentsPerDiffHunk` | Actionable admitted findings per changed diff hunk. |
 | `incompleteCoverageRate` | Runs whose report coverage is incomplete divided by total runs. The release target is `0`. |
 | `contextMutationRate` | Context ledger entries with budget-driven mutation divided by entries considered for model context. The release target is `0`. |
+| `providerErrorRate` | Cases with an UNRECOVERED provider error divided by total cases. |
+| `providerIssueRate` | Cases carrying any provider issue, recovered or not, divided by total cases. Reported separately from `providerErrorRate` so a recovered retry stays visible without being counted as a case error. |
+| `providerIssueCount` | Total provider issues across cases. |
+| `securityRecallByMechanism` | Recall per CWE-family security mechanism (`authorization`, `injection`, `ssrf`, `xss`, `deserialization`, `secret-flow`, `cryptography`, `path-traversal`, `unsafe-config`, `concurrency-resource`, `prompt-injection`). Empty value `0`. |
+| `securityMechanismCounts` | Expected-finding denominators behind `securityRecallByMechanism`. |
+| `securityRecallByContextDepth` | Recall per declared context depth (`local`, `cross-function`, `callee`, `caller`, `implementation`, `cross-file`, `analyzer-path-dependent`), so a cross-file blind spot is readable separately from a local one. |
+| `securityContextDepthCounts` | Expected-finding denominators behind `securityRecallByContextDepth`. |
+| `securityObviousRecall` | Recall over security expectations whose context depth is `local` — the ones visible without leaving the changed file. |
+| `securityHardRecall` | Recall over security expectations at every other context depth. |
+| `securityObviousCount` | Denominator of `securityObviousRecall`. |
+| `securityHardCount` | Denominator of `securityHardRecall`. |
+| `costUnavailableCount` | Cases whose cost/token metadata was incomplete, so their cost could not be priced. |
 | `costUsd` | Provider-reported or estimated cost, summed across each case's REVIEW report only. Does not include judge or plausibility-judge provider spend — see `scoringCostUsd`. |
 | `durationMs` | Summed per-case review duration (each case's own `run.durationMs`, added together). This is **not** a wall-clock measurement: it excludes judge/plausibility-judge calls, calibration, orchestration, and any idle time between cases, so it cannot be compared to how long the run actually took. See `elapsedMs` for that. |
 | `scoringInputTokens` | Input tokens the semantic-match judge and the plausibility judge consumed across the WHOLE run — both matching and their own calibration passes — captured by wrapping the judge model alias in the same usage-recorder mechanism the review path uses. `0` when no judge ran (an offline run). |
@@ -620,7 +680,9 @@ matching strategy produced the run:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `scoring.judgeAgreement` | number or omitted | Measured semantic-judge agreement against the calibration set for this run. Omitted when no pair was judged. |
-| `scoring.judgeTrustworthy` | boolean | `false` when `judgeAgreement` is below the configured minimum, marking the run's quality metrics untrustworthy. |
+| `scoring.judgeTrustworthy` | boolean | `false` when `judgeAgreement` is below `evaluation.minJudgeAgreement` or no calibration pair was scored, marking the run's quality metrics untrustworthy. |
+| `scoring.plausibilityJudgeAgreement` | number or omitted | Measured plausibility-judge agreement against its own calibration set. Omitted when no pair was judged. |
+| `scoring.adjustedPrecisionTrustworthy` | boolean | `false` when `plausibilityJudgeAgreement` is below the same configured minimum or no plausibility-calibration pair was scored, marking `adjustedPrecision` untrustworthy. Defaults to `true` when no plausibility judge ran. |
 
 `eval-report.json` must also include a `provenance` object proving WHAT was
 scored and under WHAT configuration, distinct from `scoring` above (which
@@ -698,6 +760,16 @@ availability from the review report:
 | `duplicateFindings` | object[] | Sanitized duplicate summaries with ID, severity, category, path, line, and title. |
 | `falsePositiveFindingIds` | string[] | Admitted findings that neither match an expected finding nor duplicate a matched finding. |
 | `falsePositiveFindings` | object[] | Sanitized false-positive summaries with ID, severity, category, path, line, and title. |
+| `unlistedRealFindingIds` | string[] | Unmatched findings the plausibility judge deemed genuine defects the fixture omitted. |
+| `unlistedRealFindings` | object[] | Sanitized summaries for the same findings. |
+| `genuineFalsePositiveFindingIds` | string[] | Unmatched findings the plausibility judge deemed spurious, plus any whose judgment could not be completed. |
+| `noFindingZoneFalsePositiveIds` | string[] | Findings inside an `ExpectedNoFindingZone` that match no expected finding. |
+| `agenticStages` | object[] | One entry per optional agentic stage (`refutation`, `fix`, `provider-recovery`) with `status` (`active`, `skipped`, `recovered`, `error`) and a count, so "the stage was off" stays distinguishable from "the stage ran and found nothing". |
+| `parseValid` | boolean | Whether the case's outputs validated against schema. |
+| `providerErrored` | boolean | Whether the case ended with an unrecovered provider error. |
+| `inlineFindingCount` | integer >= 0 | Admitted findings the case marked inline-eligible. |
+| `warnings` | string[] | Case-level warnings, including `cost-unavailable`, `eval-inconclusive-match:<n>`, and `eval-plausibility-fail-closed:<n>`. |
+| `durationMs` | integer >= 0 | The case's own review duration. |
 | `artifactOnlyFindingIds` | string[] | Admitted findings with `reporterEligibility = "artifact-only"`; these are diagnostic and excluded from main recall/precision gates. |
 | `artifactOnlyMatchedFindings` | object[] | Match records for artifact-only findings that overlap expected findings. |
 | `artifactOnlyFalsePositiveFindingIds` | string[] | Artifact-only findings that neither match an expected finding nor duplicate a matched artifact-only finding. |
@@ -861,6 +933,33 @@ review command's Quality Gate above: it is computed from
 `EvalRegressionThresholds` (`src/domains/evaluation/eval-report-contracts.ts`)
 against the run's own `metrics`, and is recorded on the saved report as
 `regressionGate`.
+
+`EvalRegressionThresholds` fields, every one optional except
+`failOnProviderError`, which defaults to `true`:
+
+| Threshold | Metric it gates |
+| --- | --- |
+| `minParseValidity` | `parseValidity` |
+| `minRecall` | `recall` |
+| `minProductRecall` | `productRecall` |
+| `minPrecision` | `precision` (raw, not adjusted) |
+| `minSeverityWeightedF1` | `severityWeightedF1` |
+| `maxFalsePositiveCount` | `falsePositiveCount` (raw, not `genuineFalsePositiveCount`) |
+| `maxCommentsPerKloc` | `commentsPerKloc` |
+| `maxCommentsPerDiffHunk` | `commentsPerDiffHunk` |
+| `maxIncompleteCoverageRate` | `incompleteCoverageRate` |
+| `maxContextMutationRate` | `contextMutationRate` |
+| `maxCostUsd` | `costUsd` |
+| `maxDurationMs` | `durationMs` |
+| `failOnProviderError` | presence of an unrecovered provider error |
+
+The gate reads RAW metrics only. `adjustedPrecision`,
+`genuineFalsePositiveCount`, `judgeTrustworthy`, and
+`adjustedPrecisionTrustworthy` never enter it, and the nullable metrics
+(`lineAccuracy`, `linePlacementRate`, `severityAccuracy`) are structurally
+excluded so an undefined rate can never fail a gate. This is deliberate: the
+gate's inputs must be reproducible from the run itself, and every excluded value
+depends on a second model judgement.
 
 Threshold values are resolved from `evaluation.regressionGate` config in this
 order, each layer overriding the previous field-by-field:

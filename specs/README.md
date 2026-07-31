@@ -1,7 +1,7 @@
 # CodeReviewer Specifications
 
 Status: Approved
-Date: 2026-07-27
+Date: 2026-07-31
 Owner: Product architecture
 
 ## Source Of Truth
@@ -45,6 +45,13 @@ Capabilities and measured variants:
 - [15-security-focused-review.md](15-security-focused-review.md)
 - [16-agentic-cross-file-discovery.md](16-agentic-cross-file-discovery.md)
 - [17-real-repository-eval-corpus.md](17-real-repository-eval-corpus.md)
+- [22-change-impact-review.md](22-change-impact-review.md)
+- [23-intent-fulfilment-review.md](23-intent-fulfilment-review.md)
+- [24-invariant-conformance-review.md](24-invariant-conformance-review.md)
+- [25-guarded-region-context.md](25-guarded-region-context.md) — **withdrawn 2026-07-30**, kept because it records the measurement that withdrew it
+- [26-reactive-task-splitting.md](26-reactive-task-splitting.md)
+- [27-discovery-partitioning.md](27-discovery-partitioning.md)
+- [28-targeted-reads.md](28-targeted-reads.md)
 
 Numbers 14 and 18 through 21 are unused. 19 was withdrawn on 2026-07-27 after the
 un-anchored discovery pass failed its pre-committed decision rule. 18 was withdrawn

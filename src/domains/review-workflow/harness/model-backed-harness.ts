@@ -74,7 +74,13 @@ export const createModelBackedReviewHarness = (
       maxToolCalls: crossFileRetrieval.maxToolCallsPerTask
     })
 
-    const result = await runWithCrossFileDiscoveryTools(bounded.tools, runTask)
+    const result = await runWithCrossFileDiscoveryTools(
+      bounded.tools,
+      // Spec 28: nothing caps a read in advance, so an overflow is discovered by
+      // hitting the provider's real limit. This is what makes the retry smaller.
+      contextRetriever.reduceReadBudget,
+      runTask
+    )
 
     logger.debug('Cross-file discovery retrieval completed.', {
       tool_call_count: bounded.toolCallCount(),

@@ -372,7 +372,37 @@ stays intact and this capability stops passing through a gate calibrated for a
 different question. **This is not a licence to relabel fixtures to fit a gate**,
 which remains forbidden.
 
+## What Is Built, And What This Spec Still Asks For
+
+Recorded 2026-08-01 by an alignment audit. **These are unmet requirements, not
+amendments.** Everything above stands as written; this section exists so the gap is
+visible rather than silent, and so the verification matrix below is not read as a
+description of what exists.
+
+Built: design step 2 (bounded, diff-seeded dependent discovery through
+`context-retrieval`), and step 4 as a **reference report** — changed symbol,
+definition site, and its production / test / withheld-non-source reference sites,
+with truncation flags. No provider call, deterministic, `impact check` exits 0
+whatever it reports, and `status: "disabled"` is emitted when the capability is off.
+
+| Requirement | State of the implementation |
+| --- | --- |
+| *Design* steps 1 and 3 — contract delta and impact adjudication | Not implemented. |
+| *Requirements*: findings carry the dependent's path and line, the contract element relied upon, and the consequence; a finding without a named dependent is rejected | No finding exists to carry them. Nothing is admitted, nothing carries a severity, and the two matrix rows below that name an admission test have no counterpart. |
+| *Requirements*: "Blocking is **configurable** and defaults to non-blocking" | Non-blocking is enforced — the command always exits 0 on its result — but there is **no `blocking` key**, and the config object is strict, so setting one is a configuration error (exit 2). The omission is deliberate and reasoned in code: there is nothing to block on until an impact finding is admitted. The requirement as written is still unmet. |
+| *Report at file granularity, not per site* | The report groups sites under the **changed symbol**, not the destination file. This is the opposite of the grouping the RIPPLE result mandates, and it is free precision left on the table. |
+| *Removals must be paired with additions before reporting* | Not implemented. `changeKind` is taken straight from intake, so a pure rename is reported today as a deletion — the most severe category — exactly as the section warns. |
+| *Publish a known-not-reported list* | The list does not exist, in this spec or in the user documentation. At least one entry is already known and measured: seeding depends on the deterministic language-support registry, and the JavaScript extractor produced **6 declarations across 1 046 `.js` files** (results ledger, 2026-07-30), so `impact check` is near-blind on a JavaScript repository. |
+
+**Provenance of the two deterministic runs above.** Both were run against this
+repository's own branch and are recorded only here — neither appears in
+`reports/eval-results-ledger.md`. They are deterministic counts over a working tree
+rather than scored measurements, so nothing about them is poolable; they should not
+be quoted as corpus results.
+
 ## Verification Matrix
+
+Rows marked (unbuilt) have no counterpart today; see the section above.
 
 | Requirement | Test |
 | --- | --- |
@@ -381,8 +411,8 @@ which remains forbidden.
 | Reference sites obey the configured include/exclude rules | unit test driving `paths.exclude` through discovery, plus an end-to-end test |
 | Non-source destinations are excluded, and reported rather than dropped | unit test over prose, fixture data and a snapshot; classifier test generated from the language registry |
 | Test call sites are reported separately rather than mixed in or lost | unit test, plus a CLI test over a real repository |
-| A finding without a named dependent is rejected | admission test |
+| A finding without a named dependent is rejected | admission test (unbuilt) |
 | Reports no impact rather than manufacturing findings | unit test |
-| Non-blocking by default | config schema test |
+| Non-blocking by default | config schema test (asserts the absence of a `blocking` key) |
 | Failure leaves the diff review unaffected | integration test |
 | Instructions stay generic and language-neutral | prompt genericity guard |

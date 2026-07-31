@@ -1,7 +1,7 @@
 # 01: Architecture And Structure
 
 Status: Approved
-Date: 2026-07-22
+Date: 2026-07-31
 
 ## Topology
 
@@ -29,25 +29,37 @@ domain folders require a spec update.
 ```text
 src/
   index.ts
+  cli/
   platform/
     path-service.ts
+    repository-path.ts
   domains/
     repository-intake/
     configuration/
     provider-resolution/
     deterministic-signals/
+    declaration-analysis/
     review-planning/
     context-retrieval/
     context-ingestion/
     verification/
     change-impact/
+    intent-fulfilment/
     invariant-conformance/
     shared-context/
     review-workflow/
       harness/
       pipeline/
+        admission/
         discovery/
+        refutation/
       run/
+        context/
+        intake/
+        planning/
+        provider/
+        results/
+        support/
     admission/
     reporting/
     evaluation/
@@ -79,27 +91,36 @@ excludes it) because nothing at runtime may import it.
 | `configuration` | Config discovery, parsing, defaults, merge order, validation. | Provider SDK imports, workflow execution. |
 | `provider-resolution` | Optional adapter package names, runtime loading, provider setup errors. | Model prompts, review policy, support-signal logic. |
 | `deterministic-signals` | Cheap local facts used for changed-line anchoring, symbol spans, import/test hints, scope validation, de-duplication, known-noisy contradiction checks, and optional external-tool metadata summaries. | Primary issue discovery, replacement CodeQL/linter/build/test behavior, admission decisions, provider calls, or report rendering. |
+| `declaration-analysis` | Language-neutral lexical primitives shared by `invariant-conformance` and `review-workflow`: declaration spans, blanked non-code, observable declaration traits, and trait positions. | Parsing (no syntax tree, no per-language construct table), symbol resolution, provider calls, admission decisions, or importing either of its consumers. |
 | `review-planning` | Review tasks and dependency-aware task grouping (change-unit clustering). | Model provider loading or publication. |
 | `context-retrieval` | Read/list/grep-style repository context tools exposed through bounded mediation to refutation and (when skills are enabled) holistic review. | Shell execution, filesystem writes, network access, provider loading, or admission. |
 | `context-ingestion` | External change-intent context providers (inbox, changed-files), fragment redaction, and the digest/model summarizers producing one bounded change-intent brief. | Admission decisions, gate authority, network beyond the configured provider endpoint, or reading outside the repository root. |
 | `verification` | The agentic investigation flow: claim/verdict contracts, claim providers (claims-file, prior-findings, current-findings), the bounded `investigate_claim` agent using mediated read/list/grep, the deterministic fix apply-check and advisory `fixProposal` enrichment, and corroboration matching. | Shell, network, filesystem writes, publishing, gate authority, or changing the general review's discovery path. |
 | `change-impact` | Change-impact review (spec 22): the changed-symbol seed derived from support-signal facts intersected with diff hunks, bounded dependent discovery over those symbols, and its own report contract, admission, and metrics. | Filesystem or git access of its own, the diff reviewer's admission gate, quality-gate authority, report rendering for the diff review, or provider package loading. |
+| `intent-fulfilment` | Intent-fulfilment review (spec 23): change-surface collection, obligation extraction from the stated intent, per-obligation judgement, aptness filtering, the run explanation, and its own advisory report contract. | Filesystem or git access of its own, the diff reviewer's admission gate, quality-gate authority, report rendering for the diff review, or provider package loading. |
 | `invariant-conformance` | Invariant-conformance review (spec 24): deterministic derivation of a changed declaration's peer set from support-signal facts, majority-pattern extraction over those peers, conformance adjudication, and its own divergence report contract separating change-attributed from pre-existing divergences. | Filesystem or git access of its own, the diff reviewer's admission gate or report schema, severity, quality-gate authority, or provider package loading. |
 | `shared-context` | Run-local admitted facts/findings/evidence references. | Filesystem scanning or provider calls. |
 | `review-workflow` | The public harness facade and the review runner: run-start state, preflight, source and planning state, context assembly, provider execution and failure classification, admission and completion state, baseline loading, cost and warning finalization. Also the model-facing stages it drives — holistic discovery, semantic finding merge, refutation, candidate conversion — with their packet shaping, agent instructions, and IO contracts. | Low-level git parsing, path normalization, artifact rendering, deterministic path authority, publication, provider package loading, or report rendering. |
 | `admission` | Refutation-result validation, deterministic safety checks, promotion policy, and admitted/rejected decisions. | Candidate generation or output formatting. |
 | `reporting` | JSON/Markdown/SARIF artifacts, run summary rendering, and platform-neutral review-comment drafts with their platform detection and per-platform renderers. | Admission decisions, provider calls, or publishing. |
 | `evaluation` | Focused eval report contracts, focused Markdown report rendering, golden fixtures, metrics, benchmark runner, quality scoring, semantic-judge scoring metadata, and provider issue visibility in eval artifacts. | Production admission logic. |
-| `security` | Redaction, permission models, safe command policy. | Business-domain review rules. |
+| `costs` | Token aggregation, the bundled model pricing snapshot, and cost calculation with its `cost-unavailable` warning. | Provider calls, admission decisions, or report rendering. |
+| `observability` | Sanitized run logging and the optional OpenTelemetry setup. | Raw source, prompt text, model output, env vars, or secrets in any emitted signal. |
 | `drift` | Deterministic checks for docs/specs/schema/security ambiguity and drift. | Provider calls, model judging, git mutations, or source writes. |
-| `shared` | Reusable contracts/helpers used by 2+ domains. | Domain-specific orchestration. |
+| `shared` | Reusable contracts/helpers used by 2+ domains: Zod contracts, the error taxonomy, glob matching, hashing, JSON values, the redactor, JSON Schema generation, cross-domain test assertions, and text/line utilities. | Domain-specific orchestration. |
+
+There is no `security` domain folder. Redaction is `shared/redaction`, the
+permission model is the `security` configuration block plus the mediated
+`context-retrieval` tool surface, and there is no safe-command policy because R1
+executes no commands.
 
 ## Public Entrypoints
 
 | Entrypoint | Path | Contract |
 | --- | --- | --- |
 | Library entry | `src/index.ts` | Re-export stable public types and runtime helpers. No side effects. |
-| CLI entry | `src/cli/index.ts` | Parse args, call domain services, map errors to exit codes. |
+| CLI entry | `src/cli/index.ts` | Parse args, call domain services, map errors to exit codes. Returns a `CliResult`; it never exits the process itself. |
+| CLI binary | `src/cli/main.ts` | The `codereviewer` bin (`dist/cli/main.js`). Calls `runCli`, writes stdout/stderr, sets `process.exitCode`, and holds no other logic. |
 | Specs | `specs/` | Source of truth until readiness approval and implementation. |
 | User docs | `docs/` | Implemented behavior only. |
 
@@ -110,8 +131,11 @@ excludes it) because nothing at runtime may import it.
 | Build output | `dist/` | No |
 | Coverage | `coverage/` | No |
 | Local run artifacts | `.codereviewer/runs/<run-id>/` | No |
+| Hydrated eval slices | `.codereviewer/eval/` | No |
 | Generated config schema | `schema/codereviewer-config.schema.json` | Yes |
+| Generated contract copies | `specs/03-contracts/config.schema.json`, `specs/03-contracts/review-report.schema.json` | Yes |
 | Golden eval datasets | `eval/fixtures/` | Yes when hand-authored |
+| Eval benchmarks and corpora | `eval/benchmarks/`, `eval/corpora/` | Yes (manifests; slices are hydrated) |
 
 ## Shared Helper Policy
 
@@ -128,9 +152,13 @@ the owning domain.
 - Optional provider packages must only be imported by `provider-resolution`.
 - `change-impact` must not import from `review-workflow`, and `review-workflow`
   must not import from it. It is reachable only from `src/cli/`.
-- `invariant-conformance` must not import from `review-workflow`, and
+- `intent-fulfilment` must not import from `review-workflow`, and
   `review-workflow` must not import from it. It is reachable only from
   `src/cli/`.
+- `invariant-conformance` must not import from `review-workflow`, and
+  `review-workflow` must not import from it. It is reachable only from
+  `src/cli/`. The primitives both need live in `declaration-analysis`, which
+  neither of them may import the other through.
 - `review-workflow` must not perform shell, git, network, or write operations,
   and every repository path it reads must first be resolved inside the
   repository root. See *Known Divergence* below on where that content is read.

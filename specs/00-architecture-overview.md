@@ -1,7 +1,7 @@
 # 00: Architecture Overview
 
 Status: Approved
-Date: 2026-07-22
+Date: 2026-07-31
 
 ## Architecture Summary
 
@@ -19,13 +19,19 @@ CLI
   -> context-ingestion (optional external change-intent brief)
   -> provider-resolution
   -> review-workflow
-  -> holistic-discovery
+  -> holistic-discovery (partitioned per task, with mediated cross-file
+       read/list/grep tools through context-retrieval)
+  -> semantic-finding-merge
   -> refutation
   -> admission
   -> baseline matching
   -> reporting
   -> quality gate
 ```
+
+The separate `impact check`, `intent check`, and `conformance check` commands are
+advisory lanes reachable only from the CLI. They never run inside `review`, and
+`review-workflow` neither imports them nor can be failed by them.
 
 ## Boundary Decisions
 
@@ -38,7 +44,9 @@ CLI
 | SARIF | Export format only; internal domain model remains canonical. |
 | Evaluation | Product capability with fixtures and metrics, not only test helper code. |
 | Deterministic support signals | Local tooling layer that emits normalized anchors, context hints, contradictions, and evidence; a narrow trusted-rule allowlist may seed actionable deterministic candidates directly. |
-| Verification flow | A separate, optional agentic flow (`12-verification-flow.md`) that verifies specific claims with bounded, mediated read/list/grep tools; distinct from the deterministic single-shot general review, whose guarantees it does not change. |
+| Verification flow | A separate, optional agentic flow (`12-verification-flow.md`) that verifies specific claims with bounded, mediated read/list/grep tools; distinct from the general review, whose guarantees it does not change. |
+| Packet size | The provider is the only authority. Assembly never splits on a byte budget; a task is halved only after the provider's normalised `context_length_exceeded` refusal (`26-reactive-task-splitting.md`). The local 8,000,000-byte ceiling is a runaway guard that refuses rather than truncates. |
+| Cross-file retrieval | On by default (`16-agentic-cross-file-discovery.md`). Discovery may open files outside the changed set through the mediated tools; retrieved content is untrusted repository data and its candidates pass the same refutation and admission as any other. |
 
 ## Clean Rebuild Decision
 

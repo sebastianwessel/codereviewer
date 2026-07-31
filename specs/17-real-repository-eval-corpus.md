@@ -126,6 +126,12 @@ The classification is derived deterministically from the reviewed diff and MUST 
 stored with the case so it is auditable and cannot drift. It MUST NOT be
 hand-assigned.
 
+**The storage half of that requirement is unmet.** No expectation or case field
+carries the classification, and no metric is keyed on it: the split exists only as
+ad-hoc analysis re-derived per report. That is exactly the drift the storage
+requirement was written to prevent, and it is why the figures below have to be
+dated and superseded by hand instead of recomputed.
+
 **The rule is hunk span, not added lines.** An expectation is in-diff when its
 `lineRange` intersects the head-coordinate span of any hunk, taken from the hunk
 header `@@ -a,b +c,d @@` as `[c, c+d-1]`. Hunks that are pure deletions in the
@@ -144,13 +150,25 @@ that boundary soft.
 ### Why This Section Exists
 
 Measured 2026-07-27 over 18 archived runs
-(`reports/2026-07-27-in-diff-vs-out-of-diff-recall.md`):
+(`reports/2026-07-27-in-diff-vs-out-of-diff-recall.md`), **against the pre-cleanup
+answer key**:
 
 | population | recall |
 |---|---:|
 | in-diff | **69.8%** |
 | out-of-diff | **0.0%** (0 of 81) |
 | blended, as previously reported | 46.3% |
+
+**Superseded for quoting purposes.** The answer key moved twice on 2026-07-27, and
+the current baseline on the clean 37-case / 87-expectation corpus (results ledger,
+marked CURRENT) reads **in-diff 64.4% (116/180), out-of-diff 0.0% (0/81), blended
+44.4%**, with the expectation mix at 60 in-diff to 27 out-of-diff — **31%**
+out-of-diff, down from the 42.5% below. In-diff recall *fell*, and that is the
+cleanup working: the five cases removed for answer-key disclosure had been scoring
+83.3%, and the six added are multi-defect by construction. The figures above are
+retained because the argument they establish — that the two populations must never
+be blended, and that the hunk-span rule beats an added-lines rule — does not depend
+on the key.
 
 **42.5% of expectations (34 of 80) lie in unchanged code.** The corpus reviews
 `base = fixCommit`, `head = parentCommit`, so a defect the upstream fix commit did
@@ -187,6 +205,11 @@ Requirements:
 - **Rounds to clean** — the number of review rounds after which no expectation for
   a case remains unfound — is reported alongside single-pass recall, never instead
   of it.
+
+**None of this is implemented.** The corpus contract carries no round or
+between-round-fix field, and nothing computes rounds-to-clean. The 2026-07-27
+convergence pilot cited below was therefore run outside the corpus contract, and is
+not reproducible from committed data — which is the reason the requirement exists.
 
 ### What The Corpus Can Support Today, And What It Cannot
 
@@ -300,8 +323,10 @@ manifest data, so a violation fails loading instead of silently inflating a scor
   reviewed diff as a **removed** line, so the reviewer is shown a deleted comment
   that names the defect before it reads any code. The requirement and its evidence
   are below.
-- **Dedup.** A token-normalized diff fingerprint is recorded per case so exact and
-  near-duplicate captures are detectable.
+- **Dedup.** A token-normalized diff fingerprint is computed per case during
+  hydration and compared across the corpus, so exact and near-duplicate captures are
+  rejected at capture time. It is not persisted in the manifest — the check runs
+  against the hydrated trees rather than against a stored value that could go stale.
 - **Provenance.** License, source, and capture date are required per case; a case
   whose license is not on the permissive allowlist is rejected.
 

@@ -67,8 +67,13 @@ A strict schema under `src/shared/contracts/`:
 Suggestion eligibility (unchanged from current behavior, moved into the neutral
 layer): exactly one fix edit, `fixProposal.safety` is `manual-review`, the edit
 path and line range match `targetRange` exactly, the replacement contains no
-triple-backtick fence, and the rendered result fits the platform body cap. When
+triple-backtick fence, and the rendered result fits the body cap. When
 any check fails, the draft carries the prose fix summary but no `suggestion`.
+
+The caps are contract constants, not configuration: a body is at most **3 000**
+characters and a `replacement` at most **4 000**. The replacement bound is
+deliberately the larger of the two — it bounds the structured field a platform
+applies directly, while the body bound governs the rendered comment.
 
 ### PlatformTarget
 
@@ -81,10 +86,13 @@ The target platform is resolved in this order, first match wins:
 1. `reporting.reviewComments.platform`, when the user sets it explicitly.
 2. CI environment signal: `GITHUB_ACTIONS` → `github`; `GITLAB_CI` → `gitlab`;
    `BITBUCKET_PIPELINE_UUID` (or `BITBUCKET_WORKSPACE`) → `bitbucket`.
-3. The `origin` remote host: `github.com` → `github`; `gitlab.com` (and
-   self-managed hosts whose remote path matches the GitLab form) → `gitlab`;
+3. The `origin` remote host: `github.com` → `github`; `gitlab.com` and any host
+   whose name starts with `gitlab.` (the self-managed convention) → `gitlab`;
    `bitbucket.org` → `bitbucket`.
 4. `generic` when nothing matches.
+
+A CI environment variable present but set to the empty string, `false`, or `0` is
+**not** a signal, so an unset-but-declared variable cannot mis-detect the platform.
 
 Detection reads environment variables and the git remote only. It performs no
 network request and calls no platform API, so it does not compromise platform
@@ -133,6 +141,13 @@ Invalid configuration fails validation with exit code `2`.
   replacement appears in logs, traces, or events.
 - A run that resolves to `generic` (no platform detected) is normal, not an
   error.
+
+**This step does not exist yet.** No draft count, suggestion count, platform, or
+detection source is emitted anywhere, and the artifact writer discards the resolved
+`source` after reading `platform`. The consequence is precisely what the requirement
+exists to prevent: a run that resolved `generic` and emitted zero drafts is
+indistinguishable from one where the feature never ran. Recorded here rather than
+removed — it is an unmet requirement, not a withdrawn one.
 
 ## Testing
 

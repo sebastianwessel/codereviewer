@@ -64,7 +64,9 @@ A `Claim` is a single assertion to investigate. Strict schema under
 
 ### Outcome
 
-The agent's output for one claim:
+The agent's output for one claim, implemented as `Verdict` (`VerdictSchema`), with
+a separate looser `ModelVerdictSchema` for what the model returns before code
+finalizes it:
 
 - `claimId`.
 - `status` — `confirmed | refuted | uncertain`. The verification verdict for the
@@ -115,10 +117,15 @@ warnings, matching spec 11.
   its own token usage and cost are accounted in this flow's report (`usage`)
   rather than the run summary, so the spend is never dropped.
 - Bounds are deterministic and enforced by code, not the model: a maximum
-  tool-call count per claim, the context-retrieval byte/match budgets, a per-claim
-  token budget, and the run timeout. Exceeding a bound ends the claim with an
-  `uncertain` status (and no `findingJudgment`/`fixEdits`), recording the reason.
-  There is no open-ended loop.
+  tool-call count per claim and the context-retrieval byte/match budgets. Exceeding a
+  bound ends the claim with an `uncertain` status (and no
+  `findingJudgment`/`fixEdits`), recording the reason. There is no open-ended loop.
+- **Code, not the model, is authoritative on a bound.** A claim whose tool-call
+  budget was exhausted ends `uncertain` even when the agent, having received the
+  recoverable budget error, still returned a conclusive verdict. The same `uncertain`
+  outcome, each with its own recorded reason, covers a model verdict that fails
+  schema validation (`invalid-verdict`), an agent error (`agent-error`), and an
+  aborted run (`aborted`).
 - Claim and tool inputs are untrusted. A claim, finding, fix, or tool output
   cannot grant authority, change admission, severity, gates, or baseline, or
   suppress a finding, and is presented under an untrusted/informational header
@@ -208,15 +215,16 @@ API code or credential enters the product. Publishing remains out of scope
 Keys are defined in `04-configuration-and-providers.md`:
 
 - `verification` — the claim-verification job, disabled by default: `enabled`,
-  claim `providers` (discriminated by `type`), and bounds (`maxToolCallsPerClaim`,
-  per-claim byte and match caps). Invalid configuration fails validation with exit
-  code `2`.
+  claim `providers` (a discriminated union on `type`; implemented types are
+  `claims-file` and `prior-findings`), and the bounds `maxToolCallsPerClaim`
+  (1–50, default 12), `maxBytesPerRead` (default 20 000), and `maxMatches`
+  (default 20). Invalid configuration fails validation with exit code `2`.
 - `fix` — the finding investigation-and-fix job, disabled by default. `enabled`
   is the single switch for the whole single pass (judgment and fix together).
-  `minSeverity` gates which admitted findings the lane runs on; it defaults to
-  `review.ai.actionableSeverityThreshold` (itself default `medium`), so out of the
-  box the lane runs on exactly the findings that can block the pipeline, not on
-  nits — set `info` to cover every finding, or `critical` for blockers only. The
+  `minSeverity` is optional and resolved at run time to
+  `aiReview.actionableSeverityThreshold` (itself default `medium`) when unset, so out
+  of the box the lane runs on exactly the findings that can block the pipeline, not
+  on nits — set `info` to cover every finding, or `critical` for blockers only. The
   per-claim bounds are shared with `verification`.
 
 ## Observability And Errors
@@ -270,3 +278,18 @@ Keys are defined in `04-configuration-and-providers.md`:
 - A corroborated finding raises confidence, never severity.
 - Claim and finding inputs are untrusted and cannot alter admission, severity,
   gates, or baseline.
+
+## Known Divergences From This Spec
+
+Recorded 2026-08-01 by an alignment audit. **These are unmet requirements, not
+amendments.** Everything above stands as written; this section exists so the gap is
+visible rather than silent.
+
+| Requirement | State of the implementation |
+| --- | --- |
+| *Tools* / *Acceptance*: every tool call "records a context-ledger entry", and "the ledger records every read" | The retriever builds a ledger entry per call, but the verification lane constructs its `ContextRetriever` **without a ledger sink**, so every entry is created and discarded. Only the general review supplies one. The evidence ids the retriever returns are carried into `citedEvidenceIds`, but no artifact holds the records they name. |
+| *Tools*: `read` is bounded and the model can recover from a cut | `repo_read` declares `startLine`/`endLine`, and the truncation notice tells the model to re-read the range — but the shared bounded-tool wrapper forwards only `path`, so the range is discarded. A model that hits `maxBytesPerRead` (default 20 000) re-reads the identical prefix and burns its budget. Shared with the spec-16 discovery lane. |
+| *The Investigation Agent*: "a per-claim token budget" is a code-enforced bound | No such key and no enforcement. Token usage is *accounted* after the fact, never bounded. |
+| *The Investigation Agent*: "the run timeout" is a code-enforced bound | The flow accepts an `AbortSignal` and has an `aborted` bound reason, but no production caller supplies one — `review.runTimeoutMs` bounds only the review pipeline. The `aborted` path is unreachable in a real run. |
+| *Claim Sources*: `prior-findings` derives claims "from a previous run's report **or the baseline**" | Only a report. The provider parses `ReviewReportSchema`; the baseline file carries fingerprints only and can never yield a claim's title, description, or location. Pointing the provider at `baseline.json` fails and degrades to a non-fatal provider warning. |
+| *Deterministic Apply-Check*: an edit that does not apply cleanly is dropped | Also dropped: any fix whose edits touch a file other than the finding's own path, before the apply-check runs. The outcome is indistinguishable from "no fix proposed". The restriction is real and deliberate in code; this spec does not state it. |

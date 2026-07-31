@@ -7,7 +7,8 @@ Each capability is implementation-ready only when its linked spec sections
 define contracts, errors, permissions, observability, acceptance, and tests.
 R1 is intentionally LLM-centric: deterministic code provides safety, context,
 and corroboration signals, while semantic issue discovery is owned by a holistic
-whole-file review and a per-candidate refutation pass.
+whole-file review, a semantic finding merge, and a refutation pass batched per
+task.
 
 ## Inventory
 
@@ -23,7 +24,9 @@ whole-file review and a per-candidate refutation pass.
 | CAP-AI-001 | Holistic discovery | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-AI-004 | Refutation | ACT-MODEL, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `05-review-workflow-and-runtime.md` |
 | CAP-AI-005 | Semantic finding merge | ACT-MODEL, ACT-REVIEWER | Yes | `05-review-workflow-and-runtime.md`, `03-contracts/finding-evidence-report.md` |
-| CAP-AI-006 | Agentic cross-file discovery (mediated repo read/list/grep during discovery, off by default) | ACT-MODEL, ACT-REVIEWER | Yes | `16-agentic-cross-file-discovery.md`, `04-configuration-and-providers.md` |
+| CAP-AI-006 | Agentic cross-file discovery (mediated repo read/list/grep during discovery, on by default) | ACT-MODEL, ACT-REVIEWER | Yes | `16-agentic-cross-file-discovery.md`, `28-targeted-reads.md`, `04-configuration-and-providers.md` |
+| CAP-AI-010 | Discovery partitioning (a task's changed files spread across several discovery calls, candidates unioned) | ACT-MODEL, ACT-REVIEWER | Yes | `27-discovery-partitioning.md`, `05-review-workflow-and-runtime.md` |
+| CAP-AI-011 | Reactive task splitting (a task is halved only when the provider refuses the packet) | ACT-MODEL | Yes | `26-reactive-task-splitting.md`, `05-review-workflow-and-runtime.md` |
 | CAP-ADM-001 | Admission gate | ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-002 | Markdown report | ACT-DEV, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md` |
@@ -46,6 +49,9 @@ whole-file review and a per-candidate refutation pass.
 | CAP-EVAL-004 | Per-mechanism security measurement (recall/precision by CWE mechanism + context-depth, held-out anti-contamination) | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `15-security-focused-review.md` |
 | CAP-SEC-001 | Security review lens (generic OWASP/CWE checklist discovery, refutation-gated) | ACT-MODEL, ACT-REVIEWER | Yes | `15-security-focused-review.md`, `05-review-workflow-and-runtime.md` |
 | CAP-SEC-002 | Deterministic security-signal evidence (source/sink, CWE/data-flow) | ACT-MODEL, ACT-DEV | Yes | `15-security-focused-review.md`, `03-contracts/finding-evidence-report.md` |
+| CAP-IMPACT-001 | Change-impact review (`impact check`, deterministic reference traversal, off by default) | ACT-DEV, ACT-CI | Yes | `22-change-impact-review.md` |
+| CAP-INTENT-001 | Intent-fulfilment review (`intent check`, obligation extraction and per-obligation judgement, advisory-only, off by default) | ACT-DEV, ACT-CI, ACT-MODEL | Yes | `23-intent-fulfilment-review.md` |
+| CAP-CONF-001 | Invariant-conformance review (`conformance check`, peer-set divergence detection with optional model adjudication, off by default) | ACT-DEV, ACT-CI, ACT-MODEL | Yes | `24-invariant-conformance-review.md` |
 | CAP-GATE-001 | Quality gate result | ACT-CI | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-OPS-001 | Run observability | ACT-OPS | Yes | `07-security-privacy-operations.md` |
 | CAP-DRIFT-001 | Drift, gap, and ambiguity checks | ACT-DEV, ACT-CI, ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `07-security-privacy-operations.md` |
@@ -145,15 +151,52 @@ whole-file review and a per-candidate refutation pass.
 
 - Trigger: provider-backed review after deterministic support signals and task
   packets are assembled.
-- Contracts: a single recall-first whole-file review per task reads the unified
-  diff plus the full line-numbered changed files and emits `CandidateFinding[]`
-  directly (capped per task), not findings. Each candidate names a concrete
-  defect, its triggering path, and impact.
-- Side effects: provider calls only when model-backed review is configured.
-- Final state: every candidate is passed to refutation; raw candidates do not
-  become actionable on their own.
+- Contracts: a recall-first whole-file review per discovery partition reads the
+  partition's unified-diff segments plus the full line-numbered changed files and
+  emits `CandidateFinding[]` directly (capped per CALL), not findings. Each
+  candidate names a concrete defect, its triggering path, and impact. A finding
+  is dropped when its path is outside the paths its own call was shown.
+- Side effects: provider calls only when model-backed review is configured; one
+  general call per partition, plus one security call per partition when the
+  dedicated security pass is enabled, plus any call a provider refusal split.
+- Final state: every candidate is passed to the semantic merge and then to
+  refutation; raw candidates do not become actionable on their own.
 - Verification: hermetic provider fixture tests for candidate creation, schema
-  invalid output, and per-task candidate caps.
+  invalid output, per-call candidate caps, and out-of-partition path rejection.
+
+### CAP-AI-010 Discovery Partitioning
+
+- Trigger: provider-backed discovery whenever a task carries more review targets
+  than `aiReview.maxFilesPerDiscoveryCall` (default `2`).
+- Contracts: `27-discovery-partitioning.md`. Partitioning is by file count, never
+  by bytes. Each partition is a sub-task with its own synthetic task id and its
+  own narrowed `paths`; every partition receives the shared context the undivided
+  task would have had; candidates are unioned across partitions.
+- Side effects: more discovery and refutation provider calls per task. The
+  child-agent call budget scales with the partition count, since under-reserving
+  makes the workflow refuse a call mid-run.
+- Final state: a task within the limit produces exactly one partition and the run
+  is unchanged. Above it, the same code is reviewed across more calls, and a
+  finding stays restricted to the files its own call read.
+- Verification: partition unit tests for the inert case, path narrowing, context
+  routing (including referenced definitions, which are not parent review
+  targets), and the scaled call budget.
+
+### CAP-AI-011 Reactive Task Splitting
+
+- Trigger: a discovery call failing with the harness's normalised
+  `context_length_exceeded` reason.
+- Contracts: `26-reactive-task-splitting.md`. Assembly never splits on a byte
+  budget. Detection is the normalised reason only — never provider message text,
+  status codes, or any provider-specific shape. The task is halved and each half
+  retried from its own rebuilt context, bounded by recursion depth 6.
+- Side effects: additional sequential provider calls; a reported split count kept
+  distinguishable from transient retry.
+- Final state: halves keep their absolute line origins so a finding reports the
+  file's real line. A unit that cannot be halved and is still refused fails with
+  `review_task_indivisible` rather than being truncated or dropped.
+- Verification: split, depth-bound, line-origin, and indivisible-failure unit
+  tests.
 
 ### CAP-AI-005 Semantic Finding Merge
 
@@ -179,12 +222,17 @@ whole-file review and a per-candidate refutation pass.
 ### CAP-AI-004 Refutation
 
 - Trigger: every model-origin candidate finding within reviewed scope before
-  admission.
+  admission. Candidates are grouped by the task that raised them and adjudicated
+  one batch per task, so a partitioned task produces one batch per partition.
+  Support-signal and out-of-scope candidates are decided by deterministic rules
+  and never cost a call.
 - Contracts: model-assisted or hermetic-test refutation uses only the provided
-  candidate, reviewed diff ranges, evidence, review context, support-signal
-  candidates, instructions, skills metadata, shared digest, and provenance to
-  prove or disprove the candidate (reachability, guards, framework semantics,
-  declared contracts, outside-scope status, evidence sufficiency).
+  candidates, reviewed diff ranges, evidence, review context (excluding the
+  change-intent brief), support-signal candidates, instructions, skills metadata,
+  shared digest, and provenance to prove or disprove each candidate
+  (reachability, guards, framework semantics, declared contracts, outside-scope
+  status, evidence sufficiency). Each candidate receives its own verdict, and
+  sharing a call must not make one candidate's verdict depend on another's.
 - Side effects: provider calls and mediated repository reads only when
   configured; no publication or write authority.
 - Final state: `proved`, `refuted`, `needs-more-evidence`, or `provider-error`
@@ -195,16 +243,24 @@ whole-file review and a per-candidate refutation pass.
 
 ### CAP-AI-006 Agentic Cross-File Discovery
 
-- Trigger: `review.crossFileRetrieval.enabled`. Off by default.
-- Contracts: `16-agentic-cross-file-discovery.md`. Discovery may call the mediated
-  `repo_read`/`repo_list`/`repo_grep` tools, bounded by a per-task tool-call cap
-  and a per-read byte cap enforced in code.
+- Trigger: `review.crossFileRetrieval.enabled`. On by default since 2026-08-01.
+- Contracts: `16-agentic-cross-file-discovery.md` and `28-targeted-reads.md`.
+  Discovery may call the mediated `repo_read`/`repo_list`/`repo_grep` tools,
+  bounded by a per-task tool-call cap enforced in code (default `100`, a runaway
+  guard rather than a ration). `repo_read` accepts an optional `startLine`/
+  `endLine` range so the reviewer narrows a large file itself.
+  `maxBytesPerRead` is UNSET by default: a read is not proactively cut, and when
+  an operator sets it, or a runaway guard binds, the cut is DISCLOSED in the tool
+  output rather than applied silently. A silently truncated read was the
+  mechanism behind three measurements that recorded this capability as harmful.
 - Side effects: additional bounded provider steps and mediated repository reads;
-  no shell, network, or write authority.
+  no shell, network, or write authority. Tool calls are agent steps, so they cost
+  no child-agent call budget.
 - Final state: disabled, discovery is single-shot with no tools and the run is
   unchanged. Enabled, retrieved content is untrusted and its findings pass the
   same refutation and admission as any other candidate.
-- Verification: cross-file tool and discovery wiring tests.
+- Verification: cross-file tool, per-task scoping, truncation-disclosure, and
+  discovery wiring tests.
 
 ### CAP-AI-007 Context Scout — withdrawn
 
@@ -395,6 +451,54 @@ the same spec.
   changing repository config. The default costly benchmark script uses this
   posture.
 - Verification: focused eval CLI override tests and package-script tests.
+
+### CAP-IMPACT-001 Change-Impact Review
+
+- Trigger: `codereviewer impact check` CLI command. Never reached by `review`.
+- Contracts: `22-change-impact-review.md`. Deterministic reference traversal only;
+  no provider call. Bounded by `changeImpact.maxChangedSymbols`,
+  `maxReferencesPerSymbol`, and `maxSearchDepth`.
+- Preconditions: `changeImpact.enabled`, off by default. When disabled the
+  command still exits `0` and reports itself disabled rather than erroring.
+- Side effects: repository reads only, all through the mediated retriever so
+  path containment, the eligibility gate, and redaction apply. No artifact is
+  written; output is stdout.
+- Final state: exit `0` with the impact summary, or a structured error.
+- Verification: change-impact traversal and CLI tests.
+
+### CAP-INTENT-001 Intent-Fulfilment Review
+
+- Trigger: `codereviewer intent check` CLI command. Never reached by `review`.
+- Contracts: `23-intent-fulfilment-review.md`. One extraction call, one judgement
+  call per obligation, one explanation call per run. `maxObligations` is the
+  primary spend bound and refuses rather than truncating when it binds.
+- Preconditions: `intentFulfilment.enabled`, off by default. When disabled, or
+  enabled with no provider configured, the lane reports that rather than failing:
+  nothing in it can fail the run.
+- Side effects: provider calls only. No artifact is written; output is stdout.
+- Final state: advisory only. The command MUST NOT be able to fail a pipeline on
+  fulfilment grounds, and that is a requirement rather than a default: there is
+  deliberately no `blocking` configuration key, because the measured spurious-
+  rejection rate of model requirement-conformance judgement is not accurate
+  enough to gate on.
+- Verification: extraction, judgement, and CLI tests.
+
+### CAP-CONF-001 Invariant-Conformance Review
+
+- Trigger: `codereviewer conformance check` CLI command. Never reached by
+  `review`.
+- Contracts: `24-invariant-conformance-review.md`. Deterministic peer-set
+  divergence detection, with an optional model adjudication stage that is itself
+  off by default. Bounded by `maxChangedDeclarations`, `maxPeersPerDeclaration`,
+  `maxPeerFiles`, `maxDivergences`, and `maxPreExistingDivergences`.
+- Preconditions: `invariantConformance.enabled`, off by default. When disabled
+  the command still exits `0` and reports itself disabled rather than erroring.
+  Adjudication enabled with no available adjudicator reports the deterministic
+  divergences unjudged rather than failing.
+- Side effects: repository reads, plus provider calls only when adjudication is
+  enabled. No artifact is written; output is stdout.
+- Final state: exit `0` with the divergence report, or a structured error.
+- Verification: peer-derivation, divergence, and adjudication tests.
 
 ### CAP-GATE-001 Quality Gate Result
 

@@ -55,7 +55,7 @@ code, not by model behavior:
 | Artifact write boundary | Writes are allowed only below the configured artifact directory after it resolves under repository root. |
 | Non-destructive git | The only allowed git commands are read-only discovery commands explicitly allowlisted in code. Mutating git commands are impossible through the product API. |
 | No shell expansion | Git and tool invocations use argument-array process APIs. Shell strings are forbidden. |
-| No implicit network | Network is denied by default. The only network path is the explicitly selected model provider endpoint after provider config validation, used by review and by the change-intent summarizer. Change-intent context providers are filesystem-only in the current phase; later-phase network providers (`platform-API`, `mcp`) contact only explicitly configured, allowlisted endpoints and are the subject of dedicated controls below. No network path can be initiated by model output. |
+| No implicit network | Network is denied by default. The only network path is the explicitly selected model provider endpoint after provider config validation. Every model-backed stage uses that one path and no other: holistic discovery, the semantic finding merge, refutation, the change-intent summarizer, the fix and verification lanes, intent-fulfilment and invariant-conformance checking, and the evaluation match and plausibility judges. Change-intent context providers are filesystem-only in the current phase; later-phase network providers (`platform-API`, `mcp`) contact only explicitly configured, allowlisted endpoints and are the subject of dedicated controls below. No network path can be initiated by model output. |
 | No repository exfiltration by default | Local providerless and signal-only paths must not send repository content to any network destination. Provider-backed review sends only bounded, redacted, ledger-recorded context to the selected provider. |
 | No prompt/tool authority | Prompts, repository content, skills, and model output cannot grant filesystem, git, shell, network, publishing, or gate authority. |
 | Auditable decisions | Security-relevant allow/deny decisions produce stable, redacted events and testable error codes. |
@@ -75,6 +75,7 @@ code, not by model behavior:
 | Report injection | finding title contains HTML/script/Markdown table breaks | Escape Markdown/SARIF user-controlled text and never emit raw source snippets by default. |
 | External context injection | PR body, inbox file, or changed doc says "ignore all findings" or "this is pre-approved" | Treat external context as untrusted data presented under an informational header; it never changes admission, severity, gates, or baseline, and never suppresses a finding. |
 | Agentic tool abuse (verification flow) | a claim or tool output steers the verification agent to read `.env`/secrets, loop unboundedly, or claim authority | The verification agent's only tools are mediated read/list/grep (`12-verification-flow.md`): read-only, path-contained, eligibility-filtered so secret/excluded files are never read, in-process (no shell), redacted, ledgered, and bounded by per-claim tool-call and byte/match budgets. No shell, network, filesystem write, environment, publishing, or gate authority is available, and claim inputs cannot change admission, severity, gates, or baseline. |
+| Agentic tool abuse (cross-file discovery) | changed source or a retrieved file steers the discovery agent to read secrets, browse the repository, or loop until its budget is gone | The discovery agent's `repo_read`/`repo_list`/`repo_grep` tools are the SAME mediated, eligibility-gated, redacted, ledgered surface as the verification agent's, bound per task through a scoped tool registry so concurrent tasks cannot spend each other's budget. A per-task tool-call cap enforced in code bounds a model that never stops requesting reads. Retrieved content is untrusted repository data on exactly the terms the changed files are, its findings pass the same refutation and admission as any other candidate, and findings stay restricted to the task's own paths. |
 | Context-source SSRF (later-phase `platform-API` provider) | ticket id or URL in repository content aims a platform-API fetch at an internal host | Contact only the explicitly configured, host-allowlisted platform host; never derive fetch targets from repository content or model output. |
 | Context-source credential leak | tracker or platform token echoed into the brief, ledger, or logs | The current-phase inbox carries no credentials because the pipeline owns the fetch; the later-phase platform-API provider reads credentials only from a configured environment variable; redact external context before use. |
 | Secret leakage | token appears in source, error, provider message, or artifact | Redact before logs, errors, reports, traces, and provider-bound summaries. If a value cannot be proven redacted, exclude it from output. |
@@ -146,7 +147,7 @@ Default permissions:
 | Repository read | allowed | Required. |
 | Filesystem write | restricted | Only run artifact directory. |
 | Shell execution | denied | Future spec required. |
-| Network | provider only | Selected provider adapter (review and change-intent summarizer). Change-intent context providers are filesystem-only; a network `platform-API` provider is a later phase (`11-external-context-ingestion.md`). |
+| Network | provider only | Selected provider adapter, used by every model-backed stage listed in the "No implicit network" invariant above. Change-intent context providers are filesystem-only; a network `platform-API` provider is a later phase (`11-external-context-ingestion.md`). |
 | PR publishing | denied | Future spec required. |
 | Fix application | denied | Future spec required. |
 
@@ -283,6 +284,12 @@ Rules:
   directories through the harness skill registry.
 - Mounted skills expose only `read`, `list`, and `grep` by default; shell,
   write, edit, network, and publish tools remain unavailable.
+- Skill tools and the mediated repository tools are distinct surfaces and must
+  not be conflated. Skill tools are the harness builtins scoped to the mounted
+  skill directories; the mediated `repo_read`/`repo_list`/`repo_grep` tools are
+  in-process handlers that route every call through the context retriever. The
+  tool ids are prefixed so they cannot collide with a harness builtin name, which
+  would otherwise silently route a call to the unmediated builtin.
 - Raw skill content is not inlined into workflow input, reports, logs, traces, or
   shared-context artifacts.
 
@@ -339,16 +346,37 @@ R1 operations are local/CI only:
 - no alerts;
 - no persistent service state.
 
-Operational artifacts:
+Operational artifacts, all written under the configured artifact directory:
+
+Per review run, in `<artifactDir>/<runId>/`:
 
 - `report.json`;
-- `report.md`;
-- `report.sarif`;
+- `report.md` when the Markdown format is enabled;
+- `report.sarif` when the SARIF format is enabled;
+- `review-comments.json` and `review-comments.<platform>.json` when
+  `reporting.reviewComments.enabled`;
 - `run-summary.json`;
 - `context-ledger.json`;
 - `shared-context.json`;
-- `error.json` for partial failed runs;
-- optional `eval-report.json`.
+- `observability.json`;
+- `fix-report.json` when the fix lane produced one;
+- `verification-report.json` when the verification flow ran;
+- `error.json` for partial failed runs.
+
+Per artifact directory:
+
+- `index.json`, the run index.
+
+Evaluation artifacts, written to `.codereviewer/eval/` and again under
+`.codereviewer/eval/runs/<run-id>/`:
+
+- `eval-report.json`;
+- `eval-summary.md`;
+- `eval-recall-report.md`.
+
+`codereviewer config validate`, `eval compare`, `eval recall-report`,
+`eval slice-manifest`, `drift check`, `impact check`, `intent check`, and
+`conformance check` write no artifacts and print to stdout only.
 
 Default artifact root is `.codereviewer/`. Generated artifacts are ignored by git.
 User-authored `.codereviewer/config.json`, `.codereviewer/instructions/`, and

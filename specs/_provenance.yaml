@@ -1,6 +1,6 @@
 schema_version: "1.0"
 status: approved
-updated_at: "2026-07-27"
+updated_at: "2026-07-31"
 authors:
   - role: product_architecture_agent
     scope: spec_authoring_and_readiness_repair
@@ -13,6 +13,12 @@ research_evidence:
   web_research_verified_at: "2026-06-20"
   source_index: specs/10-state-of-the-art-research-synthesis.md
 approved_updates:
+  - spec 28 targeted reads is implemented while its own header still reads "Draft - awaiting human approval"; crossFileRetrieval.maxBytesPerRead is now optional and unset, repo_read accepts an optional startLine/endLine range and reports the file's total line count, and the ContextRetrievalBudget default per-read cap is 4,000,000 bytes as a memory runaway guard
+  - spec 27 discovery partitioning shipped on by default at aiReview.maxFilesPerDiscoveryCall 2, chosen by a measured sweep of 1/2/4/unlimited on the 21 largest benchmark cases; 2 matched the strongest setting on both recall (46.5%) and adjusted precision (97.1%) at 27% less cost and was the only arm to reach conventional significance (p = 0.033)
+  - spec 26 reactive task splitting replaced proactive byte-budget splitting; assembly no longer splits on bytes, review.contextMaxBytes is unset by default and no longer sizes the review packet, and the serialized packet ceiling is 8,000,000 bytes as a runaway guard that refuses rather than truncates
+  - cross-file retrieval (spec 16) was enabled by default; the earlier net-negative verdict was refuted as an artefact of reads silently truncated at the old 24,000-byte cap, and two runs were positive on every measured dimension without reaching significance, so no recall gain is claimed
+  - withdrew spec 25 guarded-region context on 2026-07-30 after all three measured arms failed; the implementation was removed and the spec is kept only as the record of that measurement
+  - CodeReviewerConfigSchema.review now uses .prefault({}) rather than a restated default literal, because Zod's .default(value) returns the value unparsed and silently overrode every field-level default underneath it
   - added spec 24, invariant-conformance review: reports where a change stops upholding a protective pattern its peers uphold, peers cited as evidence, advisory only, firing rate measured before recall
   - added spec 22, change-impact review: a separate command reporting which dependents outside the diff relied on a contract the change altered, evidence not verdict, non-blocking by default, with its own inverse-shape corpus
   - added spec 23, intent-fulfilment review: a separate advisory-only command mapping stated obligations to evidence in the change, reusing spec 11 ingestion, gated on false-satisfied rate rather than recall
