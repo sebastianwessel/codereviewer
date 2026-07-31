@@ -35,12 +35,6 @@ import {
   tooManyObligationsError
 } from './intent-limits.js'
 import {
-  citationAptnessInputFor,
-  isCitationConcern,
-  type CitationAptness,
-  type CitationAptnessRunner
-} from './aptness.js'
-import {
   collectChangeSurface,
   type ChangeSurface,
   type ChangeSurfaceSourceFile
@@ -70,13 +64,6 @@ import { resolveIntentCitation, toIntentSources } from './intent-sources.js'
 export type IntentFulfilmentAgents = {
   readonly extractObligations: ObligationExtractionRunner
   readonly judge: FulfilmentJudgementRunner
-  // Spec 23's Second Amendment. REQUIRED, deliberately. It was optional for one
-  // iteration and three separate wiring sites silently omitted it — the lane, the
-  // CLI, and the run's own guard — so the stage never executed while every test
-  // passed and the report claimed a clean `inaptCitationCount: 0`. An optional
-  // stage on an agents contract is a stage that can be dropped without anything
-  // failing; required makes each omission a compile error instead.
-  readonly checkAptness: CitationAptnessRunner
   readonly explain: FulfilmentExplanationRunner
 }
 
@@ -461,10 +448,6 @@ export const runIntentFulfilment = async (
   }
   const obligations: Obligation[] = []
   let unevidencedAddressedCount = 0
-  // Spec 23's Second Amendment: `addressed` obligations carrying an evidence
-  // concern. It changes no verdict — see `aptness.ts` for why demoting was measured
-  // and rejected twice — so this is a count of annotations, not of suppressions.
-  let evidenceConcernCount = 0
   let failedJudgementCount = 0
 
   // Sequential, one call per obligation. Each call is its own session, so no
@@ -487,7 +470,6 @@ export const runIntentFulfilment = async (
     }
 
     const verified = verifyJudgement(judged, surface)
-    let evidenceConcern = false
 
     // The false-satisfied guard firing: the model said `addressed` and not one of
     // its citations was a line the change touched. Spec 23 makes the rate of
@@ -498,38 +480,15 @@ export const runIntentFulfilment = async (
       unevidencedAddressedCount += 1
     }
 
-    // Spec 23's Second Amendment. Runs on every `addressed` verdict, because it
-    // cannot demote one: the worst an aptness failure can do is fail to annotate.
-    // Demoting was measured and rejected twice — see `aptness.ts`.
-    if (verified.status === 'addressed') {
-      let aptness: CitationAptness = 'undetermined'
-
-      try {
-        aptness = await agents.checkAptness(
-          citationAptnessInputFor(entry.statement, verified.evidence),
-          input.signal
-        )
-      } catch {
-        aptness = 'undetermined'
-      }
-
-      evidenceConcern = isCitationConcern(verified, aptness)
-
-      if (evidenceConcern) {
-        evidenceConcernCount += 1
-      }
-    }
-
+    // ONE CALL PER OBLIGATION, and no second one. A citation-aptness stage used to
+    // run here on every `addressed` verdict; it was measured and removed. See spec
+    // 23's rejected-design record for the numbers.
     obligations.push({
       id: `obl_${index + 1}`,
       source: entry.source,
       statement: entry.statement,
       ...(verified.status === 'addressed'
-        ? {
-            status: 'addressed' as const,
-            evidence: [...verified.evidence],
-            ...(evidenceConcern ? { evidenceConcern: true as const } : {})
-          }
+        ? { status: 'addressed' as const, evidence: [...verified.evidence] }
         : { status: verified.status })
     })
   }
@@ -597,13 +556,12 @@ export const runIntentFulfilment = async (
       obligationsTruncated: false,
       uncitedObligationCount,
       unevidencedAddressedCount,
-      evidenceConcernCount,
-      // Everything the run could not confirm. An evidence concern counts here even
-      // though its verdict stayed `addressed`: doubtful evidence is exactly the
-      // case a reviewer should still check, and putting it on this list costs a
-      // longer list rather than a suppressed verdict.
-      outstandingCount:
-        countOf('unaddressed') + countOf('undetermined') + evidenceConcernCount,
+      // Everything the run could not confirm: unaddressed plus undetermined. An
+      // `addressed` obligation is never on this list — the third term that once
+      // put doubted-evidence verdicts here went with the aptness stage, and 18.1%
+      // of this lane's false positives were that term firing on verdicts that were
+      // already correct.
+      outstandingCount: countOf('unaddressed') + countOf('undetermined'),
       extraScopeFileCount: extraScope.length
     },
     obligations,

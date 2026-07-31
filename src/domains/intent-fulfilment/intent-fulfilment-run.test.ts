@@ -19,10 +19,6 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
 import { CodeReviewerConfigSchema } from '../../shared/contracts/index.js'
 import type { GitCommandRunner } from '../repository-intake/index.js'
-import type {
-  CitationAptness,
-  CitationAptnessInput
-} from './aptness.js'
 import type { FulfilmentJudgement } from './judgement.js'
 import type { ExtractedObligation } from './obligation-extraction.js'
 import {
@@ -117,27 +113,20 @@ const gitOutputs: Readonly<Record<string, string>> = {
 type ScriptedAgents = IntentFulfilmentAgents & {
   readonly judgementPackets: { readonly obligation: string }[]
   readonly explanationCalls: unknown[]
-  readonly aptnessPackets: CitationAptnessInput[]
 }
 
 const scriptedAgents = (script: {
   readonly obligations: readonly ExtractedObligation[]
   readonly judgements: readonly FulfilmentJudgement[]
   readonly explanation?: string
-  // Defaults to 'apt', so every existing case behaves exactly as it did before
-  // the aptness stage existed.
-  readonly aptness?: readonly CitationAptness[]
 }): ScriptedAgents => {
   const judgementPackets: { readonly obligation: string }[] = []
   const explanationCalls: unknown[] = []
-  const aptnessPackets: CitationAptnessInput[] = []
   let judged = 0
-  let aptnessChecked = 0
 
   return {
     judgementPackets,
     explanationCalls,
-    aptnessPackets,
     extractObligations: async () => [...script.obligations],
     judge: async (input) => {
       judgementPackets.push({ obligation: input.obligation })
@@ -145,13 +134,6 @@ const scriptedAgents = (script: {
       judged += 1
 
       return judgement
-    },
-    checkAptness: async (input) => {
-      aptnessPackets.push(input)
-      const aptness = script.aptness?.[aptnessChecked] ?? 'apt'
-      aptnessChecked += 1
-
-      return aptness
     },
     explain: async (input) => {
       explanationCalls.push(input)
@@ -556,63 +538,35 @@ describe('intent fulfilment run', () => {
 })
 
 describe('outstanding is the headline, and completion is never certified', () => {
-  test('counts unaddressed, undetermined and evidence-concern alike', async () => {
-    // Spec 23: the report answers "what is left?", never "is this done?". An
-    // obligation whose evidence is doubtful belongs ON this list — a doubtful item
-    // costs a reviewer ten seconds, while omitting it costs the thing the
-    // capability exists to prevent.
-    const root = await createRepository()
+  test('counts unaddressed and undetermined, and never an addressed obligation', async () => {
+    // Spec 23: the report answers "what is left?", never "is this done?". The list
+    // is exactly the two non-addressed statuses. A third term once put `addressed`
+    // obligations with doubted evidence here; the stage that produced it was
+    // measured and removed, because 18.1% of this lane's false positives were it
+    // firing on verdicts that were already correct.
+    // Both non-addressed statuses are checked against the same addressed verdict,
+    // so the assertion is that each one counts AND that the addressed one does not.
+    for (const status of ['unaddressed', 'undetermined'] as const) {
+      const root = await createRepository()
 
-    try {
-      const agents = scriptedAgents({
-        obligations: [
-          { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' },
-          { origin: 'inbox:tracker/A-1', line: 2, statement: 'Log every refusal.' }
-        ],
-        judgements: [
-          { status: 'addressed', evidence: [{ path: 'src/token.ts', line: 2 }] },
-          { status: 'unaddressed' }
-        ],
-        // The one addressed verdict is flagged, so all three are outstanding.
-        aptness: ['inapt']
-      })
-      const report = await run(root, { agents })
+      try {
+        const agents = scriptedAgents({
+          obligations: [
+            { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' },
+            { origin: 'inbox:tracker/A-1', line: 2, statement: 'Log every refusal.' }
+          ],
+          judgements: [
+            { status: 'addressed', evidence: [{ path: 'src/token.ts', line: 2 }] },
+            { status }
+          ]
+        })
+        const report = await run(root, { agents })
 
-      // One unaddressed, plus one addressed-but-doubted. Both are things a
-      // reviewer should still look at, which is what this list is for.
-      expect(report.summary.addressedCount).toBe(1)
-      expect(report.summary.unaddressedCount).toBe(1)
-      expect(report.summary.evidenceConcernCount).toBe(1)
-      expect(report.summary.outstandingCount).toBe(2)
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('a flagged obligation keeps its addressed verdict and its evidence', async () => {
-    // Annotating, not demoting: the concern adds the item to the outstanding list
-    // without suppressing the verdict or discarding what was found.
-    const root = await createRepository()
-
-    try {
-      const agents = scriptedAgents({
-        obligations: [
-          { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' }
-        ],
-        judgements: [
-          { status: 'addressed', evidence: [{ path: 'src/token.ts', line: 2 }] }
-        ],
-        aptness: ['inapt']
-      })
-      const report = await run(root, { agents })
-      const entry = report.obligations[0]
-
-      expect(entry?.status).toBe('addressed')
-      expect(entry?.status === 'addressed' && entry.evidence).toHaveLength(1)
-      expect(entry?.status === 'addressed' && entry.evidenceConcern).toBe(true)
-      expect(report.summary.outstandingCount).toBe(1)
-    } finally {
-      await rm(root, { recursive: true, force: true })
+        expect(report.summary.addressedCount).toBe(1)
+        expect(report.summary.outstandingCount).toBe(1)
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
     }
   })
 

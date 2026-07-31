@@ -4,11 +4,15 @@ Status: Approved
 Date: 2026-07-27
 Amended: 2026-07-30 — a citation may name a removed line (see *Amendment* below)
 Second Amendment: 2026-07-31 — two demoting designs rejected; **annotates, never demotes**
+**Second Amendment WITHDRAWN: 2026-08-01 — all three aptness designs rejected; the
+stage is REMOVED. `intent check` has no citation-aptness call.**
 
-## Second Amendment (2026-07-31): the aptness check ANNOTATES, it does not demote
+## Aptness check — REJECTED DESIGN, REMOVED 2026-08-01
 
-Three designs were tried for the same signal. **Two were rejected on measurement
-and the third is what this amendment requires.**
+**No citation-aptness stage exists.** Three designs were tried for the same signal
+and **all three are rejected**. The third was built and shipped for one day; this
+section is the record of why it is gone, and of what any fourth attempt has to
+clear.
 
 **Design 1 — demote on every `addressed` verdict.** Built and measured over 34
 cases. It suppressed **five correct verdicts to remove one wrong one**, failing its
@@ -22,22 +26,56 @@ three of the four cite added lines by their nature (a test line, documentation
 prose, a spec file) and can therefore never be all-removed. It would catch zero and
 still cost roughly 1.3 false downgrades. Not shipped.
 
-**Design 3 — annotate, and change no verdict.** This is the requirement.
+**Design 3 — annotate, and change no verdict.** Built, shipped, measured, and now
+**removed**. See below.
 
-### What this amendment requires
+### Why design 3 was removed
 
-- The aptness check MUST run over an already-frozen judgement, in its own model
-  call, with **no free-text field** in its output — unchanged from the rejected
-  designs, and for the same measured reason (26–36% spurious rejection rising to
-  73–88% when a model justifies a verdict in the same breath as reaching it).
-- It MUST NOT alter any verdict. There is **no code path** by which it can: the
-  function that consumes its answer returns a boolean, not a judgement. A false
-  downgrade is therefore impossible by construction rather than merely rare.
-- An `addressed` obligation whose citations are judged inapt MUST carry an
-  **evidence concern** in the report, and the count MUST be reported.
-- It MUST run on every `addressed` verdict. Narrowing exists to reduce the cost of
-  demoting; with nothing demoted there is no cost to reduce, and narrowing would
-  only lose coverage.
+Design 3 was reached by removing the cost side of designs 1 and 2 rather than by
+fixing their signal: it changed no verdict, so a false downgrade was impossible by
+construction. **The signal was unchanged, and so was its ~38% precision** — the
+argument for shipping it was that a wrong flag now cost only a longer outstanding
+list rather than a suppressed verdict.
+
+That cost turned out to be the headline number.
+
+- The results ledger's own verdict on the measured run: *"it works as designed and
+  still costs more than it saves. WITHDRAW THE STAGE."* Its 8 downgrades attributed
+  exactly: **1 benefit, 1 correct-by-necessity, 5 FALSE DOWNGRADES, 1 undecidable**.
+  **The pre-registered exchange rate `2 × removed ≥ produced` FAILS: 2 × 1 = 2 < 5.**
+- **It missed the case it was written for.** `s17/obl_13` — *"make runs that request
+  the withdrawn context kind by name fail intake with exit code 2"* — came back
+  `addressed` on the same removed lines with `inaptCitationCount: 0`. The aptness
+  call read that citation and declined to call it inapt.
+- The later false-positive diagnosis of the realistic corpus attributes **15 of 83
+  false positives (18.1%)** to this stage: obligations whose judgement was **already
+  correct**, pushed onto the outstanding list by an inapt flag. It is the third
+  largest failure mode in the lane and the only one that is purely self-inflicted.
+- Removing it is measured to raise outstanding precision by about **+4.1pp** and
+  costs **no new model calls** — it removes one call per `addressed` obligation.
+
+Annotating is not free. It was argued to be, on the grounds that a doubtful item
+costs a reviewer ten seconds; measured, it cost a fifth of the lane's false
+positives on the number the capability is read by.
+
+### What is REQUIRED now
+
+- `intent check` MUST make **no citation-aptness call**. One judgement call per
+  obligation, plus one extraction and one explanation per run, is the whole cost.
+- The report MUST carry **no evidence-concern field and no evidence-concern count**.
+  There is no flag, no configuration switch, and no disabled code path — a dead
+  switch for a rejected design is worse than its absence, because it reads as a
+  decision still open.
+- `outstandingCount` MUST count **unaddressed plus undetermined, and nothing else**.
+  An `addressed` obligation is never outstanding.
+
+### The bar for a fourth attempt
+
+Not "make the check stricter" — that makes it worse, for the base-rate reason below.
+A fourth design MUST come with a pre-registered exchange rate and MUST clear it on a
+corpus fixed before the result is read. Designs 1 and 3 both failed the same rate;
+design 2 was refuted before it ran. **The signal has been measured three times and
+has never paid for itself.**
 
 ### Why this is the honest ceiling for this signal
 
@@ -46,11 +84,16 @@ The check is **well calibrated and aimed at a rare event**: 2.0% false-inapt ove
 cited. Expected precision is ~38%. That is far too low to suppress a verdict and
 perfectly adequate to raise a flag a human can dismiss in a second.
 
-**What this does not do, stated plainly: a wrongly-certified obligation is still
-reported as addressed.** This amendment does not close the false-satisfied route. It
-makes the doubt visible beside the claim, which is the most 38% precision can
-honestly buy — and unlike both rejected designs, it cannot make the capability
-worse.
+**What it did not do, stated plainly: a wrongly-certified obligation was still
+reported as addressed.** Design 3 never closed the false-satisfied route. It made the
+doubt visible beside the claim, which was argued to be the most 38% precision can
+honestly buy.
+
+**The claim that it "cannot make the capability worse" is the one that was wrong**,
+and it is the specific mistake this record exists to preserve. A flag that changes no
+verdict still changes the headline number, and 15 of 83 false positives (18.1%) were
+that flag firing on a correct verdict. "Costs nothing because it demotes nothing" is
+not a property a design gets for free; measure it.
 
 ### What the demoting designs measured (retained — the reason they were rejected)
 
@@ -93,15 +136,19 @@ only on behavioural obligations cited exclusively to removed lines, where the ba
 rate is far higher), or **annotate rather than demote** (flag the citation as weak
 and leave the verdict alone).
 
+*(Written before design 3. The second direction was then built as design 3 and
+rejected on measurement; the first remains untried. Retained as written.)*
+
 One thing that must **not** be claimed as its benefit: the deletion-heavy inapt
 rate falling 33.3% → 0.0%. The check cannot improve a citation, only reject it.
 
 ### Consequence for the capability
 
-The false-satisfied route documented below is **open again and unmitigated**.
-`intent check` remains **off by default** with a measured, named failure mode —
-which is a better state than a mitigation that costs five good verdicts per bad one
-caught.
+The false-satisfied route documented below is **open and unmitigated**, and no design
+tried so far mitigates it at a price worth paying. `intent check` remains **off by
+default** with a measured, named failure mode — which is a better state than a
+mitigation that costs five good verdicts per bad one caught, or one that spends a
+call per obligation to add 18.1% of the lane's false positives.
 
 ---
 
@@ -263,12 +310,20 @@ missing an item from the outstanding list, which costs a reviewer nothing they w
 not already going to do — and which this spec's Evaluation section already ranks as
 the cheap direction.
 
-That inverts the economics of every uncertain signal in the pipeline. An obligation
-whose evidence is doubtful belongs **on** the outstanding list, not suppressed from
-it: a doubtful item costs ten seconds to dismiss, while omitting it costs the thing
-this capability exists to prevent. `outstandingCount` is therefore the headline
-number, and it counts unaddressed, undetermined, and evidence-concern obligations
-alike.
+`outstandingCount` is therefore the headline number. It counts **unaddressed plus
+undetermined**, and an `addressed` obligation is never on it.
+
+That framing inverts the economics of every uncertain signal in the pipeline: an
+obligation the run could not settle belongs **on** the list rather than suppressed
+from it, because a doubtful item costs ten seconds to dismiss while omitting it costs
+the thing this capability exists to prevent.
+
+**That argument has a limit, and it was found by measurement.** It justifies keeping
+an unsettled obligation on the list; it does not justify manufacturing doubt about a
+settled one. The withdrawn aptness stage did the latter — it put `addressed`
+obligations on this list at ~38% precision, and 18.1% of the lane's false positives
+were that term firing on verdicts that were already correct. A cheap-to-dismiss item
+is still a false positive on the number the capability is read by.
 
 This framing is also why the capability is comfortable being advisory. If it finds
 something, that is useful; if it finds nothing, it has cost a little money and
@@ -407,5 +462,7 @@ recall compensates.
 | Absent intent reports plainly and exits successfully | integration test |
 | Judgement and explanation do not share a model call, and the judgement schema carries no free text | harness test asserting distinct agents and distinct output schemas, plus a schema-shape assertion that the mapping output has no string field other than identifiers and enums |
 | Extra scope is reported without a defect severity | unit test |
+| No citation-aptness call: one judgement per obligation and nothing more | end-to-end provider-request count in the CLI test |
+| `outstandingCount` counts unaddressed and undetermined only, never an addressed obligation | unit test |
 | Disabled by default | config schema test |
 | Instructions stay generic and language-neutral | prompt genericity guard |

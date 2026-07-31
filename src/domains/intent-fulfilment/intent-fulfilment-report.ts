@@ -78,12 +78,7 @@ export const ObligationSchema = z.discriminatedUnion('status', [
     status: z.literal('addressed'),
     // At least one, always. See the header: this is the whole reason the entry is
     // a union member rather than an optional field.
-    evidence: z.array(ChangeCitationSchema).min(1),
-    // Present and true only when the aptness check judged the cited lines not to
-    // evidence this obligation. The verdict still says addressed: this records the
-    // doubt beside it rather than acting on it, at a measured ~38% precision that
-    // does not justify suppressing a verdict.
-    evidenceConcern: z.literal(true).optional()
+    evidence: z.array(ChangeCitationSchema).min(1)
   }),
   z.strictObject({ ...obligationBase, status: z.literal('unaddressed') }),
   z.strictObject({ ...obligationBase, status: z.literal('undetermined') })
@@ -123,16 +118,17 @@ const IntentFulfilmentSummarySchema = z.strictObject({
   // the downgrade is visible. This is the metric spec 23 says decides whether the
   // capability is safe to show anyone.
   unevidencedAddressedCount: z.int().min(0),
-  // Spec 23's Second Amendment: addressed obligations carrying an evidence
-  // concern. These are ANNOTATIONS, not suppressions — the verdict is unchanged —
-  // because demoting on this signal was measured twice and rejected twice.
-  evidenceConcernCount: z.int().min(0).default(0),
   // THE HEADLINE NUMBER, and the reason this capability is shaped the way it is.
   //
   // Obligations this run could NOT confirm the change addresses: everything
-  // unaddressed, everything undetermined, and every addressed obligation whose
-  // evidence the aptness check doubted. It is a statement about what the SEARCH
-  // found, never a certification of the rest.
+  // unaddressed and everything undetermined. It is a statement about what the
+  // SEARCH found, never a certification of the rest.
+  //
+  // IT ONCE COUNTED A THIRD THING. A citation-aptness stage put `addressed`
+  // obligations with doubted evidence on this list too. That stage was measured
+  // and removed — 15 of this lane's 83 false positives (18.1%) were it flagging a
+  // verdict that was already correct — so the number is now exactly the two
+  // non-addressed statuses, and an `addressed` obligation is never outstanding.
   //
   // Reading the report this way removes the one error spec 23 calls expensive. A
   // false "this is done" makes a reviewer stop looking; a false "you might still
