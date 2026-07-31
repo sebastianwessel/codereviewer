@@ -1,4 +1,4 @@
-export type ParsedFrontmatter = {
+type ParsedFrontmatter = {
   readonly metadata: Readonly<Record<string, string>>
   readonly body: string
 }

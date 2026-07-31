@@ -232,21 +232,24 @@ export const assembleContext = async (
     }
   }
 
+  // A single-file task carrying only its own source keeps the planner's id, so the
+  // common case stays traceable straight back to planning; anything else gets an id
+  // derived from what it actually carries.
+  //
+  // The literal `batch:0` is a fossil of the removed proactive byte-budget split,
+  // which numbered several batches per task. It is kept verbatim rather than tidied
+  // away because the id is hashed into every candidate and evidence id the task
+  // produces, and rewriting the seed would silently renumber all of them.
   const workflowTaskId = (
     task: ReviewTask,
-    input: {
-      readonly contexts: readonly ContextInput[]
-      readonly batchIndex: number
-      readonly batchCount: number
-    }
+    contexts: readonly ContextInput[]
   ): string =>
-    input.batchCount === 1 &&
-    input.contexts.length === 1 &&
-    input.contexts[0]?.kind === 'file' &&
+    contexts.length === 1 &&
+    contexts[0]?.kind === 'file' &&
     task.paths.length === 1
       ? task.id
       : `task_${sha256(
-          `${task.id}:batch:${input.batchIndex}:${input.contexts
+          `${task.id}:batch:0:${contexts
             .map((context) => `${context.kind}:${context.path ?? ''}`)
             .join('|')}`
         ).slice(0, 16)}`
@@ -320,7 +323,9 @@ export const assembleContext = async (
       startLine: 1,
       endLine: Math.max(1, sourceLineCount(file.content))
     }))
-    const batch: ContextInput[] = [
+    // Spec 26 again: the task's whole context is ONE document set, not a series of
+    // byte-sized batches.
+    const taskContexts: ContextInput[] = [
       ...sourceContexts,
       ...supportSignalContextsForPaths(
         task,
@@ -329,7 +334,6 @@ export const assembleContext = async (
           : new Set(workflowTaskPaths(sourceContexts, task.paths))
       )
     ]
-    const batches: ContextInput[][] = batch.length === 0 ? [] : [batch]
 
     // R4: collect bounded referenced-definition digests for unchanged files the
     // task's changed files import (relative imports only). Context only — these
@@ -351,23 +355,18 @@ export const assembleContext = async (
             content: digest.content
           }))
 
-    batches.forEach((batch, index) => {
-      const paths = workflowTaskPaths(batch, task.paths)
-
+    // A task with nothing to show the reviewer produces no workflow task at all.
+    if (taskContexts.length > 0) {
       tasks.push(
         createWorkflowTask(
           task,
-          workflowTaskId(task, {
-            contexts: batch,
-            batchIndex: index,
-            batchCount: batches.length
-          }),
-          batch,
-          paths,
+          workflowTaskId(task, taskContexts),
+          taskContexts,
+          workflowTaskPaths(taskContexts, task.paths),
           referencedDefinitionContexts
         )
       )
-    })
+    }
   }
   const reviewContextById = new Map<string, ReviewContextDocument>()
 

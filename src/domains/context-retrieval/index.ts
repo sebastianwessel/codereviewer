@@ -55,7 +55,7 @@ export type ContextRetrievalBudget = z.infer<typeof ContextRetrievalBudgetSchema
 // on both sides. The character class is deliberately language-neutral: letters,
 // digits, `_` and `$` are identifier characters in every language this engine
 // analyses, so the mode needs no per-language configuration.
-export type ContextRetrievalMatchMode = 'literal' | 'identifier'
+type ContextRetrievalMatchMode = 'literal' | 'identifier'
 
 // One matched line, with the text that matched. Returning the text is what makes
 // a search result usable on its own: previously a caller received `path:line`

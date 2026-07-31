@@ -178,6 +178,14 @@ const createProviderOptions = (
 const modelSupportsTemperatureDefault = (provider: ProviderConfig): boolean =>
   provider.id !== 'openai' || !/^gpt-5(?:[.-]|$)/iu.test(provider.model)
 
+// Groups requests that share a prompt prefix. Requests from the same engine and
+// model share the static instruction prefix that precedes every call, so keying on
+// the model is the coarsest grouping that is still correct. A per-run or per-task
+// key would be worse than none: it would scatter requests across machines and
+// guarantee a miss.
+const promptCacheKeyFor = (provider: ProviderConfig): string =>
+  `codereviewer:${provider.model}`
+
 const createModelAlias = (
   provider: ProviderConfig,
   modelProvider: ModelProvider
@@ -221,15 +229,6 @@ const createModelAlias = (
     }
   }
 })
-
-// Groups requests that share a prompt prefix. Requests from the same engine and
-// model share the static instruction prefix that precedes every call, so keying on
-// the model is the coarsest grouping that is still correct. A per-run or per-task
-// key would be worse than none: it would scatter requests across machines and
-// guarantee a miss.
-export const promptCacheKeyFor = (provider: {
-  readonly model: string
-}): string => `codereviewer:${provider.model}`
 
 export const resolveProviderModelAlias = async (
   options: ResolveProviderModelAliasOptions

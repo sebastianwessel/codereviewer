@@ -30,6 +30,7 @@ import {
   type GitCommandRunner,
   type RepositoryIntake
 } from '../repository-intake/index.js'
+import type { LaneUsage } from '../costs/index.js'
 import { supportedSignalLanguageForPath } from '../deterministic-signals/index.js'
 import {
   adjudicateDivergences,
@@ -40,7 +41,6 @@ import {
   InvariantConformanceReportSchema,
   type ConformanceAdjudicationSummary,
   type ConformanceDivergence,
-  type ConformanceUsage,
   type InvariantConformanceReport
 } from './conformance-report.js'
 import { collectDivergences } from './divergence.js'
@@ -72,7 +72,7 @@ export type RunInvariantConformanceInput = {
   // Supplied by the same wiring that supplies the adjudicator, which owns the
   // usage recorder and the price table; this composition only places the result in
   // the report so there is exactly one place a report is assembled.
-  readonly adjudicationUsage?: () => ConformanceUsage | undefined
+  readonly adjudicationUsage?: () => LaneUsage | undefined
   readonly signal?: AbortSignal
 }
 

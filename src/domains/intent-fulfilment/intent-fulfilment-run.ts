@@ -21,6 +21,7 @@
 import type { CodeReviewerConfig } from '../../shared/contracts/index.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
 import { gatherContextFragments } from '../context-ingestion/index.js'
+import type { LaneUsage } from '../costs/index.js'
 import {
   collectRepositoryIntake,
   parseRemovedLines,
@@ -52,7 +53,6 @@ import {
   IntentFulfilmentReportSchema,
   type ExtraScopeEntry,
   type IntentFulfilmentReport,
-  type IntentFulfilmentUsage,
   type Obligation
 } from './intent-fulfilment-report.js'
 import {
@@ -98,7 +98,7 @@ export type RunIntentFulfilmentInput = {
   // Token usage and cost, read ONCE after the calls finish. Supplied by the same
   // wiring that supplies the agents, which owns the usage recorder and the price
   // table.
-  readonly usage?: () => IntentFulfilmentUsage | undefined
+  readonly usage?: () => LaneUsage | undefined
   // Git seam, passed straight through to intake, which owns and validates every
   // git invocation. Present only so a test can drive this composition
   // hermetically; production leaves it unset. This domain never invokes git.
@@ -216,7 +216,7 @@ type EmptyReportInput = {
   // Present on the paths reached AFTER the extraction call: it spent tokens even
   // though there is no mapping to show for them, and a run that cost money must
   // say so.
-  readonly usage?: IntentFulfilmentUsage | undefined
+  readonly usage?: LaneUsage | undefined
 }
 
 // The four outcomes that produce no mapping. They are separate statuses rather
@@ -257,8 +257,8 @@ const emptyReport = (input: EmptyReportInput): IntentFulfilmentReport =>
 // report never carries an all-zero usage block that reads as "a provider ran and
 // cost nothing".
 const withUsage = (
-  usage: IntentFulfilmentUsage | undefined
-): { readonly usage?: IntentFulfilmentUsage } =>
+  usage: LaneUsage | undefined
+): { readonly usage?: LaneUsage } =>
   usage === undefined ? {} : { usage }
 
 export const runIntentFulfilment = async (
@@ -424,15 +424,13 @@ export const runIntentFulfilment = async (
     })
   }
 
-  const selected = cited
-
   if (uncitedObligationCount > 0) {
     warnings.push(
       `${uncitedObligationCount} proposed obligation(s) did not cite a line of the stated intent and were not reported.`
     )
   }
 
-  if (selected.length === 0) {
+  if (cited.length === 0) {
     return emptyReport({
       status: 'unusable-intent',
       baseRef,
@@ -473,7 +471,7 @@ export const runIntentFulfilment = async (
   // judgement opens holding the answer of the one before it: a verdict must follow
   // from the obligation in front of the model, and a conversation carrying six
   // previous "unaddressed" answers is a reason to give a seventh.
-  for (const [index, entry] of selected.entries()) {
+  for (const [index, entry] of cited.entries()) {
     let judged: FulfilmentJudgement
 
     try {
@@ -591,24 +589,11 @@ export const runIntentFulfilment = async (
       addressedCount: countOf('addressed'),
       unaddressedCount: countOf('unaddressed'),
       undeterminedCount: countOf('undetermined'),
-      // TRUE WHEN THE CAP MAY HAVE BOUND THE LIST, not when the model overran it.
-      //
-      // This used to read `cited.length > selected.length`, which is a condition
-      // that essentially cannot occur: the cap is passed INTO the extraction
-      // prompt, so a compliant model never returns more than `maxObligations` and
-      // the local slice never removes anything. A run cut short by the cap
-      // therefore reported `obligationsTruncated: false` — precisely backwards for
-      // the reader, who needs to know the checklist may be incomplete.
-      //
-      // Measured on the 2026-08-01 pre-written corpus: 24 of 28 runs returned
-      // EXACTLY the cap and every one claimed it was not truncated. That corpus's
-      // 52.9% end-to-end outstanding recall was read as an extraction weakness
-      // when a binding cap explains part of it, and nothing in the report said so.
-      //
-      // Returning exactly the cap does not PROVE more existed — the intent may hold
-      // exactly that many. The flag is deliberately the weaker claim it can support:
-      // more cannot be ruled out.
-      // Always false: a run that would truncate throws instead.
+      // ALWAYS FALSE: a run the cap would have bound throws above rather than
+      // reporting a short checklist. The flag previously fired on a condition that
+      // essentially cannot occur — the cap is passed INTO the extraction prompt, so
+      // a compliant model never overruns it — and 24 of 28 runs on the 2026-08-01
+      // corpus returned exactly the cap while every one reported no truncation.
       obligationsTruncated: false,
       uncitedObligationCount,
       unevidencedAddressedCount,
@@ -625,6 +610,6 @@ export const runIntentFulfilment = async (
     extraScope,
     ...(explanation === undefined ? {} : { explanation }),
     warnings,
-    ...(input.usage === undefined ? {} : withUsage(input.usage()))
+    ...withUsage(input.usage?.())
   })
 }

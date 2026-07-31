@@ -24,7 +24,7 @@ import type { DiffHunk, RemovedLine } from '../repository-intake/index.js'
 // the PRE-change side, so the two are different address spaces and the side has to
 // travel with the number — spec 23 requires the report to disclose it, so that
 // "done, this deleted line 42" can never read as "done, this added line 42".
-export type ChangedLineSide = 'added' | 'removed'
+type ChangedLineSide = 'added' | 'removed'
 
 export type ChangedLine = {
   readonly line: number

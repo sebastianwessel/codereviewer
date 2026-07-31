@@ -168,7 +168,6 @@ const checkStalePathReferences = (
 ): readonly DriftFinding[] =>
   files.flatMap((file) => {
     const findings: DriftFinding[] = []
-    const contentForLegacyArtifactScan = file.content
 
     // `\b` also matches after a slash, which made prose like
     // "documentation/spec/implementation" read as a stale spec root. Require
@@ -191,9 +190,7 @@ const checkStalePathReferences = (
     // config identifier that merely begins with "review" (for example
     // `reporting.reviewComments`) is not mistaken for the old artifact directory.
     if (
-      new RegExp(`\\${obsoleteArtifactRoot}(?![A-Za-z])`, 'u').test(
-        contentForLegacyArtifactScan
-      )
+      new RegExp(`\\${obsoleteArtifactRoot}(?![A-Za-z])`, 'u').test(file.content)
     ) {
       findings.push(
         createFinding(config, {

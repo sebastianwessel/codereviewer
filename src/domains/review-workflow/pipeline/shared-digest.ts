@@ -1,5 +1,10 @@
 import { type SharedContextEntry } from '../../shared-context/index.js'
 
+// What a packet carries in place of a digest when there is nothing to summarize.
+// Shared with the task queue, which needs the same text for a task claimed before
+// any shared context exists.
+export const EMPTY_SHARED_DIGEST = '(no admitted shared context yet)'
+
 const defaultEntryLimit = 12
 const defaultMaxSummaryChars = 240
 const defaultMaxDigestBytes = 4096
@@ -53,7 +58,7 @@ export const renderSharedDigest = (
     .slice(-limit)
 
   if (selected.length === 0) {
-    return '(no admitted shared context yet)'
+    return EMPTY_SHARED_DIGEST
   }
 
   return trimLinesToBudget(

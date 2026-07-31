@@ -76,11 +76,11 @@ describe('model task packet', () => {
       'large admitted digest '.repeat(700)
     )
 
-    expect(packet.input.evidence.map((record) => record.id)).toEqual([
+    expect(packet.evidence.map((record) => record.id)).toEqual([
       'ev_diff1'
     ])
-    expect(packet.input.task.reviewContext).toEqual(task.reviewContext)
-    expect(packet.input.sharedDigest).toBe(
+    expect(packet.task.reviewContext).toEqual(task.reviewContext)
+    expect(packet.sharedDigest).toBe(
       '(shared digest omitted for task packet budget)'
     )
   })

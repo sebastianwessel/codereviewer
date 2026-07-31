@@ -369,6 +369,7 @@
       "type": "object",
       "properties": {
         "enabled": {
+          "default": true,
           "type": "boolean"
         },
         "requireRefutation": {
@@ -403,6 +404,7 @@
         }
       },
       "required": [
+        "enabled",
         "requireRefutation",
         "deterministicSignalMode",
         "actionableSeverityThreshold",

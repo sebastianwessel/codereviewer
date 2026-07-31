@@ -24,9 +24,18 @@ export const truncateToUtf8Bytes = (text: string, maxBytes: number): string => {
   return text.slice(0, low)
 }
 
-// Minimal glob matcher for the changed-files provider. Kept local to the domain
-// rather than imported from repository-intake so provider selection stays
-// isolated. Supports `**`, `*`, and `?` against POSIX-style repository paths.
+// Minimal glob matcher for the changed-files provider. Supports `**`, `*`, and
+// `?` against POSIX-style repository paths.
+//
+// NOT the shared matcher in `src/shared/glob/glob-matcher.ts`, and not
+// interchangeable with it: the two disagree on zero-segment cases. `dist/**`
+// compiles to `^dist/.*$` here but to `^dist(?:/.*)?$` there, so the shared one
+// also matches a file named exactly `dist`; and a `**` glued to other characters
+// inside a segment (`**.md`) crosses path separators here but is treated as a
+// literal segment there. The shared matcher additionally throws on a pattern
+// longer than 4096 characters, which would escape this provider's
+// never-fail-the-review contract because matchers are compiled outside the
+// per-provider try block. Unify only together with a decision about those cases.
 const globToRegExp = (pattern: string): RegExp => {
   const normalized = pattern.replaceAll('\\', '/')
   let source = '^'

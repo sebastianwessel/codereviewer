@@ -12,13 +12,13 @@ import {
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 
-export const isReviewTarget = (document: ReviewContextDocument): boolean =>
+const isReviewTarget = (document: ReviewContextDocument): boolean =>
   document.kind === 'file'
 
 // A sub-task needs its own id: sub-tasks run as distinct calls, and reusing the
 // parent's id would collide their candidates (keyed by task id and location) and make
 // the calls indistinguishable in the run record.
-export const subTaskId = (parentId: string, suffix: string): string =>
+const subTaskId = (parentId: string, suffix: string): string =>
   `task_${sha256(`${parentId}:${suffix}`).slice(0, 16)}`
 
 /**

@@ -12,6 +12,10 @@ import { sha256 } from '../../shared/hash/hash.js'
 import { truncateForContract } from '../../shared/text/truncate.js'
 import type { z } from 'zod'
 import { BaselineFileSchema, type BaselineEntry } from '../admission/index.js'
+import {
+  fingerprintEvidenceRefs,
+  fingerprintKey
+} from './claim-fingerprints.js'
 import { MAX_CLAIMS_PER_PROVIDER, type ClaimProvider } from './contracts.js'
 import { redactClaim } from './redact-claim.js'
 
@@ -44,16 +48,8 @@ const claimFromAdmittedFinding = (finding: AdmittedFinding): Claim =>
       `Does the prior finding still hold in the current code, or has it been fixed: ${finding.title}?`,
       CLAIM_QUESTION_MAX
     ),
-    evidenceRefs: finding.fingerprints.map((fingerprint) => ({
-      key: `fingerprint:${fingerprint.algorithm}`,
-      value: fingerprint.value
-    }))
+    evidenceRefs: fingerprintEvidenceRefs(finding.fingerprints)
   })
-
-const fingerprintKey = (fingerprint: {
-  readonly algorithm: string
-  readonly value: string
-}): string => `${fingerprint.algorithm}:${fingerprint.value}`
 
 // A baseline entry records fingerprints and nothing else (see the baseline
 // writer: the file deliberately discloses no path, title, or finding text), so

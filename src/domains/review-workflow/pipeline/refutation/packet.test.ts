@@ -10,7 +10,7 @@ import {
   type ReviewWorkflowInput
 } from '../contracts.js'
 import { findingRefutationBatchInput } from './packet.js'
-import { isTaskPacketBudgetExceededError } from '../discovery/task-packet.js'
+import { isTaskPacketBudgetExceededError } from '../packet-budget.js'
 
 const configHash =
   '1111111111111111111111111111111111111111111111111111111111111111'
@@ -150,12 +150,12 @@ describe('finding refutation packet', () => {
       sharedDigest: '(no admitted shared context yet)'
     })
 
-    expect(packet.input.evidence.map((record) => record.id)).toEqual([
+    expect(packet.evidence.map((record) => record.id)).toEqual([
       'ev_diff1'
     ])
-    expect(packet.input.supportSignalCandidates).toEqual([supportCandidate])
-    expect(packet.input.reviewContext).toEqual([context])
-    expect(packet.input.reviewedDiffRanges).toEqual([
+    expect(packet.supportSignalCandidates).toEqual([supportCandidate])
+    expect(packet.reviewContext).toEqual([context])
+    expect(packet.reviewedDiffRanges).toEqual([
       {
         path: 'src/app.ts',
         startLine: 4,
@@ -176,15 +176,15 @@ describe('finding refutation packet', () => {
       sharedDigest: '(no admitted shared context yet)'
     })
 
-    expect(packet.input.candidates.map((entry) => entry.id)).toEqual([
+    expect(packet.candidates.map((entry) => entry.id)).toEqual([
       'cand_bug1',
       'cand_bug2'
     ])
-    expect(packet.input.evidence.map((record) => record.id)).toEqual([
+    expect(packet.evidence.map((record) => record.id)).toEqual([
       'ev_diff1',
       'ev_other1'
     ])
-    expect(packet.input.reviewContext).toEqual([context])
+    expect(packet.reviewContext).toEqual([context])
   })
 
   test('drops unrelated same-file support signals from the refutation packet', () => {
@@ -200,7 +200,7 @@ describe('finding refutation packet', () => {
       sharedDigest: '(no admitted shared context yet)'
     })
 
-    expect(packet.input.supportSignalCandidates).toEqual([supportCandidate])
+    expect(packet.supportSignalCandidates).toEqual([supportCandidate])
   })
 
   test('throws the shared packet budget error when the refutation packet is too large', () => {
@@ -240,12 +240,12 @@ describe('finding refutation packet', () => {
       sharedDigest: 'large admitted digest '.repeat(700)
     })
 
-    expect(packet.input.evidence.map((record) => record.id)).toEqual([
+    expect(packet.evidence.map((record) => record.id)).toEqual([
       'ev_diff1'
     ])
-    expect(packet.input.reviewContext).toEqual([context])
-    expect(packet.input.supportSignalCandidates).toEqual([])
-    expect(packet.input.sharedDigest).toBe(
+    expect(packet.reviewContext).toEqual([context])
+    expect(packet.supportSignalCandidates).toEqual([])
+    expect(packet.sharedDigest).toBe(
       '(shared digest omitted for refutation packet budget)'
     )
   })

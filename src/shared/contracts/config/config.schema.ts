@@ -270,7 +270,12 @@ export const QualityGateConfigSchema = z.strictObject({
 })
 
 export const AiReviewConfigSchema = z.strictObject({
-  enabled: z.boolean().optional(),
+  // A plain boolean, defaulting ON. It used to be `.optional()`, which made it a
+  // TRI-state where `undefined` and `true` behaved identically and only an explicit
+  // `false` meant anything — so every reader had to write `=== false` and get that
+  // right. The goal is that naming a provider and a model is enough to get a
+  // review; this says so in the schema instead of leaving it implicit.
+  enabled: z.boolean().default(true),
   requireRefutation: z.literal(true).default(true),
   deterministicSignalMode: z.enum(['support', 'disabled']).default('support'),
   // Minimum severity for a MODEL-origin finding to be admitted as actionable.

@@ -16,24 +16,14 @@ export const ContextLedgerKindSchema = z.enum([
 
 export type ContextLedgerKind = z.infer<typeof ContextLedgerKindSchema>
 
-export type ContextLedgerDecision =
-  | 'included'
-  | 'skipped'
-  | 'truncated'
-  | 'summarized'
+export const ContextLedgerDecisionSchema = z.enum([
+  'included',
+  'skipped',
+  'truncated',
+  'summarized'
+])
 
-export type ContextLedgerEntry = {
-  readonly id: string
-  readonly kind: ContextLedgerKind
-  readonly path?: string | undefined
-  readonly taskId?: string | undefined
-  readonly sourceLedgerEntryId?: string | undefined
-  readonly contentHash?: string | undefined
-  readonly decision: ContextLedgerDecision
-  readonly reason: string
-  readonly bytesConsidered: number
-  readonly bytesIncluded: number
-}
+export type ContextLedgerDecision = z.infer<typeof ContextLedgerDecisionSchema>
 
 export const ContextLedgerEntrySchema = z.strictObject({
   id: ContextLedgerIdSchema,
@@ -42,13 +32,17 @@ export const ContextLedgerEntrySchema = z.strictObject({
   taskId: z.string().min(1).optional(),
   sourceLedgerEntryId: z.string().min(1).optional(),
   contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
-  decision: z.enum(['included', 'skipped', 'truncated', 'summarized']),
+  decision: ContextLedgerDecisionSchema,
   reason: z.string().min(1),
   bytesConsidered: z.int().min(0),
   bytesIncluded: z.int().min(0)
 })
 
-export type CreateContextLedgerEntryOptions = {
+// Derived from the schema rather than restated: the schema is what actually
+// validates a ledger entry, so a hand-written mirror can only ever drift from it.
+export type ContextLedgerEntry = Readonly<z.infer<typeof ContextLedgerEntrySchema>>
+
+type CreateContextLedgerEntryOptions = {
   readonly kind: ContextLedgerKind
   readonly decision: ContextLedgerDecision
   readonly reason: string
@@ -60,7 +54,7 @@ export type CreateContextLedgerEntryOptions = {
   readonly content?: string | Buffer
 }
 
-export type CreateTextContextLedgerEntryOptions = {
+type CreateTextContextLedgerEntryOptions = {
   readonly kind: ContextLedgerKind
   readonly path?: string
   readonly reason: string

@@ -37,7 +37,6 @@ export {
   type IntentCitation,
   type IntentFulfilmentReport,
   type IntentFulfilmentSummary,
-  type IntentFulfilmentUsage,
   type Obligation,
   type ObligationStatus
 } from './intent-fulfilment-report.js'

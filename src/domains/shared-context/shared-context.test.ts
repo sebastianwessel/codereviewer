@@ -17,15 +17,15 @@ describe('review shared context', () => {
       contentHash:
         '1111111111111111111111111111111111111111111111111111111111111111'
     })
-    context.appendTask({
-      id: 'task_abc',
-      kind: 'file',
-      round: 1,
-      paths: ['src/app.ts'],
-      state: 'planned'
-    })
-    context.transitionTask('task_abc', 'running')
-    context.transitionTask('task_abc', 'completed')
+    for (const state of ['planned', 'running', 'completed'] as const) {
+      context.appendTask({
+        id: 'task_abc',
+        kind: 'file',
+        round: 1,
+        paths: ['src/app.ts'],
+        state
+      })
+    }
 
     const snapshot = context.snapshot()
 

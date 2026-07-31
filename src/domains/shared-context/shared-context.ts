@@ -8,9 +8,9 @@ import type { SupportSignalFact } from '../deterministic-signals/index.js'
 import type { ContextLedgerEntry } from '../review-planning/index.js'
 import type { CandidateFinding } from '../admission/index.js'
 
-export type ReviewTaskState = 'planned' | 'running' | 'completed' | 'failed'
+type ReviewTaskState = 'planned' | 'running' | 'completed' | 'failed'
 
-export type ReviewTaskRecord = {
+type ReviewTaskRecord = {
   readonly id: string
   readonly kind: 'file' | 'dependency-cluster'
   readonly round: number
@@ -20,7 +20,7 @@ export type ReviewTaskRecord = {
   readonly message?: string
 }
 
-export type SharedContextEntryKind =
+type SharedContextEntryKind =
   | 'support-signal-fact'
   | 'task-state'
   | 'candidate-finding'
@@ -62,11 +62,6 @@ export type ReviewSharedContextSnapshot = {
 export type ReviewSharedContext = {
   readonly appendSupportSignalFact: (fact: SupportSignalFact) => void
   readonly appendTask: (task: ReviewTaskRecord) => void
-  readonly transitionTask: (
-    taskId: string,
-    state: Exclude<ReviewTaskState, 'planned'>,
-    message?: string
-  ) => void
   readonly appendContextLedgerEntry: (entry: ContextLedgerEntry) => void
   readonly appendEvidenceRecord: (record: EvidenceRecord) => void
   readonly appendCandidateFinding: (candidate: CandidateFinding) => void
@@ -127,50 +122,18 @@ export const createReviewSharedContext = (): ReviewSharedContext => {
         refIds: [fact.id]
       })
     },
-	    appendTask: (task) => {
-	      tasks.push(task)
-	      appendSharedEntry(sharedEntries, {
-	        kind: 'task-state',
-	        summary:
-	          task.message === undefined
-	            ? `${task.kind} task ${task.id} is ${task.state}.`
-	            : `${task.kind} task ${task.id} is ${task.state}: ${task.message}`,
-	        source: task.workerId ?? 'review-planner',
-	        taskId: task.id,
-	        evidenceIds: [],
-        refIds: [task.id]
-      })
-    },
-    transitionTask: (taskId, state, message) => {
-      const latestTask = tasks.findLast((task) => task.id === taskId)
-
-      if (latestTask === undefined) {
-        throw new TypeError(`Cannot transition missing review task: ${taskId}`)
-      }
-
-      tasks.push(
-        {
-          id: latestTask.id,
-          kind: latestTask.kind,
-          round: latestTask.round,
-          paths: latestTask.paths,
-          state,
-          ...(latestTask.workerId === undefined
-            ? {}
-            : { workerId: latestTask.workerId }),
-          ...(message === undefined ? {} : { message })
-        }
-      )
+    appendTask: (task) => {
+      tasks.push(task)
       appendSharedEntry(sharedEntries, {
         kind: 'task-state',
         summary:
-          message === undefined
-            ? `${latestTask.kind} task ${taskId} is ${state}.`
-            : `${latestTask.kind} task ${taskId} is ${state}: ${message}`,
-        source: latestTask.workerId ?? 'review-task-queue',
-        taskId,
+          task.message === undefined
+            ? `${task.kind} task ${task.id} is ${task.state}.`
+            : `${task.kind} task ${task.id} is ${task.state}: ${task.message}`,
+        source: task.workerId ?? 'review-planner',
+        taskId: task.id,
         evidenceIds: [],
-        refIds: [taskId]
+        refIds: [task.id]
       })
     },
     appendContextLedgerEntry: (entry) => {

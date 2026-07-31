@@ -189,9 +189,10 @@ describe('workflow harness config', () => {
       maxSteps: 4
     })
 
+    // Configured skill tools reach the agent options through the role builder.
     expect(
       reviewAgentOptionsForRole({
-        role: 'propose_candidates',
+        role: 'holistic_review',
         skillIds: ['secure-review'],
         skillTools: ['read']
       })

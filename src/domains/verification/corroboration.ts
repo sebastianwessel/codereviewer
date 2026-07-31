@@ -9,13 +9,13 @@
 import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
 import type {
   AdmittedFinding,
-  CodeLocation,
-  FindingFingerprint
+  CodeLocation
 } from '../../shared/contracts/index.js'
 import type {
   Claim,
   Verdict
 } from '../../shared/contracts/verification/verification.schema.js'
+import { fingerprintKey } from './claim-fingerprints.js'
 import type {
   CorroborationMatchKind,
   FindingCorroboration
@@ -31,9 +31,6 @@ export type CorroborateFindingsInput = {
   // matching claim, only exact fingerprint matching applies to that verdict.
   readonly claims?: readonly Claim[]
 }
-
-const fingerprintKey = (fingerprint: FindingFingerprint): string =>
-  `${fingerprint.algorithm}:${fingerprint.value}`
 
 const shareFingerprint = (
   finding: AdmittedFinding,

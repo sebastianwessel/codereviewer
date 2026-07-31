@@ -10,8 +10,6 @@ import {
 } from '../../shared/contracts/index.js'
 import { redactText } from '../../shared/redaction/redactor.js'
 
-export { sha256 }
-
 export const validateReviewReport = (report: unknown): ReviewReport =>
   ReviewReportSchema.parse(report)
 

@@ -22,7 +22,6 @@ import {
   isReviewTaskExecutionError,
   type ReviewTaskExecutionError
 } from '../../pipeline/task-queue.js'
-import type { WorkflowReviewTask } from '../../pipeline/agent-contracts.js'
 
 type ProviderFailureBaseInput = {
   readonly repositoryRoot: string
@@ -100,7 +99,6 @@ export const createProviderTaskExecutionFailure = (
 export const createProviderWorkflowFailure = (
   input: ProviderFailureBaseInput & {
     readonly error: unknown
-    readonly tasks: readonly WorkflowReviewTask[]
   }
 ): ReviewRunFailedError | undefined => {
   if (!isReviewTaskExecutionError(input.error)) {

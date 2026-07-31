@@ -98,7 +98,7 @@ const selectSummarizer = async (input: {
     return { summarizer: createDigestSummarizer() }
   }
 
-  if (input.config.aiReview.enabled === false) {
+  if (!input.config.aiReview.enabled) {
     // Asked for a model summary, provider present, model review off. The operator
     // gets the digest and is told why, rather than silently receiving something
     // other than what was configured.

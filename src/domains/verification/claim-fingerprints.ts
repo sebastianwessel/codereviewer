@@ -15,6 +15,27 @@ import { sha256 } from '../../shared/hash/hash.js'
 
 const FINGERPRINT_REF_PREFIX = 'fingerprint:'
 
+/**
+ * The evidence refs that carry a finding's fingerprints onto a claim.
+ *
+ * This is the WRITE side of the `fingerprint:<algorithm>` ref format that
+ * `fingerprintsForClaim` below reads back. Both live here so the prefix has one
+ * owner: a claim provider that spelled the key itself would silently stop
+ * round-tripping the moment the prefix changed, and the verdict would then be
+ * matched to no finding at all rather than fail.
+ */
+export const fingerprintEvidenceRefs = (
+  fingerprints: readonly FindingFingerprint[]
+): readonly { readonly key: string; readonly value: string }[] =>
+  fingerprints.map((fingerprint) => ({
+    key: `${FINGERPRINT_REF_PREFIX}${fingerprint.algorithm}`,
+    value: fingerprint.value
+  }))
+
+/** Comparison key for fingerprint equality across findings, verdicts and claims. */
+export const fingerprintKey = (fingerprint: FindingFingerprint): string =>
+  `${fingerprint.algorithm}:${fingerprint.value}`
+
 const synthesizedFingerprint = (claim: Claim): FindingFingerprint => ({
   algorithm: 'v1-claim-id',
   value: sha256(`verification-claim:${claim.id}`).slice(0, 32)

@@ -16,14 +16,17 @@
 import type { Logger } from '@purista/harness'
 import type { CodeReviewerConfig } from '../../shared/contracts/index.js'
 import type { CitationAptnessRunner } from './aptness.js'
-import { createProviderUsageRecorder, summarizeRunCost } from '../costs/index.js'
+import {
+  createProviderUsageRecorder,
+  summarizeLaneUsage,
+  type LaneUsage
+} from '../costs/index.js'
 import {
   resolveProviderModelAlias,
   type ProviderImport
 } from '../provider-resolution/index.js'
 import type { FulfilmentExplanationRunner } from './explanation.js'
 import { createHarnessIntentFulfilmentAgents } from './intent-fulfilment-agents.js'
-import type { IntentFulfilmentUsage } from './intent-fulfilment-report.js'
 import type { FulfilmentJudgementRunner } from './judgement.js'
 import type { ObligationExtractionRunner } from './obligation-extraction.js'
 
@@ -35,7 +38,7 @@ export type IntentFulfilmentLane = {
   // Read once, after the calls have finished. `undefined` when no call reported
   // any tokens, so a report never carries an all-zero usage block that reads as
   // "a provider ran and cost nothing".
-  readonly usage: () => IntentFulfilmentUsage | undefined
+  readonly usage: () => LaneUsage | undefined
   readonly shutdown: () => Promise<void>
 }
 
@@ -104,25 +107,12 @@ export const createIntentFulfilmentLane = async (input: {
         return undefined
       }
 
-      const cost = summarizeRunCost({
-        providerConfigured: true,
+      return summarizeLaneUsage({
+        usage,
         providerId: providerConfig.id,
         modelName: providerConfig.model,
-        prices: input.config.costs,
-        usage
+        prices: input.config.costs
       })
-
-      return {
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        ...(usage.cachedInputTokens === undefined
-          ? {}
-          : { cachedInputTokens: usage.cachedInputTokens }),
-        ...(usage.reasoningTokens === undefined
-          ? {}
-          : { reasoningTokens: usage.reasoningTokens }),
-        ...(cost.costUsd === undefined ? {} : { costUsd: cost.costUsd })
-      }
     },
     shutdown: agents.shutdown
   }

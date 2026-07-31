@@ -7,7 +7,7 @@ import {
 import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
 import { sha256 } from '../../shared/hash/hash.js'
 
-export type SkillIndexEntry = {
+type SkillIndexEntry = {
   readonly id: string
   readonly path: string
   readonly directory: string
@@ -16,11 +16,11 @@ export type SkillIndexEntry = {
   readonly description: string
 }
 
-export type SkillIndex = {
+type SkillIndex = {
   readonly skills: readonly SkillIndexEntry[]
 }
 
-export type CreateSkillIndexOptions = {
+type CreateSkillIndexOptions = {
   readonly repositoryRoot: string
   readonly directories: readonly string[]
 }

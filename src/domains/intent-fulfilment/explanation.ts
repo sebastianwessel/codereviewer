@@ -11,7 +11,11 @@
 // after the verdict is immovable.
 
 import { z } from 'zod'
-import type { Obligation, ExtraScopeEntry } from './intent-fulfilment-report.js'
+import {
+  ObligationStatusSchema,
+  type Obligation,
+  type ExtraScopeEntry
+} from './intent-fulfilment-report.js'
 
 // Loose, for the same measured reason as the other two model-bound schemas: a
 // provider-side rejection here would cost the explanation entirely, and the
@@ -20,17 +24,13 @@ export const ModelFulfilmentExplanationSchema = z.strictObject({
   explanation: z.string().optional()
 })
 
-export type ModelFulfilmentExplanation = z.infer<
-  typeof ModelFulfilmentExplanationSchema
->
-
 export const FulfilmentExplanationInputSchema = z.strictObject({
   // The frozen mapping. `status` is an enum literal here, not a free string,
   // because it is being REPORTED to this call rather than decided by it.
   obligations: z.array(
     z.strictObject({
       statement: z.string().min(1),
-      status: z.enum(['addressed', 'unaddressed', 'undetermined']),
+      status: ObligationStatusSchema,
       evidence: z.array(
         z.strictObject({ path: z.string().min(1), line: z.int().min(1) })
       )

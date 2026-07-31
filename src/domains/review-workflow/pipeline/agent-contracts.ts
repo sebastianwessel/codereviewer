@@ -779,7 +779,6 @@ export type TaskReviewResult = z.infer<typeof TaskReviewResultSchema>
 export type FindingRefutationResult = z.infer<
   typeof FindingRefutationResultSchema
 >
-export type ModelHolisticFinding = z.infer<typeof ModelHolisticFindingSchema>
 
 // Batched refutation (spec 05). One call adjudicates EVERY candidate raised for a
 // task instead of one call per candidate. The per-candidate packet repeated the

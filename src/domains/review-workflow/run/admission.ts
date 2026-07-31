@@ -106,17 +106,11 @@ export const candidateFindingsFromTaskResults = (
 const deterministicTaskEventFromQueueRecord = (
   record: ReviewTaskQueueRecord<WorkflowReviewTask>
 ): ReviewSharedContextSnapshot['taskEvents'][number] =>
-  sharedTaskEventFromWorkflow({
-    id: record.id,
-    kind: record.kind,
-    round: record.round,
-    paths: record.paths,
-    state: record.state,
-    ...(record.workerId === undefined ? {} : { workerId: record.workerId }),
-    ...(record.message === undefined ? {} : { message: record.message })
-  })
+  // `sharedTaskEventFromWorkflow` already picks the event fields and omits the
+  // absent optional ones, so the queue record is passed straight through.
+  sharedTaskEventFromWorkflow(record)
 
-export const runDeterministicReviewTaskQueue = (
+const runDeterministicReviewTaskQueue = (
   input: {
     readonly tasks: readonly WorkflowReviewTask[]
     readonly maxConcurrentTasks: number

@@ -26,12 +26,6 @@ export type WrittenReportArtifact = {
   readonly content: string
 }
 
-// Resolved review-comment rendering request. Presence means the feature is
-// enabled; `platform` is already resolved (no `auto`) by the caller's detection.
-export type ReviewCommentsRenderRequest = {
-  readonly platform: PlatformTarget
-}
-
 const stableStringify = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
 
 const redactJsonValue = (value: unknown): JsonValue | undefined => {
@@ -74,7 +68,9 @@ export const writeReportingArtifacts = async (
     readonly writer: ReportArtifactWriter
     readonly formats?: readonly ReportFormat[]
     readonly sarif?: SarifRenderOptions
-    readonly reviewComments?: ReviewCommentsRenderRequest
+    // Presence enables review-comment rendering; `platform` is already resolved
+    // (never `auto`) by the caller's detection.
+    readonly reviewComments?: { readonly platform: PlatformTarget }
   }
 ): Promise<readonly WrittenReportArtifact[]> => {
   const report = validateReviewReport(input.report)

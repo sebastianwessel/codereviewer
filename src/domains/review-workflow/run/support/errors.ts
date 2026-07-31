@@ -1,4 +1,3 @@
-import { OperationTimeoutError } from '@purista/harness'
 import type {
   CoverageSummary,
   ReviewReport
@@ -56,13 +55,7 @@ export const createCostBudgetExceededError = (
   }
 })
 
-export const isHarnessRunTimeoutError = (
-  error: unknown
-): error is OperationTimeoutError =>
-  error instanceof OperationTimeoutError &&
-  error.meta?.scope === 'run'
-
-export type ReviewRunTerminalFailure = {
+type ReviewRunTerminalFailure = {
   readonly throwError: ReviewRunFailedError | StructuredError
   readonly structuredError: StructuredError
   readonly logMessage: string
@@ -86,7 +79,6 @@ export const createReviewRunTerminalFailure = (
       }
     }
   }
-
 
   const normalized = normalizeError(input.error, {
     source: 'internal',

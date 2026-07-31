@@ -30,10 +30,6 @@ export const ModelObligationExtractionSchema = z.strictObject({
     .optional()
 })
 
-export type ModelObligationExtraction = z.infer<
-  typeof ModelObligationExtractionSchema
->
-
 // FIELD ORDER IS LOAD-BEARING, for the same reason it is in the conformance
 // adjudication packet: the serialized packet's shared prefix is what a provider
 // could cache. Nothing per-run unique appears anywhere.

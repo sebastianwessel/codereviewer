@@ -43,7 +43,6 @@ export {
 export {
   createReportArtifact,
   safeText,
-  sha256,
   sortAdmittedFindings,
   validateReviewReport
 } from './reporting-utils.js'

@@ -7,19 +7,11 @@ import {
   type FindingRefutationRunner,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
+import { type DebugLogger } from '../debug-logger.js'
 import { isTaskPacketBudgetExceededError } from '../packet-budget.js'
 import { findingRefutationBatchInput } from './packet.js'
 import { type RefutationProviderErrorStage } from '../admission/provider-error-outcome.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
-
-// Narrow, duck-typed logger so this module does not require callers to thread a
-// full `@purista/harness` `Logger` through tests that have no interest in one.
-export type RefutationExecutionLogger = {
-  readonly debug: (
-    message: string,
-    metadata?: Readonly<Record<string, unknown>>
-  ) => void
-}
 
 // A refutation call can fail two structurally different ways, and only one of
 // them is ours to retry. A hard provider failure - auth, rate limiting, a
@@ -72,7 +64,7 @@ export type BatchRefutationInput = {
   readonly reviewEvidence: readonly EvidenceRecord[]
   readonly refuteFinding: FindingRefutationRunner
   readonly signal?: AbortSignal
-  readonly logger?: RefutationExecutionLogger
+  readonly logger?: DebugLogger
 }
 
 const resolutionForAll = (
@@ -128,7 +120,7 @@ export const executeBatchRefutation = async (
       allCandidates: input.allCandidates,
       sharedDigest: input.sharedDigest,
       reviewEvidence: input.reviewEvidence
-    }).input
+    })
   } catch (error: unknown) {
     // A single candidate that cannot fit is a genuine packet failure; a larger
     // batch can still be split into halves that do fit.

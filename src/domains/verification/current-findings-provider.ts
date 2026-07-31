@@ -23,6 +23,7 @@ import {
 import { createRedactor } from '../../shared/redaction/redactor.js'
 import { sha256 } from '../../shared/hash/hash.js'
 import { truncateForContract } from '../../shared/text/truncate.js'
+import { fingerprintEvidenceRefs } from './claim-fingerprints.js'
 import { MAX_CLAIMS_PER_PROVIDER, type ClaimProvider } from './contracts.js'
 import { redactClaim } from './redact-claim.js'
 
@@ -49,10 +50,7 @@ const claimFromAdmittedFinding = (finding: AdmittedFinding): Claim =>
       `Is this a real defect; if so, what is the minimal fix: ${finding.title}?`,
       CLAIM_QUESTION_MAX
     ),
-    evidenceRefs: finding.fingerprints.map((fingerprint) => ({
-      key: `fingerprint:${fingerprint.algorithm}`,
-      value: fingerprint.value
-    }))
+    evidenceRefs: fingerprintEvidenceRefs(finding.fingerprints)
   })
 
 export type CurrentFindingsProviderConfig = {

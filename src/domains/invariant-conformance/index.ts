@@ -23,29 +23,22 @@ export {
   ConformanceAdjudicationRecordSchema,
   ConformanceAdjudicationSummarySchema,
   ConformanceDivergenceSchema,
-  ConformanceUsageSchema,
   InvariantConformanceReportSchema,
   MINIMUM_CITED_PEERS,
   type ConformanceAdjudicationRecord,
   type ConformanceAdjudicationSummary,
   type ConformanceDivergence,
-  type ConformanceUsage,
   type DeclarationSite,
-  type DivergenceAttribution,
   type InvariantConformanceReport
 } from './conformance-report.js'
 export {
   ConformanceAdjudicationInputSchema,
-  ConformanceAdjudicationVerdictSchema,
   ModelConformanceAdjudicationSchema,
   conformanceAdjudicationInputFor,
   normalizeConformanceAdjudication,
   type ConformanceAdjudication,
-  type ConformanceAdjudicationContext,
   type ConformanceAdjudicationInput,
-  type ConformanceAdjudicationRunner,
-  type ConformanceAdjudicationVerdict,
-  type ModelConformanceAdjudication
+  type ConformanceAdjudicationRunner
 } from './conformance-adjudication.js'
 export { modelConformanceAdjudicationInstructions } from './adjudication-instructions.js'
 export {

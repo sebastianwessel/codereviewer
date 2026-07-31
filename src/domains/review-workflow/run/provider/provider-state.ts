@@ -10,7 +10,6 @@ import type { NoContentEventRecorder } from '../../../observability/index.js'
 import type { ProviderImport } from '../../../provider-resolution/index.js'
 import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
 import type { ReviewWorkflowInput, ReviewWorkflowOutput } from '../../harness/workflow.js'
-import type { WorkflowReviewTask } from '../../pipeline/agent-contracts.js'
 import { sharedTaskEventFromWorkflow } from '../admission.js'
 import { recordObservedTaskEvents } from '../support/observability.js'
 import { createProviderWorkflowFailure } from './provider-failures.js'
@@ -39,7 +38,6 @@ export const prepareReviewRunnerProviderState = async (input: {
   readonly evidence: readonly EvidenceRecord[]
   readonly supportSignalCandidates: readonly CandidateFinding[]
   readonly workflowInput: ReviewWorkflowInput
-  readonly tasks: readonly WorkflowReviewTask[]
   readonly environment: Readonly<Record<string, string | undefined>>
   readonly providerImport?: ProviderImport | undefined
   readonly skillDefinitions: SkillsConfig
@@ -98,7 +96,6 @@ export const prepareReviewRunnerProviderState = async (input: {
       evidence: input.evidence,
       supportSignalCandidates: input.supportSignalCandidates,
       error,
-      tasks: input.tasks,
       observability: input.observability.snapshot()
     })
     if (providerFailure !== undefined) {

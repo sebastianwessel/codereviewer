@@ -26,6 +26,7 @@
 
 import { z } from 'zod'
 import { RepositoryRelativePathSchema } from '../../shared/contracts/index.js'
+import { LaneUsageSchema } from '../costs/lane-usage.js'
 
 // Spec 24: "A finding MUST cite at least three peer sites by path and line. Below
 // that threshold there is no pattern, only a coincidence." Enforced twice — by
@@ -39,7 +40,7 @@ export const PeerDeclarationKindSchema = z.enum([
   'export'
 ])
 
-export const DivergenceAttributionSchema = z.enum([
+const DivergenceAttributionSchema = z.enum([
   // The change added or modified this declaration.
   'change-attributed',
   // The change did not touch this declaration; it is the odd one out in a peer
@@ -157,15 +158,6 @@ export const ConformanceAdjudicationSummarySchema = z.strictObject({
 // verification lane's: spec 24 forbids sharing the diff reviewer's report schema,
 // and every field here is a provider-usage primitive rather than shared behaviour,
 // so a shared helper would couple two independent report contracts to buy nothing.
-export const ConformanceUsageSchema = z.strictObject({
-  inputTokens: z.int().min(0),
-  outputTokens: z.int().min(0),
-  // A SUBSET of `inputTokens`, already counted there.
-  cachedInputTokens: z.int().min(0).optional(),
-  reasoningTokens: z.int().min(0).optional(),
-  costUsd: z.number().min(0).optional()
-})
-
 export const InvariantConformanceReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),
   // `disabled` is a first-class outcome: the capability is off by default until
@@ -197,7 +189,7 @@ export const InvariantConformanceReportSchema = z.strictObject({
   preExistingDivergences: z.array(ConformanceDivergenceSchema),
   warnings: z.array(z.string()),
   // Present only when the adjudicated arm actually issued a call.
-  usage: ConformanceUsageSchema.optional()
+  usage: LaneUsageSchema.optional()
 })
 
 export type DeclarationSite = z.infer<typeof DeclarationSiteSchema>
@@ -208,8 +200,6 @@ export type ConformanceAdjudicationRecord = z.infer<
 export type ConformanceAdjudicationSummary = z.infer<
   typeof ConformanceAdjudicationSummarySchema
 >
-export type ConformanceUsage = z.infer<typeof ConformanceUsageSchema>
-export type DivergenceAttribution = z.infer<typeof DivergenceAttributionSchema>
 export type InvariantConformanceReport = z.infer<
   typeof InvariantConformanceReportSchema
 >

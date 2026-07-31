@@ -12,30 +12,21 @@ import {
 import { type ReviewWorkflowInput } from '../contracts.js'
 import {
   createTaskPacketBudgetExceededError,
-  isTaskPacketBudgetExceededError,
   serializedBytes
 } from '../packet-budget.js'
-
-export type TaskReviewPacket = {
-  readonly input: TaskReviewInput
-}
 
 const fitTaskReviewInputToBudget = (
   taskInput: TaskReviewInput,
   maxTaskInputBytes: number | undefined
-): TaskReviewPacket => {
+): TaskReviewInput => {
   if (maxTaskInputBytes === undefined) {
-    return {
-      input: taskInput
-    }
+    return taskInput
   }
 
   const currentBytes = serializedBytes(taskInput)
 
   if (currentBytes <= maxTaskInputBytes) {
-    return {
-      input: taskInput
-    }
+    return taskInput
   }
 
   const withoutSharedDigest = TaskReviewInputSchema.parse({
@@ -44,9 +35,7 @@ const fitTaskReviewInputToBudget = (
   })
 
   if (serializedBytes(withoutSharedDigest) <= maxTaskInputBytes) {
-    return {
-      input: withoutSharedDigest
-    }
+    return withoutSharedDigest
   }
 
   throw createTaskPacketBudgetExceededError({
@@ -60,7 +49,7 @@ export const taskReviewInputFor = (
   input: ReviewWorkflowInput,
   task: WorkflowReviewTask,
   sharedDigest: string
-): TaskReviewPacket => {
+): TaskReviewInput => {
   const evidence = input.evidence.filter((record) =>
     task.evidenceIds.length > 0
       ? task.evidenceIds.includes(record.id)
@@ -90,5 +79,3 @@ export const taskReviewInputFor = (
 
   return fitTaskReviewInputToBudget(taskInput, input.maxTaskInputBytes)
 }
-
-export { isTaskPacketBudgetExceededError }

@@ -55,7 +55,7 @@ const registerFirstClassDynamicLanguages = (): void => {
   dynamicLanguagesRegistered = true
 }
 
-export type AstGrepParseResult = {
+type AstGrepParseResult = {
   readonly language: SupportedSignalLanguage
   readonly parsed: boolean
   readonly root?: SgNode

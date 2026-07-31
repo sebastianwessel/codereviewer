@@ -23,7 +23,7 @@ type RenderedCommentBase = {
 
 // GitHub review comment: `side: RIGHT` with absolute line / startLine anchors and
 // a native ```suggestion block.
-export type GithubRenderedComment = RenderedCommentBase & {
+type GithubRenderedComment = RenderedCommentBase & {
   readonly line: number
   readonly side: 'RIGHT'
   readonly startLine?: number
@@ -32,12 +32,12 @@ export type GithubRenderedComment = RenderedCommentBase & {
 
 // GitLab and Bitbucket comments anchor to the last line of the target range and
 // differ only in the fence syntax their suggestion block uses.
-export type LineAnchoredRenderedComment = RenderedCommentBase & {
+type LineAnchoredRenderedComment = RenderedCommentBase & {
   readonly line: number
 }
 
 // Generic comment keeps the full range and a plain fenced block (no apply).
-export type RangeAnchoredRenderedComment = RenderedCommentBase & {
+type RangeAnchoredRenderedComment = RenderedCommentBase & {
   readonly startLine: number
   readonly endLine: number
 }

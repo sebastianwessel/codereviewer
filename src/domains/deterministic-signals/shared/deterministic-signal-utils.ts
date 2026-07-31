@@ -45,7 +45,7 @@ export const supportedSignalLanguages = supportedSignalLanguageDefinitions.map(
   (definition) => definition.id
 ) as readonly SupportedSignalLanguage[]
 
-export const languageDefinitionFor = (
+const languageDefinitionFor = (
   language: SupportedSignalLanguage
 ): SupportedSignalLanguageDefinition => {
   const definition = supportedSignalLanguageDefinitions.find((candidate) => candidate.id === language)

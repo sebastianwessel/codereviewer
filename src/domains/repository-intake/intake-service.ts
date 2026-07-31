@@ -27,16 +27,16 @@ const defaultMaxFileBytes = 500_000
 const defaultMaxFiles = 500
 const gitMaxBufferBytes = 20_000_000
 
-export type ChangedFileStatus = 'added' | 'modified' | 'renamed' | 'copied'
+type ChangedFileStatus = 'added' | 'modified' | 'renamed' | 'copied'
 
-export type ChangedFile = {
+type ChangedFile = {
   readonly path: string
   readonly status: ChangedFileStatus
   readonly sizeBytes: number
   readonly contentHash: string
 }
 
-export type RepositorySnapshot = {
+type RepositorySnapshot = {
   readonly repositoryRoot: string
   readonly changedFileCount: number
   readonly skippedFileCount: number
@@ -47,7 +47,7 @@ export type RepositorySnapshot = {
 
 // A path the change removes outright, with the content it had at the merge base.
 // Surfaced only when `includeDeletedPaths` is requested; see `RepositoryIntake`.
-export type DeletedFile = {
+type DeletedFile = {
   readonly path: string
   readonly contentHash: string
   readonly sizeBytes: number
@@ -77,16 +77,16 @@ export type GitCommandRunner = (
   }
 ) => Promise<string>
 
-export type IntakeFileStat = {
+type IntakeFileStat = {
   readonly size: number
 }
 
-export type RepositoryIntakeFileSystem = {
+type RepositoryIntakeFileSystem = {
   readonly statFile: (path: string) => Promise<IntakeFileStat>
   readonly readFile: (path: string) => Promise<Buffer>
 }
 
-export type CollectRepositoryIntakeOptions = {
+type CollectRepositoryIntakeOptions = {
   readonly repositoryRoot: string
   readonly baseRef?: string
   readonly headRef?: string
@@ -258,10 +258,6 @@ const statusFromGitCode = (statusCode: string): GitChangedPath['status'] => {
   return 'modified'
 }
 
-const changedStatusFromGitStatus = (
-  status: Exclude<GitChangedPath['status'], 'deleted'>
-): ChangedFileStatus => status
-
 const parseGitNameStatus = (output: string): readonly GitChangedPath[] =>
   output
     .split(/\r?\n/)
@@ -304,27 +300,21 @@ const toSkippedFile = (
         message
       }
 
+// Reads one in-scope changed path and classifies it. Deletion, include/exclude
+// scoping, and the file-count limit are decided by the caller before this runs,
+// so only the outcomes that require touching the filesystem are decided here.
 const inspectChangedPath = async (
   options: {
     readonly repositoryRoot: string
-    readonly rawPath: string
-    readonly status: GitChangedPath['status']
-    readonly excludeMatchers: readonly RegExp[]
+    readonly portablePath: string
+    readonly status: Exclude<GitChangedPath['status'], 'deleted'>
     readonly maxFileBytes: number
     readonly pathFlavor: FileSystemFlavor
     readonly fileSystem: RepositoryIntakeFileSystem
     readonly enforceRealPathContainment: boolean
   }
 ): Promise<ChangedFile | SkippedFile> => {
-  const portablePath = normalizeInputPath(options.rawPath, options.pathFlavor)
-
-  if (options.status === 'deleted') {
-    return toSkippedFile(portablePath, 'deleted')
-  }
-
-  if (isExcluded(portablePath, options.excludeMatchers)) {
-    return toSkippedFile(portablePath, 'excluded')
-  }
+  const { portablePath } = options
 
   try {
     const existingPath = options.enforceRealPathContainment
@@ -350,7 +340,7 @@ const inspectChangedPath = async (
 
     return {
       path: portablePath,
-      status: changedStatusFromGitStatus(options.status),
+      status: options.status,
       sizeBytes: fileStat.size,
       contentHash: sha256(content)
     }
@@ -410,9 +400,8 @@ const inspectChangedPathsWithinLimit = async (
 
     const record = await inspectChangedPath({
       repositoryRoot: options.repositoryRoot,
-      rawPath: portablePath,
+      portablePath,
       status: changedPath.status,
-      excludeMatchers: options.excludeMatchers,
       maxFileBytes: options.maxFileBytes,
       pathFlavor: options.pathFlavor,
       fileSystem: options.fileSystem,

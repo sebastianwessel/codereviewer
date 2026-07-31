@@ -27,10 +27,7 @@ import {
 } from '../pipeline/contracts.js'
 import { runRefutationProviderCall } from './provider-call-adapters.js'
 import { runModelBackedHolisticTaskReview } from '../pipeline/discovery/holistic-task-review.js'
-import {
-  type ModelBackedReviewHarness,
-  type ReviewHarness
-} from './session.js'
+import { type ReviewHarness } from './session.js'
 import { runReviewWorkflowHandler } from '../pipeline/handler.js'
 import {
   effectiveMaxConcurrentTasks,
@@ -42,7 +39,7 @@ import { type CreateReviewHarnessOptions } from './options.js'
 
 export const createModelBackedReviewHarness = (
   options: CreateReviewHarnessOptions
-): ModelBackedReviewHarness => {
+): ReviewHarness => {
   const skills = options.skills ?? {}
   const logger = options.logger ?? createNoopReviewLogger()
   const maxConcurrentTasks = effectiveMaxConcurrentTasks(

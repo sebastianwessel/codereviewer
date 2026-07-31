@@ -1,4 +1,4 @@
-export type NoContentAttributeValue = string | number | boolean | null
+type NoContentAttributeValue = string | number | boolean | null
 
 export type NoContentAttributes = Readonly<
   Record<string, NoContentAttributeValue | readonly NoContentAttributeValue[]>
@@ -72,6 +72,15 @@ export type NoContentEventRecorder = {
 const forbiddenAttributeKeyPattern =
   /(?:content|prompt|source|snippet|raw|output|response|header|environment|env|secret|token|key|password|credential)/iu
 
+const isSafeScalar = (value: unknown): value is NoContentAttributeValue =>
+  value === null ||
+  typeof value === 'string' ||
+  typeof value === 'number' ||
+  typeof value === 'boolean'
+
+const isSafeAttributeValue = (value: unknown): boolean =>
+  Array.isArray(value) ? value.every(isSafeScalar) : isSafeScalar(value)
+
 const keepSafeAttributes = (
   attributes: NoContentAttributes | undefined
 ): NoContentAttributes =>
@@ -81,22 +90,6 @@ const keepSafeAttributes = (
         !forbiddenAttributeKeyPattern.test(key) && isSafeAttributeValue(value)
     )
   )
-
-const isSafeAttributeValue = (
-  value: NoContentAttributes[string]
-): value is NoContentAttributes[string] => {
-  if (Array.isArray(value)) {
-    return value.every(isSafeScalar)
-  }
-
-  return isSafeScalar(value)
-}
-
-const isSafeScalar = (value: unknown): value is NoContentAttributeValue =>
-  value === null ||
-  typeof value === 'string' ||
-  typeof value === 'number' ||
-  typeof value === 'boolean'
 
 const nowIso = (): string => new Date().toISOString()
 
@@ -162,22 +155,6 @@ export const createNoContentEventRecorder = (): NoContentEventRecorder => {
     snapshot: () => ({
       events: events.map((event) => ({ ...event }))
     }),
-    shutdown: async () => {}
-  }
-}
-
-export const createNoopNoContentEventRecorder = (): NoContentEventRecorder => {
-  const recorder = createNoContentEventRecorder()
-
-  return {
-    startRun: () => {},
-    startStep: () => ({
-      end: () => {},
-      fail: () => {}
-    }),
-    recordTaskEvent: () => {},
-    recordError: () => {},
-    snapshot: recorder.snapshot,
     shutdown: async () => {}
   }
 }

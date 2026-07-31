@@ -184,62 +184,36 @@ const reviewedLineRangesFromReviewContext = (
   return ranges.length === 0 ? undefined : ranges
 }
 
-const uniqueEvidenceRecords = (
-  evidenceRecords: readonly EvidenceRecord[]
-): readonly EvidenceRecord[] => {
-  const byId = new Map<string, EvidenceRecord>()
-
-  for (const evidence of evidenceRecords) {
-    if (!byId.has(evidence.id)) {
-      byId.set(evidence.id, evidence)
-    }
-  }
-
-  return [...byId.values()]
-}
-
-const uniqueById = <T extends { readonly id: string }>(
-  values: readonly T[]
+/**
+ * De-duplicate by a caller-chosen key, keeping the FIRST occurrence.
+ *
+ * First-wins is load-bearing: the same record can reach completion from several
+ * stages, and the earliest one is the one whose provenance the rest of the output
+ * already refers to.
+ */
+const uniqueBy = <T>(
+  values: readonly T[],
+  keyOf: (value: T) => string
 ): readonly T[] => {
-  const byId = new Map<string, T>()
+  const byKey = new Map<string, T>()
 
   for (const value of values) {
-    if (!byId.has(value.id)) {
-      byId.set(value.id, value)
+    const key = keyOf(value)
+
+    if (!byKey.has(key)) {
+      byKey.set(key, value)
     }
   }
 
-  return [...byId.values()]
+  return [...byKey.values()]
 }
 
-const uniqueRejectedFindingsByCandidateId = (
-  findings: readonly RejectedFinding[]
-): readonly RejectedFinding[] => {
-  const byCandidateId = new Map<string, RejectedFinding>()
+const byId = (value: { readonly id: string }): string => value.id
 
-  for (const finding of findings) {
-    if (!byCandidateId.has(finding.candidateId)) {
-      byCandidateId.set(finding.candidateId, finding)
-    }
-  }
+const byCandidateId = (value: { readonly candidateId: string }): string =>
+  value.candidateId
 
-  return [...byCandidateId.values()]
-}
-
-const uniqueAdmissionDecisionsByCandidateId = (
-  decisions: readonly AdmissionDecisionRecord[]
-): readonly AdmissionDecisionRecord[] => {
-  const byCandidateId = new Map<string, AdmissionDecisionRecord>()
-
-  for (const decision of decisions) {
-    if (!byCandidateId.has(decision.candidateId)) {
-      byCandidateId.set(decision.candidateId, decision)
-    }
-  }
-
-  return [...byCandidateId.values()]
-}
-
+// A provider issue carries no id, so its whole reportable shape is its identity.
 const providerIssueKey = (issue: ProviderIssue): string =>
   JSON.stringify({
     code: issue.code,
@@ -247,36 +221,6 @@ const providerIssueKey = (issue: ProviderIssue): string =>
     recovered: issue.recovered ?? null,
     message: issue.message ?? null
   })
-
-const uniqueProviderIssues = (
-  providerIssues: readonly ProviderIssue[]
-): readonly ProviderIssue[] => {
-  const byKey = new Map<string, ProviderIssue>()
-
-  for (const issue of providerIssues) {
-    const key = providerIssueKey(issue)
-
-    if (!byKey.has(key)) {
-      byKey.set(key, issue)
-    }
-  }
-
-  return [...byKey.values()]
-}
-
-const uniqueContextLedgerEntries = (
-  entries: readonly ContextLedgerEntry[]
-): readonly ContextLedgerEntry[] => {
-  const byId = new Map<string, ContextLedgerEntry>()
-
-  for (const entry of entries) {
-    if (!byId.has(entry.id)) {
-      byId.set(entry.id, entry)
-    }
-  }
-
-  return [...byId.values()]
-}
 
 const terminalPreAdmissionCandidateIds = (
   input: {
@@ -310,24 +254,21 @@ export const completeReviewWorkflow = (
     readonly skillHashes: readonly string[]
   }
 ): ReviewWorkflowOutput => {
-  const evidence = uniqueEvidenceRecords(input.evidence)
-  const refutationResults = uniqueById(input.refutationResults)
-  const providerIssues = uniqueProviderIssues(input.providerIssues)
-  const contextLedgerEntries = uniqueContextLedgerEntries(
-    input.contextLedgerEntries
-  )
-  const candidateFindings = uniqueById(input.candidateFindings)
-  const preRejectedFindings = uniqueRejectedFindingsByCandidateId(
-    input.preRejectedFindings
-  )
-  const preAdmissionDecisions = uniqueAdmissionDecisionsByCandidateId(
-    input.preAdmissionDecisions
+  const evidence = uniqueBy(input.evidence, byId)
+  const refutationResults = uniqueBy(input.refutationResults, byId)
+  const providerIssues = uniqueBy(input.providerIssues, providerIssueKey)
+  const contextLedgerEntries = uniqueBy(input.contextLedgerEntries, byId)
+  const candidateFindings = uniqueBy(input.candidateFindings, byId)
+  const preRejectedFindings = uniqueBy(input.preRejectedFindings, byCandidateId)
+  const preAdmissionDecisions = uniqueBy(
+    input.preAdmissionDecisions,
+    byCandidateId
   )
   const terminalCandidateIds = terminalPreAdmissionCandidateIds({
     rejectedFindings: preRejectedFindings,
     admissionDecisions: preAdmissionDecisions
   })
-  const admissionCandidates = uniqueById(input.admissionCandidates).filter(
+  const admissionCandidates = uniqueBy(input.admissionCandidates, byId).filter(
     (candidate) => !terminalCandidateIds.has(candidate.id)
   )
   const { admittedFindings, rejectedFindings, admissionDecisions } = runAdmission({

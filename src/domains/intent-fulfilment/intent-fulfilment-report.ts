@@ -28,6 +28,7 @@
 
 import { z } from 'zod'
 import { RepositoryRelativePathSchema } from '../../shared/contracts/index.js'
+import { LaneUsageSchema } from '../costs/lane-usage.js'
 
 // A line of the STATED INTENT, resolved from the redacted change-intent fragment
 // the obligation was read out of (spec 11's origin label plus a line number).
@@ -99,22 +100,18 @@ export const ExtraScopeEntrySchema = z.strictObject({
   changedLineCount: z.int().min(1)
 })
 
-export const IntentFulfilmentSummarySchema = z.strictObject({
+const IntentFulfilmentSummarySchema = z.strictObject({
   intentFragmentCount: z.int().min(0),
   obligationCount: z.int().min(0),
   addressedCount: z.int().min(0),
   unaddressedCount: z.int().min(0),
   undeterminedCount: z.int().min(0),
-  // True when `intentFulfilment.maxObligations` MAY have bound the list — either
-  // the extraction overran the cap, or it returned exactly the cap and so more
-  // cannot be ruled out.
-  //
-  // The weaker claim is deliberate. Returning exactly the cap does not prove the
-  // intent held more, but reporting `false` in that case is worse: it tells a
-  // reader the checklist is complete when the run was told where to stop. This
-  // flag previously only fired if the model overran a cap it had been given, which
-  // essentially never happens — 24 of 28 runs on the 2026-08-01 corpus returned
-  // exactly the cap and all 28 claimed no truncation.
+  // ALWAYS FALSE, and retained in the contract for that reason rather than for
+  // any state it can report: `intentFulfilment.maxObligations` now refuses the run
+  // instead of binding the list (see `intent-limits.ts`), so a run that reaches a
+  // report hit no cap. It fired on the wrong condition before that — 24 of 28 runs
+  // on the 2026-08-01 corpus returned exactly the cap and all 28 claimed no
+  // truncation — which is the defect refusing removed.
   obligationsTruncated: z.boolean(),
   // Obligations the extraction proposed whose citation did not resolve to a line
   // of the stated intent, and which were therefore not reported at all. Counted
@@ -144,15 +141,6 @@ export const IntentFulfilmentSummarySchema = z.strictObject({
   // list, which is the cheap direction spec 23 explicitly prefers.
   outstandingCount: z.int().min(0).default(0),
   extraScopeFileCount: z.int().min(0)
-})
-
-export const IntentFulfilmentUsageSchema = z.strictObject({
-  inputTokens: z.int().min(0),
-  outputTokens: z.int().min(0),
-  // A SUBSET of `inputTokens`, already counted there.
-  cachedInputTokens: z.int().min(0).optional(),
-  reasoningTokens: z.int().min(0).optional(),
-  costUsd: z.number().min(0).optional()
 })
 
 export const IntentFulfilmentReportSchema = z.strictObject({
@@ -197,7 +185,7 @@ export const IntentFulfilmentReportSchema = z.strictObject({
   // prose is a convenience over it.
   explanation: z.string().min(1).max(2_000).optional(),
   warnings: z.array(z.string()),
-  usage: IntentFulfilmentUsageSchema.optional()
+  usage: LaneUsageSchema.optional()
 })
 
 export type IntentCitation = z.infer<typeof IntentCitationSchema>
@@ -208,5 +196,4 @@ export type ExtraScopeEntry = z.infer<typeof ExtraScopeEntrySchema>
 export type IntentFulfilmentSummary = z.infer<
   typeof IntentFulfilmentSummarySchema
 >
-export type IntentFulfilmentUsage = z.infer<typeof IntentFulfilmentUsageSchema>
 export type IntentFulfilmentReport = z.infer<typeof IntentFulfilmentReportSchema>

@@ -7,10 +7,8 @@ import {
   type ModelFindingRefutationBatchResult,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
-import {
-  executeBatchRefutation,
-  type RefutationExecutionLogger
-} from './execution.js'
+import { type DebugLogger } from '../debug-logger.js'
+import { executeBatchRefutation } from './execution.js'
 import {
   ReviewWorkflowInputSchema,
   type ReviewWorkflowInput
@@ -125,7 +123,7 @@ const batchInput = (
       packet: FindingRefutationBatchInput
     ) => Promise<ModelFindingRefutationBatchResult>
     readonly workflowInput?: ReviewWorkflowInput
-    readonly logger?: RefutationExecutionLogger
+    readonly logger?: DebugLogger
   }
 ) => ({
   workflowInput: input.workflowInput ?? workflowInput(),
@@ -143,7 +141,7 @@ const batchInput = (
 // what the logged fields were, so the instrumentation itself is under test rather
 // than only the observable retry behaviour.
 const recordingLogger = (): {
-  readonly logger: RefutationExecutionLogger
+  readonly logger: DebugLogger
   readonly messages: string[]
 } => {
   const messages: string[] = []

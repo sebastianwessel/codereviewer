@@ -13,66 +13,66 @@ import {
 } from '../admission/outcome.js'
 import { enrichProvedCandidate } from './evidence.js'
 
-export const refutedCandidateOutcome = (input: {
+type RefutationOutcomeInput = {
   readonly candidate: CandidateFinding
   readonly refutation: FindingRefutationResult
   readonly refutationEvidence: EvidenceRecord
   readonly refutationResult: RefutationResult
-}): AdmissionCandidateOutcome => ({
+}
+
+type RejectedVerdict = {
+  readonly status: 'rejected' | 'needs-more-evidence'
+  readonly reason: 'refuted' | 'weak-evidence'
+}
+
+// Both refutation rejections record the same thing — the refuter's evidence, its
+// result, and one rejected finding whose message is the rationale — and differ only
+// in the (status, reason) pair the contract requires. Keeping one builder is what
+// stops the two from drifting on the fields they must share.
+const rejectedRefutationOutcome = (
+  input: RefutationOutcomeInput,
+  verdict: RejectedVerdict
+): AdmissionCandidateOutcome => ({
   ...emptyAdmissionCandidateOutcome(),
   evidence: [input.refutationEvidence],
   refutationResults: [input.refutationResult],
   rejectedFindings: [
     RejectedFindingSchema.parse({
       candidateId: input.candidate.id,
-      status: 'rejected',
-      reason: 'refuted',
-      message: truncateForContract(input.refutation.rationaleSummary, REJECTED_FINDING_MESSAGE_MAX),
+      status: verdict.status,
+      reason: verdict.reason,
+      message: truncateForContract(
+        input.refutation.rationaleSummary,
+        REJECTED_FINDING_MESSAGE_MAX
+      ),
       evidenceIds: [input.refutationEvidence.id]
     })
   ],
   admissionDecisions: [
     {
       candidateId: input.candidate.id,
-      status: 'rejected',
-      rejectedReason: 'refuted'
+      status: verdict.status,
+      rejectedReason: verdict.reason
     }
   ]
 })
 
-export const weakEvidenceRejectedOutcome = (input: {
-  readonly candidate: CandidateFinding
-  readonly refutation: FindingRefutationResult
-  readonly refutationEvidence: EvidenceRecord
-  readonly refutationResult: RefutationResult
-}): AdmissionCandidateOutcome => ({
-  ...emptyAdmissionCandidateOutcome(),
-  evidence: [input.refutationEvidence],
-  refutationResults: [input.refutationResult],
-  rejectedFindings: [
-    RejectedFindingSchema.parse({
-      candidateId: input.candidate.id,
-      status: 'needs-more-evidence',
-      reason: 'weak-evidence',
-      message: truncateForContract(input.refutation.rationaleSummary, REJECTED_FINDING_MESSAGE_MAX),
-      evidenceIds: [input.refutationEvidence.id]
-    })
-  ],
-  admissionDecisions: [
-    {
-      candidateId: input.candidate.id,
-      status: 'needs-more-evidence',
-      rejectedReason: 'weak-evidence'
-    }
-  ]
-})
+export const refutedCandidateOutcome = (
+  input: RefutationOutcomeInput
+): AdmissionCandidateOutcome =>
+  rejectedRefutationOutcome(input, { status: 'rejected', reason: 'refuted' })
 
-export const admissibleRefutationOutcome = (input: {
-  readonly candidate: CandidateFinding
-  readonly refutation: FindingRefutationResult
-  readonly refutationEvidence: EvidenceRecord
-  readonly refutationResult: RefutationResult
-}): AdmissionCandidateOutcome => ({
+export const weakEvidenceRejectedOutcome = (
+  input: RefutationOutcomeInput
+): AdmissionCandidateOutcome =>
+  rejectedRefutationOutcome(input, {
+    status: 'needs-more-evidence',
+    reason: 'weak-evidence'
+  })
+
+export const admissibleRefutationOutcome = (
+  input: RefutationOutcomeInput
+): AdmissionCandidateOutcome => ({
   ...emptyAdmissionCandidateOutcome(),
   admissionCandidates: [
     enrichProvedCandidate({

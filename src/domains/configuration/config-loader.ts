@@ -11,9 +11,9 @@ type JsonObject = {
   readonly [key: string]: JsonValue
 }
 
-export type EnvironmentSource = Readonly<Record<string, string | undefined>>
+type EnvironmentSource = Readonly<Record<string, string | undefined>>
 
-export type ConfigLoaderOptions = {
+type ConfigLoaderOptions = {
   readonly repositoryRoot: string
   readonly configPath?: string
   readonly environment?: EnvironmentSource
@@ -21,7 +21,7 @@ export type ConfigLoaderOptions = {
   readonly loadDotEnv?: boolean
 }
 
-export type LoadedConfig = {
+type LoadedConfig = {
   readonly config: CodeReviewerConfig
   readonly environment: EnvironmentSource
   readonly warnings: readonly string[]

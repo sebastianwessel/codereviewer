@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 import { FixEditSchema } from '../../shared/contracts/findings/finding.schema.js'
+import { LaneUsageSchema } from '../costs/lane-usage.js'
 import { ContextLedgerEntrySchema } from '../review-planning/index.js'
 import {
   ClaimIdSchema,
@@ -32,9 +33,10 @@ export const ModelVerdictSchema = z.strictObject({
 export type ModelVerdict = z.infer<typeof ModelVerdictSchema>
 
 // Reason a claim ended `uncertain` because CODE (never the model) hit a bound.
-// `tool-call-budget-exceeded` is the per-claim loop bound; `aborted` is the run
-// timeout / cancellation; `invalid-verdict` is a model verdict that failed
-// schema validation; `agent-error` is any other agent/provider failure.
+// `tool-call-budget-exceeded` is the per-claim loop bound; `aborted` is a
+// caller-supplied cancellation (there is no whole-run deadline in the engine);
+// `invalid-verdict` is a model verdict that failed schema validation;
+// `agent-error` is any other agent/provider failure.
 export const VerificationBoundReasonSchema = z.enum([
   'tool-call-budget-exceeded',
   'aborted',
@@ -44,14 +46,14 @@ export const VerificationBoundReasonSchema = z.enum([
 
 export type VerificationBoundReason = z.infer<typeof VerificationBoundReasonSchema>
 
-// No-content per-claim observation (spec 12 "Observability And Errors"): claim
-// kind, source label, tool-call count, bytes read, verdict status, the finding
-// judgment (or absent), whether a fix was produced, the apply-check outcome, and
-// duration. It carries no source, claim/finding text, fix text, or tool output.
 export const ApplyCheckOutcomeSchema = z.enum(['passed', 'failed', 'not-attempted'])
 
 export type ApplyCheckOutcome = z.infer<typeof ApplyCheckOutcomeSchema>
 
+// No-content per-claim observation (spec 12 "Observability And Errors"): claim
+// kind, source label, tool-call count, bytes read, verdict status, the finding
+// judgment (or absent), whether a fix was produced, the apply-check outcome, and
+// duration. It carries no source, claim/finding text, fix text, or tool output.
 export const ClaimObservationSchema = z.strictObject({
   claimId: ClaimIdSchema,
   claimKind: ClaimKindSchema,
@@ -68,18 +70,22 @@ export const ClaimObservationSchema = z.strictObject({
 
 export type ClaimObservation = z.infer<typeof ClaimObservationSchema>
 
-export const CorroborationMatchKindSchema = z.enum(['fingerprint', 'fuzzy'])
+const CorroborationMatchKindSchema = z.enum(['fingerprint', 'fuzzy'])
+
+export type CorroborationMatchKind = z.infer<typeof CorroborationMatchKindSchema>
 
 // Links a general-review admitted finding to the confirming verification
 // verdict(s) that independently support it (spec 12 "Corroboration"). It raises
 // a CONFIDENCE signal only — there is deliberately no severity field, and the
 // admitted finding contract is left untouched.
-export const FindingCorroborationSchema = z.strictObject({
+const FindingCorroborationSchema = z.strictObject({
   findingId: z.string().min(1),
   confidence: z.literal('corroborated'),
   matchKinds: z.array(CorroborationMatchKindSchema),
   witnessClaimIds: z.array(z.string().min(1))
 })
+
+export type FindingCorroboration = z.infer<typeof FindingCorroborationSchema>
 
 // Per-finding advisory result of the fix lane (spec 12 "Effect On Findings").
 // `findingJudgment` is the boolean precision signal (absent when the agent
@@ -99,14 +105,6 @@ export type FixOutcome = z.infer<typeof FixOutcomeSchema>
 // Token usage and cost for the verification model calls. The flow runs after the
 // general review's report is finalized, so its spend is accounted here (in its own
 // lane) rather than silently dropped from the run cost.
-export const VerificationUsageSchema = z.strictObject({
-  inputTokens: z.int().min(0),
-  outputTokens: z.int().min(0),
-  cachedInputTokens: z.int().min(0).optional(),
-  reasoningTokens: z.int().min(0).optional(),
-  costUsd: z.number().min(0).optional()
-})
-
 export const VerificationReportSchema = z.strictObject({
   verdicts: z.array(VerdictSchema).default([]),
   observations: z.array(ClaimObservationSchema).default([]),
@@ -128,11 +126,8 @@ export const VerificationReportSchema = z.strictObject({
   // no-content by construction — path, byte counts, and a content hash only.
   contextLedger: z.array(ContextLedgerEntrySchema).default([]),
   // Token usage and cost of the verification model calls, when a provider ran.
-  usage: VerificationUsageSchema.optional()
+  usage: LaneUsageSchema.optional()
 })
-
-export type CorroborationMatchKind = z.infer<typeof CorroborationMatchKindSchema>
-export type FindingCorroboration = z.infer<typeof FindingCorroborationSchema>
 
 export type VerificationReport = z.infer<typeof VerificationReportSchema>
 

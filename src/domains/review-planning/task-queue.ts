@@ -1,6 +1,6 @@
 import type { ReviewTask } from './task-planner.js'
 
-export type ReviewTaskQueueState = 'planned' | 'running' | 'completed' | 'failed'
+type ReviewTaskQueueState = 'planned' | 'running' | 'completed' | 'failed'
 
 export type ReviewTaskQueueRecord<TTask extends ReviewTask = ReviewTask> =
   TTask & {
@@ -9,7 +9,7 @@ export type ReviewTaskQueueRecord<TTask extends ReviewTask = ReviewTask> =
     readonly message?: string
   }
 
-export type ReviewTaskQueue<TTask extends ReviewTask = ReviewTask> = {
+type ReviewTaskQueue<TTask extends ReviewTask = ReviewTask> = {
   readonly claimBatch: (options: {
     readonly limit: number
     readonly workerId?: string

@@ -18,7 +18,6 @@ import {
   refutedCandidateOutcome,
   weakEvidenceRejectedOutcome
 } from '../refutation/verdict-outcome.js'
-import { providerIssueForError } from '../provider-issues.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
 
 /**
@@ -58,8 +57,7 @@ export const reviewCandidateForAdmission = (
     return refutationProviderErrorOutcome({
       candidate: input.candidate,
       error: input.resolution.error,
-      stage: input.resolution.stage,
-      issueForError: providerIssueForError
+      stage: input.resolution.stage
     })
   }
 

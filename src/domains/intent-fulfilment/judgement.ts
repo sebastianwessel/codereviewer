@@ -26,6 +26,7 @@
 // nothing for the model to echo and nothing to mismatch.
 
 import { z } from 'zod'
+import { answerKey } from './answer-key.js'
 import type { ChangeSurface } from './change-surface.js'
 import type { ChangeCitation } from './intent-fulfilment-report.js'
 
@@ -53,10 +54,6 @@ export const ModelFulfilmentJudgementSchema = z.strictObject({
     )
     .optional()
 })
-
-export type ModelFulfilmentJudgement = z.infer<
-  typeof ModelFulfilmentJudgementSchema
->
 
 // FIELD ORDER IS LOAD-BEARING. `changedFiles` is identical for every obligation
 // in a run and comes first, so consecutive judgement calls share the longest
@@ -110,15 +107,6 @@ export type FulfilmentJudgementRunner = (
 
 const UNDETERMINED: FulfilmentJudgement = { status: 'undetermined' }
 
-// Lowercased, punctuation-stripped comparison key. Deliberately the only tolerance
-// applied: casing and a trailing full stop are formatting, whereas a paraphrase is
-// a different answer and is not read as one of the three.
-const statusKey = (value: string): string =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z]+/gu, '')
-
 /**
  * Resolves whatever the judgement returned into one of the three statuses.
  *
@@ -139,7 +127,7 @@ export const normalizeFulfilmentJudgement = (
     return UNDETERMINED
   }
 
-  const key = statusKey(parsed.data.status)
+  const key = answerKey(parsed.data.status)
 
   if (key === 'unaddressed') {
     return { status: 'unaddressed' }
@@ -157,7 +145,7 @@ export const normalizeFulfilmentJudgement = (
       return []
     }
 
-    const side = statusKey(citation.side ?? '')
+    const side = answerKey(citation.side ?? '')
 
     if (side === 'added' || side === 'removed') {
       return [{ path, line, side }]

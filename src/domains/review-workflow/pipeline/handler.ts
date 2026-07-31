@@ -22,10 +22,7 @@ import {
 import { createStructuredError } from '../../../shared/errors/error-normalizer.js'
 import { sha256 } from '../../../shared/hash/hash.js'
 import { prepareCandidatesForAdmission } from './admission/review.js'
-import {
-  isTaskPacketBudgetExceededError,
-  taskReviewInputFor
-} from './discovery/task-packet.js'
+import { taskReviewInputFor } from './discovery/task-packet.js'
 import { renderSharedDigest } from './shared-digest.js'
 import { tasksForWorkflowInput } from './task-planning.js'
 import {
@@ -164,9 +161,8 @@ export const runReviewWorkflowHandler = async (params: {
       : { onTaskEvent: params.onTaskEvent }),
     sharedDigest: () => renderSharedDigest(shared.digest()),
     runTask: async (task, sharedDigest) => {
-      const taskPacket = taskReviewInputFor(input, task, sharedDigest)
       return params.runTask(
-        taskPacket.input,
+        taskReviewInputFor(input, task, sharedDigest),
         task,
         params.signal,
         contextRetriever
@@ -259,5 +255,3 @@ export const runReviewWorkflowHandler = async (params: {
 
   return output
 }
-
-export { isTaskPacketBudgetExceededError }

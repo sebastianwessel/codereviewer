@@ -41,7 +41,7 @@ export const runProviderWorkflow = async (
     }
   | undefined
 > => {
-  if (input.config.provider === undefined || input.config.aiReview.enabled === false) {
+  if (input.config.provider === undefined || !input.config.aiReview.enabled) {
     return undefined
   }
 

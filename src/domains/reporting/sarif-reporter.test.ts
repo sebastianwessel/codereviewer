@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { renderSarifReport } from './index.js'
-import { validateSarifDocument } from './sarif-reporter.js'
+import { validateSarifDocument } from './sarif-validation.js'
 import { createReportFixture } from './reporting-fixture.js'
 
 describe('SARIF reporter', () => {

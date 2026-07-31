@@ -2,7 +2,6 @@ export {
   ReviewTaskExecutionError,
   isReviewTaskExecutionError,
   runModelBackedReviewWorkflow,
-  type ModelBackedReviewHarness,
   type ReviewHarness
 } from './session.js'
 

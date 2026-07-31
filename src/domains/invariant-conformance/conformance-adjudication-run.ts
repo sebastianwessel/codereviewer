@@ -14,21 +14,24 @@
 
 import type { Logger } from '@purista/harness'
 import type { CodeReviewerConfig } from '../../shared/contracts/index.js'
-import { createProviderUsageRecorder, summarizeRunCost } from '../costs/index.js'
+import {
+  createProviderUsageRecorder,
+  summarizeLaneUsage,
+  type LaneUsage
+} from '../costs/index.js'
 import {
   resolveProviderModelAlias,
   type ProviderImport
 } from '../provider-resolution/index.js'
 import { createHarnessConformanceAdjudicator } from './conformance-adjudication-agent.js'
 import type { ConformanceAdjudicationRunner } from './conformance-adjudication.js'
-import type { ConformanceUsage } from './conformance-report.js'
 
 export type ConformanceAdjudicationLane = {
   readonly adjudicate: ConformanceAdjudicationRunner
   // Read once, after the adjudication calls have finished. `undefined` when no
   // call reported any tokens, so a report never carries an all-zero usage block
   // that reads as "a provider ran and cost nothing".
-  readonly usage: () => ConformanceUsage | undefined
+  readonly usage: () => LaneUsage | undefined
   readonly shutdown: () => Promise<void>
 }
 
@@ -98,25 +101,12 @@ export const createConformanceAdjudicationLane = async (input: {
         return undefined
       }
 
-      const cost = summarizeRunCost({
-        providerConfigured: true,
+      return summarizeLaneUsage({
+        usage,
         providerId: providerConfig.id,
         modelName: providerConfig.model,
-        prices: input.config.costs,
-        usage
+        prices: input.config.costs
       })
-
-      return {
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        ...(usage.cachedInputTokens === undefined
-          ? {}
-          : { cachedInputTokens: usage.cachedInputTokens }),
-        ...(usage.reasoningTokens === undefined
-          ? {}
-          : { reasoningTokens: usage.reasoningTokens }),
-        ...(cost.costUsd === undefined ? {} : { costUsd: cost.costUsd })
-      }
     },
     shutdown: adjudicator.shutdown
   }

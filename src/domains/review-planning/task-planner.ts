@@ -13,7 +13,7 @@ import { uniqueSorted } from '../../shared/text/unique-sorted.js'
 import type { CandidateFinding } from '../admission/index.js'
 import type { SupportSignalFact } from '../deterministic-signals/index.js'
 
-export const ReviewTaskKindSchema = z.enum([
+const ReviewTaskKindSchema = z.enum([
   'file',
   'dependency-cluster'
 ])
@@ -37,7 +37,7 @@ export const ReviewTaskSchema = z.strictObject({
 
 export type ReviewTask = z.infer<typeof ReviewTaskSchema>
 
-export type PlanReviewTasksOptions = {
+type PlanReviewTasksOptions = {
   readonly depth: CodeReviewerConfig['review']['depth']
   readonly files: readonly { readonly path: string }[]
   readonly facts: readonly SupportSignalFact[]

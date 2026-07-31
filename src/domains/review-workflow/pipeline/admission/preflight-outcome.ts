@@ -24,15 +24,12 @@ export const noRefuterAdmissionOutcome = (input: {
   readonly candidates: readonly CandidateFinding[]
   readonly workflowEvidence: readonly EvidenceRecord[]
 }): AdmissionCandidateOutcome => ({
+  ...emptyAdmissionCandidateOutcome(),
   admissionCandidates: input.candidates,
   evidence: input.workflowEvidence,
-  rejectedFindings: [],
-  admissionDecisions: [],
   artifactOnlyCandidateIds: supportSignalArtifactOnlyCandidateIds(
     input.candidates
-  ),
-  refutationResults: [],
-  providerIssues: []
+  )
 })
 
 export const supportSignalCandidateOutcome = (

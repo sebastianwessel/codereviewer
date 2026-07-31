@@ -11,11 +11,7 @@ import {
 } from '../packet-budget.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
 
-export type FindingRefutationPacket = {
-  readonly input: FindingRefutationBatchInput
-}
-
-const locationEndLine = (candidate: CandidateFinding): number =>
+const locationEndLine =(candidate: CandidateFinding): number =>
   candidate.location.endLine ?? candidate.location.startLine
 
 const candidateLocationsOverlap = (
@@ -184,9 +180,8 @@ export const findingRefutationBatchInput = (
     readonly sharedDigest: string
     readonly reviewEvidence?: readonly EvidenceRecord[]
   }
-): FindingRefutationPacket => ({
-  input: fitFindingRefutationBatchInputToBudget(
+): FindingRefutationBatchInput =>
+  fitFindingRefutationBatchInputToBudget(
     createFindingRefutationBatchInput(input),
     input.workflowInput.maxTaskInputBytes
   )
-})

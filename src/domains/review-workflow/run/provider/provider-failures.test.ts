@@ -6,7 +6,6 @@ import {
 import type { CandidateFinding } from '../../../admission/index.js'
 import type { DriftFinding } from '../../../drift/index.js'
 import { ReviewTaskExecutionError } from '../../harness/workflow.js'
-import type { WorkflowReviewTask } from '../../pipeline/agent-contracts.js'
 import {
   createProviderTaskExecutionFailure,
   createProviderWorkflowFailure
@@ -64,19 +63,6 @@ const providerCandidate: CandidateFinding = {
   ...supportCandidate,
   id: 'cand_provider',
   proposedBy: 'model'
-}
-
-const task: WorkflowReviewTask = {
-  id: 'task_alpha',
-  kind: 'file',
-  round: 1,
-  paths: ['src/a.ts'],
-  factIds: ['fact_alpha'],
-  evidenceIds: ['ev_alpha'],
-  candidateIds: [],
-  contextEntryIds: [],
-  priority: 0,
-  reviewContext: []
 }
 
 const commonInput = {
@@ -176,8 +162,7 @@ describe('review runner provider failure helpers', () => {
 
     const failure = createProviderWorkflowFailure({
       ...commonInput,
-      error: executionError,
-      tasks: [task]
+      error: executionError
     })
 
     expect(failure?.structuredError.code).toBe('provider_error')
@@ -190,8 +175,7 @@ describe('review runner provider failure helpers', () => {
   test('does not classify unrelated workflow errors', () => {
     const failure = createProviderWorkflowFailure({
       ...commonInput,
-      error: new Error('plain provider setup error'),
-      tasks: [task]
+      error: new Error('plain provider setup error')
     })
 
     expect(failure).toBeUndefined()

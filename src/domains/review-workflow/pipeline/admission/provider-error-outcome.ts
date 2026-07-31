@@ -8,10 +8,7 @@ import {
   emptyAdmissionCandidateOutcome,
   type AdmissionCandidateOutcome
 } from './outcome.js'
-import {
-  providerIssueForError,
-  type ProviderIssueForError
-} from '../provider-issues.js'
+import { providerIssueForError } from '../provider-issues.js'
 
 export type RefutationProviderErrorStage =
   | 'refutation-packet'
@@ -38,20 +35,18 @@ export const refutationProviderErrorOutcome = (
     readonly candidate: CandidateFinding
     readonly error: unknown
     readonly stage: RefutationProviderErrorStage
-    readonly issueForError?: ProviderIssueForError
   }
 ): AdmissionCandidateOutcome => {
   const rejectedFinding = rejectedFindingForRefutationError({
     candidate: input.candidate,
     error: input.error
   })
-  const issueForError = input.issueForError ?? providerIssueForError
 
   return {
     ...emptyAdmissionCandidateOutcome(),
     rejectedFindings: [rejectedFinding],
     providerIssues: [
-      issueForError({
+      providerIssueForError({
         error: input.error,
         stage: input.stage,
         recovered: true

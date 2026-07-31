@@ -20,10 +20,9 @@ const refutationBatchSplitAllowance = 3
 const maxPathsPerReviewTask = 8
 const contextHeavyAgentMaxSteps = 4
 
-export type ReviewAgentRole =
-  | 'holistic_review'
-  | 'refute_finding'
-  | 'propose_candidates'
+// The agents that share the skill/tool option builder below. `semantic_merge` is
+// deliberately absent: it is defined with its own fixed, tool-free options.
+type ReviewAgentRole = 'holistic_review' | 'refute_finding'
 
 export const effectiveMaxConcurrentTasks = (
   maxConcurrentTasks: number | undefined
@@ -184,16 +183,11 @@ export const reviewAgentOptionsForRole = (
 ) => {
   const base = reviewSkillAgentOptions(input)
 
-  switch (input.role) {
-    case 'holistic_review':
-      return input.crossFileRetrieval?.enabled === true
-        ? crossFileDiscoveryAgentOptions(
-            base,
-            input.crossFileRetrieval.maxToolCallsPerTask
-          )
-        : base
-    case 'refute_finding':
-    case 'propose_candidates':
-      return base
-  }
+  return input.role === 'holistic_review' &&
+    input.crossFileRetrieval?.enabled === true
+    ? crossFileDiscoveryAgentOptions(
+        base,
+        input.crossFileRetrieval.maxToolCallsPerTask
+      )
+    : base
 }

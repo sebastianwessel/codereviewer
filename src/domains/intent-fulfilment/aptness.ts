@@ -48,6 +48,7 @@
 // this stage can honestly buy at ~38% precision.
 
 import { z } from 'zod'
+import { answerKey } from './answer-key.js'
 import type { ChangeCitation } from './intent-fulfilment-report.js'
 import type { VerifiedJudgement } from './judgement.js'
 
@@ -59,8 +60,6 @@ import type { VerifiedJudgement } from './judgement.js'
 export const ModelCitationAptnessSchema = z.strictObject({
   verdict: z.string()
 })
-
-export type ModelCitationAptness = z.infer<typeof ModelCitationAptnessSchema>
 
 export const CitationAptnessInputSchema = z.strictObject({
   // The obligation, and the citations already verified against the change. Both
@@ -85,12 +84,6 @@ export type CitationAptnessRunner = (
   signal: AbortSignal | undefined
 ) => Promise<CitationAptness>
 
-const aptnessKey = (value: string): string =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z]+/gu, '')
-
 /**
  * Resolves the answer into one of the three verdicts.
  *
@@ -105,7 +98,7 @@ export const normalizeCitationAptness = (value: unknown): CitationAptness => {
     return 'undetermined'
   }
 
-  const key = aptnessKey(parsed.data.verdict)
+  const key = answerKey(parsed.data.verdict)
 
   return key === 'apt' || key === 'inapt' ? key : 'undetermined'
 }
@@ -123,7 +116,6 @@ export const citationAptnessInputFor = (
       text: citation.text
     }))
   })
-
 
 /**
  * Whether a concern should be recorded beside this obligation.

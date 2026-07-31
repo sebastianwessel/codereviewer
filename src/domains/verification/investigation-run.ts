@@ -17,7 +17,7 @@ import type { CodeReviewerConfig } from '../../shared/contracts/index.js'
 import type { Claim } from '../../shared/contracts/verification/verification.schema.js'
 import {
   createProviderUsageRecorder,
-  summarizeRunCost,
+  summarizeLaneUsage,
   type RunTokenUsage
 } from '../costs/index.js'
 import {
@@ -125,26 +125,14 @@ export const runInvestigationFlow = async (
     const usage = usageRecorder.usage()
     // Account the model spend in this lane's report so it is not silently dropped
     // (the general-review run cost is finalized before this lane runs).
-    const cost = summarizeRunCost({
-      providerConfigured: true,
-      providerId: input.config.provider.id,
-      modelName: input.config.provider.model,
-      prices: input.config.costs,
-      usage
-    })
     const reportWithUsage: VerificationReport = {
       ...report,
-      usage: {
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        ...(usage.cachedInputTokens === undefined
-          ? {}
-          : { cachedInputTokens: usage.cachedInputTokens }),
-        ...(usage.reasoningTokens === undefined
-          ? {}
-          : { reasoningTokens: usage.reasoningTokens }),
-        ...(cost.costUsd === undefined ? {} : { costUsd: cost.costUsd })
-      }
+      usage: summarizeLaneUsage({
+        usage,
+        providerId: input.config.provider.id,
+        modelName: input.config.provider.model,
+        prices: input.config.costs
+      })
     }
 
     return { report: reportWithUsage, claims, usage }

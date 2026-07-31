@@ -41,7 +41,7 @@ export const ChangedFileChangeKindSchema = z.enum([
   'deleted'
 ])
 
-export const SymbolReferenceSiteSchema = z.strictObject({
+const SymbolReferenceSiteSchema = z.strictObject({
   path: RepositoryRelativePathSchema,
   line: z.int().min(1),
   // The matched line, redacted by `context-retrieval` before it ever leaves the

@@ -19,6 +19,10 @@ describe('CodeReviewerConfigSchema', () => {
       failOnProviderError: true
     })
     expect(parsed.aiReview).toEqual({
+      // Naming a provider and a model is enough to get a review: the AI review is
+      // ON unless explicitly disabled. It used to be an optional tri-state where
+      // `undefined` and `true` were indistinguishable.
+      enabled: true,
       requireRefutation: true,
       deterministicSignalMode: 'support',
       actionableSeverityThreshold: 'medium',

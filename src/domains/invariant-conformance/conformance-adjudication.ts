@@ -33,7 +33,7 @@ import {
   type ConformanceDivergence
 } from './conformance-report.js'
 
-export const ConformanceAdjudicationVerdictSchema = z.enum([
+const ConformanceAdjudicationVerdictSchema = z.enum([
   // The peers share the trait because of what they are, so a reader would expect
   // any declaration of that role to have it.
   'convention',
@@ -44,7 +44,7 @@ export const ConformanceAdjudicationVerdictSchema = z.enum([
   'undetermined'
 ])
 
-export type ConformanceAdjudicationVerdict = z.infer<
+type ConformanceAdjudicationVerdict = z.infer<
   typeof ConformanceAdjudicationVerdictSchema
 >
 
@@ -129,10 +129,6 @@ export const ModelConformanceAdjudicationSchema = z.strictObject({
   reason: z.string().optional()
 })
 
-export type ModelConformanceAdjudication = z.infer<
-  typeof ModelConformanceAdjudicationSchema
->
-
 // Longer than this and the "short reason" is an argument; it is truncated rather
 // than rejected, because the verdict is the part that matters.
 const MAX_REASON_LENGTH = 400
@@ -182,7 +178,7 @@ export const normalizeConformanceAdjudication = (
   return UNDETERMINED
 }
 
-export type ConformanceAdjudicationContext = {
+type ConformanceAdjudicationContext = {
   // Traits a majority of the peers hold and the divergent one is not among.
   readonly sharedPeerTraits: readonly string[]
   // Traits the diverging declaration itself holds.

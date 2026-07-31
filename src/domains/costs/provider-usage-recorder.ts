@@ -27,6 +27,17 @@ export const createProviderUsageRecorder = (
   let outputTokens = 0
   let cachedInputTokens = 0
   let reasoningTokens = 0
+  const accumulate = (usage: {
+    readonly inputTokens: number
+    readonly outputTokens: number
+    readonly cachedInputTokens?: number
+    readonly reasoningTokens?: number
+  }): void => {
+    inputTokens += usage.inputTokens
+    outputTokens += usage.outputTokens
+    cachedInputTokens += usage.cachedInputTokens ?? 0
+    reasoningTokens += usage.reasoningTokens ?? 0
+  }
   const provider = modelAlias.provider
   const wrappedProvider: ModelProvider = {
     ...provider,
@@ -39,10 +50,7 @@ export const createProviderUsageRecorder = (
           text: async (request) => {
             const response = await provider.text!(request)
 
-            inputTokens += response.usage.inputTokens
-            outputTokens += response.usage.outputTokens
-            cachedInputTokens += response.usage.cachedInputTokens ?? 0
-            reasoningTokens += response.usage.reasoningTokens ?? 0
+            accumulate(response.usage)
 
             return response
           }
@@ -55,10 +63,7 @@ export const createProviderUsageRecorder = (
           ): Promise<ObjectResponse<T>> => {
             const response = await provider.object!(request)
 
-            inputTokens += response.usage.inputTokens
-            outputTokens += response.usage.outputTokens
-            cachedInputTokens += response.usage.cachedInputTokens ?? 0
-            reasoningTokens += response.usage.reasoningTokens ?? 0
+            accumulate(response.usage)
 
             return response
           }

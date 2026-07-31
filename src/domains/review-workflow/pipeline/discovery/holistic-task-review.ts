@@ -10,6 +10,7 @@ import {
   type TaskReviewResult,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
+import { type DebugLogger } from '../debug-logger.js'
 import { type ProviderIssue } from '../provider-issues.js'
 import { runDiscoveryCall } from './discovery-call.js'
 import { partitionTaskForDiscovery } from './discovery-partition.js'
@@ -111,13 +112,6 @@ const buildSecurityReviewText = (
     `\n${securityReviewChecklist}`
   ].join('\n')
 
-type HolisticTaskReviewLogger = {
-  readonly debug: (
-    message: string,
-    metadata?: Readonly<Record<string, unknown>>
-  ) => void
-}
-
 // Upper bound on candidates emitted per DISCOVERY CALL — per partition, not per
 // task, since spec 27 spread a task's files across several calls. Holistic discovery
 // favors recall, and the refutation filter (not this cap) is what controls precision.
@@ -143,7 +137,6 @@ export const SECURITY_MAX_CANDIDATES = 8
 // through a different lens, and reporting both is noise.
 const locationKey = (candidate: CandidateFinding): string =>
   `${candidate.location.path}:${candidate.location.startLine}`
-
 
 // Collect candidates from one discovery call's findings into the shared map, capping
 // how many THIS call may add and skipping any at an excluded location. Reports what
@@ -191,6 +184,85 @@ const collectCandidates = (params: {
   }
 
   return { dropped, suppressedByLocation, suppressedById }
+}
+
+type DiscoveryPassResult = {
+  readonly providerIssues: readonly ProviderIssue[]
+  readonly reviewedTasks: readonly WorkflowReviewTask[]
+  readonly findingCount: number
+  readonly splitCount: number
+  readonly collected: CollectedCandidates
+}
+
+/**
+ * Issue one discovery call per partition and collect what it found.
+ *
+ * The general pass and the dedicated security pass (spec 15) differ only in the
+ * prompt they build, the stage they report under, their candidate cap, and whether
+ * they exclude already-flagged locations. Everything else — partition ordering,
+ * where candidates are collected against, how provider issues and reviewed tasks
+ * accumulate — must be identical, so it lives here once.
+ *
+ * Sequential, not concurrent: the partitions hit the same provider under the same
+ * rate limit, and firing them together would turn one large change into a burst.
+ */
+const runDiscoveryPass = async (params: {
+  readonly runner: HolisticReviewRunner
+  readonly taskInput: TaskReviewInput
+  readonly partitions: readonly WorkflowReviewTask[]
+  readonly buildText: (taskInput: TaskReviewInput) => string
+  readonly stage: string
+  readonly signal: AbortSignal | undefined
+  readonly into: Map<string, CandidateFinding>
+  readonly maxCandidatesPerCall: number
+  readonly excludeLocations?: ReadonlySet<string>
+}): Promise<DiscoveryPassResult> => {
+  const providerIssues: ProviderIssue[] = []
+  const reviewedTasks: WorkflowReviewTask[] = []
+  let findingCount = 0
+  let splitCount = 0
+  let dropped = 0
+  let suppressedByLocation = 0
+  let suppressedById = 0
+
+  for (const partition of params.partitions) {
+    const call = await runDiscoveryCall({
+      runner: params.runner,
+      taskInput: { ...params.taskInput, task: partition },
+      buildText: params.buildText,
+      signal: params.signal,
+      stage: params.stage
+    })
+
+    providerIssues.push(...call.providerIssues)
+    reviewedTasks.push(...call.reviewedTasks)
+    findingCount += call.findings.length
+    splitCount += call.splitCount
+
+    // Collected against the PARTITION, not the parent task: a finding must stay
+    // restricted to the files its own call was shown, or admission would anchor it
+    // against content that call never read.
+    const collected = collectCandidates({
+      findings: call.findings,
+      task: partition,
+      into: params.into,
+      maxToAdd: params.maxCandidatesPerCall,
+      ...(params.excludeLocations === undefined
+        ? {}
+        : { excludeLocations: params.excludeLocations })
+    })
+    dropped += collected.dropped
+    suppressedByLocation += collected.suppressedByLocation
+    suppressedById += collected.suppressedById
+  }
+
+  return {
+    providerIssues,
+    reviewedTasks,
+    findingCount,
+    splitCount,
+    collected: { dropped, suppressedByLocation, suppressedById }
+  }
 }
 
 const candidateFromFinding = (
@@ -262,7 +334,7 @@ export const runModelBackedHolisticTaskReview = async (
       // this stage's own failure mode anyway.
       readonly semanticMerge?: SemanticMergeRunner
     }
-    readonly logger: HolisticTaskReviewLogger
+    readonly logger: DebugLogger
     readonly signal?: AbortSignal | undefined
   }
 ): Promise<TaskReviewResult> => {
@@ -277,83 +349,59 @@ export const runModelBackedHolisticTaskReview = async (
     input.task,
     input.workflowInput.maxFilesPerDiscoveryCall
   )
-  const providerIssues: ProviderIssue[] = []
-  let droppedCount = 0
-  let suppressedByLocationCount = 0
-  let suppressedByIdCount = 0
-  let generalFindingCount = 0
-  let generalSplitCount = 0
-  const reviewedTasks: WorkflowReviewTask[] = []
 
-  // Sequential: the partitions hit the same provider under the same rate limit, and
-  // firing them together would turn one large change into a burst.
-  for (const partition of partitions) {
-    const partitionInput = { ...input.taskInput, task: partition }
-    const general = await runDiscoveryCall({
-      runner: input.runners.holisticReview,
-      taskInput: partitionInput,
-      // Rebuilt per task rather than prebuilt, so a task the provider refuses can be
-      // halved and each half prompted from its OWN context (spec 26).
-      buildText: (taskInput) => buildReviewText(taskInput, rawDiff),
-      signal: input.signal,
-      stage: 'holistic_review'
-    })
-
-    providerIssues.push(...general.providerIssues)
-    generalFindingCount += general.findings.length
-    generalSplitCount += general.splitCount
-    reviewedTasks.push(...general.reviewedTasks)
-
-    // Collected against the PARTITION, not the parent task: a finding must stay
-    // restricted to the files its own call was shown, or admission would anchor it
-    // against content that call never read.
-    const collected = collectCandidates({
-      findings: general.findings,
-      task: partition,
-      into: candidatesById,
-      maxToAdd: HOLISTIC_MAX_CANDIDATES
-    })
-    droppedCount += collected.dropped
-    suppressedByLocationCount += collected.suppressedByLocation
-    suppressedByIdCount += collected.suppressedById
-  }
+  const general = await runDiscoveryPass({
+    runner: input.runners.holisticReview,
+    taskInput: input.taskInput,
+    partitions,
+    // Rebuilt per task rather than prebuilt, so a task the provider refuses can be
+    // halved and each half prompted from its OWN context (spec 26).
+    buildText: (taskInput) => buildReviewText(taskInput, rawDiff),
+    stage: 'holistic_review',
+    signal: input.signal,
+    into: candidatesById,
+    maxCandidatesPerCall: HOLISTIC_MAX_CANDIDATES
+  })
 
   const generalCandidateCount = candidatesById.size
 
-  let securityFindingCount = 0
-  let securitySplitCount = 0
-  if (input.workflowInput.securityPassEnabled) {
-    const generalLocations = new Set(
-      [...candidatesById.values()].map(locationKey)
-    )
-    // Partitioned on the same terms as the general pass. Spec 27's requirement is
-    // unqualified, and a security call that reviewed the whole task while the
-    // general pass reviewed slices would be both the largest packet in the run and
-    // the one call not getting the attention benefit the whole feature rests on.
-    for (const partition of partitions) {
-      const security = await runDiscoveryCall({
+  // Partitioned on the same terms as the general pass. Spec 27's requirement is
+  // unqualified, and a security call that reviewed the whole task while the general
+  // pass reviewed slices would be both the largest packet in the run and the one
+  // call not getting the attention benefit the whole feature rests on.
+  const security = input.workflowInput.securityPassEnabled
+    ? await runDiscoveryPass({
         runner: input.runners.holisticReview,
-        taskInput: { ...input.taskInput, task: partition },
+        taskInput: input.taskInput,
+        partitions,
         buildText: (taskInput) => buildSecurityReviewText(taskInput, rawDiff),
+        stage: 'holistic_review_security',
         signal: input.signal,
-        stage: 'holistic_review_security'
-      })
-      providerIssues.push(...security.providerIssues)
-      securityFindingCount += security.findings.length
-      securitySplitCount += security.splitCount
-      reviewedTasks.push(...security.reviewedTasks)
-      const securityCollected = collectCandidates({
-        findings: security.findings,
-        task: partition,
         into: candidatesById,
-        maxToAdd: SECURITY_MAX_CANDIDATES,
-        excludeLocations: generalLocations
+        maxCandidatesPerCall: SECURITY_MAX_CANDIDATES,
+        excludeLocations: new Set(
+          [...candidatesById.values()].map(locationKey)
+        )
       })
-      droppedCount += securityCollected.dropped
-      suppressedByLocationCount += securityCollected.suppressedByLocation
-      suppressedByIdCount += securityCollected.suppressedById
-    }
-  }
+    : undefined
+
+  const providerIssues: ProviderIssue[] = [
+    ...general.providerIssues,
+    ...(security?.providerIssues ?? [])
+  ]
+  const reviewedTasks = [
+    ...general.reviewedTasks,
+    ...(security?.reviewedTasks ?? [])
+  ]
+  const splitCount = general.splitCount + (security?.splitCount ?? 0)
+  const droppedCount =
+    general.collected.dropped + (security?.collected.dropped ?? 0)
+  const suppressedByLocationCount =
+    general.collected.suppressedByLocation +
+    (security?.collected.suppressedByLocation ?? 0)
+  const suppressedByIdCount =
+    general.collected.suppressedById +
+    (security?.collected.suppressedById ?? 0)
 
   const discovered = [...candidatesById.values()]
 
@@ -378,23 +426,19 @@ export const runModelBackedHolisticTaskReview = async (
 
   input.logger.debug('Holistic task review completed.', {
     task_id: input.task.id,
-    finding_count: generalFindingCount,
+    finding_count: general.findingCount,
     // Every discovery call actually issued: one per partition for the general pass,
     // the same again when the security pass runs, plus the extra calls any reactive
     // split produced.
     discovery_call_count:
-      partitions.length *
-        (input.workflowInput.securityPassEnabled ? 2 : 1) +
-      generalSplitCount +
-      securitySplitCount,
+      partitions.length * (security === undefined ? 1 : 2) + splitCount,
     security_pass_enabled: input.workflowInput.securityPassEnabled,
-    security_finding_count: securityFindingCount,
+    security_finding_count: security?.findingCount ?? 0,
     // Spec 26: how many times the provider refused a packet and it was halved.
     // Named apart from transient retry on purpose — an oversize split and a rate-
     // limit retry have different causes and different meanings, and one counter for
     // both would hide which was happening.
-    context_overflow_split_count:
-      generalSplitCount + securitySplitCount,
+    context_overflow_split_count: splitCount,
     general_candidate_count: generalCandidateCount,
     suppressed_by_location_count: suppressedByLocationCount,
     suppressed_by_id_count: suppressedByIdCount,

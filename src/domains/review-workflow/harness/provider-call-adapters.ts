@@ -3,13 +3,7 @@ import {
   type FindingRefutationBatchInput,
   type ModelFindingRefutationBatchResult
 } from '../pipeline/agent-contracts.js'
-
-type ProviderCallLogger = {
-  readonly debug: (
-    message: string,
-    metadata?: Readonly<Record<string, unknown>>
-  ) => void
-}
+import { type DebugLogger } from '../pipeline/debug-logger.js'
 
 export const runRefutationProviderCall = async (
   input: {
@@ -18,7 +12,7 @@ export const runRefutationProviderCall = async (
       input: FindingRefutationBatchInput,
       signal: AbortSignal | undefined
     ) => Promise<ModelFindingRefutationBatchResult>
-    readonly logger: ProviderCallLogger
+    readonly logger: DebugLogger
     readonly signal?: AbortSignal | undefined
   }
 ): Promise<ModelFindingRefutationBatchResult> => {
@@ -48,5 +42,3 @@ export const runRefutationProviderCall = async (
 
   return batch
 }
-
-export type { ProviderCallLogger }

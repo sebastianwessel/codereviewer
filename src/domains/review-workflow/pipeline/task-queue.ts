@@ -7,13 +7,8 @@ import {
   type WorkflowReviewTask,
   type WorkflowTaskEvent
 } from './agent-contracts.js'
-
-type WorkflowTaskQueueLogger = {
-  readonly debug: (
-    message: string,
-    metadata?: Readonly<Record<string, unknown>>
-  ) => void
-}
+import { type DebugLogger } from './debug-logger.js'
+import { EMPTY_SHARED_DIGEST } from './shared-digest.js'
 
 export class ReviewTaskExecutionError<R = unknown> extends Error {
   readonly taskEvents: readonly WorkflowTaskEvent[]
@@ -55,7 +50,7 @@ export const runQueuedReviewTasks = async <R>(
   input: {
     readonly tasks: readonly WorkflowReviewTask[]
     readonly maxConcurrentTasks: number
-    readonly logger?: WorkflowTaskQueueLogger
+    readonly logger?: DebugLogger
     readonly runTask: (
       task: WorkflowReviewTask,
       sharedDigest: string
@@ -128,8 +123,7 @@ export const runQueuedReviewTasks = async <R>(
         pending_task_count: Math.max(0, input.tasks.length - results.length)
       })
 
-      const sharedDigest =
-        input.sharedDigest?.() ?? '(no admitted shared context yet)'
+      const sharedDigest = input.sharedDigest?.() ?? EMPTY_SHARED_DIGEST
 
       try {
         const result = await input.runTask(task, sharedDigest)

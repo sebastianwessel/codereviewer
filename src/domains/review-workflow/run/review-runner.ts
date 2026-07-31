@@ -193,7 +193,6 @@ export const runReview = async (
         evidence,
         supportSignalCandidates,
         workflowInput,
-        tasks: assembledContext.tasks,
         environment: options.environment ?? {},
         ...(options.providerImport === undefined
           ? {}
