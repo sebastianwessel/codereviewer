@@ -67,9 +67,10 @@ are not validated. Treat their output as a prompt for a human, not a result.
 
 ## Install
 
-> Requires Node.js `>= 24.15.0`. **Not published to npm** — `package.json` is
-> `"private": true`, so there is no `npm install -g` and no `npx`. You run it from
-> a source checkout.
+> Requires Node.js `>= 24.15.0`. **Nothing is published to npm yet** — the
+> package is publishable and a release workflow publishes on a version bump, but
+> no version has reached the registry, so there is no `npm install -g` and no
+> `npx` today. You run it from a source checkout.
 
 ```bash
 git clone <repository-url> codereviewer && cd codereviewer && npm install

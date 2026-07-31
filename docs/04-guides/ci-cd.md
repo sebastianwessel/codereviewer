@@ -17,7 +17,7 @@ are the only way to run it in CI. For this repository's own PR reviews, see
 
 **2. The engine reviews the current working directory.** The repository root is
 `process.cwd()` at CLI entry, and every read and write must resolve under it.
-That single rule determines the two supported job shapes below.
+That single rule determines the job shapes below.
 
 ### Shape A — the engine reviews its own repository
 
@@ -51,6 +51,32 @@ where the working directory points.
 > The build emits `dist/cli/main.js`, matching the `bin` entry in
 > `package.json`. Invoking that file directly is what a published install would
 > run, so this shape stays valid once the package ships.
+
+### Shape C — install the published package
+
+> **Not available yet.** Nothing has been published to the registry, so the
+> commands in this section fail today. They are what the release automation
+> enables, recorded here so a pipeline can move to them without redesign. Use
+> Shape A or B until a release lands.
+
+Once a version is on npm, a job no longer needs a checkout of this repository —
+only of the code under review. The `bin` entry resolves to the same
+`dist/cli/main.js` that Shape B invokes by path.
+
+```bash
+npx --yes @sebastianwessel/codereviewer review --base-ref origin/main --head-ref HEAD
+```
+
+Fact 2 still governs: the engine reviews `process.cwd()`, so the job must run
+from the root of the repository under review, and artifacts land in that
+repository's `.codereviewer/runs/<runId>/`.
+
+Pin the version in CI rather than floating on the latest — a review engine that
+changes underneath a required check will change which findings block a merge:
+
+```bash
+npm install --no-save @sebastianwessel/codereviewer@0.1.0
+```
 
 ---
 
