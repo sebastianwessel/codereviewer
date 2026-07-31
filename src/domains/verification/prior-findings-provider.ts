@@ -18,14 +18,10 @@ import {
 } from './claim-fingerprints.js'
 import { MAX_CLAIMS_PER_PROVIDER, type ClaimProvider } from './contracts.js'
 import { redactClaim } from './redact-claim.js'
+import { isFileNotFoundError } from '../../shared/errors/error-normalizer.js'
 
 type PriorFindingsConfig = z.infer<typeof VerificationPriorFindingsProviderSchema>
 
-const isEnoent = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  error.code === 'ENOENT'
 
 const CLAIM_TITLE_MAX = 200
 const CLAIM_QUESTION_MAX = 500
@@ -145,7 +141,7 @@ export const createPriorFindingsProvider = (
           'utf8'
         )
       } catch (error) {
-        if (isEnoent(error)) {
+        if (isFileNotFoundError(error)) {
           return []
         }
         throw error

@@ -1,5 +1,8 @@
 import type { OpenTelemetryConfig } from '../../shared/contracts/index.js'
-import { createStructuredError } from '../../shared/errors/error-normalizer.js'
+import {
+  createStructuredError,
+  isMissingModuleError
+} from '../../shared/errors/error-normalizer.js'
 
 export type OpenTelemetrySetupResult =
   | {
@@ -16,11 +19,6 @@ export type ModuleImporter = (specifier: string) => Promise<unknown>
 
 const defaultImportModule: ModuleImporter = (specifier) => import(specifier)
 
-const isMissingModuleError = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  error.code === 'ERR_MODULE_NOT_FOUND'
 
 export const configureOpenTelemetry = async (options: {
   readonly config: OpenTelemetryConfig

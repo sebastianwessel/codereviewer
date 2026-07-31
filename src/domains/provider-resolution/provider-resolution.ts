@@ -2,6 +2,7 @@ import type { Logger, ModelAlias, ModelProvider } from '@purista/harness'
 import type { ProviderConfig } from '../../shared/contracts/index.js'
 import {
   createStructuredError,
+  isMissingModuleError,
   normalizeError
 } from '../../shared/errors/error-normalizer.js'
 
@@ -69,11 +70,6 @@ const environmentValue = (
   return value === undefined || value.trim().length === 0 ? undefined : value
 }
 
-const isMissingModuleError = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  error.code === 'ERR_MODULE_NOT_FOUND'
 
 const assertCredentialSources = (
   definition: ProviderAdapterDefinition,

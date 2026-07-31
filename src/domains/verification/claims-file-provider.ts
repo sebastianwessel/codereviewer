@@ -6,14 +6,10 @@ import { createRedactor } from '../../shared/redaction/redactor.js'
 import type { z } from 'zod'
 import { MAX_CLAIMS_PER_PROVIDER, type ClaimProvider } from './contracts.js'
 import { redactClaim } from './redact-claim.js'
+import { isFileNotFoundError } from '../../shared/errors/error-normalizer.js'
 
 type ClaimsFileConfig = z.infer<typeof VerificationClaimsFileProviderSchema>
 
-const isEnoent = (error: unknown): boolean =>
-  typeof error === 'object' &&
-  error !== null &&
-  'code' in error &&
-  error.code === 'ENOENT'
 
 /**
  * Reads a neutral claims file a pipeline wrote before the run — a JSON array of
@@ -43,7 +39,7 @@ export const createClaimsFileProvider = (config: ClaimsFileConfig): ClaimProvide
           'utf8'
         )
       } catch (error) {
-        if (isEnoent(error)) {
+        if (isFileNotFoundError(error)) {
           return []
         }
         throw error

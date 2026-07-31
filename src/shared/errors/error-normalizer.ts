@@ -20,6 +20,27 @@ export const isZodError = (value: unknown): value is ZodLikeError =>
   'issues' in value &&
   Array.isArray((value as { issues: unknown }).issues)
 
+/**
+ * True when `value` is an errno-style error carrying `code`.
+ *
+ * The predicate every "is this a missing file / missing module" check should be
+ * built from. Six hand-rolled copies of this same four-line shape existed across
+ * four domains — each correct, each independently maintainable into being wrong.
+ */
+export const hasErrorCode = (value: unknown, code: string): boolean =>
+  typeof value === 'object' &&
+  value !== null &&
+  'code' in value &&
+  (value as { readonly code: unknown }).code === code
+
+/** A file (or directory) that is simply not there. */
+export const isFileNotFoundError = (value: unknown): boolean =>
+  hasErrorCode(value, 'ENOENT')
+
+/** An optional dependency that is not installed. */
+export const isMissingModuleError = (value: unknown): boolean =>
+  hasErrorCode(value, 'ERR_MODULE_NOT_FOUND')
+
 // Errno-style filesystem errors expose a string `code` such as `ENOENT`.
 export const isFileSystemError = (value: unknown): boolean =>
   typeof value === 'object' &&
