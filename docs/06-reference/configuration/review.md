@@ -73,6 +73,16 @@ very high to disable partitioning entirely.
 
 ### `review.crossFileRetrieval`
 
+**Enabled by default.** The reviewer may open other files in the repository —
+the callee, interface, or permission definition a suspected defect depends on.
+
+It was previously off, recorded as harmful. That verdict was measuring a bug: files
+were cut off mid-read and the reviewer was never told, so it concluded things were
+missing from code it had only partly seen. With the cut disclosed, two runs put it
+ahead on defects found, false alarms, cost and reliability alike. No specific gain is
+claimed — the recall difference alone is within noise — but nothing measured argues
+against it.
+
 Agentic cross-file discovery. When enabled, the discovery agent may call the
 mediated `repo_read` / `repo_list` / `repo_grep` tools to inspect files outside
 the changed set. Its candidates pass the same refutation and admission as any

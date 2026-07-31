@@ -158,11 +158,15 @@ describe('review runner workflow input', () => {
     // An EXPLICIT contextMaxBytes still binds: min(120 000, 8 000 000 guard)=120 000
     expect(workflowInput.maxTaskInputBytes).toBe(120000)
     expect(workflowInput.maxConcurrentTasks).toBe(2)
-    // contextMaxBytes=120 000, depthContextCap(balanced)=120 000
-    // → maxBytesPerRead = min(120 000, 120 000) = 120 000
+    // Cross-file retrieval is ON by default, which TIGHTENS the per-read cap to the
+    // cross-file value: min(120 000 depth cap, 24 000 cross-file cap) = 24 000.
+    // That 24 000 is an unmeasured value on a feature whose job is reading files —
+    // it is the cap whose silent truncation produced the original wrong verdict.
+    // It is now disclosed to the model rather than silent, but it has never been
+    // swept, and it is the obvious next thing to measure.
     expect(workflowInput.contextRetrievalBudget).toEqual(
       expect.objectContaining({
-        maxBytesPerRead: 120000
+        maxBytesPerRead: 24000
       })
     )
     expect(workflowInput.evidence.map((record) => record.id)).toEqual([

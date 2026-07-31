@@ -66,7 +66,26 @@ const gitRefSchema = z
 // admission as any other candidate. Disabled, discovery is single-shot with no
 // tools and the run is byte-for-byte unchanged.
 export const CrossFileRetrievalConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false),
+  // ON by default since 2026-08-01, and the reasoning matters because the recall
+  // gain is NOT statistically significant.
+  //
+  // It was long recorded as net negative and shipped off. That verdict turned out to
+  // be measuring a bug — every retrieved file was cut at the per-read cap with the
+  // model never told, so it concluded things were missing from code it had only
+  // partly seen. With the cut now disclosed, two independent runs put it ahead on
+  // EVERY measured dimension: recall up both times (+5.7pp, +2.3pp), adjusted
+  // precision at 100% both times against 97.4% and 95.0%, cost DOWN both times
+  // (-8%, -5%), latency inside noise, and zero provider errors across all four arms.
+  //
+  // Significance is the bar for CLAIMING a benefit; it is not the bar for permitting
+  // a default that is free, harmless, and directionally positive twice. Demanding
+  // proof of gain before allowing a no-cost change is the wrong test, and it would
+  // also keep the feature off for models that might use tools better than the one it
+  // was measured on.
+  //
+  // What is NOT claimed: a specific recall improvement. Both runs used one model on
+  // one corpus. If a regression ever appears, this is the first switch to flip.
+  enabled: z.boolean().default(true),
   // Runaway-loop guard: the maximum mediated tool calls one discovery task may
   // make. It exists to bound a model that never stops requesting reads, NOT to
   // ration context — measurement showed the model self-limits well below the cap
@@ -94,7 +113,7 @@ export const ReviewConfigSchema = z.strictObject({
   maxCostUsd: z.number().min(0).optional(),
   runTimeoutMs: z.int().min(10000).max(7200000).optional(),
   crossFileRetrieval: CrossFileRetrievalConfigSchema.default({
-    enabled: false,
+    enabled: true,
     maxToolCallsPerTask: 100,
     maxBytesPerRead: 24000
   })

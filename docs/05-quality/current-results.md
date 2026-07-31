@@ -79,8 +79,13 @@ significant rather than suggestive, and it is described in full in
 Separately, the ability to consult *other* files in the repository — previously
 recorded here as unhelpful — was re-tested and **the earlier verdict was wrong**. It
 had been measuring a bug that cut files off mid-read without telling the reviewer.
-Corrected and re-run on a larger corpus, it improves results at slightly lower cost.
-Replication is pending before it becomes a default.
+
+It is now **on by default**. Two independent runs put it ahead on every dimension
+measured: more defects found, fewer false alarms, slightly *lower* cost, no added
+failures, and latency inside noise. The recall gain on its own is not statistically
+significant, and no specific improvement is claimed for it — but significance is the
+bar for claiming a benefit, not for allowing a change that is free and shows no harm.
+If a regression ever appears, this is the first switch to turn back off.
 
 ## What limits recall today
 
