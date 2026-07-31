@@ -1632,6 +1632,39 @@ framing is the measured cause, it costs nothing to change, and it now has a
 27-expectation population with a hard floor of zero to be measured against.
 
 
+### Prompt reframing arm — BUILT AND PRE-REGISTERED, NOT YET RUN (2026-07-31)
+
+The arm is committed (`a5ade0b`) and its measurement is **outstanding**: the run
+attempted on 2026-07-31 failed on all 37 cases with HTTP 429
+`project_spend_limit_exceeded` before a single model call was made. Cost $0.00,
+output 0 tokens, provider error rate 100%. Its artefact is retained as
+`VOID-spend-limit-report.json` and **must not be compared against anything** — it
+scores 0.0% because nothing ran, not because anything was measured.
+
+**Why the arm exists.** Out-of-diff recall is 0 of 27 on this corpus, and all 27 of
+those misses sit in files the reviewer was shown IN FULL. Distance does not explain
+it: the median miss is 68 lines from a changed hunk, a quarter are within ten lines,
+and the closest is **one line away, in a single-file change with its own dedicated
+call**. Crowding does not explain it either, for the same reason. What remains is
+framing, and the packet stated it outright — three places called the file content
+"context" and one told the model to review the diff "closely", against a single
+permission-shaped line eighth of twelve saying out-of-diff defects are "in scope".
+
+**The arm** makes the diff orientation, the files the review target, scope an
+obligation rather than a permission, and adds a coverage instruction (do not stop at
+the first defect; no severity floor at discovery).
+
+**Pre-registered, before any run:**
+
+- Out-of-diff recall must rise from its floor of **0/27** to count as anything. A
+  hard zero makes this a far better instrument than the blended figure.
+- **Adjusted precision (100%) MUST NOT fall.**
+- Report cost and output tokens: a coverage instruction that only inflates output
+  without finding more is a cost regression, not a win.
+- In-diff recall (66.7%) must not fall — the risk of de-emphasising the diff is that
+  it trades the population that already works for the one that does not.
+
+
 ## Standing caveats for reading anything here
 
 - **Variance.** sd ≈ 4.8pp on this corpus. An effect below roughly 10pp cannot be
