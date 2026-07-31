@@ -161,7 +161,7 @@ export const buildContextSections = (
     .join('\n')
   const changeSection =
     diffText.length > 0
-      ? `\n## Diff - exactly what this change modified (review this closely)\n\`\`\`diff\n${diffText}\n\`\`\``
+      ? `\n## What this change modified (orientation - shows which lines moved)\n\`\`\`diff\n${diffText}\n\`\`\``
       : diffRanges.length === 0
         ? ''
         : `\n## Reviewed diff ranges (what changed)\n${diffRanges}`
@@ -205,7 +205,7 @@ export const buildContextSections = (
 
   return [
     changeSection,
-    `\n## Changed files (full content, line-numbered, for context)\n${
+    `\n## Files under review (full content, line-numbered) - THIS is what you review\n${
       files.length === 0 ? '(no file content provided)' : files
     }`,
     referencedDefinitionsSection,
