@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Severity } from '../../shared/contracts/index.js'
+import { allDiffScopes, DiffScopeSchema, type DiffScope } from './eval-diff-scope.js'
 import {
   ExpectedFindingTierSchema,
   isObviousSecurityContextDepth,
@@ -60,6 +61,23 @@ export const emptySecurityContextDepthCounts = (): Record<
     allSecurityContextDepths.map((depth) => [depth, { expected: 0, matched: 0 }])
   ) as Record<SecurityContextDepth, SecurityFindingCounts>
 
+// Matched/expected pair per diff scope (spec 17). Same shape as the tier and
+// security records, and the denominator is what makes the paired recall rate
+// readable: `0.0%` over 81 expectations and `n/a` over none are opposite
+// statements about the engine.
+export type DiffScopeFindingCounts = {
+  readonly expected: number
+  readonly matched: number
+}
+
+export const emptyDiffScopeCounts = (): Record<
+  DiffScope,
+  DiffScopeFindingCounts
+> =>
+  Object.fromEntries(
+    allDiffScopes.map((scope) => [scope, { expected: 0, matched: 0 }])
+  ) as Record<DiffScope, DiffScopeFindingCounts>
+
 const clampRate = (value: unknown): unknown =>
   typeof value === 'number' && Number.isFinite(value)
     ? Math.min(RATE_MAX, Math.max(RATE_MIN, value))
@@ -118,6 +136,31 @@ const SecurityContextDepthRateSchema = z
 const SecurityContextDepthCountsSchema = z
   .record(SecurityContextDepthSchema, SecurityFindingCountsSchema)
   .default(() => emptySecurityContextDepthCounts())
+
+const DiffScopeFindingCountsSchema = z.strictObject({
+  expected: z.int().min(0),
+  matched: z.int().min(0)
+})
+
+// Diff-scope recall (spec 17) is NULLABLE per scope, unlike the tier and
+// security records, and that is the whole point of the field. The engine's
+// measured out-of-diff recall is a real 0.0% over a real denominator; a corpus
+// with no out-of-diff expectation at all must therefore be distinguishable from
+// that, or the two read identically. Null means "nobody measured this", exactly
+// as it does for `lineAccuracy`, and `diffScopeCounts` carries the denominator
+// that makes each rate interpretable.
+const DiffScopeRateSchema = z
+  .record(DiffScopeSchema, RateSchema.nullable())
+  .default(() =>
+    Object.fromEntries(allDiffScopes.map((scope) => [scope, null])) as Record<
+      DiffScope,
+      number | null
+    >
+  )
+
+const DiffScopeCountsSchema = z
+  .record(DiffScopeSchema, DiffScopeFindingCountsSchema)
+  .default(() => emptyDiffScopeCounts())
 
 const severityWeights: Readonly<Record<Severity, number>> = {
   critical: 5,
@@ -281,6 +324,21 @@ export const EvalMetricsSchema = z.strictObject({
   recallByTier: TierRateSchema,
   productRecall: RateSchema.default(1),
   nitRecall: RateSchema.default(1),
+  // Diff-scope recall (spec 17 *Diff Scope Of An Expectation*). `recall` above
+  // BLENDS two populations whose measured recall differs by tens of points, so
+  // its value tracks the in/out ratio of the fixture set as much as reviewer
+  // quality. These two are reported alongside it, never instead of it: it would
+  // be equally dishonest to headline the in-diff figure and drop the harder
+  // population as it was to blend them without saying so.
+  //
+  // `undetermined` is not a third quality signal. It counts expectations the
+  // hunk-span rule cannot place (no path, no declared line range, or a case
+  // whose reviewed diff was not captured), and exists so those never silently
+  // land in the out-of-diff denominator. A non-zero undetermined count on the
+  // real-repository corpus means the classification lost its input, not that
+  // the engine did anything.
+  recallByDiffScope: DiffScopeRateSchema,
+  diffScopeCounts: DiffScopeCountsSchema,
   // Security-dimension measurement (spec 15). Recall only: an admitted finding
   // carries no mechanism label, so per-mechanism adjusted precision is NOT
   // derivable and is deliberately absent. Every denominator is the count of
@@ -422,6 +480,10 @@ export type EvalMetricCaseResult = {
     SecurityContextDepth,
     SecurityFindingCounts
   >
+  // Diff-scope tallies (spec 17): matched/expected per in-diff, out-of-diff and
+  // undetermined, derived from the case's own reviewed diff joined to the match
+  // result. Aggregated exactly like `tierCounts`.
+  readonly diffScopeCounts: Record<DiffScope, DiffScopeFindingCounts>
   readonly noFindingZoneFalsePositiveCount: number
   readonly changedLineCount: number
   readonly diffHunkCount: number
@@ -663,6 +725,30 @@ export const calculateEvalMetrics = (
     securityHardExpected,
     0
   )
+  // Diff scope (spec 17). Aggregated like the tier counts, but the rate is
+  // `rateOrNull`, not `ratio`: an empty denominator here must not render as the
+  // 0.0% that a fully-missed out-of-diff population legitimately reports.
+  const diffScopeTotals = allDiffScopes.map((scope) => ({
+    scope,
+    expected: sum(
+      caseResults.map((result) => result.diffScopeCounts[scope].expected)
+    ),
+    matched: sum(
+      caseResults.map((result) => result.diffScopeCounts[scope].matched)
+    )
+  }))
+  const recallByDiffScope = Object.fromEntries(
+    diffScopeTotals.map(({ scope, expected, matched }) => [
+      scope,
+      rateOrNull(matched, expected)
+    ])
+  ) as Record<DiffScope, number | null>
+  const diffScopeCounts = Object.fromEntries(
+    diffScopeTotals.map(({ scope, expected, matched }) => [
+      scope,
+      { expected, matched }
+    ])
+  ) as Record<DiffScope, DiffScopeFindingCounts>
   const severityWeightedPrecision = ratio(
     totalMatchedExpectedSeverityWeight,
     totalMatchedExpectedSeverityWeight + totalFalsePositiveSeverityWeight,
@@ -894,6 +980,8 @@ export const calculateEvalMetrics = (
     recallByTier,
     productRecall,
     nitRecall,
+    recallByDiffScope,
+    diffScopeCounts,
     securityRecallByMechanism,
     securityMechanismCounts,
     securityRecallByContextDepth,

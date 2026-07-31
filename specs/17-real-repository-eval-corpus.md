@@ -126,11 +126,38 @@ The classification is derived deterministically from the reviewed diff and MUST 
 stored with the case so it is auditable and cannot drift. It MUST NOT be
 hand-assigned.
 
-**The storage half of that requirement is unmet.** No expectation or case field
-carries the classification, and no metric is keyed on it: the split exists only as
-ad-hoc analysis re-derived per report. That is exactly the drift the storage
-requirement was written to prevent, and it is why the figures below have to be
-dated and superseded by hand instead of recomputed.
+**Implemented.** The eval domain classifies every expectation from the case's own
+reviewed diff, at the single site that writes the scored artefact:
+
+- `diffScope` is stored **per expectation** on every case result in `report.json`,
+  beside `matchMode`. It is derived, never curated: no manifest, fixture, or slice
+  field carries it, so there is nothing for a curator to hand-assign, and the
+  runner computes it from the case's diff alone — never from the answer key, the
+  case id, or a tag. It is written at the one site that assembles a case's
+  expected-finding entries, so the report and the metric cannot disagree.
+- `metrics.recallByDiffScope` and `metrics.diffScopeCounts` report matched over
+  expected per population, aggregated across cases exactly as `recallByTier` is,
+  with an inconclusive expectation leaving the denominator for the same reason it
+  leaves the aggregate one.
+- Both populations are rendered **beside** the blended figure — in the summary
+  headline, in the metric catalog, in a `Recall by Diff Scope` section, and as
+  their own comparison rows — so neither can be quietly favoured. The
+  per-expectation recall report does not yet carry the scope as a column; it is
+  readable per expectation from `report.json` in the meantime.
+- A population with no expectation reports `n/a (0 checked)`, not `0.0%`. The
+  engine's measured out-of-diff recall is a real 0.0% over a real denominator, so
+  an unmeasured population must not render as that result. A comparison suppresses
+  the delta when either side is unmeasured.
+- Classification has a third value, **`undetermined`**, for an expectation the rule
+  cannot place: one with no path or no declared `lineRange`, or a case whose
+  reviewed diff was not captured (the default fixture pack carries none). Those
+  never enter the out-of-diff denominator, where they would depress the population
+  the engine already scores worst on with data that says nothing about it. A saved
+  report written before the field existed reads back as `undetermined` throughout,
+  which is what it is: it cannot answer the question.
+- `metricsVersion` is bumped (`2026-07-31.diff-scope-recall`), so a report scored
+  before the split existed cannot pool with one scored after it — an older report's
+  populations are holes, not zeros.
 
 **The rule is hunk span, not added lines.** An expectation is in-diff when its
 `lineRange` intersects the head-coordinate span of any hunk, taken from the hunk
@@ -138,6 +165,11 @@ header `@@ -a,b +c,d @@` as `[c, c+d-1]`. Hunks that are pure deletions in the
 reversed diff count: a fix that only *adds* a guard reverses into a deletion, and
 the reviewer is still shown that hunk with its surrounding context, so the region
 is genuinely under review.
+
+A hunk with **no head-side line at all** (`+c,0` — a whole-file deletion, or a
+zero-context diff) has an empty `[c, c+d-1]` span, which could never intersect
+anything and would read as unreviewed. It is taken as the single head coordinate
+`[c, c]` the header names, so the hunk still counts, as the rule above requires.
 
 An added-lines-only rule was used initially and was wrong. Measured on the same
 runs: it reported in-diff 73.9% against out-of-diff 8.8%, while the hunk-span rule
@@ -169,6 +201,12 @@ cleanup working: the five cases removed for answer-key disclosure had been scori
 retained because the argument they establish — that the two populations must never
 be blended, and that the hunk-span rule beats an added-lines rule — does not depend
 on the key.
+
+Every figure in this subsection was derived by hand, which is why each has had to
+be dated and superseded by hand. A run scored after the classification landed
+carries both populations in its own `report.json`, so the next re-measurement is
+read off the artefact rather than reconstructed. These figures are **not** restated
+from such a run: no evaluation was executed for this change.
 
 **42.5% of expectations (34 of 80) lie in unchanged code.** The corpus reviews
 `base = fixCommit`, `head = parentCommit`, so a defect the upstream fix commit did
@@ -210,6 +248,17 @@ Requirements:
 between-round-fix field, and nothing computes rounds-to-clean. The 2026-07-27
 convergence pilot cited below was therefore run outside the corpus contract, and is
 not reproducible from committed data — which is the reason the requirement exists.
+
+Unlike the diff-scope classification above, this requirement is **not derivable
+from committed data**, and that is why it stays open. A round mapping is only
+meaningful if something executes the rounds: hydration must materialise a working
+tree with the between-round fix applied, the eval runner must be told which round a
+case output belongs to, and the CLI must drive successive rounds. Rounds-to-clean
+is then a function of those per-round results — it cannot be recovered from a
+single-pass report, however the corpus is annotated. Adding the manifest field on
+its own would record a contract nothing produces and nothing reads, and would let
+this row be ticked while the metric the requirement exists for still does not
+exist. The unmet work is therefore the whole path, not the field.
 
 ### What The Corpus Can Support Today, And What It Cannot
 
@@ -418,6 +467,15 @@ comparison outright.
 
 ## Testing
 
+- Unit: the diff-scope classification — that a pure-deletion hunk classifies
+  in-diff (the case an added-lines rule gets wrong), that span boundaries decide
+  rather than proximity, that an expectation in a file the diff never mentions is
+  out-of-diff, that a hunk with no head-side line still counts, that an
+  expectation the rule cannot place is `undetermined` rather than out-of-diff, and
+  that hunk spans do not leak between files; and end to end through the runner,
+  that the classification is stored per expectation and that recall splits by it,
+  with an unmeasured population reporting `n/a` rather than 0.0% in the summary
+  and its delta suppressed in a comparison. No provider is involved.
 - Unit: the committed manifest's no-finding zones, asserting that each names a
   reviewed path, carries a line range, and does not overlap an expected finding;
   and the zone path end to end — manifest through `buildRealRepoSlice`, the written
@@ -545,3 +603,9 @@ real code is unmeasured here**, in either direction.
   freshly generated or reused from an existing checkout.
 - Cross-file recall reported on this corpus is a property of the engine: the
   evidence for every cross-file expected finding is present in the checkout.
+- A scored run carries each expectation's diff scope in its own report and reports
+  in-diff and out-of-diff recall beside the blended figure. A population with no
+  expectation reports as undefined, never as 0.0%, and no curated field anywhere in
+  the corpus can assign the classification.
+- Rounds-to-clean is still not reported. Nothing executes successive review rounds,
+  so no artefact carries the number and none can be derived from one that does not.

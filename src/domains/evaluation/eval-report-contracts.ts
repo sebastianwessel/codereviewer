@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { ReviewReportSchema } from '../../shared/contracts/index.js'
 import { ContextLedgerKindSchema } from '../review-planning/context-ledger.js'
+import { DiffScopeSchema } from './eval-diff-scope.js'
 import { EvalMetricsSchema } from './metrics.js'
 
 export const EvalContextLedgerEntrySchema = z.strictObject({
@@ -130,6 +131,16 @@ export const EvalExpectedFindingReportSchema = z.strictObject({
   path: z.string().min(1).optional(),
   lineRange: z.tuple([z.int().min(1), z.int().min(1)]).optional(),
   matchMode: z.enum(['path-line', 'path-semantic', 'semantic-only']),
+  // Whether this expectation lies inside the reviewed diff (spec 17). Derived
+  // by the eval domain from the case's own diff under the hunk-span rule and
+  // STORED here so the split is auditable per expectation and cannot drift:
+  // before this field it was re-derived by hand for every analysis, and two
+  // people computing it two ways got two different headline numbers.
+  //
+  // Defaulted for the same reason `metricsVersion` and `provenance` are: a
+  // report saved before the field existed must still parse, and such a report
+  // genuinely cannot answer the question — it is `undetermined`, not in-diff.
+  diffScope: DiffScopeSchema.default('undetermined'),
   semanticSummary: z.string().min(1)
 })
 
@@ -274,7 +285,14 @@ export const EvalMetricGroupSchema = z.strictObject({
 // review output. Comparing across a bump silently mixes incomparable runs, which
 // is the same class of failure as scoring a run against a stale answer key -- and
 // that one has already happened here.
-export const EVAL_METRICS_VERSION = '2026-07-27.plausibility-restatement-collapse'
+//
+// A metric that is merely ADDED bumps it too, whenever its value cannot be
+// recovered for a report saved earlier. `recallByDiffScope` is such a metric: an
+// older report carries no per-expectation diff-scope classification, so it reads
+// back as entirely `undetermined` and would pool into an in-diff or out-of-diff
+// figure as a silent hole rather than as data. Refusing to compare across the
+// bump is the same protection the earlier entries buy.
+export const EVAL_METRICS_VERSION = '2026-07-31.diff-scope-recall'
 
 export const EvalReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),

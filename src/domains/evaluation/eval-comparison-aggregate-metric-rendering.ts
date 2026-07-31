@@ -1,9 +1,11 @@
+import { type DiffScope } from './eval-diff-scope.js'
 import {
   appendMarkdownTable,
   formatCostMetric,
   formatDuration,
   formatInteger,
-  formatPercent
+  formatPercent,
+  formatRateOverCount
 } from './eval-report-markdown-formatting.js'
 import { type EvalReport } from './eval-report-contracts.js'
 import { type EvalMetrics } from './metrics.js'
@@ -50,6 +52,35 @@ const formatEvalComparisonPercentMetricDeltaRow = (
     head: formatPercent(input.head),
     delta: formatPercentagePointDelta(input.base, input.head)
   })
+
+// Diff-scope recall (spec 17) is nullable per side: a run whose fixture set
+// carries no expectation in a population measured nothing there. Such a side is
+// rendered `n/a` and the delta is suppressed, because differencing a missing
+// population against a measured one produces a number that looks like a
+// regression and is not one.
+const formatEvalComparisonDiffScopeRecallRow = (
+  input: {
+    readonly metric: string
+    readonly base: EvalMetrics
+    readonly head: EvalMetrics
+    readonly scope: DiffScope
+  }
+): string => {
+  const baseRate = input.base.recallByDiffScope[input.scope] ?? null
+  const headRate = input.head.recallByDiffScope[input.scope] ?? null
+  const baseCount = input.base.diffScopeCounts[input.scope]?.expected ?? 0
+  const headCount = input.head.diffScopeCounts[input.scope]?.expected ?? 0
+
+  return formatEvalComparisonMetricDeltaRow({
+    metric: input.metric,
+    base: formatRateOverCount(baseRate, baseCount),
+    head: formatRateOverCount(headRate, headCount),
+    delta:
+      baseRate === null || headRate === null || baseCount === 0 || headCount === 0
+        ? 'n/a'
+        : formatPercentagePointDelta(baseRate, headRate)
+  })
+}
 
 const formatEvalComparisonCountMetricDeltaRow = (
   input: {
@@ -135,6 +166,18 @@ export const appendEvalComparisonMetricDeltas = (
         metric: 'Recall',
         base: input.base.metrics.recall,
         head: input.head.metrics.recall
+      }),
+      formatEvalComparisonDiffScopeRecallRow({
+        metric: 'Recall (in-diff)',
+        base: input.base.metrics,
+        head: input.head.metrics,
+        scope: 'in-diff'
+      }),
+      formatEvalComparisonDiffScopeRecallRow({
+        metric: 'Recall (out-of-diff)',
+        base: input.base.metrics,
+        head: input.head.metrics,
+        scope: 'out-of-diff'
       }),
       formatEvalComparisonPercentMetricDeltaRow({
         metric: 'Precision',

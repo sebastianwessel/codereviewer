@@ -99,6 +99,7 @@ describe('eval report rendering', () => {
                 category: 'bug',
                 severity: 'high',
                 matchMode: 'semantic-only',
+                diffScope: 'undetermined',
                 semanticSummary: 'descriptor resource is leaked'
               }
             ],
@@ -200,6 +201,16 @@ describe('eval report rendering', () => {
           inconclusiveMatchCount: 0,
           productRecall: 1,
           nitRecall: 1,
+          recallByDiffScope: {
+            'in-diff': null,
+            'out-of-diff': null,
+            undetermined: 1
+          },
+          diffScopeCounts: {
+            'in-diff': { expected: 0, matched: 0 },
+            'out-of-diff': { expected: 0, matched: 0 },
+            undetermined: { expected: 1, matched: 1 }
+          },
           securityRecallByMechanism: zeroSecurityRecordByMechanism,
           securityMechanismCounts: emptySecurityMechanismCounts(),
           securityRecallByContextDepth: zeroSecurityRecordByContextDepth,
@@ -233,6 +244,17 @@ describe('eval report rendering', () => {
       }
     })
 
+    // A population with no expectation reports `n/a`, never 0.0%: the engine's
+    // real out-of-diff result IS 0.0% over a full denominator, so the two must
+    // not render alike.
+    expect(summary).toContain('| Findings | Recall (in-diff) | n/a (0 checked) |')
+    expect(summary).toContain(
+      '| Findings | Recall (out-of-diff) | n/a (0 checked) |'
+    )
+    // An expectation the hunk-span rule cannot place is surfaced rather than
+    // folded into either population.
+    expect(summary).toContain('## Recall by Diff Scope')
+    expect(summary).toContain('| undetermined | 100.0% (1 checked) | 1/1 |')
     expect(summary).toContain('## Semantic Judge Matches')
     expect(summary).toContain('| Judge agreement | 100.0% (12 pairs) |')
     expect(summary).toContain('| Judge trustworthy | yes |')

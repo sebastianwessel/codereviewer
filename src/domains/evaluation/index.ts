@@ -159,3 +159,12 @@ export {
   calculateEvalDiffStats,
   type EvalDiffStats
 } from './eval-diff-stats.js'
+export {
+  allDiffScopes,
+  classifyExpectedFindingDiffScope,
+  DiffScopeSchema,
+  expectedFindingDiffScopes,
+  hunkSpansByPath,
+  type DiffScope,
+  type DiffHunkSpansByPath
+} from './eval-diff-scope.js'

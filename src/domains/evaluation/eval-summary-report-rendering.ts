@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { allDiffScopes, type DiffScope } from './eval-diff-scope.js'
 import {
   resolveExpectedFindingMatchMode,
   SecurityContextDepthSchema,
@@ -83,6 +84,19 @@ const formatCountRecord = (record: Readonly<Record<string, number>>): string =>
     .map(([key, count]) => `${key} ${count}`)
     .join(', ') || 'none'
 
+// Diff-scope recall (spec 17) is rendered through `formatRateOverCount` so an
+// empty population reads `n/a (0 checked)`. Rendering it as 0.0% would be
+// indistinguishable from the engine's real, measured out-of-diff result, which
+// IS 0.0% over a full denominator.
+const formatDiffScopeRecall = (
+  metrics: EvalMetrics,
+  scope: DiffScope
+): string =>
+  formatRateOverCount(
+    metrics.recallByDiffScope[scope] ?? null,
+    metrics.diffScopeCounts[scope]?.expected ?? 0
+  )
+
 const findCase = (
   cases: readonly EvalCase[],
   caseId: string
@@ -150,6 +164,14 @@ const appendEvalSummaryHeadline = (
     rows: [
       `| Findings | Product recall | ${formatPercent(metrics.productRecall)} |`,
       `| Findings | Recall (all tiers) | ${formatPercent(metrics.recall)} |`,
+      // The blended figure above is not interpretable on its own: it depends on
+      // the in/out ratio of the fixture set as much as on the reviewer, and the
+      // two populations have measured tens of points apart. They are rendered
+      // immediately beside it (spec 17) so neither can be quietly favoured --
+      // headlining the in-diff figure alone would be as dishonest as blending
+      // them without saying so.
+      `| Findings | Recall (in-diff) | ${formatDiffScopeRecall(metrics, 'in-diff')} |`,
+      `| Findings | Recall (out-of-diff) | ${formatDiffScopeRecall(metrics, 'out-of-diff')} |`,
       `| Findings | Unmatched but plausible | ${formatInteger(metrics.unlistedRealFindingCount)} |`,
       `| False positives | Adjusted precision | ${formatPercent(metrics.adjustedPrecision)} |`,
       `| False positives | Genuine false positives | ${formatInteger(metrics.genuineFalsePositiveCount)} |`,
@@ -178,6 +200,8 @@ const appendEvalSummaryMetrics = (
       `| Recall | ${formatPercent(report.metrics.recall)} |`,
       `| Product recall | ${formatPercent(report.metrics.productRecall)} |`,
       `| Nit recall | ${formatPercent(report.metrics.nitRecall)} |`,
+      `| In-diff recall | ${formatDiffScopeRecall(report.metrics, 'in-diff')} |`,
+      `| Out-of-diff recall | ${formatDiffScopeRecall(report.metrics, 'out-of-diff')} |`,
       `| Security obvious recall | ${formatPercent(report.metrics.securityObviousRecall)} (${report.metrics.securityObviousCount} expected) |`,
       `| Security hard recall | ${formatPercent(report.metrics.securityHardRecall)} (${report.metrics.securityHardCount} expected) |`,
       `| Precision | ${formatPercent(report.metrics.precision)} |`,
@@ -283,6 +307,31 @@ const appendEvalSummaryRecallByTier = (
     rows: tierDisplayOrder.map(
       (tier) => `| ${tier} | ${formatPercent(report.metrics.recallByTier[tier])} |`
     )
+  })
+}
+
+// Recall by diff scope (spec 17). Every scope with expectations is rendered,
+// including `undetermined`: an expectation the hunk-span rule could not place is
+// a hole in the classification, and hiding it would let a report look complete
+// while part of its answer key sat outside both populations.
+const appendEvalSummaryRecallByDiffScope = (
+  lines: string[],
+  report: EvalReport
+): void => {
+  appendMarkdownTable(lines, {
+    heading: '## Recall by Diff Scope',
+    header: '| Diff scope | Recall | Matched/Expected |',
+    alignment: '| --- | ---: | ---: |',
+    rows: allDiffScopes.flatMap((scope) => {
+      const counts = report.metrics.diffScopeCounts[scope]
+      if (counts === undefined || counts.expected === 0) {
+        return []
+      }
+
+      return [
+        `| ${scope} | ${formatDiffScopeRecall(report.metrics, scope)} | ${counts.matched}/${counts.expected} |`
+      ]
+    })
   })
 }
 
@@ -764,6 +813,7 @@ export const renderEvalSummary = (
   appendEvalSummaryMetrics(lines, input.report)
   appendEvalSummaryRejectionsByReasonAndSeverity(lines, input.report)
   appendEvalSummaryRecallByTier(lines, input.report)
+  appendEvalSummaryRecallByDiffScope(lines, input.report)
   appendEvalSummaryMetricGroups(lines, input.report)
   // Per-mechanism security labels are a secondary breakdown (label accuracy is not
   // a headline goal), rendered after the general aggregate metrics.

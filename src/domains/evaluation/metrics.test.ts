@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import type { Severity } from '../../shared/contracts/index.js'
 import {
   calculateEvalMetrics,
+  emptyDiffScopeCounts,
   emptySecurityContextDepthCounts,
   emptySecurityMechanismCounts,
   severityWeight,
@@ -57,6 +58,7 @@ const caseResult = (
   },
   securityMechanismCounts: emptySecurityMechanismCounts(),
   securityContextDepthCounts: emptySecurityContextDepthCounts(),
+  diffScopeCounts: emptyDiffScopeCounts(),
   noFindingZoneFalsePositiveCount: 1,
   changedLineCount: 200,
   diffHunkCount: 4,
@@ -137,6 +139,58 @@ describe('eval metrics', () => {
     // productRecall over runtime-critical + security + logic: 3 matched / 5 expected.
     expect(metrics.productRecall).toBe(0.6)
     expect(metrics.nitRecall).toBe(0.25)
+  })
+
+  test('reports recall separately for the in-diff and out-of-diff populations', () => {
+    const metrics = calculateEvalMetrics([
+      caseResult({
+        expectedFindingCount: 6,
+        matchedFindingCount: 3,
+        diffScopeCounts: {
+          'in-diff': { expected: 4, matched: 3 },
+          'out-of-diff': { expected: 2, matched: 0 },
+          undetermined: { expected: 0, matched: 0 }
+        }
+      })
+    ])
+
+    // The blended figure is the one that depends on the population mix; the
+    // split is what makes it interpretable, so both must be present.
+    expect(metrics.recall).toBe(0.5)
+    expect(metrics.recallByDiffScope['in-diff']).toBe(0.75)
+    expect(metrics.recallByDiffScope['out-of-diff']).toBe(0)
+    expect(metrics.diffScopeCounts).toEqual({
+      'in-diff': { expected: 4, matched: 3 },
+      'out-of-diff': { expected: 2, matched: 0 },
+      undetermined: { expected: 0, matched: 0 }
+    })
+  })
+
+  test('reports an unmeasured diff-scope population as null, not as zero recall', () => {
+    // A fully missed population and an absent one must never render alike: the
+    // engine's measured out-of-diff recall is a real 0 over a real denominator.
+    const metrics = calculateEvalMetrics([
+      caseResult({
+        expectedFindingCount: 2,
+        matchedFindingCount: 0,
+        diffScopeCounts: {
+          'in-diff': { expected: 0, matched: 0 },
+          'out-of-diff': { expected: 2, matched: 0 },
+          undetermined: { expected: 0, matched: 0 }
+        }
+      })
+    ])
+
+    expect(metrics.recallByDiffScope['in-diff']).toBeNull()
+    expect(metrics.diffScopeCounts['in-diff']).toEqual({
+      expected: 0,
+      matched: 0
+    })
+    expect(metrics.recallByDiffScope['out-of-diff']).toBe(0)
+    expect(metrics.diffScopeCounts['out-of-diff']).toEqual({
+      expected: 2,
+      matched: 0
+    })
   })
 
   test('never emits a rate outside [0,1] under adversarial case results', () => {

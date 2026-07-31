@@ -42,8 +42,10 @@ import {
   type EvalPlausibilityJudge,
   type EvalPlausibilityResult
 } from './eval-plausibility-judge.js'
+import { expectedFindingDiffScopes } from './eval-diff-scope.js'
 import {
   calculateEvalMetrics,
+  emptyDiffScopeCounts,
   emptySecurityContextDepthCounts,
   emptySecurityMechanismCounts,
   emptyTierCounts,
@@ -362,10 +364,16 @@ const trustedDeterministicFindingsForEval = (
     (finding) => finding.proposedBy === 'deterministic-trusted-rule'
   )
 
+// Per-expectation report entries, including the diff-scope classification
+// (spec 17) derived from the case's own reviewed diff. Deriving it here, at the
+// single site that writes the scored artefact, is what makes it durable: every
+// consumer reads one stored value instead of re-deriving the split by hand.
 const expectedFindingSummaries = (
   evalCase: EvalCase
-): readonly z.infer<typeof EvalExpectedFindingReportSchema>[] =>
-  evalCase.expectedFindings.map((expected, expectedIndex) =>
+): readonly z.infer<typeof EvalExpectedFindingReportSchema>[] => {
+  const diffScopes = expectedFindingDiffScopes(evalCase)
+
+  return evalCase.expectedFindings.map((expected, expectedIndex) =>
     EvalExpectedFindingReportSchema.parse({
       expectedIndex,
       category: expected.category,
@@ -375,9 +383,44 @@ const expectedFindingSummaries = (
         ? {}
         : { lineRange: [...expected.lineRange] }),
       matchMode: resolveExpectedFindingMatchMode(expected),
+      diffScope: diffScopes[expectedIndex],
       semanticSummary: expected.semanticSummary
     })
   )
+}
+
+// Join the match result to the diff-scope classification so recall is scored
+// per population (spec 17). An inconclusive expectation leaves the denominator
+// for the same reason it leaves the aggregate recall one: a failed judge call is
+// not a miss.
+const diffScopeCountsForCase = (
+  evalCase: EvalCase,
+  matchResult: EvalMatcherResult
+): EvalMetricCaseResult['diffScopeCounts'] => {
+  const counts = emptyDiffScopeCounts()
+  const diffScopes = expectedFindingDiffScopes(evalCase)
+  const matchedExpectedIndexes = new Set(
+    matchResult.matches.map((match) => match.expectedIndex)
+  )
+  const inconclusiveExpectedIndexes = new Set(
+    matchResult.inconclusiveExpectedIndexes
+  )
+
+  evalCase.expectedFindings.forEach((_expected, expectedIndex) => {
+    if (inconclusiveExpectedIndexes.has(expectedIndex)) {
+      return
+    }
+
+    const scope = diffScopes[expectedIndex]!
+    counts[scope] = {
+      expected: counts[scope].expected + 1,
+      matched:
+        counts[scope].matched + (matchedExpectedIndexes.has(expectedIndex) ? 1 : 0)
+    }
+  })
+
+  return counts
+}
 
 const tierCountsForCase = (
   evalCase: EvalCase,
@@ -722,6 +765,7 @@ const buildMetricCase = (
       unlistedRealFindingIds: input.plausibility?.unlistedRealFindingIds ?? []
     }),
     tierCounts: tierCountsForCase(input.evalCase, input.matchResult),
+    diffScopeCounts: diffScopeCountsForCase(input.evalCase, input.matchResult),
     ...securityCountsForCase(input.evalCase, input.matchResult),
     noFindingZoneFalsePositiveCount:
       input.matchResult.noFindingZoneFalsePositiveIds.length,

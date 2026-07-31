@@ -42,6 +42,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "expectedFindings": [
         {
           "category": "bug",
+          "diffScope": "undetermined",
           "expectedIndex": 0,
           "lineRange": [
             4,
@@ -177,6 +178,20 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "contextMutationRate": 0,
         "costUnavailableCount": 0,
         "costUsd": 0.2,
+        "diffScopeCounts": {
+          "in-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "out-of-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "undetermined": {
+            "expected": 1,
+            "matched": 1,
+          },
+        },
         "duplicateFindingCount": 0,
         "durationMs": 2000,
         "elapsedMs": 42,
@@ -211,6 +226,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "providerIssueCount": 0,
         "providerIssueRate": 0,
         "recall": 1,
+        "recallByDiffScope": {
+          "in-diff": null,
+          "out-of-diff": null,
+          "undetermined": 1,
+        },
         "recallByTier": {
           "logic": 1,
           "nit": 1,
@@ -360,6 +380,20 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "contextMutationRate": 0,
         "costUnavailableCount": 0,
         "costUsd": 0.2,
+        "diffScopeCounts": {
+          "in-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "out-of-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "undetermined": {
+            "expected": 1,
+            "matched": 1,
+          },
+        },
         "duplicateFindingCount": 0,
         "durationMs": 2000,
         "elapsedMs": 42,
@@ -394,6 +428,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "providerIssueCount": 0,
         "providerIssueRate": 0,
         "recall": 1,
+        "recallByDiffScope": {
+          "in-diff": null,
+          "out-of-diff": null,
+          "undetermined": 1,
+        },
         "recallByTier": {
           "logic": 1,
           "nit": 1,
@@ -542,6 +581,20 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "contextMutationRate": 0,
         "costUnavailableCount": 0,
         "costUsd": 0.1,
+        "diffScopeCounts": {
+          "in-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "out-of-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "undetermined": {
+            "expected": 0,
+            "matched": 0,
+          },
+        },
         "duplicateFindingCount": 0,
         "durationMs": 1000,
         "elapsedMs": 42,
@@ -576,6 +629,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "providerIssueCount": 0,
         "providerIssueRate": 0,
         "recall": 1,
+        "recallByDiffScope": {
+          "in-diff": null,
+          "out-of-diff": null,
+          "undetermined": null,
+        },
         "recallByTier": {
           "logic": 1,
           "nit": 1,
@@ -724,6 +782,20 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "contextMutationRate": 0,
         "costUnavailableCount": 0,
         "costUsd": 0.1,
+        "diffScopeCounts": {
+          "in-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "out-of-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "undetermined": {
+            "expected": 1,
+            "matched": 1,
+          },
+        },
         "duplicateFindingCount": 0,
         "durationMs": 1000,
         "elapsedMs": 42,
@@ -758,6 +830,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "providerIssueCount": 0,
         "providerIssueRate": 0,
         "recall": 1,
+        "recallByDiffScope": {
+          "in-diff": null,
+          "out-of-diff": null,
+          "undetermined": 1,
+        },
         "recallByTier": {
           "logic": 1,
           "nit": 1,
@@ -907,6 +984,20 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "contextMutationRate": 0,
         "costUnavailableCount": 0,
         "costUsd": 0.2,
+        "diffScopeCounts": {
+          "in-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "out-of-diff": {
+            "expected": 0,
+            "matched": 0,
+          },
+          "undetermined": {
+            "expected": 1,
+            "matched": 1,
+          },
+        },
         "duplicateFindingCount": 0,
         "durationMs": 2000,
         "elapsedMs": 42,
@@ -941,6 +1032,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "providerIssueCount": 0,
         "providerIssueRate": 0,
         "recall": 1,
+        "recallByDiffScope": {
+          "in-diff": null,
+          "out-of-diff": null,
+          "undetermined": 1,
+        },
         "recallByTier": {
           "logic": 1,
           "nit": 1,
@@ -1083,6 +1179,20 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "contextMutationRate": 0,
     "costUnavailableCount": 0,
     "costUsd": 0.2,
+    "diffScopeCounts": {
+      "in-diff": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "out-of-diff": {
+        "expected": 0,
+        "matched": 0,
+      },
+      "undetermined": {
+        "expected": 1,
+        "matched": 1,
+      },
+    },
     "duplicateFindingCount": 0,
     "durationMs": 2000,
     "elapsedMs": 42,
@@ -1117,6 +1227,11 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "providerIssueCount": 0,
     "providerIssueRate": 0,
     "recall": 1,
+    "recallByDiffScope": {
+      "in-diff": null,
+      "out-of-diff": null,
+      "undetermined": 1,
+    },
     "recallByTier": {
       "logic": 1,
       "nit": 1,
@@ -1243,7 +1358,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "trustedDeterministicFindingCount": 0,
     "unlistedRealFindingCount": 0,
   },
-  "metricsVersion": "2026-07-27.plausibility-restatement-collapse",
+  "metricsVersion": "2026-07-31.diff-scope-recall",
   "provenance": {
     "answerKeyDigest": "8a0f6c4247b62cb5ae0d182f93ca56547fb831d783599d2c4d19626a6452d8e2",
     "answerKeyDigestByCase": {
@@ -1297,6 +1412,8 @@ Fixtures: 2
 | --- | --- | ---: |
 | Findings | Product recall | 100.0% |
 | Findings | Recall (all tiers) | 100.0% |
+| Findings | Recall (in-diff) | n/a (0 checked) |
+| Findings | Recall (out-of-diff) | n/a (0 checked) |
 | Findings | Unmatched but plausible | 0 |
 | False positives | Adjusted precision | 50.0% |
 | False positives | Genuine false positives | 1 |
@@ -1326,6 +1443,8 @@ Fixtures: 2
 | Recall | 100.0% |
 | Product recall | 100.0% |
 | Nit recall | 100.0% |
+| In-diff recall | n/a (0 checked) |
+| Out-of-diff recall | n/a (0 checked) |
 | Security obvious recall | 0.0% (0 expected) |
 | Security hard recall | 0.0% (0 expected) |
 | Precision | 50.0% |
@@ -1380,6 +1499,12 @@ Fixtures: 2
 | security | 100.0% |
 | logic | 100.0% |
 | nit | 100.0% |
+
+## Recall by Diff Scope
+
+| Diff scope | Recall | Matched/Expected |
+| --- | ---: | ---: |
+| undetermined | 100.0% (1 checked) | 1/1 |
 
 ## Metric Groups
 

@@ -1408,6 +1408,9 @@ describe('eval runner', () => {
         path: 'src/app.ts',
         lineRange: [4, 4],
         matchMode: 'path-line',
+        // This fixture carries no reviewed diff, so the hunk-span rule has
+        // nothing to place the expectation against.
+        diffScope: 'undetermined',
         semanticSummary: 'incorrect return value from changed branch'
       }
     ])
@@ -1424,6 +1427,153 @@ describe('eval runner', () => {
     expect(recallReport).toContain('| Expected findings | Always detected | Never detected | Flaky |')
     expect(recallReport).toContain('| 1 | 0 | 0 | 1 |')
     expect(recallReport).toContain('| typescript-positive | 0 | high | src/app.ts:4 | path-line | incorrect return value from changed branch | 1/2 | Y N |')
+  })
+
+  test('stores the diff scope of every expectation and splits recall by it', async () => {
+    // Two expectations in the same case: one inside a hunk of the reviewed
+    // diff, one in a file the diff never touches. The reviewer finds the
+    // in-diff one only, which is the shape the corpus measures repeatedly --
+    // and blended recall (50%) says nothing about either population on its own.
+    const cases = parseEvalCases([
+      {
+        id: 'diff-scope-case',
+        language: 'typescript',
+        repositoryFixture: 'fixtures/typescript/positive',
+        changedFiles: ['src/app.ts'],
+        diff: `diff --git a/src/app.ts b/src/app.ts
+--- a/src/app.ts
++++ b/src/app.ts
+@@ -1,6 +1,6 @@
+ export const run = () => {
+-  const value = computeSafely()
++  const value = compute()
+   return value
+ }
+`,
+        expectedFindings: [
+          {
+            category: 'bug',
+            severity: 'high',
+            path: 'src/app.ts',
+            lineRange: [4, 4],
+            matchMode: 'path-semantic',
+            semanticSummary: 'incorrect return value from changed branch'
+          },
+          {
+            category: 'bug',
+            severity: 'high',
+            path: 'src/legacy.ts',
+            lineRange: [40, 42],
+            matchMode: 'path-semantic',
+            semanticSummary: 'pre-existing unchecked cast in untouched code'
+          }
+        ],
+        expectedNoFindingZones: [],
+        tags: ['positive', 'typescript']
+      }
+    ])
+
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'diff-scope-case',
+          changedLineCount: 2,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding()])
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    // Stored per expectation on the scored artefact, so no consumer has to
+    // re-derive the split and no two consumers can derive it differently.
+    expect(
+      result.report.caseResults[0]?.expectedFindings.map(
+        (expected) => expected.diffScope
+      )
+    ).toEqual(['in-diff', 'out-of-diff'])
+
+    expect(result.report.metrics.recall).toBe(0.5)
+    expect(result.report.metrics.recallByDiffScope['in-diff']).toBe(1)
+    expect(result.report.metrics.recallByDiffScope['out-of-diff']).toBe(0)
+    expect(result.report.metrics.recallByDiffScope.undetermined).toBeNull()
+    expect(result.report.metrics.diffScopeCounts).toEqual({
+      'in-diff': { expected: 1, matched: 1 },
+      'out-of-diff': { expected: 1, matched: 0 },
+      undetermined: { expected: 0, matched: 0 }
+    })
+
+    const summary = renderEvalSummary({ cases, report: result.report })
+
+    // Reported ALONGSIDE the blended figure, never instead of it.
+    expect(summary).toContain('| Findings | Recall (all tiers) | 50.0% |')
+    expect(summary).toContain('| Findings | Recall (in-diff) | 100.0% (1 checked) |')
+    expect(summary).toContain('| Findings | Recall (out-of-diff) | 0.0% (1 checked) |')
+    expect(summary).toContain('| in-diff | 100.0% (1 checked) | 1/1 |')
+    expect(summary).toContain('| out-of-diff | 0.0% (1 checked) | 0/1 |')
+
+    // A comparison must be able to move the two populations independently, or a
+    // change that trades one for the other reads as flat.
+    const miss = await runEvaluation({
+      cases,
+      judge: rejectingJudge,
+      outputs: [
+        {
+          caseId: 'diff-scope-case',
+          changedLineCount: 2,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([])
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:03.000Z'
+    })
+    const comparison = renderEvalComparison({
+      base: miss.report,
+      head: result.report
+    })
+
+    expect(comparison).toContain(
+      '| Recall (in-diff) | 0.0% (1 checked) | 100.0% (1 checked) | +100.0pp |'
+    )
+    expect(comparison).toContain(
+      '| Recall (out-of-diff) | 0.0% (1 checked) | 0.0% (1 checked) | 0.0pp |'
+    )
+
+    // A side that measured a population not at all is `n/a`, and its delta is
+    // suppressed: differencing a missing population against a measured one
+    // produces a number that looks like a regression and is not one.
+    const negativeOnly = await runEvaluation({
+      cases: parseEvalCases([inlineEvalCases[1]]),
+      outputs: [
+        {
+          caseId: 'typescript-negative',
+          changedLineCount: 5,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([])
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:04.000Z'
+    })
+
+    expect(
+      renderEvalComparison({ base: negativeOnly.report, head: result.report })
+    ).toContain(
+      '| Recall (in-diff) | n/a (0 checked) | 100.0% (1 checked) | n/a |'
+    )
   })
 
   test('renders eval comparison selection status and mismatch warning before metrics', async () => {
