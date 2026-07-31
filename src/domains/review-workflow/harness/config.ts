@@ -15,6 +15,9 @@ const compactAgentMaxSteps = 1
 // Head-room for refutation batches that exceed the provider input budget and split
 // into halves. Splitting is bounded and rare, so a small constant is enough.
 const refutationBatchSplitAllowance = 3
+// The task planner's own cap on paths per clustered task. Mirrored here because the
+// call budget must bound the worst case a planned task can present.
+const maxPathsPerReviewTask = 8
 const contextHeavyAgentMaxSteps = 4
 
 export type ReviewAgentRole =
@@ -31,18 +34,27 @@ export const maxChildAgentCallsForReview = (
     readonly taskCount?: number
     readonly maxConcurrentTasks?: number
     readonly securityPassEnabled?: boolean
+    readonly maxFilesPerDiscoveryCall?: number
   } = {}
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
   const maxConcurrentTasks = effectiveMaxConcurrentTasks(input.maxConcurrentTasks)
-  // One holistic discovery call per task (plus one more when the dedicated
-  // security pass is enabled, spec 15), plus refutation. Refutation adjudicates
-  // ALL of a task's candidates in a single batched call, so it costs one call per
-  // task rather than one per candidate; a batch that exceeds the input budget
-  // splits in half, so a small allowance is added for those splits.
+  // Spec 27 partitions a task's files across several discovery calls, so a task no
+  // longer costs one discovery call — it costs one PER PARTITION, and the security
+  // pass the same again. Refutation groups by task id, and each partition is its own
+  // task id, so a task's candidates are adjudicated in one batch per partition too.
+  //
+  // This must track partitioning rather than be re-guessed: under-reserving is fatal
+  // (the workflow refuses the call) while over-reserving costs nothing, because this
+  // is a ceiling and not a spend.
+  const partitionsPerTask =
+    input.maxFilesPerDiscoveryCall === undefined
+      ? 1
+      : Math.ceil(maxPathsPerReviewTask / input.maxFilesPerDiscoveryCall)
   const discoveryCallsPerTask =
-    1 + (input.securityPassEnabled === true ? 1 : 0)
-  const refutationCallsPerTask = 1 + refutationBatchSplitAllowance
+    partitionsPerTask * (1 + (input.securityPassEnabled === true ? 1 : 0))
+  const refutationCallsPerTask =
+    partitionsPerTask * (1 + refutationBatchSplitAllowance)
   // Spec 05: the semantic finding merge issues at most one call per FILE that
   // carries two or more candidates, and a task's candidates are capped, so
   // halving the cap is the exact ceiling for a task. It is derived from the caps
@@ -50,9 +62,12 @@ export const maxChildAgentCallsForReview = (
   // the call) while over-reserving costs nothing: this budget is a ceiling, not
   // a spend, and today's roughly one candidate per file means almost none of it
   // is used.
+  // The candidate caps are per DISCOVERY CALL, so a partitioned task's ceiling
+  // scales with the number of partitions.
   const mergeCallsPerTask = Math.floor(
-    (HOLISTIC_MAX_CANDIDATES +
-      (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0)) /
+    (partitionsPerTask *
+      (HOLISTIC_MAX_CANDIDATES +
+        (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0))) /
       2
   )
   // Cross-file retrieval (spec 16) needs no reservation here: a mediated tool call

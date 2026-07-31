@@ -77,7 +77,15 @@ export const runProviderWorkflow = async (
     taskCount:
       input.workflowInput.tasks?.length ?? input.workflowInput.reviewedPaths.length,
     maxConcurrentTasks: input.config.review.maxConcurrentTasks,
-    securityPassEnabled: input.config.security.dedicatedPass.enabled
+    securityPassEnabled: input.config.security.dedicatedPass.enabled,
+    // Spec 27: partitioning multiplies discovery and refutation calls per task, and
+    // under-reserving here makes the workflow refuse a call mid-run.
+    ...(input.config.aiReview.maxFilesPerDiscoveryCall === undefined
+      ? {}
+      : {
+          maxFilesPerDiscoveryCall:
+            input.config.aiReview.maxFilesPerDiscoveryCall
+        })
   })
   const harness = createModelBackedReviewHarness({
     modelAlias: usageRecorder.modelAlias,

@@ -1536,6 +1536,36 @@ The dip at 4 is almost certainly noise at this sample size and should not be rea
 structure.
 
 
+### Stage 1 headline at shipped defaults, and the cross-file replication (2026-08-01, $4.51)
+
+37-case real-repository corpus, pinned engine, partitioning at its shipped default of
+2 files per call.
+
+| | recall | adjusted precision | raw precision | cost |
+|---|---|---|---|---|
+| **defaults** | **43.7%** | **95.0%** | 73.1% | $2.31 |
+| defaults + cross-file | 46.0% | 100% | 76.9% | $2.20 |
+
+**43.7% / 95.0% at $2.31 is the current honest headline for the review stage.** It is
+the first figure measured on this corpus with the shipped configuration and a pinned
+engine, and it supersedes everything earlier on this page for quoting purposes.
+
+Note it is only ~1pp above the same corpus without partitioning (42.5%). That is
+expected and not a contradiction: the real-repo cases are small, so partitioning
+rarely engages. Its measured value was on the 21 LARGE benchmark cases, where it is
+worth +11.3pp. The two corpora answer different questions.
+
+**Cross-file retrieval: the replication does NOT confirm the effect.** Paired,
+87 expectations: **+2.3pp**, 95% CI [−4.6, 9.2], discordant 10 (gained 6, lost 4),
+McNemar z 0.63, **p = 0.527**. Against the first run's +5.7pp at p = 0.096.
+
+Two runs, both positive in direction, neither significant, the second much weaker.
+The honest reading: the original **net-negative verdict is refuted** — it was
+measuring silently truncated reads — but a positive effect is **not established**.
+Adjusted precision reached 100% in both runs at neutral cost, so it is best described
+as neutral-to-slightly-positive. **It stays off by default.**
+
+
 ## Standing caveats for reading anything here
 
 - **Variance.** sd ≈ 4.8pp on this corpus. An effect below roughly 10pp cannot be

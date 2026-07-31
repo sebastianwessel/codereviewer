@@ -318,26 +318,32 @@ export const runModelBackedHolisticTaskReview = async (
     const generalLocations = new Set(
       [...candidatesById.values()].map(locationKey)
     )
-    const security = await runDiscoveryCall({
-      runner: input.runners.holisticReview,
-      taskInput: input.taskInput,
-      buildText: (taskInput) => buildSecurityReviewText(taskInput, rawDiff),
-      signal: input.signal,
-      stage: 'holistic_review_security'
-    })
-    providerIssues.push(...security.providerIssues)
-    securityFindingCount = security.findings.length
-    securitySplitCount = security.splitCount
-    const securityCollected = collectCandidates({
-      findings: security.findings,
-      task: input.task,
-      into: candidatesById,
-      maxToAdd: SECURITY_MAX_CANDIDATES,
-      excludeLocations: generalLocations
-    })
-    droppedCount += securityCollected.dropped
-    suppressedByLocationCount += securityCollected.suppressedByLocation
-    suppressedByIdCount += securityCollected.suppressedById
+    // Partitioned on the same terms as the general pass. Spec 27's requirement is
+    // unqualified, and a security call that reviewed the whole task while the
+    // general pass reviewed slices would be both the largest packet in the run and
+    // the one call not getting the attention benefit the whole feature rests on.
+    for (const partition of partitions) {
+      const security = await runDiscoveryCall({
+        runner: input.runners.holisticReview,
+        taskInput: { ...input.taskInput, task: partition },
+        buildText: (taskInput) => buildSecurityReviewText(taskInput, rawDiff),
+        signal: input.signal,
+        stage: 'holistic_review_security'
+      })
+      providerIssues.push(...security.providerIssues)
+      securityFindingCount += security.findings.length
+      securitySplitCount += security.splitCount
+      const securityCollected = collectCandidates({
+        findings: security.findings,
+        task: partition,
+        into: candidatesById,
+        maxToAdd: SECURITY_MAX_CANDIDATES,
+        excludeLocations: generalLocations
+      })
+      droppedCount += securityCollected.dropped
+      suppressedByLocationCount += securityCollected.suppressedByLocation
+      suppressedByIdCount += securityCollected.suppressedById
+    }
   }
 
   const discovered = [...candidatesById.values()]
@@ -364,7 +370,14 @@ export const runModelBackedHolisticTaskReview = async (
   input.logger.debug('Holistic task review completed.', {
     task_id: input.task.id,
     finding_count: generalFindingCount,
-    discovery_call_count: partitions.length,
+    // Every discovery call actually issued: one per partition for the general pass,
+    // the same again when the security pass runs, plus the extra calls any reactive
+    // split produced.
+    discovery_call_count:
+      partitions.length *
+        (input.workflowInput.securityPassEnabled ? 2 : 1) +
+      generalSplitCount +
+      securitySplitCount,
     security_pass_enabled: input.workflowInput.securityPassEnabled,
     security_finding_count: securityFindingCount,
     // Spec 26: how many times the provider refused a packet and it was halved.

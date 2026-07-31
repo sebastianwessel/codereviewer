@@ -82,7 +82,9 @@ describe('discovery partitioning', () => {
         ...fileDocuments(2),
         document({
           kind: 'referenced-definition',
-          path: 'src/f0.ts',
+          // An UNCHANGED dependency — which is the only thing a referenced
+          // definition ever is. Never one of the changed files.
+          path: 'src/lib/unchanged-dependency.ts',
           content: 'digest',
           ledgerEntryId: 'ctx_0000000000000097'
         }),
@@ -98,8 +100,10 @@ describe('discovery partitioning', () => {
     const kinds = (index: number) =>
       partitions[index]?.reviewContext.map((entry) => entry.kind) ?? []
 
+    // A referenced definition describes an unchanged dependency of the CHANGE, not
+    // of one file, so every call needs it. Dropping it is what the original code did.
     expect(kinds(0)).toContain('referenced-definition')
-    expect(kinds(1)).not.toContain('referenced-definition')
+    expect(kinds(1)).toContain('referenced-definition')
     // Context describing the whole change reaches every call: dropping it would make
     // a partition review with LESS context than the undivided task had.
     expect(kinds(0)).toContain('change-intent')

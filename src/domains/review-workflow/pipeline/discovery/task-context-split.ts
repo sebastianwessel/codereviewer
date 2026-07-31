@@ -24,10 +24,22 @@ export const subTaskId = (parentId: string, suffix: string): string =>
 /**
  * Build a sub-task from a subset of review targets, attaching the context each needs.
  *
- * Context-only documents (referenced definitions, change intent, support signals)
- * follow their path into the sub-task that reviews it; documents with no path —
- * change intent describes the whole change — go to EVERY sub-task, because dropping
- * them would silently review with less context than the undivided task had.
+ * Context-only documents reach a sub-task when they are ABOUT one of its files, or
+ * when they are not about any reviewed file at all:
+ *
+ * - no path (change intent describes the whole change) → every sub-task;
+ * - path is one of this sub-task's own files → this sub-task;
+ * - path is not a review target of the parent AT ALL → every sub-task.
+ *
+ * That third case is the one that matters and it was wrong. A referenced definition
+ * is by construction an UNCHANGED dependency file, deliberately excluded from
+ * `task.paths` so it can never become a review target — so matching it against a
+ * sub-task's own paths never succeeds, and every R4 digest was silently dropped from
+ * every partition. The reviewer lost exactly the callee contracts that let it judge
+ * a caller, on precisely the large multi-file changes partitioning exists to serve.
+ *
+ * The unit tests did not catch it because their fixtures gave a referenced
+ * definition the path of a CHANGED file, a state assembly cannot produce.
  */
 export const subTaskFrom = (
   parent: WorkflowReviewTask,
@@ -44,6 +56,16 @@ export const subTaskFrom = (
   ].sort()
   const pathSet = new Set(paths)
 
+  // Every file the PARENT reviews. A context document pointing outside this set is
+  // external context, not a sibling's file, so withholding it from a sub-task would
+  // simply lose it.
+  const parentTargetPaths = new Set(
+    parent.reviewContext
+      .filter(isReviewTarget)
+      .map((document) => document.path)
+      .filter((path): path is string => path !== undefined)
+  )
+
   return {
     ...parent,
     id: subTaskId(parent.id, suffix),
@@ -55,7 +77,9 @@ export const subTaskFrom = (
       ...targets,
       ...contextOnly.filter(
         (document) =>
-          document.path === undefined || pathSet.has(document.path)
+          document.path === undefined ||
+          pathSet.has(document.path) ||
+          !parentTargetPaths.has(document.path)
       )
     ]
   }

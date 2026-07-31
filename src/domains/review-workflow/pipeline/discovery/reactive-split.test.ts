@@ -97,7 +97,8 @@ describe('reactive task splitting', () => {
         document({ path: 'src/b.ts', ledgerEntryId: 'ctx_0000000000000002' }),
         document({
           kind: 'referenced-definition',
-          path: 'src/a.ts',
+          // An UNCHANGED dependency, as assembly always produces.
+          path: 'src/lib/unchanged-dependency.ts',
           content: 'digest of a dependency',
           ledgerEntryId: 'ctx_0000000000000003'
         }),
@@ -112,9 +113,10 @@ describe('reactive task splitting', () => {
     const kinds = (index: 0 | 1): readonly string[] =>
       halves?.[index].reviewContext.map((entry) => entry.kind) ?? []
 
-    // The referenced definition follows the file it belongs to...
+    // A referenced definition points OUTSIDE the reviewed files, so it belongs to
+    // both halves — withholding it from either would simply lose it.
     expect(kinds(0)).toContain('referenced-definition')
-    expect(kinds(1)).not.toContain('referenced-definition')
+    expect(kinds(1)).toContain('referenced-definition')
     // ...while context describing the whole change goes to BOTH halves, since
     // dropping it from either would silently review that half with less context
     // than the undivided task had.
