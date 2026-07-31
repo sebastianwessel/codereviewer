@@ -8,7 +8,8 @@ import {
   RejectedFindingSchema,
   RepositoryRelativePathSchema,
   ReviewReportSchema,
-  SeveritySchema
+  SeveritySchema,
+  TaskDiscoveryTelemetrySchema
 } from '../../../shared/contracts/index.js'
 import {
   CandidateFindingSchema
@@ -697,7 +698,12 @@ export const TaskReviewResultSchema = z.strictObject({
   // split halves (spec 26), not the planned task. Admission validates a finding's
   // line against the span its own call was shown, and those sub-tasks carry
   // synthetic ids that match nothing in the planned task list.
-  reviewedTasks: z.array(WorkflowReviewTaskSchema).default([])
+  reviewedTasks: z.array(WorkflowReviewTaskSchema).default([]),
+  // What discovery produced for this task, before refutation and admission decided
+  // what survived (spec 27). Optional rather than defaulted: a task runner that
+  // issues no discovery call has nothing to state, and an absent record must not be
+  // readable as a recorded zero.
+  discovery: TaskDiscoveryTelemetrySchema.optional()
 })
 
 export const FindingRefutationResultSchema = z.strictObject({

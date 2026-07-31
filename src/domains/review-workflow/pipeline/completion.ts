@@ -3,7 +3,8 @@ import {
   type AdmittedFinding,
   type EvidenceRecord,
   type RefutationResult,
-  type RejectedFinding
+  type RejectedFinding,
+  type ReviewDiscoveryReport
 } from '../../../shared/contracts/index.js'
 import { assertDeterministicSignalEvidenceOwnsPath } from '../../deterministic-signals/index.js'
 import {
@@ -243,6 +244,10 @@ export const completeReviewWorkflow = (
     readonly refutationResults: readonly RefutationResult[]
     // Sub-tasks discovery actually ran (partitions, reactive split halves).
     readonly reviewedTasks?: readonly WorkflowReviewTask[]
+    // What discovery produced before refutation and admission (spec 27). Passed
+    // through untouched: completion decides what is ADMITTED, and a record of what
+    // discovery found would stop meaning that the moment this stage edited it.
+    readonly discovery?: ReviewDiscoveryReport | undefined
     readonly providerIssues: readonly ProviderIssue[]
     readonly contextLedgerEntries: readonly ContextLedgerEntry[]
     readonly evidence: readonly EvidenceRecord[]
@@ -333,6 +338,7 @@ export const completeReviewWorkflow = (
   })
 
   return ReviewWorkflowOutputSchema.parse({
+    ...(input.discovery === undefined ? {} : { discovery: input.discovery }),
     admittedFindings: baseline.admittedFindings,
     rejectedFindings,
     evidence,

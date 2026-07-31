@@ -396,6 +396,242 @@ describe('runModelBackedHolisticTaskReview', () => {
   })
 })
 
+// Spec 27. These numbers existed before, in a `logger.debug` line that was off for
+// every paid evaluation run, so every measurement this project made was blind to
+// what discovery produced as opposed to what survived it.
+describe('discovery telemetry', () => {
+  const threeFileTask: WorkflowReviewTask = {
+    ...task,
+    id: 'task_three_files',
+    paths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
+    reviewContext: ['a', 'b', 'c'].map((name, index) => ({
+      kind: 'file' as const,
+      path: `src/${name}.ts`,
+      content: `export const ${name} = ${index}\n`,
+      startLine: 1,
+      endLine: 2,
+      ledgerEntryId: `ctx_000000000000000${index}`
+    }))
+  }
+
+  test('records raw findings BEFORE the parse, the scope filter and the cap — so raw and candidate counts differ', async () => {
+    // The load-bearing assertion. A run where `rawFindingCount` always equalled
+    // `candidateCount` would look like working instrumentation while hiding the
+    // exact drop these counters exist to expose, so the case is pinned here: three
+    // raw findings in, one candidate out, and the two causes counted apart.
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([
+            {
+              category: 'bug',
+              severity: 'high',
+              title: 'Unconditional cache write on error path',
+              description: 'Assigned to the cache even when the fetch failed.',
+              path: 'src/app.ts',
+              startLine: 10
+            },
+            // Out of scope: the call was never shown this file.
+            {
+              category: 'bug',
+              severity: 'high',
+              title: 'Unrelated file defect',
+              description: 'A defect in a file with no reviewed change.',
+              path: 'src/other.ts',
+              startLine: 3
+            },
+            // Unparseable: no location at all.
+            {
+              category: 'bug',
+              severity: 'medium',
+              title: 'Vague concern',
+              description: 'No location provided.'
+            }
+          ])
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(1)
+    expect(result.discovery).toMatchObject({
+      taskId: 'task_holistic',
+      callCount: 1,
+      rawFindingCount: 3,
+      rawFindingsPerCall: [3],
+      candidateCount: 1,
+      droppedCount: 2,
+      suppressedByIdCount: 0,
+      suppressedByLocationCount: 0,
+      contextOverflowSplitCount: 0
+    })
+    expect(result.discovery?.rawFindingCount).not.toBe(
+      result.discovery?.candidateCount
+    )
+  })
+
+  test('counts a duplicate suppression apart from a dropped finding', async () => {
+    // Two identical findings: one candidate, and the loss attributed to
+    // suppression rather than to a parse or scope failure. Summing them into one
+    // counter is what hid both.
+    const duplicate = {
+      category: 'bug',
+      severity: 'high',
+      title: 'Same defect',
+      description: 'Identical finding emitted twice.',
+      path: 'src/app.ts',
+      startLine: 5
+    }
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () => holisticResultWith([duplicate, duplicate])
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.discovery).toMatchObject({
+      rawFindingCount: 2,
+      candidateCount: 1,
+      suppressedByIdCount: 1,
+      droppedCount: 0
+    })
+  })
+
+  test('records raw findings per CALL, so the distribution survives and not only its mean', async () => {
+    // The open question is the SHAPE: whether per-file yield is capped or merely
+    // averages low. A total of four over three calls is consistent with both, and
+    // only the per-call array separates them.
+    const yields = [3, 1, 0]
+    let call = 0
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: ReviewWorkflowInputSchema.parse({
+        runId: 'run-holistic',
+        reviewedPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        maxFilesPerDiscoveryCall: 1,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'holistic-test',
+          signalVersions: { typescript: '6.0.3' },
+          configHash
+        }
+      }),
+      taskInput: TaskReviewInputSchema.parse({
+        ...taskInput,
+        task: threeFileTask
+      }),
+      task: threeFileTask,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          const first = holisticInput.paths[0] as string
+          const count = yields[call] as number
+          call += 1
+
+          return holisticResultWith(
+            Array.from({ length: count }, (_unused, index) => ({
+              category: 'bug',
+              severity: 'high',
+              title: `Defect ${index + 1} in ${first}`,
+              description: 'One of several findings from a single call.',
+              path: first,
+              startLine: index + 1
+            }))
+          )
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.discovery?.rawFindingsPerCall).toEqual([3, 1, 0])
+    expect(result.discovery?.callCount).toBe(3)
+    expect(result.discovery?.rawFindingCount).toBe(4)
+  })
+
+  test('a reactive split reports one entry per call actually issued, never for the refused packet', async () => {
+    // The refused packet produced no findings because the provider never read it.
+    // Counting it as a zero-yield look would understate findings-per-call exactly
+    // when the provider is refusing, which is when the number matters most.
+    const config = CodeReviewerConfigSchema.parse({})
+    const assembled = await assembleContext({
+      repositoryRoot: '/unused',
+      config,
+      sourceFiles: [{ path: 'src/large.ts', content: multiByteSource(200) }],
+      analysis: { facts: [], evidence: [] },
+      tasks: [
+        {
+          id: 'task_large',
+          round: 1,
+          kind: 'file',
+          paths: ['src/large.ts'],
+          factIds: [],
+          evidenceIds: [],
+          candidateIds: [],
+          contextEntryIds: [],
+          priority: 0
+        }
+      ]
+    })
+    const wholeTask = assembled.tasks[0] as WorkflowReviewTask
+    let call = 0
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: ReviewWorkflowInputSchema.parse({
+        runId: 'run-holistic',
+        reviewedPaths: ['src/large.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'holistic-test',
+          signalVersions: { typescript: '6.0.3' },
+          configHash
+        }
+      }),
+      taskInput: TaskReviewInputSchema.parse({
+        ...taskInput,
+        task: wholeTask,
+        reviewedDiffRanges: [
+          { path: 'src/large.ts', startLine: 1, endLine: 200 }
+        ]
+      }),
+      task: wholeTask,
+      runners: {
+        holisticReview: async () => {
+          call += 1
+
+          if (call === 1) {
+            throw Object.assign(new Error('provider rejected the request'), {
+              reason: 'context_length_exceeded'
+            })
+          }
+
+          return holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // Three model calls were made; two of them were looks at content.
+    expect(call).toBe(3)
+    expect(result.discovery).toMatchObject({
+      callCount: 2,
+      rawFindingsPerCall: [0, 0],
+      contextOverflowSplitCount: 1
+    })
+  })
+})
+
 // The discovery packet's field ORDER is a measured property, not a style choice:
 // the packet is serialized in declaration order and a provider-side prompt cache
 // matches on leading tokens, so a reordered packet is a cache miss on every call.

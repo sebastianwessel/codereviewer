@@ -22,6 +22,7 @@ import {
 import { createStructuredError } from '../../../shared/errors/error-normalizer.js'
 import { sha256 } from '../../../shared/hash/hash.js'
 import { prepareCandidatesForAdmission } from './admission/review.js'
+import { summarizeDiscoveryTelemetry } from './discovery/discovery-telemetry.js'
 import { taskReviewInputFor } from './discovery/task-packet.js'
 import { renderSharedDigest } from './shared-digest.js'
 import { tasksForWorkflowInput } from './task-planning.js'
@@ -185,6 +186,15 @@ export const runReviewWorkflowHandler = async (params: {
   // are the only units carrying a genuine sub-file span, and admission needs them to
   // check a finding's line against what its own call was shown.
   const reviewedTasks = queued.results.flatMap((result) => result.reviewedTasks)
+  // What discovery produced, per task, before refutation and admission filtered it
+  // (spec 27). Threaded exactly like `reviewedTasks` above, and for the same
+  // reason: a number no stage downstream can recompute has to be carried, or it is
+  // gone.
+  const discovery = summarizeDiscoveryTelemetry(
+    queued.results.flatMap((result) =>
+      result.discovery === undefined ? [] : [result.discovery]
+    )
+  )
   const taskEvidenceRecords = queued.results.flatMap(
     (result) => result.evidenceRecords
   )
@@ -232,6 +242,7 @@ export const runReviewWorkflowHandler = async (params: {
   const output = completeReviewWorkflow({
     workflowInput: input,
     reviewedTasks,
+    ...(discovery === undefined ? {} : { discovery }),
     candidateFindings: mergedCandidates,
     admissionCandidates: prepared.admissionCandidates,
     artifactOnlyCandidateIds: prepared.artifactOnlyCandidateIds,

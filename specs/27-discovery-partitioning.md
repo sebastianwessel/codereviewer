@@ -60,10 +60,29 @@ Two consequences follow, and both matter more than the original claim:
   file per call" and "one function per call" is entirely unmeasured and is where the
   curve points next.
 
-What the data cannot yet settle is whether the ~1.2-per-file ceiling originates in
-discovery or is partly imposed by refutation and admission. Deciding that requires
-the per-call `finding_count` the debug line already computes to reach the evaluation
-report; nothing new has to be measured, only recorded.
+What the data could not settle is whether the ~1.2-per-file ceiling originates in
+discovery or is partly imposed by refutation and admission. Deciding it required the
+per-call `finding_count` the debug line already computed to reach the evaluation
+report; nothing new had to be measured, only recorded.
+
+**That recording now exists (2026-08-01).** Discovery telemetry is carried from the
+discovery call up through the task result, the workflow output, and the review
+report, into the per-case eval report — the same path `reviewedTasks` already took.
+It records, per run and per task: discovery calls issued, **raw findings returned by
+the model before the schema parse, the scope filter, the per-call cap and the merge**,
+candidates after collection, findings dropped at parse or scope, findings suppressed
+as duplicates by id and by location, overflow-driven splits, and the merge counters.
+Raw findings are additionally kept **per call**, because the open question is the
+SHAPE of the distribution — a hard ceiling near 1.2 per file and a spread with the
+same mean imply different fixes, and a mean cannot separate them. The debug line is
+unchanged and still emitted; the durable path runs alongside it. `EVAL_METRICS_VERSION`
+is bumped, because a report saved earlier cannot recover the new figures: for such a
+report the honest reading is "not recorded", never "no discovery calls".
+
+The measurement itself is still outstanding. What has changed is that the next run —
+including the prompt A/B this was needed for — answers it as a by-product, and a null
+recall result can now be told apart from a discovery gain that later stages filtered
+away.
 
 The old byte budget was therefore doing two jobs while claiming one. It said it was
 fitting packets into a context window (false — the provider accepts 1.2 MB without
@@ -110,6 +129,10 @@ size.
   cannot anchor a finding against content that call never read.
 - The number of discovery calls issued MUST be reported, so a run's yield can be read
   against the number of looks that produced it.
+- The raw findings a discovery call returned MUST be recorded on the review report,
+  per call, BEFORE the schema parse, the scope filter, the per-call cap, and the
+  merge. A debug log line does not satisfy this: debug logging was off for every paid
+  run, so the figure existed and was discarded every time.
 - The default MUST leave behaviour unchanged until the value is measured. Shipping a
   chosen-by-feel default is the failure this project has now corrected five times.
 

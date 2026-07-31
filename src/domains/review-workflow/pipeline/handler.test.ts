@@ -199,4 +199,58 @@ describe('workflow handler', () => {
       output.rejectedFindings.filter((finding) => finding.reason === 'duplicate')
     ).toMatchObject([{ candidateId: mergedAway.id }])
   })
+
+  test('carries each task’s discovery telemetry into the workflow output, summed and per task', async () => {
+    // Spec 27. The handler is the only place the per-task counters can be summed,
+    // and nothing downstream can recompute them: refutation and admission see what
+    // survived discovery, never what discovery produced.
+    const output = await runReviewWorkflowHandler({
+      input: workflowInput,
+      signal: undefined,
+      logger: createNoopReviewLogger(),
+      maxConcurrentTasks: 1,
+      runTask: async (_taskInput, task) =>
+        TaskReviewResultSchema.parse({
+          candidates: [candidate],
+          discovery: {
+            taskId: task.id,
+            callCount: 2,
+            rawFindingCount: 5,
+            rawFindingsPerCall: [4, 1],
+            candidateCount: 1,
+            droppedCount: 3,
+            suppressedByIdCount: 1,
+            suppressedByLocationCount: 0,
+            contextOverflowSplitCount: 0,
+            mergeCallCount: 0,
+            mergeGroupCount: 0,
+            mergedAwayCount: 0
+          }
+        })
+    })
+
+    expect(output.discovery?.totals).toMatchObject({
+      callCount: 2,
+      rawFindingCount: 5,
+      rawFindingsPerCall: [4, 1],
+      candidateCount: 1,
+      droppedCount: 3
+    })
+    expect(output.discovery?.tasks).toHaveLength(1)
+    // The one admitted finding is unchanged: instrumentation must not move a
+    // verdict, a candidate, or a count that already existed.
+    expect(output.admittedFindings).toHaveLength(1)
+  })
+
+  test('records no discovery at all when no task issued a discovery call', async () => {
+    const output = await runReviewWorkflowHandler({
+      input: workflowInput,
+      signal: undefined,
+      logger: createNoopReviewLogger(),
+      maxConcurrentTasks: 1,
+      runTask: async () => TaskReviewResultSchema.parse({ candidates: [] })
+    })
+
+    expect(output.discovery).toBeUndefined()
+  })
 })

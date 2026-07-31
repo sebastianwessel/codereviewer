@@ -185,6 +185,9 @@ export const createReviewReport = (input: {
   readonly qualityGate: ReviewReport['qualityGate']
   readonly refutationResults: ReviewReport['refutationResults']
   readonly providerIssues: ReviewReport['providerIssues']
+  // Spec 27. Carried onto the report so a run's yield can be read against the
+  // number of looks that produced it, without a debug log having been enabled.
+  readonly discovery?: ReviewReport['discovery']
   readonly resolvedBaselineEntries?: readonly NonNullable<
     ReviewReport['resolvedBaselineEntries']
   >[number][]
@@ -200,6 +203,7 @@ export const createReviewReport = (input: {
     qualityGate: input.qualityGate,
     refutationResults: input.refutationResults,
     providerIssues: input.providerIssues,
+    ...(input.discovery === undefined ? {} : { discovery: input.discovery }),
     ...(input.resolvedBaselineEntries === undefined
       ? {}
       : { resolvedBaselineEntries: input.resolvedBaselineEntries }),
@@ -269,6 +273,9 @@ export const prepareReviewRunnerSuccessResult = (
     qualityGate: input.admission.qualityGate,
     refutationResults: input.admission.refutationResults,
     providerIssues: input.admission.providerIssues,
+    ...(input.admission.discovery === undefined
+      ? {}
+      : { discovery: input.admission.discovery }),
     ...(input.config.baseline.includeResolvedInReport
       ? { resolvedBaselineEntries: input.resolvedBaselineEntries }
       : {})

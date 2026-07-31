@@ -243,6 +243,42 @@ describe('review runner results', () => {
     expect(report.run.runId).toBe('run_report')
     expect(report.coverage.status).toBe('complete')
     expect(report.artifacts).toEqual([])
+    // A run whose findings came from deterministic signals alone issued no
+    // discovery call, and must not claim a recorded zero.
+    expect(report.discovery).toBeUndefined()
+
+    const discovery = {
+      totals: {
+        callCount: 3,
+        rawFindingCount: 4,
+        rawFindingsPerCall: [2, 1, 1],
+        candidateCount: 2,
+        droppedCount: 2,
+        suppressedByIdCount: 0,
+        suppressedByLocationCount: 0,
+        contextOverflowSplitCount: 0,
+        mergeCallCount: 0,
+        mergeGroupCount: 0,
+        mergedAwayCount: 0
+      },
+      tasks: []
+    }
+    const instrumentedReport = createReviewReport({
+      run,
+      coverage,
+      admittedFindings: [],
+      rejectedFindings: [],
+      evidence: [],
+      skippedFiles: [],
+      qualityGate: undefined,
+      refutationResults: [],
+      providerIssues: [],
+      discovery
+    })
+
+    // Spec 27: the report is where the counters have to arrive, because it is the
+    // only artefact an evaluation reads back.
+    expect(instrumentedReport.discovery).toEqual(discovery)
   })
 
   test('prepares successful runner result with report metrics and shared context', () => {

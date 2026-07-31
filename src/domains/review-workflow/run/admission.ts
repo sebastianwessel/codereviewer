@@ -39,6 +39,8 @@ export type ReviewRunnerAdmissionState = Pick<
   readonly evidence: readonly EvidenceRecord[]
   readonly candidateFindings: readonly CandidateFinding[]
   readonly refutationResults: ReviewReport['refutationResults']
+  // Spec 27. Absent on the deterministic path, which issues no discovery call.
+  readonly discovery?: ReviewReport['discovery']
   readonly providerIssues: ReviewReport['providerIssues']
   readonly contextLedgerEntries: readonly ContextLedgerEntry[]
   readonly admissionDecisions: ReviewSharedContextSnapshot['admissionDecisions']
@@ -244,6 +246,7 @@ export const admissionFromProviderWorkflowOutput = (
   qualityGate: output.qualityGate,
   candidateFindings: output.candidateFindings,
   refutationResults: output.refutationResults,
+  ...(output.discovery === undefined ? {} : { discovery: output.discovery }),
   providerIssues: output.providerIssues,
   contextLedgerEntries: output.contextLedgerEntries,
   admissionDecisions: output.admissionDecisions.map(

@@ -1245,6 +1245,178 @@
         "additionalProperties": false
       }
     },
+    "discovery": {
+      "type": "object",
+      "properties": {
+        "totals": {
+          "type": "object",
+          "properties": {
+            "callCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "rawFindingCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "rawFindingsPerCall": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "candidateCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "droppedCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "suppressedByIdCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "suppressedByLocationCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "contextOverflowSplitCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "mergeCallCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "mergeGroupCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "mergedAwayCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "callCount",
+            "rawFindingCount",
+            "rawFindingsPerCall",
+            "candidateCount",
+            "droppedCount",
+            "suppressedByIdCount",
+            "suppressedByLocationCount",
+            "contextOverflowSplitCount",
+            "mergeCallCount",
+            "mergeGroupCount",
+            "mergedAwayCount"
+          ],
+          "additionalProperties": false
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "callCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "rawFindingCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "rawFindingsPerCall": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                }
+              },
+              "candidateCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "droppedCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "suppressedByIdCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "suppressedByLocationCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "contextOverflowSplitCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "mergeCallCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "mergeGroupCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "mergedAwayCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^(?:test-[A-Za-z0-9_-]+|task_[a-z0-9]+(?:_[a-z0-9]+)*)$"
+              }
+            },
+            "required": [
+              "callCount",
+              "rawFindingCount",
+              "rawFindingsPerCall",
+              "candidateCount",
+              "droppedCount",
+              "suppressedByIdCount",
+              "suppressedByLocationCount",
+              "contextOverflowSplitCount",
+              "mergeCallCount",
+              "mergeGroupCount",
+              "mergedAwayCount",
+              "taskId"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "totals",
+        "tasks"
+      ],
+      "additionalProperties": false
+    },
     "artifacts": {
       "type": "array",
       "items": {

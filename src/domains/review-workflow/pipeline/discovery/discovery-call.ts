@@ -38,6 +38,14 @@ const isRecoverableDiscoveryFailure = (error: unknown): boolean =>
 export type DiscoveryCallResult = {
   readonly findings: readonly unknown[]
   readonly providerIssues: readonly ProviderIssue[]
+  // Raw findings returned by each model call this invocation actually issued, in
+  // issue order — one entry per LEAF call, so a call the provider refused and that
+  // was halved contributes one entry per half rather than one for the whole. The
+  // per-call shape is the point (spec 27): the open question is whether findings per
+  // file are capped or merely average low, and a total cannot tell those apart.
+  // `rawFindingsPerCall.length` is `1 + splitCount` by construction, which is the
+  // same call count the debug line has always reported.
+  readonly rawFindingsPerCall: readonly number[]
   // How many times this call had to be halved because the provider refused the
   // packet (spec 26). Zero is the expected case and the one worth noticing when it
   // stops being true: a run that split is doing something measurably different from
@@ -59,6 +67,10 @@ const emptyResult = (
   findings: [],
   providerIssues,
   splitCount: 0,
+  // A call WAS issued; it just yielded nothing usable. Recording it as a zero-yield
+  // call rather than as no call keeps the denominator honest — dropping it would
+  // quietly inflate findings-per-call exactly when the provider is degrading.
+  rawFindingsPerCall: [0],
   reviewedTasks: []
 })
 
@@ -99,6 +111,7 @@ export const runDiscoveryCall = async (
       findings: review.findings,
       providerIssues: [],
       splitCount: 0,
+      rawFindingsPerCall: [review.findings.length],
       reviewedTasks: [task]
     }
   } catch (error) {
@@ -178,6 +191,10 @@ const splitAndRetry = async (
     // This split, plus any the halves themselves needed.
     splitCount:
       1 + results.reduce((total, result) => total + result.splitCount, 0),
+    // The refused call is deliberately NOT an entry: it returned no findings
+    // because the provider never read it, and counting it would report a
+    // zero-yield look that never happened.
+    rawFindingsPerCall: results.flatMap((result) => result.rawFindingsPerCall),
     reviewedTasks: results.flatMap((result) => result.reviewedTasks)
   }
 }

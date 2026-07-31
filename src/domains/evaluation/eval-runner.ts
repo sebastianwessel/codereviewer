@@ -801,6 +801,14 @@ const buildReportCase = (
   agenticStages: [
     ...agenticStagesForReport(input.reviewReport, input.output.fixOutcomes.length)
   ],
+  // Spec 27: carried through verbatim so a comparison script can read what
+  // DISCOVERY produced next to what survived, per case. Without it a null result on
+  // a discovery-targeting change is uninterpretable — "the reviewer did not look at
+  // more" and "it did, and refutation or admission removed the difference" produce
+  // the same recall.
+  ...(input.reviewReport.discovery === undefined
+    ? {}
+    : { discovery: input.reviewReport.discovery }),
   fixOutcomes: [...input.output.fixOutcomes],
   expectedFindings: [...expectedFindingSummaries(input.evalCase)],
   matchedFindings: [...input.matchResult.matches],

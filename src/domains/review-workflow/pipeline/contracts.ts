@@ -75,6 +75,10 @@ export const ReviewWorkflowOutputSchema = z.strictObject({
   providerIssues: ReviewReportSchema.shape.providerIssues,
   admissionDecisions: z.array(WorkflowAdmissionDecisionSchema),
   taskEvents: z.array(WorkflowTaskEventSchema),
+  // Spec 27. Optional for the same reason it is optional on the report: a workflow
+  // that issued no discovery call has nothing to state, and an absent record is not
+  // a recorded zero.
+  discovery: ReviewReportSchema.shape.discovery,
   qualityGate: ReviewReportSchema.shape.qualityGate.unwrap(),
   instructionHashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)),
   skillHashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)),

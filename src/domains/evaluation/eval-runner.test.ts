@@ -523,6 +523,85 @@ describe('eval runner', () => {
     )
   })
 
+  test('surfaces the review report’s discovery telemetry per case', async () => {
+    // Spec 27. The eval report is the only artefact a comparison script reads, so
+    // a counter that stops at the review report answers nothing about a paid run.
+    // Recorded per case so an A/B can be paired case by case, and at the
+    // resolution of hundreds of discovery calls rather than dozens of
+    // expectations.
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const discovery = {
+      totals: {
+        callCount: 3,
+        rawFindingCount: 5,
+        rawFindingsPerCall: [3, 2, 0],
+        candidateCount: 2,
+        droppedCount: 3,
+        suppressedByIdCount: 0,
+        suppressedByLocationCount: 0,
+        contextOverflowSplitCount: 0,
+        mergeCallCount: 0,
+        mergeGroupCount: 0,
+        mergedAwayCount: 0
+      },
+      tasks: []
+    }
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport(
+              [admittedFinding()],
+              [],
+              'complete',
+              {},
+              { discovery }
+            )
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.caseResults[0]?.discovery).toEqual(discovery)
+    // Raw findings and admitted findings are different quantities, and the whole
+    // point of recording both is that the gap between them is visible.
+    expect(result.report.caseResults[0]?.discovery?.totals.rawFindingCount).toBe(5)
+    expect(result.report.caseResults[0]?.matchedFindings).toHaveLength(1)
+  })
+
+  test('records no discovery telemetry for a case whose provider errored', async () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'provider-error',
+            code: 'provider_unavailable',
+            message: 'The provider refused the request.'
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    // No call was issued, so nothing is claimed — not a recorded zero.
+    expect(result.report.caseResults[0]?.discovery).toBeUndefined()
+  })
+
   test('derives refutation metrics and surfaces refutation results in case reports', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
     const result = await runEvaluation({

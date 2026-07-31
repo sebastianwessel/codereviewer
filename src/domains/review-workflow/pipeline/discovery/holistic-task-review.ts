@@ -3,6 +3,7 @@ import {
   type CandidateFinding
 } from '../../../admission/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
+import { TaskDiscoveryTelemetrySchema } from '../../../../shared/contracts/index.js'
 import {
   ModelHolisticFindingSchema,
   type HolisticReviewRunner,
@@ -191,6 +192,8 @@ type DiscoveryPassResult = {
   readonly reviewedTasks: readonly WorkflowReviewTask[]
   readonly findingCount: number
   readonly splitCount: number
+  // Raw findings per discovery call this pass issued, in issue order.
+  readonly rawFindingsPerCall: readonly number[]
   readonly collected: CollectedCandidates
 }
 
@@ -219,6 +222,7 @@ const runDiscoveryPass = async (params: {
 }): Promise<DiscoveryPassResult> => {
   const providerIssues: ProviderIssue[] = []
   const reviewedTasks: WorkflowReviewTask[] = []
+  const rawFindingsPerCall: number[] = []
   let findingCount = 0
   let splitCount = 0
   let dropped = 0
@@ -238,6 +242,7 @@ const runDiscoveryPass = async (params: {
     reviewedTasks.push(...call.reviewedTasks)
     findingCount += call.findings.length
     splitCount += call.splitCount
+    rawFindingsPerCall.push(...call.rawFindingsPerCall)
 
     // Collected against the PARTITION, not the parent task: a finding must stay
     // restricted to the files its own call was shown, or admission would anchor it
@@ -261,6 +266,7 @@ const runDiscoveryPass = async (params: {
     reviewedTasks,
     findingCount,
     splitCount,
+    rawFindingsPerCall,
     collected: { dropped, suppressedByLocation, suppressedById }
   }
 }
@@ -424,6 +430,31 @@ export const runModelBackedHolisticTaskReview = async (
     providerIssues.push(...merge.providerIssues)
   }
 
+  // The same numbers the debug line below has always computed, on a path that
+  // survives the run (spec 27). The debug line stays: it is useful at debug level
+  // and costs nothing. What it could not do was reach an evaluation report, and
+  // every paid run so far had debug logging off — so the one measurement that
+  // separates "discovery produced no more" from "discovery produced more and later
+  // stages filtered it out" was computed and then discarded, every time.
+  const discovery = TaskDiscoveryTelemetrySchema.parse({
+    taskId: input.task.id,
+    callCount: general.rawFindingsPerCall.length +
+      (security?.rawFindingsPerCall.length ?? 0),
+    rawFindingCount: general.findingCount + (security?.findingCount ?? 0),
+    rawFindingsPerCall: [
+      ...general.rawFindingsPerCall,
+      ...(security?.rawFindingsPerCall ?? [])
+    ],
+    candidateCount: discovered.length,
+    droppedCount,
+    suppressedByIdCount,
+    suppressedByLocationCount,
+    contextOverflowSplitCount: splitCount,
+    mergeCallCount: merge?.mergeCallCount ?? 0,
+    mergeGroupCount: merge?.groupCount ?? 0,
+    mergedAwayCount: merge?.rejectedFindings.length ?? 0
+  })
+
   input.logger.debug('Holistic task review completed.', {
     task_id: input.task.id,
     finding_count: general.findingCount,
@@ -464,6 +495,7 @@ export const runModelBackedHolisticTaskReview = async (
     evidenceRecords: [],
     providerIssues,
     rejectedFindings: [...(merge?.rejectedFindings ?? [])],
-    reviewedTasks
+    reviewedTasks,
+    discovery
   }
 }

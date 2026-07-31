@@ -150,6 +150,13 @@ export const EvalCaseReportSchema = z.strictObject({
   providerErrored: z.boolean(),
   providerIssues: z.array(EvalProviderIssueReportSchema).default([]),
   agenticStages: z.array(EvalAgenticStageReportSchema).default([]),
+  // What discovery produced for this case, before refutation and admission
+  // filtered it (spec 27). Reused from the review report verbatim rather than
+  // mirrored: the provider-issue and refutation mirrors above exist because the
+  // eval reshapes those, and there is nothing to reshape here — a copy would only
+  // create two definitions that can drift. Absent when the review report carried
+  // none (a provider-errored case, or a report written before the field existed).
+  discovery: ReviewReportSchema.shape.discovery,
   contextLedger: z.array(EvalContextLedgerEntrySchema).default([]),
   expectedFindings: z.array(EvalExpectedFindingReportSchema),
   matchedFindings: z.array(EvalFindingMatchReportSchema),
@@ -292,7 +299,13 @@ export const EvalMetricGroupSchema = z.strictObject({
 // back as entirely `undetermined` and would pool into an in-diff or out-of-diff
 // figure as a silent hole rather than as data. Refusing to compare across the
 // bump is the same protection the earlier entries buy.
-export const EVAL_METRICS_VERSION = '2026-07-31.no-trusted-rule-metric'
+//
+// `discovery` (spec 27) is the same case as `recallByDiffScope`: the per-case
+// discovery counters cannot be recovered for a report saved before they were
+// recorded, because the run that would have produced them is over and its debug
+// log was off. A comparison that pooled such a report would read "no discovery
+// calls" where the truth is "not recorded".
+export const EVAL_METRICS_VERSION = '2026-08-01.discovery-telemetry'
 
 export const EvalReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),

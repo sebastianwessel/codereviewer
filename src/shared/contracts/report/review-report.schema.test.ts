@@ -130,6 +130,49 @@ describe('ReviewReportSchema', () => {
     expect(ReviewReportSchema.parse(validReport).schemaVersion).toBe('1.0')
   })
 
+  test('carries optional discovery telemetry, and distinguishes absent from zero', () => {
+    // Spec 27. `undefined` means the run issued no discovery call (or predates the
+    // field); an all-zero record means it looked and found nothing. Conflating the
+    // two would make an old report read as a reviewer that never looked.
+    expect(ReviewReportSchema.parse(validReport).discovery).toBeUndefined()
+
+    const discovery = {
+      totals: {
+        callCount: 2,
+        rawFindingCount: 3,
+        rawFindingsPerCall: [2, 1],
+        candidateCount: 1,
+        droppedCount: 2,
+        suppressedByIdCount: 0,
+        suppressedByLocationCount: 0,
+        contextOverflowSplitCount: 0,
+        mergeCallCount: 0,
+        mergeGroupCount: 0,
+        mergedAwayCount: 0
+      },
+      tasks: [
+        {
+          taskId: 'task_abc123',
+          callCount: 2,
+          rawFindingCount: 3,
+          rawFindingsPerCall: [2, 1],
+          candidateCount: 1,
+          droppedCount: 2,
+          suppressedByIdCount: 0,
+          suppressedByLocationCount: 0,
+          contextOverflowSplitCount: 0,
+          mergeCallCount: 0,
+          mergeGroupCount: 0,
+          mergedAwayCount: 0
+        }
+      ]
+    }
+
+    expect(
+      ReviewReportSchema.parse({ ...validReport, discovery }).discovery
+    ).toEqual(discovery)
+  })
+
   test('rejects unknown report fields', () => {
     expect(() =>
       ReviewReportSchema.parse({
