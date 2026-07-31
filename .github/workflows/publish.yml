@@ -159,6 +159,11 @@ jobs:
       - name: Check generated schemas are up to date
         run: npm run generate:schemas:check
 
+      # The README ships inside the tarball, so documentation drift is drift in a
+      # published artefact — a dead link or a stale path reaches every consumer.
+      - name: Check documentation drift
+        run: node dist/cli/main.js drift check
+
       # Only the dependencies that ship. The dev tree carries advisories that
       # never reach a consumer, and blocking a release on those would train
       # people to skip the gate.

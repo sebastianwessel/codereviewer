@@ -186,11 +186,25 @@ const checkStalePathReferences = (
 
     const obsoleteArtifactRoot = `.${'review'}`
 
-    // Match the obsolete `.review` artifact root only at a segment boundary, so a
-    // config identifier that merely begins with "review" (for example
-    // `reporting.reviewComments`) is not mistaken for the old artifact directory.
+    // The obsolete root is a DIRECTORY, and that is what distinguishes it from the
+    // many legitimate `.review` spellings in prose. Both boundaries are needed:
+    //
+    // - trailing, so an identifier that merely begins with "review" (for example
+    //   `reporting.reviewComments`) is not read as the old artifact directory;
+    // - leading, so a PROPERTY ACCESS is not either. `CodeReviewerConfigSchema.review`
+    //   is a schema field this repository still has, and it was being reported as a
+    //   stale artifact path — an `error`-gated finding that failed `drift check`
+    //   outright and kept the whole gate out of CI.
+    //
+    // A directory root is never preceded by an identifier character: a real stale
+    // path reads `.review/…`, `` `.review` `` or "the .review directory", where the
+    // preceding character is a separator, quote or space. So the lookbehind costs no
+    // detection.
     if (
-      new RegExp(`\\${obsoleteArtifactRoot}(?![A-Za-z])`, 'u').test(file.content)
+      new RegExp(
+        `(?<![A-Za-z0-9_])\\${obsoleteArtifactRoot}(?![A-Za-z])`,
+        'u'
+      ).test(file.content)
     ) {
       findings.push(
         createFinding(config, {
@@ -227,15 +241,23 @@ const checkAmbiguity = (
         ]
   })
 
-// Implemented CLI command inventory. Documentation referencing a command
-// outside this set describes behavior the implementation does not provide.
-const implementedCliCommands = new Set([
+// Implemented CLI command inventory. Documentation referencing a command outside
+// this set describes behavior the implementation does not provide.
+//
+// This is a hand-maintained mirror of the CLI's dispatch, because a domain must not
+// import from the CLI layer. That makes it a second source of truth, and it drifted:
+// `intent` was missing long after `intent check` shipped, so every spec that
+// documented the command correctly was reported as documenting a command that does
+// not exist. `src/cli/drift-checker-cli-inventory.test.ts` now pins this set against the
+// CLI's real dispatch so the mirror cannot silently fall behind again.
+export const implementedCliCommands = new Set([
   'config',
   'review',
   'baseline',
   'eval',
   'drift',
   'impact',
+  'intent',
   'conformance'
 ])
 const cliCommandPattern =

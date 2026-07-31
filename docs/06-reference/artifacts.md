@@ -182,7 +182,8 @@ These are **outside `paths.artifactDir`** and are unaffected by
 Only written when `--log-file <path>` is passed to `review` or `eval run`.
 JSONL, **append-only**: each invocation appends a
 `{"event":"log-run-start","at":"…"}` header line so earlier runs survive.
-Parent directories are created as needed.
+Missing parent directories are created recursively; an existing directory is not
+an error.
 
 ## Related
 

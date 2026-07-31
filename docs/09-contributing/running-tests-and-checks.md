@@ -273,11 +273,23 @@ nvm use && npm run typecheck && npm test && npm run generate:schemas:check && np
 If any of these fail, the change is not done. See
 [spec-driven-workflow.md](spec-driven-workflow.md) for what each gate protects.
 
-The `PR checks` workflow runs the same gates except `drift check`, then packs
-the package and installs the tarball to prove it still runs. See
-[releasing.md](releasing.md).
+The `PR checks` workflow runs the same gates, then packs the package and installs
+the tarball to prove it still runs. See [releasing.md](releasing.md).
 
-> `drift check` is missing from CI because the repository does not currently
-> pass it: it reports a `security-drift` **error** for a stale `.review` path
-> reference in `specs/04-configuration-and-providers.md`. Fix that and add the
-> step; do not add the step first and relax the gate to accommodate it.
+> `drift check` used to be excluded from CI because the repository did not pass
+> it. Both blocking findings turned out to be defects in the checker, not stale
+> documentation:
+>
+> - a reference to the `review` field of `CodeReviewerConfigSchema`, written as a
+>   dotted property path, was read as the obsolete artifact directory — an
+>   **error**-gated finding. The check now also requires that the dot not follow
+>   an identifier character, which a directory root never does;
+> - `intent` was missing from the checker's hand-maintained CLI inventory, so
+>   every spec that documented `intent check` — a command that has shipped for a
+>   long time — was reported as documenting a command that does not exist.
+>
+> Both are fixed, and a test pins the CLI inventory against the CLI's real
+> dispatch. The rule that kept them visible still stands: **fix what the gate
+> reports, or fix the gate's logic — never relax the gate to accommodate a
+> finding.** A checker that reports the truth as drift is worse than no checker,
+> because it teaches people to skip it.

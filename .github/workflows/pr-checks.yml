@@ -55,6 +55,14 @@ jobs:
       - name: Check generated schemas are up to date
         run: npm run generate:schemas:check
 
+      # Documentation is a shipped artefact here: the README goes in the tarball,
+      # and the specs are the contract the implementation is held to. `drift check`
+      # fails on dead local links, stale artefact paths and documented commands the
+      # CLI does not dispatch. It runs from the build above rather than via tsx, so
+      # it exercises the same entry point users get.
+      - name: Check documentation drift
+        run: node dist/cli/main.js drift check
+
       # `npm pack` runs `prepack`, which rebuilds `dist/` from a clean slate, so
       # this proves the tarball matches the source rather than a stale build.
       - name: Pack
