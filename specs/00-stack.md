@@ -59,7 +59,6 @@ execution_semantics:
   default_tests: hermetic_provider_fixtures
   timeout_sources:
     provider_call: provider.timeoutMs
-    run: review.runTimeoutMs
   cancellation:
     cli_interrupt: cancel_pending_tasks_and_write_partial_summary
   retries:

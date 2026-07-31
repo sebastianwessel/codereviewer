@@ -129,7 +129,6 @@ This is why the generated JSON Schema carries no `default` object on `review`.
 | `contextMaxBytes` | integer 10000..10000000 | *unset* | Lowers the 8,000,000-byte packet ceiling and the depth-derived cross-file per-read cap. Unset means nothing bounds the packet in advance and the provider decides (spec 26). Never skips or truncates source. |
 | `inlineSeverityThreshold` | severity | `"high"` | Only affects reporter eligibility. |
 | `maxCostUsd` | number >= 0 | *unset* | Checked once, after the run's work completes and before the success result is built: the run fails when the computed run cost exceeds it. It is not a mid-run stop, and it is skipped entirely when cost is unavailable. |
-| `runTimeoutMs` | integer 10000..7200000 | *unset* | Optional whole-run timeout. When unset, no hidden Harness run timeout is applied; provider calls still use `provider.timeoutMs`. |
 
 `review.crossFileRetrieval` is a nested review block and is inventoried in its own
 section below.
@@ -224,7 +223,7 @@ present in the environment; no provider is assumed as a default.
 ## Depth Budget Defaults
 
 `review.depth` does not set cost, timeout, or concurrency. `maxCostUsd` and
-`runTimeoutMs` are unset unless configured, and `maxConcurrentTasks` defaults to
+`maxCostUsd` is unset unless configured, and `maxConcurrentTasks` defaults to
 `4` at every depth. The only per-depth defaults are the context-retrieval caps:
 
 | Depth | `maxReads` | `maxSearches` | `maxMatches` | `maxDepth` | cross-file `maxBytesPerRead` |

@@ -100,28 +100,6 @@ class FailingSecondTaskProvider implements ModelProvider {
   }
 }
 
-class HangingProvider implements ModelProvider {
-  readonly id = 'hanging'
-  readonly genAiSystem = 'scripted'
-  readonly requests: ObjectRequest[] = []
-
-  async object<T extends JsonValue = JsonValue>(
-    req: ObjectRequest<T>
-  ): Promise<ObjectResponse<T>> {
-    this.requests.push(req)
-
-    await new Promise<never>((_resolve, reject) => {
-      req.signal.addEventListener(
-        'abort',
-        () => reject(req.signal.reason ?? new Error('provider aborted')),
-        { once: true }
-      )
-    })
-
-    throw new Error('provider did not receive an abort signal')
-  }
-}
-
 class ObservedConcurrencyProvider implements ModelProvider {
   readonly id = 'observed-concurrency'
   readonly genAiSystem = 'scripted'
@@ -2898,78 +2876,6 @@ describe('review workflow', () => {
           }),
           expect.objectContaining({
             paths: ['src/b.ts'],
-            state: 'failed'
-          })
-        ])
-      )
-    } finally {
-      await rm(root, { recursive: true, force: true })
-    }
-  })
-
-  test('runner enforces whole-run timeout and preserves partial task state', async () => {
-    const root = join(tmpdir(), `codereviewer-run-timeout-${crypto.randomUUID()}`)
-    const provider = new HangingProvider()
-
-    try {
-      await mkdir(join(root, 'src'), { recursive: true })
-      await writeFile(join(root, 'src', 'a.ts'), 'export const a = 1;\n')
-
-      const config = CodeReviewerConfigSchema.parse({
-        provider: {
-          id: 'openai',
-          model: 'hanging-model',
-          maxRetries: 0
-        },
-        review: {
-          depth: 'fast'
-        },
-        drift: {
-          enabled: false
-        }
-      })
-      const timeoutConfig = {
-        ...config,
-        review: {
-          ...config.review,
-          runTimeoutMs: 250
-        }
-      }
-
-      let capturedError: unknown
-      try {
-        await runReview({
-          repositoryRoot: root,
-          config: timeoutConfig,
-          explicitFiles: ['src/a.ts'],
-          environment: {
-            OPENAI_API_KEY: 'sk-proj-secret-value'
-          },
-          runId: 'run-timeout',
-          now: () => new Date('2026-06-20T00:00:00.000Z'),
-          providerImport: async () => ({
-            openai: () => provider
-          })
-        })
-      } catch (error) {
-        capturedError = error
-      }
-
-      expect(isReviewRunFailedError(capturedError)).toBe(true)
-      if (!isReviewRunFailedError(capturedError)) {
-        throw new Error('expected ReviewRunFailedError')
-      }
-
-      expect(provider.requests).toHaveLength(1)
-      expect(capturedError.structuredError).toMatchObject({
-        code: 'review_run_timeout',
-        category: 'provider',
-        exitCode: 4
-      })
-      expect(capturedError.partialState.sharedContext.taskEvents).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            paths: ['src/a.ts'],
             state: 'failed'
           })
         ])

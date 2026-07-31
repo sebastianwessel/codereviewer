@@ -72,11 +72,6 @@
           "type": "number",
           "minimum": 0
         },
-        "runTimeoutMs": {
-          "type": "integer",
-          "minimum": 10000,
-          "maximum": 7200000
-        },
         "crossFileRetrieval": {
           "type": "object",
           "properties": {

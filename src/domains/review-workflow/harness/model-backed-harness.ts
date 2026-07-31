@@ -104,7 +104,7 @@ export const createModelBackedReviewHarness = (
 
   return defineHarness({ name: 'codereviewer-review' })
     .logger(logger)
-    .defaults(harnessDefaults(options, maxConcurrentTasks))
+    .defaults(harnessDefaults(maxConcurrentTasks))
     .telemetry({ contentCaptureMode: 'NO_CONTENT' })
     .models({
       reviewer: options.modelAlias

@@ -112,14 +112,10 @@ This is checked **after** the review completes. Exceeding it fails the run with
 `cost_budget_exceeded` (exit code `1`) and still writes the partial artifacts,
 so you keep the evidence of what was spent. It does not stop a run in flight.
 
-To bound wall-clock instead:
-
-```json
-{ "review": { "runTimeoutMs": 900000 } }
-```
-
-A timeout aborts the run, writes partial artifacts and exits `4` with
-`review_run_timeout`.
+Wall-clock is deliberately **not** boundable. A whole-run deadline destroys work
+already done, and it bounds the wrong thing: what costs money is calls, not
+minutes. Use `review.maxFiles`, a narrower ref range, or a cheaper model. A single
+network call is bounded by `provider.timeoutMs` so nothing hangs forever.
 
 `review.maxConcurrentTasks` (default 4, range 1–32) changes throughput and peak
 rate-limit pressure. It does not change the number of calls or the total cost.

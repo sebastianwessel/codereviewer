@@ -45,7 +45,7 @@ Before any source is read:
   the run; the rest become run warnings. This runs *before* any provider call, so
   a drifted repository fails fast and cheaply.
 - **OpenTelemetry setup** when `observability.openTelemetry.enabled` is true.
-- A run-level abort signal is armed from `review.runTimeoutMs` when configured.
+- A caller-supplied abort signal is honoured when one is given (a CI job being cancelled). No deadline is armed by the engine itself.
 
 ### Repository intake
 
@@ -90,7 +90,6 @@ reviewer sees whole files, not just hunks — and derives:
 | Drift category in `drift.failOn` triggered | Run aborts in preflight, before any provider call |
 | No changed files | Zero tasks; the run completes with an empty finding set |
 | File too large / binary / excluded | Recorded in `skippedFiles`; it is *not* reviewed and not counted against coverage |
-| `review.runTimeoutMs` exceeded | Run fails with a timeout error and writes partial artifacts |
 
 ## Configuration keys
 
@@ -99,7 +98,6 @@ reviewer sees whole files, not just hunks — and derives:
 | `review.baseRef` / `review.headRef` | `main` / `HEAD` | Diff endpoints (CLI flags override) |
 | `review.maxFiles` | `500` | Cap on reviewed files |
 | `review.maxFileBytes` | `500000` | Per-file size cap |
-| `review.runTimeoutMs` | unset | Whole-run abort deadline |
 | `paths.include` / `paths.exclude` | `**/*` / built-in exclude list | File selection |
 | `paths.artifactDir` | `.codereviewer/runs` | Where the run writes its artifacts |
 | `drift.enabled` / `drift.failOn` / `drift.include*` | `true` / `["generated-artifact-drift","security-drift"]` / `true` | Preflight gate |

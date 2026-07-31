@@ -9,7 +9,6 @@ import { ReviewTaskExecutionError } from '../../harness/workflow.js'
 import type { WorkflowReviewTask } from '../../pipeline/agent-contracts.js'
 import {
   createProviderTaskExecutionFailure,
-  createProviderTimeoutFailure,
   createProviderWorkflowFailure
 } from './provider-failures.js'
 
@@ -17,7 +16,6 @@ const config = CodeReviewerConfigSchema.parse({
   review: {
     mode: 'pr',
     depth: 'balanced',
-    runTimeoutMs: 10000
   },
   paths: {
     artifactDir: '.codereviewer/runs'
@@ -114,32 +112,6 @@ const commonInput = {
 } as const
 
 describe('review runner provider failure helpers', () => {
-  test('creates timeout partial failures with failed task events', () => {
-    const failure = createProviderTimeoutFailure({
-      ...commonInput,
-      tasks: [task],
-      timeoutMs: 10000
-    })
-
-    expect(failure.structuredError.code).toBe('review_run_timeout')
-    expect(failure.partialState.runSummary.warnings).toEqual([
-      'config-warning',
-      'drift:documentation-drift',
-      'partial-run'
-    ])
-    expect(failure.partialState.sharedContext.taskEvents.map((event) => ({
-      id: event.id,
-      state: event.state,
-      workerId: event.workerId
-    }))).toEqual([
-      { id: 'task_alpha', state: 'planned', workerId: undefined },
-      { id: 'task_alpha', state: 'failed', workerId: 'review-timeout' }
-    ])
-    expect(failure.partialState.sharedContext.candidateFindings).toEqual([
-      supportCandidate
-    ])
-  })
-
   test('creates task-execution partial failures with recovered candidates', () => {
     const executionError = new ReviewTaskExecutionError({
       originalError: new Error('provider exploded'),
@@ -160,7 +132,6 @@ describe('review runner provider failure helpers', () => {
     const failure = createProviderTaskExecutionFailure({
       ...commonInput,
       executionError,
-      timedOut: false
     })
 
     expect(failure.structuredError.code).toBe('provider_error')
@@ -186,26 +157,6 @@ describe('review runner provider failure helpers', () => {
     ])
   })
 
-  test('classifies timed-out workflow errors as timeout partial failures', () => {
-    const failure = createProviderWorkflowFailure({
-      ...commonInput,
-      error: new Error('provider did not complete in time'),
-      runTimedOut: true,
-      tasks: [task],
-      timeoutMs: 10000
-    })
-
-    expect(failure?.structuredError.code).toBe('review_run_timeout')
-    expect(failure?.partialState.sharedContext.taskEvents.map((event) => ({
-      id: event.id,
-      state: event.state,
-      workerId: event.workerId
-    }))).toEqual([
-      { id: 'task_alpha', state: 'planned', workerId: undefined },
-      { id: 'task_alpha', state: 'failed', workerId: 'review-timeout' }
-    ])
-  })
-
   test('classifies task-execution workflow errors as recoverable provider partial failures', () => {
     const executionError = new ReviewTaskExecutionError({
       originalError: new Error('provider exploded'),
@@ -226,9 +177,7 @@ describe('review runner provider failure helpers', () => {
     const failure = createProviderWorkflowFailure({
       ...commonInput,
       error: executionError,
-      runTimedOut: false,
-      tasks: [task],
-      timeoutMs: 10000
+      tasks: [task]
     })
 
     expect(failure?.structuredError.code).toBe('provider_error')
@@ -242,9 +191,7 @@ describe('review runner provider failure helpers', () => {
     const failure = createProviderWorkflowFailure({
       ...commonInput,
       error: new Error('plain provider setup error'),
-      runTimedOut: false,
-      tasks: [task],
-      timeoutMs: 10000
+      tasks: [task]
     })
 
     expect(failure).toBeUndefined()

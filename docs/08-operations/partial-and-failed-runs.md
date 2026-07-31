@@ -49,7 +49,6 @@ task execution has begun or admission has completed:
 | Failure | Code | Exit |
 | --- | --- | --- |
 | A review task threw an unrecoverable error | The normalized provider code (`provider_auth`, `provider_context_length`, `provider_error`, …) | `4` |
-| The run timeout elapsed | `review_run_timeout` | `4` |
 | Coverage was incomplete after admission | `coverage_incomplete` | `1` |
 | The cost budget was exceeded | `cost_budget_exceeded` | `1` |
 
@@ -177,7 +176,6 @@ They never carry raw provider messages or tool output.
 | `provider_rate_limited` | Re-run. Lower `review.maxConcurrentTasks`, or raise `provider.retryMaxDelayMs`. |
 | `provider_context_length` | Lower `review.depth`, set `review.contextMaxBytes`, or narrow `paths.include`. |
 | `provider_auth` | Fix the credential; not retried by design. |
-| `review_run_timeout` | Raise `review.runTimeoutMs` or shrink the run. |
 | `coverage_incomplete` | Check `skippedFiles` and `paths.exclude`; something reviewable was not assigned to a task. |
 | `cost_budget_exceeded` | Raise `review.maxCostUsd`, or reduce scope and optional passes. |
 

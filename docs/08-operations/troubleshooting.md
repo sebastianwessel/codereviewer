@@ -206,10 +206,13 @@ changed file — check `review.maxFileBytes` and `paths.exclude`.
 Transient classes are retried. Persistent failures point at the endpoint.
 Raise `provider.timeoutMs` for a slow gateway.
 
-### `review_run_timeout` — exit 4
+### The run is taking a long time
 
-`review.runTimeoutMs` elapsed. Partial artifacts are written. Either raise the
-budget or shrink the run (`paths.exclude`, lower `review.depth`).
+There is no run timeout, deliberately — a deadline would abort work that was
+progressing, and a review takes as long as the change needs. If a run is slower
+than you want, shrink it (`paths.exclude`, `review.maxFiles`, a narrower ref
+range) or raise `aiReview.maxFilesPerDiscoveryCall` to spend fewer calls per file.
+A single call that hangs is already bounded by `provider.timeoutMs`.
 
 ---
 

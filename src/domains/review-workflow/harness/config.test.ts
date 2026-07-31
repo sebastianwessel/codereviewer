@@ -16,15 +16,11 @@ describe('workflow harness config', () => {
     // unless its invocation asks for history. The provider-boundary assertion that
     // this actually reaches every stage lives in model-backed-harness.test.ts; this
     // only pins that the default is set and survives the other options.
-    expect(harnessDefaults({}, 3)).toEqual({
+    // `runTimeoutMs: 0` is "no run deadline", and it is no longer configurable: a
+    // whole-run timeout is a self-imposed limit that destroys progressing work.
+    // Hanging calls are bounded by `provider.timeoutMs` instead.
+    expect(harnessDefaults(3)).toEqual({
       runTimeoutMs: 0,
-      historyWindow: 0,
-      delegation: {
-        maxParallelChildAgentCalls: 3
-      }
-    })
-    expect(harnessDefaults({ runTimeoutMs: 1200 }, 3)).toEqual({
-      runTimeoutMs: 1200,
       historyWindow: 0,
       delegation: {
         maxParallelChildAgentCalls: 3

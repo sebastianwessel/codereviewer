@@ -72,10 +72,7 @@ export const runReview = async (
     ...(options.runId === undefined ? {} : { runId: options.runId }),
     ...(options.now === undefined ? {} : { now: options.now })
   })
-  const runSignal = createReviewRunSignal(
-    options.signal,
-    options.config.review.runTimeoutMs
-  )
+  const runSignal = createReviewRunSignal(options.signal)
   const { observability, logger } = prepareReviewRunnerRunObservability({
     runId,
     configHash,
@@ -205,7 +202,6 @@ export const runReview = async (
         skillIds: assembledContext.skillIds,
         logger,
         observability,
-        runTimedOut: runSignal.timedOut,
         ...(runSignal.signal === undefined ? {} : { signal: runSignal.signal })
       })
     const successResult = prepareReviewRunnerCompletionState({
@@ -254,8 +250,6 @@ export const runReview = async (
   } catch (error) {
     const failure = createReviewRunTerminalFailure({
       error,
-      runTimedOut: runSignal.timedOut(),
-      timeoutMs: options.config.review.runTimeoutMs
     })
     recordObservedError(observability, failure.structuredError)
     logger.error(failure.logMessage, failure.logMetadata)

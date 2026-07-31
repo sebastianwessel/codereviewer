@@ -17,7 +17,7 @@ selected adapter is dynamically imported at run time, and it must be installed.
 | `provider.temperature` | number 0–2 | `0` | Sampling temperature. Omitted from the request for OpenAI `gpt-5*` models (dot or dash minor separator, e.g. `gpt-5-mini`, `gpt-5.4-mini`) because those reasoning models reject it with HTTP 400. `openai-compatible` keeps the configured value. |
 | `provider.maxOutputTokens` | integer ≥ 1 | *unset* | Forwarded as the adapter's max output tokens. Unset uses the adapter default. |
 | `provider.reasoningEffort` | `"minimal"` \| `"low"` \| `"medium"` \| `"high"` | *unset* | Forwarded as `reasoning.effort` on the OpenAI Responses API. Raises proof/investigation quality on smaller reasoning models at higher token cost. Emitted only when set. |
-| `provider.timeoutMs` | integer 1000–600000 | `120000` | Per provider call timeout. Independent of [`review.runTimeoutMs`](./review.md). |
+| `provider.timeoutMs` | integer 1000–600000 | `120000` | Per provider call timeout. This is the **only** time bound in the engine, and it exists so a single network call cannot hang forever. There is deliberately no whole-run deadline: that would be a self-imposed limit that destroys work already done. A call that fails transiently is retried under `maxRetries`; anything unrecoverable fails loudly. |
 | `provider.maxRetries` | integer 0–5 | `2` | Classified retries of provider task calls. Total attempts = `maxRetries + 1`. |
 | `provider.retryBackoffMs` | integer 0–60000 | `500` | Base delay for exponential backoff between retries. |
 | `provider.retryMaxDelayMs` | integer 0–600000 | `30000` | Maximum single backoff wait. A required wait above this cap (e.g. a long rate-limit `Retry-After`) fails the run instead of blocking. |

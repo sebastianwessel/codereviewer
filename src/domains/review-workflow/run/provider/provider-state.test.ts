@@ -8,7 +8,6 @@ import type { CandidateFinding } from '../../../admission/index.js'
 import type { DeterministicSignalExtraction } from '../../../deterministic-signals/index.js'
 import type { DriftFinding } from '../../../drift/index.js'
 import { createNoContentEventRecorder } from '../../../observability/index.js'
-import { ReviewRunFailedError } from '../support/errors.js'
 import { prepareReviewRunnerProviderState } from './provider-state.js'
 import {
   ReviewWorkflowInputSchema,
@@ -39,7 +38,6 @@ const config = CodeReviewerConfigSchema.parse({
     model: 'gpt-5-mini'
   },
   review: {
-    runTimeoutMs: 10000,
     maxConcurrentTasks: 1
   }
 })
@@ -152,7 +150,6 @@ describe('review runner provider state', () => {
     const result = await prepareReviewRunnerProviderState({
       ...commonInput,
       observability,
-      runTimedOut: () => false,
       runProviderWorkflow: async (input) => {
         input.onTaskEvent?.({
           id: 'task_provider_state',
@@ -186,22 +183,21 @@ describe('review runner provider state', () => {
     ])
   })
 
-  test('converts timed-out provider workflow errors to partial run failures', async () => {
+  test('lets an unclassified provider failure propagate rather than calling it a timeout', async () => {
+    // There is no run deadline any more, so a slow provider is not reclassified as
+    // "the run timed out". A failure that is not a task-execution error is not the
+    // workflow's to convert: it propagates as itself, loudly, instead of being
+    // relabelled into a bound that no longer exists.
     const observability = createNoContentEventRecorder()
 
     await expect(
       prepareReviewRunnerProviderState({
         ...commonInput,
         observability,
-        runTimedOut: () => true,
         runProviderWorkflow: async () => {
-          throw new Error('provider timed out')
+          throw new Error('provider setup failed')
         }
       })
-    ).rejects.toSatisfy(
-      (error) =>
-        error instanceof ReviewRunFailedError &&
-        error.structuredError.code === 'review_run_timeout'
-    )
+    ).rejects.toThrow('provider setup failed')
   })
 })

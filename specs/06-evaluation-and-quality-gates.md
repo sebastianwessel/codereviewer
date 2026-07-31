@@ -1233,7 +1233,7 @@ uncontrolled external provider latency:
 | Hermetic provider fixture balanced review of 25 changed files with holistic discovery and refutation | <= 90000 ms |
 
 External provider runs must enforce provider `timeoutMs`, provider
-`maxRetries`, whole-run `runTimeoutMs`, task packet budgets, and preset
+`maxRetries`, task packet budgets, and preset
 `maxCostUsd` when usage and pricing data are available. Strict per-task cost
 stops remain release-blocking follow-up work before R1 is considered complete.
 

@@ -47,7 +47,6 @@ export const prepareReviewRunnerProviderState = async (input: {
   readonly logger: Logger
   readonly observability: NoContentEventRecorder
   readonly signal?: AbortSignal | undefined
-  readonly runTimedOut: () => boolean
   readonly runProviderWorkflow?: RunProviderWorkflow | undefined
 }): Promise<ReviewRunnerProviderState> => {
   const executeProviderWorkflow =
@@ -99,9 +98,7 @@ export const prepareReviewRunnerProviderState = async (input: {
       evidence: input.evidence,
       supportSignalCandidates: input.supportSignalCandidates,
       error,
-      runTimedOut: input.runTimedOut(),
       tasks: input.tasks,
-      timeoutMs: input.config.review.runTimeoutMs,
       observability: input.observability.snapshot()
     })
     if (providerFailure !== undefined) {

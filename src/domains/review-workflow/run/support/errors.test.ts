@@ -4,22 +4,11 @@ import {
   createCoverageIncompleteError,
   createReviewRunTerminalFailure,
   createReviewRunSignal,
-  createReviewRunTimeoutError,
   ReviewRunFailedError
 } from './errors.js'
 
 describe('review runner errors', () => {
   test('creates report-safe structured run errors', () => {
-    expect(createReviewRunTimeoutError(250)).toEqual({
-      code: 'review_run_timeout',
-      message: 'Review run timed out after 250ms.',
-      category: 'provider',
-      recoverable: true,
-      exitCode: 4,
-      details: {
-        timeoutMs: 250
-      }
-    })
 
     expect(
       createCostBudgetExceededError({ maxCostUsd: 1.5, costUsd: 2 })
@@ -63,19 +52,32 @@ describe('review runner errors', () => {
 
   test('forwards parent aborts through the review run signal', () => {
     const parent = new AbortController()
-    const runSignal = createReviewRunSignal(parent.signal, undefined)
+    const runSignal = createReviewRunSignal(parent.signal)
 
     parent.abort('stop')
 
     expect(runSignal.signal?.aborted).toBe(true)
     expect(runSignal.signal?.reason).toBe('stop')
-    expect(runSignal.timedOut()).toBe(false)
 
     runSignal.cleanup()
   })
 
+  test('arms no deadline of its own when no caller signal is given', () => {
+    // There is deliberately no run-level timeout to arm: it is a self-imposed limit
+    // that destroys progressing work. A hanging network call is bounded by
+    // `provider.timeoutMs`, a transient failure is retried, and an unrecoverable one
+    // fails loudly.
+    const runSignal = createReviewRunSignal(undefined)
+
+    expect(runSignal.signal).toBeUndefined()
+    runSignal.cleanup()
+  })
+
   test('classifies terminal review run errors for logging and throwing', () => {
-    const partialStructuredError = createReviewRunTimeoutError(500)
+    const partialStructuredError = createCostBudgetExceededError({
+      maxCostUsd: 1,
+      costUsd: 2
+    })
     const partialFailure = new ReviewRunFailedError({
       structuredError: partialStructuredError,
       partialState: {} as ConstructorParameters<
@@ -83,36 +85,18 @@ describe('review runner errors', () => {
       >[0]['partialState']
     })
 
-    const failed = createReviewRunTerminalFailure({
-      error: partialFailure,
-      runTimedOut: false
-    })
+    const failed = createReviewRunTerminalFailure({ error: partialFailure })
     expect(failed.throwError).toBe(partialFailure)
     expect(failed.structuredError).toBe(partialStructuredError)
     expect(failed.logMessage).toBe('Review run failed.')
     expect(failed.logMetadata).toEqual({
-      code: 'review_run_timeout',
-      category: 'provider',
+      code: 'cost_budget_exceeded',
+      category: 'quality-gate',
       recoverable: true
     })
 
-    const timeout = createReviewRunTerminalFailure({
-      error: new Error('aborted'),
-      runTimedOut: true,
-      timeoutMs: 1000
-    })
-    expect(timeout.throwError).toEqual(createReviewRunTimeoutError(1000))
-    expect(timeout.logMessage).toBe('Review run timed out.')
-    expect(timeout.logMetadata).toEqual({
-      code: 'review_run_timeout',
-      timeout_ms: 1000
-    })
 
-    const crashed = createReviewRunTerminalFailure({
-      error: new Error('boom'),
-      runTimedOut: false,
-      timeoutMs: 1000
-    })
+    const crashed = createReviewRunTerminalFailure({ error: new Error('boom') })
     expect(crashed.structuredError.code).toBe('unknown_error')
     expect(crashed.logMessage).toBe('Review run crashed.')
     expect(crashed.logMetadata).toEqual({

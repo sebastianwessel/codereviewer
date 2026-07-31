@@ -118,7 +118,6 @@ export const ReviewConfigSchema = z.strictObject({
   contextMaxBytes: z.int().min(10000).max(10000000).optional(),
   inlineSeverityThreshold: SeveritySchema.default('high'),
   maxCostUsd: z.number().min(0).optional(),
-  runTimeoutMs: z.int().min(10000).max(7200000).optional(),
   crossFileRetrieval: CrossFileRetrievalConfigSchema.prefault({})
 })
 

@@ -113,13 +113,13 @@ export const maxChildAgentCallsForReview = (
 // was shown to be harmful.
 const noForwardedConversationHistory = 0
 
-export const harnessDefaults = (
-  options: {
-    readonly runTimeoutMs?: number
-  },
-  maxConcurrentTasks: number
-) => ({
-  runTimeoutMs: options.runTimeoutMs ?? defaultRunTimeoutMs,
+export const harnessDefaults = (maxConcurrentTasks: number) => ({
+  // No run-level deadline, ever. A whole-run timeout is a limit this project would
+  // impose on itself, and firing it destroys work that was progressing. A single
+  // network call that could hang forever is bounded by `provider.timeoutMs`; a
+  // transient failure is retried under `provider.maxRetries`; anything unrecoverable
+  // fails loudly with a classified error.
+  runTimeoutMs: defaultRunTimeoutMs,
   historyWindow: noForwardedConversationHistory,
   delegation: {
     maxParallelChildAgentCalls: maxConcurrentTasks

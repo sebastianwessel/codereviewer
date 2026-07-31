@@ -71,7 +71,6 @@ export const runProviderWorkflow = async (
   input.logger?.debug('Review harness creation started.', {
     task_count: input.workflowInput.tasks?.length ?? 0,
     max_concurrent_tasks: input.config.review.maxConcurrentTasks,
-    run_timeout_configured: input.config.review.runTimeoutMs !== undefined
   })
   const maxChildAgentCalls = maxChildAgentCallsForReview({
     taskCount:
@@ -95,9 +94,6 @@ export const runProviderWorkflow = async (
     maxConcurrentTasks: input.config.review.maxConcurrentTasks,
     maxChildAgentCalls,
     crossFileRetrieval: input.config.review.crossFileRetrieval,
-    ...(input.config.review.runTimeoutMs === undefined
-      ? {}
-      : { runTimeoutMs: input.config.review.runTimeoutMs }),
     ...(input.logger === undefined ? {} : { logger: input.logger }),
     ...(input.onTaskEvent === undefined
       ? {}

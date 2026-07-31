@@ -10,12 +10,9 @@ import type { NoContentObservabilitySnapshot } from '../../../observability/inde
 import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
 import {
   candidateFindingsFromTaskResults,
-  sharedTaskEventFromWorkflow,
-  timedOutTaskEventsFor
+  sharedTaskEventFromWorkflow
 } from '../admission.js'
 import {
-  createReviewRunTimeoutError,
-  isHarnessRunTimeoutError,
   type ReviewRunFailedError
 } from '../support/errors.js'
 import { driftWarningsFor } from '../drift.js'
@@ -56,52 +53,18 @@ const partialWarningsFor = (
   'partial-run'
 ]
 
-export const createProviderTimeoutFailure = (
-  input: ProviderFailureBaseInput & {
-    readonly tasks: readonly WorkflowReviewTask[]
-    readonly timeoutMs: number
-  }
-): ReviewRunFailedError =>
-  createPartialReviewRunFailedError({
-    structuredError: createReviewRunTimeoutError(input.timeoutMs),
-    artifactDir: input.config.paths.artifactDir,
-    repositoryRoot: input.repositoryRoot,
-    config: input.config,
-    baseRef: input.baseRef,
-    headRef: input.headRef,
-    runId: input.runId,
-    startedAt: input.startedAt,
-    completedAt: input.completedAt,
-    configHash: input.configHash,
-    warnings: partialWarningsFor(input),
-    contextLedger: input.contextLedger,
-    sharedContext: createSharedContextSnapshot({
-      analysis: input.analysis,
-      taskEvents: timedOutTaskEventsFor(input.tasks),
-      contextLedger: input.contextLedger,
-      evidence: input.evidence,
-      candidates: input.supportSignalCandidates,
-      admissionDecisions: [],
-      admittedFindings: [],
-      rejectedFindings: []
-    }),
-    observability: input.observability
-  })
-
 export const createProviderTaskExecutionFailure = (
   input: ProviderFailureBaseInput & {
     readonly executionError: ReviewTaskExecutionError
-    readonly timedOut: boolean
-    readonly timeoutMs?: number | undefined
   }
 ): ReviewRunFailedError => {
-  const structuredError =
-    input.timedOut && input.timeoutMs !== undefined
-      ? createReviewRunTimeoutError(input.timeoutMs)
-      : normalizeError(input.executionError.originalError, {
-          source: 'provider',
-          operation: 'run_review_task'
-        })
+  const structuredError = normalizeError(
+    input.executionError.originalError,
+    {
+      source: 'provider',
+      operation: 'run_review_task'
+    }
+  )
   const candidates = [
     ...input.supportSignalCandidates,
     ...candidateFindingsFromTaskResults(input.executionError.partialResults)
@@ -137,29 +100,15 @@ export const createProviderTaskExecutionFailure = (
 export const createProviderWorkflowFailure = (
   input: ProviderFailureBaseInput & {
     readonly error: unknown
-    readonly runTimedOut: boolean
     readonly tasks: readonly WorkflowReviewTask[]
-    readonly timeoutMs?: number | undefined
   }
 ): ReviewRunFailedError | undefined => {
   if (!isReviewTaskExecutionError(input.error)) {
-    if (
-      (input.runTimedOut || isHarnessRunTimeoutError(input.error)) &&
-      input.timeoutMs !== undefined
-    ) {
-      return createProviderTimeoutFailure({
-        ...input,
-        timeoutMs: input.timeoutMs
-      })
-    }
-
     return undefined
   }
 
   return createProviderTaskExecutionFailure({
     ...input,
-    executionError: input.error,
-    timedOut:
-      input.runTimedOut || isHarnessRunTimeoutError(input.error.originalError)
+    executionError: input.error
   })
 }

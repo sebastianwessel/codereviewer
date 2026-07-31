@@ -116,7 +116,6 @@ Provider setup problems are **config** errors (exit `2`), not provider errors:
 | `provider_*` runtime codes | See the table above. |
 | `task_packet_budget_exceeded` | A serialized model-input packet exceeded the 8 MB runaway guard, or an explicitly configured `review.contextMaxBytes`. Fails *before* the call; source is never truncated. Fix by raising or unsetting `review.contextMaxBytes`, or reducing scope. |
 | `review_task_indivisible` | The provider refused a review task as exceeding its context length and it cannot be split further. Nothing was truncated. Review a smaller change, or configure a model with a larger context window. |
-| `review_run_timeout` | `review.runTimeoutMs` elapsed. |
 
 ### `quality-gate` (exit 1)
 

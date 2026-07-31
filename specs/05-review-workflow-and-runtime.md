@@ -1048,11 +1048,15 @@ Rules:
 - Provider-backed agents must use the shared role-specific harness option
   helper. Hardcoded per-agent `maxSteps` or builtin-tool settings in the harness
   builder are forbidden because they drift from the role-specific budget policy.
-- Provider-backed Harness defaults must not introduce an implicit whole-run
-  timeout. If `review.runTimeoutMs` is unset, Harness run timeout must be
-  disabled and provider calls are bounded by `provider.timeoutMs`. If
-  `review.runTimeoutMs` is set, Harness and runner timeout handling must map
-  run expiry to the provider-stage partial-failure path with redacted artifacts.
+- There MUST be no whole-run timeout, implicit or configurable. A run-level
+  deadline is a self-imposed limit whose only effect when it fires is to destroy
+  work that was progressing; a review takes as long as the change needs. The
+  Harness run timeout MUST stay disabled. The only time bound is
+  `provider.timeoutMs`, which exists so a single network call cannot hang forever;
+  a transient failure is retried under `provider.maxRetries`, and anything
+  unrecoverable MUST fail loudly with a classified error rather than being
+  silently abandoned. A caller-supplied abort signal MUST still be honoured — an
+  operator cancelling a CI job is a decision, not a self-imposed bound.
 - Completed and partial runs must write a no-content `observability.json`
   artifact containing run steps and task events. The artifact must not contain
   prompt text, source snippets, raw provider responses, headers, environment

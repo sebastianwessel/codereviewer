@@ -19,7 +19,6 @@ Read the [strict-object rule and precedence](./README.md) first. Nesting matters
 | `review.contextMaxBytes` | integer 10000–10000000 | *unset* | Lowers the packet ceiling and the cross-file per-read cap. **Leave it unset**: the provider then decides whether a packet is too large (see below). |
 | `review.inlineSeverityThreshold` | severity | `"high"` | Minimum severity for a finding to be eligible for inline presentation. Reporting only — it does not affect admission or the gate. |
 | `review.maxCostUsd` | number ≥ 0 | *unset* | Hard stop when the accumulated run cost exceeds it (`cost_budget_exceeded`, exit `1`). Enforced **only** when token counts and prices are both available; otherwise the run records the warning `cost-unavailable` and no cap applies. When unset, no cost cap is enforced at all. |
-| `review.runTimeoutMs` | integer 10000–7200000 | *unset* | Whole-run timeout (`review_run_timeout`, exit `4`). When unset, no run-level timeout is imposed; individual provider calls still use [`provider.timeoutMs`](./provider.md). |
 
 ### What `contextMaxBytes` does when unset
 

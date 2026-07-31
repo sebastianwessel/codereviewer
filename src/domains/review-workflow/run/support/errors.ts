@@ -39,19 +39,6 @@ export const isReviewRunFailedError = (
   error: unknown
 ): error is ReviewRunFailedError => error instanceof ReviewRunFailedError
 
-export const createReviewRunTimeoutError = (
-  timeoutMs: number
-): StructuredError => ({
-  code: 'review_run_timeout',
-  message: `Review run timed out after ${timeoutMs}ms.`,
-  category: 'provider',
-  recoverable: true,
-  exitCode: 4,
-  details: {
-    timeoutMs
-  }
-})
-
 export const createCostBudgetExceededError = (
   input: {
     readonly maxCostUsd: number
@@ -85,8 +72,6 @@ export type ReviewRunTerminalFailure = {
 export const createReviewRunTerminalFailure = (
   input: {
     readonly error: unknown
-    readonly runTimedOut: boolean
-    readonly timeoutMs?: number | undefined
   }
 ): ReviewRunTerminalFailure => {
   if (isReviewRunFailedError(input.error)) {
@@ -102,22 +87,6 @@ export const createReviewRunTerminalFailure = (
     }
   }
 
-  if (
-    (input.runTimedOut || isHarnessRunTimeoutError(input.error)) &&
-    input.timeoutMs !== undefined
-  ) {
-    const timeoutError = createReviewRunTimeoutError(input.timeoutMs)
-
-    return {
-      throwError: timeoutError,
-      structuredError: timeoutError,
-      logMessage: 'Review run timed out.',
-      logMetadata: {
-        code: timeoutError.code,
-        timeout_ms: input.timeoutMs
-      }
-    }
-  }
 
   const normalized = normalizeError(input.error, {
     source: 'internal',
@@ -153,33 +122,36 @@ export const createCoverageIncompleteError = (
   }
 })
 
+/**
+ * Bridges a CALLER-supplied abort signal into the run.
+ *
+ * There is deliberately no run-level timeout to arm. A whole-run deadline is a
+ * limit this project imposes on itself, and when it fires it destroys work that
+ * was progressing perfectly well — the review simply takes as long as the change
+ * needs. What genuinely must be bounded is a single network call that could hang
+ * forever, and that is `provider.timeoutMs`; a call that fails transiently is
+ * retried under `provider.maxRetries`, and anything that cannot be recovered fails
+ * loudly with a classified error.
+ *
+ * An external abort is a different thing entirely and is still honoured: a CI job
+ * being cancelled is the operator deciding, not the engine restricting itself.
+ */
 export const createReviewRunSignal = (
-  parentSignal: AbortSignal | undefined,
-  timeoutMs: number | undefined
+  parentSignal: AbortSignal | undefined
 ): {
   readonly signal?: AbortSignal
-  readonly timedOut: () => boolean
   readonly cleanup: () => void
 } => {
-  if (parentSignal === undefined && timeoutMs === undefined) {
+  if (parentSignal === undefined) {
     return {
-      timedOut: () => false,
       cleanup: () => {}
     }
   }
 
   const controller = new AbortController()
-  let timedOut = false
   const abortFromParent = (): void => {
     controller.abort(parentSignal?.reason)
   }
-  const timeout =
-    timeoutMs === undefined
-      ? undefined
-      : setTimeout(() => {
-          timedOut = true
-          controller.abort(createReviewRunTimeoutError(timeoutMs))
-        }, timeoutMs)
 
   if (parentSignal?.aborted) {
     abortFromParent()
@@ -189,11 +161,7 @@ export const createReviewRunSignal = (
 
   return {
     signal: controller.signal,
-    timedOut: () => timedOut,
     cleanup: () => {
-      if (timeout !== undefined) {
-        clearTimeout(timeout)
-      }
       parentSignal?.removeEventListener('abort', abortFromParent)
     }
   }

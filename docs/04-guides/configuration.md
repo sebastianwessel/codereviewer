@@ -289,13 +289,12 @@ See [instructions-and-skills.md](instructions-and-skills.md).
 
 ---
 
-## Recipe: cap what a run may cost or how long it may take
+## Recipe: cap what a run may cost
 
 ```json
 {
   "review": {
     "maxCostUsd": 2.5,
-    "runTimeoutMs": 900000,
     "maxConcurrentTasks": 4
   }
 }
@@ -303,9 +302,14 @@ See [instructions-and-skills.md](instructions-and-skills.md).
 
 `maxCostUsd` is checked **after** the review completes: exceeding it fails the
 run with `cost_budget_exceeded` (exit `1`) and still writes partial artifacts.
-It is a tripwire, not a mid-run brake. `runTimeoutMs` aborts the run and writes
-partial artifacts with `review_run_timeout` (exit `4`). See
+It is a tripwire, not a mid-run brake. See
 [controlling-cost.md](controlling-cost.md).
+
+**There is no whole-run time limit, deliberately.** A deadline would abort work
+that was progressing perfectly well, and a review takes as long as the change
+needs. The one time bound that exists is `provider.timeoutMs`, so a single network
+call cannot hang forever; a call that fails transiently is retried, and anything
+unrecoverable fails loudly with a classified error.
 
 ---
 

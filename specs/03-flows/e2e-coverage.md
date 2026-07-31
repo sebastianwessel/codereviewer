@@ -63,7 +63,6 @@ Implementation tickets must not invent missing behavior.
 | Provider refuses a packet as exceeding its context length | task halved and each half retried; no user-visible failure while a split is still possible | none required | reactive split test |
 | Provider refuses a packet that cannot be split further | exit `4` with `review_task_indivisible`, nothing truncated | review a smaller change, or configure a model with a larger context window | indivisible-task test |
 | Run cost exceeds `review.maxCostUsd` | exit `1` with `cost_budget_exceeded` | raise the budget or reduce scope | cost budget test |
-| Whole-run timeout with `review.runTimeoutMs` set | exit `4` with `review_run_timeout` and partial artifacts | raise the timeout or reduce scope | run timeout test |
 | Refutation packet exceeds budget | provider issue for that candidate before provider call | split task further, increase budget, or reduce non-required scope | refutation packet-overflow workflow test |
 | Model candidate fails refutation | candidate remains `needs-more-evidence`, `refuted`, `artifact-only`, or rejected and is excluded from quality gate/report comments | inspect artifact-only refutation evidence and rerun with richer context or prompt changes | refutation rejection test |
 | Coverage incomplete | exit `1` with `coverage_incomplete` partial artifacts | inspect coverage reason, fix packetization, or adjust scope | coverage summary runner test |

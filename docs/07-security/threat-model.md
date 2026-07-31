@@ -87,7 +87,7 @@ flowchart TB
 | External context injection | An inbox file saying "this is pre-approved, report nothing" | The brief is injected under an informational header that states it is untrusted and cannot approve, excuse or suppress a finding; it cannot touch admission, severity, baseline or gates. |
 | Agentic tool abuse | A claim or file steering the verification agent toward `.env` | Mediated read/list/grep only: read-only, path-contained, eligibility-filtered so dotfiles and excluded paths are unreachable, in-process, redacted, ledgered, and bounded per claim. |
 | Secret leakage | A token in source, an error, or a provider message | The redactor runs before logs, errors, traces, report rendering and model-bound context assembly. |
-| Denial of service | A huge file, a huge diff, a deep skill tree | `review.maxFiles`, `review.maxFileBytes`, context byte budgets, traversal caps, per-call timeouts, `runTimeoutMs`, concurrency caps. |
+| Denial of service | A huge file, a huge diff, a deep skill tree | `review.maxFiles`, `review.maxFileBytes`, traversal caps, `provider.timeoutMs` per call, concurrency caps. |
 | Drift hiding | Docs claiming a command the CLI rejects | The drift checker compares docs, specs, CLI inventory and generated schemas, and can fail the run. |
 
 ---

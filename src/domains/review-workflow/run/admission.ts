@@ -144,28 +144,6 @@ export const runDeterministicReviewTaskQueue = (
   return queue.snapshot().map(deterministicTaskEventFromQueueRecord)
 }
 
-export const timedOutTaskEventsFor = (
-  tasks: readonly WorkflowReviewTask[]
-): ReviewSharedContextSnapshot['taskEvents'] =>
-  tasks.flatMap((task) => [
-    sharedTaskEventFromWorkflow({
-      id: task.id,
-      kind: task.kind,
-      round: task.round,
-      paths: task.paths,
-      state: 'planned'
-    }),
-    sharedTaskEventFromWorkflow({
-      id: task.id,
-      kind: task.kind,
-      round: task.round,
-      paths: task.paths,
-      state: 'failed',
-      workerId: 'review-timeout',
-      message: 'review run timed out'
-    })
-  ])
-
 export const runDeterministicAdmission = (
   input: {
     readonly reviewedPaths: readonly string[]
