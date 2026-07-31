@@ -1,0 +1,105 @@
+# Pull-request gate. Runs the four checks AGENTS.md requires of every change
+# (typecheck, tests, build, generated-artifact drift) plus a packaging check, so
+# a broken tarball is caught on the PR rather than on release day.
+#
+# This workflow needs no secrets. Nothing here contacts a model provider:
+# `npm test` is hermetic by design, and the live suite (`test:live`) is a
+# separate script that is deliberately not run in CI.
+name: PR checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# Read-only. A PR from a fork gets the same token scope as one from a branch.
+permissions:
+  contents: read
+
+# A new push to the same PR supersedes the previous run.
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Single Node version, from `.nvmrc`. The project targets one runtime on
+      # purpose: `@purista/harness` requires >=24.15.0 and `engines.node`
+      # declares the same floor, so a matrix would only test versions this
+      # package refuses to install on.
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Check generated schemas are up to date
+        run: npm run generate:schemas:check
+
+      # `npm pack` runs `prepack`, which rebuilds `dist/` from a clean slate, so
+      # this proves the tarball matches the source rather than a stale build.
+      - name: Pack
+        id: pack
+        run: |
+          set -euo pipefail
+          PACK_DIR="$RUNNER_TEMP/pack"
+          mkdir -p "$PACK_DIR"
+          npm pack --pack-destination "$PACK_DIR" > /dev/null
+          TARBALL="$(find "$PACK_DIR" -name '*.tgz' -print -quit)"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "Packed $TARBALL"
+          tar -tzf "$TARBALL" | sort
+
+      # Installs the tarball into an empty directory, so it exercises what a
+      # consumer gets — `files`, `bin`, `exports` and the whole module graph —
+      # and not the working tree.
+      #
+      # The CLI has no `--help`: unknown options are rejected on purpose (see
+      # `src/cli/args.ts`), so the no-op invocations are a bare call, which must
+      # fail with the usage contract, and `config validate`, which resolves the
+      # default configuration and contacts no provider.
+      - name: Smoke test the packed artefact
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          SMOKE_DIR="$(mktemp -d)"
+          cd "$SMOKE_DIR"
+          npm init --yes > /dev/null
+          npm install "$TARBALL" --no-audit --no-fund
+
+          CLI="$SMOKE_DIR/node_modules/.bin/codereviewer"
+          test -x "$CLI" || { echo "::error::bin/codereviewer is missing or not executable"; exit 1; }
+
+          set +e
+          USAGE_OUTPUT="$("$CLI" 2>&1)"
+          USAGE_STATUS=$?
+          set -e
+          if [ "$USAGE_STATUS" -ne 2 ] || ! printf '%s' "$USAGE_OUTPUT" | grep -q 'usage_error'; then
+            echo "::error::bare invocation should exit 2 with a usage_error; got $USAGE_STATUS: $USAGE_OUTPUT"
+            exit 1
+          fi
+
+          "$CLI" config validate > /dev/null
+          node --input-type=module -e "await import('@sebastianwessel/codereviewer')"
+          node --input-type=module -e "await import('@sebastianwessel/codereviewer/cli')"
+          echo "Packed artefact runs."

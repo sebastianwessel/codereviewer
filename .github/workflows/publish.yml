@@ -1,0 +1,258 @@
+# Release on version bump.
+#
+# The rule is: whatever version `package.json` names on the default branch is
+# the version that exists on npm. A push to `main` whose version is already on
+# the registry does nothing; a push whose version is not on the registry runs
+# the full gate and publishes it. The registry — not the diff against the
+# previous commit — is the authority, so a re-run after a half-failed release
+# resumes rather than double-publishing, and a revert-then-rebump still works.
+name: Publish
+
+on:
+  push:
+    branches: [main]
+  # Manual runs are for retrying a release whose publish step failed. They obey
+  # exactly the same registry check, so they cannot republish an existing
+  # version.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Releases must not overlap; never cancel one mid-publish.
+concurrency:
+  group: publish-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  check-version:
+    name: Check version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      name: ${{ steps.detect.outputs.name }}
+      version: ${{ steps.detect.outputs.version }}
+      should-publish: ${{ steps.detect.outputs.should-publish }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Enough history to report what the previous commit declared.
+          fetch-depth: 2
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Detect version bump
+        id: detect
+        run: |
+          set -euo pipefail
+          NAME="$(jq -r .name package.json)"
+          VERSION="$(jq -r .version package.json)"
+          PREVIOUS="$(git show 'HEAD^:package.json' 2>/dev/null | jq -r .version || echo 'unknown')"
+
+          # `npm view` exits non-zero for a package that does not exist yet, and
+          # prints a bare string instead of an array when only one version has
+          # ever been published. Both are normal.
+          PUBLISHED="$(npm view "$NAME" versions --json 2>/dev/null || echo '[]')"
+          if printf '%s' "$PUBLISHED" \
+            | jq -e --arg v "$VERSION" 'if type == "array" then any(. == $v) else . == $v end' > /dev/null; then
+            SHOULD_PUBLISH=false
+            VERDICT="\`$VERSION\` is already on the registry. Nothing to publish."
+          else
+            SHOULD_PUBLISH=true
+            VERDICT="\`$VERSION\` is not on the registry. Running the release gate."
+          fi
+
+          {
+            echo "name=$NAME"
+            echo "version=$VERSION"
+            echo "should-publish=$SHOULD_PUBLISH"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## $NAME"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| package.json version | \`$VERSION\` |"
+            echo "| previous commit | \`$PREVIOUS\` |"
+            echo "| publish | \`$SHOULD_PUBLISH\` |"
+            echo
+            echo "$VERDICT"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "$VERDICT"
+
+  publish:
+    name: Publish ${{ needs.check-version.outputs.version }}
+    needs: check-version
+    if: needs.check-version.outputs.should-publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/${{ needs.check-version.outputs.name }}
+    permissions:
+      # Tagging the release and creating the GitHub release.
+      contents: write
+      # Required for npm provenance: npm exchanges this for a signed
+      # attestation, which is what makes the published build verifiable.
+      id-token: write
+
+    env:
+      VERSION: ${{ needs.check-version.outputs.version }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # First, because it needs nothing installed and it is the check most
+      # likely to fail on a first release. A public package with no licence is
+      # all-rights-reserved by default; fail here rather than on npmjs.com.
+      - name: Verify release metadata
+        run: |
+          set -euo pipefail
+          MISSING=()
+          for FIELD in description license repository homepage bugs keywords author; do
+            # Absent, null, empty string or empty array all count as missing.
+            if ! jq -e --arg f "$FIELD" \
+              '(.[$f] // empty) | if type == "array" or type == "string" then length > 0 else true end' \
+              package.json > /dev/null; then
+              MISSING+=("$FIELD")
+            fi
+          done
+          if [ "$(jq -r '.private // false' package.json)" != "false" ]; then
+            MISSING+=('private must be absent or false')
+          fi
+          if [ ! -f LICENSE ] && [ ! -f LICENSE.md ] && [ ! -f LICENSE.txt ]; then
+            MISSING+=('a LICENSE file at the repository root')
+          fi
+          if [ "${#MISSING[@]}" -gt 0 ]; then
+            printf '::error::cannot publish, package metadata is incomplete: %s\n' "${MISSING[*]}"
+            exit 1
+          fi
+          echo "Release metadata is complete."
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Check generated schemas are up to date
+        run: npm run generate:schemas:check
+
+      # Only the dependencies that ship. The dev tree carries advisories that
+      # never reach a consumer, and blocking a release on those would train
+      # people to skip the gate.
+      - name: Audit shipped dependencies
+        run: npm run audit:release
+
+      - name: Pack
+        id: pack
+        run: |
+          set -euo pipefail
+          PACK_DIR="$RUNNER_TEMP/pack"
+          mkdir -p "$PACK_DIR"
+          npm pack --pack-destination "$PACK_DIR" > /dev/null
+          TARBALL="$(find "$PACK_DIR" -name '*.tgz' -print -quit)"
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Tarball"
+            echo
+            echo '```'
+            tar -tzf "$TARBALL" | sort
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The release gate. Everything above tests the working tree; this tests
+      # the artefact that is about to be published, installed the way a consumer
+      # installs it. The publish step below uploads this exact tarball.
+      - name: Smoke test the packed artefact
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          SMOKE_DIR="$(mktemp -d)"
+          cd "$SMOKE_DIR"
+          npm init --yes > /dev/null
+          npm install "$TARBALL" --no-audit --no-fund
+
+          CLI="$SMOKE_DIR/node_modules/.bin/codereviewer"
+          test -x "$CLI" || { echo "::error::bin/codereviewer is missing or not executable"; exit 1; }
+
+          # The CLI has no `--help`: unknown options are rejected on purpose
+          # (see `src/cli/args.ts`). A bare call is the no-op invocation, and it
+          # must fail with the documented usage contract rather than a crash.
+          set +e
+          USAGE_OUTPUT="$("$CLI" 2>&1)"
+          USAGE_STATUS=$?
+          set -e
+          if [ "$USAGE_STATUS" -ne 2 ] || ! printf '%s' "$USAGE_OUTPUT" | grep -q 'usage_error'; then
+            echo "::error::bare invocation should exit 2 with a usage_error; got $USAGE_STATUS: $USAGE_OUTPUT"
+            exit 1
+          fi
+
+          # Resolves the default configuration. No provider call, no network.
+          "$CLI" config validate > /dev/null
+          node --input-type=module -e "await import('@sebastianwessel/codereviewer')"
+          node --input-type=module -e "await import('@sebastianwessel/codereviewer/cli')"
+          echo "Packed artefact runs."
+
+      - name: Generate SBOM
+        run: npm sbom --sbom-format cyclonedx --omit dev > "$RUNNER_TEMP/sbom.cdx.json"
+
+      # `npm publish <tarball>` uploads the artefact the previous steps proved,
+      # instead of repacking from the working tree.
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: npm publish "$TARBALL" --provenance --access public
+
+      # After the publish, so a failed release never leaves a tag claiming a
+      # version that does not exist on the registry.
+      - name: Tag the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          TAG="v$VERSION"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git tag --annotate "$TAG" --message "$TAG"
+          git push origin "$TAG"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes \
+            --verify-tag \
+            "$TARBALL" \
+            "$RUNNER_TEMP/sbom.cdx.json"
+
+      - name: Upload release artefacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-${{ needs.check-version.outputs.version }}
+          path: |
+            ${{ steps.pack.outputs.tarball }}
+            ${{ runner.temp }}/sbom.cdx.json
+          if-no-files-found: warn

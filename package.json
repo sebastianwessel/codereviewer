@@ -1,15 +1,41 @@
 {
   "name": "@sebastianwessel/codereviewer",
   "version": "0.1.0",
-  "private": true,
-  "description": "Harness-based evidence-first code review engine.",
+  "description": "Evidence-first AI code review engine: finds semantic defects that compile cleanly and pass lint.",
+  "keywords": [
+    "code-review",
+    "static-analysis",
+    "ai",
+    "llm",
+    "pull-request",
+    "sarif",
+    "code-quality",
+    "cli",
+    "typescript"
+  ],
+  "homepage": "https://github.com/sebastianwessel/codereviewer#readme",
+  "bugs": {
+    "url": "https://github.com/sebastianwessel/codereviewer/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastianwessel/codereviewer.git"
+  },
+  "author": "Sebastian Wessel",
   "type": "module",
   "bin": {
     "codereviewer": "./dist/cli/main.js"
   },
   "exports": {
-    ".": "./dist/index.js",
-    "./cli": "./dist/cli/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "default": "./dist/cli/index.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -18,8 +44,14 @@
   "engines": {
     "node": ">=24.15.0"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
+    "prebuild": "npm run clean",
     "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "generate:schemas": "tsx scripts/generate-schemas.mjs",
     "generate:schemas:check": "tsx scripts/generate-schemas.mjs --check",
     "update:model-pricing": "tsx scripts/update-model-pricing.ts",
@@ -38,7 +70,8 @@
     "provider:install:openai": "npm install @purista/harness-openai",
     "provider:install:bedrock": "npm install @purista/harness-bedrock",
     "provider:install:azure": "npm install @purista/harness-azure-foundry",
-    "audit:high": "npm audit --audit-level=high"
+    "audit:high": "npm audit --audit-level=high",
+    "audit:release": "npm audit --omit dev --audit-level=high"
   },
   "dependencies": {
     "@ast-grep/lang-go": "^0.0.6",

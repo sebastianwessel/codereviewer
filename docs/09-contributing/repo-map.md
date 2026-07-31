@@ -16,6 +16,7 @@ for the conventions that govern how code inside these folders is written.
 | `eval/` | Evaluation fixtures, benchmark slices, corpus manifests | yes |
 | `scripts/` | Operator scripts: schema generation, corpus hydration, pricing refresh | yes |
 | `schema/` | Generated JSON Schema for the configuration contract | yes (generated) |
+| `.github/workflows/` | Pull-request gate, publish-on-version-bump, Scorecard — see [releasing.md](releasing.md) | yes |
 | `plans/` | Implementation plans, tickets and status tracking | yes |
 | `.agent/IMPLEMENTATION.md` | Implementation conventions | yes |
 | `AGENTS.md` / `CLAUDE.md` | Agent instructions and repository rules | yes |

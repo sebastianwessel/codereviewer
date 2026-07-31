@@ -10,14 +10,34 @@
   // only through `vitest.config.ts` importing `vitest/config`. Dropping that file
   // from the build silently removed `Buffer` and the `node:*` modules, so the
   // build was depending on a test configuration for its platform types.
+  //
+  // `sourceMap` is off for the published build. `tsconfig.json` turns it on, but
+  // `files` in package.json ships `dist/` and `schema/` only, so every emitted
+  // `.js.map` pointed at `../../../src/*.ts` paths that are absent from the
+  // tarball: 249 maps, roughly half the unpacked size, that no debugger could
+  // resolve. The alternatives were shipping `src/` or inlining the sources into
+  // the maps; both pay real bytes for a package that is developed from a source
+  // checkout, where `tsconfig.json` still emits working maps.
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node"],
+    "sourceMap": false
   },
   "include": ["src/**/*.ts"],
   // `src/shared/testing/` holds assertions shared BETWEEN test suites. Nothing at
   // runtime imports it, so shipping it in `dist/` would only add dead weight to
   // the published package.
-  "exclude": ["src/**/*.test.ts", "src/shared/testing/**"]
+  //
+  // `reporting-fixture.ts` is the same thing under a different name: the report
+  // fixture the four reporter suites share. It sits beside the domain rather
+  // than in `shared/testing/`, so the rule above missed it and it was shipping.
+  // Only `*.test.ts` files import it — an excluded file that a shipped module
+  // imported would still be compiled in, so this exclusion drops it only
+  // because nothing at runtime needs it.
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/shared/testing/**",
+    "src/domains/reporting/reporting-fixture.ts"
+  ]
 }

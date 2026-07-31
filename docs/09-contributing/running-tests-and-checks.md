@@ -1,8 +1,8 @@
 # Running Tests and Checks
 
-Every command here runs from a source checkout of this repository. The package
-is `"private": true` and is not published, so there is no global install and no
-`npx` form.
+Every command here runs from a source checkout of this repository. Publishing
+the package to npm is automated and described in [releasing.md](releasing.md);
+this page is about the checks that run before a release, not the release itself.
 
 ---
 
@@ -94,19 +94,22 @@ things — stale generated artifacts versus docs/specs/CLI disagreement.
 npm run build
 ```
 
-`tsc -p tsconfig.json`. Remove the output afterwards unless a spec explicitly
-requires tracked build artifacts:
+`tsc -p tsconfig.build.json`, preceded by `prebuild`, which deletes `dist/` so
+a rename or deletion in `src/` cannot leave an orphan compiled module behind to
+be published. Remove the output afterwards unless a spec explicitly requires
+tracked build artifacts:
 
 ```bash
-rm -rf dist
+npm run clean
 ```
 
 > The build uses `tsconfig.build.json`, not `tsconfig.json`. It pins
-> `rootDir` to `src` and excludes tests, so the emitted layout is
-> `dist/cli/main.js` and `dist/index.js` — the paths `package.json` declares in
-> `bin` and `exports`. `tsconfig.json` stays broader on purpose: `typecheck`
+> `rootDir` to `src`, excludes tests and test-only fixtures, and turns
+> `sourceMap` off, so the emitted layout is `dist/cli/main.js` and
+> `dist/index.js` — the paths `package.json` declares in `bin` and `exports` —
+> and nothing else. `tsconfig.json` stays broader on purpose: `typecheck`
 > covers the tests and `vitest.config.ts` as well, which the build must not
-> emit.
+> emit, and it keeps source maps on for local debugging.
 
 ---
 
@@ -232,7 +235,9 @@ npm run cli -- eval recall-report --report .codereviewer/eval/eval-report.json
 
 | Command | Does |
 | --- | --- |
-| `npm run audit:high` | `npm audit --audit-level=high` |
+| `npm run audit:high` | `npm audit --audit-level=high` over the whole tree, dev dependencies included |
+| `npm run audit:release` | The same at `high`, but `--omit dev` — only what ships. This is the release gate |
+| `npm run clean` | Delete `dist/` |
 | `npm run update:model-pricing` | Fetch current model prices and report differences |
 | `npm run update:model-pricing:write` | Write the refreshed prices into the pricing snapshot |
 | `npm run provider:install:openai` | Install `@purista/harness-openai` |
@@ -262,8 +267,17 @@ From `specs/00-conventions.md` and `.agent/IMPLEMENTATION.md`:
 ## Pre-flight checklist
 
 ```bash
-nvm use && npm run typecheck && npm test && npm run generate:schemas:check && npm run cli -- drift check && npm run build && rm -rf dist
+nvm use && npm run typecheck && npm test && npm run generate:schemas:check && npm run cli -- drift check && npm run build && npm run clean
 ```
 
 If any of these fail, the change is not done. See
 [spec-driven-workflow.md](spec-driven-workflow.md) for what each gate protects.
+
+The `PR checks` workflow runs the same gates except `drift check`, then packs
+the package and installs the tarball to prove it still runs. See
+[releasing.md](releasing.md).
+
+> `drift check` is missing from CI because the repository does not currently
+> pass it: it reports a `security-drift` **error** for a stale `.review` path
+> reference in `specs/04-configuration-and-providers.md`. Fix that and add the
+> step; do not add the step first and relax the gate to accommodate it.
