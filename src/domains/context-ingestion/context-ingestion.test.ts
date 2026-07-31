@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { parseFrontmatter } from './frontmatter.js'
-import { truncateToUtf8Bytes, compileGlobMatchers, matchesAnyGlob } from './text.js'
+import { truncateToUtf8Bytes } from './text.js'
+import {
+  compileGlobMatchers,
+  matchesAnyGlob
+} from '../../shared/glob/glob-matcher.js'
 import { createDigestSummarizer } from './digest-summarizer.js'
 import { createInboxProvider } from './inbox-provider.js'
 import { createChangedFilesProvider } from './changed-files-provider.js'

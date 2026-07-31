@@ -1,7 +1,11 @@
 import type { ContextChangedFilesProviderSchema } from '../../shared/contracts/config/config.schema.js'
 import type { z } from 'zod'
 import type { ContextFragment, ContextProvider } from './contracts.js'
-import { compileGlobMatchers, matchesAnyGlob, truncateToUtf8Bytes } from './text.js'
+import {
+  compileGlobMatchers,
+  matchesAnyGlob
+} from '../../shared/glob/glob-matcher.js'
+import { truncateToUtf8Bytes } from './text.js'
 
 type ChangedFilesConfig = z.infer<typeof ContextChangedFilesProviderSchema>
 
