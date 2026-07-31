@@ -17,6 +17,7 @@ import {
   modelFulfilmentJudgementInstructions,
   modelObligationExtractionInstructions
 } from './instructions.js'
+import { normalizeFulfilmentJudgement } from './judgement.js'
 
 const prompts: ReadonlyArray<readonly [string, string]> = [
   ['intent obligation extraction', modelObligationExtractionInstructions],
@@ -72,25 +73,46 @@ describe('fulfilment judgement instructions', () => {
       )
     }
     expect(modelFulfilmentJudgementInstructions).toContain(
-      'Return one of the three answers, and the cited lines when your answer is "addressed". Return nothing else.'
+      'Return one of the three answers, and the cited lines when your answer is "evidenced". Return nothing else.'
     )
   })
 
-  test('requires cited lines for addressed and offers unaddressed as ordinary', () => {
+  test('requires cited lines for evidenced and offers not-evidenced as ordinary', () => {
     expect(modelFulfilmentJudgementInstructions).toContain(
-      'Answer "addressed" ONLY when you can point at specific changed lines'
+      'Answer "evidenced" ONLY when you can point at specific changed lines'
     )
     expect(modelFulfilmentJudgementInstructions).toContain(
-      'An answer of "addressed" with no lines is not an answer, and it will be discarded.'
+      'An answer of "evidenced" with no lines is not an answer, and it will be discarded.'
     )
     // Spec 23's product reason for advisory output: a pull request need not fully
-    // implement a ticket, so `unaddressed` must not read as an accusation.
+    // implement a ticket, so `not-evidenced` must not read as an accusation.
     expect(modelFulfilmentJudgementInstructions).toContain(
       'This is an ordinary and expected answer'
     )
-    for (const status of ['addressed', 'unaddressed', 'undetermined']) {
+    for (const status of ['evidenced', 'not-evidenced', 'undetermined']) {
       expect(modelFulfilmentJudgementInstructions).toContain(`"${status}"`)
     }
+  })
+
+  test('offers the labels the normalizer accepts, and no retired one', () => {
+    // The prompt and `normalizeFulfilmentJudgement` have to name the same three
+    // answers: a prompt asking for a word the normalizer does not accept turns
+    // every judgement into `undetermined`, silently. The retired labels are named
+    // here so reintroducing one is a test failure rather than a slow drift back to
+    // the vocabulary that produced 54 of the lane's 83 false positives.
+    for (const retired of ['"addressed"', '"unaddressed"']) {
+      expect(modelFulfilmentJudgementInstructions).not.toContain(retired)
+    }
+    for (const answer of ['evidenced', 'not-evidenced', 'undetermined']) {
+      expect(normalizeFulfilmentJudgement({ status: answer, evidence: [] }).status)
+        .toBe(answer === 'evidenced' ? 'undetermined' : answer)
+    }
+    expect(
+      normalizeFulfilmentJudgement({
+        status: 'evidenced',
+        evidence: [{ path: 'src/a.ts', line: 1 }]
+      }).status
+    ).toBe('evidenced')
   })
 
   test('treats the obligation and the changed lines as untrusted data', () => {

@@ -186,10 +186,10 @@ describe('intent fulfilment run', () => {
         ],
         judgements: [
           {
-            status: 'addressed',
+            status: 'evidenced',
             evidence: [{ path: 'src/token.ts', line: 2 }]
           },
-          { status: 'unaddressed' }
+          { status: 'not-evidenced' }
         ],
         explanation: 'One obligation is covered; the audit log is not.'
       })
@@ -210,7 +210,7 @@ describe('intent fulfilment run', () => {
             text: 'Reject tokens older than five minutes.'
           },
           statement: 'Reject old tokens.',
-          status: 'addressed',
+          status: 'evidenced',
           evidence: [
             {
               path: 'src/token.ts',
@@ -228,11 +228,11 @@ describe('intent fulfilment run', () => {
             text: 'Record every refusal in the audit log.'
           },
           statement: 'Log every refusal.',
-          status: 'unaddressed'
+          status: 'not-evidenced'
         }
       ])
-      expect(report.summary.addressedCount).toBe(1)
-      expect(report.summary.unaddressedCount).toBe(1)
+      expect(report.summary.evidencedCount).toBe(1)
+      expect(report.summary.notEvidencedStatusCount).toBe(1)
       expect(report.explanation).toBe(
         'One obligation is covered; the audit log is not.'
       )
@@ -257,7 +257,7 @@ describe('intent fulfilment run', () => {
           { origin: 'inbox:tracker/A-1', line: 99, statement: 'Invented.' },
           { origin: 'inbox:nowhere', line: 1, statement: 'Also invented.' }
         ],
-        judgements: [{ status: 'unaddressed' }]
+        judgements: [{ status: 'not-evidenced' }]
       })
       const report = await run(root, { agents })
 
@@ -277,7 +277,7 @@ describe('intent fulfilment run', () => {
     }
   })
 
-  test('downgrades an addressed verdict that cites nothing the change touched, and counts it', async () => {
+  test('downgrades an evidenced verdict that cites nothing the change touched, and counts it', async () => {
     const root = await createRepository()
 
     try {
@@ -292,7 +292,7 @@ describe('intent fulfilment run', () => {
           ],
           judgements: [
             {
-              status: 'addressed',
+              status: 'evidenced',
               evidence: [{ path: 'src/token.ts', line: 1 }]
             }
           ]
@@ -304,8 +304,8 @@ describe('intent fulfilment run', () => {
       // capability can produce, so it becomes `undetermined` rather than a
       // satisfaction claim with a decorative citation.
       expect(report.obligations[0]?.status).toBe('undetermined')
-      expect(report.summary.unevidencedAddressedCount).toBe(1)
-      expect(report.summary.addressedCount).toBe(0)
+      expect(report.summary.unverifiedEvidenceClaimCount).toBe(1)
+      expect(report.summary.evidencedCount).toBe(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -326,7 +326,7 @@ describe('intent fulfilment run', () => {
           ],
           judgements: [
             {
-              status: 'addressed',
+              status: 'evidenced',
               evidence: [{ path: 'src/token.ts', line: 2 }]
             }
           ]
@@ -449,7 +449,7 @@ describe('intent fulfilment run', () => {
         obligations: [
           { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' }
         ],
-        judgements: [{ status: 'unaddressed' }]
+        judgements: [{ status: 'not-evidenced' }]
       })
       const report = await run(root, {
         agents: {
@@ -484,7 +484,7 @@ describe('intent fulfilment run', () => {
           { origin: 'inbox:tracker/A-1', line: 1, statement: 'First.' },
           { origin: 'inbox:tracker/A-1', line: 2, statement: 'Second.' }
         ],
-        judgements: [{ status: 'unaddressed' }, { status: 'unaddressed' }]
+        judgements: [{ status: 'not-evidenced' }, { status: 'not-evidenced' }]
       })
 
       await expect(
@@ -537,16 +537,16 @@ describe('intent fulfilment run', () => {
   })
 })
 
-describe('outstanding is the headline, and completion is never certified', () => {
-  test('counts unaddressed and undetermined, and never an addressed obligation', async () => {
-    // Spec 23: the report answers "what is left?", never "is this done?". The list
-    // is exactly the two non-addressed statuses. A third term once put `addressed`
-    // obligations with doubted evidence here; the stage that produced it was
-    // measured and removed, because 18.1% of this lane's false positives were it
-    // firing on verdicts that were already correct.
-    // Both non-addressed statuses are checked against the same addressed verdict,
-    // so the assertion is that each one counts AND that the addressed one does not.
-    for (const status of ['unaddressed', 'undetermined'] as const) {
+describe('notEvidenced is the headline, and completion is never certified', () => {
+  test('counts not-evidenced and undetermined, and never an evidenced obligation', async () => {
+    // Spec 23: the report answers "what did this change show?", never "is this
+    // done?". The list is exactly the two non-evidenced statuses. A third term once
+    // put `evidenced` obligations with doubted evidence here; the stage that
+    // produced it was measured and removed, because 18.1% of this lane's false
+    // positives were it firing on verdicts that were already correct.
+    // Both non-evidenced statuses are checked against the same evidenced verdict,
+    // so the assertion is that each one counts AND that the evidenced one does not.
+    for (const status of ['not-evidenced', 'undetermined'] as const) {
       const root = await createRepository()
 
       try {
@@ -556,21 +556,21 @@ describe('outstanding is the headline, and completion is never certified', () =>
             { origin: 'inbox:tracker/A-1', line: 2, statement: 'Log every refusal.' }
           ],
           judgements: [
-            { status: 'addressed', evidence: [{ path: 'src/token.ts', line: 2 }] },
+            { status: 'evidenced', evidence: [{ path: 'src/token.ts', line: 2 }] },
             { status }
           ]
         })
         const report = await run(root, { agents })
 
-        expect(report.summary.addressedCount).toBe(1)
-        expect(report.summary.outstandingCount).toBe(1)
+        expect(report.summary.evidencedCount).toBe(1)
+        expect(report.summary.notEvidencedCount).toBe(1)
       } finally {
         await rm(root, { recursive: true, force: true })
       }
     }
   })
 
-  test('nothing outstanding is reported as a search result, not a clean bill', async () => {
+  test('an empty not-evidenced list is a search result, not a clean bill', async () => {
     const root = await createRepository()
 
     try {
@@ -579,12 +579,12 @@ describe('outstanding is the headline, and completion is never certified', () =>
           { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' }
         ],
         judgements: [
-          { status: 'addressed', evidence: [{ path: 'src/token.ts', line: 2 }] }
+          { status: 'evidenced', evidence: [{ path: 'src/token.ts', line: 2 }] }
         ]
       })
       const report = await run(root, { agents })
 
-      expect(report.summary.outstandingCount).toBe(0)
+      expect(report.summary.notEvidencedCount).toBe(0)
       // And there is no field anywhere asserting the change is complete: the
       // report carries counts and citations, never a completion verdict.
       expect(JSON.stringify(report)).not.toMatch(/"complete"|"fulfilled"|"satisfied"/u)
@@ -606,7 +606,7 @@ describe('a limit that would bind refuses instead of truncating', () => {
         obligations: [
           { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' }
         ],
-        judgements: [{ status: 'unaddressed' }]
+        judgements: [{ status: 'not-evidenced' }]
       })
       const report = await run(root, { agents })
 

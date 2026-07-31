@@ -1,6 +1,6 @@
 // The change, reduced to the lines a judgement is allowed to cite.
 //
-// Spec 23: "An obligation judged addressed MUST cite the change that addresses
+// Spec 23: "An obligation judged evidenced MUST cite the change that evidences
 // it — path and line. Unevidenced satisfaction claims are worse than silence,
 // because they invite a reviewer to stop checking."
 //
@@ -8,12 +8,13 @@
 //
 // 1. The judgement is shown the lines the diff ADDED, MODIFIED OR REMOVED, not
 //    whole files. A citation into an untouched line is not evidence that the
-//    change addressed anything, and a model shown whole files will produce one.
+//    change does what an obligation asks, and a model shown whole files will
+//    produce one.
 //    Removed lines were added by spec 23's 2026-07-30 amendment: without them a
 //    deletion is unprovable, because it creates no line to point at, and every
 //    "remove X" obligation came back wrong on a real revert commit.
 // 2. The same set is the verification surface. A cited `path:line` that is not
-//    in it is not a valid citation, so "addressed" cannot survive on a line the
+//    in it is not a valid citation, so "evidenced" cannot survive on a line the
 //    change never touched. That check is `verifyJudgement` in `judgement.ts`, and
 //    it reads the surface this module builds — one definition of "the change",
 //    used both to ask and to check.
@@ -83,7 +84,7 @@ const linesInHunks = (hunks: readonly DiffHunk[]): ReadonlySet<number> => {
  * order, so which part of a large change a bounded run judges is reproducible
  * rather than dependent on iteration order. Blank changed lines are skipped: they
  * are citable addresses that show nothing, and admitting them would let an
- * "addressed" verdict rest on whitespace.
+ * "evidenced" verdict rest on whitespace.
  *
  * Added lines come before removed lines within a file, and the budget is spent in
  * that order. A pure deletion therefore still reaches the surface, while a change

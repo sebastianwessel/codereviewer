@@ -12,16 +12,16 @@
 //
 // Two shapes below are load-bearing rather than stylistic.
 //
-// ADDRESSED IMPLIES EVIDENCE. `ObligationSchema` is a discriminated union in
-// which only the `addressed` member has an `evidence` array, and that array has a
-// minimum length of one. An obligation reported as addressed therefore CANNOT be
+// EVIDENCED IMPLIES EVIDENCE. `ObligationSchema` is a discriminated union in
+// which only the `evidenced` member has an `evidence` array, and that array has a
+// minimum length of one. An obligation reported as evidenced therefore CANNOT be
 // written without a path and a line, at the schema level, rather than by a filter
 // somebody has to remember to apply. Spec 23 names the unevidenced satisfaction
 // claim as the single most harmful output this capability can produce, "because
 // that stops a human looking".
 //
 // EVERY OBLIGATION CARRIES ITS SOURCE. `source` is required on every member of
-// the union, including `unaddressed` and `undetermined`. Spec 23: "An obligation
+// the union, including `not-evidenced` and `undetermined`. Spec 23: "An obligation
 // the reviewer inferred rather than read is not an obligation." The citation is
 // resolved from the fragment by this domain, not copied from the model's answer,
 // so `source.text` is the author's own line.
@@ -39,7 +39,7 @@ export const IntentCitationSchema = z.strictObject({
 })
 
 // A line of the CHANGE. Path and line are required: spec 23 asks for both, and a
-// path alone would let "addressed" point at a whole file.
+// path alone would let "evidenced" point at a whole file.
 //
 // `side` is required too, per spec 23's 2026-07-30 amendment. A removed line is
 // numbered on the PRE-change side, so without the side a reader cannot tell
@@ -52,13 +52,33 @@ export const ChangeCitationSchema = z.strictObject({
   text: z.string().min(1)
 })
 
+// WHY THESE WORDS, AND NOT `addressed`/`unaddressed`.
+//
+// The judgement is shown ONLY the changed lines, so the question it can answer is
+// "do these lines evidence this obligation?" and never "does the obligation hold
+// at head?". The two are different questions, and the old labels answered the
+// second one in a reader's head: `unaddressed` reads as "you did not do this",
+// while what the call actually established is "there is nothing here that shows
+// you did".
+//
+// That gap was measured, not supposed. On the 2026-08-01 realistic corpus, 54 of
+// this lane's 83 false positives were obligations the judgement had reported
+// CORRECTLY — nothing in the change evidenced them — which a reader and the
+// eval's answer key both read as a claim that the work was undone. 65% of the
+// lane's false positives were the words on the answer rather than the answer.
+//
+// The eval answer keys keep `addressed`/`unaddressed`, because they label TRUTH:
+// whether the state holds at head. Those are the right words for that question,
+// and the collision was that one word was being used for both.
 export const ObligationStatusSchema = z.enum([
-  // The change contains something that addresses this obligation, and the lines
-  // that do are cited.
-  'addressed',
-  // Nothing in the change addresses it. Reported neutrally: a pull request need
-  // not fully implement a ticket, and partial work is normal.
-  'unaddressed',
+  // The changed lines contain something that does what the obligation asks, and
+  // the lines that do are cited.
+  'evidenced',
+  // Nothing among the changed lines does what the obligation asks. Reported
+  // neutrally, and it asserts nothing about the rest of the repository: a pull
+  // request need not fully implement a ticket, partial work is normal, and an
+  // obligation already satisfied elsewhere leaves no evidence in THIS change.
+  'not-evidenced',
   // The material did not permit a decision. A real answer, and the value every
   // unusable judgement resolves to.
   'undetermined'
@@ -75,12 +95,12 @@ const obligationBase = {
 export const ObligationSchema = z.discriminatedUnion('status', [
   z.strictObject({
     ...obligationBase,
-    status: z.literal('addressed'),
+    status: z.literal('evidenced'),
     // At least one, always. See the header: this is the whole reason the entry is
     // a union member rather than an optional field.
     evidence: z.array(ChangeCitationSchema).min(1)
   }),
-  z.strictObject({ ...obligationBase, status: z.literal('unaddressed') }),
+  z.strictObject({ ...obligationBase, status: z.literal('not-evidenced') }),
   z.strictObject({ ...obligationBase, status: z.literal('undetermined') })
 ])
 
@@ -98,8 +118,15 @@ export const ExtraScopeEntrySchema = z.strictObject({
 const IntentFulfilmentSummarySchema = z.strictObject({
   intentFragmentCount: z.int().min(0),
   obligationCount: z.int().min(0),
-  addressedCount: z.int().min(0),
-  unaddressedCount: z.int().min(0),
+  // The three status tallies, one per member of `ObligationStatusSchema`.
+  //
+  // The middle one carries `Status` in its name because `notEvidencedCount` below
+  // is a DIFFERENT number — the headline, which adds `undetermined` in — and two
+  // fields differing only by what they silently include is exactly the kind of
+  // collision this vocabulary was renamed to remove. This one is the tally of the
+  // status; that one is everything the run could not evidence.
+  evidencedCount: z.int().min(0),
+  notEvidencedStatusCount: z.int().min(0),
   undeterminedCount: z.int().min(0),
   // ALWAYS FALSE, and retained in the contract for that reason rather than for
   // any state it can report: `intentFulfilment.maxObligations` now refuses the run
@@ -113,29 +140,29 @@ const IntentFulfilmentSummarySchema = z.strictObject({
   // rather than hidden: an extraction that mostly invents its sources should be
   // visible in the report it produced.
   uncitedObligationCount: z.int().min(0),
-  // Obligations a judgement called addressed while citing no line the change
-  // actually touched. They are reported as `undetermined`, and counted here so
-  // the downgrade is visible. This is the metric spec 23 says decides whether the
-  // capability is safe to show anyone.
-  unevidencedAddressedCount: z.int().min(0),
+  // Obligations a judgement answered `evidenced` for while citing no line the
+  // change actually touched. They are reported as `undetermined`, and counted here
+  // so the downgrade is visible. This is the metric spec 23 says decides whether
+  // the capability is safe to show anyone.
+  unverifiedEvidenceClaimCount: z.int().min(0),
   // THE HEADLINE NUMBER, and the reason this capability is shaped the way it is.
   //
-  // Obligations this run could NOT confirm the change addresses: everything
-  // unaddressed and everything undetermined. It is a statement about what the
-  // SEARCH found, never a certification of the rest.
+  // Obligations this run found no evidence for: everything `not-evidenced` and
+  // everything `undetermined`. It is a statement about what the SEARCH found in
+  // the change, never a claim about whether the work is done.
   //
-  // IT ONCE COUNTED A THIRD THING. A citation-aptness stage put `addressed`
+  // IT ONCE COUNTED A THIRD THING. A citation-aptness stage put `evidenced`
   // obligations with doubted evidence on this list too. That stage was measured
   // and removed — 15 of this lane's 83 false positives (18.1%) were it flagging a
   // verdict that was already correct — so the number is now exactly the two
-  // non-addressed statuses, and an `addressed` obligation is never outstanding.
+  // non-evidenced statuses, and an `evidenced` obligation is never on it.
   //
   // Reading the report this way removes the one error spec 23 calls expensive. A
-  // false "this is done" makes a reviewer stop looking; a false "you might still
-  // owe this" costs them ten seconds. Since the report never asserts completion,
-  // it cannot assert it wrongly — the failure mode becomes a missed item on this
-  // list, which is the cheap direction spec 23 explicitly prefers.
-  outstandingCount: z.int().min(0).default(0),
+  // false "this is done" makes a reviewer stop looking; a false "this change does
+  // not show it" costs them ten seconds. Since the report never asserts
+  // completion, it cannot assert it wrongly — the failure mode becomes a missed
+  // item on this list, which is the cheap direction spec 23 explicitly prefers.
+  notEvidencedCount: z.int().min(0).default(0),
   extraScopeFileCount: z.int().min(0)
 })
 

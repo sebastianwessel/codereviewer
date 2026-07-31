@@ -33,7 +33,7 @@ import type { ChangeCitation } from './intent-fulfilment-report.js'
 // The model-bound OUTPUT schema, loose on purpose.
 //
 // `status` is a plain string rather than the three-value enum, and the enum lives
-// in the normalizer below: with an enum here a model answering "Addressed." fails
+// in the normalizer below: with an enum here a model answering "Evidenced." fails
 // provider-side validation, the call throws, and the judgement is lost. A schema
 // stricter than the normalizer converts a recoverable answer into silence. Loose
 // here, authoritative in code — the same division the conformance adjudication and
@@ -84,20 +84,20 @@ export type FulfilmentJudgementInput = z.infer<
 /**
  * A normalized judgement.
  *
- * A union rather than a record with an optional evidence array, so "an addressed
+ * A union rather than a record with an optional evidence array, so "an evidenced
  * obligation always carries evidence" is checked by the compiler at every use
  * site instead of being a rule the wiring has to remember.
  */
 export type FulfilmentJudgement =
   | {
-      readonly status: 'addressed'
+      readonly status: 'evidenced'
       readonly evidence: readonly {
         readonly path: string
         readonly line: number
         readonly side?: 'added' | 'removed'
       }[]
     }
-  | { readonly status: 'unaddressed' }
+  | { readonly status: 'not-evidenced' }
   | { readonly status: 'undetermined' }
 
 export type FulfilmentJudgementRunner = (
@@ -110,13 +110,16 @@ const UNDETERMINED: FulfilmentJudgement = { status: 'undetermined' }
 /**
  * Resolves whatever the judgement returned into one of the three statuses.
  *
- * Everything unusable resolves to `undetermined`, INCLUDING an `addressed` answer
+ * Everything unusable resolves to `undetermined`, INCLUDING an `evidenced` answer
  * with no evidence. The error direction is deliberate and is spec 23's: "The
  * dangerous output is not 'missed an obligation'. It is confidently asserting an
  * obligation is satisfied when it is not, because that stops a human looking."
- * `undetermined` rather than `unaddressed`, because a failed judgement is not
- * evidence that nothing addresses the obligation either — that would be a second
+ * `undetermined` rather than `not-evidenced`, because a failed judgement did not
+ * establish that the change carries no evidence either — that would be a second
  * claim made on the strength of a malformed answer.
+ *
+ * `answerKey` strips punctuation, so "not-evidenced", "Not evidenced" and "NOT
+ * EVIDENCED." are one answer, while a paraphrase is still a different one.
  */
 export const normalizeFulfilmentJudgement = (
   value: unknown
@@ -129,11 +132,11 @@ export const normalizeFulfilmentJudgement = (
 
   const key = answerKey(parsed.data.status)
 
-  if (key === 'unaddressed') {
-    return { status: 'unaddressed' }
+  if (key === 'notevidenced') {
+    return { status: 'not-evidenced' }
   }
 
-  if (key !== 'addressed') {
+  if (key !== 'evidenced') {
     return UNDETERMINED
   }
 
@@ -154,7 +157,7 @@ export const normalizeFulfilmentJudgement = (
     return [{ path, line }]
   })
 
-  return evidence.length === 0 ? UNDETERMINED : { status: 'addressed', evidence }
+  return evidence.length === 0 ? UNDETERMINED : { status: 'evidenced', evidence }
 }
 
 /** Builds the packet for one obligation from the already-bounded change surface. */
@@ -175,19 +178,19 @@ export const fulfilmentJudgementInputFor = (
   })
 
 export type VerifiedJudgement =
-  | { readonly status: 'addressed'; readonly evidence: readonly ChangeCitation[] }
-  | { readonly status: 'unaddressed' }
+  | { readonly status: 'evidenced'; readonly evidence: readonly ChangeCitation[] }
+  | { readonly status: 'not-evidenced' }
   | { readonly status: 'undetermined' }
 
 /**
- * Verifies an `addressed` judgement against the change it claims to have found.
+ * Verifies an `evidenced` judgement against the change it claims to have found.
  *
  * Every cited `path:line` must be a line the change actually touched — that is
  * what the change surface holds. Citations that are not are dropped, and an
- * `addressed` judgement left with none is downgraded to `undetermined`.
+ * `evidenced` judgement left with none is downgraded to `undetermined`.
  *
- * This is spec 23's "an obligation judged addressed MUST cite the change that
- * addresses it", enforced rather than requested. Without it, "addressed" survives
+ * This is spec 23's "an obligation judged evidenced MUST cite the change that
+ * evidences it", enforced rather than requested. Without it, "evidenced" survives
  * on a line number a model produced from the shape of the question, and the
  * report tells a reviewer to stop checking something nobody checked.
  *
@@ -198,7 +201,7 @@ export const verifyJudgement = (
   judgement: FulfilmentJudgement,
   surface: ChangeSurface
 ): VerifiedJudgement => {
-  if (judgement.status !== 'addressed') {
+  if (judgement.status !== 'evidenced') {
     return judgement
   }
 
@@ -239,5 +242,5 @@ export const verifyJudgement = (
 
   return evidence.length === 0
     ? { status: 'undetermined' }
-    : { status: 'addressed', evidence }
+    : { status: 'evidenced', evidence }
 }

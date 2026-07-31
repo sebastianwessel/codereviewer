@@ -384,7 +384,7 @@ supplies — turns it into discrete obligations, and for each one says either
 whether the change is complete, correct, or acceptable.
 
 Because of that, **the exit code is always `0`** when the command runs at all,
-including when every obligation is unaddressed. Only a configuration or usage
+including when no obligation is evidenced. Only a configuration or usage
 failure (`2`) or a repository failure such as an unresolvable ref (`3`) changes
 it.
 
@@ -462,12 +462,13 @@ and all of them exit `0`:
   "summary": {
     "intentFragmentCount": 1,
     "obligationCount": 2,
-    "addressedCount": 1,
-    "unaddressedCount": 1,
+    "evidencedCount": 1,
+    "notEvidencedStatusCount": 1,
     "undeterminedCount": 0,
+    "notEvidencedCount": 1,
     "obligationsTruncated": false,
     "uncitedObligationCount": 0,
-    "unevidencedAddressedCount": 0,
+    "unverifiedEvidenceClaimCount": 0,
     "extraScopeFileCount": 1
   },
   "obligations": [
@@ -479,7 +480,7 @@ and all of them exit `0`:
         "text": "Reject tokens older than five minutes."
       },
       "statement": "Reject old tokens.",
-      "status": "addressed",
+      "status": "evidenced",
       "evidence": [
         {
           "path": "src/token.ts",
@@ -496,26 +497,35 @@ and all of them exit `0`:
         "text": "Record every refusal in the audit log."
       },
       "statement": "Log every refusal.",
-      "status": "unaddressed"
+      "status": "not-evidenced"
     }
   ],
   "extraScope": [{ "path": "src/unrelated.ts", "changedLineCount": 1 }],
-  "explanation": "The change rejects old tokens; the audit-log requirement is not addressed.",
+  "explanation": "The change rejects old tokens; nothing in it evidences the audit-log requirement.",
   "warnings": [],
   "usage": { "inputTokens": 1840, "outputTokens": 96, "costUsd": 0.0034 }
 }
 ```
 
-- **`source` is on every obligation, including the unaddressed ones.** It is the
+- **The status words say what was SHOWN, not what was done.** The judgement is
+  given only the lines this change touched, so `evidenced` means "these changed
+  lines show it" and `not-evidenced` means "nothing in these changed lines shows
+  it" — which is **not** the same as "the work is undone". An obligation an earlier
+  commit already satisfied, or one that asks for something *not* to happen, is
+  correctly `not-evidenced` here. The words were renamed on 2026-08-01 for exactly
+  this reason: 54 of the lane's 83 apparent false positives were readers taking
+  `unaddressed` to mean "outstanding work". `summary.notEvidencedCount` is
+  `not-evidenced` + `undetermined`.
+- **`source` is on every obligation, including the ones with no evidence.** It is the
   origin and line of the stated intent the obligation was read out of, and the
   `text` is resolved from that line rather than repeated back by the model. An
   obligation whose citation does not resolve is **not reported at all**, and is
   counted in `summary.uncitedObligationCount`. An obligation nobody wrote is not
   an obligation.
-- **`evidence` exists only on `addressed`, and always holds at least one entry.**
+- **`evidence` exists only on `evidenced`, and always holds at least one entry.**
   Every cited line is checked against the lines the diff actually touched; an
-  `addressed` verdict whose citations do not survive that check is reported as
-  `undetermined` and counted in `summary.unevidencedAddressedCount`. A
+  `evidenced` verdict whose citations do not survive that check is reported as
+  `undetermined` and counted in `summary.unverifiedEvidenceClaimCount`. A
   satisfaction claim with nothing behind it is the most harmful thing this
   command could print, because it tells you to stop looking.
 - `undetermined` means the judgement could not be made — including when the call

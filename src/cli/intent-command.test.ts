@@ -239,7 +239,7 @@ describe('intent CLI', { timeout: 20_000 }, () => {
       )
       await writeTicket(root, 'Reject tokens older than five minutes.')
       const provider = new ScriptedIntentProvider({
-        status: 'addressed',
+        status: 'evidenced',
         evidence: [{ path: 'src/token.ts', line: 1 }]
       })
       const result = await check(root, {
@@ -257,14 +257,14 @@ describe('intent CLI', { timeout: 20_000 }, () => {
           obligation.status,
           obligation.source.origin,
           obligation.source.line,
-          obligation.status === 'addressed'
+          obligation.status === 'evidenced'
             ? obligation.evidence.map(
                 (citation) => `${citation.path}:${citation.line}`
               )
             : []
         ])
       ).toEqual([
-        ['addressed', 'inbox:tracker/A-1', 1, ['src/token.ts:1']]
+        ['evidenced', 'inbox:tracker/A-1', 1, ['src/token.ts:1']]
       ])
       expect(report.explanation).toBe(
         'The mapping above is what the change covers.'
@@ -274,7 +274,7 @@ describe('intent CLI', { timeout: 20_000 }, () => {
       // one judgement, explanation.
       //
       // The count is load-bearing in the other direction now. A fourth call was a
-      // citation-aptness check on each `addressed` verdict, measured and removed —
+      // citation-aptness check on each `evidenced` verdict, measured and removed —
       // it suppressed five correct verdicts per wrong one caught. This assertion is
       // what makes reintroducing a per-obligation call a visible cost rather than a
       // silent one.
@@ -294,7 +294,7 @@ describe('intent CLI', { timeout: 20_000 }, () => {
   // 23 states it as a requirement rather than a default: the command MUST NOT be
   // able to fail a pipeline on fulfilment grounds, and that is not configurable.
   // Every report shape is driven through the command here.
-  test('exits 0 for every report shape it can produce, including a wholly unaddressed intent', async () => {
+  test('exits 0 for every report shape it can produce, including an intent nothing evidences', async () => {
     const root = await createRepository()
 
     try {
@@ -306,20 +306,20 @@ describe('intent CLI', { timeout: 20_000 }, () => {
         { provider: { id: 'openai', model: 'sentinel-model' } }
       )
       await writeTicket(root, 'Reject tokens older than five minutes.')
-      const unaddressed = await check(root, {
+      const notEvidenced = await check(root, {
         cwd: root,
         environment: { OPENAI_API_KEY: 'sk-test' },
         providerImport: async () => ({
-          openai: () => new ScriptedIntentProvider({ status: 'unaddressed' })
+          openai: () => new ScriptedIntentProvider({ status: 'not-evidenced' })
         })
       })
 
       expect(disabled.exitCode).toBe(0)
-      expect(unaddressed.exitCode).toBe(0)
-      // Nothing in the change addresses the only stated obligation, which is the
+      expect(notEvidenced.exitCode).toBe(0)
+      // Nothing in the change evidences the only stated obligation, which is the
       // strongest case a gate would want to fail on. It still exits 0.
-      expect(parseReport(unaddressed.stdout).summary.unaddressedCount).toBe(1)
-      expect(parseReport(unaddressed.stdout).summary.addressedCount).toBe(0)
+      expect(parseReport(notEvidenced.stdout).summary.notEvidencedStatusCount).toBe(1)
+      expect(parseReport(notEvidenced.stdout).summary.evidencedCount).toBe(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

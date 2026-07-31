@@ -82,7 +82,7 @@ export const fulfilmentExplanationInputFor = (
       statement: obligation.statement,
       status: obligation.status,
       evidence:
-        obligation.status === 'addressed'
+        obligation.status === 'evidenced'
           ? obligation.evidence.map((citation) => ({
               path: citation.path,
               line: citation.line

@@ -121,7 +121,7 @@ const diffMapsByPath = (
 //
 // The removed lines come from the raw diff intake already holds, so no extra git
 // subcommand and no second filesystem read is needed. They matter because spec
-// 23's 2026-07-30 amendment lets an addressed obligation cite a removed line:
+// 23's 2026-07-30 amendment lets an evidenced obligation cite a removed line:
 // without them a deletion is unprovable, and every "remove X" obligation on a
 // real revert commit came back wrong.
 const collectSourceFiles = async (
@@ -176,7 +176,7 @@ const collectExtraScope = (
 ): readonly ExtraScopeEntry[] => {
   const cited = new Set(
     obligations.flatMap((obligation) =>
-      obligation.status === 'addressed'
+      obligation.status === 'evidenced'
         ? obligation.evidence.map((citation) => citation.path)
         : []
     )
@@ -226,12 +226,12 @@ const emptyReport = (input: EmptyReportInput): IntentFulfilmentReport =>
     summary: {
       intentFragmentCount: input.intentFragmentCount ?? 0,
       obligationCount: 0,
-      addressedCount: 0,
-      unaddressedCount: 0,
+      evidencedCount: 0,
+      notEvidencedStatusCount: 0,
       undeterminedCount: 0,
       obligationsTruncated: false,
       uncitedObligationCount: input.uncitedObligationCount ?? 0,
-      unevidencedAddressedCount: 0,
+      unverifiedEvidenceClaimCount: 0,
       extraScopeFileCount: 0
     },
     obligations: [],
@@ -438,7 +438,7 @@ export const runIntentFulfilment = async (
   })
 
   // REFUSE rather than judge against part of the change. A judgement that cannot
-  // see the evidence reports the obligation unaddressed, which is a wrong answer
+  // see the evidence reports the obligation not-evidenced, which is a wrong answer
   // on this command's only question — see `intent-limits.ts`.
   if (surface.truncated) {
     throw intentChangeTooLargeError({
@@ -447,13 +447,13 @@ export const runIntentFulfilment = async (
     })
   }
   const obligations: Obligation[] = []
-  let unevidencedAddressedCount = 0
+  let unverifiedEvidenceClaimCount = 0
   let failedJudgementCount = 0
 
   // Sequential, one call per obligation. Each call is its own session, so no
   // judgement opens holding the answer of the one before it: a verdict must follow
   // from the obligation in front of the model, and a conversation carrying six
-  // previous "unaddressed" answers is a reason to give a seventh.
+  // previous "not-evidenced" answers is a reason to give a seventh.
   for (const [index, entry] of cited.entries()) {
     let judged: FulfilmentJudgement
 
@@ -471,24 +471,24 @@ export const runIntentFulfilment = async (
 
     const verified = verifyJudgement(judged, surface)
 
-    // The false-satisfied guard firing: the model said `addressed` and not one of
+    // The false-satisfied guard firing: the model said `evidenced` and not one of
     // its citations was a line the change touched. Spec 23 makes the rate of
     // wrongly-certified obligations the metric that decides whether this
     // capability is safe to show anyone, so the downgrade is counted rather than
     // absorbed into the undetermined total without trace.
-    if (judged.status === 'addressed' && verified.status !== 'addressed') {
-      unevidencedAddressedCount += 1
+    if (judged.status === 'evidenced' && verified.status !== 'evidenced') {
+      unverifiedEvidenceClaimCount += 1
     }
 
     // ONE CALL PER OBLIGATION, and no second one. A citation-aptness stage used to
-    // run here on every `addressed` verdict; it was measured and removed. See spec
+    // run here on every `evidenced` verdict; it was measured and removed. See spec
     // 23's rejected-design record for the numbers.
     obligations.push({
       id: `obl_${index + 1}`,
       source: entry.source,
       statement: entry.statement,
-      ...(verified.status === 'addressed'
-        ? { status: 'addressed' as const, evidence: [...verified.evidence] }
+      ...(verified.status === 'evidenced'
+        ? { status: 'evidenced' as const, evidence: [...verified.evidence] }
         : { status: verified.status })
     })
   }
@@ -545,8 +545,8 @@ export const runIntentFulfilment = async (
     summary: {
       intentFragmentCount: fragments.length,
       obligationCount: obligations.length,
-      addressedCount: countOf('addressed'),
-      unaddressedCount: countOf('unaddressed'),
+      evidencedCount: countOf('evidenced'),
+      notEvidencedStatusCount: countOf('not-evidenced'),
       undeterminedCount: countOf('undetermined'),
       // ALWAYS FALSE: a run the cap would have bound throws above rather than
       // reporting a short checklist. The flag previously fired on a condition that
@@ -555,13 +555,13 @@ export const runIntentFulfilment = async (
       // corpus returned exactly the cap while every one reported no truncation.
       obligationsTruncated: false,
       uncitedObligationCount,
-      unevidencedAddressedCount,
-      // Everything the run could not confirm: unaddressed plus undetermined. An
-      // `addressed` obligation is never on this list — the third term that once
-      // put doubted-evidence verdicts here went with the aptness stage, and 18.1%
-      // of this lane's false positives were that term firing on verdicts that were
-      // already correct.
-      outstandingCount: countOf('unaddressed') + countOf('undetermined'),
+      unverifiedEvidenceClaimCount,
+      // Everything the run found no evidence for: `not-evidenced` plus
+      // `undetermined`. An `evidenced` obligation is never on this list — the third
+      // term that once put doubted-evidence verdicts here went with the aptness
+      // stage, and 18.1% of this lane's false positives were that term firing on
+      // verdicts that were already correct.
+      notEvidencedCount: countOf('not-evidenced') + countOf('undetermined'),
       extraScopeFileCount: extraScope.length
     },
     obligations,

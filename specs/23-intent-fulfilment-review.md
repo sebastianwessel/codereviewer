@@ -6,6 +6,57 @@ Amended: 2026-07-30 — a citation may name a removed line (see *Amendment* belo
 Second Amendment: 2026-07-31 — two demoting designs rejected; **annotates, never demotes**
 **Second Amendment WITHDRAWN: 2026-08-01 — all three aptness designs rejected; the
 stage is REMOVED. `intent check` has no citation-aptness call.**
+Vocabulary: 2026-08-01 — the report says `evidenced` / `not-evidenced`, never
+`addressed` / `unaddressed` (see *Output Vocabulary* below)
+
+## Output Vocabulary (2026-08-01): `evidenced`, not `addressed`
+
+The report emits **`evidenced`**, **`not-evidenced`** and **`undetermined`**. It no
+longer emits `addressed` or `unaddressed`, and there is no alias for either.
+
+**Why the words changed, and it is not a matter of taste.** The judgement is shown
+ONLY the changed lines, so the question it can answer is *"do these lines evidence
+this obligation?"*. It cannot answer *"does this obligation hold at head?"*, because
+it never sees the rest of the repository. `unaddressed` answered the second question
+in the reader's head while the engine had only asked the first.
+
+That was measured rather than supposed. The 2026-08-01 offline diagnosis classified
+this lane's 83 false positives, and **54 of them (65.1%) were not errors at all**: 33
+obligations satisfied by ABSENCE — a prohibition, where nothing changed and there is
+therefore no line to cite — and 21 satisfied OUTSIDE the diff, by an earlier commit or
+by code that already existed. In every one of those the judgement reported correctly
+that nothing among the changed lines did what the obligation asked, and a reader — and
+the eval's answer key — read the output as a claim that the work was undone.
+
+The collision was exact. The ENGINE emitted `unaddressed` meaning *no evidence in this
+diff*; the eval ANSWER KEY used the same word to mean *the state does not hold at
+head*. One word, two different questions. This spec's own Purpose is *"report what a
+change has not been shown to cover"*, which is the first question — so the engine was
+answering correctly and the words on the answer were what misled.
+
+### What this requires
+
+- The report MUST emit `evidenced`, `not-evidenced` and `undetermined` and nothing
+  else. No alias, no back-compatible spelling, no dual-accepting schema on the engine
+  side.
+- The headline count is **`notEvidencedCount`**. It counts `not-evidenced` plus
+  `undetermined`, and an `evidenced` obligation is never on it.
+- **The eval answer keys keep `addressed` / `unaddressed`.** They label TRUTH — whether
+  the state holds at head — and those are the right words for that question. The
+  scorers are where the two vocabularies meet, and they are the only place entitled to
+  know both.
+- Nothing this capability emits — status, count or prose — may be phrased so that *"this
+  change does not show it"* reads as *"this was not done"*.
+
+This is a renaming and nothing else. No verdict, count or decision rule moved with it:
+the same obligations receive the same statuses under the new words, and no accuracy
+number changes.
+
+**Records written before this date are NOT restated.** The measurement records below
+quote the labels the engine emitted when they were taken, and stored `report.json`
+artefacts genuinely carry the old values. The scorers read both spellings for exactly
+that reason — rescoring history under new labels would be silently wrong — while a new
+run can only ever produce the new ones.
 
 ## Aptness check — REJECTED DESIGN, REMOVED 2026-08-01
 
@@ -66,8 +117,8 @@ positives on the number the capability is read by.
   There is no flag, no configuration switch, and no disabled code path — a dead
   switch for a rejected design is worse than its absence, because it reads as a
   decision still open.
-- `outstandingCount` MUST count **unaddressed plus undetermined, and nothing else**.
-  An `addressed` obligation is never outstanding.
+- `notEvidencedCount` MUST count **`not-evidenced` plus `undetermined`, and nothing
+  else**. An `evidenced` obligation is never on that list.
 
 ### The bar for a fourth attempt
 
@@ -231,7 +282,7 @@ reader can confirm in the diff. The rule was written with additions in mind, not
 with a judgement that deletions should not count.
 
 The amendment therefore widens what a citation may name and adds an obligation to
-disclose the side, so the safety property is unchanged: an addressed obligation
+disclose the side, so the safety property is unchanged: an `evidenced` obligation
 still cannot survive without a verified, human-checkable address.
 
 Recorded date: 2026-07-30. This is the first amendment to an approved spec in this
@@ -242,7 +293,8 @@ project made after implementation; the measurement that forced it is in
 
 Report **what a change has not been shown to cover**, against its stated intent —
 the pull-request description, a linked ticket, a commit body — so a human can see
-at a glance what may still be outstanding.
+at a glance what the change does not evidence. What it does not evidence is not the
+same as what is undone, and the vocabulary above exists to keep the two apart.
 
 ## Limits Refuse; They Never Truncate
 
@@ -253,7 +305,7 @@ This is a correctness requirement, not a preference. A truncating limit answers 
 question it was not able to answer, and the caller cannot tell that from a real
 result:
 
-- bounding the changed lines makes a judgement report an obligation `unaddressed`
+- bounding the changed lines makes a judgement report an obligation `not-evidenced`
   because its evidence was not shown — a wrong answer on the only question asked;
 - bounding the obligation list under-reports what is left, which is the single
   direction this capability must not err in;
@@ -310,8 +362,8 @@ missing an item from the outstanding list, which costs a reviewer nothing they w
 not already going to do — and which this spec's Evaluation section already ranks as
 the cheap direction.
 
-`outstandingCount` is therefore the headline number. It counts **unaddressed plus
-undetermined**, and an `addressed` obligation is never on it.
+`notEvidencedCount` is therefore the headline number. It counts **`not-evidenced`
+plus `undetermined`**, and an `evidenced` obligation is never on it.
 
 That framing inverts the economics of every uncertain signal in the pipeline: an
 obligation the run could not settle belongs **on** the list rather than suppressed
@@ -320,7 +372,7 @@ the thing this capability exists to prevent.
 
 **That argument has a limit, and it was found by measurement.** It justifies keeping
 an unsettled obligation on the list; it does not justify manufacturing doubt about a
-settled one. The withdrawn aptness stage did the latter — it put `addressed`
+settled one. The withdrawn aptness stage did the latter — it put `evidenced`
 obligations on this list at ~38% precision, and 18.1% of the lane's false positives
 were that term firing on verdicts that were already correct. A cheap-to-dismiss item
 is still a false positive on the number the capability is read by.
@@ -378,7 +430,7 @@ document. **That ingestion MUST be reused, not reimplemented.**
   the underlying judgement is not accurate enough to gate on.
 - Every reported obligation MUST cite **where in the stated intent it came from**.
   An obligation the reviewer inferred rather than read is not an obligation.
-- An obligation judged addressed MUST cite the change that addresses it — path and
+- An obligation judged `evidenced` MUST cite the change that evidences it — path and
   line. Unevidenced satisfaction claims are worse than silence, because they
   invite a reviewer to stop checking.
 - **A cited line MAY be one the change REMOVED, identified by its line number on
@@ -412,7 +464,7 @@ The dangerous output is not "missed an obligation". It is **confidently assertin
 an obligation is satisfied when it is not**, because that stops a human looking.
 
 Evaluation MUST therefore treat a false *satisfied* claim as more costly than a
-false *unaddressed* claim, and report the two separately rather than in one
+false *not-evidenced* claim, and report the two separately rather than in one
 accuracy figure.
 
 ## Evaluation
@@ -440,11 +492,12 @@ Metrics, reported separately and never blended:
 
 - **Obligation extraction** — do the obligations match what a human reads in the
   intent?
-- **Unaddressed detection** — of obligations genuinely not addressed, how many are
-  reported?
-- **False-satisfied rate** — of obligations reported as addressed, how many are
-  not? Per the failure mode above, this is the metric that decides whether the
-  capability is safe to show anyone.
+- **Unaddressed detection** — of obligations genuinely not addressed at head, how
+  many does the run report as `not-evidenced`? The metric keeps the answer key's
+  word because its denominator is a truth, not a reported status.
+- **False-satisfied rate** — of obligations reported as `evidenced`, how many are
+  not addressed? Per the failure mode above, this is the metric that decides whether
+  the capability is safe to show anyone.
 
 Decision rule, fixed before the first measurement: **ship only if the
 false-satisfied rate is low.** A capability that misses unaddressed obligations is
@@ -458,11 +511,12 @@ recall compensates.
 | Reuses spec 11 change-intent ingestion | integration test asserting no second ingestion path |
 | Cannot fail a pipeline on fulfilment grounds | exit-code test |
 | Every obligation cites its source in the stated intent | unit test |
-| Every satisfied obligation cites path and line | unit test |
+| Every `evidenced` obligation cites path and line | unit test |
 | Absent intent reports plainly and exits successfully | integration test |
 | Judgement and explanation do not share a model call, and the judgement schema carries no free text | harness test asserting distinct agents and distinct output schemas, plus a schema-shape assertion that the mapping output has no string field other than identifiers and enums |
 | Extra scope is reported without a defect severity | unit test |
 | No citation-aptness call: one judgement per obligation and nothing more | end-to-end provider-request count in the CLI test |
-| `outstandingCount` counts unaddressed and undetermined only, never an addressed obligation | unit test |
+| The report emits `evidenced` / `not-evidenced` / `undetermined` and no retired label | prompt test asserting the judgement instruction names the accepted answers and no retired one, plus normalizer unit tests |
+| `notEvidencedCount` counts `not-evidenced` and `undetermined` only, never an `evidenced` obligation | unit test |
 | Disabled by default | config schema test |
 | Instructions stay generic and language-neutral | prompt genericity guard |

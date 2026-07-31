@@ -4,7 +4,7 @@
 // plausible-looking report from an input it had only partly seen:
 //
 //   maxChangeLines bounded the evidence a judgement may draw from, so a judgement
-//   that could not see the evidence reported the obligation UNADDRESSED. Measured
+//   that could not see the evidence reported the obligation NOT-EVIDENCED. Measured
 //   over this repository's last 60 commits, 43% change more than the 400 lines the
 //   default allowed. Wrong answers, on the capability's only question, on nearly
 //   half of real changes.
@@ -88,7 +88,7 @@ export const intentChangeTooLargeError = (input: {
       `The change has more citable lines (${input.changedLineCount}) than ` +
       `intentFulfilment.maxChangeLines allows (${input.maxChangeLines}). ` +
       'Judging it against part of the change would report obligations as ' +
-      'unaddressed whose evidence was simply not shown. ' +
+      'not-evidenced whose evidence was simply not shown. ' +
       recoveryFor({
         key: 'maxChangeLines',
         configured: input.maxChangeLines,

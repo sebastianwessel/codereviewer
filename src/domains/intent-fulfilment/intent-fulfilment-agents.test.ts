@@ -104,8 +104,8 @@ class RecordingProvider implements ModelProvider {
     const answer = properties.includes('obligations')
       ? { obligations: [{ origin: 'inbox:a', line: 1, statement: 'do a thing' }] }
       : properties.includes('explanation')
-        ? { explanation: 'One obligation, not addressed.' }
-        : { status: 'unaddressed' }
+        ? { explanation: 'One obligation, not evidenced.' }
+        : { status: 'not-evidenced' }
 
     return {
       object: answer as unknown as T,
@@ -189,7 +189,7 @@ describe('intent-fulfilment harness agents', () => {
       await agents.explain(
         {
           obligations: [
-            { statement: 'do a thing', status: 'unaddressed', evidence: [] }
+            { statement: 'do a thing', status: 'not-evidenced', evidence: [] }
           ],
           extraScopePaths: []
         },

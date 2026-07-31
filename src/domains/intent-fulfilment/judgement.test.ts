@@ -5,7 +5,7 @@
 //    asserting an obligation is satisfied when it is not, because that stops a
 //    human looking."
 //
-// Both halves are tested: the normalizer, which refuses an `addressed` answer that
+// Both halves are tested: the normalizer, which refuses an `evidenced` answer that
 // carries no citation at all, and `verifyJudgement`, which refuses one whose
 // citations do not land on a line the change actually touched. The second is the
 // one that matters — a model asked for evidence will produce a plausible-looking
@@ -33,15 +33,15 @@ describe('normalizeFulfilmentJudgement', () => {
   test('accepts the three answers, tolerating casing and a trailing stop', () => {
     expect(
       normalizeFulfilmentJudgement({
-        status: 'Addressed.',
+        status: 'Evidenced.',
         evidence: [{ path: 'src/token.ts', line: 2 }]
       })
     ).toEqual({
-      status: 'addressed',
+      status: 'evidenced',
       evidence: [{ path: 'src/token.ts', line: 2 }]
     })
-    expect(normalizeFulfilmentJudgement({ status: 'UNADDRESSED' })).toEqual({
-      status: 'unaddressed'
+    expect(normalizeFulfilmentJudgement({ status: 'NOT-EVIDENCED' })).toEqual({
+      status: 'not-evidenced'
     })
     expect(normalizeFulfilmentJudgement({ status: 'undetermined' })).toEqual({
       status: 'undetermined'
@@ -54,30 +54,30 @@ describe('normalizeFulfilmentJudgement', () => {
     // provider error rate from 0% to 28.8%.
     expect(
       normalizeFulfilmentJudgement({
-        status: 'addressed',
+        status: 'evidenced',
         evidence: [{ path: 'src/token.ts', line: '2' }]
       })
     ).toEqual({
-      status: 'addressed',
+      status: 'evidenced',
       evidence: [{ path: 'src/token.ts', line: 2 }]
     })
   })
 
   test.each([
-    ['addressed with no evidence field', { status: 'addressed' }],
-    ['addressed with an empty evidence list', { status: 'addressed', evidence: [] }],
+    ['evidenced with no evidence field', { status: 'evidenced' }],
+    ['evidenced with an empty evidence list', { status: 'evidenced', evidence: [] }],
     [
-      'addressed citing an empty path',
-      { status: 'addressed', evidence: [{ path: '  ', line: 3 }] }
+      'evidenced citing an empty path',
+      { status: 'evidenced', evidence: [{ path: '  ', line: 3 }] }
     ],
     ['a paraphrased verdict', { status: 'it is covered' }],
     ['a missing status', { evidence: [] }],
-    ['a malformed answer', 'addressed'],
+    ['a malformed answer', 'evidenced'],
     ['a null answer', null]
-  ])('resolves %s to undetermined rather than to addressed', (_name, value) => {
+  ])('resolves %s to undetermined rather than to evidenced', (_name, value) => {
     // Every failure of this layer resolves AWAY from a satisfaction claim, and to
-    // `undetermined` rather than `unaddressed`: a malformed answer is not evidence
-    // that nothing addresses the obligation either.
+    // `undetermined` rather than `not-evidenced`: a malformed answer did not
+    // establish that the change carries no evidence either.
     expect(normalizeFulfilmentJudgement(value)).toEqual({ status: 'undetermined' })
   })
 })
@@ -87,7 +87,7 @@ describe('verifyJudgement', () => {
     expect(
       verifyJudgement(
         {
-          status: 'addressed',
+          status: 'evidenced',
           // The text is never taken from the answer, so a report cannot quote a
           // line the change does not contain.
           evidence: [{ path: 'src/token.ts', line: 2 }]
@@ -95,7 +95,7 @@ describe('verifyJudgement', () => {
         surface
       )
     ).toEqual({
-      status: 'addressed',
+      status: 'evidenced',
       evidence: [
         { path: 'src/token.ts', line: 2, side: 'added', text: 'const expired = check()' }
       ]
@@ -106,14 +106,14 @@ describe('verifyJudgement', () => {
     ['a file the change did not touch', 'src/other.ts', 2],
     ['a line outside the changed hunks', 'src/token.ts', 1],
     ['a line past the end of the file', 'src/token.ts', 99],
-    // Line 3 is blank, so it is not part of the citable surface: an "addressed"
+    // Line 3 is blank, so it is not part of the citable surface: an "evidenced"
     // verdict must not be able to rest on whitespace.
     ['a blank changed line', 'src/token.ts', 3]
   ])(
-    'downgrades an addressed verdict citing %s to undetermined',
+    'downgrades an evidenced verdict citing %s to undetermined',
     (_name, path, line) => {
       expect(
-        verifyJudgement({ status: 'addressed', evidence: [{ path, line }] }, surface)
+        verifyJudgement({ status: 'evidenced', evidence: [{ path, line }] }, surface)
       ).toEqual({ status: 'undetermined' })
     }
   )
@@ -121,7 +121,7 @@ describe('verifyJudgement', () => {
   test('keeps the valid citations of a partly wrong answer and drops duplicates', () => {
     const verified = verifyJudgement(
       {
-        status: 'addressed',
+        status: 'evidenced',
         evidence: [
           { path: 'src/token.ts', line: 2 },
           { path: 'src/token.ts', line: 2 },
@@ -132,16 +132,16 @@ describe('verifyJudgement', () => {
     )
 
     expect(verified).toEqual({
-      status: 'addressed',
+      status: 'evidenced',
       evidence: [
         { path: 'src/token.ts', line: 2, side: 'added', text: 'const expired = check()' }
       ]
     })
   })
 
-  test('leaves unaddressed and undetermined verdicts alone', () => {
-    expect(verifyJudgement({ status: 'unaddressed' }, surface)).toEqual({
-      status: 'unaddressed'
+  test('leaves not-evidenced and undetermined verdicts alone', () => {
+    expect(verifyJudgement({ status: 'not-evidenced' }, surface)).toEqual({
+      status: 'not-evidenced'
     })
     expect(verifyJudgement({ status: 'undetermined' }, surface)).toEqual({
       status: 'undetermined'
@@ -151,8 +151,9 @@ describe('verifyJudgement', () => {
 
 describe('collectChangeSurface', () => {
   test('offers only the lines the diff added or modified', () => {
-    // A citation into an untouched line is not evidence that the change addressed
-    // anything, so untouched lines are not offered to the judgement at all.
+    // A citation into an untouched line is not evidence that the change does what
+    // an obligation asks, so untouched lines are not offered to the judgement at
+    // all.
     expect(surface.files).toEqual([
       {
         path: 'src/token.ts',
@@ -232,14 +233,14 @@ describe('removed lines as evidence (spec 23, 2026-07-30 amendment)', () => {
     ])
   })
 
-  test('an obligation can be addressed by citing a removed line', () => {
+  test('an obligation can be evidenced by citing a removed line', () => {
     expect(
       verifyJudgement(
-        { status: 'addressed', evidence: [{ path: 'src/cache.ts', line: 2 }] },
+        { status: 'evidenced', evidence: [{ path: 'src/cache.ts', line: 2 }] },
         removalSurface
       )
     ).toEqual({
-      status: 'addressed',
+      status: 'evidenced',
       evidence: [
         {
           path: 'src/cache.ts',
@@ -257,13 +258,13 @@ describe('removed lines as evidence (spec 23, 2026-07-30 amendment)', () => {
     // disclose the side, so the disclosure has to come from the change.
     const verified = verifyJudgement(
       {
-        status: 'addressed',
+        status: 'evidenced',
         evidence: [{ path: 'src/cache.ts', line: 2, side: 'added' }]
       },
       removalSurface
     )
 
-    expect(verified.status === 'addressed' && verified.evidence[0]?.side).toBe(
+    expect(verified.status === 'evidenced' && verified.evidence[0]?.side).toBe(
       'removed'
     )
   })
@@ -273,7 +274,7 @@ describe('removed lines as evidence (spec 23, 2026-07-30 amendment)', () => {
     // widen it to lines outside the change.
     expect(
       verifyJudgement(
-        { status: 'addressed', evidence: [{ path: 'src/cache.ts', line: 99 }] },
+        { status: 'evidenced', evidence: [{ path: 'src/cache.ts', line: 99 }] },
         removalSurface
       )
     ).toEqual({ status: 'undetermined' })

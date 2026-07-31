@@ -34,6 +34,32 @@ rather than advising you to raise it.
 }
 ```
 
+## What the statuses mean: `evidenced`, not "done"
+
+Every obligation in the report carries one of three statuses, and they are all
+statements about **what the changed lines show** — never about whether the work
+exists somewhere in the repository:
+
+| Status | What it means | What it does **not** mean |
+| --- | --- | --- |
+| `evidenced` | Changed lines do what the obligation asks, and the report cites them by path, line and side. | — |
+| `not-evidenced` | Nothing among the changed lines does what the obligation asks. | That the obligation is undone. An earlier commit, existing code, or a prohibition satisfied by changing nothing all land here. |
+| `undetermined` | The material did not let the judgement decide — including when the call itself failed. | That anything is wrong with the change. |
+
+The headline count is **`summary.notEvidencedCount`**: `not-evidenced` plus
+`undetermined`. An `evidenced` obligation is never on it.
+
+**Why these words, and not `addressed` / `unaddressed`.** The judgement is shown only
+the changed lines, so it can answer *"do these lines evidence this obligation?"* and
+not *"does this hold at head?"*. The old labels answered the second question in the
+reader's head. Measured on the realistic corpus, **54 of this lane's 83 false
+positives (65%) were obligations the judgement had reported correctly** — satisfied by
+an earlier commit, by existing code, or by a prohibition that required no change at
+all — and were counted as errors because `unaddressed` was read as "not done". The
+verdicts did not change with the rename; only the words did. Read a
+`not-evidenced` item as *"this change does not show me this"*, which is a question for
+a reviewer rather than a defect.
+
 ## It needs `contextSources`, and it needs a provider
 
 `intent check` reads the stated intent through the **same ingestion**
