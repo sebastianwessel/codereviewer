@@ -4,9 +4,11 @@ This engine's recall is not limited by what it can understand, by how much it ca
 be shown, or by how good the prompt is. It is limited by **how many separate looks
 it takes at the code**.
 
-One look produces roughly one answer. Show that look a single file or forty and it
-still produces roughly one answer. So recall is governed by the number of looks, and
-almost everything else is secondary.
+The rule, measured precisely: **a file that gets looked at yields about one finding —
+and how many files get looked at is set by how many are crowded into a single call.**
+Show one call forty files and it attends to a couple of them; show it two and it
+attends to most. So recall is governed by how the change is divided between calls,
+and almost everything else is secondary.
 
 This page is the high-level account: what the engine is reliably good at, what
 the enumeration limit is and how it was proved, what ceiling it puts on any
@@ -84,15 +86,16 @@ combined.
 Two experiments, four days apart, found the same thing from opposite directions.
 Together they are the most consequential result this project has produced.
 
-**Part one: one look yields one answer.** A review call reports on the thing the
-change points at, and then effectively stops. It is not running out of context or
-losing concentration part-way down a file — it answers the question it was anchored
-to and does not go looking for a second, unrelated problem.
+**Part one: a file yields about one finding.** When the reviewer attends to a file at
+all, it reports roughly 1.2 problems in it. That figure barely moves across a
+nineteen-fold change in how much code the call was handed, and it is the same on two
+unrelated test sets. It is the hard ceiling in the system.
 
-**Part two: yield therefore scales with looks, not with scope.** Give the same code
-to one call or spread it across many, and the number of defects found moves with the
-number of calls — not with how much code each call was shown, and not with how many
-defects are actually present.
+**Part two: crowding a call makes it skip files.** Give one call forty files and it
+attends to about one in nine of them; give it two and it attends to about one in four.
+Attention per file decays as the call gets more crowded, so the number of defects
+found moves with how many calls the change is divided into — not with how much code
+each call was shown, and not with how many defects are actually there.
 
 This is the whole ballgame. It explains why bigger context windows do not help, why
 better prompts help only a little, and why the single most effective lever available
@@ -183,9 +186,12 @@ allowed to cover, on the largest changes in the benchmark:
 | 1 | best (no better than 2) | lowest | +158% |
 
 **Two files per call is where the curve flattens.** Going further — one file per call
-— finds nothing extra and costs half as much again. This is the setting the product
-ships with, and it is the only change measured in this project whose improvement is
-strong enough to be conventionally significant rather than merely suggestive.
+— finds nothing extra *of what the test set asks for* and costs half as much again.
+It does keep turning up additional real problems that the answer key never listed, so
+past this point you are buying breadth rather than measured recall. Two files per call
+is the setting the product ships with, and it is the only change measured in this
+project whose improvement is strong enough to be conventionally significant rather
+than merely suggestive.
 
 **The lesson is not "always use more calls."** The gain flattens, and past the knee
 the extra calls are pure cost. The lesson is that the number of looks is a real,

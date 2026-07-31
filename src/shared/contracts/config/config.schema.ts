@@ -262,10 +262,11 @@ export const AiReviewConfigSchema = z.strictObject({
   // Spec 27: how many changed files ONE discovery call may review. A task covering
   // more is partitioned across several calls whose candidates are unioned.
   //
-  // Discovery yield tracks CALL COUNT, not defect count: a call returns roughly
-  // three to five candidates whether it is shown one file or forty. The spec 26 A/B
-  // measured the same code, same prompts, differing only in how many calls it was
-  // spread across — 106 candidates against 75, and 43.7% recall against 35.2%.
+  // Discovery yield tracks CALL COUNT, not defect count. Measured law: a file that
+  // gets any attention yields ~1.2 findings — invariant across a 19x range of
+  // files-per-call and across two corpora — while per-call yield is SUB-LINEAR in
+  // scope (~0.46 * files^0.70). Partitioning raises the SHARE of files looked at
+  // (11% -> 27%); it never raises per-file yield.
   //
   // Default 2, chosen by MEASUREMENT rather than by feel — a sweep of 1 / 2 / 4 /
   // unlimited on the 21 largest benchmark cases. 2 matched the strongest setting (1)

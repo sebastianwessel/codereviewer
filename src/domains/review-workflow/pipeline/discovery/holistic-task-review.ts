@@ -263,10 +263,10 @@ export const runModelBackedHolisticTaskReview = async (
   const candidatesById = new Map<string, CandidateFinding>()
   const rawDiff = input.workflowInput.reviewedDiffText
 
-  // Spec 27: yield tracks CALL COUNT, not defect count — a discovery call returns
-  // roughly three to five candidates whether shown one file or forty. Partitioning
-  // the task's files across several calls is therefore how yield scales with scope.
-  // With no limit configured this is exactly one partition, i.e. today's behaviour.
+  // Spec 27: yield tracks CALL COUNT, not defect count. A file that gets any
+  // attention yields ~1.2 findings regardless of how much the call was shown, so
+  // spreading files across calls raises the share of files looked at and is the only
+  // measured lever on recall. With no limit configured this is one partition.
   const partitions = partitionTaskForDiscovery(
     input.task,
     input.workflowInput.maxFilesPerDiscoveryCall

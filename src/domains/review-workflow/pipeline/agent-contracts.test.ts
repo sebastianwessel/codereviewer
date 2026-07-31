@@ -257,3 +257,38 @@ describe('semanticMergeGroups', () => {
     ).toEqual([[known[0], known[1]]])
   })
 })
+
+describe('over-long model text truncates instead of dropping the finding', () => {
+  const base = {
+    category: 'bug',
+    severity: 'high',
+    path: 'src/a.ts',
+    startLine: 1,
+    title: 'A defect'
+  }
+
+  test('a verbose description is kept and shortened, not discarded', () => {
+    // It used to be discarded. A description one character over the bound failed
+    // validation and the WHOLE finding was thrown away — by code that sliced
+    // descriptions to 1200 downstream anyway. A real defect was lost for being
+    // wordy, which is the one thing a reviewer is entitled to be.
+    const parsed = ModelHolisticFindingSchema.safeParse({
+      ...base,
+      description: 'd'.repeat(20_000)
+    })
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.description).toHaveLength(3000)
+  })
+
+  test('a verbose title is kept and shortened', () => {
+    const parsed = ModelHolisticFindingSchema.safeParse({
+      ...base,
+      title: 'T'.repeat(900),
+      description: 'A concrete failure.'
+    })
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.title).toHaveLength(500)
+  })
+})

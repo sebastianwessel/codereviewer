@@ -471,8 +471,21 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
         }),
       CandidateFindingSchema.shape.severity.optional()
     ),
-  title: z.string().min(1).max(500).optional(),
-  description: z.string().min(1).max(3000).optional(),
+  // Over-long text TRUNCATES; it does not kill the finding.
+  //
+  // These were bare `.max()` bounds, so a description one character over the limit
+  // failed validation and the WHOLE finding was discarded — while a description one
+  // character under was accepted and then sliced to 1200 downstream anyway. A real
+  // defect was thrown away for being verbose, by code that was about to shorten it
+  // regardless. Same preprocessor the refuter's fields already use.
+  title: z.preprocess(
+    (value) => truncateModelString(value, 500),
+    z.string().min(1).max(500).optional()
+  ),
+  description: z.preprocess(
+    (value) => truncateModelString(value, 3000),
+    z.string().min(1).max(3000).optional()
+  ),
   path: RepositoryRelativePathSchema.optional(),
   startLine: z
     .preprocess(normalizeModelLineValue, z.int().min(1).optional()),

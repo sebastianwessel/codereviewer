@@ -21,11 +21,49 @@ many discovery calls the same code was spread across:
 | findings emitted | 113 | 84 |
 | recall | 43.7% | 35.2% |
 
-**Yield tracks call count, not defect count.** A discovery call returns roughly three
-to five candidates whether it is shown one file or forty. The per-task cap
-(`HOLISTIC_MAX_CANDIDATES`, 12) is **not** what binds — arm 1 averaged 3.6 candidates
-per case against it — so raising the cap changes nothing. What binds is attention
-inside a single call.
+**Yield tracks the number of calls, not the number of defects present.** The per-task
+candidate cap (`HOLISTIC_MAX_CANDIDATES`, 12) is **not** what binds — the
+whole-change arm averaged 3.6 candidates per call against it — so raising the cap
+changes nothing. What binds is attention inside a single call.
+
+### Correction (2026-08-01): the mechanism is per FILE, not per call
+
+This spec originally asserted that a call "returns roughly three to five candidates
+whether it is shown one file or forty." **That is measured false.** A full analysis
+of the five arms establishes a sharper and more useful law:
+
+| files shown per call | candidates per call | share of files getting any finding | findings per file that gets any |
+|---|---|---|---|
+| 1 | 0.46 | 26.6% | **1.18** |
+| 2 | 0.64 | 22.4% | **1.23** |
+| 4 | 0.92 | 15.7% | **1.19** |
+| 19 | 3.57 | 11.2% | **1.22** |
+
+- **The ceiling is ~1.2 findings per FILE.** That figure is invariant across a 19x
+  range of files-per-call and across two unrelated corpora — the hard limit in this
+  system.
+- **Per-call yield is sub-linear in scope**, not flat: roughly `0.46 · files^0.70`.
+  The number of files a call attends to grows with what it is shown, but per-file
+  attention decays as `shown^-0.30`.
+- **Partitioning therefore works by moving files into more calls, and only that.** It
+  does not raise per-file yield at all; it raises the share of files that get looked
+  at, from 11% to 27%.
+
+Two consequences follow, and both matter more than the original claim:
+
+- **Recall saturates at 2 files per call.** Going to 1 keeps producing candidates
+  (131 → 184) but they are additional *unlisted-real* defects and noise, not more of
+  the listed ones. That is why 1 and 2 tie on recall, and it is the reason 2 is the
+  default rather than an arbitrary midpoint.
+- **The untested lever is sub-file partitioning.** Per-file yield is pinned at ~1.2
+  while per-call yield still scales at exponent 0.70, so the interval between "one
+  file per call" and "one function per call" is entirely unmeasured and is where the
+  curve points next.
+
+What the data cannot yet settle is whether the ~1.2-per-file ceiling originates in
+discovery or is partly imposed by refutation and admission. Deciding that requires
+the per-call `finding_count` the debug line already computes to reach the evaluation
+report; nothing new has to be measured, only recorded.
 
 The old byte budget was therefore doing two jobs while claiming one. It said it was
 fitting packets into a context window (false — the provider accepts 1.2 MB without
