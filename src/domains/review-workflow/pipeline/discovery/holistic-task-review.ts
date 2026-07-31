@@ -283,6 +283,7 @@ export const runModelBackedHolisticTaskReview = async (
   let suppressedByIdCount = 0
   let generalFindingCount = 0
   let generalSplitCount = 0
+  const reviewedTasks: WorkflowReviewTask[] = []
 
   // Sequential: the partitions hit the same provider under the same rate limit, and
   // firing them together would turn one large change into a burst.
@@ -301,6 +302,7 @@ export const runModelBackedHolisticTaskReview = async (
     providerIssues.push(...general.providerIssues)
     generalFindingCount += general.findings.length
     generalSplitCount += general.splitCount
+    reviewedTasks.push(...general.reviewedTasks)
 
     // Collected against the PARTITION, not the parent task: a finding must stay
     // restricted to the files its own call was shown, or admission would anchor it
@@ -339,6 +341,7 @@ export const runModelBackedHolisticTaskReview = async (
       providerIssues.push(...security.providerIssues)
       securityFindingCount += security.findings.length
       securitySplitCount += security.splitCount
+      reviewedTasks.push(...security.reviewedTasks)
       const securityCollected = collectCandidates({
         findings: security.findings,
         task: partition,
@@ -416,6 +419,7 @@ export const runModelBackedHolisticTaskReview = async (
     candidates: discovered,
     evidenceRecords: [],
     providerIssues,
-    rejectedFindings: [...(merge?.rejectedFindings ?? [])]
+    rejectedFindings: [...(merge?.rejectedFindings ?? [])],
+    reviewedTasks
   }
 }

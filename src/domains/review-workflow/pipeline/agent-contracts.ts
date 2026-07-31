@@ -696,7 +696,12 @@ export const TaskReviewResultSchema = z.strictObject({
   // non-representative member of each group: the spec requires them to be
   // recorded rather than silently dropped, so the merge stays auditable and its
   // rate observable in the report instead of only in a debug log line.
-  rejectedFindings: z.array(RejectedFindingSchema).default([])
+  rejectedFindings: z.array(RejectedFindingSchema).default([]),
+  // The tasks discovery was ACTUALLY issued for — partitions (spec 27) and reactive
+  // split halves (spec 26), not the planned task. Admission validates a finding's
+  // line against the span its own call was shown, and those sub-tasks carry
+  // synthetic ids that match nothing in the planned task list.
+  reviewedTasks: z.array(WorkflowReviewTaskSchema).default([])
 })
 
 export const FindingRefutationResultSchema = z.strictObject({

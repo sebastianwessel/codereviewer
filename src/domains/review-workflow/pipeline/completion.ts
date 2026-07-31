@@ -46,6 +46,8 @@ const runAdmission = (
     readonly admissionDecisions?: readonly AdmissionDecisionRecord[]
     readonly instructionHashes: readonly string[]
     readonly skillHashes: readonly string[]
+    // Sub-tasks discovery actually ran, in addition to the planned ones.
+    readonly reviewedTasks?: readonly WorkflowReviewTask[]
   }
 ): {
   readonly admittedFindings: readonly AdmittedFinding[]
@@ -72,9 +74,15 @@ const runAdmission = (
   // Which lines each task was actually shown. A file too large for one packet is
   // split into chunks that each become their own task, so a task's candidate must
   // fall inside its own chunk; the whole-file range cannot tell the difference.
-  const taskSourceChunkRanges = taskSourceChunkRangesFromTasks(
-    input.workflowInput.tasks ?? []
-  )
+  // Planned tasks AND the sub-tasks discovery actually ran. Only the latter carry a
+  // genuine sub-file span, and their synthetic ids match nothing in the planned list
+  // — so deriving ranges from planned tasks alone made this check silently pass for
+  // every partition and every reactive half, which is precisely where a
+  // chunk-relative line number could still arise.
+  const taskSourceChunkRanges = taskSourceChunkRangesFromTasks([
+    ...(input.workflowInput.tasks ?? []),
+    ...(input.reviewedTasks ?? [])
+  ])
 
   for (const evidence of evidenceRecords) {
     assertDeterministicSignalEvidenceOwnsPath(evidence)
@@ -290,6 +298,8 @@ export const completeReviewWorkflow = (
     readonly admissionCandidates: readonly CandidateFinding[]
     readonly artifactOnlyCandidateIds: readonly string[]
     readonly refutationResults: readonly RefutationResult[]
+    // Sub-tasks discovery actually ran (partitions, reactive split halves).
+    readonly reviewedTasks?: readonly WorkflowReviewTask[]
     readonly providerIssues: readonly ProviderIssue[]
     readonly contextLedgerEntries: readonly ContextLedgerEntry[]
     readonly evidence: readonly EvidenceRecord[]

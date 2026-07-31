@@ -664,6 +664,91 @@ describe('reactive splitting when the provider refuses a packet', () => {
     expect(result.candidates[0]?.location.startLine).toBe(targetLine)
   })
 
+  test('reports the sub-tasks it actually reviewed, with their real line spans', async () => {
+    // Admission checks a finding's line against the span its OWN call was shown.
+    // A partition or split half carries a synthetic task id that matches nothing in
+    // the planned task list, so unless the sub-tasks are reported, that check finds
+    // no range and silently passes — exactly where a chunk-relative line number
+    // could still arise.
+    const config = CodeReviewerConfigSchema.parse({})
+    const sourceContent = multiByteSource(200)
+    const assembled = await assembleContext({
+      repositoryRoot: '/unused',
+      config,
+      sourceFiles: [{ path: 'src/large.ts', content: sourceContent }],
+      analysis: { facts: [], evidence: [] },
+      tasks: [
+        {
+          id: 'task_large',
+          round: 1,
+          kind: 'file',
+          paths: ['src/large.ts'],
+          factIds: [],
+          evidenceIds: [],
+          candidateIds: [],
+          contextEntryIds: [],
+          priority: 0
+        }
+      ]
+    })
+    const wholeTask = assembled.tasks[0] as WorkflowReviewTask
+    let calls = 0
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: ReviewWorkflowInputSchema.parse({
+        runId: 'run-holistic',
+        reviewedPaths: ['src/large.ts'],
+        evidence: [],
+        candidates: [],
+        instructions: [],
+        skills: [],
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'holistic-test',
+          signalVersions: { typescript: '6.0.3' },
+          configHash
+        }
+      }),
+      taskInput: TaskReviewInputSchema.parse({
+        ...taskInput,
+        task: wholeTask,
+        reviewedDiffRanges: [
+          { path: 'src/large.ts', startLine: 1, endLine: 200 }
+        ]
+      }),
+      task: wholeTask,
+      runners: {
+        holisticReview: async () => {
+          calls += 1
+
+          if (calls === 1) {
+            throw Object.assign(new Error('provider rejected the request'), {
+              reason: 'context_length_exceeded'
+            })
+          }
+
+          return holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    // The two halves, each carrying the absolute span it was actually shown.
+    expect(result.reviewedTasks).toHaveLength(2)
+    const spans = result.reviewedTasks.flatMap((reviewed) =>
+      reviewed.reviewContext
+        .filter((entry) => entry.kind === 'file')
+        .map((entry) => [entry.startLine, entry.endLine])
+    )
+
+    expect(spans).toHaveLength(2)
+    expect(spans[0]?.[0]).toBe(1)
+    // The second half starts partway down the file, which is the whole point: its
+    // findings must be judged against ITS lines, not the file's first line.
+    expect(spans[1]?.[0]).toBeGreaterThan(1)
+    expect(spans[1]?.[1]).toBe(sourceContent.split('\n').length)
+  })
+
   test('a task that cannot be split further fails loudly instead of recursing', async () => {
     // The terminal case spec 26 requires: bounded by DEPTH, and a refusal rather
     // than a truncation or a silently dropped task.

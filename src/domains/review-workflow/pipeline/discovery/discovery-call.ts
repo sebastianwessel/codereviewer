@@ -7,7 +7,8 @@
 import {
   ModelHolisticReviewResultSchema,
   type HolisticReviewRunner,
-  type TaskReviewInput
+  type TaskReviewInput,
+  type WorkflowReviewTask
 } from '../agent-contracts.js'
 import { createIndivisibleTaskError } from '../packet-budget.js'
 import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
@@ -43,11 +44,23 @@ export type DiscoveryCallResult = {
   // one that did not — several partial reviews instead of one whole-file review —
   // and before this nothing said so.
   readonly splitCount: number
+  // The tasks a model call was ACTUALLY issued for. For an unsplit call that is the
+  // task itself; for a split one it is the leaves, which are the only units that
+  // carry a genuine sub-file line span. Admission checks a finding's line against
+  // the span its own call was shown, and a synthetic sub-task id matches nothing in
+  // the planned task list — so without this the check silently passed for every
+  // partition and every reactive half.
+  readonly reviewedTasks: readonly WorkflowReviewTask[]
 }
 
 const emptyResult = (
   providerIssues: readonly ProviderIssue[]
-): DiscoveryCallResult => ({ findings: [], providerIssues, splitCount: 0 })
+): DiscoveryCallResult => ({
+  findings: [],
+  providerIssues,
+  splitCount: 0,
+  reviewedTasks: []
+})
 
 /**
  * Issue one discovery call, halving the task and retrying if the provider refuses
@@ -82,7 +95,12 @@ export const runDiscoveryCall = async (
       )
     )
 
-    return { findings: review.findings, providerIssues: [], splitCount: 0 }
+    return {
+      findings: review.findings,
+      providerIssues: [],
+      splitCount: 0,
+      reviewedTasks: [task]
+    }
   } catch (error) {
     if (isContextLengthExceeded(error)) {
       // Reads first, splitting second. When the overflow came from a tool result,
@@ -159,6 +177,7 @@ const splitAndRetry = async (
     providerIssues: results.flatMap((result) => result.providerIssues),
     // This split, plus any the halves themselves needed.
     splitCount:
-      1 + results.reduce((total, result) => total + result.splitCount, 0)
+      1 + results.reduce((total, result) => total + result.splitCount, 0),
+    reviewedTasks: results.flatMap((result) => result.reviewedTasks)
   }
 }

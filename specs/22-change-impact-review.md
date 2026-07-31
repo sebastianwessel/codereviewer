@@ -72,7 +72,11 @@ service, admission, reporting — MUST be reused. Only the analysis is new.
   change-impact finding** and MUST be rejected.
 - The command MUST be able to report **no impact** and MUST NOT manufacture
   findings to fill a report.
-- Blocking is **configurable and defaults to non-blocking**. A breaking change is
+- The lane is **non-blocking**, and MUST NOT be configurable to block. There is
+  nothing to block on until an impact finding is admitted, so a `blocking` key would
+  be a switch that changes nothing — worse than absent, because an operator could set
+  it and believe the build was gated. The config object is strict, so setting one is
+  a configuration error rather than a silent no-op. A breaking change is
   frequently intentional; the tool's job is to surface the dependents, not to
   decide whether breaking them is acceptable.
 - Instructions MUST remain generic and language-neutral, per spec 15's
@@ -389,7 +393,6 @@ whatever it reports, and `status: "disabled"` is emitted when the capability is 
 | --- | --- |
 | *Design* steps 1 and 3 — contract delta and impact adjudication | Not implemented. |
 | *Requirements*: findings carry the dependent's path and line, the contract element relied upon, and the consequence; a finding without a named dependent is rejected | No finding exists to carry them. Nothing is admitted, nothing carries a severity, and the two matrix rows below that name an admission test have no counterpart. |
-| *Requirements*: "Blocking is **configurable** and defaults to non-blocking" | Non-blocking is enforced — the command always exits 0 on its result — but there is **no `blocking` key**, and the config object is strict, so setting one is a configuration error (exit 2). The omission is deliberate and reasoned in code: there is nothing to block on until an impact finding is admitted. The requirement as written is still unmet. |
 | *Report at file granularity, not per site* | The report groups sites under the **changed symbol**, not the destination file. This is the opposite of the grouping the RIPPLE result mandates, and it is free precision left on the table. |
 | *Removals must be paired with additions before reporting* | Not implemented. `changeKind` is taken straight from intake, so a pure rename is reported today as a deletion — the most severe category — exactly as the section warns. |
 | *Publish a known-not-reported list* | The list does not exist, in this spec or in the user documentation. At least one entry is already known and measured: seeding depends on the deterministic language-support registry, and the JavaScript extractor produced **6 declarations across 1 046 `.js` files** (results ledger, 2026-07-30), so `impact check` is near-blind on a JavaScript repository. |
@@ -413,6 +416,6 @@ Rows marked (unbuilt) have no counterpart today; see the section above.
 | Test call sites are reported separately rather than mixed in or lost | unit test, plus a CLI test over a real repository |
 | A finding without a named dependent is rejected | admission test (unbuilt) |
 | Reports no impact rather than manufacturing findings | unit test |
-| Non-blocking by default | config schema test (asserts the absence of a `blocking` key) |
+| Non-blocking, and not configurable to block | config schema test (asserts the absence of a `blocking` key) |
 | Failure leaves the diff review unaffected | integration test |
 | Instructions stay generic and language-neutral | prompt genericity guard |

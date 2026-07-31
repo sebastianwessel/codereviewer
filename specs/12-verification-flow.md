@@ -225,7 +225,10 @@ Keys are defined in `04-configuration-and-providers.md`:
   `aiReview.actionableSeverityThreshold` (itself default `medium`) when unset, so out
   of the box the lane runs on exactly the findings that can block the pipeline, not
   on nits — set `info` to cover every finding, or `critical` for blockers only. The
-  per-claim bounds are shared with `verification`.
+  per-claim bounds are shared with `verification`. Token usage is **accounted after
+  the fact, never bounded** — there is no per-claim token budget, deliberately: the
+  bound that matters is tool calls, which is what actually runs away, and a token cap
+  would cut an investigation mid-reasoning rather than refusing it cleanly.
 
 ## Observability And Errors
 
@@ -289,7 +292,6 @@ visible rather than silent.
 | --- | --- |
 | *Tools* / *Acceptance*: every tool call "records a context-ledger entry", and "the ledger records every read" | The retriever builds a ledger entry per call, but the verification lane constructs its `ContextRetriever` **without a ledger sink**, so every entry is created and discarded. Only the general review supplies one. The evidence ids the retriever returns are carried into `citedEvidenceIds`, but no artifact holds the records they name. |
 | *Tools*: `read` is bounded and the model can recover from a cut | `repo_read` declares `startLine`/`endLine`, and the truncation notice tells the model to re-read the range — but the shared bounded-tool wrapper forwards only `path`, so the range is discarded. A model that hits `maxBytesPerRead` (default 20 000) re-reads the identical prefix and burns its budget. Shared with the spec-16 discovery lane. |
-| *The Investigation Agent*: "a per-claim token budget" is a code-enforced bound | No such key and no enforcement. Token usage is *accounted* after the fact, never bounded. |
 | *The Investigation Agent*: "the run timeout" is a code-enforced bound | The flow accepts an `AbortSignal` and has an `aborted` bound reason, but no production caller supplies one — `review.runTimeoutMs` bounds only the review pipeline. The `aborted` path is unreachable in a real run. |
 | *Claim Sources*: `prior-findings` derives claims "from a previous run's report **or the baseline**" | Only a report. The provider parses `ReviewReportSchema`; the baseline file carries fingerprints only and can never yield a claim's title, description, or location. Pointing the provider at `baseline.json` fails and degrades to a non-fatal provider warning. |
 | *Deterministic Apply-Check*: an edit that does not apply cleanly is dropped | Also dropped: any fix whose edits touch a file other than the finding's own path, before the apply-check runs. The outcome is indistinguishable from "no fix proposed". The restriction is real and deliberate in code; this spec does not state it. |

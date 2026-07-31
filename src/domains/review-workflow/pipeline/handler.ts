@@ -185,6 +185,10 @@ export const runReviewWorkflowHandler = async (params: {
   })
 
   const taskCandidates = queued.results.flatMap((result) => result.candidates)
+  // The sub-tasks discovery actually ran (partitions, reactive split halves). They
+  // are the only units carrying a genuine sub-file span, and admission needs them to
+  // check a finding's line against what its own call was shown.
+  const reviewedTasks = queued.results.flatMap((result) => result.reviewedTasks)
   const taskEvidenceRecords = queued.results.flatMap(
     (result) => result.evidenceRecords
   )
@@ -231,6 +235,7 @@ export const runReviewWorkflowHandler = async (params: {
 
   const output = completeReviewWorkflow({
     workflowInput: input,
+    reviewedTasks,
     candidateFindings: mergedCandidates,
     admissionCandidates: prepared.admissionCandidates,
     artifactOnlyCandidateIds: prepared.artifactOnlyCandidateIds,
