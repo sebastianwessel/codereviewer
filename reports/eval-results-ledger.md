@@ -1574,6 +1574,45 @@ times. No specific improvement is claimed; if a regression appears this is the f
 switch to flip.
 
 
+### CURRENT HEADLINE — re-baseline at shipped defaults (2026-07-31, $2.24)
+
+37-case real-repository corpus, engine pinned at `1152751`, 0 provider errors.
+Supersedes every earlier figure on this page for quoting purposes.
+
+| | value | previous baseline |
+|---|---|---|
+| recall | **46.0%** | 43.7% |
+| adjusted precision | **100%** | 95.0% |
+| raw precision | 80.0% | 73.1% |
+| cost | **$2.24** | $2.31 |
+
+The gain is not a new feature — it is the day's defect fixes landing: referenced
+definitions had been dropped from every partition, reads were still cut at 120 KB,
+the line range never reached the retriever, the security pass was unpartitioned, and
+over-long findings were discarded whole.
+
+### The out-of-diff wall — first MEASURED split, not hand-derived
+
+| scope | expected | matched | recall |
+|---|---|---|---|
+| in-diff | 60 | 40 | **66.7%** |
+| out-of-diff | 27 | 0 | **0.0%** |
+| undetermined | 0 | 0 | n/a |
+
+**Out-of-diff recall is exactly zero over a full denominator of 27 expectations.**
+Not "low", not "unmeasured" — zero, and the nullable-rate work is what makes that
+distinguishable from having no data at all (`undetermined` is genuinely n/a).
+
+**31% of the answer key lies in code the change did not touch, and the engine finds
+none of it.** The blended 46.0% is carried entirely by in-diff performance. This is
+now the largest single recall opportunity in the product, it is quantified rather
+than estimated, and it confirms the 2026-07-27 "attention follows the diff"
+experiment at full corpus scale with a proper denominator.
+
+Ceiling arithmetic worth stating plainly: even perfect in-diff recall caps the
+blended figure at 69% while out-of-diff stays at zero.
+
+
 ## Standing caveats for reading anything here
 
 - **Variance.** sd ≈ 4.8pp on this corpus. An effect below roughly 10pp cannot be
