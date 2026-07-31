@@ -19,6 +19,10 @@
 
 import type { DiffHunk } from '../repository-intake/index.js'
 import {
+  groupByKeyInOrder,
+  selectSpreadAcrossGroups
+} from './bounded-selection.js'
+import {
   extractDeterministicSignals,
   normalizeSignalPath,
   type SupportedSignalLanguage,
@@ -346,7 +350,16 @@ export const derivePeerSets = (
   const changed = allDeclarations
     .filter((declaration) => declaration.changeAttributed)
     .sort(compareDeclarations)
-  const seeds = changed.slice(0, input.maxChangedDeclarations)
+  // The cap is spread across the changed FILES rather than taken off the front of
+  // a path-sorted list, so a change larger than the cap is sampled instead of
+  // truncated to whichever files sort first. See `bounded-selection.ts` for what
+  // the front-of-list form cost when it bound.
+  const seeds = [
+    ...selectSpreadAcrossGroups(
+      groupByKeyInOrder(changed, (declaration) => declaration.path),
+      input.maxChangedDeclarations
+    )
+  ].sort(compareDeclarations)
   const peerSets: PeerSet[] = []
 
   for (const subject of seeds) {

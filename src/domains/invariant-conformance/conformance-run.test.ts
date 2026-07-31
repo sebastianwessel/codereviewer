@@ -375,6 +375,195 @@ describe('invariant conformance run', () => {
     expect(report.scope.peerFilesTruncated).toBe(true)
   })
 
+  // The shape this capability is sold on, written the way a reader would describe
+  // it: sibling modules in one directory share a validation convention and one of
+  // them does not. It is here as a live-fire check that the deterministic path
+  // still FIRES end to end — the capability spent a period reporting zero
+  // divergences on every input tried, and nothing in the suite would have noticed.
+  test('reports the sibling that breaks a convention its peers all follow', async () => {
+    const validating = (name: string): string =>
+      [
+        `export const ${name} = (raw) => {`,
+        '  log(name)',
+        '  const parsed = schema.parse(raw)',
+        '  return respond(parsed)',
+        '}',
+        ''
+      ].join('\n')
+    // Skips the parse, but is otherwise one of the group — which is what makes it
+    // a member of the peer set rather than an unrelated declaration.
+    const unvalidating = [
+      'export const parseSix = (raw) => {',
+      '  log(name)',
+      '  const parsed = raw',
+      '  return respond(parsed)',
+      '}',
+      ''
+    ].join('\n')
+    const root = await createRepository({
+      'src/parse/six.ts': unvalidating,
+      ...Object.fromEntries(
+        ['one', 'two', 'three', 'four', 'five'].map((name) => [
+          `src/parse/${name}.ts`,
+          validating(`parse${name}`)
+        ])
+      )
+    })
+    const report = await runInvariantConformance({
+      repositoryRoot: root,
+      config: enabledConfig,
+      baseRef: 'main',
+      headRef: 'HEAD',
+      generatedAt,
+      ...createSeams(root),
+      runGit: gitFor('src/parse/six.ts', unvalidating.split('\n').length)
+    })
+
+    expect(report.summary.changedDeclarationCount).toBe(1)
+    expect(
+      report.changeAttributedDivergences.map(
+        (divergence) => divergence.pattern.symbol
+      )
+    ).toContain('parse')
+    expect(
+      report.changeAttributedDivergences.some((divergence) =>
+        divergence.statement.includes('5 of 5 sibling declarations call parse')
+      )
+    ).toBe(true)
+  })
+
+  // The boundary of the shape above, asserted so it is a decision rather than a
+  // surprise. A declaration that does nothing at all holds no trait, and this
+  // capability compares declarations by what they DO: it is dropped before it can
+  // be a subject, and it would fail the membership precondition even if it were
+  // not. Relaxing either gate was measured and rejected — it reports every type
+  // alias and constant as diverging from every peer. The cost is stated here: a
+  // pure pass-through beside five validating siblings is NOT reported, and the
+  // right diagnostic for that reader is the warning, not a divergence.
+  test('says so plainly when the odd one out does nothing at all to compare', async () => {
+    const passthrough = 'export const parseSix = (raw) => raw\n'
+    const root = await createRepository({
+      'src/parse/six.ts': passthrough,
+      ...Object.fromEntries(
+        ['one', 'two', 'three', 'four', 'five'].map((name) => [
+          `src/parse/${name}.ts`,
+          `export const parse${name} = (raw) => schema.parse(raw)\n`
+        ])
+      )
+    })
+    const report = await runInvariantConformance({
+      repositoryRoot: root,
+      config: enabledConfig,
+      baseRef: 'main',
+      headRef: 'HEAD',
+      generatedAt,
+      ...createSeams(root),
+      runGit: gitFor('src/parse/six.ts', passthrough.split('\n').length)
+    })
+
+    expect(report.summary.changedDeclarationCount).toBe(0)
+    expect(report.changeAttributedDivergences).toEqual([])
+    expect(report.warnings).toContain(
+      'Changed files were in covered languages but seeded no declarations to compare; nothing in them was extracted as a declaration.'
+    )
+  })
+
+  // The regression that made this capability look dead. Both work bounds used to
+  // keep the front of a path-sorted list, so a change wider than a bound was
+  // analysed only where the paths sorted first — and a divergence anywhere later
+  // was silently unreachable. Measured on this repository, a range with 23
+  // divergences reported none, while a SUBSET of the same range reported 15.
+  test('a bound that binds still reaches a divergence in a late-sorting directory', async () => {
+    const directories = Array.from({ length: 8 }, (_unused, index) =>
+      String.fromCharCode(97 + index)
+    )
+    // Every divergence in this repository is in the LATE half of the alphabet, so
+    // an analysis confined to the front of the sorted change finds none at all —
+    // which is exactly what the old bound did, and what a reader then read as
+    // "your pull request is clean".
+    const divergentDirectories = new Set(['e', 'f', 'g', 'h'])
+    const files: Record<string, string> = {}
+    const changedPaths: string[] = []
+
+    for (const directory of directories) {
+      // Two changed files per directory, so the seed bound binds well before the
+      // last directory is reached.
+      for (const name of ['one', 'two']) {
+        const filePath = `src/${directory}/${name}.ts`
+
+        files[filePath] =
+          name === 'two' && divergentDirectories.has(directory)
+            ? // Calls `load` like its peers, but never `requireAuth`.
+              handler(`${directory}Two`, ['  return load(request)'])
+            : guardedHandler(`${directory}${name}`)
+        changedPaths.push(filePath)
+      }
+
+      for (const peer of ['peerA', 'peerB', 'peerC', 'peerD']) {
+        files[`src/${directory}/${peer}.ts`] = guardedHandler(
+          `${directory}${peer}`
+        )
+      }
+    }
+
+    const root = await createRepository(files)
+    const report = await runInvariantConformance({
+      repositoryRoot: root,
+      config: CodeReviewerConfigSchema.parse({
+        invariantConformance: {
+          enabled: true,
+          // Both bounds bind: 16 changed declarations against 6 seeds, and 32
+          // sibling files against 24 reads.
+          maxChangedDeclarations: 6,
+          maxPeerFiles: 24
+        }
+      }),
+      baseRef: 'main',
+      headRef: 'HEAD',
+      generatedAt,
+      ...createSeams(root),
+      runGit: scriptedGit({
+        'merge-base main HEAD': `${mergeBaseSha}\n`,
+        [`diff --name-status ${mergeBaseSha} HEAD`]: `${changedPaths
+          .map((changedPath) => `M\t${changedPath}`)
+          .join('\n')}\n`,
+        // Intake asks for every changed file in one command, so the answer is one
+        // diff covering all of them.
+        [`diff --unified=0 ${mergeBaseSha} HEAD -- ${changedPaths.join(' ')}`]:
+          changedPaths
+            .map(
+              (changedPath) =>
+                `diff --git a/${changedPath} b/${changedPath}\n` +
+                `--- a/${changedPath}\n+++ b/${changedPath}\n` +
+                '@@ -1,1 +1,8 @@\n-const old = 1\n' +
+                '+replaced\n'.repeat(8)
+            )
+            .join('')
+      })
+    })
+
+    const reported = report.changeAttributedDivergences.map((divergence) => [
+      divergence.declaration.path,
+      divergence.pattern.symbol
+    ])
+
+    expect(report.summary.changedDeclarationsTruncated).toBe(true)
+    expect(report.scope.peerFilesTruncated).toBe(true)
+    // The bound still bounds — this is a sample, not the whole change — but the
+    // sample reaches the part of the change where the divergences actually are.
+    // The old front-of-list bound seeded `src/a`, `src/b` and `src/c` only, read
+    // no sibling in `src/e` onwards, and reported nothing.
+    expect(reported.length).toBeGreaterThan(0)
+    expect(
+      reported.every(
+        ([declarationPath]) =>
+          declarationPath !== undefined &&
+          divergentDirectories.has(declarationPath.split('/')[1] ?? '')
+      )
+    ).toBe(true)
+    expect(reported.map(([, symbol]) => symbol)).toContain('requireAuth')
+  })
+
   test('the report schema carries no finding, severity, or gate field', () => {
     // The distinction this wave rests on: a divergence is NOT a finding. It is a
     // substantiated fact plus a question, and spec 24 forbids a verdict on

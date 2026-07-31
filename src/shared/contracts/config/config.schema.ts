@@ -527,8 +527,17 @@ export const ConformanceAdjudicationConfigSchema = z.strictObject({
 export const InvariantConformanceConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
   // Upper bound on the declarations the diff seeds. Each seed derives one peer
-  // set, so this is what bounds how many peer sets are built.
-  maxChangedDeclarations: z.int().min(1).max(500).default(50),
+  // set, so this bounds how many peer sets are built.
+  //
+  // It gates NO provider cost: the deterministic core makes no model call, and
+  // model adjudication is bounded separately by `adjudication.maxAdjudications`,
+  // which counts DIVERGENCES — far fewer than seeds. So this bounds in-memory
+  // grouping and comparison only, and a low value buys nothing while costing
+  // coverage: a 137-declaration range was previously sampled down to 50.
+  //
+  // It was 50. Raised to the contract maximum so it behaves as a runaway guard
+  // rather than a ration, consistent with every other limit in this engine.
+  maxChangedDeclarations: z.int().min(1).max(500).default(500),
   // Per-declaration cap on the peer set. A peer set larger than this is
   // truncated in file-then-line order rather than dropped, so a large directory
   // still yields a bounded, reproducible comparison.

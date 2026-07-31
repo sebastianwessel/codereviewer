@@ -310,7 +310,7 @@ describe('CodeReviewerConfigSchema', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.invariantConformance).toEqual({
       enabled: false,
-      maxChangedDeclarations: 50,
+      maxChangedDeclarations: 500,
       maxPeersPerDeclaration: 60,
       maxPeerFiles: 300,
       maxDivergences: 50,

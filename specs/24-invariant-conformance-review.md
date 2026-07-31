@@ -507,6 +507,15 @@ properly made either: the design was never run on most declarations. Both direct
 are open, and the re-measurement is itself one repository, one 20-commit window, in a
 codebase with unusually uniform style.
 
+**Addendum, 2026-07-31.** This 0.000 stands. It was measured one commit at a time,
+at roughly four changed declarations per commit, so the seed bound never bound and
+the amputation described under *The Work Bounds Amputated the Change* cannot account
+for it. What that defect does invalidate is every run over a **range** — the
+pull-request-sized use the command exists for — where the same repository, pinned at
+`ff819fc`, reports zero before the fix and 23 after it. The per-commit rate and the
+per-range rate are different measurements and this spec had only ever taken the
+first.
+
 The subsection is kept rather than deleted because the reasoning it records — that
 splitting a trait by position also splits a majority, and that the failure was
 dominated by `pre-existing` reports rather than change-attributed ones — is what a
@@ -567,6 +576,93 @@ corpus. Two consequences follow.
 Note also that this case carries only three peers *including* the changed
 declaration, leaving two — below this spec's three-cited-peer floor. It would have
 been rejected on that ground regardless.
+
+## The Work Bounds Amputated the Change, Not the Work — FIXED 2026-07-31
+
+**The capability was reported as producing nothing on every input tried. Part of
+that was a defect in how its two bounds truncated, and it is fixed.**
+
+`maxChangedDeclarations` (default 50) selected its seeds with `slice(0, limit)`
+over a **path-sorted** list, and `maxPeerFiles` (default 300) did the same over a
+sorted list of sibling files. Sorting is what makes a bounded run reproducible, so
+it cannot go — but a sorted list sliced at the front is not a sample of the change.
+It is the part of the repository whose paths sort first. A change wider than a
+bound was therefore not bounded, it was **amputated**, and the amputation grew with
+the size of the review: the larger the pull request, the smaller the fraction of it
+the capability had ever read.
+
+Measured on this repository, pinned at `ff819fc`, deterministic arm, default
+configuration, zero spend:
+
+| range | changed declarations | before | after |
+|---|---:|---:|---:|
+| `~1` | 15 | 5 + 10 | 5 + 10 |
+| `~5` | 31 | 5 + 10 | 5 + 10 |
+| `~10` | 44 | 5 + 10 | 5 + 10 |
+| `~20` | 101 | **0 + 0** | **5 + 18** |
+| `~40` | 137 | **0 + 0** | **7 + 16** |
+| `~60` | 157 | **0 + 0** | **7 + 16** |
+
+(change-attributed + pre-existing.)
+
+**The failure was a cliff, not a taper, and that is what made it invisible.** Below
+the cap the report was complete; one declaration above it the report went to zero
+and stayed there. A range reported nothing while a strict *subset* of the same
+range reported fifteen — a monotonicity violation a reader has no way to suspect,
+because `changedDeclarationsTruncated: true` truthfully says "bounded" and says
+nothing about *which* part survived. Raising the cap alone recovered every one of
+the missing divergences, which is what identified the bound rather than the
+detector as the cause.
+
+**The fix keeps both bounds and changes only what they keep** (`bounded-selection.ts`):
+a bound that binds now takes an evenly spread sample of the whole change. Items are
+grouped by changed file (for seeds) or by touched directory (for peer files); when
+the budget is smaller than the number of groups the groups are sampled at a
+constant stride, and when it is larger the budget is shared out group by group and
+each share is taken at a stride through its group. Selection remains a
+deterministic, order-preserving function of the same stable sort, so a bounded run
+is still byte-identical across runs.
+
+**What this does NOT change.** The bound still bounds: a report over a large change
+is a sample and is still marked truncated. And it does not touch the small-commit
+case at all — at 15 to 44 changed declarations the cap never bound, so the rows
+above are identical before and after. The per-commit firing rates recorded elsewhere
+in this spec were measured one commit at a time, well under the cap, and are
+therefore **not** invalidated by this defect. What the defect did invalidate is any
+run over a pull-request-sized range, which is the way the command is actually used.
+
+## What the Capability Cannot See, Stated Plainly
+
+Two gates, both deliberate and both measured, jointly exclude one shape that
+readers will expect this capability to catch, and it is named here so it is a
+decision rather than a surprise.
+
+A declaration with **no extracted trait** is dropped before it can be a subject or
+a peer, and the membership precondition above then refuses to compare a member that
+shares no majority trait with its peers. Together they mean: *a declaration that
+does nothing at all is never reported, however unanimous its siblings are.*
+
+This was verified against a purpose-built fixture — six sibling modules in one
+directory, five validating their input with a schema and one not — where the
+capability reported `changedDeclarationCount: 0`. The divergent sibling was
+`export const parseSix = (raw) => raw as { a: string }`: it holds no trait, so it
+was dropped at extraction and would have failed membership regardless. **Extraction,
+change attribution and peer-set formation were all working; the declaration was
+excluded on purpose.**
+
+The boundary is narrow, and worth stating in both directions. Rewrite the same
+fixture so the divergent sibling still logs and still responds like its peers — the
+realistic shape, where a function that skips validation is not otherwise empty — and
+the capability reports it immediately: *"5 of 5 sibling declarations call `parse`;
+`parseSix` does not."* Both shapes are now in the suite, the second asserting the
+divergence and the first asserting the silence.
+
+Neither gate is relaxed. Both were measured, and relaxing the trait gate reported 28
+divergences of which every single one was a type alias or a constant diverging
+trivially from every peer. The cost is accepted and now written down: **an empty or
+pass-through declaration beside a unanimous peer set is not reported**, and the
+right diagnostic for that reader is the "seeded no declarations" warning, not a
+divergence.
 
 ## Divergence Population Across 37 Real Repositories
 
@@ -632,3 +728,7 @@ this capability is only as meaningful as the extractor behind it.
 | A wrap is not a position | unit tests: a chained call wrapped onto the next line, and a call on the header line against the same call wrapped, are one position |
 | A pattern the declaration holds elsewhere is stated as displaced, never as absent | divergence unit test asserting the statement |
 | A symbol that is a majority pattern at two positions is one divergence | divergence unit test |
+| A bound that binds samples the whole change rather than its path-sorted front | selection unit tests over both regimes (budget below and above the group count), a peer-set test asserting the seeds span the change, and an end-to-end test with both bounds binding and every divergence in a late-sorting directory |
+| A bounded selection is still reproducible | selection unit test asserting two runs select identically |
+| The deterministic path still fires end to end | end-to-end test in the shape it is sold on: sibling modules sharing a validation convention and one that breaks it |
+| A declaration with nothing to compare is silent by design, not by accident | end-to-end test asserting the pass-through sibling yields no divergence and the "seeded no declarations" warning |

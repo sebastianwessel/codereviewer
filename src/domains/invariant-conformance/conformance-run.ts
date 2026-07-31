@@ -32,6 +32,7 @@ import {
 } from '../repository-intake/index.js'
 import type { LaneUsage } from '../costs/index.js'
 import { supportedSignalLanguageForPath } from '../deterministic-signals/index.js'
+import { selectSpreadAcrossGroups } from './bounded-selection.js'
 import {
   adjudicateDivergences,
   deterministicAdjudicationSummary
@@ -176,23 +177,37 @@ const collectFiles = async (
   }
 
   const maxPeerFiles = input.config.invariantConformance.maxPeerFiles
-  const candidates: string[] = []
+  const candidatesByDirectory: string[][] = []
+  let candidateCount = 0
 
+  // Sorted at both levels so which peers a bounded run reads is reproducible
+  // rather than dependent on directory iteration order.
   for (const directory of [...directories].sort()) {
-    for (const entry of await input.listDirectoryFiles(directory)) {
-      if (!seenPaths.has(entry) && wantedExtensions.has(extensionOf(entry))) {
-        candidates.push(entry)
-      }
+    const entries = (await input.listDirectoryFiles(directory))
+      .filter(
+        (entry) =>
+          !seenPaths.has(entry) && wantedExtensions.has(extensionOf(entry))
+      )
+      .sort()
+
+    if (entries.length > 0) {
+      candidatesByDirectory.push(entries)
+      candidateCount += entries.length
     }
   }
 
-  // Sorted before the cap so which peers a bounded run reads is reproducible
-  // rather than dependent on directory iteration order.
-  candidates.sort()
+  // Spread across the touched DIRECTORIES rather than taken off the front of one
+  // sorted list. A changed file whose directory sorts last would otherwise get no
+  // peers at all once the cap binds, so the capability would report "nothing to
+  // say" about it having never read a single sibling. Re-sorted afterwards so the
+  // read order, and therefore the order peers appear in a set, stays stable.
+  const selected = [
+    ...selectSpreadAcrossGroups(candidatesByDirectory, maxPeerFiles)
+  ].sort()
 
   let peerFileCount = 0
 
-  for (const candidate of candidates.slice(0, maxPeerFiles)) {
+  for (const candidate of selected) {
     const content = await input.readRepositoryFile(candidate)
 
     if (content === undefined) {
@@ -207,7 +222,7 @@ const collectFiles = async (
   return {
     files,
     peerFileCount,
-    peerFilesTruncated: candidates.length > maxPeerFiles,
+    peerFilesTruncated: candidateCount > maxPeerFiles,
     unreadableFileCount
   }
 }

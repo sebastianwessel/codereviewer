@@ -289,6 +289,44 @@ describe('peer set derivation', () => {
     expect(result.peerSets[0]?.truncated).toBe(true)
   })
 
+  // The bound used to be `slice(0, limit)` over a path-sorted list, so a change
+  // wider than the cap was not sampled but amputated: every seed came from the
+  // files whose paths sort first, and a divergence anywhere later in the alphabet
+  // was invisible. Measured on this repository, that turned a 23-divergence range
+  // into an empty report — and the wider the change, the more of it went unread.
+  test('the seed cap samples the whole change rather than its alphabetical front', () => {
+    const files: readonly ConformanceSourceFile[] = Array.from(
+      { length: 26 },
+      (_unused, index) => {
+        const letter = String.fromCharCode(97 + index)
+        const content =
+          handlerSource(`${letter}One`, ['  return load(request)']) +
+          handlerSource(`${letter}Two`, ['  return load(request)'])
+
+        return {
+          path: `src/${letter}.ts`,
+          content,
+          hunks: wholeFileHunks(content)
+        }
+      }
+    )
+    const result = derivePeerSets({
+      files,
+      maxChangedDeclarations: 6,
+      maxPeersPerDeclaration: 60
+    })
+    const seededFiles = result.peerSets.map((set) => set.subject.path)
+
+    expect(result.changedDeclarationCount).toBe(52)
+    expect(result.changedDeclarationsTruncated).toBe(true)
+    expect(result.peerSets).toHaveLength(6)
+    // Six distinct files, drawn from across the twenty-six rather than from the
+    // first three. `slice(0, 6)` would have seeded `src/a.ts` … `src/c.ts` twice
+    // each and never looked past `c`.
+    expect(new Set(seededFiles).size).toBe(6)
+    expect(seededFiles.some((path) => path > 'src/m.ts')).toBe(true)
+  })
+
   test('derivation is deterministic and needs no model', () => {
     const files: readonly ConformanceSourceFile[] = [
       {
