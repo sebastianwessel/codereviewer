@@ -1665,6 +1665,54 @@ the first defect; no severity floor at discovery).
   it trades the population that already works for the one that does not.
 
 
+### Stage 2 precision diagnosed — it is mostly measuring the wrong question ($0, offline)
+
+Diagnosed entirely from stored artefacts, no provider calls. Base: **51.5% (88/171)**
+outstanding precision on the realistic corpus. Every case predates the provenance
+sidecar, so this inherits the unpinned-engine caveat (scored with
+`--allow-mixed-engines`, reproducing the published figure exactly).
+
+**The 83 false positives, classified:**
+
+| failure mode | count | share |
+|---|---:|---:|
+| satisfied by ABSENCE (a prohibition — nothing changed, so no line to cite) | 33 | 39.8% |
+| satisfied OUTSIDE the diff (real, done by an earlier commit or existing code) | 21 | 25.3% |
+| the withdrawn aptness stage flagging a CORRECT `addressed` verdict | 15 | 18.1% |
+| genuine judgement error — the evidence WAS in the changed lines | 11 | 13.3% |
+| unfalsifiable from any artefact (provenance/process claims) | 3 | 3.6% |
+
+**Extraction contributes ZERO.** Fidelity is 100% (469/469) and not one false positive
+has `faithful: false`. Do not spend on extraction.
+
+**The dominant failure is not model accuracy — it is a question mismatch.** 54 of 83
+(65.1%) are obligations the judgement could not settle from what it was shown. The
+judgement sees ONLY the changed lines and is told to answer `unaddressed` when nothing
+among them satisfies the obligation; the scorer asks whether the state holds at head,
+whoever made it hold. Spec 23's own Purpose is *"report what a change has not been
+shown to cover"* — so the engine is answering its question correctly and the label on
+the answer is what misleads.
+
+**Corroboration, same engine and prompts:** on the older SYNTHETIC arm, where intent
+is matched to the change by construction, false-`unaddressed` is **1.3% (1/75)**. That
+is the cleanest available evidence that the imprecision is intent/change scope
+mismatch rather than judgement quality.
+
+**What correlates:** bigger changes score better (r = +0.52 lines, +0.55 files — more
+chance the evidence is inside the window). Obligation count does not correlate at all
+(r = −0.03), so capping obligations buys no precision and the uncapped round already
+showed it costs 27.6pp of recall. Post-hoc intent reproduces its known pathology: 89
+obligations, 0 genuinely outstanding, 7 wrongly flagged.
+
+**Ceiling arithmetic:** 56–58% from reporting changes alone; ~71% if absence-satisfied
+obligations are handled; a hard ~86% set by 11 genuine judgement errors plus 3
+unfalsifiable obligations. Treat **65–80%** as the achievable band.
+
+**Caveat that limits all of it:** n=1 per case, no variance band, on a capability whose
+extraction is measurably non-deterministic (±10% on any count). The 51.5% headline is a
+single run.
+
+
 ## Standing caveats for reading anything here
 
 - **Variance.** sd ≈ 4.8pp on this corpus. An effect below roughly 10pp cannot be
