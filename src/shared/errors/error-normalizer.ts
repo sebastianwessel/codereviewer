@@ -56,13 +56,12 @@ export type StructuredErrorCategory =
   | 'quality-gate'
   | 'internal'
 
-export type ErrorSource =
-  | 'config'
-  | 'repository'
-  | 'provider'
-  | 'admission'
-  | 'report'
-  | 'internal'
+// The categories a raw error can be normalized INTO. Derived from the category
+// union rather than restated, so a new category cannot be added to one list and
+// silently forgotten in the other. `quality-gate` is excluded because it is a
+// completion signal a gate constructs deliberately, never a classification
+// `normalizeError` infers from an arbitrary thrown value.
+export type ErrorSource = Exclude<StructuredErrorCategory, 'quality-gate'>
 
 export type StructuredErrorDetailValue = string | number | boolean | null
 
@@ -161,7 +160,12 @@ const rawMessageFrom = (error: unknown, source: ErrorSource): string => {
   return defaultMessagesBySource[source]
 }
 
-const classifyErrorKind = (message: string): 'error' | 'timeout' | 'cancelled' => {
+// How a raw error's message reads, which decides whether the code gets a
+// `_timeout`/`_cancelled` suffix. Named so `codeFor` below consumes exactly what
+// `classifyErrorKind` produces instead of restating the union.
+type ErrorKind = 'error' | 'timeout' | 'cancelled'
+
+const classifyErrorKind = (message: string): ErrorKind => {
   const lowerCaseMessage = message.toLowerCase()
 
   if (
@@ -251,7 +255,7 @@ const providerErrorSubcode = (
 
 const codeFor = (
   input: {
-    readonly kind: 'error' | 'timeout' | 'cancelled'
+    readonly kind: ErrorKind
     readonly source: ErrorSource
     readonly status: number | undefined
     readonly lowerCaseMessage: string

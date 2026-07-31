@@ -34,14 +34,29 @@ export const ReportFormatSchema = z.enum([
   'sarif'
 ])
 
-// Renderer selection for platform-neutral review comments. `auto` runs platform
-// detection (CI env, then git remote host, then `generic`); the other values
-// pin a specific renderer and skip detection (spec 13).
-export const ReviewCommentPlatformSchema = z.enum([
+// Review mode and depth. Declared here rather than beside the report contract
+// that also carries them, because `review.mode`/`review.depth` and
+// `RunSummary.mode`/`RunSummary.depth` are the SAME value travelling from
+// configuration into the report: two enum literals would let a mode be
+// configurable but unreportable (or the reverse) with nothing failing.
+export const ReviewModeSchema = z.enum(['local', 'ci', 'pr', 'full'])
+export const ReviewDepthSchema = z.enum(['fast', 'balanced', 'thorough'])
+
+// Concrete platform a review-comment draft can be rendered for.
+export const PlatformTargetSchema = z.enum([
   'github',
   'gitlab',
   'bitbucket',
-  'generic',
+  'generic'
+])
+
+// Renderer selection for platform-neutral review comments. `auto` runs platform
+// detection (CI env, then git remote host, then `generic`); the other values
+// pin a specific renderer and skip detection (spec 13). Derived from
+// `PlatformTargetSchema` so a newly supported renderer becomes configurable in
+// the same edit that makes it renderable.
+export const ReviewCommentPlatformSchema = z.enum([
+  ...PlatformTargetSchema.options,
   'auto'
 ])
 
@@ -107,12 +122,22 @@ export const CrossFileRetrievalConfigSchema = z.strictObject({
   maxBytesPerRead: z.int().min(1000).max(4000000).optional()
 })
 
+// Accepted range for `review.maxConcurrentTasks`. Exported because `eval run`
+// also accepts it as a flag: a flag range that drifted below the schema's would
+// reject a value the config allows, and one above it would be accepted by the
+// parser and then rejected by config validation.
+export const maxConcurrentTasksBounds = { min: 1, max: 32 } as const
+
 export const ReviewConfigSchema = z.strictObject({
-  mode: z.enum(['local', 'ci', 'pr', 'full']).default('local'),
-  depth: z.enum(['fast', 'balanced', 'thorough']).default('balanced'),
+  mode: ReviewModeSchema.default('local'),
+  depth: ReviewDepthSchema.default('balanced'),
   baseRef: gitRefSchema.default('main'),
   headRef: gitRefSchema.default('HEAD'),
-  maxConcurrentTasks: z.int().min(1).max(32).default(4),
+  maxConcurrentTasks: z
+    .int()
+    .min(maxConcurrentTasksBounds.min)
+    .max(maxConcurrentTasksBounds.max)
+    .default(4),
   maxFiles: z.int().min(1).max(10000).default(500),
   maxFileBytes: z.int().min(1).max(5000000).default(500000),
   contextMaxBytes: z.int().min(10000).max(10000000).optional(),
@@ -699,6 +724,9 @@ export const CodeReviewerConfigSchema = z.strictObject({
 
 export type Severity = z.infer<typeof SeveritySchema>
 export type ReportFormat = z.infer<typeof ReportFormatSchema>
+export type ReviewMode = z.infer<typeof ReviewModeSchema>
+export type ReviewDepth = z.infer<typeof ReviewDepthSchema>
+export type PlatformTarget = z.infer<typeof PlatformTargetSchema>
 export type RepositoryRelativePath = z.infer<typeof RepositoryRelativePathSchema>
 export type ReviewConfig = z.infer<typeof ReviewConfigSchema>
 export type CrossFileRetrievalConfig = z.infer<

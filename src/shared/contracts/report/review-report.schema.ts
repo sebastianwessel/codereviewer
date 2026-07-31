@@ -1,5 +1,10 @@
 import { z } from 'zod'
-import { ReportFormatSchema, RepositoryRelativePathSchema } from '../config/config.schema.js'
+import {
+  ReportFormatSchema,
+  RepositoryRelativePathSchema,
+  ReviewDepthSchema,
+  ReviewModeSchema
+} from '../config/config.schema.js'
 import {
   AdmittedFindingSchema,
   ContractIdSchema,
@@ -10,9 +15,6 @@ import {
   Sha256Schema,
   TaskIdSchema
 } from '../findings/finding.schema.js'
-
-export const ReviewModeSchema = z.enum(['local', 'ci', 'pr', 'full'])
-export const ReviewDepthSchema = z.enum(['fast', 'balanced', 'thorough'])
 
 export const RunSummarySchema = z.strictObject({
   runId: z.string().min(1),
@@ -117,8 +119,6 @@ export const ReviewReportSchema = z.strictObject({
   artifacts: z.array(ReportArtifactSchema)
 })
 
-export type ReviewMode = z.infer<typeof ReviewModeSchema>
-export type ReviewDepth = z.infer<typeof ReviewDepthSchema>
 export type RunSummary = z.infer<typeof RunSummarySchema>
 export type SkippedFile = z.infer<typeof SkippedFileSchema>
 export type QualityGateResult = z.infer<typeof QualityGateResultSchema>

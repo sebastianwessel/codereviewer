@@ -141,7 +141,8 @@ in how much source each task may carry.
 
 ## The optional discovery passes
 
-All are **off by default**. Each one adds provider calls per task — see
+All of the ones below are **off by default** (cross-file retrieval is *on* — see its
+own section). Each one adds provider calls per task — see
 [controlling-cost.md](controlling-cost.md) for the arithmetic before you turn
 one on.
 
@@ -152,23 +153,25 @@ one on.
 > [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md);
 > none earned its cost, and the limitation is still open.
 
-### Cross-file retrieval
-
-```json
-{ "review": { "crossFileRetrieval": { "enabled": true, "maxToolCallsPerTask": 100, "maxBytesPerRead": 24000 } } }
-```
+### Cross-file retrieval — **on by default**
 
 Gives the discovery agent the mediated `repo_read`, `repo_list` and `repo_grep`
-tools so it can inspect a callee body, interface or permission definition
-outside the changed set. Findings are still restricted to the task's paths and
-still pass the same refutation and admission.
+tools so it can inspect a callee body, interface or permission definition outside
+the changed set. Findings are still restricted to the task's paths and still pass
+the same refutation and admission.
 
-The prompt is deliberately restrictive ("resolve a specific suspicion, do not
-browse"), and `maxBytesPerRead` exists because a single large retrieved file
-measurably dilutes the review. `maxToolCallsPerTask` is a runaway-loop guard,
+It was long recorded here as *net negative* and shipped off. **That verdict was
+wrong**: it was measuring a bug, not the feature. Every retrieved file was cut
+part-way through and the reviewer was never told, so it concluded things were
+absent from code it had only partly seen. With the cut disclosed, two runs put it
+ahead on defects found, false alarms, cost and reliability alike. No specific gain
+is claimed — the recall difference alone is inside noise — but nothing measured
+argues against it.
+
+There is no longer a per-read byte cap. The reviewer narrows a large file itself
+by asking for a line range after locating what it needs with grep, rather than
+receiving a prefix we chose for it. `maxToolCallsPerTask` is a runaway-loop guard,
 not a context ration.
-
-This is the pass most likely to *cost* recall through dilution. Measure it.
 
 ### Dedicated security pass
 
@@ -197,13 +200,18 @@ class for the injection classes — finite attention.
    `promotionPolicy.modelWeakOrRefuted` to `rejected`, then raise
    `review.inlineSeverityThreshold`.
 2. **Missing security specifically?** `security.dedicatedPass`.
-3. **Missing defects that depend on unchanged code?** There is no dial worth
-   recommending. `crossFileRetrieval` exists but measured **net negative** — see
-   its [page](../03-concepts/optional-capabilities/cross-file-retrieval.md). A
-   context scout that pre-selected the missing symbols was
-   [removed](../03-concepts/optional-capabilities/context-scout.md) after a
-   controlled experiment showed the reviewer largely does not read the context it
-   already has.
+3. **Missing defects that depend on unchanged code?** `crossFileRetrieval` is on
+   by default and is the dial for this; its old net-negative verdict was measuring
+   a truncation bug and does not stand.
+
+   But be clear about what this will *not* fix. Measured on the 37-case corpus,
+   recall on defects outside the diff is **0 of 27** — and every one of those 27
+   sat in a file the reviewer had already been shown **in full**. None needed
+   retrieval at all. That is an attention problem, not an information problem, and
+   no amount of extra context addresses it. A context scout that pre-selected the
+   missing symbols was
+   [removed](../03-concepts/optional-capabilities/context-scout.md) for the same
+   reason: the reviewer largely does not read the context it already has.
 4. **Still missing?** Raise `review.depth` to `thorough` so more source fits in
    each task.
 5. **Missing a second defect in files that already produced one?** No dial

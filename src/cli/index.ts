@@ -26,6 +26,7 @@ import {
   stableJsonDigest,
   type EvalCaseFileReader,
   type EvalRegressionThresholds,
+  type EvalReport,
 } from '../domains/evaluation/index.js'
 import { runChangeImpact } from '../domains/change-impact/index.js'
 import {
@@ -76,9 +77,13 @@ import {
   normalizeError,
   type ErrorSource
 } from '../shared/errors/error-normalizer.js'
-import type {
-  AdmittedFinding,
-  CodeReviewerConfig
+import {
+  EvalRegressionGateProfileSchema,
+  ReviewDepthSchema,
+  ReviewModeSchema,
+  maxConcurrentTasksBounds,
+  type AdmittedFinding,
+  type CodeReviewerConfig
 } from '../shared/contracts/index.js'
 import {
   parseConfigPath,
@@ -150,12 +155,7 @@ const runConfigValidate = async (
   }
 
   try {
-    const configPath = parseConfigPath(args)
-    const config = await loadCodeReviewerConfig({
-      repositoryRoot: options.cwd,
-      environment: options.environment ?? {},
-      ...(configPath === undefined ? {} : { configPath })
-    })
+    const config = await loadConfigForCommand(args, options)
 
     return {
       exitCode: 0,
@@ -328,6 +328,118 @@ const resolveLogSink = async (
   }
 }
 
+type LoadedCodeReviewerConfig = Awaited<ReturnType<typeof loadCodeReviewerConfig>>
+
+// Every command resolves configuration identically: `--config` when given, the
+// discovered file otherwise, always against the process environment. `overrides`
+// carries the few command-specific inputs (`cliConfig`, `loadDotEnv`); it is
+// spread BEFORE `configPath` so an override can never displace the explicit
+// `--config` the user passed.
+const loadConfigForCommand = async (
+  args: readonly string[],
+  options: CliRunOptions,
+  overrides: Omit<
+    Parameters<typeof loadCodeReviewerConfig>[0],
+    'repositoryRoot' | 'environment' | 'configPath'
+  > = {}
+): Promise<LoadedCodeReviewerConfig> => {
+  const configPath = parseConfigPath(args)
+
+  return loadCodeReviewerConfig({
+    repositoryRoot: options.cwd,
+    environment: options.environment ?? {},
+    ...overrides,
+    ...(configPath === undefined ? {} : { configPath })
+  })
+}
+
+const createCliLogger = (
+  input: {
+    readonly config: CodeReviewerConfig
+    readonly command: string
+    readonly sink: ReviewLogSink | undefined
+  }
+): Logger =>
+  createReviewLogger({
+    level: input.config.observability.logging.level,
+    ...(input.sink === undefined ? {} : { out: input.sink }),
+    bindings: {
+      component: 'cli',
+      command: input.command
+    }
+  })
+
+// Reads one repository file through the mediated retriever, which is the only
+// filesystem seam these commands get: path containment, symlink-realpath
+// re-checking, the eligibility gate and redaction all apply. An ineligible,
+// missing, or over-budget file is skipped and counted; one unreadable file must
+// not fail the whole report.
+const mediatedFileReader =
+  (retriever: ReturnType<typeof createContextRetriever>) =>
+  async (filePath: string): Promise<string | undefined> => {
+    try {
+      return (await retriever.readRepositoryFile({ path: filePath })).content
+    } catch {
+      return undefined
+    }
+  }
+
+// `impact check`, `intent check` and `conformance check` are three independently
+// runnable ADVISORY stages that share one shape: they accept only the two git
+// refs, require the `check` subcommand, load configuration in a scope of its own
+// so a malformed config file exits 2 as a config error rather than being swept
+// into the repository fallback the rest of the command needs for git failures,
+// and then print a report as JSON with exit code 0 WHATEVER the report says.
+// Only the report body differs, so the skeleton is written once here — a fourth
+// advisory stage cannot accidentally acquire the ability to fail a pipeline.
+const runCheckCommand = async (
+  input: {
+    readonly name: string
+    readonly args: readonly string[]
+    readonly options: CliRunOptions
+    readonly report: (context: {
+      readonly loadedConfig: LoadedCodeReviewerConfig
+      readonly baseRef: string | undefined
+      readonly headRef: string | undefined
+    }) => Promise<unknown>
+  }
+): Promise<CliResult> => {
+  const unrecognized = unknownCliOption(input.args, ['--base-ref', '--head-ref'])
+
+  if (unrecognized !== undefined) {
+    return usageError(`Unknown option ${unrecognized}`)
+  }
+
+  if (input.args[0] !== 'check') {
+    return usageError(`Expected command: ${input.name} check`)
+  }
+
+  const checkArgs = input.args.slice(1)
+  let loadedConfig: LoadedCodeReviewerConfig
+
+  try {
+    loadedConfig = await loadConfigForCommand(checkArgs, input.options)
+  } catch (error) {
+    return mapErrorResult(error, 'config')
+  }
+
+  try {
+    return {
+      exitCode: 0,
+      stdout: jsonResult(
+        await input.report({
+          loadedConfig,
+          baseRef: parseOptionValue(checkArgs, '--base-ref'),
+          headRef: parseOptionValue(checkArgs, '--head-ref')
+        })
+      ),
+      stderr: ''
+    }
+  } catch (error) {
+    return mapErrorResult(error, 'repository')
+  }
+}
+
 // Everything both post-review investigation lanes (spec 12) take from the CLI
 // run.
 type InvestigationLaneInput = {
@@ -418,11 +530,7 @@ const runReview = async (
     const logLevelOverride = parseLogLevelOverride(args)
     const logFileOverride = parseLogFileOverride(logLevelOverride.args)
     const reviewArgs = logFileOverride.args
-    const configPath = parseConfigPath(reviewArgs)
-    const loadedConfig = await loadCodeReviewerConfig({
-      repositoryRoot: options.cwd,
-      environment: options.environment ?? {},
-      ...(configPath === undefined ? {} : { configPath }),
+    const loadedConfig = await loadConfigForCommand(reviewArgs, options, {
       ...(logLevelOverride.level === undefined
         ? {}
         : {
@@ -438,14 +546,10 @@ const runReview = async (
     const explicitFiles = parseExplicitFiles(reviewArgs)
     const baseRef = parseOptionValue(reviewArgs, '--base-ref')
     const headRef = parseOptionValue(reviewArgs, '--head-ref')
-    const logSink = await resolveLogSink(options, logFileOverride.logFile)
-    const logger = createReviewLogger({
-      level: loadedConfig.config.observability.logging.level,
-      ...(logSink === undefined ? {} : { out: logSink }),
-      bindings: {
-        component: 'cli',
-        command: 'review'
-      }
+    const logger = createCliLogger({
+      config: loadedConfig.config,
+      command: 'review',
+      sink: await resolveLogSink(options, logFileOverride.logFile)
     })
     const result = await runReviewPipeline({
       repositoryRoot: options.cwd,
@@ -648,12 +752,7 @@ const runBaselineWrite = async (
   }
 
   try {
-    const configPath = parseConfigPath(args)
-    const loadedConfig = await loadCodeReviewerConfig({
-      repositoryRoot: options.cwd,
-      environment: options.environment ?? {},
-      ...(configPath === undefined ? {} : { configPath })
-    })
+    const loadedConfig = await loadConfigForCommand(args, options)
     const source = await resolveBaselineSourceReport({
       repositoryRoot: options.cwd,
       artifactDir: loadedConfig.config.paths.artifactDir,
@@ -709,35 +808,33 @@ const runEval = async (
     const logLevelOverride = parseLogLevelOverride(args)
     const logFileOverride = parseLogFileOverride(logLevelOverride.args)
     const evalArgs = logFileOverride.args
-    const configPath = parseConfigPath(evalArgs)
     const sliceRoot = parseOptionValue(evalArgs, '--slice-root')
     const caseFilters = parseOptionValues(evalArgs, '--case')
-    const reviewMode = parseEnumOption(evalArgs, '--review-mode', [
-      'local',
-      'ci',
-      'pr',
-      'full'
-    ] as const)
-    const reviewDepth = parseEnumOption(evalArgs, '--review-depth', [
-      'fast',
-      'balanced',
-      'thorough'
-    ] as const)
+    // Every accepted value below comes from the config schema that will validate
+    // it moments later, so a flag can never accept a value the config rejects.
+    const reviewMode = parseEnumOption(
+      evalArgs,
+      '--review-mode',
+      ReviewModeSchema.options
+    )
+    const reviewDepth = parseEnumOption(
+      evalArgs,
+      '--review-depth',
+      ReviewDepthSchema.options
+    )
     const maxConcurrentTasks = parseIntegerOption(
       evalArgs,
       '--max-concurrent-tasks',
-      {
-        min: 1,
-        max: 32
-      }
+      maxConcurrentTasksBounds
     )
     // Overrides `evaluation.regressionGate.profile` for this run only, without
     // touching the committed config's default. See the `stable`/`strict`
     // rationale on `resolveEvalRegressionGateThresholds` below.
-    const gateProfile = parseEnumOption(evalArgs, '--gate-profile', [
-      'stable',
-      'strict'
-    ] as const)
+    const gateProfile = parseEnumOption(
+      evalArgs,
+      '--gate-profile',
+      EvalRegressionGateProfileSchema.options
+    )
     const cliConfig = {
       ...(logLevelOverride.level === undefined
         ? {}
@@ -765,21 +862,14 @@ const runEval = async (
         ? {}
         : { evaluation: { regressionGate: { profile: gateProfile } } })
     }
-    const loadedConfig = await loadCodeReviewerConfig({
-      repositoryRoot: options.cwd,
-      environment: options.environment ?? {},
+    const loadedConfig = await loadConfigForCommand(evalArgs, options, {
       loadDotEnv: false,
-      ...(configPath === undefined ? {} : { configPath }),
       ...(Object.keys(cliConfig).length === 0 ? {} : { cliConfig })
     })
-    const logSink = await resolveLogSink(options, logFileOverride.logFile)
-    const logger = createReviewLogger({
-      level: loadedConfig.config.observability.logging.level,
-      ...(logSink === undefined ? {} : { out: logSink }),
-      bindings: {
-        component: 'cli',
-        command: 'eval'
-      }
+    const logger = createCliLogger({
+      config: loadedConfig.config,
+      command: 'eval',
+      sink: await resolveLogSink(options, logFileOverride.logFile)
     })
     const loadedEvalCases = await loadEvalCasesFromFixtures(options.cwd, {
       ...(sliceRoot === undefined ? {} : { sliceRoot })
@@ -1055,6 +1145,22 @@ const runEval = async (
   }
 }
 
+// Reads a saved eval report and validates it against the contract. Both readers
+// below go through this so a malformed or foreign JSON file is rejected by the
+// schema rather than rendered as a report with missing metrics.
+const readEvalReport = async (
+  repositoryRoot: string,
+  reportPath: string
+): Promise<EvalReport> =>
+  EvalReportSchema.parse(
+    JSON.parse(
+      await readFile(
+        await resolveExistingPathInsideRoot(repositoryRoot, reportPath),
+        'utf8'
+      )
+    )
+  )
+
 const runEvalRecallReport = async (
   args: readonly string[],
   options: CliRunOptions
@@ -1075,14 +1181,7 @@ const runEvalRecallReport = async (
     const reports = await Promise.all(
       selectedReportPaths.map(async (reportPath) => ({
         label: reportPath,
-        report: EvalReportSchema.parse(
-          JSON.parse(
-            await readFile(
-              await resolveExistingPathInsideRoot(options.cwd, reportPath),
-              'utf8'
-            )
-          )
-        )
+        report: await readEvalReport(options.cwd, reportPath)
       }))
     )
 
@@ -1120,22 +1219,8 @@ const runEvalCompare = async (
       return usageError('eval compare requires --base and --head report paths')
     }
 
-    const baseReport = EvalReportSchema.parse(
-      JSON.parse(
-        await readFile(
-          await resolveExistingPathInsideRoot(options.cwd, basePath),
-          'utf8'
-        )
-      )
-    )
-    const headReport = EvalReportSchema.parse(
-      JSON.parse(
-        await readFile(
-          await resolveExistingPathInsideRoot(options.cwd, headPath),
-          'utf8'
-        )
-      )
-    )
+    const baseReport = await readEvalReport(options.cwd, basePath)
+    const headReport = await readEvalReport(options.cwd, headPath)
 
     return {
       exitCode: 0,
@@ -1199,12 +1284,7 @@ const runDrift = async (
   }
 
   try {
-    const configPath = parseConfigPath(args.slice(1))
-    const loadedConfig = await loadCodeReviewerConfig({
-      repositoryRoot: options.cwd,
-      environment: options.environment ?? {},
-      ...(configPath === undefined ? {} : { configPath })
-    })
+    const loadedConfig = await loadConfigForCommand(args.slice(1), options)
     const result = await runDriftCheck({
       repositoryRoot: options.cwd,
       config: loadedConfig.config
@@ -1234,80 +1314,37 @@ const runDrift = async (
 const runImpact = async (
   args: readonly string[],
   options: CliRunOptions
-): Promise<CliResult> => {
-  const unrecognized = unknownCliOption(args, ['--base-ref', '--head-ref'])
-
-  if (unrecognized !== undefined) {
-    return usageError(`Unknown option ${unrecognized}`)
-  }
-
-  if (args[0] !== 'check') {
-    return usageError('Expected command: impact check')
-  }
-
-  const impactArgs = args.slice(1)
-  let loadedConfig: Awaited<ReturnType<typeof loadCodeReviewerConfig>>
-
-  // Configuration is loaded in its own scope so a malformed config file exits 2
-  // as a config error rather than being swept into the repository fallback the
-  // rest of the command needs for git failures.
-  try {
-    const configPath = parseConfigPath(impactArgs)
-    loadedConfig = await loadCodeReviewerConfig({
-      repositoryRoot: options.cwd,
-      environment: options.environment ?? {},
-      ...(configPath === undefined ? {} : { configPath })
-    })
-  } catch (error) {
-    return mapErrorResult(error, 'config')
-  }
-
-  try {
-    const baseRef = parseOptionValue(impactArgs, '--base-ref')
-    const headRef = parseOptionValue(impactArgs, '--head-ref')
-    // The mediated retriever is the only filesystem seam the run gets: path
-    // containment, symlink-realpath re-checking, the eligibility gate and
-    // redaction all apply to every file the symbol extraction sees. The read
-    // budget is sized to the review file cap, which is the same bound intake
-    // applies to how many files can be changed in one run.
-    const retriever = createContextRetriever({
-      repositoryRoot: options.cwd,
-      budget: {
-        maxReads: loadedConfig.config.review.maxFiles,
-        maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
-        maxSearches: 0
-      },
-      paths: {
-        include: loadedConfig.config.paths.include,
-        exclude: loadedConfig.config.paths.exclude
-      }
-    })
-    const report = await runChangeImpact({
-      repositoryRoot: options.cwd,
-      config: loadedConfig.config,
-      ...(baseRef === undefined ? {} : { baseRef }),
-      ...(headRef === undefined ? {} : { headRef }),
-      ...(options.now === undefined ? {} : { generatedAt: options.now() }),
-      readChangedFile: async (filePath) => {
-        try {
-          return (await retriever.readRepositoryFile({ path: filePath })).content
-        } catch {
-          // An ineligible, missing, or over-budget file is skipped and counted;
-          // one unreadable file must not fail the whole report.
-          return undefined
+): Promise<CliResult> =>
+  runCheckCommand({
+    name: 'impact',
+    args,
+    options,
+    report: async ({ loadedConfig, baseRef, headRef }) => {
+      // The read budget is sized to the review file cap, which is the same bound
+      // intake applies to how many files can be changed in one run.
+      const retriever = createContextRetriever({
+        repositoryRoot: options.cwd,
+        budget: {
+          maxReads: loadedConfig.config.review.maxFiles,
+          maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
+          maxSearches: 0
+        },
+        paths: {
+          include: loadedConfig.config.paths.include,
+          exclude: loadedConfig.config.paths.exclude
         }
-      }
-    })
+      })
 
-    return {
-      exitCode: 0,
-      stdout: jsonResult(report),
-      stderr: ''
+      return runChangeImpact({
+        repositoryRoot: options.cwd,
+        config: loadedConfig.config,
+        ...(baseRef === undefined ? {} : { baseRef }),
+        ...(headRef === undefined ? {} : { headRef }),
+        ...(options.now === undefined ? {} : { generatedAt: options.now() }),
+        readChangedFile: mediatedFileReader(retriever)
+      })
     }
-  } catch (error) {
-    return mapErrorResult(error, 'repository')
-  }
-}
+  })
 
 // `intent check` (spec 23).
 //
@@ -1329,115 +1366,67 @@ const runImpact = async (
 const runIntent = async (
   args: readonly string[],
   options: CliRunOptions
-): Promise<CliResult> => {
-  const unrecognized = unknownCliOption(args, ['--base-ref', '--head-ref'])
-
-  if (unrecognized !== undefined) {
-    return usageError(`Unknown option ${unrecognized}`)
-  }
-
-  if (args[0] !== 'check') {
-    return usageError('Expected command: intent check')
-  }
-
-  const intentArgs = args.slice(1)
-  let loadedConfig: Awaited<ReturnType<typeof loadCodeReviewerConfig>>
-
-  // Configuration is loaded in its own scope so a malformed config file exits 2
-  // as a config error rather than being swept into the repository fallback the
-  // rest of the command needs for git failures.
-  try {
-    const configPath = parseConfigPath(intentArgs)
-    loadedConfig = await loadCodeReviewerConfig({
-      repositoryRoot: options.cwd,
-      environment: options.environment ?? {},
-      ...(configPath === undefined ? {} : { configPath })
-    })
-  } catch (error) {
-    return mapErrorResult(error, 'config')
-  }
-
-  try {
-    const baseRef = parseOptionValue(intentArgs, '--base-ref')
-    const headRef = parseOptionValue(intentArgs, '--head-ref')
-    // The mediated retriever is the only filesystem seam the run gets for
-    // repository content: path containment, symlink-realpath re-checking, the
-    // eligibility gate and redaction all apply to every changed file the run
-    // sees. Change-intent sources are read by spec 11's ingestion instead, which
-    // owns its own bounds and its own redaction.
-    const retriever = createContextRetriever({
-      repositoryRoot: options.cwd,
-      budget: {
-        maxReads: loadedConfig.config.review.maxFiles,
-        maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
-        maxSearches: 0
-      },
-      paths: {
-        include: loadedConfig.config.paths.include,
-        exclude: loadedConfig.config.paths.exclude
-      }
-    })
-    const logger = createReviewLogger({
-      level: loadedConfig.config.observability.logging.level,
-      ...(options.logSink === undefined ? {} : { out: options.logSink }),
-      bindings: {
-        component: 'cli',
-        command: 'intent'
-      }
-    })
-    // Absent unless the capability is enabled AND a provider resolves. Every other
-    // outcome reports `provider-unavailable` with a warning and still exits 0.
-    const lane = await createIntentFulfilmentLane({
-      config: loadedConfig.config,
-      environment: options.environment ?? {},
-      ...(options.providerImport === undefined
-        ? {}
-        : { providerImport: options.providerImport }),
-      logger
-    })
-
-    try {
-      const report = await runIntentFulfilment({
+): Promise<CliResult> =>
+  runCheckCommand({
+    name: 'intent',
+    args,
+    options,
+    report: async ({ loadedConfig, baseRef, headRef }) => {
+      // Change-intent sources are read by spec 11's ingestion instead of through
+      // this retriever, which owns its own bounds and its own redaction.
+      const retriever = createContextRetriever({
         repositoryRoot: options.cwd,
-        config: loadedConfig.config,
-        ...(baseRef === undefined ? {} : { baseRef }),
-        ...(headRef === undefined ? {} : { headRef }),
-        ...(options.now === undefined ? {} : { generatedAt: options.now() }),
-        ...(lane === undefined
-          ? {}
-          : {
-              agents: {
-                extractObligations: lane.extractObligations,
-                judge: lane.judge,
-                checkAptness: lane.checkAptness,
-                explain: lane.explain
-              },
-              usage: lane.usage
-            }),
-        readChangedFile: async (filePath) => {
-          try {
-            return (await retriever.readRepositoryFile({ path: filePath }))
-              .content
-          } catch {
-            // An ineligible, missing, or over-budget file is skipped and counted;
-            // one unreadable file must not fail the whole report.
-            return undefined
-          }
+        budget: {
+          maxReads: loadedConfig.config.review.maxFiles,
+          maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
+          maxSearches: 0
+        },
+        paths: {
+          include: loadedConfig.config.paths.include,
+          exclude: loadedConfig.config.paths.exclude
         }
       })
+      const logger = createCliLogger({
+        config: loadedConfig.config,
+        command: 'intent',
+        sink: options.logSink
+      })
+      // Absent unless the capability is enabled AND a provider resolves. Every other
+      // outcome reports `provider-unavailable` with a warning and still exits 0.
+      const lane = await createIntentFulfilmentLane({
+        config: loadedConfig.config,
+        environment: options.environment ?? {},
+        ...(options.providerImport === undefined
+          ? {}
+          : { providerImport: options.providerImport }),
+        logger
+      })
 
-      return {
-        exitCode: 0,
-        stdout: jsonResult(report),
-        stderr: ''
+      try {
+        return await runIntentFulfilment({
+          repositoryRoot: options.cwd,
+          config: loadedConfig.config,
+          ...(baseRef === undefined ? {} : { baseRef }),
+          ...(headRef === undefined ? {} : { headRef }),
+          ...(options.now === undefined ? {} : { generatedAt: options.now() }),
+          ...(lane === undefined
+            ? {}
+            : {
+                agents: {
+                  extractObligations: lane.extractObligations,
+                  judge: lane.judge,
+                  checkAptness: lane.checkAptness,
+                  explain: lane.explain
+                },
+                usage: lane.usage
+              }),
+          readChangedFile: mediatedFileReader(retriever)
+        })
+      } finally {
+        await lane?.shutdown()
       }
-    } finally {
-      await lane?.shutdown()
     }
-  } catch (error) {
-    return mapErrorResult(error, 'repository')
-  }
-}
+  })
 
 // `conformance check` (spec 24).
 //
@@ -1458,147 +1447,102 @@ const runIntent = async (
 const runConformance = async (
   args: readonly string[],
   options: CliRunOptions
-): Promise<CliResult> => {
-  const unrecognized = unknownCliOption(args, ['--base-ref', '--head-ref'])
-
-  if (unrecognized !== undefined) {
-    return usageError(`Unknown option ${unrecognized}`)
-  }
-
-  if (args[0] !== 'check') {
-    return usageError('Expected command: conformance check')
-  }
-
-  const conformanceArgs = args.slice(1)
-  let loadedConfig: Awaited<ReturnType<typeof loadCodeReviewerConfig>>
-
-  // Configuration is loaded in its own scope so a malformed config file exits 2
-  // as a config error rather than being swept into the repository fallback the
-  // rest of the command needs for git failures.
-  try {
-    const configPath = parseConfigPath(conformanceArgs)
-    loadedConfig = await loadCodeReviewerConfig({
-      repositoryRoot: options.cwd,
-      environment: options.environment ?? {},
-      ...(configPath === undefined ? {} : { configPath })
-    })
-  } catch (error) {
-    return mapErrorResult(error, 'config')
-  }
-
-  try {
-    const baseRef = parseOptionValue(conformanceArgs, '--base-ref')
-    const headRef = parseOptionValue(conformanceArgs, '--head-ref')
-    const { review, invariantConformance } = loadedConfig.config
-    // The mediated retriever is the only filesystem seam the run gets. The read
-    // budget is derived rather than guessed: at most one read per changed file,
-    // at most one directory listing per changed file, and at most `maxPeerFiles`
-    // sibling reads. `maxMatches` bounds how many entries one listing returns, so
-    // it must not sit below the peer-file cap or peers would be lost to a bound
-    // meant for model-facing search.
-    const retriever = createContextRetriever({
-      repositoryRoot: options.cwd,
-      budget: {
-        maxReads: review.maxFiles * 2 + invariantConformance.maxPeerFiles,
-        maxBytesPerRead: review.maxFileBytes,
-        maxMatches: invariantConformance.maxPeerFiles,
-        maxSearches: 0
-      },
-      paths: {
-        include: loadedConfig.config.paths.include,
-        exclude: loadedConfig.config.paths.exclude
-      }
-    })
-    const logger = createReviewLogger({
-      level: loadedConfig.config.observability.logging.level,
-      ...(options.logSink === undefined ? {} : { out: options.logSink }),
-      bindings: {
-        component: 'cli',
-        command: 'conformance'
-      }
-    })
-    // Absent unless adjudication is enabled AND a provider resolves. Every other
-    // outcome degrades to the deterministic arm, which reports the reason as a
-    // warning rather than failing.
-    const adjudicationLane = await createConformanceAdjudicationLane({
-      config: loadedConfig.config,
-      environment: options.environment ?? {},
-      ...(options.providerImport === undefined
-        ? {}
-        : { providerImport: options.providerImport }),
-      logger
-    })
-
-    try {
-      const report = await runInvariantConformance({
+): Promise<CliResult> =>
+  runCheckCommand({
+    name: 'conformance',
+    args,
+    options,
+    report: async ({ loadedConfig, baseRef, headRef }) => {
+      const { review, invariantConformance } = loadedConfig.config
+      // The read budget is derived rather than guessed: at most one read per
+      // changed file, at most one directory listing per changed file, and at most
+      // `maxPeerFiles` sibling reads. `maxMatches` bounds how many entries one
+      // listing returns, so it must not sit below the peer-file cap or peers would
+      // be lost to a bound meant for model-facing search.
+      const retriever = createContextRetriever({
         repositoryRoot: options.cwd,
-        config: loadedConfig.config,
-        ...(baseRef === undefined ? {} : { baseRef }),
-        ...(headRef === undefined ? {} : { headRef }),
-        ...(options.now === undefined ? {} : { generatedAt: options.now() }),
-        ...(adjudicationLane === undefined
-          ? {}
-          : {
-              adjudicate: adjudicationLane.adjudicate,
-              adjudicationUsage: adjudicationLane.usage
-            }),
-        readRepositoryFile: async (filePath) => {
-          try {
-            return (await retriever.readRepositoryFile({ path: filePath }))
-              .content
-          } catch {
-            // An ineligible, missing, or over-budget file is skipped and counted;
-            // one unreadable file must not fail the whole report.
-            return undefined
-          }
+        budget: {
+          maxReads: review.maxFiles * 2 + invariantConformance.maxPeerFiles,
+          maxBytesPerRead: review.maxFileBytes,
+          maxMatches: invariantConformance.maxPeerFiles,
+          maxSearches: 0
         },
-        listDirectoryFiles: async (directoryPath) => {
-          try {
-            const listing = await retriever.listRepositoryDirectory({
-              path: directoryPath
-            })
-
-            // The mediated listing renders one `"<file|dir> <path>"` line per
-            // eligible entry. Peer derivation wants files only; a subdirectory is
-            // not a sibling of a declaration.
-            return listing.content
-              .split('\n')
-              .filter((line) => line.startsWith('file '))
-              .map((line) => line.slice('file '.length))
-          } catch {
-            return []
-          }
+        paths: {
+          include: loadedConfig.config.paths.include,
+          exclude: loadedConfig.config.paths.exclude
         }
       })
+      const logger = createCliLogger({
+        config: loadedConfig.config,
+        command: 'conformance',
+        sink: options.logSink
+      })
+      // Absent unless adjudication is enabled AND a provider resolves. Every other
+      // outcome degrades to the deterministic arm, which reports the reason as a
+      // warning rather than failing.
+      const adjudicationLane = await createConformanceAdjudicationLane({
+        config: loadedConfig.config,
+        environment: options.environment ?? {},
+        ...(options.providerImport === undefined
+          ? {}
+          : { providerImport: options.providerImport }),
+        logger
+      })
 
-      return {
-        exitCode: 0,
-        stdout: jsonResult(report),
-        stderr: ''
+      try {
+        return await runInvariantConformance({
+          repositoryRoot: options.cwd,
+          config: loadedConfig.config,
+          ...(baseRef === undefined ? {} : { baseRef }),
+          ...(headRef === undefined ? {} : { headRef }),
+          ...(options.now === undefined ? {} : { generatedAt: options.now() }),
+          ...(adjudicationLane === undefined
+            ? {}
+            : {
+                adjudicate: adjudicationLane.adjudicate,
+                adjudicationUsage: adjudicationLane.usage
+              }),
+          readRepositoryFile: mediatedFileReader(retriever),
+          listDirectoryFiles: async (directoryPath) => {
+            try {
+              const listing = await retriever.listRepositoryDirectory({
+                path: directoryPath
+              })
+
+              // The mediated listing renders one `"<file|dir> <path>"` line per
+              // eligible entry. Peer derivation wants files only; a subdirectory is
+              // not a sibling of a declaration.
+              return listing.content
+                .split('\n')
+                .filter((line) => line.startsWith('file '))
+                .map((line) => line.slice('file '.length))
+            } catch {
+              return []
+            }
+          }
+        })
+      } finally {
+        await adjudicationLane?.shutdown()
       }
-    } finally {
-      await adjudicationLane?.shutdown()
     }
-  } catch (error) {
-    return mapErrorResult(error, 'repository')
-  }
-}
+  })
 
 export const runCli = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
   const [command, subcommand, ...rest] = args
+  // Commands that own their own subcommand parsing (`review` takes none;
+  // `drift`/`impact`/`intent`/`conformance` require `check`) receive everything
+  // after the command name.
+  const commandArgs = args.slice(1)
 
   if (command === 'config' && subcommand === 'validate') {
     return runConfigValidate(rest, options)
   }
 
   if (command === 'review') {
-    return runReview(
-      [subcommand, ...rest].filter((value): value is string => value !== undefined),
-      options
-    )
+    return runReview(commandArgs, options)
   }
 
   if (command === 'eval') {
@@ -1624,31 +1568,19 @@ export const runCli = async (
   }
 
   if (command === 'drift') {
-    return runDrift(
-      [subcommand, ...rest].filter((value): value is string => value !== undefined),
-      options
-    )
+    return runDrift(commandArgs, options)
   }
 
   if (command === 'impact') {
-    return runImpact(
-      [subcommand, ...rest].filter((value): value is string => value !== undefined),
-      options
-    )
+    return runImpact(commandArgs, options)
   }
 
   if (command === 'intent') {
-    return runIntent(
-      [subcommand, ...rest].filter((value): value is string => value !== undefined),
-      options
-    )
+    return runIntent(commandArgs, options)
   }
 
   if (command === 'conformance') {
-    return runConformance(
-      [subcommand, ...rest].filter((value): value is string => value !== undefined),
-      options
-    )
+    return runConformance(commandArgs, options)
   }
 
   return usageError(

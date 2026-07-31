@@ -46,9 +46,14 @@ So the baseline cost of a default run is:
 calls ≈ 2 × taskCount   (one discovery + one refutation per task)
 ```
 
-Each optional pass you enable adds `1 × taskCount` to the discovery side.
-Enabling both the scout and the security pass takes a task from 2 calls to 4 — a
-2× increase before any change in packet size.
+Each optional pass you enable adds `1 × taskCount` to the discovery side. The
+security pass is the only one that remains, and enabling it takes a task from 2
+calls to 3.
+
+The larger multiplier is `aiReview.maxFilesPerDiscoveryCall` (default 2): a task
+covering more files than that is split across several calls, each with its own
+refutation. That is deliberate — it is the only measured lever on recall — but it
+is also where the calls go.
 
 ---
 

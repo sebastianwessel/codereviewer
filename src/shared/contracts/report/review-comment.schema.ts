@@ -2,16 +2,6 @@ import { z } from 'zod'
 import { RepositoryRelativePathSchema, SeveritySchema } from '../config/config.schema.js'
 import { ContractIdSchema, FindingCategorySchema } from '../findings/finding.schema.js'
 
-// Concrete platform a review-comment draft can be rendered for. Distinct from the
-// `reporting.reviewComments.platform` config value, which additionally accepts
-// `auto` (resolved to one of these targets by platform detection).
-export const PlatformTargetSchema = z.enum([
-  'github',
-  'gitlab',
-  'bitbucket',
-  'generic'
-])
-
 // New-side line range a review comment anchors to.
 export const ReviewCommentTargetRangeSchema = z
   .strictObject({
@@ -49,7 +39,6 @@ export const ReviewCommentDraftSchema = z.strictObject({
   category: FindingCategorySchema
 })
 
-export type PlatformTarget = z.infer<typeof PlatformTargetSchema>
 export type ReviewCommentTargetRange = z.infer<
   typeof ReviewCommentTargetRangeSchema
 >
