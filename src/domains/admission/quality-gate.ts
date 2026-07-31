@@ -1,16 +1,23 @@
+import { z } from 'zod'
 import type {
   AdmittedFinding,
   QualityGateResult,
   Severity
 } from '../../shared/contracts/index.js'
 
-export type QualityGateThresholds = {
-  readonly maxCritical?: number
-  readonly maxHigh?: number
-  readonly maxMedium?: number
-  readonly failOnProviderError?: boolean
-  readonly failOnNewOnly?: boolean
-}
+// The schema is the definition and the type is inferred from it. Both used to be
+// written out by hand in two domains, and under `exactOptionalPropertyTypes` the
+// two shapes were not assignable (`?: number` against `?: number | undefined`), so
+// the pipeline reached admission through a cast. One declaration, no cast.
+export const QualityGateThresholdsSchema = z.strictObject({
+  maxCritical: z.int().min(0).optional(),
+  maxHigh: z.int().min(0).optional(),
+  maxMedium: z.int().min(0).optional(),
+  failOnProviderError: z.boolean().optional(),
+  failOnNewOnly: z.boolean().optional()
+})
+
+export type QualityGateThresholds = z.infer<typeof QualityGateThresholdsSchema>
 
 const severityThresholdKey: Readonly<
   Partial<Record<Severity, keyof QualityGateThresholds>>

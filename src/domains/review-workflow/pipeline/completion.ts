@@ -15,7 +15,6 @@ import {
   reviewedLineRangeForContent,
   type BaselineFingerprintRecord,
   type CandidateFinding,
-  type QualityGateThresholds,
   type ReviewedDiffRange,
   type ReviewedLineRange,
   type TaskSourceChunkRange
@@ -330,7 +329,7 @@ export const completeReviewWorkflow = (
   })
   const qualityGate = evaluateQualityGate({
     admittedFindings: baseline.admittedFindings,
-    thresholds: input.workflowInput.qualityGate as QualityGateThresholds
+    thresholds: input.workflowInput.qualityGate
   })
 
   return ReviewWorkflowOutputSchema.parse({

@@ -77,13 +77,9 @@ export const WorkflowAdmissionDecisionSchema = z.strictObject({
   supersedes: z.string().min(1).optional()
 })
 
-export const QualityGateThresholdsSchema = z.strictObject({
-  maxCritical: z.int().min(0).optional(),
-  maxHigh: z.int().min(0).optional(),
-  maxMedium: z.int().min(0).optional(),
-  failOnProviderError: z.boolean().optional(),
-  failOnNewOnly: z.boolean().optional()
-})
+// Re-exported from admission, which owns quality gating. Restating it here made
+// two definitions of one contract and forced a cast at the boundary.
+export { QualityGateThresholdsSchema } from '../../admission/index.js'
 
 export const WorkflowAdmissionPolicySchema = z.strictObject({
   inlineSeverityThreshold: SeveritySchema,

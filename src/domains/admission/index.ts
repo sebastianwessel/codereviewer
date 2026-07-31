@@ -31,5 +31,6 @@ export {
 } from './baseline-writer.js'
 export {
   evaluateQualityGate,
+  QualityGateThresholdsSchema,
   type QualityGateThresholds
 } from './quality-gate.js'
