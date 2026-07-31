@@ -111,3 +111,34 @@ jobs:
           node --input-type=module -e "await import('@sebastianwessel/codereviewer')"
           node --input-type=module -e "await import('@sebastianwessel/codereviewer/cli')"
           echo "Packed artefact runs."
+
+          # The published DECLARATIONS must compile for a consumer too, which the
+          # runtime imports above cannot tell us. Three shipped declarations name
+          # `Buffer` in a public type position, and they once raised TS2591 inside
+          # our own `.d.ts` for anyone whose tsconfig did not set `"types":
+          # ["node"]` — a fix no consumer could guess. This compiles a real
+          # consumer with NO `types` field and NO `@types/node` of its own, so it
+          # fails if the types entry ever stops carrying the Node reference.
+          npm install --no-audit --no-fund typescript
+          cat > tsconfig.json <<'JSON'
+          {
+            "compilerOptions": {
+              "module": "NodeNext",
+              "moduleResolution": "NodeNext",
+              "strict": true,
+              "noEmit": true
+            },
+            "include": ["consumer.ts"]
+          }
+          JSON
+          cat > consumer.ts <<'TS'
+          import { projectName } from '@sebastianwessel/codereviewer'
+          import type { CliResult } from '@sebastianwessel/codereviewer/cli'
+          export const result: CliResult = {
+            exitCode: 0,
+            stdout: projectName,
+            stderr: ''
+          }
+          TS
+          ./node_modules/.bin/tsc --noEmit
+          echo "Published declarations compile for a consumer."
