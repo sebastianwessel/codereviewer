@@ -93,7 +93,6 @@ const commonInput = {
   },
   contextLedger: [],
   evidence: [evidence],
-  supportSignalCandidates: [supportCandidate],
   observability: { events: [] }
 } as const
 
@@ -132,8 +131,10 @@ describe('review runner provider failure helpers', () => {
         message: 'worker failed'
       }
     ])
+    // Only the provider's own candidates survive a partial failure now. The
+    // support-signal channel that used to be prepended here carried nothing: its
+    // sole producer was the eval-gaming trusted-rule map.
     expect(failure.partialState.sharedContext.candidateFindings).toEqual([
-      supportCandidate,
       providerCandidate
     ])
     expect(failure.partialState.runSummary.warnings).toEqual([
@@ -167,7 +168,6 @@ describe('review runner provider failure helpers', () => {
 
     expect(failure?.structuredError.code).toBe('provider_error')
     expect(failure?.partialState.sharedContext.candidateFindings).toEqual([
-      supportCandidate,
       providerCandidate
     ])
   })

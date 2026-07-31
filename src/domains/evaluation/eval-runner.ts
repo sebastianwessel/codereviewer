@@ -357,13 +357,6 @@ const artifactOnlyFindingsForEval = (
     (finding) => finding.reporterEligibility === 'artifact-only'
   )
 
-const trustedDeterministicFindingsForEval = (
-  admittedFindings: readonly AdmittedFinding[]
-): readonly AdmittedFinding[] =>
-  actionableFindingsForEval(admittedFindings).filter(
-    (finding) => finding.proposedBy === 'deterministic-trusted-rule'
-  )
-
 // Per-expectation report entries, including the diff-scope classification
 // (spec 17) derived from the case's own reviewed diff. Deriving it here, at the
 // single site that writes the scored artefact, is what makes it durable: every
@@ -625,8 +618,6 @@ const buildMetricCase = (
   const admittedFindings = input.reviewReport?.admittedFindings ?? []
   const actionableFindings = actionableFindingsForEval(admittedFindings)
   const artifactOnlyFindings = artifactOnlyFindingsForEval(admittedFindings)
-  const trustedDeterministicFindings =
-    trustedDeterministicFindingsForEval(admittedFindings)
   const matchedExpectedSeverityWeights = input.matchResult.matches.map((match) =>
     severityWeight(input.evalCase.expectedFindings[match.expectedIndex]!.severity)
   )
@@ -741,7 +732,6 @@ const buildMetricCase = (
       input.artifactOnlyMatchResult.matches.length,
     artifactOnlyFalsePositiveCount:
       input.artifactOnlyMatchResult.falsePositiveFindingIds.length,
-    trustedDeterministicFindingCount: trustedDeterministicFindings.length,
     provedRefutationCount: refutationResults.filter(
       (refutation) => refutation.verdict === 'proved'
     ).length,

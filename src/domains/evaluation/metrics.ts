@@ -250,7 +250,6 @@ export const EvalMetricsSchema = z.strictObject({
   artifactOnlyFindingCount: z.int().min(0).default(0),
   artifactOnlyMatchedFindingCount: z.int().min(0).default(0),
   artifactOnlyFalsePositiveCount: z.int().min(0).default(0),
-  trustedDeterministicFindingCount: z.int().min(0).default(0),
   // Rejections by reason, aggregated. Shows what the admission gate discarded
   // before anything downstream could see it.
   rejectionReasonCounts: z.record(z.string(), z.int().min(0)).default({}),
@@ -437,7 +436,6 @@ export type EvalMetricCaseResult = {
   readonly artifactOnlyFindingCount: number
   readonly artifactOnlyMatchedFindingCount: number
   readonly artifactOnlyFalsePositiveCount: number
-  readonly trustedDeterministicFindingCount: number
   // Refutation results with a `proved` verdict. Used to derive the refutation
   // false-positive count (proved refutations whose finding never matched).
   readonly provedRefutationCount: number
@@ -598,9 +596,6 @@ export const calculateEvalMetrics = (
   )
   const totalArtifactOnlyFalsePositiveCount = sum(
     caseResults.map((result) => result.artifactOnlyFalsePositiveCount)
-  )
-  const totalTrustedDeterministicFindingCount = sum(
-    caseResults.map((result) => result.trustedDeterministicFindingCount)
   )
   const totalExpectedSeverityWeight = sum(
     caseResults.flatMap((result) => result.expectedSeverityWeights)
@@ -856,7 +851,6 @@ export const calculateEvalMetrics = (
     artifactOnlyFindingCount: totalArtifactOnlyFindingCount,
     artifactOnlyMatchedFindingCount: totalArtifactOnlyMatchedFindingCount,
     artifactOnlyFalsePositiveCount: totalArtifactOnlyFalsePositiveCount,
-    trustedDeterministicFindingCount: totalTrustedDeterministicFindingCount,
     rejectionReasonCounts: caseResults.reduce<Record<string, number>>(
       (totals, result) => {
         for (const [reason, count] of Object.entries(

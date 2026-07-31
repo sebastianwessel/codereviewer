@@ -3,7 +3,6 @@ import type {
   EvidenceRecord
 } from '../../../../shared/contracts/index.js'
 import { normalizeError } from '../../../../shared/errors/error-normalizer.js'
-import type { CandidateFinding } from '../../../admission/index.js'
 import type { DeterministicSignalExtraction } from '../../../deterministic-signals/index.js'
 import type { DriftFinding } from '../../../drift/index.js'
 import type { NoContentObservabilitySnapshot } from '../../../observability/index.js'
@@ -37,7 +36,6 @@ type ProviderFailureBaseInput = {
   readonly analysis: DeterministicSignalExtraction
   readonly contextLedger: readonly ContextLedgerEntry[]
   readonly evidence: readonly EvidenceRecord[]
-  readonly supportSignalCandidates: readonly CandidateFinding[]
   readonly observability: NoContentObservabilitySnapshot
 }
 
@@ -65,7 +63,6 @@ export const createProviderTaskExecutionFailure = (
     }
   )
   const candidates = [
-    ...input.supportSignalCandidates,
     ...candidateFindingsFromTaskResults(input.executionError.partialResults)
   ]
 

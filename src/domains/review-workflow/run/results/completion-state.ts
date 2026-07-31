@@ -5,7 +5,6 @@ import type {
   ReviewReport
 } from '../../../../shared/contracts/index.js'
 import type {
-  CandidateFinding,
   ReviewedDiffRange,
   ReviewedLineRange
 } from '../../../admission/index.js'
@@ -53,8 +52,7 @@ export const prepareReviewRunnerCompletionState = (
     readonly analysis: DeterministicSignalExtraction
     readonly contextLedger: readonly ContextLedgerEntry[]
     readonly evidence: readonly EvidenceRecord[]
-    readonly supportSignalCandidates: readonly CandidateFinding[]
-    readonly providerWorkflow: ReviewRunnerProviderState['providerWorkflow']
+      readonly providerWorkflow: ReviewRunnerProviderState['providerWorkflow']
     readonly contextIngestionUsage?: RunTokenUsage | undefined
     readonly contextIngestionWarnings?: readonly string[] | undefined
     readonly providerTaskEventsObservedLive: boolean
@@ -77,7 +75,7 @@ export const prepareReviewRunnerCompletionState = (
     reviewedPaths: input.reviewedPaths,
     reviewedLineRanges: input.reviewedLineRanges,
     reviewedDiffRanges: input.reviewedDiffRanges,
-    candidates: input.supportSignalCandidates,
+    candidates: [],
     evidence: input.evidence,
     config: input.config,
     admittedAt: input.admittedAt,

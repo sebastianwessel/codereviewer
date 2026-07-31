@@ -3,7 +3,6 @@ import type {
   CodeReviewerConfig,
   EvidenceRecord
 } from '../../../../shared/contracts/index.js'
-import type { CandidateFinding } from '../../../admission/index.js'
 import type { DeterministicSignalExtraction } from '../../../deterministic-signals/index.js'
 import type { DriftFinding } from '../../../drift/index.js'
 import type { NoContentEventRecorder } from '../../../observability/index.js'
@@ -36,7 +35,6 @@ export const prepareReviewRunnerProviderState = async (input: {
   readonly analysis: DeterministicSignalExtraction
   readonly contextLedger: readonly ContextLedgerEntry[]
   readonly evidence: readonly EvidenceRecord[]
-  readonly supportSignalCandidates: readonly CandidateFinding[]
   readonly workflowInput: ReviewWorkflowInput
   readonly environment: Readonly<Record<string, string | undefined>>
   readonly providerImport?: ProviderImport | undefined
@@ -94,7 +92,6 @@ export const prepareReviewRunnerProviderState = async (input: {
       analysis: input.analysis,
       contextLedger: input.contextLedger,
       evidence: input.evidence,
-      supportSignalCandidates: input.supportSignalCandidates,
       error,
       observability: input.observability.snapshot()
     })

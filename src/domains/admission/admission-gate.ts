@@ -557,11 +557,13 @@ export const admitCandidate = (
     )
   }
 
-  // Trusted deterministic-rule findings bypass the model severity floor; every
-  // other (model-origin) candidate must meet `actionableSeverityThreshold` when
-  // set, otherwise the base `minimumSeverity`.
+  // Every candidate must meet `actionableSeverityThreshold` when set, otherwise
+  // the base `minimumSeverity`. There is deliberately no exemption: the one that
+  // existed was for deterministic "trusted rule" findings whose only producer was
+  // a map of benchmark-specific rule IDs, removed as eval-gaming. An exemption
+  // with no producer is not neutral — it is a bypass of the severity floor waiting
+  // for something to trigger it.
   const severityFloor =
-    candidate.proposedBy !== 'deterministic-trusted-rule' &&
     input.policy.actionableSeverityThreshold !== undefined
       ? input.policy.actionableSeverityThreshold
       : input.policy.minimumSeverity

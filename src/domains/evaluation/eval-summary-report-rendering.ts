@@ -229,7 +229,6 @@ const appendEvalSummaryMetrics = (
       `| Artifact-only findings | ${report.metrics.artifactOnlyFindingCount} |`,
       `| Artifact-only matched | ${report.metrics.artifactOnlyMatchedFindingCount} |`,
       `| Artifact-only false positives | ${report.metrics.artifactOnlyFalsePositiveCount} |`,
-      `| Trusted deterministic findings | ${report.metrics.trustedDeterministicFindingCount} |`,
       `| Rejected candidates by reason | ${formatCountRecord(report.metrics.rejectionReasonCounts)} |`,
       // Severity of the REJECTED candidate (spec 06 item 0.4), not the
       // expectation's severity. Answers "is the model over-calling severity"

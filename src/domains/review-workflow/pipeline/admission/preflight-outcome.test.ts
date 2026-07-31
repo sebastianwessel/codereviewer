@@ -58,7 +58,9 @@ describe('model admission preflight outcome', () => {
         supportCandidate,
         trustedDeterministicCandidate
       ])
-    ).toEqual(['cand_support1'])
+      // Both, now: the `deterministic-trusted-rule` carve-out that kept one of
+      // them out of this list was a refutation bypass with no producer.
+    ).toEqual(['cand_support1', 'cand_trusted1'])
   })
 
   test('creates no-refuter fallback outcomes', () => {
@@ -90,13 +92,18 @@ describe('model admission preflight outcome', () => {
     })
   })
 
-  test('keeps trusted deterministic rule candidates actionable', () => {
+  test('marks every support-signal candidate artifact-only, with no exemption', () => {
+    // A `deterministic-trusted-rule` candidate used to stay actionable here,
+    // skipping refutation. Its only producer was a map of benchmark-specific rule
+    // ids removed as eval-gaming, so the carve-out was a refutation bypass with
+    // nothing to trigger it. Nothing is exempt now, whatever claims to have
+    // proposed it.
     expect(supportSignalCandidateOutcome(trustedDeterministicCandidate)).toEqual({
       admissionCandidates: [trustedDeterministicCandidate],
       evidence: [],
       rejectedFindings: [],
       admissionDecisions: [],
-      artifactOnlyCandidateIds: [],
+      artifactOnlyCandidateIds: [trustedDeterministicCandidate.id],
       refutationResults: [],
       providerIssues: []
     })

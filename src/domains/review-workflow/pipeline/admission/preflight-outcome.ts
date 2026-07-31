@@ -13,11 +13,7 @@ export const supportSignalArtifactOnlyCandidateIds = (
   candidates: readonly CandidateFinding[]
 ): readonly string[] =>
   candidates
-    .filter(
-      (candidate) =>
-        !isModelProposedCandidate(candidate) &&
-        candidate.proposedBy !== 'deterministic-trusted-rule'
-    )
+    .filter((candidate) => !isModelProposedCandidate(candidate))
     .map((candidate) => candidate.id)
 
 export const noRefuterAdmissionOutcome = (input: {
@@ -37,8 +33,7 @@ export const supportSignalCandidateOutcome = (
 ): AdmissionCandidateOutcome => ({
   ...emptyAdmissionCandidateOutcome(),
   admissionCandidates: [candidate],
-  artifactOnlyCandidateIds:
-    candidate.proposedBy === 'deterministic-trusted-rule' ? [] : [candidate.id]
+  artifactOnlyCandidateIds: [candidate.id]
 })
 
 export const outOfDiffScopeOutcome = (

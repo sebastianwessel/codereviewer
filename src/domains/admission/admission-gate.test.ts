@@ -633,7 +633,7 @@ describe('admission gate', () => {
     })
   })
 
-  test('applies the model actionable severity floor (exempting trusted rules)', () => {
+  test('applies the actionable severity floor to EVERY candidate, with no exemption', () => {
     const floorPolicy = { ...diffBackedPolicy, actionableSeverityThreshold: 'medium' as const }
 
     // Low-severity model finding -> rejected below-threshold.
@@ -655,8 +655,11 @@ describe('admission gate', () => {
     })
     expect(mediumModel.status).toBe('admitted')
 
-    // Low-severity TRUSTED deterministic-rule finding -> exempt from the model
-    // floor, still admitted.
+    // There used to be an exemption here for `deterministic-trusted-rule`
+    // candidates. Its only producer was a map of benchmark-specific rule ids,
+    // removed as eval-gaming, so the exemption became a severity-floor bypass with
+    // nothing to trigger it. A low-severity candidate is now rejected whatever
+    // claims to have proposed it.
     const lowTrusted = admitCandidate({
       candidate: {
         ...candidate,
@@ -667,7 +670,8 @@ describe('admission gate', () => {
       existingAdmittedFindings: [],
       policy: floorPolicy
     })
-    expect(lowTrusted.status).toBe('admitted')
+    expect(lowTrusted.status).toBe('rejected')
+    expect(lowTrusted.rejectedFinding?.reason).toBe('below-threshold')
   })
 
   test('redacts model-controlled finding text before admission', () => {

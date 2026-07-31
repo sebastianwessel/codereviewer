@@ -178,7 +178,6 @@ describe('eval report rendering', () => {
           artifactOnlyFindingCount: 0,
           artifactOnlyMatchedFindingCount: 0,
           artifactOnlyFalsePositiveCount: 0,
-          trustedDeterministicFindingCount: 0,
           refutationFalseNegativeCount: 0,
           refutationFalsePositiveCount: 0,
           fixJudgmentAccuracy: 0,

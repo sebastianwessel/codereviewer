@@ -4,7 +4,6 @@ import {
   CodeReviewerConfigSchema,
   type EvidenceRecord
 } from '../../../../shared/contracts/index.js'
-import type { CandidateFinding } from '../../../admission/index.js'
 import { createNoContentEventRecorder } from '../../../observability/index.js'
 import type { ReviewTask } from '../../../review-planning/index.js'
 import type {
@@ -126,10 +125,8 @@ describe('review runner planning state', () => {
         planningInput = input
         return {
           reviewTasks: [task],
-          supportSignalCandidates: [] satisfies readonly CandidateFinding[],
           metrics: {
-            taskCount: 1,
-            supportSignalCandidateCount: 0
+            taskCount: 1
           }
         }
       }
@@ -138,8 +135,7 @@ describe('review runner planning state', () => {
     expect(result).toMatchObject({
       analysis,
       evidence: [evidence],
-      reviewTasks: [task],
-      supportSignalCandidates: []
+      reviewTasks: [task]
     })
     expect(planningInput).toEqual({
       depth: 'thorough',
@@ -210,8 +206,7 @@ describe('review runner planning state', () => {
       {
         message: 'Task planning completed.',
         fields: {
-          task_count: 1,
-          support_signal_candidate_count: 0
+          task_count: 1
         }
       }
     ])

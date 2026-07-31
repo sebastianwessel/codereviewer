@@ -118,7 +118,7 @@ export const runReview = async (
       observability,
       logger
     })
-    const { analysis, evidence, reviewTasks, supportSignalCandidates } =
+    const { analysis, evidence, reviewTasks } =
       planningState
     const contextState = await prepareReviewRunnerContextAssemblyState({
       repositoryRoot: options.repositoryRoot,
@@ -163,7 +163,7 @@ export const runReview = async (
       reviewedDiffRanges: effectiveDiffRanges,
       reviewedDiffText: effectiveRawDiff,
       evidence,
-      candidates: supportSignalCandidates,
+      candidates: [],
       config: options.config,
       configHash,
       providerId: options.config.provider?.id ?? '',
@@ -191,7 +191,6 @@ export const runReview = async (
         analysis,
         contextLedger: assembledContext.contextLedger,
         evidence,
-        supportSignalCandidates,
         workflowInput,
         environment: options.environment ?? {},
         ...(options.providerImport === undefined
@@ -220,7 +219,6 @@ export const runReview = async (
       analysis,
       contextLedger: assembledContext.contextLedger,
       evidence,
-      supportSignalCandidates,
       ...(changeIntent.usage === undefined
         ? {}
         : { contextIngestionUsage: changeIntent.usage }),

@@ -1,6 +1,5 @@
 import type { Logger } from '@purista/harness'
 import type { CodeReviewerConfig, EvidenceRecord } from '../../../../shared/contracts/index.js'
-import type { CandidateFinding } from '../../../admission/index.js'
 import type {
   DeterministicSignalExtraction,
   SupportSignalSourceFile
@@ -27,7 +26,6 @@ export type ReviewRunnerPlanningState = {
   readonly analysis: DeterministicSignalExtraction
   readonly evidence: readonly EvidenceRecord[]
   readonly reviewTasks: readonly ReviewTask[]
-  readonly supportSignalCandidates: readonly CandidateFinding[]
   readonly deterministicSignals: ReviewRunnerDeterministicSignalState
   readonly taskPlanning: ReviewRunnerTaskPlanningResult
 }
@@ -76,16 +74,13 @@ export const prepareReviewRunnerPlanningState = (input: {
   const taskPlanning = prepareTaskPlanning(planningInput)
   planningStep.end({ taskCount: taskPlanning.metrics.taskCount })
   input.logger.debug('Task planning completed.', {
-    task_count: taskPlanning.metrics.taskCount,
-    support_signal_candidate_count:
-      taskPlanning.metrics.supportSignalCandidateCount
+    task_count: taskPlanning.metrics.taskCount
   })
 
   return {
     analysis,
     evidence,
     reviewTasks: taskPlanning.reviewTasks,
-    supportSignalCandidates: taskPlanning.supportSignalCandidates,
     deterministicSignals,
     taskPlanning
   }

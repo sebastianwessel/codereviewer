@@ -354,7 +354,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
-        "trustedDeterministicFindingCount": 0,
         "unlistedRealFindingCount": 0,
       },
     },
@@ -556,7 +555,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
-        "trustedDeterministicFindingCount": 0,
         "unlistedRealFindingCount": 0,
       },
     },
@@ -757,7 +755,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedF1": 0,
         "severityWeightedPrecision": 0,
         "severityWeightedRecall": 1,
-        "trustedDeterministicFindingCount": 0,
         "unlistedRealFindingCount": 0,
       },
     },
@@ -958,7 +955,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedF1": 1,
         "severityWeightedPrecision": 1,
         "severityWeightedRecall": 1,
-        "trustedDeterministicFindingCount": 0,
         "unlistedRealFindingCount": 0,
       },
     },
@@ -1160,7 +1156,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedF1": 0.666667,
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
-        "trustedDeterministicFindingCount": 0,
         "unlistedRealFindingCount": 0,
       },
     },
@@ -1355,10 +1350,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "severityWeightedF1": 0.666667,
     "severityWeightedPrecision": 0.5,
     "severityWeightedRecall": 1,
-    "trustedDeterministicFindingCount": 0,
     "unlistedRealFindingCount": 0,
   },
-  "metricsVersion": "2026-07-31.diff-scope-recall",
+  "metricsVersion": "2026-07-31.no-trusted-rule-metric",
   "provenance": {
     "answerKeyDigest": "8a0f6c4247b62cb5ae0d182f93ca56547fb831d783599d2c4d19626a6452d8e2",
     "answerKeyDigestByCase": {
@@ -1467,7 +1461,6 @@ Fixtures: 2
 | Artifact-only findings | 0 |
 | Artifact-only matched | 0 |
 | Artifact-only false positives | 0 |
-| Trusted deterministic findings | 0 |
 | Rejected candidates by reason | none |
 | Rejected candidates by severity | none |
 | Refutation false negatives (upper bound) | 0 |

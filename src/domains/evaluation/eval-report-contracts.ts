@@ -292,7 +292,7 @@ export const EvalMetricGroupSchema = z.strictObject({
 // back as entirely `undetermined` and would pool into an in-diff or out-of-diff
 // figure as a silent hole rather than as data. Refusing to compare across the
 // bump is the same protection the earlier entries buy.
-export const EVAL_METRICS_VERSION = '2026-07-31.diff-scope-recall'
+export const EVAL_METRICS_VERSION = '2026-07-31.no-trusted-rule-metric'
 
 export const EvalReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),

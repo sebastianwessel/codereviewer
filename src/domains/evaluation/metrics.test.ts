@@ -36,7 +36,6 @@ const caseResult = (
   artifactOnlyFindingCount: 0,
   artifactOnlyMatchedFindingCount: 0,
   artifactOnlyFalsePositiveCount: 0,
-  trustedDeterministicFindingCount: 1,
   provedRefutationCount: 0,
   rejectedFindingCount: 0,
   rejectionReasonCounts: {},
@@ -104,7 +103,6 @@ describe('eval metrics', () => {
       artifactOnlyFindingCount: 0,
       artifactOnlyMatchedFindingCount: 0,
       artifactOnlyFalsePositiveCount: 0,
-      trustedDeterministicFindingCount: 1,
       refutationFalseNegativeCount: 0,
       refutationFalsePositiveCount: 0,
       productRecall: 0.5,
@@ -252,7 +250,6 @@ describe('eval metrics', () => {
         artifactOnlyFindingCount: 0,
         artifactOnlyMatchedFindingCount: 0,
         artifactOnlyFalsePositiveCount: 0,
-        trustedDeterministicFindingCount: 0,
         provedRefutationCount: 0,
         rejectedFindingCount: 0,
         tierCounts: {

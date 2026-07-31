@@ -92,7 +92,6 @@ describe('review runner completion state', () => {
       analysis,
       contextLedger,
       evidence: [evidence],
-      supportSignalCandidates: [],
       providerWorkflow: undefined,
       providerTaskEventsObservedLive: false,
       reviewedPaths: ['src/a.ts'],
