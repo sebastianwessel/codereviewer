@@ -86,9 +86,14 @@ contains no model-origin findings.
 npm run cli -- config validate --config config/codereviewer.ci.json
 ```
 
-The same `--config` flag works on `review`, `baseline write`, `eval run` and
-`drift check`. `CODEREVIEWER_CONFIG_PATH` does the same thing from the
-environment. The path must resolve inside the repository root.
+`--config` is a global option: it works on every command, alongside `--debug`,
+`--log-level` and `--log-file`. `CODEREVIEWER_CONFIG_PATH` does the same thing
+from the environment. The path must resolve inside the repository root.
+
+An unrecognised flag is rejected before any work happens — `--config` with no
+value, or a misspelled option, exits `2` naming the problem. That is deliberate: a
+parser that silently ignores a flag it does not implement has already cost this
+project a ~$11.50 A/B comparison of a build against itself.
 
 ---
 
@@ -236,12 +241,14 @@ so a lost baseline file never silently disables the gate.
     "sarif": {
       "target": "github",
       "category": "codereviewer",
-      "maxResults": 5000,
-      "redact": true
+      "maxResults": 5000
     }
   }
 }
 ```
+
+There is no `sarif.redact` key — the SARIF reporter redacts unconditionally, so a
+toggle would only be able to lie. Writing one exits `2`.
 
 `sarif.target: "github"` applies GitHub Code Scanning constraints (partial
 fingerprints required, rule-count limit). Use `generic` for any other SARIF
@@ -368,24 +375,53 @@ call) otherwise.
 
 ## Recipe: enable the optional discovery and investigation passes
 
-All of these are off by default and each adds provider calls:
+Cross-file retrieval is **on** by default. The rest are off, and each one adds
+provider calls:
 
 ```json
 {
-  "review": {
-    "crossFileRetrieval": { "enabled": false }
-  },
   "security": {
     "dedicatedPass": { "enabled": true }
   },
-  "verification": { "enabled": false },
-  "fix": { "enabled": false }
+  "verification": { "enabled": true },
+  "fix": { "enabled": true }
 }
 ```
 
 Read [tuning-noise-and-recall.md](tuning-noise-and-recall.md) before enabling
 any of them, and [controlling-cost.md](controlling-cost.md) for what each one
 adds to the bill.
+
+---
+
+## Recipe: enable an advisory stage
+
+The three `check` commands are off by default and reached only by their own
+command — never by `review`. None of them can fail a pipeline, and **none has an
+accuracy measurement**.
+
+```json
+{
+  "changeImpact": { "enabled": true },
+  "invariantConformance": { "enabled": true },
+  "intentFulfilment": { "enabled": true }
+}
+```
+
+`changeImpact` and `invariantConformance` make no provider call in this shape, so
+they cost nothing and their output is reproducible. `invariantConformance.adjudication.enabled`
+(off, separate switch) is the only part that spends money: one bounded call per
+divergence, capped by `adjudication.maxAdjudications`.
+
+`intentFulfilment` additionally needs a change-intent source, or it will exit `0`
+with `status: "no-intent"` and a warning saying so — see the change-intent recipe
+above.
+
+Every limit inside these blocks is a **runaway guard, not a ration**. Two of them
+were set as rations and both were measured as harmful: the old obligation cap was
+being hit exactly by 24 of 28 corpus runs, and 43% of real commits exceeded the
+old changed-line cap, so the judgement silently saw a partial diff and reported
+what it could not see as unaddressed. Lowering them buys nothing you want.
 
 ---
 

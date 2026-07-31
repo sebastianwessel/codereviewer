@@ -98,23 +98,25 @@ gate closed until the review comes back clean**, so that a pull request is revie
 again after each round of fixes. That is a measured recommendation rather than a
 process preference.
 
-A single discovery pass reports roughly one defect per file, because the reviewer's
-attention follows the diff. On the evaluation corpus, whose 87 expected findings sit
-across 49 distinct (case, file) pairs, that behaviour puts a **56.3% ceiling on what
-any one pass can score** — and the engine already measures at about 80% of that
-ceiling. The lever with the most headroom is therefore not a better single review,
-it is a second one.
+A single discovery pass answers the diff and largely stops there. The measured
+split on the 37-case real-repository corpus: of 87 expected findings, the 60
+sitting inside the diff were found at **66.7%**, and the 27 sitting elsewhere in a
+changed file were found at **0 of 27** — in files the reviewer had been shown in
+full. So the lever with the most headroom is not a better single review; it is a
+second one, against a different diff.
 
 Each round of fixes changes the diff, which moves the anchor, so the next defect in
-that file becomes the one the reviewer is pointed at. Under that assumption the
-reachable share rises to 88.5% after two rounds and 97.7% after three. **The
-assumption that fixing one defect surfaces the next has not been measured** — treat
-those figures as the argument for iterating, not as a forecast. The full evidence is
-in [What limits recall](../05-quality/what-limits-recall.md#the-structural-ceiling-and-why-it-changes-how-you-should-use-the-tool).
+that file becomes the one the reviewer is pointed at. **That mechanism is the
+argument for iterating; the resulting multi-round recall has not been measured**,
+so do not present a number for it. The evidence is in
+[What limits recall](../05-quality/what-limits-recall.md).
 
 Practically, this means:
 
-- Wire the review job into a **required status check**, so exit code `1` blocks the
+- **Start the job advisory** — reporting and uploading artifacts, but not failing
+  the build — and leave it that way for a week of real pull requests. Enabling a
+  gate you have not watched fire is how a review tool gets switched off again.
+- Then wire it into a **required status check**, so exit code `1` blocks the
   merge rather than posting an advisory comment somebody can scroll past.
 - Re-run the review on every push to the branch, not only on the first one. The
   second run is where the second defect in a file has its chance.
@@ -340,6 +342,10 @@ jobs:
         id: review
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        # Advisory to start with: report, upload artifacts, never fail the build.
+        # Delete this line — and make the job a required check — once the team has
+        # watched a week of real runs.
+        continue-on-error: true
         run: npm run cli -- review --base-ref "origin/${{ github.base_ref }}" --head-ref HEAD
 
       - uses: actions/upload-artifact@v4
@@ -439,6 +445,34 @@ for `merge-base` to resolve. `BITBUCKET_PIPELINE_UUID` and
 
 ---
 
+## The advisory stages in CI
+
+`intent check`, `impact check` and `conformance check` are separate commands and
+separate jobs. They **always exit `0`**, whatever they report — that is a spec
+requirement, not a default, and there is no `blocking` key to change it. So a
+pipeline consumes them by reading the JSON on stdout, not by branching on the exit
+code.
+
+**None of them has an accuracy measurement.** Add them as informational jobs whose
+output a human reads, once `review` is trusted — not as part of an initial
+adoption.
+
+```bash
+codereviewer impact check --base-ref "origin/$TARGET" --head-ref HEAD > impact.json
+codereviewer conformance check --base-ref "origin/$TARGET" --head-ref HEAD > conformance.json
+```
+
+Both are deterministic and cost nothing (`conformance check` only spends with
+`invariantConformance.adjudication.enabled`). `intent check` needs a change-intent
+source configured — see [Supplying change intent](#supplying-change-intent) — and
+without one it exits `0` with `status: "no-intent"` and a warning saying so.
+
+Each command needs its capability enabled in config, or it reports
+`status: "disabled"` and a warning. That is the intended shape: an advisory stage
+that cannot run says so in its report rather than failing a job.
+
+---
+
 ## Cost in CI
 
 A default run costs **two provider calls per review task**: one holistic
@@ -471,3 +505,13 @@ spending. Full arithmetic: [controlling-cost.md](controlling-cost.md).
 
 More detail: [threat-model.md](../07-security/threat-model.md) and
 [data-handling-and-redaction.md](../07-security/data-handling-and-redaction.md).
+
+---
+
+## See also
+
+- [GitHub integration](github-integration.md) — the GitHub-specific path in depth.
+- [Setup skill](../../skills/codereviewer-setup/SKILL.md) — the whole adoption
+  sequence packaged for an AI agent to follow, including advisory-first CI
+  templates for all three platforms.
+- [Controlling cost](controlling-cost.md) · [Tuning noise and recall](tuning-noise-and-recall.md)

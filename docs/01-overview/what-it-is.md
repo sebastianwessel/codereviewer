@@ -73,6 +73,39 @@ The default report formats are `json`, `markdown`, and `sarif`
 
 ---
 
+## What it measures at
+
+On a 37-case corpus of real repositories, `review` finds **46.0%** of the known
+defects at **100% adjusted precision** for about **$2.24** per run. Split by where
+the defect lives: **66.7%** for the 60 expectations inside the diff, **0 of 27**
+for the ones sitting elsewhere in a changed file.
+
+Read the second half of that sentence as the product's actual shape. What it
+reports is almost always real; it finds fewer than half the defects present; and
+it finds essentially nothing the change does not point at — even when it was shown
+the whole file. → [Current results](../05-quality/current-results.md)
+
+---
+
+## Three advisory commands alongside the review
+
+`review` is the only command that can block. Three others run independently, share
+no context with it and with each other, and **always exit `0` whatever they
+report**:
+
+| Command | What it produces |
+| --- | --- |
+| `intent check` | A mapping between a stated intent and the change: the obligations the intent states, each citing the line it was read from, and for each one either the changed lines that evidence it or nothing. Not a verdict. |
+| `impact check` | A deterministic reference report — which symbols the change touched and where they are used. No provider call, so it costs nothing and its output is reproducible. |
+| `conformance check` | Divergences between a changed declaration and its peers: "these N peers do X; this declaration does not", with the peers listed so a human judges. No verdict, no severity. |
+
+**None of the three has an accuracy measurement.** They are implemented and
+runnable; they are not validated. Advisory-only is a spec requirement for
+`intent check` and `conformance check` rather than a default — there is no
+`blocking` key to find, and adding one would be a switch that lies.
+
+---
+
 ## Two properties that hold everywhere
 
 - **Model output is untrusted until admitted.** Candidates, refutation

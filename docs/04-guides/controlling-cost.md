@@ -98,7 +98,7 @@ full input tokens.
 | `aiReview.deterministicSignalMode: "disabled"` | Stops injecting deterministic support facts into the packet. Planning still uses them. |
 | `instructions.files` / `instructions.inline` | Added to **every** task packet, discovery and refutation alike. |
 | `contextSources.summary.maxBytes` | Caps the change-intent brief (default 4 000 bytes). |
-| `review.crossFileRetrieval.maxBytesPerRead` | Caps each retrieved file (default 24 000). |
+| `review.crossFileRetrieval.maxBytesPerRead` | **Unset by default — no proactive cut.** Setting it caps each retrieved file. It used to default to 24 000 bytes, which cut files mid-read without telling the model and caused three separate measurements to record cross-file retrieval as harmful when what they were measuring was the cap. Set it only as a deliberate operator choice; the cut is disclosed when it binds. |
 
 A single model-input packet is hard-capped at 8 MB regardless of depth — a runaway
 guard far beyond any current model, not a cost lever. Note the cost direction here:
@@ -176,8 +176,10 @@ npm run update:model-pricing:write
    vendored directories. Biggest win, no quality cost.
 2. **Turn off passes you have not measured a benefit from.** Every optional
    discovery pass multiplies the discovery side of the bill.
-3. **Drop `review.depth` to `balanced`** if you are on `thorough`. Halves the
-   per-task context cap.
+3. **Do not reach for `review.depth`.** It no longer bounds the review packet at
+   all — it sizes the cross-file retrieval budget, and at `fast` it switches
+   planning to one task per file, which *raises* the call count. It is not a cost
+   lever in either direction.
 4. **Set `aiReview.deterministicSignalMode: "disabled"`** if support facts are
    not earning their bytes for your codebase.
 5. **Trim instructions.** They ride along on every single call.
@@ -195,11 +197,22 @@ These paths make no provider call at all:
 - `config validate`
 - `drift check` (also run as a preflight step inside `review`)
 - `baseline write`
+- `impact check` — deterministic by construction; it makes no provider call at all
+- `conformance check` — unless `invariantConformance.adjudication.enabled` is set,
+  which adds one bounded call per divergence up to `adjudication.maxAdjudications`
+- `intent check` while `intentFulfilment.enabled` is false, or when no provider
+  resolves — it reports the reason as a warning and still exits `0`
 - `eval compare`, `eval recall-report`, `eval slice-manifest`
 - Corpus and benchmark hydration (git fetches only)
 - Any `review` run with no `provider` configured
 - The change-intent summarizer in `digest` mode
 - `npm test` — the default suite is hermetic and never calls a real provider
+
+`intent check` **with** the capability enabled and a provider configured is the
+one advisory stage that spends real money: one extraction call, one judgement call
+per obligation, and one explanation call per run. The obligation count is set by
+the stated intent rather than by a configured cap, so a small ticket cannot become
+expensive by raising a limit.
 
 `eval run` **is** costly: it runs a full review per case plus the semantic and
 plausibility judge calls. See [adding-evaluation-cases.md](../09-contributing/adding-evaluation-cases.md).

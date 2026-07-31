@@ -107,20 +107,24 @@ are rejected.
 
 ### File config
 
-`.codereviewer/config.json` in the repository being reviewed:
+**Naming a provider and a model is enough.** Every other default was set by
+measurement, and several were set *against* the value that felt safe — so the
+recommended starting config is exactly this, in `.codereviewer/config.json` in the
+repository being reviewed:
 
 ```json
 {
   "provider": {
     "id": "openai",
-    "model": "gpt-4o"
-  },
-  "review": {
-    "mode": "ci",
-    "depth": "balanced"
+    "model": "gpt-5.3-codex"
   }
 }
 ```
+
+`provider.model` is free text and is never checked against a catalogue; a wrong
+name surfaces as a provider error on the first call. Add keys beyond this block
+only when you have a reason — the [configuration guide](../04-guides/configuration.md)
+is organised as one recipe per reason.
 
 ### Environment config
 
@@ -198,18 +202,38 @@ A configuration error exits `2` with a JSON error on stderr.
 
 ## Command inventory
 
-| Command | Purpose |
-| --- | --- |
-| `review` | Run a review. See [Your first review](first-review.md). |
-| `config validate` | Print the effective, redacted configuration. |
-| `baseline write` | Write `baseline.path` from a completed report. |
-| `drift check` | Run the deterministic documentation/spec/implementation drift check on its own. |
-| `eval run` | Run the evaluation harness over fixtures or a slice pack. |
-| `eval compare` | Diff two eval reports (`--base`, `--head`). |
-| `eval recall-report` | Per-expected-finding recall report from saved eval reports (`--report`, repeatable). |
-| `eval slice-manifest` | Deterministic manifest of a local slice pack (`--slice-root`). |
+| Command | Purpose | Can it block? |
+| --- | --- | --- |
+| `review` | Run a review. See [Your first review](first-review.md). | **Yes** (exit `1`) |
+| `intent check` | Map a stated intent to the change. Needs `intentFulfilment.enabled` plus a `contextSources` provider. | No — always exits `0` |
+| `impact check` | Deterministic reference report for the changed symbols. Needs `changeImpact.enabled`. Makes no provider call. | No |
+| `conformance check` | Divergences between a changed declaration and its peers. Needs `invariantConformance.enabled`. | No |
+| `config validate` | Print the effective, redacted configuration. | — |
+| `baseline write` | Write `baseline.path` from a completed report. | — |
+| `drift check` | Run the deterministic documentation/spec/implementation drift check on its own. | Yes (exit `1`) |
+| `eval run` | Run the evaluation harness over fixtures or a slice pack. | Yes (exit `1`) |
+| `eval compare` | Diff two eval reports (`--base`, `--head`). | — |
+| `eval recall-report` | Per-expected-finding recall report from saved eval reports (`--report`, repeatable). | — |
+| `eval slice-manifest` | Deterministic manifest of a local slice pack (`--slice-root`). | — |
 
-Anything else exits `2` with a usage error.
+Anything else exits `2` with a usage error. Each of the three advisory commands
+requires the literal subcommand `check`, accepts only `--base-ref` and
+`--head-ref` beyond the global options, and reports its own disabled state as a
+warning inside an exit-`0` report rather than as an error:
+
+```bash
+codereviewer impact check --base-ref origin/main --head-ref HEAD
+```
+
+```json
+{
+  "schemaVersion": "1.1",
+  "status": "disabled",
+  "warnings": ["Change-impact review is disabled. Set changeImpact.enabled to true to run it."]
+}
+```
+
+Full contracts: [CLI reference](../06-reference/cli.md).
 
 ### `review` flags
 

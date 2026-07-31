@@ -150,25 +150,32 @@ so programmatic eval stays hermetic. Provider-backed eval must get credentials
 from the real process environment — the repo's npm scripts do this with Node's
 `--env-file-if-exists=.env`.
 
-### The regression gate is hard-coded
+### The regression gate has two profiles
 
-`eval run` accepts **no threshold flags and reads no threshold config.** The
-regression thresholds are literals in `src/cli/index.ts`:
+`eval run` gates on a **profile**, selected by `--gate-profile` or
+`evaluation.regressionGate.profile`, with per-threshold escape hatches in
+`evaluation.regressionGate.overrides`.
 
-| Threshold | Value |
-| --- | --- |
-| `minParseValidity` | `1` (100 %) |
-| `minRecall` | `1` (100 %) |
-| `maxFalsePositiveCount` | `0` |
-| `failOnProviderError` | `true` |
+| Threshold | `stable` (default) | `strict` |
+| --- | --- | --- |
+| `minParseValidity` | `1` (100 %) | `1` (100 %) |
+| `failOnProviderError` | `true` | `true` |
+| `minRecall` | *not gated* | `1` (100 %) |
+| `maxFalsePositiveCount` | *not gated* | `0` |
 
-Consequence, stated plainly: any provider-backed benchmark run that misses a
-single expected finding, produces a single unmatched finding, or hits one
-provider error **exits `1`**. Exit `1` from `eval run` is therefore the normal
-outcome of a real measurement run and does not mean the run was invalid — read
-`eval-summary.md` / `eval-report.json` for the metrics. Only `evaluation.
-minJudgeAgreement` is configurable, and it flags metric trustworthiness rather
-than failing the gate.
+**`stable` is the default and it deliberately does not gate on recall or false
+positives.** Under an incomplete answer key an unmatched finding is frequently a
+real defect the key never listed, so gating on the raw count made a non-zero exit
+the normal outcome of every run — a signal that fires always carries no
+information. `stable` therefore gates only on what is unambiguous: the model
+returned parseable output, and no provider call failed.
+
+**`strict` is the old all-or-nothing bar**, kept as a named opt-in for a
+maintainer preparing a release cut who has verified perfect recall holds for their
+own fixture set.
+
+`evaluation.minJudgeAgreement` is separate from the gate: it flags metric
+trustworthiness (`scoring.judgeTrustworthy`) rather than failing the run.
 
 Stdout is the rendered `eval-summary.md`. Artifacts are written to
 `.codereviewer/eval/` and a timestamped archive under

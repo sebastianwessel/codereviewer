@@ -32,7 +32,9 @@ Implemented: local CLI review of a checked-out git repository, base/head diff an
 explicit file-list intake, deterministic support signals, language-neutral
 contracts, provider resolution for OpenAI/OpenAI-compatible/Bedrock/Azure through
 optional packages, holistic discovery + refutation, JSON/Markdown/SARIF reports,
-local review-comment drafts, an evaluation runner with quality gates.
+local review-comment drafts, an evaluation runner with quality gates, and three
+independently runnable advisory commands (`intent check`, `impact check`,
+`conformance check`) that are off by default and cannot fail a pipeline.
 
 Explicitly **not** implemented:
 
@@ -55,7 +57,6 @@ unfinished. Enabling them is a deliberate, measured choice.
 
 | Config key | Default | Why it is off |
 | --- | --- | --- |
-| `review.crossFileRetrieval.enabled` | `false` | Agentic cross-file discovery — the discovery agent may read other files through mediated tools. **Measured net negative.** Built, hardened, and measured three times; recall fell each time (flat at four cases, 66.7% → 44.4% at nine, 68.8% → 56.3% at sixteen) while precision stayed perfect. |
 | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task. Additive by construction, but it costs an extra discovery call per task and has not cleared a held-out A/B showing net recall gain without an authorization regression. |
 | `contextSources.enabled` | `false` | External change-intent ingestion (ticket/PR context). Off unless you configure providers. |
 | `verification.enabled` | `false` | A separate agentic flow that verifies specific claims — see [two flows](../03-concepts/two-flows.md). |
@@ -71,9 +72,23 @@ alongside the layer, not before it. Similarly, the evaluation block has no
 `enabled` key: case selection is driven by `eval run` CLI flags, and the SARIF
 reporter has no `sarif.redact` key, since it redacts unconditionally regardless.
 
-**Consequence of the defaults:** out of the box, discovery is a single
-general pass per review task, with no tools and no pre-selected extra context.
-That is the configuration the current quality figures describe.
+**Consequence of the defaults:** out of the box, discovery is a single general
+pass per review task — no security pass, no extra sweep, no pre-selected extra
+context — but that pass *does* hold the mediated read/list/grep tools, and a task
+covering more than two changed files is split across several calls. That is the
+configuration the current quality figures describe.
+
+**One default was reversed on measurement, and the reversal is worth reading.**
+`review.crossFileRetrieval.enabled` shipped `false` for months on a recorded
+verdict of "measured net negative", from three runs in which recall fell. That
+verdict was measuring a bug, not the feature: every retrieved file was cut at a
+per-read cap with the model never told, so the reviewer concluded things were
+absent from code it had only partly seen. With the cut removed, two further runs
+put it ahead on recall, adjusted precision and cost alike. The gain is **not**
+statistically significant and no specific improvement is claimed — but a default
+that is free, harmless and directionally positive does not need a significance
+test to be permitted, and if a regression ever appears this is the first switch to
+flip.
 
 A `review.contextScout` block once existed and was removed along with the
 capability; a config that still sets it now fails validation with exit code `2`.
@@ -81,42 +96,50 @@ The record is in
 [context scout (removed)](../03-concepts/optional-capabilities/context-scout.md).
 
 Defaults that are **on**: `aiReview.requireRefutation` (a literal `true` — not a
-toggle), `aiReview.deterministicSignalMode: 'support'`, `baseline.enabled`,
-`drift.enabled`, and the strict quality gate (`maxCritical: 0`, `maxHigh: 0`).
+toggle), `aiReview.deterministicSignalMode: 'support'`,
+`review.crossFileRetrieval.enabled`, `baseline.enabled`, `drift.enabled`, and the
+strict quality gate (`maxCritical: 0`, `maxHigh: 0`).
+
+There are also **no proactive byte caps anywhere** by default —
+`review.contextMaxBytes` and `review.crossFileRetrieval.maxBytesPerRead` are both
+unset — and **no whole-run time bound**. `provider.timeoutMs` (default `120000`)
+bounds a single network call and is the only deadline that exists.
 
 ---
 
 ## Quality numbers: what can and cannot be claimed
 
-- **Every figure recorded so far predates a harness change and none of them is
-  comparable to a current run.** Until 2026-07-27 the review harness forwarded the
-  accumulated session conversation into every agent call, so each stage opened
-  holding the output of every call that had finished before it, attributed to the
-  model itself — refutation in particular began each call appearing to have already
-  asserted the candidates it was about to adjudicate. That is now suppressed
-  harness-wide. **The direction of the effect is unknown and unmeasured**: the
-  behaviour was removed because it contradicts what those stages are specified to
-  do, not because it was shown to be harmful, so it must not be described as an
-  accuracy improvement. Every recall and precision number this project has published
-  was produced with history-carrying stages. See
-  [What limits recall](../05-quality/what-limits-recall.md#a-caveat-that-applies-to-every-number-here).
-- **The known quality limitation is enumeration, not capability.** The engine
-  reliably finds the primary defect in a changed region and rarely a second one in
-  the same file, because its attention follows the diff. Six structural
-  interventions have been measured against this; five failed. That sets a
-  **58.8% ceiling on a single review pass** against the evaluation corpus, which the
-  engine already reaches about 80% of, and it is the reason the iterative
-  review-fix-re-review loop matters more than any single-pass tuning.
+- **The current headline, and the only figure that should be quoted for the review
+  stage:** **46.0% recall at 100% adjusted precision, ~$2.24**, on a 37-case
+  real-repository corpus with the engine pinned. It supersedes every earlier
+  figure. → [Current results](../05-quality/current-results.md)
+- **The known quality limitation is enumeration, and it now has a measured
+  split.** Of 87 expected findings, the 60 inside the diff were found at **66.7%**
+  and the 27 sitting elsewhere in a changed file were found at **0 of 27**. Not
+  "low" — zero, over a full denominator. Every one of those 27 was in a file the
+  reviewer had been shown **in full**, so it needed no retrieval, no larger
+  context window and no bigger model. It is an attention failure, not an
+  information failure, and it is the reason the iterative review-fix-re-review
+  loop matters more than any single-pass tuning.
   → [What limits recall](../05-quality/what-limits-recall.md)
-- **There is no published baseline.** Expected-finding matching moved to a
-  judge-only semantic matcher and the previous lexical matcher was removed, so
-  every previously published number is void and not comparable to anything the
-  engine produces today. A new baseline has to be recorded deliberately.
-- **A single run is not a result.** Four seeds of one identical configuration on
-  the real-repository corpus gave recall 81.3%, 87.5%, 81.3%, 75.0% — mean 81.3%,
-  standard deviation 4.4 percentage points. A headline figure is the mean across
-  seeds, never the best run; a change smaller than roughly twice that deviation
-  cannot be distinguished from noise on one seed.
+- **The three advisory stages have no accuracy measurement at all.**
+  `intent check`, `impact check` and `conformance check` are implemented and
+  runnable; none of them has been scored against an answer key. Treat their output
+  as a prompt for a human, not as a result. (`intent check`'s *precision* has been
+  diagnosed offline, which is a different thing from an accuracy measurement — the
+  diagnosis found the dominant failure to be a question mismatch rather than
+  judgement quality.)
+- **A single run is not a result.** Seed-to-seed variance on the real-repository
+  corpus is about 5 percentage points of recall (sd ≈ 4.8pp). A headline figure is
+  a mean, never the best run, and an effect below roughly 10pp cannot be resolved
+  at three seeds. Several recorded experiments are smaller than the instrument
+  that measured them.
+- **Every run recorded before 2026-08-01 was produced by an unpinned engine.** The
+  harnesses pinned the repository under test but invoked the engine from the live
+  working tree, and nothing in a scored artefact recorded which engine produced
+  it. Runs from before the fix carry no provenance sidecar and are reported as
+  unknown-engine, not as agreeing; treat small deltas among them as
+  correspondingly weaker.
 - **`recall` on the public benchmark understates heavily.** Its answer key is
   incomplete: in one measured run the engine produced 86 plausibility-confirmed
   real defects the key did not list against 48 matched ones. Benchmark `recall`

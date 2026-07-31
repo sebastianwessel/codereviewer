@@ -103,23 +103,27 @@ just noise.
 { "review": { "depth": "balanced" } }
 ```
 
-Depth sets byte budgets and shapes task planning. It does not change which
-files are reviewed.
+Depth shapes task planning and sizes the cross-file retrieval budget. It does not
+change which files are reviewed, and — since the proactive caps were removed — it
+no longer bounds the review packet either.
 
-| Depth | Task planning | Cross-file retrieval caps (reads / searches / matches / traversal depth / bytes per read) |
+| Depth | Task planning | Cross-file retrieval caps (reads / searches / matches / traversal depth) |
 | --- | --- | --- |
-| `fast` | One task per changed file | 200 / 100 / 50 / 4 / 60 000 B |
-| `balanced` (default) | Import-connected files clustered into one task, at most 8 paths per task | 1 200 / 600 / 150 / 8 / 120 000 B |
-| `thorough` | Same clustering as `balanced` | 4 800 / 2 400 / 320 / 12 / 240 000 B |
+| `fast` | One task per changed file | 200 / 100 / 50 / 4 |
+| `balanced` (default) | Import-connected files clustered into one task, at most 8 paths per task | 1 200 / 600 / 150 / 8 |
+| `thorough` | Same clustering as `balanced` | 4 800 / 2 400 / 320 / 12 |
 
-Depth no longer bounds the review packet. The change is sent whole, and split only
-if the provider refuses it as too large; a single serialized packet is capped at
-8 MB as a runaway guard. `review.contextMaxBytes` lowers that ceiling when set —
-leave it unset unless you have a specific reason.
+There is deliberately **no per-depth byte cap** in that table any more. A read is
+not cut in advance; the per-read bound was sized from the old per-depth context
+cap, which is exactly the "sized against a context window" value the current
+design forbids. The change is sent whole and split only if the provider refuses
+it; a single serialized packet is capped at 8 MB as a runaway guard.
+`review.contextMaxBytes` lowers that ceiling when set — leave it unset unless you
+have a specific reason.
 
-`fast` is not simply "cheaper": one task per file means more provider calls for
-the same change, each with less context. `balanced` and `thorough` differ only
-in how much source each task may carry.
+`fast` is not the cheap setting: one task per file means *more* provider calls for
+the same change, each with less context. `balanced` and `thorough` differ only in
+how far cross-file retrieval may range.
 
 > `review.mode` (`local` / `ci` / `pr` / `full`) is run metadata. It appears in
 > the run summary and in logs and changes no behavior.
@@ -190,7 +194,14 @@ admission. It is a separate call rather than an in-prompt checklist because
 folding the checklist into the general prompt trades the dominant authorization
 class for the injection classes — finite attention.
 
-`security.signals` is configuration-only in this phase and carries no behavior.
+The security-specific lift is **not established**: it was measured once, at a
+sample size too small to resolve against run-to-run variance. What that run did
+show was an overall recall gain at roughly +50% on the discovery side of the bill.
+Treat it as an experiment you are running, not a fix you are applying.
+
+There is no `security.signals` key. The deterministic security-signal evidence
+layer has no implementation, and a configuration surface for it would be a switch
+that lies about doing something; it ships alongside the layer, not before it.
 
 ---
 
@@ -212,10 +223,13 @@ class for the injection classes — finite attention.
    missing symbols was
    [removed](../03-concepts/optional-capabilities/context-scout.md) for the same
    reason: the reviewer largely does not read the context it already has.
-4. **Still missing?** Raise `review.depth` to `thorough` so more source fits in
-   each task.
+4. **Still missing?** `review.depth` is not the answer — it does not bound the
+   review packet, so raising it to `thorough` does not put more source in front of
+   the reviewer. It only widens the cross-file retrieval budget.
 5. **Missing a second defect in files that already produced one?** No dial
-   addresses this today — see the note above.
+   addresses this today — see the note above. What does help is running the review
+   again after the first round of fixes: the diff moves, and so does what the
+   reviewer is pointed at.
 
 After each step, re-measure on the same corpus and compare two reports:
 

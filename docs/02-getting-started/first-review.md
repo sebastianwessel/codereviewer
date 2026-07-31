@@ -31,18 +31,29 @@ On success the command prints JSON to stdout:
 }
 ```
 
-Expect **no findings**: without a provider there is no model-backed discovery.
-What you are checking is that the run completed, that `report.json` lists the
-files you expected under `coverage`, and that nothing landed in `Skipped Files`
-by surprise.
+Expect **no findings**: without a provider there is no model-backed discovery, so
+`report.md` renders with its sections present and empty. What you are checking is
+that the run completed, that `report.md` shows the file count you expected under
+`Coverage`, and that nothing landed in `Skipped Files` by surprise:
+
+```text
+## Coverage
+
+Status: complete
+Files: 1/1
+Bytes: 116/116
+```
+
+Getting this wrong is cheap here and expensive one step later — a scope mistake
+discovered after a paid run is the same information for money.
 
 ---
 
 ## Step 2 — Add a provider and review for real
 
 Configure `provider.id` and `provider.model` (plus credentials) as described in
-[Install and run](install-and-run.md), then run the same command. Useful
-variations:
+[Install and run](install-and-run.md) — that is the whole configuration needed —
+then run the same command. Useful variations:
 
 ```bash
 # Review specific files, bypassing the git diff entirely
@@ -52,6 +63,25 @@ codereviewer review --file src/payments/charge.ts --file src/payments/refund.ts
 codereviewer review --base-ref origin/main --head-ref HEAD \
   --debug --log-file .codereviewer/review.log
 ```
+
+---
+
+### What a first real review should look like
+
+Calibrate before you read it, or you will misread a working install as a broken
+one. On a 37-case corpus of real repositories the engine finds **46.0%** of the
+known defects at **100% adjusted precision**. A short report is the normal case —
+a long one would be the surprise.
+
+Two consequences for a first run:
+
+- **Few or no findings on a small, clean change is expected**, not a
+  misconfiguration. Check `Coverage` and `Skipped Files` to confirm it actually
+  looked, then move on.
+- **A defect elsewhere in a file you changed will probably not be reported.**
+  Measured: recall on those is 0 of 27, in files the reviewer was shown in full.
+  Don't tune for it; re-run after fixing what it *did* find, which moves the diff
+  and therefore what it looks at next.
 
 ---
 
