@@ -51,6 +51,56 @@ service, admission, reporting — MUST be reused. Only the analysis is new.
 4. **Report as evidence.** Emit the dependent, the line, the specific reliance,
    and the consequence.
 
+## Implementation Status, 2026-08-01
+
+Measured against the 27 out-of-diff expectations of the stage-1 corpus — the
+population this capability exists for, and the one `review` scores 0 on by design:
+
+| | |
+| --- | ---: |
+| defect inside a symbol the report flagged as changed | **20 / 27 (74.1%)** |
+| excluding languages the engine does not support | 20 / 25 (80%) |
+| defect landed on by a listed reference | **0 / 27** |
+
+That second row is not a failure and must not be read as one. References point at
+DEPENDENTS ELSEWHERE, and these 27 defects sit inside the changed file itself, so
+it is the wrong instrument for this population. It is the right instrument for
+"caller breaks because a callee's contract moved", which this corpus does not
+contain — a separate corpus is needed before that number means anything.
+
+**74.1% is COVERAGE, not detection, and is not comparable to the review stage's
+recall.** It says the defect fell inside the scope the report enumerates: a
+necessary condition for the report being useful, nowhere near a sufficient one. The
+stage still reports risk and never claims a defect.
+
+### The gap between coverage and value
+
+Every other stage here runs evidence → judgement → an artifact a human reads where
+they already look. `impact check` stops at evidence: JSON on stdout, no rendered
+report, no artifact, no ranking beyond "references in files the change also touched
+come first", and no statement of WHAT changed about a symbol.
+
+So a reviewer receives "`scheme` was modified, here are 49 places that mention it".
+That is a bounded, deduplicated, comment-free `grep` — real work, and not yet a
+feature. Two things close the gap, in this order:
+
+1. **The contract delta (item 1 of Design, still unbuilt).** The difference between
+   "`scheme` changed, here are 49 references" and "`scheme` may now return nil where
+   it previously could not, and these 6 callers dereference it". This is the item
+   that makes the reference list mean something, and it is what item 1 above already
+   specifies: nullability, return shape, thrown or returned errors, ordering,
+   mutation, resource ownership, visibility — diffed between base and head for each
+   changed symbol. Without it the references cannot be ranked by anything better
+   than "did this file also change", because nothing knows which references are
+   exposed to which change.
+
+2. **A rendered artifact.** The report must land beside `report.md` in the run
+   directory, not only on stdout, or it is not in the workflow a reviewer actually
+   uses.
+
+Until (1) exists, the 74.1% should be quoted as a scope measurement in this spec
+and NOT as a capability claim in user-facing documentation.
+
 ## Requirements
 
 - The command MUST reuse repository intake, provider resolution, configuration,
