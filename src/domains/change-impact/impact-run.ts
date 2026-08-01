@@ -41,8 +41,15 @@ export type RunChangeImpactInput = {
   readonly signal?: AbortSignal
 }
 
-const UNSUPPORTED_LANGUAGE_WARNING =
-  'Some changed files are in a language the deterministic signal extractors do not cover; no symbols were seeded from them.'
+// Deliberately states what was observed, not a cause.
+//
+// The previous wording asserted "a language the extractors do not cover" whenever
+// zero symbols were seeded, whatever the actual reason. That is a diagnostic naming
+// a cause it never checked, and it sent a real investigation down the wrong path:
+// Ruby and TypeScript files — both fully covered — reported themselves unsupported
+// when the true cause was that no changed line fell inside any symbol's span.
+const NO_SYMBOLS_SEEDED_WARNING =
+  'No changed symbols were seeded from the changed files. Either the files are in a language the deterministic signal extractors do not cover, or none of the changed lines fall inside a symbol this engine can name.'
 
 const diffMapsByPath = (
   intake: RepositoryIntake
@@ -206,7 +213,7 @@ export const runChangeImpact = async (
   const warnings: string[] = []
 
   if (files.length > 0 && changed.symbols.length === 0) {
-    warnings.push(UNSUPPORTED_LANGUAGE_WARNING)
+    warnings.push(NO_SYMBOLS_SEEDED_WARNING)
   }
 
   if (unreadableFileCount > 0) {

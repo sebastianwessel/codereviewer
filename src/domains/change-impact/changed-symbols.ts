@@ -102,19 +102,52 @@ const searchableSymbolNamePattern = /^[A-Za-z_$][A-Za-z0-9_$]*[?!=]?$/u
 // after, so that single line is treated as touched: it is the closest surviving
 // anchor for a symbol whose body lost code, and treating the hunk as covering
 // nothing would make every pure deletion invisible.
-const hunkTouchesLine = (hunk: DiffHunk, line: number): boolean => {
+const hunkTouchesRange = (
+  hunk: DiffHunk,
+  rangeStart: number,
+  rangeEnd: number
+): boolean => {
   const firstLine = hunk.newStartLine
   const lastLine =
     hunk.newLineCount === 0
       ? hunk.newStartLine
       : hunk.newStartLine + hunk.newLineCount - 1
 
-  return line >= firstLine && line <= lastLine
+  // Overlap, not containment: a hunk that starts inside the symbol and runs past
+  // its end still changed it.
+  return firstLine <= rangeEnd && lastLine >= rangeStart
+}
+
+// The line range a symbol OWNS: from its own declaration line up to the line
+// before the next declaration in the same file, or the end of the file for the
+// last one.
+//
+// A support-signal fact records only the line a symbol is declared on, not the
+// extent of its body, so the span is derived from the neighbouring declarations.
+// It is an approximation — a nested declaration ends its parent's span early, so
+// a change in a class body between two methods is attributed to the earlier
+// method rather than the class — but it is a sound one for this purpose: it never
+// attributes a change to a symbol declared after it, and the symbol it does name
+// is always the most specific one containing the change.
+const symbolSpansFor = (
+  declarationLines: readonly number[],
+  fileLineCount: number
+): ReadonlyMap<number, number> => {
+  const spans = new Map<number, number>()
+
+  for (const [index, line] of declarationLines.entries()) {
+    const next = declarationLines[index + 1]
+
+    spans.set(line, next === undefined ? Math.max(line, fileLineCount) : next - 1)
+  }
+
+  return spans
 }
 
 const factIsChanged = (
   file: ChangedSymbolSourceFile,
-  fact: SupportSignalFact
+  fact: SupportSignalFact,
+  spanEndByLine: ReadonlyMap<number, number>
 ): boolean => {
   // A deleted file has no surviving lines to intersect, and every symbol it
   // declared is gone. Anything less than "all of them" would be wrong.
@@ -122,7 +155,23 @@ const factIsChanged = (
     return true
   }
 
-  return file.hunks.some((hunk) => hunkTouchesLine(hunk, fact.line))
+  // A symbol is changed when the diff touches ANY line it owns, not only the line
+  // it is declared on.
+  //
+  // Declaration-line-only was the original rule and it made the whole capability
+  // inert on the changes it exists for. Editing a function's BODY leaves its
+  // signature untouched, so no hunk ever reaches the declaration line and no
+  // symbol is seeded — yet a body change is precisely what alters behaviour for
+  // everything downstream. Measured on three real corpus cases (fastify, rack,
+  // typeorm): every changed line sat inside a body, not one declaration line was
+  // touched, and all three reported ZERO changed symbols and an empty blast
+  // radius. A signature change, the only case the old rule caught, is the rare one
+  // and is usually caught by the compiler anyway.
+  const spanEnd = spanEndByLine.get(fact.line) ?? fact.line
+
+  return file.hunks.some((hunk) =>
+    hunkTouchesRange(hunk, fact.line, spanEnd)
+  )
 }
 
 const compareChangedSymbols = (
@@ -150,6 +199,41 @@ export const collectChangedSymbols = (
   const extraction = extractDeterministicSignals(
     input.files.map((file) => ({ path: file.path, content: file.content }))
   )
+  // Every line that declares a seedable symbol, per file, so each symbol's span
+  // can be bounded by the next declaration below it. Built from the seedable kinds
+  // only: an import sits above the first declaration and a module clause is not a
+  // symbol, so letting either act as a boundary would shorten a real span for no
+  // reason.
+  const declarationLinesByPath = new Map<string, number[]>()
+
+  for (const fact of extraction.facts) {
+    if (!isChangedSymbolKind(fact.kind)) {
+      continue
+    }
+
+    const lines = declarationLinesByPath.get(fact.path)
+
+    if (lines === undefined) {
+      declarationLinesByPath.set(fact.path, [fact.line])
+    } else if (!lines.includes(fact.line)) {
+      lines.push(fact.line)
+    }
+  }
+
+  const spansByPath = new Map<string, ReadonlyMap<number, number>>()
+
+  for (const [path, lines] of declarationLinesByPath) {
+    const file = filesByPath.get(path)
+
+    spansByPath.set(
+      path,
+      symbolSpansFor(
+        [...lines].sort((left, right) => left - right),
+        file === undefined ? 0 : file.content.split('\n').length
+      )
+    )
+  }
+
   // Keyed on path + name + line so two distinct symbols sharing a name in one
   // file stay distinct, while the same symbol reported under several fact kinds
   // collapses to its most visible one.
@@ -165,7 +249,10 @@ export const collectChangedSymbols = (
 
     const file = filesByPath.get(fact.path)
 
-    if (file === undefined || !factIsChanged(file, fact)) {
+    if (
+      file === undefined ||
+      !factIsChanged(file, fact, spansByPath.get(fact.path) ?? new Map())
+    ) {
       continue
     }
 

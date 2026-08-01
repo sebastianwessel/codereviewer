@@ -135,6 +135,71 @@ const languageCases: ReadonlyArray<{
 ]
 
 describe('changed symbols', () => {
+  test('a change inside a body seeds the symbol that owns it', () => {
+    // THE case this capability exists for, and the one it used to miss entirely.
+    // Editing a function's body leaves its signature untouched, so no hunk ever
+    // reaches the declaration line. Under the old declaration-line-only rule that
+    // seeded nothing, and the blast radius came back empty — on exactly the change
+    // that puts dependents at risk. Measured on three real corpus cases (fastify,
+    // rack, typeorm): every changed line sat inside a body, and all three reported
+    // zero changed symbols.
+    const lines = [
+      'def alpha',        // 1
+      '  untouched',      // 2
+      'end',              // 3
+      '',                 // 4
+      'def beta',         // 5
+      '  changed_here',   // 6
+      'end'               // 7
+    ]
+    const result = collectChangedSymbols({
+      files: [
+        {
+          path: 'lib/x.rb',
+          content: lines.join('\n'),
+          changeKind: 'modified',
+          // Line 6 only: inside `beta`'s body, touching no declaration line.
+          hunks: [
+            { oldStartLine: 6, oldLineCount: 1, newStartLine: 6, newLineCount: 1 }
+          ]
+        }
+      ],
+      maxChangedSymbols: 100
+    })
+
+    expect(result.symbols.map((symbol) => symbol.name)).toEqual(['beta'])
+  })
+
+  test('a symbol declared after the change is not attributed to it', () => {
+    // The span must end where the next declaration begins, or a change high in the
+    // file would seed every symbol below it and the blast radius would become the
+    // whole module.
+    const lines = [
+      'def alpha',        // 1
+      '  changed_here',   // 2
+      'end',              // 3
+      '',                 // 4
+      'def beta',         // 5
+      '  untouched',      // 6
+      'end'               // 7
+    ]
+    const result = collectChangedSymbols({
+      files: [
+        {
+          path: 'lib/x.rb',
+          content: lines.join('\n'),
+          changeKind: 'modified',
+          hunks: [
+            { oldStartLine: 2, oldLineCount: 1, newStartLine: 2, newLineCount: 1 }
+          ]
+        }
+      ],
+      maxChangedSymbols: 100
+    })
+
+    expect(result.symbols.map((symbol) => symbol.name)).toEqual(['alpha'])
+  })
+
   test('covers every language the signal extractors support', () => {
     expect(
       [...languageCases.map((languageCase) => languageCase.language)].sort()

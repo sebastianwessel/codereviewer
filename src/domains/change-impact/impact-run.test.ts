@@ -256,7 +256,7 @@ describe('change impact run', () => {
     }
   })
 
-  test('warns instead of failing when the changed files are in an unsupported language', async () => {
+  test('warns instead of failing when no symbol could be seeded', async () => {
     const root = await createRepo()
 
     try {
@@ -280,7 +280,11 @@ describe('change impact run', () => {
       expect(report.status).toBe('completed')
       expect(report.symbols).toEqual([])
       expect(report.warnings).toEqual([
-        'Some changed files are in a language the deterministic signal extractors do not cover; no symbols were seeded from them.'
+        // States what was observed, not a cause. The old wording asserted
+        // "unsupported language" whenever nothing was seeded, and that misdiagnosis
+        // sent a real investigation after a language bug that did not exist: the
+        // actual cause was changed lines falling outside every symbol's span.
+        'No changed symbols were seeded from the changed files. Either the files are in a language the deterministic signal extractors do not cover, or none of the changed lines fall inside a symbol this engine can name.'
       ])
     } finally {
       await rm(root, { recursive: true, force: true })
