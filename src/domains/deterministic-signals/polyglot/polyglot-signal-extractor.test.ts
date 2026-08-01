@@ -1,21 +1,22 @@
 import { describe, expect, test } from 'vitest'
 import { extractPolyglotSignals } from './polyglot-signal-extractor.js'
 
+const languageSamplePaths = {
+  python: 'src/app.py',
+  go: 'cmd/app.go',
+  rust: 'src/lib.rs',
+  java: 'src/App.java',
+  ruby: 'lib/app.rb'
+} as const
+
 const factNames = (
-  language: 'python' | 'go' | 'rust' | 'java',
+  language: keyof typeof languageSamplePaths,
   content: string,
   kind?: 'import' | 'declaration' | 'public-symbol' | 'module'
 ): readonly string[] =>
   extractPolyglotSignals(language, [
     {
-      path:
-        language === 'python'
-          ? 'src/app.py'
-          : language === 'go'
-            ? 'cmd/app.go'
-            : language === 'rust'
-              ? 'src/lib.rs'
-              : 'src/App.java',
+      path: languageSamplePaths[language],
       content
     }
   ]).facts
@@ -121,6 +122,72 @@ describe('polyglot deterministic support signal extractor', () => {
         'declaration'
       )
     ).toEqual(expect.arrayContaining(['Outer', 'Inner']))
+  })
+
+  // A Ruby definition is only a symbol other code can depend on when the file's
+  // own structure puts it there. Inside a block or another method body it is a
+  // STATEMENT: it does not exist until that body runs, and it attaches to whatever
+  // `self` holds at that moment, so nothing outside can reference it by name.
+  //
+  // Reported as a `public-symbol` it was actively harmful rather than merely
+  // useless. `def self.req` inside a test block seeded `req` as a changed public
+  // symbol, and the blast radius came back as 22 unrelated `req` locals from all
+  // over the codebase — a confident, entirely fictional dependent list, because a
+  // throwaway block-local name is exactly the kind that is reused everywhere.
+  //
+  // A namespace body is not a runtime scope: `class`, `module` and `class << self`
+  // are how a file states what it provides, so definitions inside them stay.
+  test('drops Ruby definitions created by running a block or a method body', () => {
+    const content = [
+      'class Service',
+      '  class << self',
+      '    def singleton_helper',
+      '      1',
+      '    end',
+      '  end',
+      '',
+      '  def public_thing',
+      '    def rebound_at_runtime',
+      '      2',
+      '    end',
+      '  end',
+      'end',
+      '',
+      'Thing.configure do |c|',
+      '  def self.req(headers)',
+      '    headers',
+      '  end',
+      '',
+      '  class Ephemeral',
+      '  end',
+      'end',
+      '',
+      '[1].each { def brace_scoped; end }'
+    ].join('\n')
+
+    expect(factNames('ruby', content, 'declaration')).toEqual([
+      'Service',
+      'singleton_helper',
+      'public_thing'
+    ])
+    expect(factNames('ruby', content, 'public-symbol')).toEqual([
+      'Service',
+      'singleton_helper',
+      'public_thing'
+    ])
+  })
+
+  // The guard above is about DEFINITIONS, not about position. A `require` runs
+  // wherever it sits, and the file it pulls in is a real edge from this file even
+  // when the call is nested inside a block.
+  test('keeps Ruby requires nested inside a block', () => {
+    expect(
+      factNames(
+        'ruby',
+        ['Thing.configure do', '  require "rack/utils"', 'end'].join('\n'),
+        'import'
+      )
+    ).toEqual(['utils'])
   })
 
   test('emits diagnostics and no facts for syntax error nodes', () => {
