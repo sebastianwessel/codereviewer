@@ -52,6 +52,40 @@ const isJavaTestPath = (path: string): boolean => {
 const pathHasSegment = (path: string, segment: string): boolean =>
   path.split('/').includes(segment)
 
+// Ruby has three live conventions and no single blessed one: minitest's
+// `*_test.rb`, RSpec's `*_spec.rb`, and the older `test_*.rb` / `spec_*.rb` prefix
+// form that predates both and is still what Rack ships.
+//
+// It had NO predicate at all before, so `.rb` fell through to the JUnit rules,
+// which never match a Ruby filename. Everything a Ruby test referenced was
+// therefore reported as a PRODUCTION dependent: on Rack, all 22 sites in
+// `test/spec_request.rb` rendered under "Dependents" while the test count read 0.
+// That is worse than a missing feature — the production/test split is the sharpest
+// distinction the impact report draws, and it was inverted for a whole language.
+//
+// A bare `test`/`spec` directory segment is deliberately NOT sufficient, for the
+// same reason the Java rule rejects it: those directories hold fixtures and
+// helpers that are not themselves tests.
+const isRubyTestPath = (path: string): boolean => {
+  const name = path.split('/').at(-1) ?? path
+
+  // The SUFFIX form is unambiguous and stands on its own.
+  if (/_(?:test|spec)\.rb$/u.test(name)) {
+    return true
+  }
+
+  // The PREFIX form is not. `spec_helper.rb` is RSpec's shared setup file, not a
+  // test, and it sits right beside the tests that require it — so the prefix only
+  // counts inside a test directory, and even then `spec_helper` is excluded by
+  // name. Demoting a production caller into the test bucket is the costlier
+  // mistake, so the ambiguous form gets the stricter rule.
+  return (
+    /^(?:test|spec)_.+\.rb$/u.test(name) &&
+    !/^spec_helper/u.test(name) &&
+    (pathHasSegment(path, 'test') || pathHasSegment(path, 'spec'))
+  )
+}
+
 const normalizedSourceStem = (
   language: SupportedSignalLanguage,
   path: string
@@ -68,6 +102,12 @@ const normalizedSourceStem = (
 
   if (language === 'java') {
     return stem.replace(/^Test/u, '').replace(/Test$/u, '')
+  }
+
+  if (language === 'ruby') {
+    return stem
+      .replace(/^(?:test|spec)_/u, '')
+      .replace(/_(?:test|spec)$/u, '')
   }
 
   return stem.replace(/[._-](?:test|spec)$/u, '')
@@ -97,6 +137,10 @@ export const isLanguageTestFile = (
 
   if (language === 'rust') {
     return isRustTestPath(file)
+  }
+
+  if (language === 'ruby') {
+    return isRubyTestPath(path)
   }
 
   return isJavaTestPath(path)

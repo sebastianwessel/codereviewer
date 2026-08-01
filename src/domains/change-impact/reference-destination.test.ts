@@ -65,3 +65,29 @@ describe('reference destination classification', () => {
     expect(classifyReferenceDestination('DOCS\\GUIDE.MD')).toBe('non-source')
   })
 })
+
+describe('ruby test destinations', () => {
+  // Ruby had NO test predicate: `.rb` fell through to the JUnit rules, which never
+  // match a Ruby filename, so every reference from a Ruby test was reported as a
+  // PRODUCTION dependent. On Rack that put all 22 sites in `test/spec_request.rb`
+  // under "Dependents" while the test count read 0 — the production/test split is
+  // the sharpest distinction the impact report draws, and it was inverted for a
+  // whole language.
+  test.each([
+    'test/spec_request.rb',
+    'spec/request_spec.rb',
+    'test/request_test.rb',
+    'test/test_request.rb'
+  ])('%s is a test destination', (path) => {
+    expect(classifyReferenceDestination(path)).toBe('test')
+  })
+
+  test.each(['lib/rack/request.rb', 'lib/rack/spec_helper_shim.rb'])(
+    '%s is production',
+    (path) => {
+      // A `spec`/`test` substring inside a library filename is not a convention,
+      // and demoting a production caller to the test bucket is the costlier error.
+      expect(classifyReferenceDestination(path)).toBe('source')
+    }
+  )
+})
