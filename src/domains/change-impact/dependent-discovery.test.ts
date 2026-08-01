@@ -41,6 +41,81 @@ const changedSymbol = (
   changeKind: 'modified'
 })
 
+describe('reference list quality', () => {
+  test('a symbol named only in a comment is not a dependent', async () => {
+    // References are found by TEXT SEARCH, not by resolving bindings, so prose
+    // matches as strongly as a call. Rack's `scheme` returned 53 references, one of
+    // them `## The URL scheme, which must be one of <tt>http</tt>…` — documentation,
+    // listed beside real call sites with nothing to tell them apart. A list that
+    // looks like signal while carrying prose is worse than a shorter honest one.
+    const root = join(tmpdir(), `codereviewer-comments-${crypto.randomUUID()}`)
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(
+      join(root, 'src', 'store.ts'),
+      'export const fetchUser = (id: string) => id\n'
+    )
+    await writeFile(
+      join(root, 'src', 'docs.ts'),
+      ['// fetchUser is documented here and never called', 'export const x = 1'].join('\n')
+    )
+    await writeFile(
+      join(root, 'src', 'real.ts'),
+      ['import { fetchUser } from "./store.js"', 'export const a = fetchUser("b")'].join('\n')
+    )
+
+    try {
+      const [symbol] = await discoverDependents({
+        repositoryRoot: root,
+        changedSymbols: [changedSymbol('fetchUser', 1)],
+        maxReferencesPerSymbol: 20,
+        maxSearchDepth: 5
+      })
+
+      const paths = (symbol?.references ?? []).map((reference) => reference.path)
+      expect(paths).toContain('src/real.ts')
+      expect(paths).not.toContain('src/docs.ts')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a reference in a file the change also touched is listed first', async () => {
+    // Whatever sits at the top of a long reference list is effectively the whole
+    // report, because nobody opens all of them. A dependent that moved ALONGSIDE
+    // the symbol it depends on is where a contract mismatch is most likely to have
+    // been introduced and least likely to have been noticed.
+    const root = join(tmpdir(), `codereviewer-rank-${crypto.randomUUID()}`)
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'store.ts'), 'export const fetchUser = (id: string) => id\n')
+    await writeFile(
+      join(root, 'src', 'aaa-untouched.ts'),
+      ['import { fetchUser } from "./store.js"', 'export const a = fetchUser("x")'].join('\n')
+    )
+    await writeFile(
+      join(root, 'src', 'zzz-touched.ts'),
+      ['import { fetchUser } from "./store.js"', 'export const z = fetchUser("y")'].join('\n')
+    )
+
+    try {
+      const [symbol] = await discoverDependents({
+        repositoryRoot: root,
+        changedSymbols: [
+          changedSymbol('fetchUser', 1),
+          // The change also touched this file, so its reference outranks the other
+          // even though it sorts last by name.
+          { ...changedSymbol('z', 2), path: 'src/zzz-touched.ts' }
+        ],
+        maxReferencesPerSymbol: 20,
+        maxSearchDepth: 5
+      })
+
+      expect(symbol?.references[0]?.path).toBe('src/zzz-touched.ts')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('dependent discovery', () => {
   test('lists references outside the defining file and counts the ones inside it', async () => {
     const root = await createRepo()
