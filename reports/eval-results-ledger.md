@@ -1,3 +1,12 @@
+> **Provenance warning, added 2026-08-01.** Every figure recorded below before the
+> `2026-08-01` entries was measured WITHOUT a recorded dependency digest. Engine
+> pinning covered `src/` only; the pinned worktree symlinks the live
+> `node_modules`, so a dependency change in the working tree reached backwards into
+> historical runs undetected. This was demonstrated, not suspected: re-running the
+> identical engine SHA against a verified dependency tree moved recall from 46.0%
+> to ~42% and adjusted precision from 100% to ~95%. Treat any number here whose
+> `engine.json` lacks `dependencyDigest` as unverified.
+
 # Evaluation results ledger
 
 Append-only record of every measurement, with what invalidates it. Newest first.

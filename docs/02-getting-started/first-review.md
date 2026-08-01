@@ -69,7 +69,7 @@ codereviewer review --base-ref origin/main --head-ref HEAD \
 ### What a first real review should look like
 
 Calibrate before you read it, or you will misread a working install as a broken
-one. On a 37-case corpus of real repositories the engine finds **46.0%** of the
+one. On a 37-case corpus of real repositories the engine finds **~61%** of the in-diff
 known defects at **100% adjusted precision**. A short report is the normal case —
 a long one would be the surprise.
 

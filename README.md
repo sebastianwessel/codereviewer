@@ -21,26 +21,43 @@ published.
 
 | | |
 | --- | ---: |
-| Recall | **46.0%** |
-| Adjusted precision | **100%** |
-| Cost | **~$2.24** per 37-case run |
+| Recall, in-diff | **~61%** |
+| Adjusted precision | **~99%** |
+| Cost | **~$2.20** per 37-case run |
 
-Split by where the defect lives, over the same run:
+Mean of three runs at one pinned engine, with the dependency tree pinned too.
+Run-to-run standard deviation is **0.66pp** on recall, so a difference under about
+2pp between two runs is not a difference.
 
-| Where the defect is | Expected | Found | Recall |
-| --- | ---: | ---: | ---: |
-| Inside the diff | 60 | 40 | **66.7%** |
-| Elsewhere in a changed file | 27 | 0 | **0.0%** |
+Split by where the defect lives:
+
+| Where the defect is | Expected | Recall |
+| --- | ---: | ---: |
+| Inside the diff | 60 | **~61%** |
+| Elsewhere in a changed file | 27 | **0.0%** |
+
+Quote the in-diff figure, not a blended one. `review` is diff-scoped by design, and
+the 27 defects elsewhere are what `impact check` exists for — it localises **74.1%**
+of them. Averaging the two scores one stage against another's job.
 
 Read that second row before you adopt the tool. **The engine finds defects the
 change points at, and does not find ones elsewhere in the file** — and all 27
 misses sat in files it had already been shown *in full*, so this is not a
 retrieval or context-size problem that a bigger model or a wider window fixes.
+A prompt reframing was pre-registered and measured against it: out-of-diff stayed
+at exactly 0 of 27 while raw findings rose, so it is not a wording problem either.
+
+An earlier version of this table claimed **46.0% recall at 100% adjusted
+precision**. That figure was measured before engine pinning recorded the
+dependency tree, and re-running the same commit against a verified tree returned
+~42% blended and ~95% precision. The gap was the environment, not the code. Any
+number here measured without a recorded `dependencyDigest` should be treated as
+unverified.
 
 So, plainly:
 
-- **What it reports is almost always real.** Adjusted precision was 100% on that
-  run. It is not a triage queue.
+- **What it reports is almost always real.** Adjusted precision is ~99% across
+  three runs. It is not a triage queue.
 - **It does not find everything.** Fewer than half the known defects, and none of
   the ones the diff does not point at.
 - **It complements review; it does not replace it.** Nor a linter, a type

@@ -75,7 +75,7 @@ The default report formats are `json`, `markdown`, and `sarif`
 
 ## What it measures at
 
-On a 37-case corpus of real repositories, `review` finds **46.0%** of the known
+On a 37-case corpus of real repositories, `review` finds **~61%** of the in-diff known
 defects at **100% adjusted precision** for about **$2.24** per run. Split by where
 the defect lives: **66.7%** for the 60 expectations inside the diff, **0 of 27**
 for the ones sitting elsewhere in a changed file.

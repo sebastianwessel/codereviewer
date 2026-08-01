@@ -117,11 +117,11 @@ bounds a single network call and is the only deadline that exists.
 ## Quality numbers: what can and cannot be claimed
 
 - **The current headline, and the only figure that should be quoted for the review
-  stage:** **46.0% recall at 100% adjusted precision, ~$2.24**, on a 37-case
+  stage:** **~61% in-diff recall at ~99% adjusted precision, ~$2.20**, on a 37-case
   real-repository corpus with the engine pinned. It supersedes every earlier
   figure. → [Current results](../05-quality/current-results.md)
 - **The known quality limitation is enumeration, and it now has a measured
-  split.** Of 87 expected findings, the 60 inside the diff were found at **66.7%**
+  split.** Of 87 expected findings, the 60 inside the diff were found at **~61%**
   and the 27 sitting elsewhere in a changed file were found at **0 of 27**. Not
   "low" — zero, over a full denominator. Every one of those 27 was in a file the
   reviewer had been shown **in full**, so it needed no retrieval, no larger
@@ -129,9 +129,12 @@ bounds a single network call and is the only deadline that exists.
   information failure, and it is the reason the iterative review-fix-re-review
   loop matters more than any single-pass tuning.
   → [What limits recall](../05-quality/what-limits-recall.md)
-- **The three advisory stages have no accuracy measurement at all.**
-  `intent check`, `impact check` and `conformance check` are implemented and
-  runnable; none of them has been scored against an answer key. Treat their output
+- **`impact check` now has one measurement; the other two have none.** Scored
+  against the 27 out-of-diff expectations — the population it exists for — it
+  localises **20 of 27 (74.1%)** inside a symbol it flagged as changed. That is
+  COVERAGE, not detection: it reports risk and never claims a defect, so the figure
+  is not comparable to the review stage's recall. `intent check` and
+  `conformance check` are implemented and runnable but have never been scored. Treat their output
   as a prompt for a human, not as a result. (`intent check`'s *precision* has been
   diagnosed offline, which is a different thing from an accuracy measurement — the
   diagnosis found the dominant failure to be a question mismatch rather than
