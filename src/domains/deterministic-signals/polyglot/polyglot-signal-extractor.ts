@@ -961,6 +961,35 @@ const commonJsExportedNames = (statement: AstNode): readonly string[] => {
   return []
 }
 
+// Behavioural named declarations, for the `declaration`/`public-symbol` facts the
+// other five languages already emit. No `interface`, no `type` alias: a construct
+// with no body cannot hold a behavioural pattern, which is the same reason the
+// conformance trait-less guard drops them.
+const ecmascriptNamedDeclarationKinds = [
+  'function_declaration',
+  'generator_function_declaration',
+  'class_declaration',
+  'abstract_class_declaration',
+  'method_definition'
+] as const
+
+const functionValuedDeclaratorName = (node: AstNode): string | undefined => {
+  const value = node.children().at(-1)
+
+  if (
+    value === undefined ||
+    !['arrow_function', 'function_expression', 'class', 'generator_function'].includes(
+      kindOf(value)
+    )
+  ) {
+    return undefined
+  }
+
+  const bound = node.children()[0]
+
+  return bound !== undefined && kindOf(bound) === 'identifier' ? textOf(bound) : undefined
+}
+
 const extractEcmascriptFacts = (
   language: PolyglotLanguage,
   path: string,
@@ -968,9 +997,53 @@ const extractEcmascriptFacts = (
   contentHash: string
 ): readonly SupportSignalFact[] => {
   const facts: SupportSignalFact[] = []
+  const exportedLines = new Set<number>()
+
+  walkAst(root, (node) => {
+    if (kindOf(node) === 'export_statement') {
+      const declaration = firstChildOfKind(node, [
+        ...ecmascriptDeclarationKinds,
+        ...ecmascriptVariableKinds
+      ])
+
+      if (declaration !== undefined) {
+        exportedLines.add(lineFor(declaration))
+      }
+    }
+  })
 
   walkAst(root, (node) => {
     const kind = kindOf(node)
+    const named = node.field('name')
+    const declaredName = ecmascriptNamedDeclarationKinds.some((k) => k === kind)
+      ? named === null || named === undefined
+        ? undefined
+        : textOf(named)
+      : kind === 'variable_declarator'
+        ? functionValuedDeclaratorName(node)
+        : undefined
+
+    if (declaredName !== undefined) {
+      const line = lineFor(node)
+
+      facts.push(
+        createFact(language, contentHash, path, {
+          kind: 'declaration',
+          name: declaredName,
+          line
+        })
+      )
+
+      if (exportedLines.has(line)) {
+        facts.push(
+          createFact(language, contentHash, path, {
+            kind: 'public-symbol',
+            name: declaredName,
+            line
+          })
+        )
+      }
+    }
 
     if (kind === 'import_statement') {
       facts.push(

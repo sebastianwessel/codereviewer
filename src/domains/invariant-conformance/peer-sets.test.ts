@@ -150,8 +150,21 @@ describe('peer set derivation', () => {
     // Only `kept` survives: `export { one, two }` is one construct with two
     // names and no body, and admitting it would fill a barrel file's peer set
     // with members whose shared pattern is that none of them do anything.
-    expect(result.changedDeclarationCount).toBe(1)
-    expect(result.peerSets).toEqual([])
+    // `one` and `two` are genuine function declarations — `const one = () => load()`
+    // has a name and a body — so they now count, and being alike they form peer
+    // sets. That is not what this rule protects against.
+    //
+    // The invariant is that the re-export LIST on line 4 never becomes a member:
+    // one construct carrying two names and no body, whose only shared pattern with
+    // anything is that it does nothing. Asserting an empty peer set used to imply
+    // that only because ECMAScript emitted no declarations at all, which made the
+    // proxy indistinguishable from the property. Assert the property.
+    expect(result.changedDeclarationCount).toBe(3)
+    expect(
+      result.peerSets.flatMap((peerSet) =>
+        peerSet.members.map((member) => member.span.startLine)
+      )
+    ).not.toContain(4)
   })
 
   // The regression this rule exists for. The first real run of the capability

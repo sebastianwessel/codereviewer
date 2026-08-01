@@ -295,8 +295,21 @@ export type DerivePeerSetsResult = {
 // column. Indentation is the language-neutral proxy for "sibling": it separates a
 // Python module-level function from a method inside a class, and a Rust free
 // function from one inside an `impl`, without a per-language nesting rule.
+// Deliberately NOT gated on `kind`.
+//
+// The collapse above already picks the most inclusive kind precisely so that "a
+// peer set that splits an exported sibling from an unexported one compares fewer
+// peers for no benefit". Requiring the kinds to match here undid that: it only
+// looked harmless while a language reported every declaration under the same kind.
+//
+// The moment ECMAScript gained `declaration` facts, the schema builders (still
+// `export`, being bound to a call rather than a function) split from the functions
+// and classes (now `declaration`), and a 7-peer set became a 5-peer set. That
+// shrank denominator PROMOTED patterns that were correctly sub-majority: `3 of 7`
+// is not a majority, `3 of 5` is, so two new divergences appeared out of a change
+// that added information and removed none. A peer denominator must not depend on
+// which fact kind an extractor happens to emit.
 const isSibling = (subject: PeerDeclaration, candidate: PeerDeclaration): boolean =>
-  candidate.kind === subject.kind &&
   candidate.language === subject.language &&
   candidate.span.indentation === subject.span.indentation &&
   !(

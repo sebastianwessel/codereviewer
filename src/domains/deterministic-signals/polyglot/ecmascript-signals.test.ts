@@ -78,7 +78,12 @@ describe('CommonJS export signals', () => {
       { path: 'src/legacy.ts', content: 'function h() {}\nmodule.exports = { h }\n' }
     ])
 
-    expect(facts.map((fact) => fact.name)).toEqual(['h'])
+    // `h` is now reported twice under different kinds: once as the declaration it
+    // is, once as the CommonJS export it becomes. Both are true and downstream
+    // consumers want different ones — change-impact seeds from the most visible
+    // kind, conformance from the most inclusive.
+    expect(facts.filter((fact) => fact.kind === 'export').map((fact) => fact.name)).toEqual(['h'])
+    expect(facts.filter((fact) => fact.kind === 'declaration').map((fact) => fact.name)).toEqual(['h'])
   })
 
   test('reports the assignment line, not the declaration line', () => {
@@ -88,7 +93,10 @@ describe('CommonJS export signals', () => {
       { path: 'lib/x.js', content: 'function a() {}\n\n\nmodule.exports = { a }\n' }
     ])
 
-    expect(facts[0]?.line).toBe(4)
+    // The EXPORT is the assignment on line 4; the declaration it names is on line 1.
+    // Both are recorded, and conflating them would anchor a downstream span wrongly.
+    expect(facts.find((fact) => fact.kind === 'export')?.line).toBe(4)
+    expect(facts.find((fact) => fact.kind === 'declaration')?.line).toBe(1)
   })
 })
 
