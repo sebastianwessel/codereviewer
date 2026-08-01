@@ -4,7 +4,7 @@
 // because the CLI deliberately exposes no git seam — intake owns git, and the
 // point of this file is to exercise the command exactly as a user runs it.
 import { execFileSync } from 'node:child_process'
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
@@ -131,6 +131,10 @@ describe('impact CLI', { timeout: 20_000 }, () => {
 
       expect(result.exitCode).toBe(0)
       expect(parseReport(result.stdout).status).toBe('disabled')
+      // A stage that analysed nothing leaves nothing behind: a capability that is
+      // off by default must not accumulate run directories in a repository whose
+      // owner never enabled it.
+      await expect(readdir(join(root, '.codereviewer', 'runs'))).rejects.toThrow()
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -285,6 +289,113 @@ describe('impact CLI', { timeout: 20_000 }, () => {
         [1, true],
         [1, true]
       ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The gap spec 22 names: a report only on stdout is outside the workflow a
+  // reviewer uses. It has to land where `review` puts `report.md`.
+  test('writes the rendered report into a run directory and names the path', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeConfig(root, { enabled: true })
+      const result = await runCli(
+        ['impact', 'check', '--base-ref', 'main~1', '--head-ref', 'HEAD'],
+        { cwd: root, environment: {} }
+      )
+      const runDirectories = await readdir(join(root, '.codereviewer', 'runs'))
+      const runDirectory = runDirectories[0] as string
+      const markdown = await readFile(
+        join(root, '.codereviewer', 'runs', runDirectory, 'impact-report.md'),
+        'utf8'
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(runDirectories).toHaveLength(1)
+      // Stdout stays exactly one JSON document, so scripted use is untouched; the
+      // artifact path is a note to the human on stderr.
+      expect(parseReport(result.stdout).status).toBe('completed')
+      expect(result.stderr).toContain(
+        `.codereviewer/runs/${runDirectory}/impact-report.md`
+      )
+      expect(markdown).toContain('# Change Impact Report')
+      expect(markdown).toContain('`fetchUser`')
+      expect(markdown).toContain('src/caller.ts')
+      // The JSON lands beside it: the same run directory answers both audiences.
+      expect(
+        JSON.parse(
+          await readFile(
+            join(root, '.codereviewer', 'runs', runDirectory, 'impact-report.json'),
+            'utf8'
+          )
+        )
+      ).toEqual(parseReport(result.stdout))
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('--format markdown puts the rendered report on stdout', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeConfig(root, { enabled: true })
+      const result = await runCli(
+        [
+          'impact',
+          'check',
+          '--base-ref',
+          'main~1',
+          '--head-ref',
+          'HEAD',
+          '--format',
+          'markdown'
+        ],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.startsWith('# Change Impact Report')).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The advisory guarantee has to survive the artifact: writing a file is a
+  // courtesy to the reader, and a failed courtesy must not become a failed run.
+  test('an unwritable artifact directory still reports and still exits 0', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeConfig(root, { enabled: true })
+      // A FILE where the run directory has to go: every write below it fails.
+      await writeFile(join(root, '.codereviewer', 'runs'), 'not a directory\n')
+      const result = await runCli(
+        ['impact', 'check', '--base-ref', 'main~1', '--head-ref', 'HEAD'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(parseReport(result.stdout).summary.referenceCount).toBe(4)
+      expect(result.stderr).toContain('Could not render or write the report artifacts')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects a format it does not implement rather than ignoring it', async () => {
+    const root = await createRepository()
+
+    try {
+      const result = await runCli(
+        ['impact', 'check', '--format', 'html'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('--format must be one of json, markdown')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

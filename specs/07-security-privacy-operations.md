@@ -374,9 +374,14 @@ Evaluation artifacts, written to `.codereviewer/eval/` and again under
 - `eval-summary.md`;
 - `eval-recall-report.md`.
 
+A completed `codereviewer impact check` writes one run directory,
+`<artifactDir>/impact-<uuid>/`, containing `impact-report.md` and
+`impact-report.json` (spec 22 requires the rendered report to land beside
+`report.md` rather than only on stdout). A disabled run writes nothing.
+
 `codereviewer config validate`, `eval compare`, `eval recall-report`,
-`eval slice-manifest`, `drift check`, `impact check`, `intent check`, and
-`conformance check` write no artifacts and print to stdout only.
+`eval slice-manifest`, `drift check`, `intent check`, and `conformance check`
+write no artifacts and print to stdout only.
 
 Default artifact root is `.codereviewer/`. Generated artifacts are ignored by git.
 User-authored `.codereviewer/config.json`, `.codereviewer/instructions/`, and

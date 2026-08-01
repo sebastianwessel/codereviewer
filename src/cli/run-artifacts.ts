@@ -166,6 +166,45 @@ export const writeReviewArtifacts = async (
   )
 }
 
+// Artifact names for one `impact check` run. Prefixed rather than named
+// `report.md`/`report.json` so a run directory can never present a reference
+// report under the name every consumer here reads as a REVIEW report — the two
+// are different schemas answering different questions, and `latestRunWithReport`
+// resolves baselines from the latter.
+export const IMPACT_MARKDOWN_ARTIFACT_NAME = 'impact-report.md'
+export const IMPACT_JSON_ARTIFACT_NAME = 'impact-report.json'
+
+// `impact check` is advisory and MUST exit 0 whatever it reports (spec 22), so
+// this deliberately reuses the review writer's machinery and adds no failure path
+// of its own: the caller treats a write failure as a note to the reader rather
+// than as a result. The run is NOT recorded in the run index — the index feeds
+// baseline resolution, which expects a review report, and an entry pointing at a
+// reference report would hand `baseline write` a document of the wrong shape.
+export const writeChangeImpactArtifacts = async (
+  input: {
+    readonly repositoryRoot: string
+    readonly artifactRoot: string
+    readonly reportJson: string
+    readonly reportMarkdown: string
+  }
+): Promise<void> => {
+  await ensureDirectory(
+    await resolveArtifactWritePath(input.repositoryRoot, input.artifactRoot)
+  )
+  await writeRunArtifact(
+    input.repositoryRoot,
+    input.artifactRoot,
+    IMPACT_JSON_ARTIFACT_NAME,
+    input.reportJson
+  )
+  await writeRunArtifact(
+    input.repositoryRoot,
+    input.artifactRoot,
+    IMPACT_MARKDOWN_ARTIFACT_NAME,
+    input.reportMarkdown
+  )
+}
+
 export const writePartialReviewArtifacts = async (
   input: {
     readonly repositoryRoot: string

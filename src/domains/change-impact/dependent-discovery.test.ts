@@ -38,6 +38,11 @@ const changedSymbol = (
   kind: 'export',
   language: 'typescript',
   line,
+  // Every fixture symbol here occupies exactly its declaration line. These tests
+  // are about reference POLICY — which destinations count as a dependent — and
+  // the span only decides which diff lines a contract delta is read from, which
+  // no test in this file exercises.
+  spanEndLine: line,
   changeKind: 'modified'
 })
 

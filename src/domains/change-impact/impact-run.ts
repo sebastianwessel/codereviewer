@@ -16,6 +16,7 @@ import {
   collectChangedSymbols,
   type ChangedSymbolSourceFile
 } from './changed-symbols.js'
+import { collectContractChanges } from './contract-changes.js'
 import { discoverDependents } from './dependent-discovery.js'
 import {
   ChangeImpactReferenceReportSchema,
@@ -200,9 +201,18 @@ export const runChangeImpact = async (
     files,
     maxChangedSymbols: input.config.changeImpact.maxChangedSymbols
   })
+  // Derived from the diff text intake already fetched, not from a second
+  // checkout of the base revision: reconstructing and re-parsing the base tree
+  // would cost a full extra parse of every changed file to answer a question the
+  // diff already contains.
+  const contractChanges = collectContractChanges({
+    changedSymbols: changed.symbols,
+    rawDiff: intake.rawDiff
+  })
   const symbols = await discoverDependents({
     repositoryRoot: input.repositoryRoot,
     changedSymbols: changed.symbols,
+    contractChanges,
     maxReferencesPerSymbol: input.config.changeImpact.maxReferencesPerSymbol,
     maxSearchDepth: input.config.changeImpact.maxSearchDepth,
     paths: {

@@ -142,6 +142,19 @@ describe('change impact run', () => {
         ['legacyApi', 'deleted', ['src/caller.ts:1', 'src/caller.ts:3']],
         ['fetchUser', 'modified', ['src/caller.ts:1', 'src/caller.ts:2']]
       ])
+      // The contract delta reaches the report, and it is derived from the diff
+      // this very run fetched rather than from a second read of the base
+      // revision: `fetchUser` returned `null` before the change and does not
+      // after, which is the whole difference between "this symbol was modified"
+      // and a reason to open any of its call sites.
+      expect(
+        report.symbols.map((symbol) => [symbol.name, symbol.contractChanges])
+      ).toEqual([
+        // A deleted file has no head side to anchor a removal against, and its
+        // deletion is already the strongest statement `changeKind` can make.
+        ['legacyApi', []],
+        ['fetchUser', ['no longer yields an absent value it previously could']]
+      ])
       expect(report.summary).toEqual({
         changedSymbolCount: 2,
         changedSymbolsTruncated: false,

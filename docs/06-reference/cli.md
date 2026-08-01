@@ -241,6 +241,7 @@ fails — that is, when findings exist in a category listed in
 
 ```
 codereviewer impact check [--config <path>] [--base-ref <ref>] [--head-ref <ref>]
+                          [--format json|markdown]
 ```
 
 | Flag | Value | Notes |
@@ -248,9 +249,25 @@ codereviewer impact check [--config <path>] [--base-ref <ref>] [--head-ref <ref>
 | `--config` | path | Config file path override. |
 | `--base-ref` | git ref | Overrides `review.baseRef`. |
 | `--head-ref` | git ref | Overrides `review.headRef`. |
+| `--format` | `json` (default), `markdown` | What goes to stdout. The Markdown artifact is written either way. |
 
 `impact` accepts no subcommand other than `check` (`Expected command: impact
-check`, exit `2`). Stdout is the report JSON; nothing is written to disk.
+check`, exit `2`). Stdout is the report JSON by default, so existing scripted use
+is unchanged; `--format markdown` puts the rendered report there instead.
+
+A completed run also writes a run directory under
+[`paths.artifactDir`](./configuration/review.md#paths), the same place `review`
+writes its artifacts:
+
+| Artifact | Content |
+| --- | --- |
+| `impact-report.md` | The rendered report — changed symbols whose contract moved first, their dependents grouped by file, tests listed separately, and the scope of the search stated. |
+| `impact-report.json` | The same report, byte-identical to what `--format json` prints. |
+
+The directory is named `impact-<uuid>` and the path of the Markdown file is
+printed to **stderr** so stdout stays exactly one JSON document. Impact runs are
+**not** recorded in the run index: that index feeds baseline resolution, which
+expects a review report. A **disabled** run writes nothing at all.
 
 **This command currently reports references, not impact findings.** It names the
 symbols the change touched and every place in the repository they are referenced.
@@ -305,6 +322,7 @@ Enable it with:
       "definitionPath": "src/legacy.ts",
       "definitionLine": 1,
       "changeKind": "deleted",
+      "contractChanges": [],
       "references": [
         {
           "path": "src/caller.ts",
@@ -331,6 +349,20 @@ Enable it with:
 - `symbols` lists one entry per changed symbol, in path then line order. A symbol
   with an empty `references` array means nothing outside its own file refers to
   it, which is a real result and not an omission.
+- `contractChanges` says what changed about the symbol itself, in the terms a
+  caller can observe: whether it can now be absent, now fail, return on a path it
+  did not, gained or lost a condition, mutates state, became asynchronous. It is
+  what makes the reference list mean something — *"may now yield an absent value"*
+  tells you which of forty call sites to open, where *"was modified"* does not.
+  Each entry is derived from the diff lines inside the symbol's own span, and only
+  when the change is **asymmetric**: a function that already threw and still
+  throws is not reported as newly failing.
+  An **empty list is the common case and does not mean "safe"** — it means the
+  change altered nothing this deterministic reading can show reaching a caller.
+  It is always empty for a symbol in a new or deleted file, because neither has
+  two sides to compare; `changeKind` is the statement there. And because this
+  reads the changed TEXT rather than resolved types, it is a signal, never a
+  proof.
 - `references` lists production sites **outside** the defining file only. Sites
   inside it are counted in `referencesInDefinitionFile` rather than listed,
   because a symbol's own file is not a dependent.

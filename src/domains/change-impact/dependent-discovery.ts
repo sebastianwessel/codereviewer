@@ -39,6 +39,7 @@ import type {
   SymbolReferenceSite
 } from '../context-retrieval/index.js'
 import type { ChangedSymbol } from './changed-symbols.js'
+import { changedSymbolKey } from './contract-changes.js'
 import {
   MAX_REFERENCE_TEXT_LENGTH,
   type ChangedSymbolReferences,
@@ -52,6 +53,15 @@ export type DiscoverDependentsInput = {
   readonly maxReferencesPerSymbol: number
   readonly maxSearchDepth: number
   readonly paths?: ContextRetrievalEligibilityConfig
+  // What changed about each symbol's contract, keyed by `changedSymbolKey`.
+  //
+  // Passed in rather than derived here: this module owns reference POLICY and has
+  // no business reading diff text, but it is the module that assembles the
+  // per-symbol report record, so the delta has to arrive here to be carried. A
+  // symbol absent from the map — and a caller that omits it entirely, as the
+  // reference-policy tests do — reports no contract change, which is the same
+  // statement as an empty list and never means "safe".
+  readonly contractChanges?: ReadonlyMap<string, readonly string[]>
 }
 
 const toReportSite = (
@@ -218,6 +228,11 @@ export const discoverDependents = async (
       definitionPath: symbol.path,
       definitionLine: symbol.line,
       changeKind: symbol.changeKind,
+      // Copied into a fresh array because the report type is inferred from the
+      // Zod schema and is mutable, while everything upstream of here is readonly.
+      contractChanges: [
+        ...(input.contractChanges?.get(changedSymbolKey(symbol)) ?? [])
+      ],
       references: bucketed.references,
       testReferences: bucketed.testReferences,
       // Counted, not listed. A symbol referenced only inside its own file is a

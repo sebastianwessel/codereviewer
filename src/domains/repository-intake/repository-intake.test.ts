@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest'
 import {
   assertReadOnlyGitArgs,
   collectRepositoryIntake,
+  parseChangedLines,
   parseGitDiffMaps,
   type GitCommandRunner
 } from './index.js'
@@ -609,5 +610,77 @@ describe('git diff map parser', () => {
         ]
       }
     ])
+  })
+})
+
+describe('changed line parser', () => {
+  test('numbers additions and removals in head-side coordinates', () => {
+    // Both sides have to share one coordinate system, because the consumer
+    // intersects them with a line span it can only know on the head side. A
+    // replacement anchors its removals on the same head line as the additions
+    // that replaced them, which is what keeps one edit's two sides together.
+    const changed = parseChangedLines(
+      [
+        'diff --git a/src/app.ts b/src/app.ts',
+        '--- a/src/app.ts',
+        '+++ b/src/app.ts',
+        '@@ -4,1 +4,2 @@',
+        '-const value = old()',
+        '+const value = next()',
+        '+const extra = 1'
+      ].join('\n')
+    )
+
+    expect(changed.get('src/app.ts')).toEqual({
+      added: [
+        { line: 4, text: 'const value = next()' },
+        { line: 5, text: 'const extra = 1' }
+      ],
+      removed: [{ line: 4, text: 'const value = old()' }]
+    })
+  })
+
+  test('anchors a pure deletion on the surviving line above it', () => {
+    // `+9,0` means nothing occupies that position on the head side; git names the
+    // line the removal sits after. That is the closest surviving anchor there is,
+    // and it is the same position `parseGitDiffMaps` reports as touched, so the
+    // hunk that seeds a symbol and the lines attributed to it cannot disagree.
+    const changed = parseChangedLines(
+      [
+        'diff --git a/src/app.ts b/src/app.ts',
+        '--- a/src/app.ts',
+        '+++ b/src/app.ts',
+        '@@ -10,2 +9,0 @@',
+        '-  first()',
+        '-  second()'
+      ].join('\n')
+    )
+
+    expect(changed.get('src/app.ts')?.removed).toEqual([
+      { line: 9, text: '  first()' },
+      { line: 9, text: '  second()' }
+    ])
+  })
+
+  test('ignores file headers, which carry the same marker characters', () => {
+    // `--- a/<path>` and `+++ b/<path>` start with `-` and `+` without being hunk
+    // body lines. Collecting them would put the diff's own plumbing into the text
+    // a contract claim is derived from.
+    const changed = parseChangedLines(
+      [
+        'diff --git a/src/app.ts b/src/app.ts',
+        'new file mode 100644',
+        '--- /dev/null',
+        '+++ b/src/app.ts',
+        '@@ -0,0 +1,1 @@',
+        '+const value = 1',
+        '\\ No newline at end of file'
+      ].join('\n')
+    )
+
+    expect(changed.get('src/app.ts')).toEqual({
+      added: [{ line: 1, text: 'const value = 1' }],
+      removed: []
+    })
   })
 })

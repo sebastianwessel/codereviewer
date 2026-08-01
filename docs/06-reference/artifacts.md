@@ -26,19 +26,22 @@ Two important artifact groups live **outside** it:
 │       └── eval-recall-report.md
 └── runs/                       # paths.artifactDir (default)
     ├── index.json
-    └── <runId>/
-        ├── report.json
-        ├── report.md
-        ├── report.sarif
-        ├── review-comments.json
-        ├── review-comments.<platform>.json
-        ├── run-summary.json
-        ├── context-ledger.json
-        ├── shared-context.json
-        ├── observability.json
-        ├── fix-report.json
-        ├── verification-report.json
-        └── error.json
+    ├── <runId>/
+    │   ├── report.json
+    │   ├── report.md
+    │   ├── report.sarif
+    │   ├── review-comments.json
+    │   ├── review-comments.<platform>.json
+    │   ├── run-summary.json
+    │   ├── context-ledger.json
+    │   ├── shared-context.json
+    │   ├── observability.json
+    │   ├── fix-report.json
+    │   ├── verification-report.json
+    │   └── error.json
+    └── impact-<uuid>/          # one completed `impact check`
+        ├── impact-report.md
+        └── impact-report.json
 ```
 
 `.codereviewer/**` is in the default [`paths.exclude`](./configuration/review.md#paths),
@@ -176,6 +179,20 @@ does not reset the baseline. Path configurable via `baseline.path`.
 These are **outside `paths.artifactDir`** and are unaffected by
 `CODEREVIEWER_ARTIFACT_DIR`. `eval compare`, `eval recall-report`, and
 `eval slice-manifest` write nothing — they print to stdout only.
+
+## `impact check` artifacts
+
+A **completed** `impact check` writes its own run directory under
+`paths.artifactDir`, named `impact-<uuid>`:
+
+| File | Contents |
+| --- | --- |
+| `impact-report.md` | The rendered change-impact report. Changed symbols whose contract moved and that have dependents come first; dependents are grouped by file, tests are listed separately, and the bounds of the search (per-symbol cap, references in the defining file, matches withheld as non-source) are stated. |
+| `impact-report.json` | The same report, identical to `--format json` on stdout. |
+
+The path of the Markdown file is printed to stderr. A **disabled** run writes
+nothing. These runs are deliberately **not** recorded in `index.json`: the index
+feeds baseline resolution, which expects a review report.
 
 ## Log file
 

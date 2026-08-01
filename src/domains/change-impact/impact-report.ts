@@ -57,6 +57,19 @@ export const ChangedSymbolReferencesSchema = z.strictObject({
   definitionPath: RepositoryRelativePathSchema,
   definitionLine: z.int().min(1),
   changeKind: ChangedFileChangeKindSchema,
+  // WHAT changed about this symbol's contract, in the words a reviewer would use.
+  //
+  // Without this the report says only "`scheme` was modified, here are 49 places
+  // that mention it" — a bounded grep, which is not a reason to look at any
+  // particular one of them. Each entry names an observable change to what callers
+  // can rely on: whether it can now be absent, whether it can now fail, whether
+  // what it returns has moved.
+  //
+  // Empty when the change touched the symbol's body without altering anything a
+  // caller could observe from outside. That is the common case and saying nothing
+  // is correct: an empty list means "changed, but not in a way this engine can show
+  // reaches you", not "safe".
+  contractChanges: z.array(z.string().min(1)),
   // Production reference sites OUTSIDE the defining file: the dependents a reader
   // is here for. References inside the defining file, in a test, and in a
   // non-source destination are separated below rather than mixed in.

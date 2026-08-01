@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { appendFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -28,7 +29,10 @@ import {
   type EvalRegressionThresholds,
   type EvalReport,
 } from '../domains/evaluation/index.js'
-import { runChangeImpact } from '../domains/change-impact/index.js'
+import {
+  renderChangeImpactMarkdown,
+  runChangeImpact
+} from '../domains/change-impact/index.js'
 import {
   createIntentFulfilmentLane,
   runIntentFulfilment
@@ -98,10 +102,12 @@ import {
 } from './args.js'
 import {
   ensureDirectory,
+  IMPACT_MARKDOWN_ARTIFACT_NAME,
   jsonResult,
   readRunIndex,
   recordRunInIndex,
   resolveArtifactWritePath,
+  writeChangeImpactArtifacts,
   writePartialReviewArtifacts,
   writeReviewArtifacts,
   writeRunArtifact
@@ -384,27 +390,72 @@ const mediatedFileReader =
     }
   }
 
+// What a check command may put in front of the reader on top of the default
+// presentation, which is the report as pretty JSON on stdout and an empty stderr.
+// An absent field keeps that default, so a stage that renders nothing extra needs
+// to say nothing.
+type CheckCommandPresentation = {
+  readonly stdout?: string
+  readonly stderr?: string
+}
+
+// Presentation runs AFTER the report exists and must never decide whether the
+// command succeeded. Rendering a document or writing an artifact is a courtesy to
+// the reader; failing an advisory stage because a file could not be written would
+// turn "we could not show you this nicely" into "your pipeline is broken", and
+// spec 22 makes exiting 0 a requirement rather than a default. So a presentation
+// failure degrades to the default JSON output plus a line saying what was lost.
+const presentCheckReport = async <TReport>(
+  present: ((report: TReport) => Promise<CheckCommandPresentation>) | undefined,
+  report: TReport
+): Promise<CheckCommandPresentation> => {
+  if (present === undefined) {
+    return {}
+  }
+
+  try {
+    return await present(report)
+  } catch (error) {
+    return {
+      stderr: `Could not render or write the report artifacts: ${normalizeError(error, { source: 'report' }).message}\n`
+    }
+  }
+}
+
 // `impact check`, `intent check` and `conformance check` are three independently
-// runnable ADVISORY stages that share one shape: they accept only the two git
-// refs, require the `check` subcommand, load configuration in a scope of its own
-// so a malformed config file exits 2 as a config error rather than being swept
-// into the repository fallback the rest of the command needs for git failures,
-// and then print a report as JSON with exit code 0 WHATEVER the report says.
-// Only the report body differs, so the skeleton is written once here — a fourth
-// advisory stage cannot accidentally acquire the ability to fail a pipeline.
-const runCheckCommand = async (
+// runnable ADVISORY stages that share one shape: they accept the two git refs,
+// require the `check` subcommand, load configuration in a scope of its own so a
+// malformed config file exits 2 as a config error rather than being swept into
+// the repository fallback the rest of the command needs for git failures, and
+// then print a report as JSON with exit code 0 WHATEVER the report says. Only the
+// report body and its presentation differ, so the skeleton is written once here —
+// a fourth advisory stage cannot accidentally acquire the ability to fail a
+// pipeline.
+const runCheckCommand = async <TReport>(
   input: {
     readonly name: string
     readonly args: readonly string[]
     readonly options: CliRunOptions
+    // Options this stage accepts beyond the two git refs every check takes. The
+    // sets stay per-command rather than pooled into one permissive union, so a
+    // flag one stage implements is still unknown to the others.
+    readonly commandOptions?: readonly string[]
     readonly report: (context: {
       readonly loadedConfig: LoadedCodeReviewerConfig
       readonly baseRef: string | undefined
       readonly headRef: string | undefined
-    }) => Promise<unknown>
+    }) => Promise<TReport>
+    readonly present?: (
+      report: TReport,
+      context: { readonly loadedConfig: LoadedCodeReviewerConfig }
+    ) => Promise<CheckCommandPresentation>
   }
 ): Promise<CliResult> => {
-  const unrecognized = unknownCliOption(input.args, ['--base-ref', '--head-ref'])
+  const unrecognized = unknownCliOption(input.args, [
+    '--base-ref',
+    '--head-ref',
+    ...(input.commandOptions ?? [])
+  ])
 
   if (unrecognized !== undefined) {
     return usageError(`Unknown option ${unrecognized}`)
@@ -424,16 +475,23 @@ const runCheckCommand = async (
   }
 
   try {
+    const report = await input.report({
+      loadedConfig,
+      baseRef: parseOptionValue(checkArgs, '--base-ref'),
+      headRef: parseOptionValue(checkArgs, '--head-ref')
+    })
+    const present = input.present
+    const presentation = await presentCheckReport(
+      present === undefined
+        ? undefined
+        : (presented: TReport) => present(presented, { loadedConfig }),
+      report
+    )
+
     return {
       exitCode: 0,
-      stdout: jsonResult(
-        await input.report({
-          loadedConfig,
-          baseRef: parseOptionValue(checkArgs, '--base-ref'),
-          headRef: parseOptionValue(checkArgs, '--head-ref')
-        })
-      ),
-      stderr: ''
+      stdout: presentation.stdout ?? jsonResult(report),
+      stderr: presentation.stderr ?? ''
     }
   } catch (error) {
     return mapErrorResult(error, 'repository')
@@ -1300,6 +1358,12 @@ const runDrift = async (
   }
 }
 
+// JSON is the default because it was the only output this command ever had, and a
+// script reading stdout must keep working unchanged.
+const impactOutputFormats = ['json', 'markdown'] as const
+
+type ImpactOutputFormat = (typeof impactOutputFormats)[number]
+
 // `impact check` (spec 22). It makes NO provider call: the whole command is
 // deterministic, so it costs nothing to run and its output is reproducible.
 //
@@ -1311,14 +1375,30 @@ const runDrift = async (
 // repository (3) failure changes that. This command is also spec 22's own
 // falsifier: its removal criterion is that the capability must beat naming the
 // changed symbols and letting a human grep, and this IS that baseline.
+//
+// Its output goes three places, for one reason each. The JSON stays on stdout so
+// scripted use keeps working. The rendered Markdown lands in the run directory
+// beside where `review` writes `report.md`, because a report a reviewer has to go
+// looking for is not in the workflow they actually use — spec 22 records exactly
+// that gap. `--format markdown` puts the same document on stdout for someone
+// reading it in a terminal or piping it into a pull-request body.
 const runImpact = async (
   args: readonly string[],
   options: CliRunOptions
-): Promise<CliResult> =>
-  runCheckCommand({
+): Promise<CliResult> => {
+  let format: ImpactOutputFormat | undefined
+
+  try {
+    format = parseEnumOption(args, '--format', impactOutputFormats)
+  } catch (error) {
+    return mapErrorResult(error, 'config')
+  }
+
+  return runCheckCommand({
     name: 'impact',
     args,
     options,
+    commandOptions: ['--format'],
     report: async ({ loadedConfig, baseRef, headRef }) => {
       // The read budget is sized to the review file cap, which is the same bound
       // intake applies to how many files can be changed in one run.
@@ -1343,8 +1423,45 @@ const runImpact = async (
         ...(options.now === undefined ? {} : { generatedAt: options.now() }),
         readChangedFile: mediatedFileReader(retriever)
       })
+    },
+    present: async (report, { loadedConfig }) => {
+      const markdown = renderChangeImpactMarkdown(report)
+
+      // A disabled run analysed nothing, so it leaves nothing behind. Writing a
+      // run directory per invocation for a capability that is off by default
+      // would accumulate empty runs in a repository whose owner never asked for
+      // the stage — and these directories are not in the run index, so nothing
+      // would ever enumerate them again. The report still says `disabled` on
+      // stdout, and `--format markdown` still renders it.
+      if (report.status === 'disabled') {
+        return format === 'markdown' ? { stdout: markdown } : {}
+      }
+
+      // A run of its own, in the same place `review` puts one. The id is prefixed
+      // so a directory listing says which stage produced it; nothing reads the
+      // prefix.
+      const artifactRoot = path.posix.join(
+        loadedConfig.config.paths.artifactDir,
+        `impact-${randomUUID()}`
+      )
+
+      await writeChangeImpactArtifacts({
+        repositoryRoot: options.cwd,
+        artifactRoot,
+        reportJson: jsonResult(report),
+        reportMarkdown: markdown
+      })
+
+      return {
+        ...(format === 'markdown' ? { stdout: markdown } : {}),
+        // The path goes to stderr rather than into the report on stdout: the
+        // report is a strict schema a consumer parses, and stdout has to stay
+        // exactly one JSON document for the scripted use that already exists.
+        stderr: `Change-impact report: ${path.posix.join(artifactRoot, IMPACT_MARKDOWN_ARTIFACT_NAME)}\n`
+      }
     }
   })
+}
 
 // `intent check` (spec 23).
 //

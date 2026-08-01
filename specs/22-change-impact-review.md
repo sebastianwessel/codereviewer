@@ -441,7 +441,8 @@ whatever it reports, and `status: "disabled"` is emitted when the capability is 
 
 | Requirement | State of the implementation |
 | --- | --- |
-| *Design* steps 1 and 3 — contract delta and impact adjudication | Not implemented. |
+| *Design* step 1 — contract delta | **Partly implemented, 2026-08-01.** Deterministic and text-derived, over six language-neutral dimensions: absence, failure, return shape, guard, mutation, concurrency. Derived from the diff lines inside a symbol's span rather than from a second parse of the base revision — intake already carries the unified diff, so re-parsing every changed file would buy nothing the diff does not already hold. A dimension is reported only when ASYMMETRIC between the added and removed sides, so a body that already threw and still throws says nothing. It reads TEXT: a signal-strength claim ("a caller can observe this"), never a proof, and never a type-system conclusion. Empty means "changed, but not in a way this engine can show reaches a caller" — never "safe". |
+| *Design* step 3 — impact adjudication | Not implemented. |
 | *Requirements*: findings carry the dependent's path and line, the contract element relied upon, and the consequence; a finding without a named dependent is rejected | No finding exists to carry them. Nothing is admitted, nothing carries a severity, and the two matrix rows below that name an admission test have no counterpart. |
 | *Report at file granularity, not per site* | The report groups sites under the **changed symbol**, not the destination file. This is the opposite of the grouping the RIPPLE result mandates, and it is free precision left on the table. |
 | *Removals must be paired with additions before reporting* | Not implemented. `changeKind` is taken straight from intake, so a pure rename is reported today as a deletion — the most severe category — exactly as the section warns. |

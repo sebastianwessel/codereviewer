@@ -55,6 +55,14 @@ export type ChangedSymbol = {
   readonly kind: ChangedSymbolKind
   readonly language: SupportedSignalLanguage
   readonly line: number
+  // Last line the symbol OWNS, on the same side as `line`: the line before the
+  // next declaration, or the end of the file for the last one. Carried on the
+  // symbol rather than recomputed by consumers, because the span is derived from
+  // the neighbouring declarations of the whole file and a consumer holding one
+  // symbol cannot rederive it. `contract-changes` needs exactly this to decide
+  // which diff lines belong to which symbol; a second, weaker guess at the span
+  // there would disagree with the one that seeded the symbol in the first place.
+  readonly spanEndLine: number
   readonly changeKind: ChangedFileChangeKind
 }
 
@@ -147,7 +155,7 @@ const symbolSpansFor = (
 const factIsChanged = (
   file: ChangedSymbolSourceFile,
   fact: SupportSignalFact,
-  spanEndByLine: ReadonlyMap<number, number>
+  spanEndLine: number
 ): boolean => {
   // A deleted file has no surviving lines to intersect, and every symbol it
   // declared is gone. Anything less than "all of them" would be wrong.
@@ -167,10 +175,8 @@ const factIsChanged = (
   // touched, and all three reported ZERO changed symbols and an empty blast
   // radius. A signature change, the only case the old rule caught, is the rare one
   // and is usually caught by the compiler anyway.
-  const spanEnd = spanEndByLine.get(fact.line) ?? fact.line
-
   return file.hunks.some((hunk) =>
-    hunkTouchesRange(hunk, fact.line, spanEnd)
+    hunkTouchesRange(hunk, fact.line, spanEndLine)
   )
 }
 
@@ -248,11 +254,13 @@ export const collectChangedSymbols = (
     }
 
     const file = filesByPath.get(fact.path)
+    // A declaration line missing from the span map owns only itself. That can
+    // only happen when the file contributed no seedable declaration at all, which
+    // cannot be true of a fact that reached this line, so the fallback is
+    // defensive rather than a case a run is expected to hit.
+    const spanEndLine = spansByPath.get(fact.path)?.get(fact.line) ?? fact.line
 
-    if (
-      file === undefined ||
-      !factIsChanged(file, fact, spansByPath.get(fact.path) ?? new Map())
-    ) {
+    if (file === undefined || !factIsChanged(file, fact, spanEndLine)) {
       continue
     }
 
@@ -263,6 +271,7 @@ export const collectChangedSymbols = (
       kind: fact.kind,
       language: fact.language,
       line: fact.line,
+      spanEndLine,
       changeKind: file.changeKind
     }
     const existing = strongestByKey.get(key)

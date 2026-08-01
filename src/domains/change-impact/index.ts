@@ -11,9 +11,19 @@ export {
   type CollectChangedSymbolsResult
 } from './changed-symbols.js'
 export {
+  changedSymbolKey,
+  collectContractChanges,
+  type CollectContractChangesInput
+} from './contract-changes.js'
+export {
+  describeContractDelta,
+  type ContractDeltaInput
+} from './contract-delta.js'
+export {
   discoverDependents,
   type DiscoverDependentsInput
 } from './dependent-discovery.js'
+export { renderChangeImpactMarkdown } from './impact-markdown.js'
 export {
   ChangeImpactReferenceReportSchema,
   ChangedSymbolReferencesSchema,
