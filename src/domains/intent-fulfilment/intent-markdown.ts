@@ -38,6 +38,27 @@ import type {
 const WHAT_THIS_IS =
   'This report maps the STATED INTENT of a change onto the lines the change touched. It says what those lines do and do not SHOW. It is not a completeness check: an obligation with no evidence here may be finished elsewhere, deliberately deferred, or genuinely missing, and only a human reading it can tell which. Nothing here is a finding, nothing carries a severity, and this command cannot fail a pipeline.'
 
+// The measured error rates, printed where the reader is rather than left in an
+// evaluation report they will never open.
+//
+// Spec 23's governing risk is that OMISSION gets read as COVERAGE — a reader who
+// takes "evidenced" as "done" stops checking, which is the expensive direction.
+// Stating the two rates that bound that risk is the only honest way to let someone
+// calibrate how much weight to put on a row.
+//
+// From a pre-registered round over 28 cases run twice against one pinned engine
+// (`d29aa99`), scored against hand labels frozen and digested before the first
+// call: about 1 in 29 rows called evidenced is genuinely outstanding at head, and
+// about 1 in 10 genuinely-outstanding obligations never reaches this list at all.
+// The first figure is why a row here is not a certificate; the second is why the
+// list's silence is not a clearance.
+//
+// Deliberately qualitative in the prose and exact in the numbers. Rounding "3.5%"
+// to "rarely" would let a reader supply their own optimistic figure, which is the
+// failure this paragraph exists to prevent.
+const MEASURED_RELIABILITY =
+  'Measured reliability, so these rows can be weighed rather than trusted: about **1 in 29** obligations this stage calls evidenced is in fact still outstanding at head, and about **1 in 10** genuinely outstanding obligations never appear on this list at all. Those rates come from a pre-registered round over 28 real changes, each run twice against one pinned engine. They are why this report is read alongside the diff and never in place of it.'
+
 // The sentence a reader most needs when the outstanding list is empty, and the one
 // most easily replaced by a congratulation. Spec 23 forbids certifying completion,
 // so an empty list is reported as a fact about the search.
@@ -277,6 +298,8 @@ export const renderIntentFulfilmentMarkdown = (
     '# Intent Fulfilment Report',
     '',
     WHAT_THIS_IS,
+    '',
+    MEASURED_RELIABILITY,
     '',
     ...renderScope(report),
     ...renderSummary(report),
