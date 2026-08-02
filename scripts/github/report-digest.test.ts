@@ -31,6 +31,25 @@ describe('digestReviewReport', () => {
     expect(digest?.findings[0]?.fingerprint).toBe('fp1')
   })
 
+  // The comment asserts that a defect exists. Without the refuter's own account
+  // of what it tried and could not do, the assertion is unfalsifiable from the
+  // comment alone and a reader can only take it on faith.
+  it('carries what refutation tried against the finding and could not do', () => {
+    const digest = digestReviewReport(json(reviewReportFixture))
+
+    expect(digest?.findings[0]?.whySurvived).toBe(
+      'proved: Searched the route table for a guard that runs before the handler; none is registered.'
+    )
+  })
+
+  it('leaves the refutation account absent rather than inventing one', () => {
+    const digest = digestReviewReport(
+      json({ ...reviewReportFixture, refutationResults: [] })
+    )
+
+    expect(digest?.findings[0]?.whySurvived).toBeUndefined()
+  })
+
   it('tolerates a report that gained fields it does not know about', () => {
     const digest = digestReviewReport(
       json({ ...reviewReportFixture, somethingNew: { nested: true } })

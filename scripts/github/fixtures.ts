@@ -3,8 +3,11 @@
 // They are hand-built rather than captured from a paid run, and they are
 // deliberately shaped like what the engine actually emits: a model-origin
 // finding carries `side: "file"` (not `"new"`), which is the shape spec 13
-// records having been got wrong once before, and `fingerprints` is populated,
-// because inline-comment identity depends on it.
+// records having been got wrong once before, `fingerprints` is populated,
+// because inline-comment identity depends on it, and an admitted finding carries
+// `refutationId` with a matching `refutationResults` entry, because
+// `aiReview.requireRefutation` is a literal `true` — a fixture with an empty
+// refutation ledger is a shape the engine cannot produce.
 
 export const reviewReportFixture = {
   schemaVersion: '1.0',
@@ -29,6 +32,7 @@ export const reviewReportFixture = {
       location: { path: 'src/routes/admin.ts', startLine: 42, side: 'file' },
       baselineStatus: 'new',
       reporterEligibility: 'inline',
+      refutationId: 'refute_high1',
       fingerprints: [{ algorithm: 'sha256', value: 'fp1' }]
     },
     {
@@ -51,7 +55,17 @@ export const reviewReportFixture = {
     failingFindingIds: ['find_high1'],
     thresholds: { maxHigh: 0 }
   },
-  refutationResults: [],
+  refutationResults: [
+    {
+      id: 'refute_high1',
+      candidateId: 'cand_high1',
+      verdict: 'proved',
+      summary:
+        'Searched the route table for a guard that runs before the handler; none is registered.',
+      evidenceIds: ['ev_diff1'],
+      checks: []
+    }
+  ],
   providerIssues: [],
   artifacts: []
 }

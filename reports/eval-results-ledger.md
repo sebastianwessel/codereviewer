@@ -18,6 +18,32 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-08-02 — stage 1, three runs at one pinned engine
+
+The figures the report renderer now prints to users. Recorded here so the prose in
+`markdown-reporter.ts` and `summary-comment.ts` cannot drift from the measurement
+it cites. Engine `6781a26`, same dependency digest across all three runs.
+
+| metric | value |
+| --- | ---: |
+| in-diff recall | 61.7 / 60.0 / 61.7 — mean 61.1%, **sd 0.96pp** |
+| blended recall | 42.5 / 41.4 / 42.5 — mean 42.1%, **sd 0.66pp** |
+| adjusted precision | 100 / 97.3 / 100 — mean 99.1% |
+| out-of-diff recall | 0 / 0 / 0 — **0 of 27**, a measured zero over a full denominator |
+| reported findings landing in-diff | 94.2% (49 of 52); the 3 strays were all judged real |
+
+Two consequences worth keeping attached to these numbers.
+
+The **sd is ~0.7pp, not the ±4.8pp** this project used for months. That older band
+was estimated from too few samples and made every single-run comparison unreadable
+in both directions; it produced at least three wrong calls in one day, including two
+opposite readings of the same change.
+
+The **out-of-diff zero is a scope boundary, not a defect**. `impact check` covers
+that population at 20 of 27 (74.1%). Quoting a blended recall scores stage 1
+against stage 3's job — the error spec 22 warns about by name.
+
+
 ## 2026-08-02 — `intent check`'s repeatability measured for the first time: 87.0% verdict agreement against ITSELF, which is the limit on every intent figure in this ledger
 
 Artifacts: `.codereviewer/eval/intent-corpus-realistic/score-2026-08-02-repeatability.txt`,

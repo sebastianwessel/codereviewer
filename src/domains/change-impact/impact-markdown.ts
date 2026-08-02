@@ -17,7 +17,7 @@
 // Pure: it takes a report and returns a string. No filesystem, no clock, no
 // configuration. The CLI decides where the string goes.
 
-import { safeRedactedText, safeText } from '../reporting/index.js'
+import { inlineCode, pluralize, safeText } from '../reporting/index.js'
 import type {
   ChangeImpactReferenceReport,
   ChangedSymbolReferences,
@@ -36,33 +36,9 @@ const WHAT_THIS_IS =
 const NO_CONTRACT_CHANGE_DETECTED =
   'No caller-observable contract change was detected. That means this engine could not show the change reaching a caller from the diff text — it is NOT a statement that the change is safe.'
 
-// A matched line is source, and source is full of characters Markdown would
-// otherwise eat (`*`, `_`, `[`, backticks). Escaping each one, as prose rendering
-// does, leaves a reader reading backslashes instead of code, so code goes in a
-// code span instead. The delimiter grows past the longest backtick run in the
-// text, which is CommonMark's own answer to a code span containing backticks, so
-// no input can break out of the span.
-const inlineCode = (value: string): string => {
-  const text = safeRedactedText(value)
-
-  if (text.length === 0) {
-    return '(blank)'
-  }
-
-  const longestBacktickRun = [...text.matchAll(/`+/gu)].reduce(
-    (longest, match) => Math.max(longest, match[0].length),
-    0
-  )
-  const delimiter = '`'.repeat(longestBacktickRun + 1)
-  // A span whose content starts or ends with a backtick needs one space of
-  // padding, which CommonMark strips again when rendering.
-  const padding = text.startsWith('`') || text.endsWith('`') ? ' ' : ''
-
-  return `${delimiter}${padding}${text}${padding}${delimiter}`
-}
-
-const pluralize = (count: number, singular: string, plural: string): string =>
-  `${count} ${count === 1 ? singular : plural}`
+// `inlineCode` and `pluralize` are shared with the other two Markdown surfaces
+// from `../reporting/`: the code-span rule is security-relevant (it is what stops
+// untrusted source breaking out of a span) and must not drift between renderers.
 
 const location = (path: string, line: number): string =>
   inlineCode(`${path}:${line}`)

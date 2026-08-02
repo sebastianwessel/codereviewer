@@ -32,16 +32,16 @@ On success the command prints JSON to stdout:
 ```
 
 Expect **no findings**: without a provider there is no model-backed discovery, so
-`report.md` renders with its sections present and empty. What you are checking is
-that the run completed, that `report.md` shows the file count you expected under
-`Coverage`, and that nothing landed in `Skipped Files` by surprise:
+`report.md` says so in as many words rather than rendering an empty section. What
+you are checking is that the run completed, that `report.md` shows the file count
+you expected under `Scope of this search`, and that nothing landed in `Skipped
+Files` by surprise:
 
 ```text
-## Coverage
+## Scope of this search
 
-Status: complete
-Files: 1/1
-Bytes: 116/116
+- Run: `run-3f2c…` (mode local, depth balanced)
+- Files read in full: 1 of 1 reviewable (116 of 116 bytes). Coverage status: complete — a statement that the source reached a model, not that every defect in it was found.
 ```
 
 Getting this wrong is cheap here and expensive one step later — a scope mistake
@@ -76,8 +76,9 @@ a long one would be the surprise.
 Two consequences for a first run:
 
 - **Few or no findings on a small, clean change is expected**, not a
-  misconfiguration. Check `Coverage` and `Skipped Files` to confirm it actually
-  looked, then move on.
+  misconfiguration. Check `Scope of this search` and `Skipped Files` to confirm
+  it actually looked, then move on. The report states these same rates in its own
+  header, so a reader who never opens this page is calibrated too.
 - **A defect elsewhere in a file you changed will probably not be reported.**
   Measured: recall on those is 0 of 27, in files the reviewer was shown in full.
   Don't tune for it; re-run after fixing what it *did* find, which moves the diff

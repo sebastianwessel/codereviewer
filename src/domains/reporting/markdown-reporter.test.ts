@@ -86,6 +86,154 @@ describe('Markdown reporter', () => {
     expect(rendered).not.toContain('- medium: 1')
   })
 
+  // A reader who cannot tell what this document's silence means supplies their
+  // own figure, and the one they supply is optimistic. The two rates that bound
+  // that error are printed where the reader is.
+  test('states the measured error rates and what an absent finding does not mean', () => {
+    const rendered = renderMarkdownReport(createReportFixture())
+
+    expect(rendered).toContain('in-diff recall 61-68% across three runs')
+    expect(rendered).toContain('**0 of 27**')
+    expect(rendered).toContain('adjusted precision 95-99%')
+    expect(rendered).toContain(
+      'the absence of a finding is not the absence of a defect'
+    )
+  })
+
+  // The most expensive thing this document can do is read as a clearance. It
+  // used to open with `Passed: yes` above five empty headings.
+  test('a report with nothing to act on does not read as a clearance', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      admittedFindings: [],
+      qualityGate: {
+        passed: true,
+        failingFindingIds: [],
+        thresholds: { maxHigh: 0 },
+        baselineFilteringApplied: true
+      }
+    })
+
+    expect(rendered).toContain('## Actionable Findings (0)')
+    expect(rendered).toContain('This run proved no defect it could act on')
+    expect(rendered).toContain('never as "there is nothing to find"')
+    expect(rendered).toContain(
+      'not a judgement about the change'
+    )
+    expect(rendered).not.toContain('Passed: yes')
+  })
+
+  // Coverage `complete` is a statement that the source reached a model. Printed
+  // as a bare status under a passing gate it reads as completeness of the search.
+  test('does not present coverage as a completeness claim about defects', () => {
+    const rendered = renderMarkdownReport(createReportFixture())
+
+    expect(rendered).toContain(
+      'not that every defect in it was found'
+    )
+  })
+
+  test('a finding carries the refutation it survived and the evidence it rests on', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      refutationResults: [
+        {
+          id: 'refute_join1',
+          candidateId: 'cand_join1',
+          verdict: 'proved',
+          summary: 'Looked for a caller-side guard; none exists.',
+          evidenceIds: ['ev_diff1'],
+          checks: [
+            {
+              kind: 'proof-review',
+              result: 'passed',
+              summary: 'The claim follows from the cited line.',
+              evidenceIds: ['ev_diff1']
+            }
+          ]
+        }
+      ],
+      admittedFindings: [
+        { ...report.admittedFindings[0]!, refutationId: 'refute_join1' }
+      ]
+    })
+
+    expect(rendered).toContain(
+      '- Survived refutation (proved): Looked for a caller-side guard; none exists.'
+    )
+    expect(rendered).toContain('- Check proof-review: passed')
+    // The evidence RECORD, not the bare id it used to print nowhere at all.
+    expect(rendered).toContain('- Evidence this rests on:')
+    expect(rendered).toContain(
+      'Changed branch can return an incorrect value.'
+    )
+  })
+
+  test('names an evidence id whose record is missing rather than dropping it', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      evidence: [],
+      admittedFindings: [report.admittedFindings[0]!]
+    })
+
+    expect(rendered).toContain(
+      'no evidence record for this id is present in this report'
+    )
+  })
+
+  // Which finding blocks the merge used to be recoverable only by joining
+  // `qualityGate.failingFindingIds` in the JSON.
+  test('marks the finding that failed the quality gate on the finding itself', () => {
+    const rendered = renderMarkdownReport(createReportFixture())
+
+    expect(rendered).toContain(
+      '- **This finding is why the quality gate failed.**'
+    )
+  })
+
+  test('renders the whole location span and the side it is numbered on', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      admittedFindings: [
+        {
+          ...report.admittedFindings[0]!,
+          location: {
+            path: 'src/app.ts',
+            startLine: 4,
+            endLine: 11,
+            side: 'new'
+          }
+        }
+      ]
+    })
+
+    expect(rendered).toContain('- Location: `src/app.ts:4-11` (new side)')
+  })
+
+  // A stale baseline or a degraded stage was recorded in the JSON and in the
+  // pull-request comment, and was invisible in the artifact this project tells
+  // people to read.
+  test('surfaces run warnings as bounds on the search', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      run: { ...report.run, warnings: ['baseline file was 41 days old'] }
+    })
+
+    expect(rendered).toContain('## Bounds that bound')
+    expect(rendered).toContain('baseline file was 41 days old')
+  })
+
+  test('gives a rejected candidate the reason a human can act on', () => {
+    const rendered = renderMarkdownReport(createReportFixture())
+
+    expect(rendered).toContain('Candidate requires evidence.')
+  })
+
   test('renders missing refutation evidence explicitly', () => {
     const report = createReportFixture()
     const rendered = renderMarkdownReport({

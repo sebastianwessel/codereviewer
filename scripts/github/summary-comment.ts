@@ -69,6 +69,20 @@ const MAX_LISTED_OBLIGATIONS = 20
 const MAX_LISTED_SYMBOLS = 15
 const MAX_TITLE = 200
 const MAX_DESCRIPTION = 700
+const MAX_WHY_SURVIVED = 400
+
+// The measured error rates, on the comment itself rather than in an evaluation
+// report nobody opens. This is the surface most likely to be the ONLY thing a
+// reviewer reads — it sits on the pull request, above the diff — so it is the
+// surface where an unstated recall figure does the most damage: a reader who sees
+// a short list and no caveat supplies their own, and the one they supply is
+// optimistic.
+//
+// Same measurement as `report.md`: 37-case real-repository corpus, engine pinned,
+// in-diff recall 61-68% over three runs, adjusted precision 95-99%, out-of-diff
+// recall 0 of 27 by design.
+const MEASURED_RELIABILITY =
+  '_Diff-scoped search. On a measured corpus it finds about **3 in 5** defects inside the diff and **none** of those outside it, and about **19 in 20** of what it does report holds up. An empty list means this search found nothing, not that there is nothing to find._'
 
 const statusLabels: Readonly<Record<string, string>> = {
   passed: 'ok',
@@ -77,6 +91,11 @@ const statusLabels: Readonly<Record<string, string>> = {
   skipped: 'skipped'
 }
 
+// The headline is the one line a reader is guaranteed to see, so it may only
+// state what the run DID. "No findings" and "quality gate passed" both read as a
+// clearance of the change — the first says nothing was found and lets the reader
+// hear that nothing is there, and the second promotes a threshold comparison to a
+// verdict. Both are replaced by a count of what this search reported.
 const verdictHeadline = (input: SummaryCommentInput): string => {
   const review = input.outcomes.find((outcome) => outcome.id === 'review')
 
@@ -88,15 +107,15 @@ const verdictHeadline = (input: SummaryCommentInput): string => {
     return 'Code review could not complete'
   }
 
-  if (review.status === 'gate-failed') {
-    return 'Code review: quality gate failed'
-  }
-
   const findingCount = input.review?.findings.length ?? 0
+  const reported =
+    findingCount === 0
+      ? 'this search reported nothing'
+      : `${findingCount} finding${findingCount === 1 ? '' : 's'} to read`
 
-  return findingCount === 0
-    ? 'Code review: no findings'
-    : `Code review: quality gate passed, ${findingCount} finding${findingCount === 1 ? '' : 's'} to read`
+  return review.status === 'gate-failed'
+    ? `Code review: quality gate failed, ${reported}`
+    : `Code review: no threshold crossed, ${reported}`
 }
 
 const stageTable = (input: SummaryCommentInput): string => {
@@ -119,9 +138,16 @@ const stageTable = (input: SummaryCommentInput): string => {
   ].join('\n')
 }
 
-const findingsSection = (review: ReviewDigest): string | undefined => {
+const findingsSection = (review: ReviewDigest): string => {
+  // An empty findings list used to render as no section at all, which left the
+  // headline as the only statement about the review and let it be read as a
+  // clearance. What the silence means is said out loud instead.
   if (review.findings.length === 0) {
-    return undefined
+    return [
+      '### Findings (0)',
+      '',
+      'This run proved no defect it could act on. Roughly two in five defects inside the diff are missed on the measured corpus, and defects outside the diff are not searched for at all, so read this as "the search found nothing" rather than "there is nothing to find".'
+    ].join('\n')
   }
 
   const ordered = [...review.findings].sort(
@@ -140,7 +166,15 @@ const findingsSection = (review: ReviewDigest): string | undefined => {
       `  ${sanitizeLine(finding.title, MAX_TITLE)}`,
       ...(finding.description.length === 0
         ? []
-        : [`  ${sanitizeText(finding.description, MAX_DESCRIPTION).replaceAll('\n', ' ')}`])
+        : [`  ${sanitizeText(finding.description, MAX_DESCRIPTION).replaceAll('\n', ' ')}`]),
+      // Why the reader should believe it. Without this the comment asserts a
+      // defect and offers nothing to check it against, which is the same as
+      // asking to be trusted.
+      ...(finding.whySurvived === undefined
+        ? []
+        : [
+            `  _Survived refutation — ${sanitizeLine(finding.whySurvived, MAX_WHY_SURVIVED)}_`
+          ])
     ].join('\n')
   })
   const counts = severityOrder
@@ -313,13 +347,17 @@ const assemble = (marker: string, sections: readonly string[]): string => {
 export const renderSummaryComment = (input: SummaryCommentInput): string => {
   const marker = summaryCommentMarker(input.markerKey)
   const notes = input.notes.map((note) => `> ${sanitizeLine(note, 500)}`)
+  // Ordered by what a reviewer must act on, not by what the pipeline did. The
+  // findings used to sit below the stage table, so the first thing under the
+  // headline was a description of the machinery.
   const sections: readonly (string | undefined)[] = [
     `## ${verdictHeadline(input)}`,
+    MEASURED_RELIABILITY,
     notes.length === 0 ? undefined : notes.join('\n>\n'),
-    stageTable(input),
     input.review === undefined ? undefined : findingsSection(input.review),
     input.intent === undefined ? undefined : intentSection(input.intent),
     input.impact === undefined ? undefined : impactSection(input.impact),
+    stageTable(input),
     detailsSection(input)
   ]
 

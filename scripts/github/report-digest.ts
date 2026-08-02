@@ -44,9 +44,19 @@ const AdmittedFindingSchema = z.object({
   location: LocationSchema,
   baselineStatus: z.string().nullish(),
   reporterEligibility: z.string().nullish(),
+  // The link into `refutationResults`. Without it the comment can state that a
+  // finding exists but not what was tried against it, which is the difference
+  // between a claim a reviewer can check and one they must take on faith.
+  refutationId: z.string().nullish(),
   fingerprints: z
     .array(z.object({ value: z.string() }))
     .nullish()
+})
+
+const RefutationResultSchema = z.object({
+  id: z.string(),
+  verdict: z.string(),
+  summary: z.string()
 })
 
 const ReviewReportSchema = z.object({
@@ -57,6 +67,7 @@ const ReviewReportSchema = z.object({
   }),
   coverage: z.object({ status: z.string() }).nullish(),
   admittedFindings: z.array(AdmittedFindingSchema).nullish(),
+  refutationResults: z.array(RefutationResultSchema).nullish(),
   skippedFiles: z.array(z.unknown()).nullish(),
   qualityGate: z
     .object({
@@ -78,6 +89,11 @@ export type FindingDigest = {
   readonly path: string
   readonly startLine: number
   readonly baselineStatus: string
+  /**
+   * What refutation tried against this finding and could not do, in the
+   * refuter's own words. Absent when no verdict was recorded against it.
+   */
+  readonly whySurvived?: string
   /**
    * The finding's stable, content-anchored fingerprint. Used as the identity of
    * an inline comment across runs: finding ids are generated per run, so they
@@ -134,9 +150,19 @@ export const digestReviewReport = (raw: string): ReviewDigest | undefined => {
   }
 
   const report = parsed.data
+  const refutationById = new Map(
+    (report.refutationResults ?? []).map((refutation) => [
+      refutation.id,
+      refutation
+    ])
+  )
   const findings: readonly FindingDigest[] = (report.admittedFindings ?? []).map(
     (finding) => {
       const fingerprint = finding.fingerprints?.[0]?.value
+      const refutation =
+        finding.refutationId === undefined || finding.refutationId === null
+          ? undefined
+          : refutationById.get(finding.refutationId)
 
       return {
         id: finding.id,
@@ -147,6 +173,9 @@ export const digestReviewReport = (raw: string): ReviewDigest | undefined => {
         path: finding.location.path,
         startLine: finding.location.startLine,
         baselineStatus: finding.baselineStatus ?? 'unknown',
+        ...(refutation === undefined
+          ? {}
+          : { whySurvived: `${refutation.verdict}: ${refutation.summary}` }),
         ...(fingerprint === undefined ? {} : { fingerprint })
       }
     }

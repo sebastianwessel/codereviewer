@@ -1,9 +1,64 @@
-import type { ReviewReport } from '../../shared/contracts/index.js'
+// The human-readable face of the REVIEW report.
+//
+// WHY THIS ONE IS DIFFERENT FROM THE OTHER TWO. `impact check` and `intent check`
+// are advisory and cannot fail a pipeline. This report can block a merge, and it
+// is the one a reviewer actually reads instead of the diff. That makes its two
+// failure modes expensive in opposite directions: a finding a reader cannot check
+// gets taken on faith, and a section a reader finds empty gets taken as a
+// clearance. Everything below is arranged against those two.
+//
+// WHAT IT MUST NOT BECOME. A verdict. The quality gate is a threshold comparison
+// over what THIS RUN happened to report, so `passed: true` means "nothing found
+// crossed a number", never "the change is sound" — and it used to be rendered as
+// `Passed: yes`, second from the top, above a set of empty headings. Coverage has
+// the same shape: `complete` means every reviewable file was read, not that every
+// defect in them was found. Both are now stated as facts about the search.
+//
+// Pure: it takes a report and returns a string. No filesystem, no clock, no
+// configuration.
+import type {
+  AdmittedFinding,
+  EvidenceRecord,
+  RefutationResult,
+  RejectedFinding,
+  ReviewReport
+} from '../../shared/contracts/index.js'
 import {
+  inlineCode,
+  pluralize,
   safeText,
   sortAdmittedFindings,
   validateReviewReport
 } from './reporting-utils.js'
+
+// Stated once, at the top, because the single most consequential thing a reader
+// can get wrong about this document is what its SILENCE means. A reader who skims
+// a short findings list and infers "little was wrong" has inverted the artifact:
+// the list is what one bounded, diff-scoped search could prove, not an inventory
+// of the change's defects.
+const WHAT_THIS_IS =
+  'This report lists DEFECTS THIS RUN COULD PROVE from the change it was shown. It is a diff-scoped search: attention follows the changed lines, and code the change did not touch is not searched for defects even when it was read in full. Every finding below survived an attempt to refute it and cites the lines it rests on, so it can be checked rather than believed. Nothing here is a certificate that the change is correct, and the absence of a finding is not the absence of a defect.'
+
+// The measured error rates, printed where the reader is rather than left in an
+// evaluation report they will never open — the same decision `intent check` made,
+// for the same reason: rounding a rate to "usually" lets a reader supply their own
+// optimistic figure, and the optimistic figure is the expensive one here.
+//
+// Sources, all on the 37-case real-repository corpus with the engine pinned:
+// in-diff recall 61-68% over three runs (sd 0.66pp), adjusted precision 95-99%,
+// out-of-diff recall 0 of 27 — a hard zero over a full denominator, not missing
+// data — and 94.2% of reported findings landing inside the diff. The out-of-diff
+// population is not a defect of this stage but its scope boundary, and `impact
+// check` is the stage that covers it (20 of 27, 74.1%), so it is named here rather
+// than left as an unexplained hole.
+const MEASURED_RELIABILITY =
+  'Measured reliability, so these findings can be weighed rather than trusted. On a 37-case real-repository corpus with the engine pinned: about **3 in 5** defects sitting INSIDE the diff were found (in-diff recall 61-68% across three runs), and **0 of 27** defects sitting outside the diff in the very same changed files were found — a measured zero over a full denominator, and by design, since this stage is diff-scoped and `impact check` is the stage that covers that population. Of what it does report, roughly **19 in 20** stand up under review (adjusted precision 95-99%), and 94.2% of it lands inside the diff. Two runs over the same commit do not produce the same report.'
+
+// The sentence that has to be right when the list is short, and the one most
+// easily replaced by a congratulation. Reused wherever an empty findings list is
+// rendered so the two cannot drift apart.
+const NOTHING_PROVED =
+  'This run proved no defect it could act on. That is a statement about this search and not about the change: roughly two in five defects inside the diff are missed on the measured corpus, and defects outside the diff are not looked for at all. Read it as "this search found nothing", never as "there is nothing to find".'
 
 const countBy = <T extends string>(
   values: readonly T[]
@@ -14,223 +69,531 @@ const countBy = <T extends string>(
     return counts
   }, {})
 
-const renderCounts = (title: string, counts: Readonly<Record<string, number>>): string =>
-  [`## ${title}`, '', ...Object.entries(counts).map(([key, value]) => `- ${safeText(key)}: ${value}`), ''].join('\n')
+const countList = (counts: Readonly<Record<string, number>>): string =>
+  Object.entries(counts)
+    .map(([key, value]) => `${value} ${safeText(key)}`)
+    .join(', ')
 
 const renderEvidenceIds = (evidenceIds: readonly string[]): string =>
-  evidenceIds.length === 0
-    ? 'none cited'
-    : evidenceIds.map(safeText).join(', ')
+  evidenceIds.length === 0 ? 'none cited' : evidenceIds.map(safeText).join(', ')
+
+// A location is a place a reader has to open, so it is rendered whole: the end
+// line when the finding has one (a nine-line span reported as its first line sends
+// the reader to the wrong place), and the side, because an old-side line number
+// names a line that no longer exists on the new side.
+const renderLocation = (finding: AdmittedFinding): string => {
+  const { location } = finding
+  const span =
+    location.endLine === undefined || location.endLine === location.startLine
+      ? `${location.path}:${location.startLine}`
+      : `${location.path}:${location.startLine}-${location.endLine}`
+
+  return `${inlineCode(span)} (${safeText(location.side)} side)`
+}
+
+// The answer to "why should I believe this?", per finding, in the reader's line of
+// sight. Both halves used to exist only as bare ids: `evidenceIds` pointed into a
+// list this document never rendered at all, and `refutationId` pointed into a flat
+// section at the bottom keyed by CANDIDATE id — a key that appears nowhere else in
+// the document, so the join was not one a human could actually perform.
+const renderProof = (
+  finding: AdmittedFinding,
+  evidenceById: ReadonlyMap<string, EvidenceRecord>,
+  refutationById: ReadonlyMap<string, RefutationResult>
+): readonly string[] => {
+  const refutation =
+    finding.refutationId === undefined
+      ? undefined
+      : refutationById.get(finding.refutationId)
+  const lines: string[] = []
+
+  lines.push(
+    refutation === undefined
+      ? // Deliberately NOT the wording used for an unresolved finding below: the
+        // two say different things and a reader must be able to tell them apart.
+        '- Survived refutation: no verdict was recorded against this finding, so what it survived cannot be shown here.'
+      : `- Survived refutation (${safeText(refutation.verdict)}): ${safeText(refutation.summary)}`
+  )
+
+  if (refutation !== undefined) {
+    for (const check of refutation.checks) {
+      lines.push(
+        `  - Check ${safeText(check.kind)}: ${safeText(check.result)} - ${safeText(check.summary)} (evidence: ${renderEvidenceIds(check.evidenceIds)})`
+      )
+    }
+  }
+
+  lines.push('- Evidence this rests on:')
+
+  for (const evidenceId of finding.evidenceIds) {
+    const record = evidenceById.get(evidenceId)
+
+    if (record === undefined) {
+      // Named rather than dropped. An evidence id with no record in this report
+      // is a hole in the audit trail, and a hole a reader cannot see is worse
+      // than one they can.
+      lines.push(
+        `  - ${inlineCode(evidenceId)}: no evidence record for this id is present in this report`
+      )
+      continue
+    }
+
+    const where =
+      record.location === undefined
+        ? ''
+        : ` at ${inlineCode(`${record.location.path}:${record.location.startLine}`)}`
+
+    lines.push(
+      `  - ${safeText(record.kind)}${where}: ${safeText(record.summary)}`
+    )
+  }
+
+  return lines
+}
+
+const renderFixProposal = (finding: AdmittedFinding): readonly string[] => {
+  const { fixProposal } = finding
+
+  if (fixProposal === undefined) {
+    return []
+  }
+
+  return [
+    `- Suggested fix (never applied automatically): ${safeText(fixProposal.summary)}`,
+    `- Fix evidence: ${renderEvidenceIds(fixProposal.evidenceIds)}`,
+    ...(fixProposal.edits === undefined || fixProposal.edits.length === 0
+      ? []
+      : [
+          '- Fix edits:',
+          ...fixProposal.edits.map((edit) => {
+            const description =
+              edit.description === undefined
+                ? ''
+                : ` - ${safeText(edit.description)}`
+
+            return `  - ${inlineCode(`${edit.path}:${edit.startLine}-${edit.endLine}`)}: ${inlineCode(edit.replacement)}${description}`
+          })
+        ])
+  ]
+}
+
+const renderActionableFinding = (
+  finding: AdmittedFinding,
+  input: {
+    readonly blocking: ReadonlySet<string>
+    readonly evidenceById: ReadonlyMap<string, EvidenceRecord>
+    readonly refutationById: ReadonlyMap<string, RefutationResult>
+  }
+): readonly string[] => [
+  `### ${safeText(finding.severity.toUpperCase())}: ${safeText(finding.title)}`,
+  '',
+  // First bullet, because it is the one that decides whether this finding is why
+  // the merge is blocked. It used to be recoverable only by cross-referencing
+  // `qualityGate.failingFindingIds` in the JSON.
+  ...(input.blocking.has(finding.id)
+    ? ['- **This finding is why the quality gate failed.**']
+    : []),
+  `- Location: ${renderLocation(finding)}`,
+  `- Category: ${safeText(finding.category)}`,
+  `- ID: ${inlineCode(finding.id)}`,
+  ...(finding.baselineStatus === 'existing'
+    ? [
+        '- Baseline: existing - this defect predates the change and is reported for context.'
+      ]
+    : [`- Baseline: ${safeText(finding.baselineStatus)}`]),
+  ...renderProof(finding, input.evidenceById, input.refutationById),
+  ...renderFixProposal(finding),
+  '',
+  safeText(finding.description),
+  ''
+]
+
+// Unresolved findings are suspicions the refuter could neither prove nor disprove
+// from the context it had — most often because the deciding evidence lives
+// somewhere it could not reach. Rendering them as a bare id and title made them
+// undecidable for a human too, which is the same as dropping them. They stay out
+// of the quality gate and out of inline comments on purpose: surfacing a suspicion
+// for a human decision must not block a build or add review noise.
+const renderUnresolvedFinding = (
+  finding: AdmittedFinding,
+  input: {
+    readonly evidenceById: ReadonlyMap<string, EvidenceRecord>
+    readonly refutationById: ReadonlyMap<string, RefutationResult>
+  }
+): readonly string[] => {
+  const refutation =
+    finding.refutationId === undefined
+      ? undefined
+      : input.refutationById.get(finding.refutationId)
+
+  return [
+    `### ${safeText(finding.severity.toUpperCase())}: ${safeText(finding.title)}`,
+    '',
+    `- Location: ${renderLocation(finding)}`,
+    `- Category: ${safeText(finding.category)}`,
+    `- ID: ${inlineCode(finding.id)}`,
+    `- Proposed by: ${safeText(finding.proposedBy)}`,
+    `- Why unresolved: ${
+      refutation === undefined
+        ? 'no refutation verdict was recorded for this candidate'
+        : `${safeText(refutation.verdict)} - ${safeText(refutation.summary)}`
+    }`,
+    ...(finding.evidenceIds.length === 0
+      ? []
+      : [
+          '- Evidence gathered so far:',
+          ...finding.evidenceIds.map((evidenceId) => {
+            const record = input.evidenceById.get(evidenceId)
+
+            return record === undefined
+              ? `  - ${inlineCode(evidenceId)}: no evidence record for this id is present in this report`
+              : `  - ${safeText(record.kind)}: ${safeText(record.summary)}`
+          })
+        ]),
+    '',
+    safeText(finding.description),
+    ''
+  ]
+}
+
+// What the gate is, said in the words of what it did. `passed` is a comparison
+// against configured thresholds over the findings THIS RUN produced; with recall
+// measured at roughly three in five in-diff defects, a run that crosses no
+// threshold has established that and nothing more.
+const renderGate = (report: ReviewReport): readonly string[] => {
+  const gate = report.qualityGate
+
+  if (gate === undefined) {
+    return ['- Quality gate: not evaluated for this run.']
+  }
+
+  const thresholds = Object.entries(gate.thresholds)
+    .map(([key, value]) => `${safeText(key)} ${safeText(String(value))}`)
+    .join(', ')
+  const against =
+    thresholds.length === 0 ? '' : ` Thresholds applied: ${thresholds}.`
+
+  return gate.passed
+    ? [
+        `- **Quality gate: no reported finding crossed a configured threshold.**${against} That is a comparison against what this run found, not a judgement about the change.`
+      ]
+    : [
+        `- **Quality gate: FAILED.** ${pluralize(gate.failingFindingIds.length, 'finding crosses', 'findings cross')} a configured threshold.${against}`
+      ]
+}
+
+// What the search covered, so a reader can discount it. Coverage is deliberately
+// worded as "read", not as "reviewed" or "covered": `coverage.status = complete`
+// is a statement that every reviewable byte reached a model, and reading it as a
+// completeness claim about defects is the same error this whole document is
+// arranged against.
+const renderScope = (report: ReviewReport): readonly string[] => {
+  const { coverage, run } = report
+
+  return [
+    '## Scope of this search',
+    '',
+    `- Run: ${inlineCode(run.runId)} (mode ${safeText(run.mode)}, depth ${safeText(run.depth)})`,
+    ...(run.model === undefined
+      ? []
+      : [`- Model: ${inlineCode(run.model)}`]),
+    ...(run.baseRef === undefined
+      ? []
+      : [`- Base: ${inlineCode(run.baseRef)}`]),
+    ...(run.headRef === undefined
+      ? []
+      : [`- Head: ${inlineCode(run.headRef)}`]),
+    ...(run.mergeBaseRef === undefined
+      ? []
+      : [`- Merge base: ${inlineCode(run.mergeBaseRef)}`]),
+    `- Files read in full: ${coverage.coveredFileCount} of ${coverage.reviewableFileCount} reviewable (${coverage.coveredBytes.toLocaleString('en-US')} of ${coverage.reviewableBytes.toLocaleString('en-US')} bytes). Coverage status: ${safeText(coverage.status)} — a statement that the source reached a model, not that every defect in it was found.`,
+    ...(report.skippedFiles.length === 0
+      ? []
+      : [
+          `- Files never reviewed at all: ${report.skippedFiles.length}, listed under "Skipped Files" below.`
+        ]),
+    ''
+  ]
+}
+
+const renderSummary = (
+  report: ReviewReport,
+  input: {
+    readonly actionable: readonly AdmittedFinding[]
+    readonly unresolved: readonly AdmittedFinding[]
+  }
+): readonly string[] => {
+  const severities = countList(
+    countBy(input.actionable.map((finding) => finding.severity))
+  )
+  const categories = countList(
+    countBy(input.actionable.map((finding) => finding.category))
+  )
+
+  return [
+    '## Summary',
+    '',
+    `- **Findings to act on: ${input.actionable.length}**${severities.length === 0 ? '' : ` (${severities})`}`,
+    ...(categories.length === 0 ? [] : [`- By category: ${categories}`]),
+    ...renderGate(report),
+    `- Unresolved, needing a human decision: ${input.unresolved.length}`,
+    `- Candidates proposed and then rejected: ${report.rejectedFindings.length}`,
+    ''
+  ]
+}
+
+// Bounds a reader cannot discount unless they can see them. `run.warnings` used to
+// be dropped from this document entirely — a stale baseline or a degraded stage
+// was recorded in the JSON and in the pull-request comment, and was invisible in
+// the artifact this project tells people to read.
+const renderBounds = (report: ReviewReport): readonly string[] => {
+  const bounds: string[] = [
+    ...report.coverage.incompleteReasons.map(
+      (reason) => `Coverage is incomplete: ${safeText(reason)}`
+    ),
+    ...report.run.warnings.map(safeText)
+  ]
+
+  return bounds.length === 0
+    ? []
+    : ['## Bounds that bound', '', ...bounds.map((bound) => `- ${bound}`), '']
+}
+
+const renderRejected = (
+  rejected: readonly RejectedFinding[],
+  refutationsByCandidate: ReadonlyMap<string, RefutationResult>
+): readonly string[] => {
+  if (rejected.length === 0) {
+    return [
+      '## Rejected Candidates (0)',
+      '',
+      'Nothing was proposed and then thrown out. On a run that also reports no finding, that means discovery proposed nothing — not that everything proposed was sound.',
+      ''
+    ]
+  }
+
+  return [
+    `## Rejected Candidates (${rejected.length})`,
+    '',
+    'Suspicions this run raised and then discarded, with the reason. This is where the volume went if the report reads quieter than the change felt; a rejection can be right or wrong, and the reason is printed so you can tell.',
+    '',
+    ...rejected.map((entry) => {
+      const refutation = refutationsByCandidate.get(entry.candidateId)
+      // `message` carries the actual reason — the caller already checks this,
+      // the analyzer already reports it — and used to be dropped in favour of
+      // the bare enum, which is the one part of a rejection a reader cannot act
+      // on.
+      const message =
+        entry.message.length === 0
+          ? refutation === undefined
+            ? ''
+            : ` - ${safeText(refutation.summary)}`
+          : ` - ${safeText(entry.message)}`
+
+      return `- ${inlineCode(entry.candidateId)}: ${safeText(entry.reason)} (${safeText(entry.status)})${message}`
+    }),
+    ''
+  ]
+}
+
+// The full refutation ledger. Spec 05 requires Markdown to render candidate
+// fields, refutation summaries, refutation evidence, and refutation check evidence
+// as cited evidence IDs or `none cited`, so refutation can be audited without
+// opening JSON. That requirement is met here and NOT by the per-finding rendering
+// above, which is a reading aid over the same records.
+const renderRefutations = (
+  refutations: readonly RefutationResult[]
+): readonly string[] => {
+  if (refutations.length === 0) {
+    return [
+      '## Refutation Results (0)',
+      '',
+      'No candidate reached refutation in this run.',
+      ''
+    ]
+  }
+
+  return [
+    `## Refutation Results (${refutations.length})`,
+    '',
+    'The complete adjudication ledger, one entry per candidate, so refutation can be audited without opening the JSON. The entries behind admitted findings are repeated on those findings above.',
+    '',
+    ...refutations.flatMap((refutation) => [
+      `- ${inlineCode(refutation.id)}: ${safeText(refutation.verdict)} for ${inlineCode(refutation.candidateId)} - ${safeText(refutation.summary)}`,
+      `  - Refutation evidence: ${renderEvidenceIds(refutation.evidenceIds)}`,
+      ...refutation.checks.map(
+        (check) =>
+          `  - Refutation check ${safeText(check.kind)}: ${safeText(check.result)} - ${safeText(check.summary)} evidence: ${renderEvidenceIds(check.evidenceIds)}`
+      )
+    ]),
+    ''
+  ]
+}
+
+const renderProviderIssues = (report: ReviewReport): readonly string[] =>
+  report.providerIssues.length === 0
+    ? []
+    : [
+        `## Provider Issues (${report.providerIssues.length})`,
+        '',
+        'Model or provider trouble during the run. A recovered issue still means a stage was retried or degraded, which is a reason this search may be thinner than usual.',
+        '',
+        ...report.providerIssues.map((issue) => {
+          const stage = issue.stage === undefined ? 'unknown-stage' : issue.stage
+          const recovered =
+            issue.recovered === undefined
+              ? 'unknown'
+              : issue.recovered
+                ? 'yes'
+                : 'no'
+          const message =
+            issue.message === undefined ? '' : ` - ${safeText(issue.message)}`
+
+          return `- ${safeText(issue.code)} at ${safeText(stage)} recovered: ${recovered}${message}`
+        }),
+        ''
+      ]
+
+const renderSkippedFiles = (report: ReviewReport): readonly string[] =>
+  report.skippedFiles.length === 0
+    ? []
+    : [
+        `## Skipped Files (${report.skippedFiles.length})`,
+        '',
+        'Part of the change set, never reviewed. Nothing above says anything about these files.',
+        '',
+        ...report.skippedFiles.map(
+          (skipped) =>
+            `- ${inlineCode(skipped.path)}: ${safeText(skipped.reason)}${skipped.message === undefined ? '' : ` - ${safeText(skipped.message)}`}`
+        ),
+        ''
+      ]
+
+// Spend and tokens, stated on every report rather than left to a JSON field. This
+// engine bills a provider per run and the reader is the person paying, so the
+// amount belongs beside the findings — the same place the pull-request comment
+// already puts it.
+//
+// Tokens are reported alongside because cost alone cannot be acted on: input
+// dominates output by roughly 23:1 here, so a reader deciding whether to narrow
+// `paths.include` needs to see WHICH side is large. `cachedInputTokens` is a
+// SUBSET of `inputTokens`, never an addition, and is shown because a warm cache
+// can change spend severalfold with no change to the review itself.
+const renderCost = (report: ReviewReport): readonly string[] => {
+  const { run } = report
+  const lines: string[] = [
+    '## Cost And Timing',
+    '',
+    `- Duration: ${run.durationMs.toLocaleString('en-US')} ms`
+  ]
+
+  if (run.costUsd === undefined) {
+    // Never silently omitted: a missing cost means tokens or prices were
+    // unavailable, and a reader must be able to tell that from "this was free".
+    lines.push('- Cost: unavailable (token counts or model prices were missing)')
+  } else {
+    lines.push(`- Cost: $${run.costUsd.toFixed(4)}`)
+  }
+
+  if (run.inputTokens !== undefined) {
+    const cached =
+      run.cachedInputTokens === undefined
+        ? ''
+        : ` (${run.cachedInputTokens.toLocaleString('en-US')} cached)`
+
+    lines.push(
+      `- Input tokens: ${run.inputTokens.toLocaleString('en-US')}${cached}`
+    )
+  }
+
+  if (run.outputTokens !== undefined) {
+    lines.push(`- Output tokens: ${run.outputTokens.toLocaleString('en-US')}`)
+  }
+
+  lines.push('')
+
+  return lines
+}
+
+const indexById = <T>(
+  values: readonly T[],
+  key: (value: T) => string
+): ReadonlyMap<string, T> => new Map(values.map((value) => [key(value), value]))
 
 export const renderMarkdownReport = (input: unknown): string => {
   const report: ReviewReport = validateReviewReport(input)
   const admittedFindings = sortAdmittedFindings(report.admittedFindings)
-  const actionableFindings = admittedFindings.filter(
+  const actionable = admittedFindings.filter(
     (finding) => finding.reporterEligibility !== 'artifact-only'
   )
-  const artifactOnlyFindings = admittedFindings.filter(
+  const unresolved = admittedFindings.filter(
     (finding) => finding.reporterEligibility === 'artifact-only'
   )
-  const severityCounts = countBy(actionableFindings.map((finding) => finding.severity))
-  const categoryCounts = countBy(actionableFindings.map((finding) => finding.category))
+  const evidenceById = indexById(report.evidence, (record) => record.id)
+  const refutationById = indexById(
+    report.refutationResults,
+    (refutation) => refutation.id
+  )
+  const refutationsByCandidate = indexById(
+    report.refutationResults,
+    (refutation) => refutation.candidateId
+  )
+  const blocking = new Set(report.qualityGate?.failingFindingIds ?? [])
+
   const lines: string[] = [
     '# Review Report',
     '',
-    `Run: ${safeText(report.run.runId)}`,
-    `Mode: ${safeText(report.run.mode)}`,
-    `Depth: ${safeText(report.run.depth)}`,
-    `Duration: ${report.run.durationMs} ms`,
+    WHAT_THIS_IS,
+    '',
+    MEASURED_RELIABILITY,
+    '',
+    ...renderScope(report),
+    ...renderSummary(report, { actionable, unresolved }),
+    ...renderBounds(report),
+    // First section of substance, because it is the reason to open the document.
+    `## Actionable Findings (${actionable.length})`,
     ''
   ]
 
-  if (report.qualityGate !== undefined) {
-    lines.push('## Quality Gate', '')
-    lines.push(`Passed: ${report.qualityGate.passed ? 'yes' : 'no'}`)
-    lines.push(`Failing findings: ${report.qualityGate.failingFindingIds.length}`)
-    lines.push('')
-  }
-
-  lines.push('## Coverage', '')
-  lines.push(`Status: ${safeText(report.coverage.status)}`)
-  lines.push(
-    `Files: ${report.coverage.coveredFileCount}/${report.coverage.reviewableFileCount}`
-  )
-  lines.push(
-    `Bytes: ${report.coverage.coveredBytes}/${report.coverage.reviewableBytes}`
-  )
-  if (report.coverage.incompleteReasons.length > 0) {
-    lines.push('')
-    for (const reason of report.coverage.incompleteReasons) {
-      lines.push(`- ${safeText(reason)}`)
-    }
-  }
-  lines.push('')
-
-  lines.push(renderCounts('Actionable Severity Counts', severityCounts))
-  lines.push(renderCounts('Actionable Category Counts', categoryCounts))
-  lines.push('## Actionable Findings', '')
-
-  for (const finding of actionableFindings) {
-    const fixProposalLines =
-      finding.fixProposal === undefined
-        ? []
-        : [
-            `- Suggested fix: ${safeText(finding.fixProposal.summary)}`,
-            `- Fix evidence: ${finding.fixProposal.evidenceIds.map(safeText).join(', ')}`,
-            ...(finding.fixProposal.edits === undefined ||
-            finding.fixProposal.edits.length === 0
-              ? []
-              : [
-                  '- Fix edits:',
-                  ...finding.fixProposal.edits.map((edit) => {
-                    const description =
-                      edit.description === undefined
-                        ? ''
-                        : ` - ${safeText(edit.description)}`
-
-                    return `  - ${safeText(edit.path)}:${edit.startLine}-${edit.endLine}: ${safeText(edit.replacement)}${description}`
-                  })
-                ])
-          ]
-
-    lines.push(
-      `### ${safeText(finding.severity.toUpperCase())}: ${safeText(finding.title)}`,
-      '',
-      `- ID: ${safeText(finding.id)}`,
-      `- Category: ${safeText(finding.category)}`,
-      `- Location: ${safeText(finding.location.path)}:${finding.location.startLine}`,
-      `- Baseline: ${safeText(finding.baselineStatus)}`,
-      ...fixProposalLines,
-      '',
-      safeText(finding.description),
-      ''
-    )
-  }
-
-  // Unresolved findings are suspicions the refuter could neither prove nor
-  // disprove from the context it had — most often because the evidence lives
-  // somewhere it could not reach. Rendering them as a bare id and title made them
-  // undecidable for a human too, which is the same as dropping them. They are
-  // reported with the location, the description, and the reason they stayed
-  // unresolved so a reviewer can confirm or dismiss each one. They deliberately
-  // stay out of the quality gate and out of inline comments: surfacing a suspicion
-  // for a human decision must not block a build or add review noise.
-  if (artifactOnlyFindings.length > 0) {
-    lines.push(
-      '## Unresolved - Needs Human Decision',
-      '',
-      'These candidates were neither proved nor disproved from the available context.',
-      'They do not affect the quality gate. Confirm or dismiss each one.',
-      ''
-    )
-
-    for (const finding of artifactOnlyFindings) {
-      const refutation =
-        finding.refutationId === undefined
-          ? undefined
-          : report.refutationResults.find(
-              (result) => result.id === finding.refutationId
-            )
-
-      lines.push(
-        `### ${safeText(finding.severity.toUpperCase())}: ${safeText(finding.title)}`,
-        '',
-        `- ID: ${safeText(finding.id)}`,
-        `- Category: ${safeText(finding.category)}`,
-        `- Location: ${safeText(finding.location.path)}:${finding.location.startLine}`,
-        `- Proposed by: ${safeText(finding.proposedBy)}`,
-        `- Why unresolved: ${
-          refutation === undefined
-            ? 'no refutation verdict was recorded for this candidate'
-            : `${safeText(refutation.verdict)} - ${safeText(refutation.summary)}`
-        }`,
-        '',
-        safeText(finding.description),
-        ''
-      )
-    }
-  }
-
-  lines.push('## Rejected Candidates', '')
-
-  for (const rejected of report.rejectedFindings) {
-    lines.push(
-      `- ${safeText(rejected.candidateId)}: ${safeText(rejected.reason)} (${safeText(rejected.status)})`
-    )
-  }
-
-  lines.push('', '## Refutation Results', '')
-
-  for (const refutation of report.refutationResults) {
-    lines.push(
-      `- ${safeText(refutation.id)}: ${safeText(refutation.verdict)} for ${safeText(refutation.candidateId)} - ${safeText(refutation.summary)}`
-    )
-    lines.push(`  - Refutation evidence: ${renderEvidenceIds(refutation.evidenceIds)}`)
-    for (const check of refutation.checks) {
-      lines.push(
-        `  - Refutation check ${safeText(check.kind)}: ${safeText(check.result)} - ${safeText(check.summary)} evidence: ${renderEvidenceIds(check.evidenceIds)}`
-      )
-    }
-  }
-
-  lines.push('', '## Provider Issues', '')
-
-  for (const issue of report.providerIssues) {
-    const stage = issue.stage === undefined ? 'unknown-stage' : issue.stage
-    const recovered =
-      issue.recovered === undefined ? 'unknown' : issue.recovered ? 'yes' : 'no'
-    const message = issue.message === undefined ? '' : ` - ${safeText(issue.message)}`
-
-    lines.push(
-      `- ${safeText(issue.code)} at ${safeText(stage)} recovered: ${recovered}${message}`
-    )
-  }
-
-  lines.push('', '## Skipped Files', '')
-
-  for (const skipped of report.skippedFiles) {
-    lines.push(`- ${safeText(skipped.path)}: ${safeText(skipped.reason)}`)
-  }
-
-  lines.push('', '## Cost And Timing', '')
-  lines.push(`- Duration: ${report.run.durationMs} ms`)
-
-  // Spend and tokens, stated on every report rather than left to a JSON field.
-  // This engine bills a provider per run and the reader is the person paying, so
-  // the amount belongs beside the findings — the same place the PR comment already
-  // puts it. `costUsd` was previously printed as a bare number (`Cost: 2.2276`),
-  // which reads as a count of something rather than as money.
-  //
-  // Tokens are reported alongside because cost alone cannot be acted on: input
-  // dominates output by roughly 23:1 here, so a reader deciding whether to narrow
-  // `paths.include` needs to see WHICH side is large. `cachedInputTokens` is a
-  // SUBSET of `inputTokens`, never an addition, and is shown because a warm cache
-  // can change spend severalfold with no change to the review itself — a run that
-  // looks cheap next to yesterday's may differ only in cache warmth.
-  if (report.run.costUsd !== undefined) {
-    lines.push(`- Cost: $${report.run.costUsd.toFixed(4)}`)
+  if (actionable.length === 0) {
+    lines.push(NOTHING_PROVED, '')
   } else {
-    // Never silently omitted: a missing cost means tokens or prices were
-    // unavailable, and a reader must be able to tell that from "this was free".
-    lines.push('- Cost: unavailable (token counts or model prices were missing)')
-  }
-
-  if (report.run.inputTokens !== undefined) {
-    const cached =
-      report.run.cachedInputTokens === undefined
-        ? ''
-        : ` (${report.run.cachedInputTokens.toLocaleString('en-US')} cached)`
-
     lines.push(
-      `- Input tokens: ${report.run.inputTokens.toLocaleString('en-US')}${cached}`
+      'Ordered by severity, then by path and line. Each one survived an attempt to refute it, and the evidence it rests on is printed underneath so you can disagree with it.',
+      ''
     )
+
+    for (const finding of actionable) {
+      lines.push(
+        ...renderActionableFinding(finding, {
+          blocking,
+          evidenceById,
+          refutationById
+        })
+      )
+    }
   }
 
-  if (report.run.outputTokens !== undefined) {
+  if (unresolved.length > 0) {
     lines.push(
-      `- Output tokens: ${report.run.outputTokens.toLocaleString('en-US')}`
+      `## Unresolved - Needs Human Decision (${unresolved.length})`,
+      '',
+      'These candidates were neither proved nor disproved from the available context, most often because the deciding evidence sits outside the files this run could reach. They do not affect the quality gate. Confirm or dismiss each one — skipping this section takes the strict half of a precision-first design without the half that compensates for it.',
+      ''
     )
+
+    for (const finding of unresolved) {
+      lines.push(...renderUnresolvedFinding(finding, { evidenceById, refutationById }))
+    }
   }
+
+  lines.push(
+    ...renderRejected(report.rejectedFindings, refutationsByCandidate),
+    ...renderRefutations(report.refutationResults),
+    ...renderProviderIssues(report),
+    ...renderSkippedFiles(report),
+    ...renderCost(report)
+  )
 
   return `${lines.join('\n')}\n`
 }

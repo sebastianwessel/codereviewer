@@ -42,6 +42,8 @@ export {
 } from './run-index.js'
 export {
   createReportArtifact,
+  inlineCode,
+  pluralize,
   safeRedactedText,
   safeText,
   sortAdmittedFindings,

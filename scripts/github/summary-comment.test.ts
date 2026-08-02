@@ -76,6 +76,70 @@ describe('renderSummaryComment', () => {
     expect(body).toContain('**(blocks the gate)**')
   })
 
+  // The headline is the one line every reader sees. "No findings" and "quality
+  // gate passed" both let a reader hear that the change is clear, which the
+  // measured recall does not support.
+  it('never headlines a clean run as a clearance', () => {
+    const body = renderSummaryComment(
+      baseInput({
+        review: digestReviewReport(
+          JSON.stringify({ ...reviewReportFixture, admittedFindings: [] })
+        ) as never
+      })
+    )
+
+    expect(body).not.toContain('no findings')
+    expect(body).not.toContain('quality gate passed')
+    expect(body).toContain('this search reported nothing')
+  })
+
+  it('says what an empty findings list does and does not mean', () => {
+    const body = renderSummaryComment(
+      baseInput({
+        review: digestReviewReport(
+          JSON.stringify({ ...reviewReportFixture, admittedFindings: [] })
+        ) as never
+      })
+    )
+
+    expect(body).toContain('### Findings (0)')
+    expect(body).toContain('rather than "there is nothing to find"')
+  })
+
+  it('states the measured error rates where the reader is', () => {
+    const body = renderSummaryComment(baseInput())
+
+    expect(body).toContain('**3 in 5**')
+    expect(body).toContain('**none** of those outside it')
+    expect(body).toContain('**19 in 20**')
+  })
+
+  it('shows what refutation could not do, so a finding can be checked', () => {
+    const body = renderSummaryComment(
+      baseInput({
+        review: digestReviewReport(JSON.stringify(reviewReportFixture)) as never
+      })
+    )
+
+    expect(body).toContain(
+      'Survived refutation — proved: Searched the route table'
+    )
+  })
+
+  // The findings are what a reviewer must act on; the stage table describes the
+  // machinery. Reading order is a product decision, so it is asserted.
+  it('puts the findings above the description of the pipeline', () => {
+    const body = renderSummaryComment(
+      baseInput({
+        review: digestReviewReport(JSON.stringify(reviewReportFixture)) as never
+      })
+    )
+
+    expect(body.indexOf('### Findings')).toBeLessThan(
+      body.indexOf('| Stage | Role |')
+    )
+  })
+
   it('renders every stage with its role, so an advisory result cannot read as a gate', () => {
     const body = renderSummaryComment(baseInput())
 

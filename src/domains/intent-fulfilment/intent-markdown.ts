@@ -24,7 +24,7 @@
 // Pure: it takes a report and returns a string. No filesystem, no clock, no
 // configuration. The CLI decides where the string goes.
 
-import { safeRedactedText, safeText } from '../reporting/index.js'
+import { inlineCode, pluralize, safeText } from '../reporting/index.js'
 import type {
   ChangeCitation,
   IntentFulfilmentReport,
@@ -65,30 +65,9 @@ const MEASURED_RELIABILITY =
 const NOTHING_UNEVIDENCED =
   'Every obligation read out of the stated intent was matched to lines in this change. That is a statement about this search, not a certificate: obligations the extraction never proposed are not on this list, and an obligation can be evidenced by lines that do less than it asks.'
 
-// A cited line is source, and source is full of characters Markdown would otherwise
-// eat. Escaping each one leaves a reader reading backslashes instead of code, so it
-// goes in a code span whose delimiter grows past the longest backtick run in the
-// text — CommonMark's own answer to a code span containing backticks, so no input
-// can break out of the span.
-const inlineCode = (value: string): string => {
-  const text = safeRedactedText(value)
-
-  if (text.length === 0) {
-    return '(blank)'
-  }
-
-  const longestBacktickRun = [...text.matchAll(/`+/gu)].reduce(
-    (longest, match) => Math.max(longest, match[0].length),
-    0
-  )
-  const delimiter = '`'.repeat(longestBacktickRun + 1)
-  const padding = text.startsWith('`') || text.endsWith('`') ? ' ' : ''
-
-  return `${delimiter}${padding}${text}${padding}${delimiter}`
-}
-
-const pluralize = (count: number, singular: string, plural: string): string =>
-  `${count} ${count === 1 ? singular : plural}`
+// `inlineCode` and `pluralize` are shared with the other two Markdown surfaces
+// from `../reporting/`: a cited line is source, and the code-span rule that keeps
+// it from breaking out of its span must be one rule, not three copies of one.
 
 // The side is rendered, never dropped. Spec 23's 2026-07-30 amendment makes it a
 // MUST: a removed line is numbered on the PRE-change side, so without the side a
