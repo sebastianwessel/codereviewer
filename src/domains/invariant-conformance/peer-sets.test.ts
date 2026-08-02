@@ -134,6 +134,64 @@ describe('peer set derivation', () => {
     ).toEqual([true, false, false])
   })
 
+  // THE TWO SCOPES ARE UNIONED, AND `scope` REPORTS WHICH ONES CONTRIBUTED.
+  //
+  // It was documented as a file-FIRST rule — the directory consulted only when the
+  // file could not reach spec 24's three-cited-peer floor — which the code never
+  // implemented. Built and measured over 64,201 declarations of 37 real
+  // repositories, file-first took the divergence population from 647 to 1,215 —
+  // it removed 89 divergences from the large sets it was aimed at and added 673:
+  // shrinking a denominator promotes patterns that are correctly sub-majority
+  // rather than filtering them out, because `3 of 6` is not a majority and `3 of 3`
+  // is. The documentation was corrected to the code; these pin the corrected
+  // meaning so the two cannot drift apart again.
+  test('a file that could stand alone is still unioned with its directory', () => {
+    const content = ['w', 'x', 'y', 'z']
+      .map((name) => handlerSource(name, ['  return load(request)']))
+      .join('')
+    const result = derivePeerSets({
+      files: [
+        { path: 'src/handlers/own.ts', content, hunks: wholeFileHunks(content) },
+        {
+          path: 'src/handlers/neighbour.ts',
+          content: handlerSource('far', ['  return load(request)'])
+        }
+      ],
+      ...bounds
+    })
+    const first = result.peerSets[0]
+
+    // Three same-file peers already meet the citation floor, and the neighbouring
+    // file's declaration is a member anyway.
+    expect(first?.subject.name).toBe('w')
+    expect(first?.members.map((member) => member.name)).toEqual([
+      'w',
+      'x',
+      'y',
+      'z',
+      'far'
+    ])
+    expect(first?.scope).toBe('directory')
+  })
+
+  test('scope reads file exactly when the directory contributed nothing', () => {
+    const content = ['w', 'x']
+      .map((name) => handlerSource(name, ['  return load(request)']))
+      .join('')
+    const result = derivePeerSets({
+      files: [
+        { path: 'src/handlers/own.ts', content, hunks: wholeFileHunks(content) }
+      ],
+      ...bounds
+    })
+
+    expect(result.peerSets[0]?.scope).toBe('file')
+    expect(result.peerSets[0]?.members.map((member) => member.name)).toEqual([
+      'w',
+      'x'
+    ])
+  })
+
   test('a re-export list is not a declaration and never becomes a peer', () => {
     const content = [
       'export const kept = () => load()',

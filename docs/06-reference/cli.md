@@ -370,9 +370,12 @@ Enable it with:
   calls a changed symbol genuinely is a dependent — it breaks — so it is listed
   in full; it sits in its own bucket because it breaks in CI rather than in
   production, and because on a large change test call sites can outnumber the
-  production ones you are looking for. Test files are recognised by each
-  language's own convention (`*.test.ts`, `*_test.go`, `test_*.py`, `*Test.java`,
-  …).
+  production ones you are looking for. A site counts as test-side when its file
+  follows the language's own test convention (`*.test.ts`, `*_test.go`,
+  `test_*.py`, `*Test.java`, …) **or** when it sits inside a test tree — a `test`,
+  `tests`, `spec`, `specs` or `__tests__` directory. The second half is what puts
+  fixtures and shared harness helpers in this bucket: they hold no test case of
+  their own, and nothing in production depends on them either.
 - `referencesInNonSourceFiles` counts matches in files no supported language
   covers — documentation, specification prose, fixture data, snapshots. Those are
   **counted but never listed**: a symbol name inside a JSON fixture or a prose
@@ -845,8 +848,10 @@ remove a divergence and attach a reason, never add or alter one.
   `call-argument` (the peers call it with a particular first argument, and this
   declaration passes something else). A declaration that omits a call entirely
   reports one `call` divergence rather than restating it as all three.
-- `peerScope` says whether the peers came from the declaration's own file or its
-  directory. `peersTruncated` is `true` when
+- `peerScope` says **which scopes contributed** a peer, not which one was
+  consulted. Peers are always the declaration's same-file siblings together with
+  its same-directory ones, so `directory` means the directory held at least one
+  and `file` means it held none. `peersTruncated` is `true` when
   `invariantConformance.maxPeersPerDeclaration` bounded the comparison, so a
   bounded majority is never mistaken for a complete one.
 - Peer files obey [`paths.include` and

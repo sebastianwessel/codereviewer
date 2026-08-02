@@ -109,8 +109,15 @@ export type PeerDeclaration = {
 export type PeerSet = {
   // The declaration the diff added or modified, which seeded this set.
   readonly subject: PeerDeclaration
-  // How the peers were found. `file` when the subject's own file supplied enough
-  // of them, `directory` when siblings in the same directory were needed too.
+  // WHICH SCOPES CONTRIBUTED a peer — not which one was consulted. Both always
+  // are: the members are the subject's same-file siblings UNIONED with its
+  // same-directory ones. `directory` says the directory held at least one sibling,
+  // `file` that it held none and the file is all there was.
+  //
+  // This used to be documented as a file-FIRST rule with the directory as a
+  // fallback — "`file` when the subject's own file supplied enough of them" — which
+  // the code never implemented. See `derivePeerSets` for the measurement that says
+  // the code was right and the sentence was wrong.
   readonly scope: 'file' | 'directory'
   // Every declaration compared, INCLUDING the subject. Spec 24's majority is over
   // the peers a divergence is measured against, and the subject is one of the
@@ -462,6 +469,36 @@ const isSibling = (subject: PeerDeclaration, candidate: PeerDeclaration): boolea
  * directory hold no siblings yields no peer set at all — spec 24's "a peer set
  * with no majority pattern yields nothing" starts here, with no set to take a
  * majority over.
+ *
+ * THE TWO SCOPES ARE UNIONED, AND THE FILE-FIRST ALTERNATIVE WAS MEASURED AND
+ * REJECTED.
+ *
+ * A file-first rule — take the directory only when the subject's own file cannot
+ * reach spec 24's floor of three cited peers — is what `scope` used to be
+ * documented as, and it is superficially attractive: the same-file sibling test is
+ * EXACT (the same declaration encloses both) while the cross-file one is the weaker
+ * nesting-depth proxy, and unioning them lets the proxy outvote the exact test.
+ * Peer sets of twenty or more members hold 46% of all divergences, and a directory
+ * of same-depth declarations is what produces them.
+ *
+ * Implemented and run over the same 64,201 declarations of the same 37 real
+ * repositories, it made the report NEARLY TWICE AS LOUD: 647 divergences became
+ * 1,215, spreading from 18 repositories to 25. It removed 105 divergences, 89 of
+ * them from sets of twenty peers or more — the bags it was aimed at — and added
+ * 673, of which 449 came from sets of twelve peers or fewer and 39 were the bare
+ * `3 of 3` a three-peer file can produce and nothing else can.
+ *
+ * The arithmetic is the reason, and this module already records it one comment
+ * further down: a smaller denominator PROMOTES patterns that are correctly
+ * sub-majority. `3 of 6` is not a majority and `3 of 3` is, so narrowing the peer
+ * set does not filter the weak evidence out — it converts it into findings. The
+ * same effect is visible in the negative control at fixture scale, where the file
+ * alone turned a sub-majority `describe` into a third reported divergence.
+ *
+ * So the union stays and the documentation was corrected instead. The large-bag
+ * problem is real and remains open, but it is a question about MEMBERSHIP — whether
+ * these declarations are peers at all — which spec 24 answers with its membership
+ * precondition, not one the denominator can be shrunk out of.
  */
 export const derivePeerSets = (
   input: DerivePeerSetsInput
@@ -540,6 +577,8 @@ export const derivePeerSets = (
 
     peerSets.push({
       subject,
+      // Reports what the union drew on, which is the only thing it can honestly
+      // report: `file` exactly when the directory contributed nothing.
       scope: sameDirectory.length === 0 ? 'file' : 'directory',
       members: [subject, ...bounded],
       truncated: peers.length > bounded.length

@@ -15,13 +15,17 @@
 // agree by construction; and adding a language adapter widens both ends at once,
 // with no list here to rot. Spec 15's Non-Negotiable forbids the alternative.
 //
-// "Test" reuses the adapter-owned test-file convention (`discoverSignalLanguageTests`
-// uses the same predicate), so a Go `_test.go`, a Python `test_*.py` and a Vitest
-// `*.test.ts` are recognised by the rules their own ecosystems use rather than by
-// a guess made here.
+// "Test" asks `isTestSideFile`, which is the question this bucket is for: not "does
+// this file hold test cases" but "is this a production dependent". A Go `_test.go`,
+// a Python `test_*.py` and a Vitest `*.test.ts` are recognised by the rules their
+// own ecosystems use; a fixture or a shared helper inside a test tree —
+// `test/helpers.go`, `src/test/java/…/Support.java` — carries no test of its own and
+// is recognised by its location. Both are test-side, and the previous rule saw only
+// the first: everything under Maven's and Gradle's entire test source set read as a
+// PRODUCTION dependent, which is the inversion this bucket exists to prevent.
 
 import {
-  isLanguageTestFile,
+  isTestSideFile,
   supportedSignalLanguageForPath
 } from '../deterministic-signals/index.js'
 
@@ -47,5 +51,5 @@ export const classifyReferenceDestination = (
     return 'non-source'
   }
 
-  return isLanguageTestFile(language, referencePath) ? 'test' : 'source'
+  return isTestSideFile(language, referencePath) ? 'test' : 'source'
 }

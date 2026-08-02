@@ -32,7 +32,7 @@ import {
 } from '../repository-intake/index.js'
 import type { LaneUsage } from '../costs/index.js'
 import {
-  isLanguageTestFile,
+  isTestSideFile,
   supportedSignalLanguageForPath
 } from '../deterministic-signals/index.js'
 import { selectSpreadAcrossGroups } from './bounded-selection.js'
@@ -105,8 +105,8 @@ const NO_PEERS_WARNING =
 const NO_ADJUDICATOR_WARNING =
   'Conformance adjudication is enabled but no model adjudicator was available; the deterministic divergences are reported unjudged.'
 
-const excludedTestFilesWarning = (count: number): string =>
-  `${count} changed test file(s) were excluded from conformance analysis: a test declaration's siblings are other tests, and what they share is test-harness vocabulary rather than a protective convention of the system under review.`
+const excludedTestSideFilesWarning = (count: number): string =>
+  `${count} changed test-side file(s) were excluded from conformance analysis: a test-side declaration's siblings are other test-side declarations, and what they share is test-harness vocabulary rather than a protective convention of the system under review.`
 
 const directoryOf = (path: string): string => {
   const lastSlash = path.lastIndexOf('/')
@@ -125,9 +125,10 @@ const extensionOf = (path: string): string => {
   return lastDot <= 0 ? '' : name.slice(lastDot)
 }
 
-// Whether a file is a test file, by the engine's own predicate.
+// Whether a file is on the test side of the codebase, by the engine's own
+// predicate.
 //
-// WHY CONFORMANCE DROPS TEST FILES ENTIRELY — as a seed AND as a peer.
+// WHY CONFORMANCE DROPS TEST-SIDE FILES ENTIRELY — as a seed AND as a peer.
 //
 // A test function's siblings are other test functions, and what they have in
 // common is the vocabulary of the test harness, not a protective convention of the
@@ -145,19 +146,26 @@ const extensionOf = (path: string): string => {
 // are the shape that produces the floods — the cases that fired 15 to 28 times all
 // fired inside a test file.
 //
-// The predicate is `isLanguageTestFile`, the same one the impact report splits
+// The predicate is `isTestSideFile`, the same one the impact report splits
 // production dependents from test dependents with. A second definition of "test"
 // written here would be a second thing to keep true.
+//
+// It is test-SIDE rather than "holds test cases", and the difference is most of the
+// exclusion. A shared harness helper is not itself a test, so the naming rules do
+// not claim it — but its siblings are other harness helpers, and what they have in
+// common is still the vocabulary of the harness. `test/helpers.go`,
+// `tests/helpers.py` and every file under Maven's `src/test/java` seeded peer sets
+// of exactly the shape described above while reading as production.
 //
 // It answers from the PATH, so it is decided before a file is read and asked once.
 // The other half of the exclusion — a test declaration inside a production file,
 // which is how Rust writes most of its unit tests — is not a file question at all
 // and is answered by the signal extractors, which never emit a declaration fact
 // for one. Peer derivation therefore never sees them and has nothing to filter.
-const isTestSourceFile = (path: string): boolean => {
+const isTestSideSourceFile = (path: string): boolean => {
   const language = supportedSignalLanguageForPath(path)
 
-  return language !== undefined && isLanguageTestFile(language, path)
+  return language !== undefined && isTestSideFile(language, path)
 }
 
 const diffMapsByPath = (
@@ -172,17 +180,17 @@ type CollectedFiles = {
   readonly unreadableFileCount: number
   // Changed files dropped for being tests. Reported so a change made entirely of
   // tests reads as "excluded on purpose" rather than as an unexplained silence.
-  readonly excludedTestFileCount: number
+  readonly excludedTestSideFileCount: number
 }
 
 /**
  * Reads the changed files and the sibling files that can supply their peers.
  *
- * Test files are excluded on both sides — see `isTestSourceFile` for why. Doing it
- * here rather than inside peer derivation is what makes the exclusion complete: a
- * changed test file never becomes a seed, a sibling test file never becomes a
- * peer, and neither is ever read, so the peer-file budget is spent on files that
- * can carry a convention.
+ * Test-side files are excluded on both sides — see `isTestSideSourceFile` for why.
+ * Doing it here rather than inside peer derivation is what makes the exclusion
+ * complete: a changed test-side file never becomes a seed, a sibling one never
+ * becomes a peer, and neither is ever read, so the peer-file budget is spent on
+ * files that can carry a convention.
  *
  * Deleted files are deliberately NOT included. Spec 24 keys on declarations the
  * diff adds or modifies; a deleted declaration has no body left to compare and
@@ -200,7 +208,7 @@ const collectFiles = async (
   const wantedExtensions = new Set<string>()
   const directories = new Set<string>()
   let unreadableFileCount = 0
-  let excludedTestFileCount = 0
+  let excludedTestSideFileCount = 0
 
   for (const changedFile of intake.changedFiles) {
     const diffMap = byPath.get(changedFile.path)
@@ -211,8 +219,8 @@ const collectFiles = async (
 
     // Before the read: the answer is in the path, so a test file costs nothing to
     // exclude.
-    if (isTestSourceFile(changedFile.path)) {
-      excludedTestFileCount += 1
+    if (isTestSideSourceFile(changedFile.path)) {
+      excludedTestSideFileCount += 1
       // NOT added to `seenPaths`: the path is excluded from the peer candidates
       // below by the same predicate, so leaving it out cannot resurrect it.
       continue
@@ -250,7 +258,7 @@ const collectFiles = async (
           wantedExtensions.has(extensionOf(entry)) &&
           // Spending a slot of the peer budget on a test file spends it on noise,
           // and the name is enough to know.
-          !isTestSourceFile(entry)
+          !isTestSideSourceFile(entry)
       )
       .sort()
 
@@ -288,7 +296,7 @@ const collectFiles = async (
     peerFileCount,
     peerFilesTruncated: candidateCount > maxPeerFiles,
     unreadableFileCount,
-    excludedTestFileCount
+    excludedTestSideFileCount
   }
 }
 
@@ -411,8 +419,8 @@ export const runInvariantConformance = async (
   // Placed after the two "nothing was seeded" messages and before the read
   // failures: it is the explanation for an empty report on a change that touched
   // only tests, where `changedFileCount` is zero and neither message above fires.
-  if (collected.excludedTestFileCount > 0) {
-    warnings.push(excludedTestFilesWarning(collected.excludedTestFileCount))
+  if (collected.excludedTestSideFileCount > 0) {
+    warnings.push(excludedTestSideFilesWarning(collected.excludedTestSideFileCount))
   }
 
   if (collected.unreadableFileCount > 0) {

@@ -27,6 +27,27 @@ const traitKeysOf = (source: string, startLine = 1): readonly string[] => {
     .sort()
 }
 
+// The same extraction with the declaration's name stated rather than guessed. The
+// helper above reads the first identifier before a `(`, which on a header carrying
+// a modifier (`pub(crate) fn insert`) is the modifier — precisely the thing the
+// rules below must reject on their own.
+const traitKeysOfDeclaration = (
+  source: string,
+  declarationName: string,
+  startLine = 1
+): readonly string[] => {
+  const lines = toSourceLines(source)
+  const span = declarationSpanAt(lines, startLine)
+
+  if (span === undefined) {
+    throw new Error('expected a span')
+  }
+
+  return extractDeclarationTraits({ lines, span, declarationName })
+    .map(declarationTraitKey)
+    .sort()
+}
+
 describe('declaration traits', () => {
   test('records a call, and the same call in a conditional as a guard as well', () => {
     const keys = traitKeysOf(
@@ -147,6 +168,106 @@ describe('declaration traits', () => {
       'call:load@surface/exit',
       'guard:is_admin@surface/exit'
     ])
+  })
+})
+
+// A PARENTHESIS AFTER AN IDENTIFIER IS NOT ALWAYS AN ARGUMENT LIST.
+//
+// Measured over 64,201 declarations in 37 real repositories, Rust's visibility
+// keyword was the most-reported "call" in the whole divergence population: 60
+// statements of the form "14 of 25 sibling declarations call `pub` with `crate` as
+// its first argument". `async` reached the trait set the same way, from an inline
+// callback. Neither is a language quirk to be listed — both are the identifier
+// MODIFYING what follows the parentheses rather than applying them — so the rules
+// are structural and every case below is in a different language.
+describe('modifiers that wear the shape of a call', () => {
+  test('a visibility modifier in the header prefix is not a call', () => {
+    const keys = traitKeysOfDeclaration(
+      ['pub(crate) fn insert(key: &str) -> bool {', '    validate(key)', '}'].join('\n'),
+      'insert'
+    )
+
+    expect(keys.some((key) => key.includes(':pub'))).toBe(false)
+    expect(keys).toContain('call:validate@surface/exit')
+  })
+
+  test('an annotation before the declared name is not a call the declaration makes', () => {
+    const keys = traitKeysOfDeclaration(
+      [
+        '@SuppressWarnings("unchecked") public void load(String key) {',
+        '    fetch(key);',
+        '}'
+      ].join('\n'),
+      'load'
+    )
+
+    expect(keys.some((key) => key.includes(':SuppressWarnings'))).toBe(false)
+    expect(keys).toContain('call:fetch@surface/exit')
+  })
+
+  test('a default argument value after the declared name is still a call', () => {
+    // The header's prefix ends at the name. Everything after it is signature and,
+    // on a one-line declaration, body — and a default value is real behaviour.
+    const keys = traitKeysOfDeclaration(
+      ['def render(escape = html()):', '    return escape'].join('\n'),
+      'render'
+    )
+
+    expect(keys).toContain('call:html@surface/exit')
+  })
+
+  test('a modifier on an inline function literal is not a call', () => {
+    const keys = traitKeysOfDeclaration(
+      [
+        'export const register = (app) => {',
+        '  app.get("/health", async (request, reply) => {',
+        '    reply.send(probe(request))',
+        '  })',
+        '}'
+      ].join('\n'),
+      'register'
+    )
+
+    expect(keys.some((key) => key.includes(':async'))).toBe(false)
+    expect(keys.some((key) => key.startsWith('call:get'))).toBe(true)
+  })
+
+  test('a parameter list wrapped over several lines is still a parameter list', () => {
+    const keys = traitKeysOfDeclaration(
+      [
+        'export const lookup = async (',
+        '  input: LookupInput',
+        '): Promise<void> => {',
+        '  respond(input)',
+        '}'
+      ].join('\n'),
+      'lookup'
+    )
+
+    expect(keys.some((key) => key.includes(':async'))).toBe(false)
+    expect(keys).toContain('call:respond@surface/exit')
+  })
+
+  test('a destructuring pattern in a match arm is not a call', () => {
+    // The same rule, arriving from the other direction: a group closed immediately
+    // before an arrow introduces a body, so what precedes it names a variant being
+    // taken apart rather than a function being applied.
+    const keys = traitKeysOfDeclaration(
+      [
+        'fn handle(event: Event) -> u8 {',
+        '    match event {',
+        '        Ok(value) => emit(value),',
+        '        Err(error) => report(error),',
+        '    }',
+        '}'
+      ].join('\n'),
+      'handle'
+    )
+
+    expect(keys.some((key) => key.includes(':Ok'))).toBe(false)
+    expect(keys.some((key) => key.includes(':Err'))).toBe(false)
+    expect(keys.some((key) => key.startsWith('call:emit'))).toBe(true)
+    expect(keys.some((key) => key.startsWith('call:report'))).toBe(true)
   })
 })
 

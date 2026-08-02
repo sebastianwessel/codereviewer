@@ -177,6 +177,128 @@ const nonCallKeywords = new Set([
 // every comparison carry equally.
 const callPattern = /(?<![A-Za-z0-9_$])([A-Za-z_$][A-Za-z0-9_$]*[?!]?)\s*\(/gu
 
+// ---------------------------------------------------------------------------
+// AN IDENTIFIER BEFORE A PARENTHESIS IS NOT ALWAYS A CALLEE.
+//
+// It is a callee when the parenthesis opens an ARGUMENT LIST. Two other things
+// wear the same shape, and both are the identifier MODIFYING the construct that
+// follows the group rather than applying it:
+//
+//   pub(crate) fn insert(…)          — a visibility modifier on a declaration
+//   emitter.on('x', async (e) => …)  — a modifier on a function literal
+//
+// Measured on 37 real repositories, `pub` was the single most-reported "call" in
+// the divergence population: 60 statements of the form "14 of 25 sibling
+// declarations call `pub` with `crate` as its first argument". That is not a
+// mistake about Rust, it is a mistake about parentheses, so the rules below are
+// about parentheses. Enumerating `pub` beside `async` beside `internal` beside
+// `synchronized` would fix one language at a time forever, and every entry added
+// to a keyword list also suppresses a real callee of that name — the reason the
+// list further up is deliberately short.
+//
+// Two structural tests, one per shape. Both are decided from the text already
+// blanked of comments and string contents, so nothing here can be fooled by a
+// parenthesis inside prose or a literal.
+
+// Index of the parenthesis closing the group that opens at `openIndex`, searching
+// forward across the span's remaining lines because a parameter list is very often
+// written over several. `undefined` when the group does not close within the span,
+// which leaves the identifier treated as a call — the safe direction, since a
+// missing trait is invisible while an invented one is reported.
+const closingParenthesisAfter = (
+  codeLines: readonly string[],
+  openOffset: number,
+  openIndex: number
+): { readonly offset: number; readonly index: number } | undefined => {
+  let depth = 0
+
+  for (let offset = openOffset; offset < codeLines.length; offset += 1) {
+    const line = codeLines[offset] ?? ''
+
+    for (
+      let index = offset === openOffset ? openIndex : 0;
+      index < line.length;
+      index += 1
+    ) {
+      const character = line[index]
+
+      if (character === '(') {
+        depth += 1
+      } else if (character === ')') {
+        depth -= 1
+
+        if (depth === 0) {
+          return { offset, index }
+        }
+      }
+    }
+  }
+
+  return undefined
+}
+
+// What follows a parameter list and can follow nothing else: the arrow that
+// introduces the function's body. `=>` covers ECMAScript, Java and C#-shaped
+// lambdas; `->` covers a signature's return type in Rust and Python. A call's
+// result is never written before an arrow in any supported language, so a group
+// closed immediately before one is a parameter list and the identifier in front of
+// it is a modifier on the function, not its callee.
+//
+// A return-type annotation may sit between the two — `async (input): Promise<void>
+// => {` is the dominant style wherever types are written — so a `:` clause is
+// stepped over. Only a clause, not a statement: a `;`, a brace or the end of the
+// line ends the search, so a ternary's `f(a) : g(b)` cannot reach an arrow further
+// down the line.
+//
+// It also, correctly, removes a destructuring PATTERN: Rust's `Ok(value) => …`
+// match arm names a variant being taken apart, not a function being called.
+const arrowAfterParameterList = /^\s*(?::[^;{}=]*)?(?:=>|->)/u
+
+// Whether the group opened at `openIndex` is a function's parameter list rather
+// than a call's argument list.
+const opensParameterList = (
+  codeLines: readonly string[],
+  openOffset: number,
+  openIndex: number
+): boolean => {
+  const closing = closingParenthesisAfter(codeLines, openOffset, openIndex)
+
+  if (closing === undefined) {
+    return false
+  }
+
+  return arrowAfterParameterList.test(
+    (codeLines[closing.offset] ?? '').slice(closing.index + 1)
+  )
+}
+
+const escapeForPattern = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+
+// Where the declaration's own name sits on its header line, as a whole
+// identifier. Everything to the LEFT of it is the header's modifier prefix —
+// visibility, mutability, an annotation, a decorator, a declaring keyword — and no
+// supported language writes a call there. Everything to the right is the
+// signature and, on a one-line declaration, the body: a default argument value
+// `def render(escape = html())` is a real call and is kept.
+//
+// `undefined` when the name cannot be located, which suppresses nothing.
+const declarationNameIndex = (
+  headerLine: string,
+  declarationName: string
+): number | undefined => {
+  if (declarationName.length === 0) {
+    return undefined
+  }
+
+  const match = new RegExp(
+    `(?<![A-Za-z0-9_$])${escapeForPattern(declarationName)}(?![A-Za-z0-9_$])`,
+    'u'
+  ).exec(headerLine)
+
+  return match?.index
+}
+
 // A line that opens a conditional. Optional leading `}` and `else` cover the
 // brace-language `} else if (...)` shape; `elif`/`elsif`/`unless` cover the
 // others. Deliberately anchored: a conditional appearing mid-line (a ternary, a
@@ -303,6 +425,11 @@ export const extractDeclarationTraits = (
     input.nestedSpans ?? []
   )
   const positions = traitPositionsOfSpan(codeLines, input.span.indentation)
+  // The end of the header's modifier prefix. Only the header line has one.
+  const modifierPrefixEnd = declarationNameIndex(
+    codeLines[0] ?? '',
+    input.declarationName
+  )
   const byKey = new Map<string, DeclarationTrait>()
 
   const record = (trait: DeclarationTrait): void => {
@@ -334,8 +461,19 @@ export const extractDeclarationTraits = (
 
     for (const match of line.matchAll(callPattern)) {
       const name = match[1] ?? ''
+      // The match ends on the opening parenthesis, so its last character is the
+      // one both the modifier tests and the argument scan work from.
+      const openIndex = match.index + (match[0]?.length ?? 1) - 1
 
-      if (nonCallKeywords.has(name) || name === input.declarationName) {
+      if (
+        nonCallKeywords.has(name) ||
+        name === input.declarationName ||
+        // A modifier in the header's prefix, or a modifier on a function literal.
+        (offset === 0 &&
+          modifierPrefixEnd !== undefined &&
+          match.index < modifierPrefixEnd) ||
+        opensParameterList(codeLines, offset, openIndex)
+      ) {
         continue
       }
 
@@ -345,12 +483,7 @@ export const extractDeclarationTraits = (
         record({ kind: 'guard', name, position })
       }
 
-      // The match ends on the opening parenthesis, so its last character is the
-      // one the argument scan must start after.
-      const argument = firstArgumentAt(
-        rawLine,
-        match.index + (match[0]?.length ?? 1) - 1
-      )
+      const argument = firstArgumentAt(rawLine, openIndex)
 
       if (argument !== undefined) {
         record({ kind: 'call-argument', name, argument, position })

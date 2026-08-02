@@ -390,7 +390,7 @@ describe('invariant conformance run', () => {
       // The silence is explained. Without this the report is empty, carries no
       // warning at all, and reads like a capability that failed.
       expect(report.warnings).toEqual([
-        "1 changed test file(s) were excluded from conformance analysis: a test declaration's siblings are other tests, and what they share is test-harness vocabulary rather than a protective convention of the system under review."
+        "1 changed test-side file(s) were excluded from conformance analysis: a test-side declaration's siblings are other test-side declarations, and what they share is test-harness vocabulary rather than a protective convention of the system under review."
       ])
     })
 

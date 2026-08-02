@@ -83,22 +83,27 @@ divergence is not a finding.
 excluded from review is excluded here too, so it can neither be a changed file
 nor supply a peer.
 
-### Test files are never compared
+### Test-side files are never compared
 
-Test files are excluded on both sides and there is no setting to include them:
-a changed test file seeds no declaration, and a sibling test file supplies no
-peer. A test function's siblings are other test functions, and what they share is
-the vocabulary of the test harness rather than a protective convention of the
-system under review — "most sibling declarations call this assertion helper and
-this one does not" is true and tells a reviewer nothing. Test files are also
-where near-duplicate structure is densest, so including them produced most of
-the report on a repository that has many of them.
+Test-side files are excluded on both sides and there is no setting to include
+them: a changed test-side file seeds no declaration, and a sibling test-side
+file supplies no peer. A test function's siblings are other test functions, and
+what they share is the vocabulary of the test harness rather than a protective
+convention of the system under review — "most sibling declarations call this
+assertion helper and this one does not" is true and tells a reviewer nothing.
+The same holds for the fixtures and helpers beside them. Test-side files are
+also where near-duplicate structure is densest, so including them produced most
+of the report on a repository that has many of them.
 
-What counts as a test file is each language's own convention (`*_test.go`,
-`test_*.py`, `*.test.ts`, `*_spec.rb`, a Rust file declaring a test), the same
-definition `impact check` splits production dependents from test dependents
-with. When a change touches only test files the report is empty and warns that
-they were excluded, so the silence is never unexplained.
+A file counts as test-side when it follows its language's own test convention
+(`*_test.go`, `test_*.py`, `*.test.ts`, `*_spec.rb`, a Rust file declaring a
+test) **or** when it sits inside a `test`, `tests`, `spec`, `specs` or
+`__tests__` directory — the same definition `impact check` splits production
+dependents from test dependents with. The directory half matters as much as the
+naming half: a fixture or a shared harness helper holds no test case, so no
+naming rule claims it, and its siblings are still other harness helpers. When a
+change touches only test-side files the report is empty and warns that they were
+excluded, so the silence is never unexplained.
 
 ## Related
 

@@ -47,6 +47,24 @@ describe('reference destination classification', () => {
     }
   })
 
+  test('a helper inside a test tree is a test dependent, not a production one', () => {
+    // The bucket asks "is this a production dependent", and a fixture or a shared
+    // harness helper is not one however it is named. The rule was filename affixes
+    // alone, so all of Maven's and Gradle's `src/test/java` source set — and the
+    // equivalent tree in every other ecosystem — read as PRODUCTION.
+    for (const path of [
+      'src/test/java/com/example/StoreSupport.java',
+      'test/helpers.go',
+      'tests/helpers.py',
+      'test/utils/helper.ts',
+      'test/logger/logger-test-utils.js',
+      'test/helper.rb',
+      'axum/src/routing/tests/mod.rs'
+    ]) {
+      expect(classifyReferenceDestination(path)).toBe('test')
+    }
+  })
+
   test('a production file whose name merely mentions testing stays source', () => {
     // The bucket must not swallow production code: `testing.ts` is a helper
     // module, not a test, and demoting it would hide a real dependent.
@@ -93,31 +111,36 @@ describe('ruby test destinations', () => {
 })
 
 describe('rust test destinations', () => {
-  // Rust's file-level conventions, and only those. The language's other and more
-  // common form — an inline `#[cfg(test)] mod tests` — belongs to a file that IS
-  // production code, so no amount of content may rename it: `axum-extra/src/response/`
-  // ships four of them beside their production surface.
+  // Rust's file-level conventions plus its integration-test tree. The language's
+  // other and more common form — an inline `#[cfg(test)] mod tests` — belongs to a
+  // file that IS production code, so no path rule and no amount of content may
+  // rename it: `axum-extra/src/response/` ships four of them beside their
+  // production surface.
   //
   // This classifier never had the content to get that wrong, having always been
-  // path-only, so these cases pin a contract rather than record a repair. They are
-  // here because the contract is now the whole of the file-level rule instead of a
-  // documented degradation of it.
-  test.each(['src/lib_test.rs', 'tests/integration.rs'])(
-    '%s is a test destination',
-    (path) => {
-      expect(classifyReferenceDestination(path)).toBe('test')
-    }
-  )
-
+  // path-only, so the last case pins a contract rather than records a repair.
   test.each([
-    'axum-extra/src/response/attachment.rs',
+    'src/lib_test.rs',
+    'tests/integration.rs',
+    // The shared helpers of an integration-test crate. They carry no test of their
+    // own — `isLanguageTestFile` still says so, and the peer-mapping that pairs a
+    // source file with its test still needs that answer — but they are on the test
+    // side of the crate, and nothing in production depends on them.
     'tests/common/mod.rs',
     'tests/common.rs'
-  ])('%s is production', (path) => {
-    // The last two are the shared helpers of an integration-test crate: they carry
-    // no test of their own, and a bare directory rule would sweep them in.
-    expect(classifyReferenceDestination(path)).toBe('source')
+  ])('%s is a test destination', (path) => {
+    expect(classifyReferenceDestination(path)).toBe('test')
   })
+
+  test.each(['axum-extra/src/response/attachment.rs'])(
+    '%s is production',
+    (path) => {
+      // A production file carrying an inline `#[cfg(test)] mod tests`. No path rule
+      // may rename it: `axum-extra/src/response/` ships four of them beside their
+      // production surface.
+      expect(classifyReferenceDestination(path)).toBe('source')
+    }
+  )
 })
 
 describe('python whole-module test naming', () => {

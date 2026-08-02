@@ -1,7 +1,22 @@
-// Where "this is test code" is decided, at both granularities the engine needs.
+// Where "this is test code" is decided, at every granularity the engine needs.
 //
-// A FILE is a test when its name or its location says so — the convention every
-// supported ecosystem publishes and the one its own test runner discovers by.
+// THERE ARE TWO FILE-LEVEL QUESTIONS, AND THEY HAVE DIFFERENT ANSWERS.
+//
+// "Is this file a TEST?" — does it hold test cases the ecosystem's own runner
+// discovers? That is a naming convention, and it is what pairs a source file with
+// the test that exercises it.
+//
+// "Is this file on the TEST SIDE?" — does it belong to the test half of the
+// codebase at all? A fixture, a harness, a shared assertion helper holds no test
+// case and is still not production code. `test/helpers.go`, `tests/helpers.py`,
+// `test/utils/helper.ts` and every file under Maven's `src/test/java` answer NO to
+// the first question and YES to this one.
+//
+// Overloading one predicate with both made the second question unanswerable and
+// silently answered it "production": a test helper counted as a production
+// dependent in the impact report and as a production peer in conformance. So the
+// two are modelled separately, and the naming rules stay exactly as strict as they
+// were — the widening happens in the location rule, where it belongs.
 //
 // A DECLARATION is test-side when the language builds it only for its test
 // configuration, wherever the file it sits in lives. That granularity exists
@@ -10,9 +25,9 @@
 // production surface and test suite share a path and only the declaration can be
 // asked.
 //
-// Both live here so there is ONE definition of "test" in the engine. The impact
-// report's production/test split, conformance's peer exclusion and the signal
-// extractors all read it from this module.
+// All of them live here so there is ONE definition of "test" in the engine. The
+// impact report's production/test split, conformance's peer exclusion and the
+// signal extractors all read it from this module.
 
 import type { SgNode } from '@ast-grep/napi'
 import type {
@@ -80,7 +95,8 @@ const isJavaTestPath = (path: string): boolean => {
 
   // JUnit naming conventions only. A `test` path segment (e.g. the Maven/Gradle
   // `src/test/java` source set) also contains non-test helpers, so it is not by
-  // itself a test signal.
+  // itself a signal that this file HOLDS TESTS. It is a signal that the file is on
+  // the test side, which is the separate question `isTestSideFile` answers.
   return (
     /^Test.+\.java$/u.test(name) ||
     /Tests?\.java$/u.test(name) ||
@@ -102,9 +118,10 @@ const pathHasSegment = (path: string, segment: string): boolean =>
 // That is worse than a missing feature — the production/test split is the sharpest
 // distinction the impact report draws, and it was inverted for a whole language.
 //
-// A bare `test`/`spec` directory segment is deliberately NOT sufficient, for the
-// same reason the Java rule rejects it: those directories hold fixtures and
-// helpers that are not themselves tests.
+// A bare `test`/`spec` directory segment is deliberately NOT sufficient here, for
+// the same reason the Java rule rejects it: those directories hold fixtures and
+// helpers that are not themselves tests. They are still test-side, which is what
+// `isTestSideFile` says and this predicate does not.
 const isRubyTestPath = (path: string): boolean => {
   const name = path.split('/').at(-1) ?? path
 
@@ -193,6 +210,72 @@ export const isLanguageTestFile = (
   }
 
   return isJavaTestPath(path)
+}
+
+// ---------------------------------------------------------------------------
+// File-level, second question: which SIDE of the codebase is this file on?
+
+// A directory whose name declares the tree beneath it to be the test half of the
+// project. Every supported ecosystem uses one of these and no other: Maven and
+// Gradle's `src/test/java`, Cargo's `tests/`, Go's `test/`, pytest's `tests/`,
+// RSpec's `spec/`, minitest's `test/`, Jest's `__tests__/`.
+//
+// The list is of TEST ROOTS, and it is deliberately short. `testing/`, `testutil/`
+// and `testdata/` are NOT here: a directory named `testing` is as often a
+// production helper library about tests (this repository ships one) as it is a test
+// tree, and demoting production code is the costlier mistake — the same asymmetry
+// every naming rule above is written under.
+//
+// Only DIRECTORY segments are considered. A file named `test.ts` is answered by
+// its ecosystem's naming rule, not by this one.
+const testTreeDirectoryNames = new Set([
+  '__tests__',
+  'spec',
+  'specs',
+  'test',
+  'tests'
+])
+
+/**
+ * Whether a path lies inside a test tree, whatever the file itself is named.
+ *
+ * Path-shaped and language-free: a directory declares its contents test-side for
+ * every language at once, and the fixture beside a Java test is on the same side of
+ * the codebase as the fixture beside a Go one.
+ */
+export const isTestTreePath = (filePath: string): boolean => {
+  const segments = normalizeSignalPath(filePath).split('/')
+
+  // The last segment is the file name, which this rule has no opinion about.
+  return segments
+    .slice(0, -1)
+    .some((segment) => testTreeDirectoryNames.has(segment))
+}
+
+/**
+ * Whether a file belongs to the test side of the codebase.
+ *
+ * This is the question every consumer of the production/test split is actually
+ * asking: `impact check` separating production dependents from test dependents, and
+ * `conformance check` deciding whose peers are production peers. Neither is asking
+ * whether the file holds test cases — a helper under `src/test/java` is not a
+ * production dependent of anything, and its siblings are other test helpers.
+ *
+ * A file is test-side when its own ecosystem calls it a test OR it sits inside a
+ * test tree. The first half is unchanged and stays as strict as it was; the second
+ * is what a filename affix cannot see.
+ */
+export const isTestSideFile = (
+  language: SupportedSignalLanguage,
+  filePath: string
+): boolean => {
+  const path = normalizeSignalPath(filePath)
+
+  if (!hasLanguageExtension(language, path)) {
+    return false
+  }
+
+  return isLanguageTestFile(language, path) || isTestTreePath(path)
 }
 
 // ---------------------------------------------------------------------------
