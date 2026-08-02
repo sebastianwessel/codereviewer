@@ -128,6 +128,28 @@ describe('fulfilment judgement instructions', () => {
     )
   })
 
+  test('says what makes a line evidence, not only which lines may be cited', () => {
+    // Spec 23's Output Vocabulary section: the lane is shown only the changed lines,
+    // so "it cannot answer 'does this obligation hold at head?', because it never
+    // sees the rest of the repository". A citation of text that ASSERTS the state,
+    // or of a line whose behaviour lives outside the diff, answers that second
+    // question anyway. Measured 2026-08-02: 8 of 20 hand-labelled `evidenced` rows.
+    expect(modelFulfilmentJudgementInstructions).toContain(
+      'A changed line is evidence only when the line ITSELF does what the obligation asks.'
+    )
+    expect(modelFulfilmentJudgementInstructions).toContain(
+      'Sharing a subject with the obligation is not doing what it asks.'
+    )
+    // THE CARVE-OUT IS LOAD-BEARING and its absence would be a defect rather than a
+    // stricter rule: an obligation can itself be to record or document something,
+    // and then the line that writes it down is the line that does the work. The test
+    // is the obligation's kind, never the file's - a rule keyed on the file's kind
+    // would be both wrong here and repository-specific.
+    expect(modelFulfilmentJudgementInstructions).toContain(
+      'when the obligation is to state, record or write something down, the line that writes it down IS the line that does it'
+    )
+  })
+
   test('offers the labels the normalizer accepts, and no retired one', () => {
     // The prompt and `normalizeFulfilmentJudgement` have to name the same three
     // answers: a prompt asking for a word the normalizer does not accept turns
