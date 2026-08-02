@@ -277,7 +277,10 @@ export const assembleContext = async (
   // two characters. Projecting here rather than narrowing `SupportSignalFact`
   // keeps the internal record intact for clustering, evidence and change-impact,
   // which all need the id.
-  const modelFacingSupportSignalFact = (fact: SupportSignalFact) => ({
+  const modelFacingSupportSignalFact = (
+    fact: SupportSignalFact,
+    isPublic: boolean
+  ) => ({
     language: fact.language,
     kind: fact.kind,
     path: fact.path,
@@ -286,8 +289,63 @@ export const assembleContext = async (
       ? {}
       : { moduleSpecifier: fact.moduleSpecifier }),
     line: fact.line,
+    // Visibility as a FLAG on the declaration rather than a second row about it.
+    ...(isPublic ? { public: true } : {}),
     summary: fact.summary
   })
+
+  /**
+   * Collapses the `declaration` / `public-symbol` pair the extractors emit for the
+   * same symbol into one row carrying `public: true`.
+   *
+   * Every polyglot adapter reports a public declaration twice, at the identical
+   * `(path, name, line)` — once as what it is and once as how visible it is. That
+   * is right for the internal fact stream, where change-impact ranks seeds by
+   * visibility and needs both kinds to exist. It is pure duplication in the model
+   * packet: measured across the 37-case corpus, 893 of 893 `public-symbol` rows
+   * duplicated a `declaration` row at the same coordinates and added one bit of
+   * information each, for 4.0% of ALL model input.
+   *
+   * The bit is kept because it is real — whether a caller outside the file can
+   * depend on a symbol is exactly the sort of thing a reviewer reasons about — and
+   * a row is dropped only when the same symbol is already described at the same
+   * line. A `public-symbol` arriving without its declaration is passed through
+   * unchanged rather than assumed impossible; nothing here depends on the pairing
+   * holding, so a future adapter that emits only one kind cannot silently lose it.
+   *
+   * The internal `SupportSignalFact` stream is untouched, exactly as with the
+   * bookkeeping projection above: this shapes what the model is shown, never what
+   * the engine reasons over.
+   */
+  const collapseVisibilityDuplicates = (
+    facts: readonly SupportSignalFact[]
+  ): readonly ReturnType<typeof modelFacingSupportSignalFact>[] => {
+    const coordinate = (fact: SupportSignalFact): string =>
+      `${fact.path} ${fact.name} ${fact.line}`
+    const publicCoordinates = new Set(
+      facts
+        .filter((fact) => fact.kind === 'public-symbol')
+        .map((fact) => coordinate(fact))
+    )
+    const declaredCoordinates = new Set(
+      facts
+        .filter((fact) => fact.kind === 'declaration')
+        .map((fact) => coordinate(fact))
+    )
+
+    return facts
+      .filter(
+        (fact) =>
+          fact.kind !== 'public-symbol' ||
+          !declaredCoordinates.has(coordinate(fact))
+      )
+      .map((fact) =>
+        modelFacingSupportSignalFact(
+          fact,
+          fact.kind === 'declaration' && publicCoordinates.has(coordinate(fact))
+        )
+      )
+  }
 
   const supportSignalContextsForPaths = (
     task: ReviewTask,
@@ -312,7 +370,7 @@ export const assembleContext = async (
       supportSignalFacts.length === 0 && supportSignalTestMappings.length === 0
         ? ''
         : JSON.stringify({
-            facts: supportSignalFacts.map(modelFacingSupportSignalFact),
+            facts: collapseVisibilityDuplicates(supportSignalFacts),
             testMappings: supportSignalTestMappings
           })
 
