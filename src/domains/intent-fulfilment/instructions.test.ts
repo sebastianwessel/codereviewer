@@ -51,6 +51,18 @@ describe('obligation extraction instructions', () => {
       'returning few - or none - is the correct answer for a thin description'
     )
   })
+
+  test('leaves the statement wording free, which was measured and not assumed', () => {
+    // A wording anchor was tried on 2026-08-02 to stop paraphrase drift and made
+    // extraction worse: 56/55 obligations from 43/43 distinct source lines became
+    // 45/30 from 39/27. Under spec 23 an under-reported checklist is the one
+    // direction this capability must not err in, so the anchor was reverted. The
+    // assertion exists so reinstating it is a deliberate act with a number to beat.
+    expect(modelObligationExtractionInstructions).toContain('one short sentence')
+    expect(modelObligationExtractionInstructions).not.toContain(
+      'State each obligation in the words the intent itself uses.'
+    )
+  })
 })
 
 describe('fulfilment judgement instructions', () => {
@@ -92,6 +104,28 @@ describe('fulfilment judgement instructions', () => {
     for (const status of ['evidenced', 'not-evidenced', 'undetermined']) {
       expect(modelFulfilmentJudgementInstructions).toContain(`"${status}"`)
     }
+  })
+
+  test('decides the two cases that made a verdict a coin flip', () => {
+    // Spec 23's safety direction — "The dangerous output is not 'missed an
+    // obligation'. It is confidently asserting an obligation is satisfied when it
+    // is not" — applied to an obligation the change only partly covers.
+    expect(modelFulfilmentJudgementInstructions).toContain(
+      'Answer "evidenced" only when the changed lines do the WHOLE of what the obligation asks.'
+    )
+    // Spec 23's 2026-08-01 finding: 33 of 83 classified false positives were
+    // obligations satisfied by ABSENCE, where the judgement "reported correctly
+    // that nothing among the changed lines did what the obligation asked". Both
+    // runs of the 2026-08-02 repeatability probe flipped verdicts on exactly this
+    // shape ("never emit detected secret values"), because the prompt left it open.
+    expect(modelFulfilmentJudgementInstructions).toContain(
+      'An obligation can ask that something never happen'
+    )
+    // The answer must stay readable as "this change does not show it" rather than
+    // "this was not done" — spec 23's Output Vocabulary requirement.
+    expect(modelFulfilmentJudgementInstructions).toContain(
+      'It does not say the obligation is broken, and it does not say the work was undone.'
+    )
   })
 
   test('offers the labels the normalizer accepts, and no retired one', () => {

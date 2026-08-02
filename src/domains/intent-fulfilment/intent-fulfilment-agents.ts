@@ -56,6 +56,17 @@ const buildIntentFulfilmentHarness = (input: {
 }) =>
   defineHarness({ name: 'codereviewer-intent-fulfilment' })
     .logger(input.logger)
+    // NO FORWARDED CONVERSATION, STATED RATHER THAN INHERITED FROM THE SESSION
+    // SCHEME. The harness treats an absent `historyWindow` as "keep ALL history",
+    // and the review harness pins it to 0 for the reason spec 05 gives: a call that
+    // opens holding earlier answers is answering with them in context. Today no
+    // history reaches these agents anyway, because `nextSessionId` opens a fresh
+    // session per call — but that makes the guarantee an accident of an id counter
+    // rather than a setting, and merging two calls into one session (an obvious
+    // future economy) would silently restore the priming this domain splits three
+    // agents apart to prevent. Behaviour is unchanged today; what changes is that
+    // the property is now declared where it is enforced.
+    .defaults({ historyWindow: 0 })
     .telemetry({ contentCaptureMode: 'NO_CONTENT' })
     .models({ intent: input.modelAlias })
     .agents(({ agent }) => ({
