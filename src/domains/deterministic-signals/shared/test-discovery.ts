@@ -1,3 +1,20 @@
+// Where "this is test code" is decided, at both granularities the engine needs.
+//
+// A FILE is a test when its name or its location says so — the convention every
+// supported ecosystem publishes and the one its own test runner discovers by.
+//
+// A DECLARATION is test-side when the language builds it only for its test
+// configuration, wherever the file it sits in lives. That granularity exists
+// because one file-level answer is not always available: Rust's dominant form is
+// an inline `#[cfg(test)] mod tests { … }` INSIDE the production file it tests, so
+// production surface and test suite share a path and only the declaration can be
+// asked.
+//
+// Both live here so there is ONE definition of "test" in the engine. The impact
+// report's production/test split, conformance's peer exclusion and the signal
+// extractors all read it from this module.
+
+import type { SgNode } from '@ast-grep/napi'
 import type {
   SupportedSignalLanguage,
   SupportSignalFile,
@@ -38,19 +55,24 @@ const isPythonTestPath = (path: string): boolean => {
 
 const isGoTestPath = (path: string): boolean => path.endsWith('_test.go')
 
-// Shared helper modules under a Rust integration-test crate are not tests
-// themselves unless they declare a test.
+// Shared helper modules under a Rust integration-test crate carry no test of
+// their own, so the directory rule below must not sweep them in.
 const rustTestHelperModules = new Set(['mod.rs', 'common.rs'])
 
-const isRustTestPath = (file: SupportSignalFile): boolean => {
-  const path = normalizeSignalPath(file.path)
+// Only `*_test.rs` and the integration-test directory. Rust's OTHER convention —
+// the inline `#[cfg(test)] mod tests` — is deliberately NOT a file-level answer,
+// because it is the convention of a PRODUCTION file: `axum-extra/src/response/`
+// ships four of them, and a file rule that reads the content classified all four
+// as tests, dropping their production declarations from conformance entirely and
+// shrinking the peer denominator until sub-majority patterns read as majorities.
+// That convention is answered per declaration, further down this file.
+const isRustTestPath = (path: string): boolean => {
   const name = path.split('/').at(-1) ?? path
 
-  if (file.content?.includes('#[test]') === true || path.endsWith('_test.rs')) {
-    return true
-  }
-
-  return pathHasSegment(path, 'tests') && !rustTestHelperModules.has(name)
+  return (
+    path.endsWith('_test.rs') ||
+    (pathHasSegment(path, 'tests') && !rustTestHelperModules.has(name))
+  )
 }
 
 const isJavaTestPath = (path: string): boolean => {
@@ -130,11 +152,21 @@ const normalizedSourceStem = (
   return stem.replace(/[._-](?:test|spec)$/u, '')
 }
 
+/**
+ * Whether a path is a test file by its own ecosystem's naming or layout rule.
+ *
+ * Takes a PATH and nothing else. No language decides this from file content any
+ * more, and the parameter is gone rather than ignored: while it existed, the same
+ * file answered differently depending on whether its caller happened to have read
+ * it, so `conformance check` and `impact check` disagreed about the same Rust file
+ * by construction. A content-sensitive test convention is a declaration-level
+ * question — see `isTestOnlyDeclaration`.
+ */
 export const isLanguageTestFile = (
   language: SupportedSignalLanguage,
-  file: SupportSignalFile
+  filePath: string
 ): boolean => {
-  const path = normalizeSignalPath(file.path)
+  const path = normalizeSignalPath(filePath)
 
   if (!hasLanguageExtension(language, path)) {
     return false
@@ -153,7 +185,7 @@ export const isLanguageTestFile = (
   }
 
   if (language === 'rust') {
-    return isRustTestPath(file)
+    return isRustTestPath(path)
   }
 
   if (language === 'ruby') {
@@ -162,6 +194,144 @@ export const isLanguageTestFile = (
 
   return isJavaTestPath(path)
 }
+
+// ---------------------------------------------------------------------------
+// Declaration-level: is this declaration built only for the test configuration?
+//
+// The rule is about a MECHANISM rather than about a language: where a language can
+// compile part of a file only under its test configuration, the declarations in
+// that part are not the file's production surface. Nothing that reasons about that
+// surface — conformance peer sets, changed public symbols — may see them, however
+// the file itself is named.
+//
+// Rust is the only supported language with that mechanism today, so it is the only
+// implementation. Another language that grows one adds a branch here rather than a
+// second notion of "test" somewhere else.
+
+const rustCommentKinds = new Set(['line_comment', 'block_comment'])
+
+const nodeKind = (node: SgNode): string => String(node.kind())
+
+// Every `identifier` under a node, which is how a `cfg` predicate is read without
+// resorting to its text. `#[cfg(feature = "test-utils")]` mentions no `test`
+// identifier at all, while a text match on it would see one.
+const identifiersUnder = (node: SgNode): readonly string[] => {
+  const names: string[] = []
+  const stack: SgNode[] = [node]
+
+  while (stack.length > 0) {
+    const current = stack.pop()!
+
+    if (nodeKind(current) === 'identifier') {
+      names.push(current.text())
+    }
+
+    stack.push(...current.children())
+  }
+
+  return names
+}
+
+// The two markers, both compiler built-ins rather than library macros:
+//
+//   `#[cfg(test)]` — the item exists ONLY in the test build. Applied to the
+//     `mod tests` block, it covers every declaration inside whatever attribute
+//     those declarations carry, so `#[tokio::test]`, `#[rstest]` and plain test
+//     helpers are all handled without naming any of them. That is why this is the
+//     reliable marker and `#[test]` is not.
+//   `#[test]` — the item IS a test. Needed only for a test function written
+//     outside a `cfg(test)` module; inside one the module already answered.
+//
+// Third-party attribute macros are deliberately not enumerated. The list has no
+// end, and in the place they are actually written — inside a `cfg(test)` module —
+// enumerating them would buy nothing. The cost is a `#[tokio::test]` function
+// written at a production file's top level, which is not a form Rust code takes.
+//
+// `cfg(not(test))` is the inverse: the item exists in every build EXCEPT the test
+// one, so any `not` in the predicate disqualifies it. Erring towards production is
+// the safe direction here, exactly as it is for the file-level rules.
+const isRustTestBuildAttribute = (attributeItem: SgNode): boolean => {
+  const attribute = attributeItem
+    .children()
+    .find((child) => nodeKind(child) === 'attribute')
+
+  if (attribute === undefined) {
+    return false
+  }
+
+  const name = attribute.children()[0]
+
+  if (name === undefined) {
+    return false
+  }
+
+  const nameText = name.text().trim()
+
+  if (nameText === 'test') {
+    return true
+  }
+
+  if (nameText !== 'cfg') {
+    return false
+  }
+
+  const predicate = identifiersUnder(attribute)
+
+  return predicate.includes('test') && !predicate.includes('not')
+}
+
+// An attribute is a SIBLING of the item it annotates in this grammar, not a child
+// of it, so the item's own attributes are the run of `attribute_item` nodes
+// immediately before it. Comments are stepped over: they sit between an attribute
+// and its item often enough that stopping at one would silently lose the marker.
+const carriesRustTestBuildAttribute = (node: SgNode): boolean => {
+  let sibling = node.prev()
+
+  while (sibling !== null && sibling !== undefined) {
+    const kind = nodeKind(sibling)
+
+    if (kind === 'attribute_item') {
+      if (isRustTestBuildAttribute(sibling)) {
+        return true
+      }
+    } else if (!rustCommentKinds.has(kind)) {
+      return false
+    }
+
+    sibling = sibling.prev()
+  }
+
+  return false
+}
+
+// An ancestor walk, the same shape as the Ruby runtime-scope guard in the
+// extractor: the marker is on the enclosing `mod`, and every declaration below it
+// inherits the answer however deeply it is nested.
+const isInsideRustTestBuildScope = (node: SgNode): boolean => {
+  let current: SgNode | null | undefined = node
+
+  while (current !== null && current !== undefined) {
+    if (carriesRustTestBuildAttribute(current)) {
+      return true
+    }
+
+    current = current.parent()
+  }
+
+  return false
+}
+
+/**
+ * Whether a declaration node belongs to the test build rather than to the file's
+ * production surface.
+ *
+ * Takes the declaration's own AST node because the answer is positional: the same
+ * file holds both, and only the node knows which side of it a declaration is on.
+ */
+export const isTestOnlyDeclaration = (
+  language: SupportedSignalLanguage,
+  node: SgNode
+): boolean => (language === 'rust' ? isInsideRustTestBuildScope(node) : false)
 
 export const discoverSignalLanguageTests = (
   language: SupportedSignalLanguage,
@@ -173,7 +343,7 @@ export const discoverSignalLanguageTests = (
       path: normalizeSignalPath(file.path)
     }))
     .filter((file) => hasLanguageExtension(language, file.path))
-  const testFiles = languageFiles.filter((file) => isLanguageTestFile(language, file))
+  const testFiles = languageFiles.filter((file) => isLanguageTestFile(language, file.path))
   const mappings: SupportSignalTestMapping[] = []
 
   for (const testFile of testFiles) {
@@ -186,7 +356,7 @@ export const discoverSignalLanguageTests = (
   }
 
   for (const sourceFile of languageFiles.filter(
-    (file) => !isLanguageTestFile(language, file)
+    (file) => !isLanguageTestFile(language, file.path)
   )) {
     for (const testFile of testFiles) {
       if (

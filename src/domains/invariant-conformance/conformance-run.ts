@@ -148,17 +148,16 @@ const extensionOf = (path: string): string => {
 // The predicate is `isLanguageTestFile`, the same one the impact report splits
 // production dependents from test dependents with. A second definition of "test"
 // written here would be a second thing to keep true.
-const isTestSourceFile = (path: string, content?: string): boolean => {
+//
+// It answers from the PATH, so it is decided before a file is read and asked once.
+// The other half of the exclusion — a test declaration inside a production file,
+// which is how Rust writes most of its unit tests — is not a file question at all
+// and is answered by the signal extractors, which never emit a declaration fact
+// for one. Peer derivation therefore never sees them and has nothing to filter.
+const isTestSourceFile = (path: string): boolean => {
   const language = supportedSignalLanguageForPath(path)
 
-  if (language === undefined) {
-    return false
-  }
-
-  return isLanguageTestFile(language, {
-    path,
-    ...(content === undefined ? {} : { content })
-  })
+  return language !== undefined && isLanguageTestFile(language, path)
 }
 
 const diffMapsByPath = (
@@ -210,20 +209,19 @@ const collectFiles = async (
       continue
     }
 
+    // Before the read: the answer is in the path, so a test file costs nothing to
+    // exclude.
+    if (isTestSourceFile(changedFile.path)) {
+      excludedTestFileCount += 1
+      // NOT added to `seenPaths`: the path is excluded from the peer candidates
+      // below by the same predicate, so leaving it out cannot resurrect it.
+      continue
+    }
+
     const content = await input.readRepositoryFile(changedFile.path)
 
     if (content === undefined) {
       unreadableFileCount += 1
-      continue
-    }
-
-    // After the read, because one language's test convention is a declaration in
-    // the content rather than an affix in the name. A changed file is read either
-    // way, so this costs nothing.
-    if (isTestSourceFile(changedFile.path, content)) {
-      excludedTestFileCount += 1
-      // NOT added to `seenPaths`: the path is excluded from the peer candidates
-      // below by the same predicate, so leaving it out cannot resurrect it.
       continue
     }
 
@@ -250,9 +248,8 @@ const collectFiles = async (
         (entry) =>
           !seenPaths.has(entry) &&
           wantedExtensions.has(extensionOf(entry)) &&
-          // Path-only here: nothing has been read yet, and spending a slot of the
-          // peer budget on a file the name already identifies as a test spends it
-          // on noise. The content-aware re-check below catches the rest.
+          // Spending a slot of the peer budget on a test file spends it on noise,
+          // and the name is enough to know.
           !isTestSourceFile(entry)
       )
       .sort()
@@ -279,13 +276,6 @@ const collectFiles = async (
 
     if (content === undefined) {
       unreadableFileCount += 1
-      continue
-    }
-
-    // The name-based filter above cannot see a test convention that lives in the
-    // file's content, so the same predicate runs again now that there is content
-    // to read. Not counted as a peer file: it supplies no peers.
-    if (isTestSourceFile(candidate, content)) {
       continue
     }
 

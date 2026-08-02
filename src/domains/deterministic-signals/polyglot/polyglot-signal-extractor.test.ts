@@ -177,6 +177,85 @@ describe('polyglot deterministic support signal extractor', () => {
     ])
   })
 
+  // A Rust file is not test code because it carries tests. The dominant unit-test
+  // form puts them in an inline `#[cfg(test)] mod tests` inside the very file they
+  // exercise, so path and content both describe production AND test at once and
+  // only the declaration's position separates them.
+  //
+  // Getting this wrong at file granularity was expensive in both directions. Four
+  // production files under `axum-extra/src/response/` were classified as tests
+  // wholesale and dropped from conformance, production declarations included,
+  // which shrank the peer denominator until sub-majority patterns read as
+  // majorities. The file next to them was missed the other way: its tests are
+  // `#[tokio::test]`, which no `#[test]` substring rule sees, so ten async test
+  // functions were compared against production methods as their peers.
+  //
+  // `#[cfg(test)]` on the module is what fixes both at once: it covers whatever
+  // attribute the declarations beneath it carry, so no attribute-macro spelling
+  // has to be enumerated.
+  test('drops Rust declarations the crate compiles only for its test build', () => {
+    const content = [
+      'pub fn production() -> u32 {',
+      '    1',
+      '}',
+      '',
+      '#[cfg(test)]',
+      'mod tests {',
+      '    use super::*;',
+      '',
+      '    #[test]',
+      '    fn plain_test() {}',
+      '',
+      '    #[tokio::test]',
+      '    async fn async_test() {}',
+      '',
+      '    // Carries no test attribute of its own, and is still test-side.',
+      '    fn helper() -> u32 {',
+      '        2',
+      '    }',
+      '',
+      '    struct Fixture;',
+      '',
+      '    mod deeper {',
+      '        fn nested_helper() {}',
+      '    }',
+      '}',
+      '',
+      '// A test function written outside a `cfg(test)` module is named by the',
+      '// built-in attribute on the function itself.',
+      '#[test]',
+      'fn loose_test() {}',
+      '',
+      '#[cfg(not(test))]',
+      'pub fn production_only() {}'
+    ].join('\n')
+
+    expect(factNames('rust', content, 'declaration')).toEqual([
+      'production',
+      'production_only'
+    ])
+    expect(factNames('rust', content, 'public-symbol')).toEqual([
+      'production',
+      'production_only'
+    ])
+  })
+
+  // The suppression is about the production SURFACE — what the file declares — not
+  // about everything written inside a test module. A `use` there is still an edge
+  // this file has, and retrieval follows those edges to put a definition in front
+  // of a reviewer who is reading the test.
+  test('keeps Rust imports and the module itself inside a test build scope', () => {
+    const content = [
+      '#[cfg(test)]',
+      'mod tests {',
+      '    use crate::store::Store;',
+      '}'
+    ].join('\n')
+
+    expect(factNames('rust', content, 'import')).toEqual(['Store'])
+    expect(factNames('rust', content, 'module')).toEqual(['tests'])
+  })
+
   // The guard above is about DEFINITIONS, not about position. A `require` runs
   // wherever it sits, and the file it pulls in is a real edge from this file even
   // when the call is nested inside a block.

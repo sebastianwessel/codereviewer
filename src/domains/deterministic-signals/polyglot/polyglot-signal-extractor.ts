@@ -19,7 +19,10 @@ import {
   normalizeSignalPath,
   sha256
 } from '../shared/deterministic-signal-utils.js'
-import { discoverSignalLanguageTests } from '../shared/test-discovery.js'
+import {
+  discoverSignalLanguageTests,
+  isTestOnlyDeclaration
+} from '../shared/test-discovery.js'
 
 // Every supported language runs through this engine, so the alias is simply the
 // supported set. It is kept as a name because the exported functions read better
@@ -438,6 +441,21 @@ const extractRustFacts = (
       kindOf(node) === 'enum_item' ||
       kindOf(node) === 'trait_item'
     ) {
+      // A declaration the crate compiles only for its test build is not part of
+      // what this file provides, so it must not become a conformance peer or a
+      // changed public symbol. The whole file is not test code just because it
+      // carries an inline `#[cfg(test)] mod tests`, which is why this is asked
+      // here, per declaration, rather than of the path.
+      //
+      // Only the two DECLARATION facts are suppressed. A `use` inside a test
+      // module is still an edge this file has, and retrieval reads those edges to
+      // find definitions a reviewer needs while reading the test — so the import
+      // and module facts stay, and "test-side" stops at the production surface it
+      // is about.
+      if (isTestOnlyDeclaration('rust', node)) {
+        return
+      }
+
       const name = textOf(firstChildOfKind(node, ['identifier', 'type_identifier']))
 
       if (name !== undefined) {

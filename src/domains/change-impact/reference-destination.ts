@@ -30,12 +30,13 @@ export type ReferenceDestinationKind = 'source' | 'test' | 'non-source'
 /**
  * Classifies a repository-relative reference-site path.
  *
- * Path-only: a reference site carries the matched line, never the destination's
- * full content, so a content-sensitive test convention (a Rust file that is a
- * test only because it declares `#[test]`) degrades to that language's path
- * convention. That errs towards `source`, which is the safe direction: a
- * misclassified test is still a real dependent and still listed, only in the
- * wrong bucket, whereas erring towards `test` would demote a production caller.
+ * Path-only, and that is now the whole of the file-level convention rather than a
+ * degraded form of it: no language decides testhood from content any more. What a
+ * path cannot express — a reference landing inside an inline `#[cfg(test)] mod`
+ * in an otherwise production Rust file — is still bucketed as `source`. That errs
+ * in the safe direction, as it always did: a misclassified test is a real
+ * dependent listed in the wrong bucket, while erring the other way would demote a
+ * production caller out of the reader's sight.
  */
 export const classifyReferenceDestination = (
   referencePath: string
@@ -46,7 +47,5 @@ export const classifyReferenceDestination = (
     return 'non-source'
   }
 
-  return isLanguageTestFile(language, { path: referencePath })
-    ? 'test'
-    : 'source'
+  return isLanguageTestFile(language, referencePath) ? 'test' : 'source'
 }

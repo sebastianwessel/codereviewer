@@ -92,6 +92,34 @@ describe('ruby test destinations', () => {
   )
 })
 
+describe('rust test destinations', () => {
+  // Rust's file-level conventions, and only those. The language's other and more
+  // common form — an inline `#[cfg(test)] mod tests` — belongs to a file that IS
+  // production code, so no amount of content may rename it: `axum-extra/src/response/`
+  // ships four of them beside their production surface.
+  //
+  // This classifier never had the content to get that wrong, having always been
+  // path-only, so these cases pin a contract rather than record a repair. They are
+  // here because the contract is now the whole of the file-level rule instead of a
+  // documented degradation of it.
+  test.each(['src/lib_test.rs', 'tests/integration.rs'])(
+    '%s is a test destination',
+    (path) => {
+      expect(classifyReferenceDestination(path)).toBe('test')
+    }
+  )
+
+  test.each([
+    'axum-extra/src/response/attachment.rs',
+    'tests/common/mod.rs',
+    'tests/common.rs'
+  ])('%s is production', (path) => {
+    // The last two are the shared helpers of an integration-test crate: they carry
+    // no test of their own, and a bare directory rule would sweep them in.
+    expect(classifyReferenceDestination(path)).toBe('source')
+  })
+})
+
 describe('python whole-module test naming', () => {
   // The affix forms (`test_x.py`, `x_test.py`) put the subject in the filename. A
   // module whose entire stem is `test`/`tests` puts it in the package: it is the

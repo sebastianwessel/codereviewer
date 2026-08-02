@@ -394,28 +394,66 @@ describe('invariant conformance run', () => {
       ])
     })
 
-    test('a peer whose test convention is in its content, not its name, is excluded too', async () => {
-      // One language declares a test with an attribute rather than a filename
-      // affix, so the name-based filter cannot see it. The file is read and then
-      // dropped, which is the only reason the predicate runs twice.
+    // Rust writes most of its unit tests INSIDE the file under test, in an inline
+    // `#[cfg(test)] mod tests`. So the file-level question has no answer for it —
+    // the same path holds the production surface and the test suite — and asking
+    // it anyway is what this fixture is built from.
+    //
+    // The peer file here is production code that happens to carry such a module.
+    // Both halves of the exclusion have to be right at once, and each is asserted:
+    // its four production methods MUST supply peers, and its four test functions
+    // MUST NOT. Sitting at the same indentation as the methods, the test functions
+    // are siblings by every structural rule this domain has; only the fact that
+    // the crate compiles them for the test build alone separates them.
+    test('an inline test module supplies no peers, and the production file around it still does', async () => {
       const changed = [
-        'pub fn remove(request: &Request) -> Response {',
-        '    load(request)',
+        'pub struct Store;',
+        '',
+        'impl Store {',
+        '    pub fn remove(request: &Request) -> Response {',
+        '        load(request)',
+        '    }',
         '}',
         ''
       ].join('\n')
-      const guarded = (name: string): string =>
+      const guardedMethod = (name: string): string =>
         [
-          `pub fn ${name}(request: &Request) -> Response {`,
-          '    require_auth(request);',
-          '    load(request)',
-          '}',
-          ''
+          `    pub fn ${name}(request: &Request) -> Response {`,
+          '        require_auth(request);',
+          '        load(request)',
+          '    }'
+        ].join('\n')
+      // Unanimous among the tests and nowhere in the production code, so a peer
+      // set that counted them would report `unwrap` as a convention `remove`
+      // breaks. Nothing below may mention it.
+      const testFunction = (name: string): string =>
+        [
+          '    #[test]',
+          `    fn ${name}() {`,
+          '        load(fixture().unwrap());',
+          '    }'
         ].join('\n')
       const root = await createRepository({
         'src/store.rs': changed,
-        // Named like production, and the only file that could supply a peer.
-        'src/helper.rs': `#[test]\n${guarded('read_one')}${guarded('read_all')}`
+        // Named like production because it IS production, and the only file that
+        // can supply a peer.
+        'src/helper.rs': [
+          'pub struct Helper;',
+          '',
+          'impl Helper {',
+          ['read_one', 'read_all', 'read_some', 'read_none']
+            .map(guardedMethod)
+            .join('\n\n'),
+          '}',
+          '',
+          '#[cfg(test)]',
+          'mod tests {',
+          ['reads_one', 'reads_all', 'reads_some', 'reads_none']
+            .map(testFunction)
+            .join('\n\n'),
+          '}',
+          ''
+        ].join('\n')
       })
       const report = await runInvariantConformance({
         repositoryRoot: root,
@@ -428,8 +466,20 @@ describe('invariant conformance run', () => {
       })
 
       expect(report.summary.changedDeclarationCount).toBe(1)
-      expect(report.scope.peerFileCount).toBe(0)
-      expect(report.summary.peerSetCount).toBe(0)
+      expect(report.scope.peerFileCount).toBe(1)
+      expect(report.summary.peerSetCount).toBe(1)
+      // The arithmetic is the assertion. `4 of 4` is the production methods and
+      // only them: the eight-declaration denominator an inline test module used to
+      // produce turns the same unanimous guard into a sub-majority `4 of 8` and
+      // reports nothing at all.
+      expect(
+        [
+          ...report.changeAttributedDivergences,
+          ...report.preExistingDivergences
+        ].map((divergence) => divergence.statement)
+      ).toEqual([
+        '4 of 4 sibling declarations call require_auth; remove does not.'
+      ])
     })
   })
 
