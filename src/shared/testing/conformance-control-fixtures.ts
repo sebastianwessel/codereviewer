@@ -91,9 +91,18 @@ export const ContextRetrievalBudgetSchema = z.strictObject({
 `
 
 // The two declarations spec 24's membership section describes being grouped with
-// schema builders because a module's top-level declarations all sit at column 0.
-// Neither produces a divergence — they hold no majority trait — but both count
-// towards the peer denominator, which is what makes the arithmetic "4 of 7".
+// schema builders because a module's top-level declarations are all in one scope.
+// Neither produces a divergence — they hold no majority trait.
+//
+// ONLY `RetrievalTools` COUNTS TOWARDS THE PEER DENOMINATOR, which is what makes
+// the arithmetic "4 of 6". It used to be "4 of 7", with the error class counted
+// too, and the error class was counted for a bad reason: its only observable
+// behaviour was `constructor(maxToolCalls)` — its own member's HEADER line, read
+// as a call the class makes. A declaration's traits are now taken from its own
+// body rather than from its members', which leaves this class holding nothing and
+// removes it under the pre-existing rule that a behaviourless declaration is
+// neither a subject nor a peer. Both control divergences are unaffected and still
+// fire; one non-member left the denominator.
 const errorAndToolTypes = `export class ToolCallBudgetExceededError extends Error {
   constructor(maxToolCalls: number) {
     super(\`Repository tool-call budget exceeded: at most \${maxToolCalls} calls.\`)
@@ -144,8 +153,8 @@ export const schemaBuilderNegativeControl: ConformanceControlFixture = {
     'src/context-retrieval/repo-tool-contracts.ts'
   ],
   expectedStatements: [
-    '4 of 7 sibling declarations call min; RepoToolOutputSchema does not.',
-    '4 of 7 sibling declarations call string; ContextRetrievalBudgetSchema does not.'
+    '4 of 6 sibling declarations call min; RepoToolOutputSchema does not.',
+    '4 of 6 sibling declarations call string; ContextRetrievalBudgetSchema does not.'
   ]
 }
 

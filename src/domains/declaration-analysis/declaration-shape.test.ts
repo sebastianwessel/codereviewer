@@ -278,6 +278,91 @@ describe('positional traits', () => {
     expect(onHeader).toContain('call:build@surface/exit')
     expect(wrapped).toContain('call:build@surface/exit')
   })
+
+  // THE CONTAINER DEFECT, at the level it is caused. Measured on real
+  // repositories, an 875-line Ruby class was reported for "23 of 34 sibling
+  // declarations call `initialize` with `app` as its first argument" — where the
+  // "call" was its peers' `def initialize(app)` HEADER lines. A container was
+  // being credited with everything its members do, so its trait set described its
+  // members and the comparison was between classes phrased in the vocabulary of
+  // functions.
+  test("a declaration's traits are its own body's, not its members'", () => {
+    const source = [
+      'class Middleware {',
+      '  constructor(app) {',
+      '    this.app = wrap(app)',
+      '  }',
+      '  handle(request) {',
+      '    return respond(request)',
+      '  }',
+      '}'
+    ].join('\n')
+    const lines = toSourceLines(source)
+    const span = declarationSpanAt(lines, 1)
+    const traitsWith = (nestedSpans: readonly ReturnType<typeof declarationSpanAt>[]) =>
+      extractDeclarationTraits({
+        lines,
+        span: span ?? { startLine: 1, endLine: 1, indentation: 0 },
+        declarationName: 'Middleware',
+        nestedSpans: nestedSpans.flatMap((nested) => (nested === undefined ? [] : [nested]))
+      })
+        .map(declarationTraitKey)
+        .sort()
+
+    // Non-vacuity, stated in the test rather than left to a stashed edit: with the
+    // members left in, the class holds every call they make and both of their
+    // header lines as calls of its own.
+    expect(traitsWith([])).toEqual([
+      'call-argument:constructor(app)@surface/exit',
+      'call-argument:handle(request)@surface/exit',
+      'call-argument:respond(request)@surface/exit',
+      'call-argument:wrap(app)@surface/exit',
+      'call:constructor@surface/exit',
+      'call:handle@surface/exit',
+      'call:respond@surface/exit',
+      'call:wrap@surface/exit'
+    ])
+    // Subtracting them leaves a class that is a namespace for its members and
+    // nothing else — which is the truth about it, and which the peer derivation
+    // then drops under its existing behaviourless-declaration rule.
+    expect(
+      traitsWith([declarationSpanAt(lines, 2), declarationSpanAt(lines, 5)])
+    ).toEqual([])
+  })
+
+  test('a function keeps its own body when it holds a local helper', () => {
+    const source = [
+      'function handler(request) {',
+      '  const normalize = (value) => trim(value)',
+      '  return respond(normalize(request))',
+      '}'
+    ].join('\n')
+    const lines = toSourceLines(source)
+    const span = declarationSpanAt(lines, 1)
+    const helper = declarationSpanAt(lines, 2)
+
+    if (span === undefined || helper === undefined) {
+      throw new Error('expected spans')
+    }
+
+    const keys = extractDeclarationTraits({
+      lines,
+      span,
+      declarationName: 'handler',
+      nestedSpans: [helper]
+    })
+      .map(declarationTraitKey)
+      .sort()
+
+    // `trim` belonged to the helper and is gone; `respond` and the call to the
+    // helper are the function's own and stay. A function that holds a local
+    // helper is not thereby a container with no behaviour of its own.
+    expect(keys).toEqual([
+      'call-argument:normalize(request)@surface/exit',
+      'call:normalize@surface/exit',
+      'call:respond@surface/exit'
+    ])
+  })
 })
 
 describe('comparable declaration headers', () => {

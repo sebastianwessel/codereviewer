@@ -93,6 +93,13 @@ export type PeerDeclaration = {
   readonly language: SupportedSignalLanguage
   readonly span: DeclarationSpan
   readonly traits: readonly DeclarationTrait[]
+  // The header line of the declaration this one is nested in, or undefined at the
+  // top level of its file. This is the declaration's SCOPE, and it is what makes
+  // two declarations siblings — see `isSibling`.
+  readonly containerStartLine?: number
+  // How many declarations enclose this one. Zero at a file's top level, one for a
+  // method of a top-level class, and so on.
+  readonly containerDepth: number
   // Whether the change added or modified this declaration. A declaration the
   // change did not touch can still be the odd one out in its peer set; spec 24
   // permits reporting that and requires it to be labelled separately.
@@ -173,6 +180,100 @@ const compareDeclarations = (
   left.span.startLine - right.span.startLine ||
   left.name.localeCompare(right.name)
 
+// A declaration whose header sits inside another's span and whose body ends no
+// later. Strict on the header line so two declarations reported at the SAME line
+// — an assignment whose right-hand side is a function, which several extractors
+// report twice — are never made parent and child of each other.
+const containsDeclaration = (
+  outer: DeclarationSpan,
+  inner: DeclarationSpan
+): boolean =>
+  outer.startLine < inner.startLine && inner.endLine <= outer.endLine
+
+type LocatedDeclaration = {
+  readonly fact: SupportSignalFact
+  readonly span: DeclarationSpan
+}
+
+type ScopedDeclaration = LocatedDeclaration & {
+  // The innermost declaration of the same file that encloses this one.
+  readonly container?: LocatedDeclaration
+  readonly containerDepth: number
+  // The declarations DIRECTLY inside this one, whose spans together cover every
+  // declaration nested anywhere within it.
+  readonly children: readonly DeclarationSpan[]
+}
+
+/**
+ * Resolves the nesting of one file's declarations from their spans.
+ *
+ * THE SCOPE OF A DECLARATION IS STRUCTURAL AND IS READ HERE, NOT GUESSED.
+ *
+ * The spans `declaration-span.ts` reconstructs already contain each other exactly
+ * as the source nests, so containment is a comparison of two spans and needs no
+ * second parser and no per-language nesting rule. What it replaces is an
+ * indentation proxy — "same column, same directory, same language, therefore
+ * siblings" — which is false in every language that indents two unrelated things
+ * to the same depth: ten test functions inside a test module and the methods of an
+ * unrelated type both sit one step in, and were peers of each other.
+ */
+const resolveNesting = (
+  located: readonly LocatedDeclaration[]
+): readonly ScopedDeclaration[] => {
+  const containerOf = new Map<LocatedDeclaration, LocatedDeclaration>()
+
+  for (const declaration of located) {
+    let innermost: LocatedDeclaration | undefined
+
+    for (const candidate of located) {
+      if (
+        candidate === declaration ||
+        !containsDeclaration(candidate.span, declaration.span) ||
+        // Innermost wins: of two enclosing spans, the one that starts later is
+        // inside the other.
+        (innermost !== undefined &&
+          candidate.span.startLine <= innermost.span.startLine)
+      ) {
+        continue
+      }
+
+      innermost = candidate
+    }
+
+    if (innermost !== undefined) {
+      containerOf.set(declaration, innermost)
+    }
+  }
+
+  const depthOf = (declaration: LocatedDeclaration): number => {
+    let depth = 0
+    let current = containerOf.get(declaration)
+
+    // Bounded by the chain, which cannot cycle: a container always starts on a
+    // strictly earlier line than what it contains.
+    while (current !== undefined) {
+      depth += 1
+      current = containerOf.get(current)
+    }
+
+    return depth
+  }
+
+  return located.map((declaration) => {
+    const container = containerOf.get(declaration)
+    const children = located
+      .filter((candidate) => containerOf.get(candidate) === declaration)
+      .map((candidate) => candidate.span)
+
+    return {
+      ...declaration,
+      ...(container === undefined ? {} : { container }),
+      containerDepth: depthOf(declaration),
+      children
+    }
+  })
+}
+
 /**
  * Collapses the facts of one file into comparable declarations.
  *
@@ -199,6 +300,15 @@ const compareDeclarations = (
  * an empty function body that genuinely should have had a guard — reported by
  * nothing here, and a stub that calls nothing is not the case this capability is
  * built for.
+ *
+ * IT IS ALSO WHAT REMOVES CONTAINERS, now that traits are extracted from a
+ * declaration's OWN body rather than from its members' (see
+ * `declaration-shape.ts`). A class or module whose body is nothing but
+ * declarations is left holding no trait and drops out here, under a rule that was
+ * already needed for a different reason. No separate "is this a container" test
+ * exists, and none should: a class with real body-level behaviour of its own keeps
+ * exactly that behaviour and is compared on it, while one that is only a namespace
+ * for its members has nothing to compare and says so.
  */
 const declarationsOfFile = (
   file: ConformanceSourceFile,
@@ -234,7 +344,7 @@ const declarationsOfFile = (
     }
   }
 
-  const declarations: PeerDeclaration[] = []
+  const located: LocatedDeclaration[] = []
 
   for (const [line, fact] of strongestByLine) {
     if (
@@ -246,14 +356,22 @@ const declarationsOfFile = (
 
     const span = declarationSpanAt(lines, line)
 
-    if (span === undefined) {
-      continue
+    if (span !== undefined) {
+      located.push({ fact, span })
     }
+  }
 
+  // Nesting is resolved over EVERY located declaration, before the behaviourless
+  // ones are dropped. A class removed for having no traits of its own is still the
+  // scope its methods share, and forgetting it would make them look top-level.
+  const declarations: PeerDeclaration[] = []
+
+  for (const scoped of resolveNesting(located)) {
     const traits = extractDeclarationTraits({
       lines,
-      span,
-      declarationName: fact.name
+      span: scoped.span,
+      declarationName: scoped.fact.name,
+      nestedSpans: scoped.children
     })
 
     if (traits.length === 0) {
@@ -261,13 +379,17 @@ const declarationsOfFile = (
     }
 
     declarations.push({
-      path: fact.path,
-      name: fact.name,
-      kind: fact.kind as PeerDeclarationKind,
-      language: fact.language,
-      span,
+      path: scoped.fact.path,
+      name: scoped.fact.name,
+      kind: scoped.fact.kind as PeerDeclarationKind,
+      language: scoped.fact.language,
+      span: scoped.span,
       traits,
-      changeAttributed: spanIsChanged(file, span)
+      ...(scoped.container === undefined
+        ? {}
+        : { containerStartLine: scoped.container.span.startLine }),
+      containerDepth: scoped.containerDepth,
+      changeAttributed: spanIsChanged(file, scoped.span)
     })
   }
 
@@ -291,11 +413,27 @@ export type DerivePeerSetsResult = {
   readonly changedDeclarationCount: number
 }
 
-// A peer must be the same kind, in the same language, at the same indentation
-// column. Indentation is the language-neutral proxy for "sibling": it separates a
-// Python module-level function from a method inside a class, and a Rust free
-// function from one inside an `impl`, without a per-language nesting rule.
-// Deliberately NOT gated on `kind`.
+// A peer must be in the same language and in the same SCOPE. Deliberately NOT
+// gated on `kind`.
+//
+// SCOPE IS STRUCTURAL, AND USED TO BE POSITIONAL.
+//
+// The rule was "same indentation column", an indentation proxy for "sibling". It
+// is wrong wherever a language indents two unrelated things to the same depth,
+// which is everywhere: measured on real repositories, ten `#[tokio::test]`
+// functions inside a test module sat at column 4, the methods of an unrelated type
+// sat at column 4, and every pair of them was a peer. So did a method of one class
+// and a closure nested in a function of another, and two methods of two classes
+// that have nothing to do with each other.
+//
+// The relation the spec actually means is "declared in the same place", and the
+// spans already answer it. Inside one file the test is exact: two declarations are
+// siblings when the same declaration encloses both, or when neither is enclosed at
+// all. Across files there is no shared enclosing declaration to compare, so the
+// structural relation available is nesting DEPTH — the top-level declarations of
+// two files in a directory are siblings of each other, and so are the members of
+// their top-level containers. That is weaker than the same-file test and it is
+// stated rather than hidden: it is a claim about structure, which a column is not.
 //
 // The collapse above already picks the most inclusive kind precisely so that "a
 // peer set that splits an exported sibling from an unexported one compares fewer
@@ -311,7 +449,9 @@ export type DerivePeerSetsResult = {
 // which fact kind an extractor happens to emit.
 const isSibling = (subject: PeerDeclaration, candidate: PeerDeclaration): boolean =>
   candidate.language === subject.language &&
-  candidate.span.indentation === subject.span.indentation &&
+  candidate.containerDepth === subject.containerDepth &&
+  (candidate.path !== subject.path ||
+    candidate.containerStartLine === subject.containerStartLine) &&
   !(
     candidate.path === subject.path &&
     candidate.span.startLine === subject.span.startLine

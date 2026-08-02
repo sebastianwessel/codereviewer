@@ -249,6 +249,93 @@ describe('peer set derivation', () => {
     ).toBeUndefined()
   })
 
+  // THE ROOT CAUSE this rule replaced. Peers used to be "same indentation
+  // column, same language, same directory", and every declaration one step in was
+  // then a peer of every other: measured on real repositories, ten test functions
+  // inside a test module and the methods of an unrelated type all sat at column 4
+  // and were compared against each other. Two methods of two classes in one file
+  // are the smallest form of the same mistake.
+  test('two declarations at the same column in different scopes are not siblings', () => {
+    const content = [
+      'class Reader:',
+      '    def load(self, request):',
+      '        require_auth(request)',
+      '        return fetch(request)',
+      '',
+      '    def peek(self, request):',
+      '        require_auth(request)',
+      '        return fetch(request)',
+      '',
+      'class Writer:',
+      '    def store(self, request):',
+      '        return fetch(request)',
+      ''
+    ].join('\n')
+    const result = derivePeerSets({
+      files: [{ path: 'src/service.py', content, hunks: wholeFileHunks(content) }],
+      ...bounds
+    })
+
+    // `load` and `peek` share an enclosing class, so they are peers.
+    expect(
+      result.peerSets
+        .find((set) => set.subject.name === 'load')
+        ?.members.map((member) => member.name)
+    ).toEqual(['load', 'peek'])
+    // `store` is the only declaration in its scope. Its column-4 neighbours belong
+    // to another class and are not its siblings, so it has no peer set at all.
+    expect(
+      result.peerSets.find((set) => set.subject.name === 'store')
+    ).toBeUndefined()
+  })
+
+  // A class that is only a namespace for its methods holds no behaviour of its
+  // own, so it is neither compared nor counted — while its methods are compared
+  // against the methods of the sibling class beside it, which is the relation the
+  // capability is for. Both halves used to be wrong at once: the classes were peers
+  // of each other, carrying the union of everything their members do.
+  test('a class whose body is only members is neither subject nor peer, but its methods are', () => {
+    const reader = [
+      'class Reader:',
+      '    def load(self, request):',
+      '        require_auth(request)',
+      '        return fetch(request)',
+      ''
+    ].join('\n')
+    const writer = [
+      'class Writer:',
+      '    def store(self, request):',
+      '        require_auth(request)',
+      '        return fetch(request)',
+      '',
+      '    def drop(self, request):',
+      '        return fetch(request)',
+      ''
+    ].join('\n')
+    const result = derivePeerSets({
+      files: [
+        { path: 'src/svc/reader.py', content: reader, hunks: wholeFileHunks(reader) },
+        { path: 'src/svc/writer.py', content: writer }
+      ],
+      ...bounds
+    })
+    const names = result.peerSets.flatMap((set) =>
+      set.members.map((member) => member.name)
+    )
+
+    expect(names).not.toContain('Reader')
+    expect(names).not.toContain('Writer')
+    expect(result.peerSets.map((set) => set.subject.name)).toEqual(['load'])
+    // Across files the shared scope cannot be the same object, so the relation is
+    // nesting depth: a method of one class is a peer of a method of another in the
+    // same directory, and of nothing shallower or deeper.
+    expect(result.peerSets[0]?.members.map((member) => member.name)).toEqual([
+      'load',
+      'store',
+      'drop'
+    ])
+  })
+
   test('an exported and an unexported Go function land in the same peer set', () => {
     const content = [
       'package handlers',

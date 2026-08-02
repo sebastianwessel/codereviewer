@@ -234,10 +234,60 @@ export type ExtractDeclarationTraitsInput = {
   // a convention, and a name that appears in its own header would otherwise make
   // every declaration trivially "call" itself.
   readonly declarationName: string
+  // Spans of the declarations nested INSIDE this one, which are not part of what
+  // it does. See `ownCodeLinesOf` for why they are subtracted rather than counted.
+  readonly nestedSpans?: readonly DeclarationSpan[]
 }
 
 /**
- * Extracts the trait set of one declaration. The result is de-duplicated by
+ * The span's code lines with every nested declaration blanked out.
+ *
+ * A DECLARATION'S TRAITS ARE ITS OWN, NOT ITS MEMBERS'.
+ *
+ * Without this a class's trait set is the union of everything its methods do, and
+ * every enclosing construct is credited with the behaviour of everything it holds.
+ * Measured on real repositories, that is the single largest source of false
+ * conformance reports: an 875-line Ruby class was reported for "23 of 34 sibling
+ * declarations call `initialize` with `app` as its first argument", where the
+ * "call" was in fact its peers' `def initialize(app)` HEADER lines and the claim
+ * was really "23 of these 34 classes are middleware and this one is not". A
+ * container-scale subject was being measured with a function-scale vocabulary, and
+ * the vocabulary was borrowed from the members.
+ *
+ * Subtracting the members is the whole fix, and it needs no notion of "container":
+ * a class whose body is nothing but methods is left with no traits at all and the
+ * existing rule — a declaration with no observable behaviour is neither a subject
+ * nor a peer — removes it. A function holding a local helper keeps every trait of
+ * its own body and loses only the helper's, which is exactly right: the helper is a
+ * declaration in its own right and is compared as one.
+ *
+ * Blanking rather than deleting keeps every offset equal to its line's offset in
+ * the span, so a trait can still be traced back to a raw line, and it keeps the
+ * nested lines out of the indentation ranking `traitPositionsOfSpan` performs — a
+ * method body's depth is not a level of its enclosing class.
+ */
+const ownCodeLinesOf = (
+  codeLines: readonly string[],
+  span: DeclarationSpan,
+  nestedSpans: readonly DeclarationSpan[]
+): readonly string[] =>
+  nestedSpans.length === 0
+    ? codeLines
+    : codeLines.map((line, offset) => {
+        const lineNumber = span.startLine + offset
+
+        return nestedSpans.some(
+          (nested) => lineNumber >= nested.startLine && lineNumber <= nested.endLine
+        )
+          ? ''
+          : line
+      })
+
+/**
+ * Extracts the trait set of one declaration, from its OWN body: the spans of the
+ * declarations nested inside it are subtracted first (see `ownCodeLinesOf`).
+ *
+ * The result is de-duplicated by
  * trait key: a body calling `log` five times at the same position shares exactly
  * the same trait with a peer calling it once, because what is being compared is
  * whether the convention is upheld, not how often. Calling it at two materially
@@ -247,7 +297,11 @@ export type ExtractDeclarationTraitsInput = {
 export const extractDeclarationTraits = (
   input: ExtractDeclarationTraitsInput
 ): readonly DeclarationTrait[] => {
-  const codeLines = codeLinesOfSpan(input.lines, input.span)
+  const codeLines = ownCodeLinesOf(
+    codeLinesOfSpan(input.lines, input.span),
+    input.span,
+    input.nestedSpans ?? []
+  )
   const positions = traitPositionsOfSpan(codeLines, input.span.indentation)
   const byKey = new Map<string, DeclarationTrait>()
 
