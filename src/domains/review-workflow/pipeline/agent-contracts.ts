@@ -797,6 +797,28 @@ export type FindingRefutationResult = z.infer<
 // tokens against 67,000 input tokens. Nothing ever read it back: it was written
 // into the prompt and never consumed. Run correlation belongs in telemetry, which
 // carries it already.
+//
+// FIELD ORDER IS A COST CONTRACT, and it is measured. The harness sends this packet
+// as `JSON.stringify(parsedInput)` and Zod emits keys in declaration order, so the
+// four fields above `reviewContext` — all constant for every refutation call of a
+// run — are exactly the shared prompt prefix; everything from `reviewContext` on is
+// per-task. Moving a per-task field above them, or inserting one, truncates that
+// prefix to nothing.
+//
+// What that prefix currently measures (recorded off the real pipeline over the
+// 37-slice real-repo corpus, o200k_base, no provider spend): refuter instructions
+// 783 tokens + static packet head 185 tokens = 968 identical leading tokens. The
+// provider caches only a prefix of at least 1024 tokens, in 128-token increments,
+// so refutation caches NOTHING and is 56 tokens short — while discovery's 1,621-token
+// prefix caches 1,536 per call, which is every cached token a run reports. Configure
+// `instructions.files` and the same measurement gives 1,654 tokens and 1,536 cached,
+// because the instruction document lands inside the head.
+//
+// The gap is deliberately NOT closed here. Padding the prompt to clear 1024 would
+// spend real tokens on every call to buy a discount on the same tokens, and any
+// content added to this stage's prompt is a measured recall/precision risk. If a
+// refutation prompt change is ever justified on its own merits and adds 56+ tokens,
+// caching starts working as a side effect — that is the only honest route.
 export const FindingRefutationBatchInputSchema = z.strictObject({
   provenance: WorkflowProvenanceInputSchema,
   instructions: z.array(ContextDocumentSchema),

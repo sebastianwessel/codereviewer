@@ -203,6 +203,55 @@ describe('finding refutation packet', () => {
     expect(packet.supportSignalCandidates).toEqual([supportCandidate])
   })
 
+  // The packet reaches the provider as `JSON.stringify(input)` with Zod's
+  // declaration key order, so the fields ahead of `reviewContext` ARE the prompt
+  // prefix two refutation calls of one run share, and a provider caches only a
+  // prefix it can match. Pinning the invariant here because it is invisible: a
+  // per-task field moved or inserted above `reviewContext` breaks nothing a
+  // functional test would notice, it just silently deletes the shared prefix.
+  test('serializes every run-invariant field ahead of the first per-task field', () => {
+    const input = workflowInput({
+      instructions: [{ content: 'Repository review instructions.' }]
+    })
+    const firstBatch = JSON.stringify(
+      findingRefutationBatchInput({
+        workflowInput: input,
+        task: task([reviewContext('first task context')]),
+        candidates: [modelCandidate],
+        allCandidates: [modelCandidate],
+        sharedDigest: '(no admitted shared context yet)'
+      })
+    )
+    const secondBatch = JSON.stringify(
+      findingRefutationBatchInput({
+        workflowInput: input,
+        task: task([reviewContext('second task context')]),
+        candidates: [secondModelCandidate],
+        allCandidates: [secondModelCandidate],
+        sharedDigest: '(no admitted shared context yet)'
+      })
+    )
+
+    let sharedPrefixLength = 0
+    while (
+      sharedPrefixLength < firstBatch.length &&
+      firstBatch[sharedPrefixLength] === secondBatch[sharedPrefixLength]
+    ) {
+      sharedPrefixLength += 1
+    }
+    const sharedPrefix = firstBatch.slice(0, sharedPrefixLength)
+
+    // Provenance, instructions, skills, and the shared digest are constant for
+    // every refutation call of a run and must all sit inside the shared prefix.
+    expect(sharedPrefix).toContain('"provenance":')
+    expect(sharedPrefix).toContain('Repository review instructions.')
+    expect(sharedPrefix).toContain('"skills":')
+    expect(sharedPrefix).toContain('"sharedDigest":')
+    // The prefix reaches the first per-task field and stops inside it.
+    expect(sharedPrefix).toContain('"reviewContext":')
+    expect(sharedPrefix).not.toContain('first task context')
+  })
+
   test('throws the shared packet budget error when the refutation packet is too large', () => {
     let thrown: unknown
 
