@@ -68,8 +68,7 @@ describe('command-level rejection', () => {
     ['config validate', ['config', 'validate', '--nope']],
     ['drift check', ['drift', 'check', '--nope']],
     ['impact check', ['impact', 'check', '--nope']],
-    ['intent check', ['intent', 'check', '--nope']],
-    ['conformance check', ['conformance', 'check', '--nope']]
+    ['intent check', ['intent', 'check', '--nope']]
   ])('%s rejects an unknown option', async (_name, args) => {
     const result = await cli(args)
 

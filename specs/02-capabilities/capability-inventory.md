@@ -51,7 +51,6 @@ task.
 | CAP-SEC-002 | Deterministic security-signal evidence (source/sink, CWE/data-flow) | ACT-MODEL, ACT-DEV | Yes | `15-security-focused-review.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-IMPACT-001 | Change-impact review (`impact check`, deterministic reference traversal, off by default) | ACT-DEV, ACT-CI | Yes | `22-change-impact-review.md` |
 | CAP-INTENT-001 | Intent-fulfilment review (`intent check`, obligation extraction and per-obligation judgement, advisory-only, off by default) | ACT-DEV, ACT-CI, ACT-MODEL | Yes | `23-intent-fulfilment-review.md` |
-| CAP-CONF-001 | Invariant-conformance review (`conformance check`, peer-set divergence detection with optional model adjudication, off by default) | ACT-DEV, ACT-CI, ACT-MODEL | Yes | `24-invariant-conformance-review.md` |
 | CAP-GATE-001 | Quality gate result | ACT-CI | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-OPS-001 | Run observability | ACT-OPS | Yes | `07-security-privacy-operations.md` |
 | CAP-DRIFT-001 | Drift, gap, and ambiguity checks | ACT-DEV, ACT-CI, ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `07-security-privacy-operations.md` |
@@ -483,22 +482,19 @@ the same spec.
   enough to gate on.
 - Verification: extraction, judgement, and CLI tests.
 
-### CAP-CONF-001 Invariant-Conformance Review
+### CAP-CONF-001 Invariant-Conformance Review — withdrawn
 
-- Trigger: `codereviewer conformance check` CLI command. Never reached by
-  `review`.
-- Contracts: `24-invariant-conformance-review.md`. Deterministic peer-set
-  divergence detection, with an optional model adjudication stage that is itself
-  off by default. Bounded by `maxChangedDeclarations`, `maxPeersPerDeclaration`,
-  `maxPeerFiles`, `maxDivergences`, and `maxPreExistingDivergences`.
-- Preconditions: `invariantConformance.enabled`, off by default. When disabled
-  the command still exits `0` and reports itself disabled rather than erroring.
-  Adjudication enabled with no available adjudicator reports the deterministic
-  divergences unjudged rather than failing.
-- Side effects: repository reads, plus provider calls only when adjudication is
-  enabled. No artifact is written; output is stdout.
-- Final state: exit `0` with the divergence report, or a structured error.
-- Verification: peer-derivation, divergence, and adjudication tests.
+Removed on 2026-08-02, together with the `conformance check` command, the
+`invariant-conformance` and `declaration-analysis` domains, the
+`invariantConformance` configuration block and the GitHub-integration stage. The
+identifier is retired and not reused. Step 1 of spec 24's own evaluation was run
+for the first time that day and the capability fired **7.0 reports per PR-sized
+range against a pre-registered kill criterion of ≈0.5** — 14x over — with **zero
+true positives across roughly 300 hand-judged divergences from five codebases**.
+The adjudicator cleared its own ≥95% rejection rule at 97.5% and every divergence
+it accepted was a false positive, so the rule it passed measured its silence
+rather than its judgement. `specs/24-invariant-conformance-review.md` is kept as a
+withdrawn spec and records the measurement in full.
 
 ### CAP-GATE-001 Quality Gate Result
 

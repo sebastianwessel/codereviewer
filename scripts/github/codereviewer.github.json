@@ -13,7 +13,6 @@
   },
   "intentFulfilment": { "enabled": true },
   "changeImpact": { "enabled": true },
-  "invariantConformance": { "enabled": true },
   "reporting": {
     "formats": ["json", "markdown", "sarif"],
     "sarif": { "target": "github" },

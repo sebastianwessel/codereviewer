@@ -18,11 +18,9 @@ import {
 } from './change-intent-inbox.js'
 import { checkProviderCredentials } from './provider-credentials.js'
 import {
-  digestConformanceReport,
   digestImpactReport,
   digestIntentReport,
   digestReviewReport,
-  type ConformanceDigest,
   type ImpactDigest,
   type IntentDigest,
   type ReviewDigest
@@ -281,10 +279,6 @@ export const runPipeline = async (
 
   const intent = digestOf<IntentDigest>('intent', digestIntentReport)
   const impact = digestOf<ImpactDigest>('impact', digestImpactReport)
-  const conformance = digestOf<ConformanceDigest>(
-    'conformance',
-    digestConformanceReport
-  )
 
   // Inline comments are best-effort by construction. GitHub rejects a whole
   // review when any one comment does not land on a diff line it recognises, and
@@ -340,7 +334,6 @@ export const runPipeline = async (
     ...(review === undefined ? {} : { review }),
     ...(intent === undefined ? {} : { intent }),
     ...(impact === undefined ? {} : { impact }),
-    ...(conformance === undefined ? {} : { conformance }),
     ...(options.runUrl === undefined ? {} : { runUrl: options.runUrl }),
     inlineCommentCount,
     notes

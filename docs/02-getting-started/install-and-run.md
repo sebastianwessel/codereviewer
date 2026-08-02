@@ -207,7 +207,6 @@ A configuration error exits `2` with a JSON error on stderr.
 | `review` | Run a review. See [Your first review](first-review.md). | **Yes** (exit `1`) |
 | `intent check` | Map a stated intent to the change. Needs `intentFulfilment.enabled` plus a `contextSources` provider. | No — always exits `0` |
 | `impact check` | Deterministic reference report for the changed symbols. Needs `changeImpact.enabled`. Makes no provider call. | No |
-| `conformance check` | Divergences between a changed declaration and its peers. Needs `invariantConformance.enabled`. | No |
 | `config validate` | Print the effective, redacted configuration. | — |
 | `baseline write` | Write `baseline.path` from a completed report. | — |
 | `drift check` | Run the deterministic documentation/spec/implementation drift check on its own. | Yes (exit `1`) |
@@ -216,7 +215,7 @@ A configuration error exits `2` with a JSON error on stderr.
 | `eval recall-report` | Per-expected-finding recall report from saved eval reports (`--report`, repeatable). | — |
 | `eval slice-manifest` | Deterministic manifest of a local slice pack (`--slice-root`). | — |
 
-Anything else exits `2` with a usage error. Each of the three advisory commands
+Anything else exits `2` with a usage error. Each of the two advisory commands
 requires the literal subcommand `check`, accepts only `--base-ref` and
 `--head-ref` beyond the global options, and reports its own disabled state as a
 warning inside an exit-`0` report rather than as an error:

@@ -7,7 +7,6 @@ import {
 } from './summary-comment.js'
 import { MAX_ISSUE_COMMENT_BODY } from './sanitize.js'
 import {
-  digestConformanceReport,
   digestImpactReport,
   digestIntentReport,
   digestReviewReport
@@ -18,7 +17,6 @@ import {
   type StageDefinition
 } from './stage-outcomes.js'
 import {
-  conformanceReportFixture,
   impactReportFixture,
   intentReportFixture,
   reviewReportFixture
@@ -84,18 +82,14 @@ describe('renderSummaryComment', () => {
     expect(body).toContain('| Review | blocking |')
     expect(body).toContain('| Intent | advisory |')
     expect(body).toContain('| Impact | advisory |')
-    expect(body).toContain('| Conformance | advisory |')
   })
 
-  it('renders findings, obligations, callers and divergences from real report shapes', () => {
+  it('renders findings, obligations and callers from real report shapes', () => {
     const body = renderSummaryComment(
       baseInput({
         review: digestReviewReport(JSON.stringify(reviewReportFixture)) as never,
         intent: digestIntentReport(JSON.stringify(intentReportFixture)) as never,
-        impact: digestImpactReport(JSON.stringify(impactReportFixture)) as never,
-        conformance: digestConformanceReport(
-          JSON.stringify(conformanceReportFixture)
-        ) as never
+        impact: digestImpactReport(JSON.stringify(impactReportFixture)) as never
       })
     )
 
@@ -103,7 +97,6 @@ describe('renderSummaryComment', () => {
     expect(body).toContain('`src/routes/admin.ts:42`')
     expect(body).toContain('Cover the guard with a test')
     expect(body).toContain('requireSession')
-    expect(body).toContain('Is the guard intentionally absent here?')
   })
 
   it('says plainly when the description stated no intent', () => {

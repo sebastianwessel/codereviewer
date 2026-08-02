@@ -36,8 +36,8 @@ import type { ChangeCitation } from './intent-fulfilment-report.js'
 // in the normalizer below: with an enum here a model answering "Evidenced." fails
 // provider-side validation, the call throws, and the judgement is lost. A schema
 // stricter than the normalizer converts a recoverable answer into silence. Loose
-// here, authoritative in code — the same division the conformance adjudication and
-// refutation results use, for the same measured reason (rich model-bound schemas
+// here, authoritative in code — the same division the refutation results use, for
+// the same measured reason (rich model-bound schemas
 // took this engine's provider error rate from 0% to 28.8%).
 export const ModelFulfilmentJudgementSchema = z.strictObject({
   status: z.string(),

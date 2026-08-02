@@ -73,46 +73,15 @@ already-frozen mapping. The one output it must never produce is a confident
 verdict whose cited lines are not lines the change touched is downgraded and
 counted.
 
-**Invariant-conformance review** (`invariantConformance.enabled`) is the same
-kind of thing: a separate command
-([`conformance check`](../../06-reference/cli.md#codereviewer-conformance-check)),
-off by default, and with no recall figure yet. It reports where a changed
-declaration does not hold a pattern a majority of its siblings hold — *"thirteen of
-fifteen call `requireAuth`; this one does not"* — with the peers cited by path and
-line. A pattern includes **where in a declaration it sits**, so a symbol used on the
-way out of one sibling and deep inside a loop in another is not the same thing
-twice. That is a **divergence, not a defect**: deviating from a convention is
-frequently deliberate, so the command states the fact, asks the question, and
-stops.
-
-**A previously published firing rate on this page was wrong and has been
-withdrawn.** It read *"0.70 divergences per commit, concentrated in two
-schema-heavy modules"*. That number was measured against a span reconstruction
-that truncated any declaration with a multi-line signature to its parameter list;
-such declarations extracted no traits and were dropped before the detector saw
-them. On this repository's own `src/cli/args.ts`, nine of ten exported
-declarations were invisible. The concentration in schema-heavy modules was a
-symptom: a single-line builder chain was one of the few shapes that survived.
-
-Re-measured on 2026-07-30 after the fix, over 20 consecutive commits of this
-repository: **79 changed declarations seen (3.95 per commit) and 0.000 divergences
-per commit**, change-attributed and pre-existing alike.
-
-Read that as *"the noise objection was a bug"*, **not** as *"it works"*. The
-detector now sees four times as many declarations and reports nothing at all,
-which is equally consistent with the gates correctly rejecting mere resemblance
-and with the gates being too strict to ever fire. Twenty commits of one repository
-cannot separate those, and this repository's style is unusually uniform. It has
-still never produced a positive on real code; the open question is now recall
-rather than noise.
-
-Its deterministic form makes no model call and costs nothing, and it is the floor
-the model layer has to beat. That model layer now exists as a second, separately
-disabled switch (`invariantConformance.adjudication.enabled`): one call per
-divergence, asking only whether the peers share a deliberate practice, and
-reporting only the divergences it answers `convention` for. It can make the report
-shorter and never longer, and it has **no measurement yet** — the two arms are
-built so they can be compared, not because one has been shown to win.
+**Invariant-conformance review** was removed on 2026-08-02, and its
+`invariantConformance` key with it. It reported where a changed declaration did
+not hold a pattern a majority of its siblings hold, with the peers cited. Its own
+step-1 measurement, run for the first time that day, put the firing rate at **7.0
+reports per PR-sized range against a pre-registered kill criterion of ≈0.5** with
+**zero true positives across roughly 300 hand-judged divergences from five
+codebases**. See
+[invariant-conformance review (removed)](invariant-conformance.md), including why
+a previously published *0.000 per commit* figure on this page was withdrawn.
 
 ## How to read the verdicts
 
@@ -151,11 +120,7 @@ identical to a build without it, which is what makes the A/Bs above single-varia
   "contextSources": { "enabled": false },
   "verification": { "enabled": false },
   "fix": { "enabled": false },
-  "changeImpact": { "enabled": false },
-  "invariantConformance": {
-    "enabled": false,
-    "adjudication": { "enabled": false }
-  }
+  "changeImpact": { "enabled": false }
 }
 ```
 

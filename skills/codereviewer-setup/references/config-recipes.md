@@ -150,10 +150,13 @@ Writing any of these exits `2`:
 - `reporting.sarif.redact` — SARIF output is redacted unconditionally.
 - `security.signals` — the deterministic security-signal layer has no
   implementation, so no toggle ships for it.
-- `changeImpact.blocking`, `intentFulfilment.blocking`,
-  `invariantConformance.blocking` — the advisory commands always exit `0`.
+- `changeImpact.blocking`, `intentFulfilment.blocking` — the advisory commands
+  always exit `0`.
 - `evaluation.enabled` — eval case selection is driven by `eval run` flags.
 - `review.contextScout` — the capability was removed.
+- `invariantConformance` — `conformance check` was removed on 2026-08-02 after
+  its own firing-rate measurement failed the kill criterion the spec fixed in
+  advance. The whole block exits `2`, including `{ "enabled": false }`.
 
 ## Keys that accept only one value
 

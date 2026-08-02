@@ -5,7 +5,6 @@ import type { GithubApi } from './github-api.js'
 import type { StageResult } from './stage-outcomes.js'
 import { summaryCommentMarker } from './summary-comment.js'
 import {
-  conformanceReportFixture,
   impactReportFixture,
   intentReportFixture,
   renderedGithubCommentsFixture,
@@ -79,12 +78,7 @@ const stageResults = (
       stderr: ''
     },
     intent: { exitCode: 0, stdout: JSON.stringify(intentReportFixture), stderr: '' },
-    impact: { exitCode: 0, stdout: JSON.stringify(impactReportFixture), stderr: '' },
-    conformance: {
-      exitCode: 0,
-      stdout: JSON.stringify(conformanceReportFixture),
-      stderr: ''
-    }
+    impact: { exitCode: 0, stdout: JSON.stringify(impactReportFixture), stderr: '' }
   }
 
   return async (args) => {
@@ -153,7 +147,7 @@ describe('runPipeline: the ordinary path', () => {
     )
   })
 
-  it('runs all four stages against the pull request’s base branch', async () => {
+  it('runs all three stages against the pull request’s base branch', async () => {
     const { api } = createFakeApi()
     const { dependencies, stageArgs } = createDependencies({ api })
 
@@ -162,8 +156,7 @@ describe('runPipeline: the ordinary path', () => {
     expect(stageArgs.map((args) => args.slice(0, 2))).toEqual([
       ['review', '--base-ref'],
       ['intent', 'check'],
-      ['impact', 'check'],
-      ['conformance', 'check']
+      ['impact', 'check']
     ])
     for (const args of stageArgs) {
       expect(args).toContain('origin/main')
@@ -344,7 +337,7 @@ describe('runPipeline: failure modes', () => {
     }
     const { dependencies } = createDependencies(
       { api },
-      { intent: failed, impact: failed, conformance: failed }
+      { intent: failed, impact: failed }
     )
     const result = await runPipeline(dependencies)
 

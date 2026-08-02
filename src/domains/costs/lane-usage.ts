@@ -4,12 +4,12 @@ import { summarizeRunCost, type RunTokenUsage } from './token-cost.js'
 
 // The model spend an advisory lane reports for its own provider calls.
 //
-// Each lane (verification, intent-fulfilment, invariant-conformance) resolves its
-// own provider and finalizes its own cost, because the general-review run cost is
-// already finalized before any of them runs. They report that spend in the SAME
-// shape on purpose: three separately maintained copies of this object had already
-// drifted apart once in comment wording, and a lane whose usage block disagreed
-// with the others would be silently mispriced rather than fail.
+// Each lane (verification, intent-fulfilment) resolves its own provider and
+// finalizes its own cost, because the general-review run cost is already
+// finalized before any of them runs. They report that spend in the SAME shape on
+// purpose: separately maintained copies of this object had already drifted apart
+// once in comment wording, and a lane whose usage block disagreed with the others
+// would be silently mispriced rather than fail.
 export const LaneUsageSchema = z.strictObject({
   inputTokens: z.int().min(0),
   outputTokens: z.int().min(0),

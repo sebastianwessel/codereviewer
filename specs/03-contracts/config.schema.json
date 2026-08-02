@@ -692,75 +692,6 @@
       ],
       "additionalProperties": false
     },
-    "invariantConformance": {
-      "type": "object",
-      "properties": {
-        "enabled": {
-          "default": false,
-          "type": "boolean"
-        },
-        "maxChangedDeclarations": {
-          "default": 500,
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 500
-        },
-        "maxPeersPerDeclaration": {
-          "default": 60,
-          "type": "integer",
-          "minimum": 3,
-          "maximum": 500
-        },
-        "maxPeerFiles": {
-          "default": 300,
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 2000
-        },
-        "maxDivergences": {
-          "default": 50,
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 500
-        },
-        "maxPreExistingDivergences": {
-          "default": 25,
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 500
-        },
-        "adjudication": {
-          "type": "object",
-          "properties": {
-            "enabled": {
-              "default": false,
-              "type": "boolean"
-            },
-            "maxAdjudications": {
-              "default": 25,
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 500
-            }
-          },
-          "required": [
-            "enabled",
-            "maxAdjudications"
-          ],
-          "additionalProperties": false
-        }
-      },
-      "required": [
-        "enabled",
-        "maxChangedDeclarations",
-        "maxPeersPerDeclaration",
-        "maxPeerFiles",
-        "maxDivergences",
-        "maxPreExistingDivergences",
-        "adjudication"
-      ],
-      "additionalProperties": false
-    },
     "fix": {
       "type": "object",
       "properties": {
@@ -1157,7 +1088,6 @@
     "verification",
     "changeImpact",
     "intentFulfilment",
-    "invariantConformance",
     "fix",
     "security",
     "reporting",

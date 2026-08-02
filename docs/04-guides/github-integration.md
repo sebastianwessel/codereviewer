@@ -23,7 +23,7 @@ flowchart TD
   D -- no --> E["Fail the job.<br/>Name the missing variables."]
   D -- yes --> F["Write the PR description<br/>into .codereviewer/context/"]
   F --> G["review — blocking"]
-  G --> H["intent / impact / conformance — advisory"]
+  G --> H["intent / impact — advisory"]
   H --> I["Post or edit ONE summary comment"]
   I --> J["Post inline comments the engine anchored"]
   J --> K{"Review result"}
@@ -40,8 +40,7 @@ flowchart TD
    [change-intent capability](../03-concepts/optional-capabilities/change-intent-context.md)
    reads, so the reviewer knows what the change was *supposed* to do and
    `intent check` has something to check the diff against.
-3. **Runs four stages**: `review`, then `intent check`, `impact check` and
-   `conformance check`.
+3. **Runs three stages**: `review`, then `intent check` and `impact check`.
 4. **Writes one summary comment**, created on the first run and edited in place
    on every run after that.
 5. **Posts inline review comments** for the findings the engine anchored to a
@@ -105,14 +104,13 @@ only one of them is allowed to block.
 | `review` | **blocking** | 05 | Evidence-backed defects in the changed code, filtered by refutation and a deterministic admission gate. Exit code `1` means the quality gate failed. |
 | `intent check` | advisory | [23](../../specs/23-intent-fulfilment-review.md) | Reads obligations out of the pull-request description and maps each to the changed lines that evidence it — or to nothing. |
 | `impact check` | advisory | [22](../../specs/22-change-impact-review.md) | Lists the callers of every symbol the change touched. Deterministic; makes no model call. |
-| `conformance check` | advisory | [24](../../specs/24-invariant-conformance-review.md) | Names declarations that break a convention their peers hold, citing at least three peers. Deterministic unless adjudication is enabled. |
 
-**The three advisory stages can never fail the job.** That is a specification
+**The two advisory stages can never fail the job.** That is a specification
 requirement, not a configuration default — spec 23 states it outright: the
 command "MUST NOT be able to fail a pipeline on fulfilment grounds. This is not
 configurable", because the measured spurious-rejection rate of model
 requirement-conformance judgement is 26–36% and is not accurate enough to gate
-on. All three commands exit `0` whatever they report, and
+on. Both commands exit `0` whatever they report, and
 `jobExitCode` in [`stage-outcomes.ts`](../../scripts/github/stage-outcomes.ts)
 reads the blocking stage and nothing else, so an advisory outcome has no way to
 reach the job's exit code even if one of them errors.
@@ -301,8 +299,7 @@ The blocking review dominates: two provider calls per review task (discovery and
 a batched refutation), so cost scales with tasks, not with findings.
 `intent check` adds one extraction call, one judgement call per obligation, and
 one explanation call — measured at roughly $0.008 per obligation.
-`impact check` and `conformance check` make **no** provider call at all in the
-shipped configuration (`invariantConformance.adjudication.enabled` is `false`).
+`impact check` makes **no** provider call at all.
 
 Set `review.maxCostUsd` in `codereviewer.github.json` so a pathological change
 fails the job instead of quietly spending. Full arithmetic:
@@ -331,8 +328,8 @@ inline-comment fallback are all exercised against fixtures.
 | `pull-request-context.ts` | Parses the event payload; decides `fromFork` |
 | `change-intent-inbox.ts` | Renders the description into a spec 11 inbox file |
 | `provider-credentials.ts` | Pre-flight check; reports missing variables by name |
-| `stage-outcomes.ts` | The four stages and the exit-code contract |
-| `report-digest.ts` | Reduces the four report shapes to what the comment renders |
+| `stage-outcomes.ts` | The three stages and the exit-code contract |
+| `report-digest.ts` | Reduces the three report shapes to what the comment renders |
 | `summary-comment.ts` | Renders the body; owns the marker and comment selection |
 | `inline-review.ts` | Maps rendered comments to review payloads; deduplicates by fingerprint |
 | `github-api.ts` | The only module that performs network IO |

@@ -4,8 +4,7 @@ Configuration for the [`intent check`](../cli.md#codereviewer-intent-check)
 command. It is a **separate command**, never a flag on `review`, and `review`
 ignores this key entirely.
 
-Unlike `changeImpact` and the deterministic part of `invariantConformance`, this
-capability **spends on every run it completes**: one obligation-extraction call,
+Unlike `changeImpact`, this capability **spends on every run it completes**: one obligation-extraction call,
 one judgement call per obligation, and one explanation call. Every key below
 except `enabled` is a bound on that spend.
 
@@ -109,7 +108,5 @@ against an obligation nor reported as extra scope.
 - [CLI: `intent check`](../cli.md#codereviewer-intent-check)
 - [`contextSources`](./context-and-evaluation.md#contextsources) — where the
   stated intent comes from
-- [`changeImpact`](./change-impact.md) and
-  [`invariantConformance`](./invariant-conformance.md) — the other advisory
-  commands
+- [`changeImpact`](./change-impact.md) — the other advisory command
 - [Configuration reference index](./README.md)

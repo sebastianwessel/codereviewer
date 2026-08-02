@@ -1,7 +1,75 @@
 # 24: Invariant-Conformance Review
 
-Status: Approved
+Status: **Withdrawn 2026-08-02** — step 1 measured, kill criterion missed by 14x,
+zero true positives, implementation removed
 Date: 2026-07-29
+
+## Outcome (2026-08-02)
+
+**Step 1 of this spec's own evaluation was run for the first time on 2026-08-02,
+and the capability failed the kill criterion this spec fixed in advance.**
+
+> *"Kill criterion, fixed before the run: more than roughly one report per two
+> benign pull requests and the capability is unviable at any cost, and is removed
+> rather than tuned."*
+
+| measurement | result | rule |
+|---|---:|---|
+| firing rate, PR-sized ranges | **7.0 reports / range** | ≈0.5 — missed by **14x** |
+| true positives, n≈300 hand-judged divergences, five codebases | **0** | — |
+| adjudication rejection rate | 97.5% | ≥95% — **passed** |
+| of the 2.5% it accepted | **all false positives** | — |
+
+**Zero true positives across roughly 300 hand-judged divergences from five
+codebases** — three independent censuses, a 64,201-declaration population
+diagnostic, and a stratified adjudication sample of 165. Not a weak signal: no
+signal.
+
+The adjudicator passed its own pre-registered gate and that made things worse, not
+better. It rejects 97.5% of divergences, clearing the ≥95% rule — but every one of
+the four it **accepts** is a false positive, two of them schema-constructor idioms
+accepted with a confident role-level rationale. *It accepts exactly the noise it
+exists to reject*, so the gate it passes measures its silence rather than its
+judgement.
+
+**The consequence, stated plainly, is why "it fires rarely" was never a defence.**
+Reader precision here is 0%, not 100% of a small number. A capability that fires
+rarely and is wrong every time costs a reviewer strictly more than one that does
+not exist: every report is a real interruption spent on nothing, and the rarity
+only means the reader never builds the habit of dismissing it.
+
+Two root fixes landed the same day (`c883521`, `76c5b14`) and cut the divergence
+population 1,099 → 647 and the firing rate substantially. **They improved it; they
+did not make it correct.** The remaining reports were still all false. Tuning was
+therefore not attempted further — this spec forbids it ("removed rather than
+tuned"), and there was no true positive anywhere in the measurement for tuning to
+preserve.
+
+**Everything is removed, with no legacy path and no compatibility shim:**
+`src/domains/invariant-conformance/`, the `conformance check` CLI command and its
+tests, the `invariantConformance` configuration block and its generated JSON
+schema, the GitHub-integration stage, and the documentation for all of it. A
+config that still sets `invariantConformance` **fails validation with exit code
+2**, matching the removed `review.contextScout` block. The four-stage framing
+becomes three: `review`, `intent check`, `impact check`.
+
+`src/domains/declaration-analysis/` is removed with it. Spec 25 recorded that
+extraction as surviving its own withdrawal because *this* spec depended on it;
+with this spec withdrawn it has no consumer left, and nothing in the diff reviewer
+ever came to use it.
+
+**The spec file is kept, and the numbering is not reused.** The measurement that
+withdrew it is the part worth keeping: peer-set divergence is a published
+missing-check technique (Chucky, Crix, IPPO), it was implemented deterministically
+and carefully, its own gates were honoured, and it still produced nothing a
+reviewer could act on. The design reasoning below is preserved unchanged so the
+next attempt at conventions-as-specification starts from what was already tried.
+
+**Recorded as a hypothesis and explicitly not as a result:** the failure looks
+structural rather than parametric. A peer set's shared shape is a fact about
+*similarity*, and this measurement found no case where similarity was also a fact
+about *obligation*. Nothing here shows a different peer-derivation would do
+better; nothing here shows it would not.
 
 ## Purpose
 

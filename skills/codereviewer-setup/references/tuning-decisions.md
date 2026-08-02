@@ -115,8 +115,8 @@ task's candidates and cost scales with tasks, not findings.
 pressure. It does **not** change the number of calls or the total cost.
 
 What is free: `config validate`, `drift check`, `baseline write`, `impact check`,
-`conformance check` without adjudication, `intent check` while disabled, and any
-`review` run with no provider configured.
+`intent check` while disabled, and any `review` run with no provider
+configured.
 
 ## Project review instructions
 

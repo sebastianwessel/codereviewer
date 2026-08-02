@@ -475,25 +475,23 @@ for `merge-base` to resolve. `BITBUCKET_PIPELINE_UUID` and
 
 ## The advisory stages in CI
 
-`intent check`, `impact check` and `conformance check` are separate commands and
-separate jobs. They **always exit `0`**, whatever they report — that is a spec
-requirement, not a default, and there is no `blocking` key to change it. So a
-pipeline consumes them by reading the JSON on stdout, not by branching on the exit
-code.
+`intent check` and `impact check` are separate commands and separate jobs. They
+**always exit `0`**, whatever they report — that is a spec requirement, not a
+default, and there is no `blocking` key to change it. So a pipeline consumes them
+by reading the JSON on stdout, not by branching on the exit code.
 
-**None of them has an accuracy measurement.** Add them as informational jobs whose
+**Neither has an accuracy measurement.** Add them as informational jobs whose
 output a human reads, once `review` is trusted — not as part of an initial
 adoption.
 
 ```bash
 codereviewer impact check --base-ref "origin/$TARGET" --head-ref HEAD > impact.json
-codereviewer conformance check --base-ref "origin/$TARGET" --head-ref HEAD > conformance.json
 ```
 
-Both are deterministic and cost nothing (`conformance check` only spends with
-`invariantConformance.adjudication.enabled`). `intent check` needs a change-intent
-source configured — see [Supplying change intent](#supplying-change-intent) — and
-without one it exits `0` with `status: "no-intent"` and a warning saying so.
+`impact check` is deterministic and costs nothing. `intent check` needs a
+change-intent source configured — see
+[Supplying change intent](#supplying-change-intent) — and without one it exits
+`0` with `status: "no-intent"` and a warning saying so.
 
 Each command needs its capability enabled in config, or it reports
 `status: "disabled"` and a warning. That is the intended shape: an advisory stage

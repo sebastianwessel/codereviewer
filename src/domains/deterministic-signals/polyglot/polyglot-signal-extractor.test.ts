@@ -184,9 +184,8 @@ describe('polyglot deterministic support signal extractor', () => {
   //
   // Getting this wrong at file granularity was expensive in both directions. Four
   // production files under `axum-extra/src/response/` were classified as tests
-  // wholesale and dropped from conformance, production declarations included,
-  // which shrank the peer denominator until sub-majority patterns read as
-  // majorities. The file next to them was missed the other way: its tests are
+  // wholesale and dropped from the signal facts, production declarations
+  // included. The file next to them was missed the other way: its tests are
   // `#[tokio::test]`, which no `#[test]` substring rule sees, so ten async test
   // functions were compared against production methods as their peers.
   //

@@ -10,9 +10,9 @@ import {
 // The engine used to ask only "does this file hold test cases", by filename affix,
 // and use the answer wherever it needed "is this production code". Everything a
 // test tree holds that is not itself a test — fixtures, harnesses, shared assertion
-// helpers — therefore read as PRODUCTION, in both places the distinction is drawn:
-// the production/test split of the impact report, and the production peer sets of
-// conformance.
+// helpers — therefore read as PRODUCTION, wherever the distinction is drawn: the
+// production/test split of the impact report, and the production surface the
+// signal extractors report.
 //
 // The cases below are the measured ones. Every language ships this shape, and
 // Maven's and Gradle's entire `src/test/java` source set is it.

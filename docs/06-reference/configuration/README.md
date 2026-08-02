@@ -23,10 +23,21 @@ the warning `config-file-missing`.
 | [context-and-evaluation.md](./context-and-evaluation.md) | `contextSources`, `evaluation` |
 | [change-impact.md](./change-impact.md) | `changeImpact` |
 | [intent-fulfilment.md](./intent-fulfilment.md) | `intentFulfilment` |
-| [invariant-conformance.md](./invariant-conformance.md) | `invariantConformance` |
 
-All 21 top-level keys are covered. Every one of them is optional; omitting a
+All 20 top-level keys are covered. Every one of them is optional; omitting a
 key applies its whole default object.
+
+## Removed top-level keys
+
+| Removed key | Removed | Capability |
+| --- | --- | --- |
+| `invariantConformance` | 2026-08-02 | [Invariant-conformance review](../../03-concepts/optional-capabilities/invariant-conformance.md) |
+
+Because the root object is strict (see below), a config that still sets one of
+these — even to `{ "enabled": false }` — fails validation with **exit code 2**.
+There is no compatibility shim: a config asking for a stage that no longer exists
+must say so rather than run a pipeline that quietly does less than the file asks
+for.
 
 ## Strict objects: unknown or misplaced keys are hard failures
 

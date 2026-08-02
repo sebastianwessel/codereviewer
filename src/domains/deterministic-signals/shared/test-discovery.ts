@@ -14,9 +14,9 @@
 //
 // Overloading one predicate with both made the second question unanswerable and
 // silently answered it "production": a test helper counted as a production
-// dependent in the impact report and as a production peer in conformance. So the
-// two are modelled separately, and the naming rules stay exactly as strict as they
-// were — the widening happens in the location rule, where it belongs.
+// dependent in the impact report. So the two are modelled separately, and the
+// naming rules stay exactly as strict as they were — the widening happens in the
+// location rule, where it belongs.
 //
 // A DECLARATION is test-side when the language builds it only for its test
 // configuration, wherever the file it sits in lives. That granularity exists
@@ -26,8 +26,8 @@
 // asked.
 //
 // All of them live here so there is ONE definition of "test" in the engine. The
-// impact report's production/test split, conformance's peer exclusion and the
-// signal extractors all read it from this module.
+// impact report's production/test split and the signal extractors both read it
+// from this module.
 
 import type { SgNode } from '@ast-grep/napi'
 import type {
@@ -78,9 +78,8 @@ const rustTestHelperModules = new Set(['mod.rs', 'common.rs'])
 // the inline `#[cfg(test)] mod tests` — is deliberately NOT a file-level answer,
 // because it is the convention of a PRODUCTION file: `axum-extra/src/response/`
 // ships four of them, and a file rule that reads the content classified all four
-// as tests, dropping their production declarations from conformance entirely and
-// shrinking the peer denominator until sub-majority patterns read as majorities.
-// That convention is answered per declaration, further down this file.
+// as tests, dropping their production declarations from the signal facts
+// entirely. That convention is answered per declaration, further down this file.
 const isRustTestPath = (path: string): boolean => {
   const name = path.split('/').at(-1) ?? path
 
@@ -175,9 +174,9 @@ const normalizedSourceStem = (
  * Takes a PATH and nothing else. No language decides this from file content any
  * more, and the parameter is gone rather than ignored: while it existed, the same
  * file answered differently depending on whether its caller happened to have read
- * it, so `conformance check` and `impact check` disagreed about the same Rust file
- * by construction. A content-sensitive test convention is a declaration-level
- * question — see `isTestOnlyDeclaration`.
+ * it, so two callers disagreed about the same Rust file by construction. A
+ * content-sensitive test convention is a declaration-level question — see
+ * `isTestOnlyDeclaration`.
  */
 export const isLanguageTestFile = (
   language: SupportedSignalLanguage,
@@ -255,11 +254,10 @@ export const isTestTreePath = (filePath: string): boolean => {
 /**
  * Whether a file belongs to the test side of the codebase.
  *
- * This is the question every consumer of the production/test split is actually
- * asking: `impact check` separating production dependents from test dependents, and
- * `conformance check` deciding whose peers are production peers. Neither is asking
- * whether the file holds test cases — a helper under `src/test/java` is not a
- * production dependent of anything, and its siblings are other test helpers.
+ * This is the question a consumer of the production/test split is actually
+ * asking: `impact check` separating production dependents from test dependents.
+ * It is not asking whether the file holds test cases — a helper under
+ * `src/test/java` is not a production dependent of anything.
  *
  * A file is test-side when its own ecosystem calls it a test OR it sits inside a
  * test tree. The first half is unchanged and stays as strict as it was; the second
@@ -284,7 +282,7 @@ export const isTestSideFile = (
 // The rule is about a MECHANISM rather than about a language: where a language can
 // compile part of a file only under its test configuration, the declarations in
 // that part are not the file's production surface. Nothing that reasons about that
-// surface — conformance peer sets, changed public symbols — may see them, however
+// surface — changed public symbols, dependent references — may see them, however
 // the file itself is named.
 //
 // Rust is the only supported language with that mechanism today, so it is the only

@@ -492,68 +492,6 @@ export const IntentFulfilmentConfigSchema = z.strictObject({
   maxChangeLines: z.int().min(1).max(5_000).default(5_000)
 })
 
-// Conformance adjudication (spec 24, design step 4). Off by default, and off
-// independently of `invariantConformance.enabled`, because it is the only part of
-// this capability that costs money: one model call per divergence. With it
-// disabled the command runs spec 24's deterministic baseline arm, which the
-// adjudicated arm has to beat.
-//
-// `maxAdjudications` is the spend bound, and it is the only one this key needs:
-// the divergence lists are already capped, so this bounds calls per run in
-// absolute terms. Divergences beyond it are counted as unadjudicated and are NOT
-// reported — an unjudged divergence has not passed the filter, and the error
-// direction here is silence.
-export const ConformanceAdjudicationConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false),
-  maxAdjudications: z.int().min(1).max(500).default(25)
-})
-
-// Invariant-conformance review (spec 24). Off by default until measured, and
-// reached only by the separate `conformance check` command — never by `review`.
-//
-// The bounds are again most of the cost model: the deterministic core makes no
-// provider call, so the only resource it spends is repository traversal. Peer
-// derivation reads sibling files, which is the one place this capability can grow
-// expensive on a wide change, so the peer bounds are both per-declaration and
-// per-run. The one part that can spend money is `adjudication` below, bounded
-// separately and disabled separately.
-//
-// There is deliberately no `blocking` key. Spec 24 says the capability is
-// advisory only and MUST NOT be able to fail a pipeline, and the command always
-// exits 0. A `blocking` key would therefore be accepted and silently ignored —
-// the mistake `SecurityConfigSchema` above records having already made once and
-// undone. There is nothing to add later either: advisory-only is a spec
-// requirement here, not a maturity stage.
-export const InvariantConformanceConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false),
-  // Upper bound on the declarations the diff seeds. Each seed derives one peer
-  // set, so this bounds how many peer sets are built.
-  //
-  // It gates NO provider cost: the deterministic core makes no model call, and
-  // model adjudication is bounded separately by `adjudication.maxAdjudications`,
-  // which counts DIVERGENCES — far fewer than seeds. So this bounds in-memory
-  // grouping and comparison only, and a low value buys nothing while costing
-  // coverage: a 137-declaration range was previously sampled down to 50.
-  //
-  // It was 50. Raised to the contract maximum so it behaves as a runaway guard
-  // rather than a ration, consistent with every other limit in this engine.
-  maxChangedDeclarations: z.int().min(1).max(500).default(500),
-  // Per-declaration cap on the peer set. A peer set larger than this is
-  // truncated in file-then-line order rather than dropped, so a large directory
-  // still yields a bounded, reproducible comparison.
-  maxPeersPerDeclaration: z.int().min(3).max(500).default(60),
-  // Run-wide cap on sibling files read for peer derivation. This is the
-  // traversal bound: peer derivation reads the changed file's directory, so a
-  // change spread over many directories would otherwise read the repository.
-  maxPeerFiles: z.int().min(1).max(2000).default(300),
-  // Caps on the two reported divergence lists. They are separate caps because
-  // the lists are counted separately and a flood of pre-existing divergences
-  // must never crowd out the change-attributed ones.
-  maxDivergences: z.int().min(1).max(500).default(50),
-  maxPreExistingDivergences: z.int().min(0).max(500).default(25),
-  adjudication: ConformanceAdjudicationConfigSchema.prefault({})
-})
-
 // Agentic finding investigation-and-fix job (spec 12). Off by default. Reuses the
 // same investigation agent, mediated tools, and per-claim bounds as
 // `verification`; `enabled` is the single switch for the whole single pass
@@ -726,7 +664,6 @@ export const CodeReviewerConfigSchema = z.strictObject({
   verification: VerificationConfigSchema.prefault({}),
   changeImpact: ChangeImpactConfigSchema.prefault({}),
   intentFulfilment: IntentFulfilmentConfigSchema.prefault({}),
-  invariantConformance: InvariantConformanceConfigSchema.prefault({}),
   fix: FixConfigSchema.prefault({}),
   security: SecurityConfigSchema.prefault({}),
   reporting: ReportingConfigSchema.prefault({}),
@@ -763,12 +700,6 @@ export type VerificationClaimProviderConfig = z.infer<
 export type ChangeImpactConfig = z.infer<typeof ChangeImpactConfigSchema>
 export type IntentFulfilmentConfig = z.infer<
   typeof IntentFulfilmentConfigSchema
->
-export type InvariantConformanceConfig = z.infer<
-  typeof InvariantConformanceConfigSchema
->
-export type ConformanceAdjudicationConfig = z.infer<
-  typeof ConformanceAdjudicationConfigSchema
 >
 export type FixConfig = z.infer<typeof FixConfigSchema>
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>

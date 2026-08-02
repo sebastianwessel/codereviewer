@@ -34,6 +34,13 @@ traits and trait positions out of `invariant-conformance` was needed so a stage-
 caller could use them without importing a stage-3 domain. That extraction is
 correct independently of this result and spec 24 now depends on it.
 
+> **Superseded 2026-08-02.** It does not survive. Spec 24 was withdrawn on its own
+> firing-rate measurement and removed, and `declaration-analysis` had acquired no
+> other consumer — the stage-1 caller this extraction was performed for was arm A,
+> which this spec deleted. It is removed with spec 24. Nothing else in the
+> paragraph above changes: the extraction was the right shape while it had two
+> consumers, and it is dead code with none.
+
 Recorded as a hypothesis and explicitly not as a result: unlisted real findings
 rose 4 → 11 → 14 while genuine false positives moved only 2 → 3 → 4.
 

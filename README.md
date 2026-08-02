@@ -69,16 +69,21 @@ The full record — including the interventions that were built, measured, and
 rejected — is in [Current results](docs/05-quality/current-results.md) and
 [What limits recall](docs/05-quality/what-limits-recall.md).
 
-### Three advisory stages, none of them measured
+### Two advisory stages, none of them measured
 
-Alongside `review` there are three independently runnable advisory commands:
-`intent check` (does the change do what the ticket said?), `impact check` (who
-depends on what changed?) and `conformance check` (does this declaration diverge
-from its peers?). None of them can fail a pipeline — that is a spec requirement,
-not a default.
+Alongside `review` there are two independently runnable advisory commands:
+`intent check` (does the change do what the ticket said?) and `impact check` (who
+depends on what changed?). Neither can fail a pipeline — that is a spec
+requirement, not a default.
 
 **They have no accuracy measurement at all.** They are shipped and runnable; they
 are not validated. Treat their output as a prompt for a human, not a result.
+
+A third, `conformance check`, was removed on 2026-08-02: its own firing-rate
+measurement put it at 7.0 reports per PR-sized range against a pre-registered
+kill criterion of ≈0.5, with zero true positives across roughly 300 hand-judged
+divergences. The record is in
+[invariant-conformance review (removed)](docs/03-concepts/optional-capabilities/invariant-conformance.md).
 
 ---
 
@@ -170,7 +175,6 @@ gate ordering — in the right order.
 | `review` | The review. Discovery → refutation → admission → report → quality gate. | **Yes**, exit `1` |
 | `intent check` | Maps a stated intent to the change: obligations, and the changed lines that evidence each. | No, always exits `0` |
 | `impact check` | Deterministic reference report for the symbols the change touched. Makes no provider call. | No |
-| `conformance check` | Divergences between a changed declaration and its peers. Deterministic unless adjudication is enabled. | No |
 | `config validate` | Prints the fully merged configuration with secrets masked. | — |
 | `baseline write` | Writes the fingerprints of a completed report's findings to the baseline. | — |
 | `drift check` | The deterministic docs/spec/generated-artifact drift check, on its own. | Yes, exit `1` |

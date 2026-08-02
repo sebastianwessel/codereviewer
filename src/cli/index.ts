@@ -38,10 +38,6 @@ import {
   renderIntentFulfilmentMarkdown,
   runIntentFulfilment
 } from '../domains/intent-fulfilment/index.js'
-import {
-  createConformanceAdjudicationLane,
-  runInvariantConformance
-} from '../domains/invariant-conformance/index.js'
 import { createContextRetriever } from '../domains/context-retrieval/index.js'
 import { runDriftCheck } from '../domains/drift/index.js'
 import {
@@ -425,15 +421,14 @@ const presentCheckReport = async <TReport>(
   }
 }
 
-// `impact check`, `intent check` and `conformance check` are three independently
-// runnable ADVISORY stages that share one shape: they accept the two git refs,
-// require the `check` subcommand, load configuration in a scope of its own so a
-// malformed config file exits 2 as a config error rather than being swept into
-// the repository fallback the rest of the command needs for git failures, and
-// then print a report as JSON with exit code 0 WHATEVER the report says. Only the
-// report body and its presentation differ, so the skeleton is written once here —
-// a fourth advisory stage cannot accidentally acquire the ability to fail a
-// pipeline.
+// `impact check` and `intent check` are two independently runnable ADVISORY
+// stages that share one shape: they accept the two git refs, require the `check`
+// subcommand, load configuration in a scope of its own so a malformed config file
+// exits 2 as a config error rather than being swept into the repository fallback
+// the rest of the command needs for git failures, and then print a report as JSON
+// with exit code 0 WHATEVER the report says. Only the report body and its
+// presentation differ, so the skeleton is written once here — a further advisory
+// stage cannot accidentally acquire the ability to fail a pipeline.
 const runCheckCommand = async <TReport>(
   input: {
     readonly name: string
@@ -1486,8 +1481,8 @@ const runImpact = async (
 // failure (2) or a repository failure (3) changes it.
 //
 // It is one of three independently runnable stages and shares no context or output
-// with the other two: `review` can block, `intent check` and `impact check` /
-// `conformance check` cannot.
+// with the other two: `review` can block, `intent check` and `impact check`
+// cannot.
 //
 // Output mirrors `impact check`: stdout stays exactly one JSON document so scripted
 // use keeps working, and the rendered Markdown lands in a run directory beside where
@@ -1603,113 +1598,14 @@ const runIntent = async (
   })
 }
 
-// `conformance check` (spec 24).
-//
-// It makes no provider call unless `invariantConformance.adjudication.enabled` is
-// set, which is off by default: out of the box this is spec 24's deterministic
-// baseline arm, so it costs nothing to run and its output is reproducible. With
-// adjudication on it issues one bounded model call per divergence and reports only
-// the ones judged a convention.
-//
-// What it produces either way is a DIVERGENCE report, not findings. A divergence is
-// "these N peers do X; this declaration does not" — a substantiated fact plus a
-// question, with the peers listed so the reader judges. It carries no verdict, no
-// severity and no claim about exploitability, nothing is admitted, and spec 24
-// requires the capability to be advisory only: it MUST NOT be able to fail a
-// pipeline. The exit code is therefore 0 whatever the report says, and only a
-// configuration or usage failure (2) or a repository failure (3) changes it — an
-// adjudication that could not run is a warning in the report, never an exit code.
-const runConformance = async (
-  args: readonly string[],
-  options: CliRunOptions
-): Promise<CliResult> =>
-  runCheckCommand({
-    name: 'conformance',
-    args,
-    options,
-    report: async ({ loadedConfig, baseRef, headRef }) => {
-      const { review, invariantConformance } = loadedConfig.config
-      // The read budget is derived rather than guessed: at most one read per
-      // changed file, at most one directory listing per changed file, and at most
-      // `maxPeerFiles` sibling reads. `maxMatches` bounds how many entries one
-      // listing returns, so it must not sit below the peer-file cap or peers would
-      // be lost to a bound meant for model-facing search.
-      const retriever = createContextRetriever({
-        repositoryRoot: options.cwd,
-        budget: {
-          maxReads: review.maxFiles * 2 + invariantConformance.maxPeerFiles,
-          maxBytesPerRead: review.maxFileBytes,
-          maxMatches: invariantConformance.maxPeerFiles,
-          maxSearches: 0
-        },
-        paths: {
-          include: loadedConfig.config.paths.include,
-          exclude: loadedConfig.config.paths.exclude
-        }
-      })
-      const logger = createCliLogger({
-        config: loadedConfig.config,
-        command: 'conformance',
-        sink: options.logSink
-      })
-      // Absent unless adjudication is enabled AND a provider resolves. Every other
-      // outcome degrades to the deterministic arm, which reports the reason as a
-      // warning rather than failing.
-      const adjudicationLane = await createConformanceAdjudicationLane({
-        config: loadedConfig.config,
-        environment: options.environment ?? {},
-        ...(options.providerImport === undefined
-          ? {}
-          : { providerImport: options.providerImport }),
-        logger
-      })
-
-      try {
-        return await runInvariantConformance({
-          repositoryRoot: options.cwd,
-          config: loadedConfig.config,
-          ...(baseRef === undefined ? {} : { baseRef }),
-          ...(headRef === undefined ? {} : { headRef }),
-          ...(options.now === undefined ? {} : { generatedAt: options.now() }),
-          ...(adjudicationLane === undefined
-            ? {}
-            : {
-                adjudicate: adjudicationLane.adjudicate,
-                adjudicationUsage: adjudicationLane.usage
-              }),
-          readRepositoryFile: mediatedFileReader(retriever),
-          listDirectoryFiles: async (directoryPath) => {
-            try {
-              const listing = await retriever.listRepositoryDirectory({
-                path: directoryPath
-              })
-
-              // The mediated listing renders one `"<file|dir> <path>"` line per
-              // eligible entry. Peer derivation wants files only; a subdirectory is
-              // not a sibling of a declaration.
-              return listing.content
-                .split('\n')
-                .filter((line) => line.startsWith('file '))
-                .map((line) => line.slice('file '.length))
-            } catch {
-              return []
-            }
-          }
-        })
-      } finally {
-        await adjudicationLane?.shutdown()
-      }
-    }
-  })
-
 export const runCli = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
   const [command, subcommand, ...rest] = args
   // Commands that own their own subcommand parsing (`review` takes none;
-  // `drift`/`impact`/`intent`/`conformance` require `check`) receive everything
-  // after the command name.
+  // `drift`/`impact`/`intent` require `check`) receive everything after the
+  // command name.
   const commandArgs = args.slice(1)
 
   if (command === 'config' && subcommand === 'validate') {
@@ -1754,11 +1650,7 @@ export const runCli = async (
     return runIntent(commandArgs, options)
   }
 
-  if (command === 'conformance') {
-    return runConformance(commandArgs, options)
-  }
-
   return usageError(
-    'Expected command: config validate, review, baseline write, eval run, eval compare, eval recall-report, eval slice-manifest, drift check, impact check, intent check, or conformance check'
+    'Expected command: config validate, review, baseline write, eval run, eval compare, eval recall-report, eval slice-manifest, drift check, impact check, or intent check'
   )
 }

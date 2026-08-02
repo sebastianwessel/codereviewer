@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  digestConformanceReport,
   digestImpactReport,
   digestIntentReport,
   digestReviewReport
 } from './report-digest.js'
 import {
-  conformanceReportFixture,
   impactReportFixture,
   intentReportFixture,
   reviewReportFixture
@@ -86,23 +84,5 @@ describe('digestImpactReport', () => {
       referenceCount: 2,
       testReferenceCount: 1
     })
-  })
-})
-
-describe('digestConformanceReport', () => {
-  it('renders change-attributed divergences and counts pre-existing ones apart', () => {
-    const digest = digestConformanceReport(
-      json({
-        ...conformanceReportFixture,
-        summary: {
-          ...conformanceReportFixture.summary,
-          preExistingDivergenceCount: 2
-        }
-      })
-    )
-
-    expect(digest?.divergences).toHaveLength(1)
-    expect(digest?.preExistingCount).toBe(2)
-    expect(digest?.divergences[0]?.path).toBe('src/routes/admin.ts')
   })
 })

@@ -150,6 +150,27 @@ describe('CodeReviewerConfigSchema', () => {
     }
   })
 
+  // Invariant-conformance review (spec 24) was withdrawn on 2026-08-02 after its
+  // step-1 measurement fired 7.0 reports per PR-sized range against a
+  // pre-registered kill criterion of ~0.5, with ZERO true positives across ~300
+  // hand-judged divergences from five codebases. The whole capability went, and
+  // `invariantConformance` went with it. Same rule as the removals above: no
+  // compatibility shim, because a config that still enables a stage that no
+  // longer exists must say so rather than run a pipeline that quietly does less
+  // than the file asks for.
+  test('a config still setting the removed invariant conformance block fails validation', () => {
+    for (const removed of [
+      { enabled: true, maxPeerFiles: 300 },
+      { enabled: false },
+      { adjudication: { enabled: true } },
+      {}
+    ]) {
+      expect(() =>
+        CodeReviewerConfigSchema.parse({ invariantConformance: removed })
+      ).toThrow()
+    }
+  })
+
   test('security dedicated pass defaults to disabled', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.security.dedicatedPass.enabled).toBe(false)
@@ -306,104 +327,6 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
-  test('invariant conformance is disabled by default with bounded peer limits', () => {
-    const disabled = CodeReviewerConfigSchema.parse({})
-    expect(disabled.invariantConformance).toEqual({
-      enabled: false,
-      maxChangedDeclarations: 500,
-      maxPeersPerDeclaration: 60,
-      maxPeerFiles: 300,
-      maxDivergences: 50,
-      maxPreExistingDivergences: 25,
-      adjudication: { enabled: false, maxAdjudications: 25 }
-    })
-
-    const enabled = CodeReviewerConfigSchema.parse({
-      invariantConformance: {
-        enabled: true,
-        maxChangedDeclarations: 5,
-        maxPeersPerDeclaration: 8,
-        maxPeerFiles: 20,
-        maxDivergences: 4,
-        maxPreExistingDivergences: 0
-      }
-    })
-    expect(enabled.invariantConformance).toEqual({
-      enabled: true,
-      maxChangedDeclarations: 5,
-      maxPeersPerDeclaration: 8,
-      maxPeerFiles: 20,
-      maxDivergences: 4,
-      maxPreExistingDivergences: 0,
-      adjudication: { enabled: false, maxAdjudications: 25 }
-    })
-  })
-
-  // The one part of spec 24 that can spend money, and the only reason the whole
-  // capability is not free. It is off independently of `enabled`, so turning the
-  // deterministic baseline arm on can never start a provider call by itself.
-  test('conformance adjudication is disabled independently of the capability', () => {
-    expect(
-      CodeReviewerConfigSchema.parse({
-        invariantConformance: { enabled: true }
-      }).invariantConformance.adjudication
-    ).toEqual({ enabled: false, maxAdjudications: 25 })
-
-    expect(
-      CodeReviewerConfigSchema.parse({
-        invariantConformance: {
-          enabled: true,
-          adjudication: { enabled: true, maxAdjudications: 4 }
-        }
-      }).invariantConformance.adjudication
-    ).toEqual({ enabled: true, maxAdjudications: 4 })
-
-    // A bound of zero would be a configuration that enables the arm and forbids
-    // every call it consists of.
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        invariantConformance: { adjudication: { maxAdjudications: 0 } }
-      })
-    ).toThrow()
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        invariantConformance: { adjudication: { blocking: true } }
-      })
-    ).toThrow()
-  })
-
-  // Spec 24 says the capability is advisory only and MUST NOT be able to fail a
-  // pipeline, and `conformance check` always exits 0. A `blocking` key would
-  // therefore be accepted and then silently ignored — the failure the security
-  // `signals` key was removed for. Unlike `changeImpact`, there is no later
-  // change that adds it: advisory-only is a spec requirement, not a stage.
-  test('invariant conformance rejects a blocking key it must never honour', () => {
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        invariantConformance: { blocking: true }
-      })
-    ).toThrow()
-  })
-
-  test('invariant conformance rejects out-of-range peer bounds', () => {
-    // Below three peers a divergence could never cite the three sites spec 24
-    // requires, so the schema refuses to express that configuration at all.
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        invariantConformance: { maxPeersPerDeclaration: 2 }
-      })
-    ).toThrow()
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        invariantConformance: { maxChangedDeclarations: 0 }
-      })
-    ).toThrow()
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        invariantConformance: { maxPeerFiles: 5000 }
-      })
-    ).toThrow()
-  })
 
   test('verification rejects an unknown claim provider type', () => {
     expect(() =>

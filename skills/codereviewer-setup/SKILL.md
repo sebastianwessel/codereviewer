@@ -15,16 +15,15 @@ wrong thing, in someone else's pull request, on a Friday.
 
 ## What you are setting up
 
-Four commands, all real:
+Three commands, all real:
 
 | Command | Blocks a pipeline? | Costs money? |
 | --- | --- | --- |
 | `review` | Yes — exit `1` on gate failure | Yes |
 | `intent check` | No, never — always exits `0` | Yes, when enabled and a provider resolves |
 | `impact check` | No, never | No — deterministic |
-| `conformance check` | No, never | Only with `invariantConformance.adjudication.enabled` |
 
-Set up `review` first and alone. The advisory three are additions for a team that
+Set up `review` first and alone. The advisory two are additions for a team that
 already trusts the review output, not part of an initial install.
 
 ## What it measurably does
@@ -38,7 +37,7 @@ lives: **66.7% for defects inside the diff, 0 of 27 for defects elsewhere in a
 changed file**. What it reports is almost always real; it does not find
 everything, and it finds essentially nothing the change does not point at.
 
-The three advisory stages have **no accuracy measurement at all**. Do not present
+The two advisory stages have **no accuracy measurement at all**. Do not present
 them as validated.
 
 Consequences for how you set it up:
@@ -259,15 +258,14 @@ that **none of them has an accuracy measurement**:
 | Stage | Enable with | Cost |
 | --- | --- | --- |
 | `impact check` | `changeImpact.enabled` | Free — no provider call |
-| `conformance check` | `invariantConformance.enabled` | Free unless `adjudication.enabled` |
 | `intent check` | `intentFulfilment.enabled` **and** a `contextSources` provider | ~1 call per obligation |
 
 `intent check` reports nothing useful without a configured change-intent source —
 it will exit `0` with a `no-intent` status and a warning saying so. Wire the
 pipeline to write the ticket/PR body into `.codereviewer/context/` first.
 
-None of the three can fail a pipeline. That is a spec requirement, not a default,
-and there is no `blocking` key to find.
+Neither can fail a pipeline. That is a spec requirement, not a default, and there
+is no `blocking` key to find.
 
 ## Things not to do
 

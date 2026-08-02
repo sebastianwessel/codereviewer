@@ -136,7 +136,6 @@ checklist_walk:
         - specs/16-agentic-cross-file-discovery.md
         - specs/22-change-impact-review.md
         - specs/23-intent-fulfilment-review.md
-        - specs/24-invariant-conformance-review.md
         - specs/26-reactive-task-splitting.md
         - specs/27-discovery-partitioning.md
         - specs/28-targeted-reads.md

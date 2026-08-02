@@ -442,8 +442,8 @@ const extractRustFacts = (
       kindOf(node) === 'trait_item'
     ) {
       // A declaration the crate compiles only for its test build is not part of
-      // what this file provides, so it must not become a conformance peer or a
-      // changed public symbol. The whole file is not test code just because it
+      // what this file provides, so it must not become a changed public symbol.
+      // The whole file is not test code just because it
       // carries an inline `#[cfg(test)] mod tests`, which is why this is asked
       // here, per declaration, rather than of the path.
       //
@@ -921,9 +921,9 @@ const collectEcmascriptExportFacts = (
 
 // CommonJS assignment exports. Recognising only ESM left a CommonJS file with NO
 // facts at all — measured over four real JavaScript repositories, 1,046 `.js`
-// files yielded six declarations in total. These facts feed the stage-1 packet,
-// `impact check`'s changed symbols and `conformance check`'s declarations, so a
-// CommonJS codebase degraded all three SILENTLY. Applies to `.ts` too: a
+// files yielded six declarations in total. These facts feed the stage-1 packet
+// and `impact check`'s changed symbols, so a CommonJS codebase degraded both
+// SILENTLY. Applies to `.ts` too: a
 // TypeScript file may use CommonJS and the parse is identical.
 const isExportsTarget = (node: AstNode | undefined): boolean =>
   node !== undefined && kindOf(node) === 'identifier' && node.text() === 'exports'
@@ -1030,8 +1030,7 @@ const commonJsExportedNames = (statement: AstNode): readonly string[] => {
 
 // Behavioural named declarations, for the `declaration`/`public-symbol` facts the
 // other five languages already emit. No `interface`, no `type` alias: a construct
-// with no body cannot hold a behavioural pattern, which is the same reason the
-// conformance trait-less guard drops them.
+// with no body cannot hold a behavioural pattern.
 const ecmascriptNamedDeclarationKinds = [
   'function_declaration',
   'generator_function_declaration',

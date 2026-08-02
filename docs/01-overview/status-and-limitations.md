@@ -39,9 +39,9 @@ Implemented: local CLI review of a checked-out git repository, base/head diff an
 explicit file-list intake, deterministic support signals, language-neutral
 contracts, provider resolution for OpenAI/OpenAI-compatible/Bedrock/Azure through
 optional packages, holistic discovery + refutation, JSON/Markdown/SARIF reports,
-local review-comment drafts, an evaluation runner with quality gates, and three
-independently runnable advisory commands (`intent check`, `impact check`,
-`conformance check`) that are off by default and cannot fail a pipeline.
+local review-comment drafts, an evaluation runner with quality gates, and two
+independently runnable advisory commands (`intent check`, `impact check`) that
+are off by default and cannot fail a pipeline.
 
 Explicitly **not** implemented:
 
@@ -102,6 +102,14 @@ capability; a config that still sets it now fails validation with exit code `2`.
 The record is in
 [context scout (removed)](../03-concepts/optional-capabilities/context-scout.md).
 
+An `invariantConformance` block and a third advisory command, `conformance
+check`, existed until 2026-08-02. Both were removed after the capability's own
+firing-rate measurement put it at **7.0 reports per PR-sized range against a
+pre-registered kill criterion of ≈0.5**, with **zero true positives across
+roughly 300 hand-judged divergences**. A config that still sets the block fails
+validation with exit code `2`. The record is in
+[invariant-conformance review (removed)](../03-concepts/optional-capabilities/invariant-conformance.md).
+
 Defaults that are **on**: `aiReview.requireRefutation` (a literal `true` — not a
 toggle), `aiReview.deterministicSignalMode: 'support'`,
 `review.crossFileRetrieval.enabled`, `baseline.enabled`, `drift.enabled`, and the
@@ -133,8 +141,7 @@ bounds a single network call and is the only deadline that exists.
   expectations — the population it exists for — it localises **20 of 27 (74.1%)**
   inside a symbol it flagged as changed. That is COVERAGE, not detection: it
   reports risk and never claims a defect, so the figure is not comparable to the
-  review stage's recall. `conformance check` is implemented and runnable but has
-  never been scored; treat its output as a prompt for a human, not as a result.
+  review stage's recall.
 - **`intent check` is the most-measured stage here, and none of its numbers
   describe the engine that ships.** Four scored rounds over two corpora put
   end-to-end outstanding recall at **81.2%** and outstanding precision at
@@ -196,8 +203,8 @@ workflow.
 | Runs are not resumable | Review execution is stateless and one-shot. A failed run writes partial artifacts (`run-summary.json`, `context-ledger.json`, `shared-context.json`, `observability.json`, `error.json`) and the next invocation re-plans and re-executes from scratch. |
 | Coverage fails closed | A completed report requires `coverage.status = complete`. Budget pressure splits work into more tasks; it never silently truncates required source. Packet overflow is a hard pre-call failure (`task_packet_budget_exceeded`), not a trim. |
 | Structural signal languages | Support signals exist for TypeScript, JavaScript, Python, Go, Rust, Java and Ruby, all through one ast-grep engine. Other languages still get a full model review — just with fewer structural hints. Core contracts stay language-neutral. |
-| **TypeScript/JavaScript signals cover exports only, not every declaration** | The extractor emits a fact for an **exported** symbol — ESM `export`, and since 2026-07-30 also CommonJS (`module.exports = { … }`, `module.exports = name`, `exports.x`, a named function or class expression). A **top-level declaration that is never exported remains invisible**, as does an anonymous `module.exports = function () {}`, which names nothing a peer set or reference lookup could match. Consumers affected by the remaining gap: the support-signal packet in `review`, changed symbols in `impact check`, declarations in `conformance check`. Note that `INV-ESM-001` constrains *our own* source to ESM; it says nothing about what we can review. |
-| CommonJS support was added after measurement | Before 2026-07-30 the extractor recognised ESM only, so a CommonJS file produced **no facts at all** and all three consumers above degraded *silently* — reporting "nothing to say" rather than "cannot see". `fastify`'s 701-line `lib/route.js` produced zero facts; four real JavaScript repositories yielded **6 declarations in total**. After the fix the same four yield **891 exports across 415 files**. Evidence: [signal coverage report](../../reports/2026-07-30-signal-coverage-and-conformance-yield.md). |
+| **TypeScript/JavaScript signals cover exports only, not every declaration** | The extractor emits a fact for an **exported** symbol — ESM `export`, and since 2026-07-30 also CommonJS (`module.exports = { … }`, `module.exports = name`, `exports.x`, a named function or class expression). A **top-level declaration that is never exported remains invisible**, as does an anonymous `module.exports = function () {}`, which names nothing a peer set or reference lookup could match. Consumers affected by the remaining gap: the support-signal packet in `review`, and changed symbols in `impact check`. Note that `INV-ESM-001` constrains *our own* source to ESM; it says nothing about what we can review. |
+| CommonJS support was added after measurement | Before 2026-07-30 the extractor recognised ESM only, so a CommonJS file produced **no facts at all** and both consumers above degraded *silently* — reporting "nothing to say" rather than "cannot see". `fastify`'s 701-line `lib/route.js` produced zero facts; four real JavaScript repositories yielded **6 declarations in total**. After the fix the same four yield **891 exports across 415 files**. Evidence: [signal coverage report](../../reports/2026-07-30-signal-coverage-and-conformance-yield.md). |
 | Provider adapters are separate installs | Only the adapter for your configured provider is imported. Bedrock and Azure adapters must be installed explicitly. |
 | Files that are skipped | Deleted, binary, oversized (`review.maxFileBytes`, default 500000), and excluded paths are recorded as skipped, not reviewed. Lock files, minified bundles, source maps, and snapshots are excluded by default. |
 | Cost data can be missing | Token/cost metadata is recorded when the provider supplies it. Missing pricing data is reported as unavailable, never as free. |

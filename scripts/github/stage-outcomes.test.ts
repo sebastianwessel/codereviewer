@@ -22,8 +22,8 @@ describe('stage definitions', () => {
     expect(stage('review').kind).toBe('blocking')
   })
 
-  it('marks intent, impact and conformance advisory, as their specs require', () => {
-    for (const id of ['intent', 'impact', 'conformance']) {
+  it('marks intent and impact advisory, as their specs require', () => {
+    for (const id of ['intent', 'impact']) {
       expect(stage(id).kind).toBe('advisory')
     }
   })
@@ -140,7 +140,7 @@ describe('jobExitCode', () => {
   it('NEVER fails the job for an advisory stage, whatever it reported', () => {
     const outcomes = [
       classifyStageOutcome(review, { exitCode: 0, stdout: '{}', stderr: '' }),
-      ...['intent', 'impact', 'conformance'].map((id) =>
+      ...['intent', 'impact'].map((id) =>
         classifyStageOutcome(stage(id), {
           exitCode: 3,
           stdout: '',

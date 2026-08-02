@@ -112,7 +112,6 @@ This is why the generated JSON Schema carries no `default` object on `review`.
 | `verification` | no | object | agentic claim verification disabled |
 | `changeImpact` | no | object | change-impact review disabled |
 | `intentFulfilment` | no | object | intent-fulfilment review disabled |
-| `invariantConformance` | no | object | invariant-conformance review disabled |
 | `fix` | no | object | agentic finding investigation and fix disabled |
 
 ## Review Config
@@ -533,43 +532,6 @@ Rules:
   advisory-only a requirement, not a default, so a `blocking` key would be accepted
   and then silently ignored.
 
-## Invariant Conformance
-
-Controls invariant-conformance review (`24-invariant-conformance-review.md`).
-Disabled by default and reached only by `codereviewer conformance check` — never by
-`review`.
-
-| Key | Type | Default |
-| --- | --- | --- |
-| `invariantConformance.enabled` | boolean | `false` |
-| `invariantConformance.maxChangedDeclarations` | integer 1..500 | `50` |
-| `invariantConformance.maxPeersPerDeclaration` | integer 3..500 | `60` |
-| `invariantConformance.maxPeerFiles` | integer 1..2000 | `300` |
-| `invariantConformance.maxDivergences` | integer 1..500 | `50` |
-| `invariantConformance.maxPreExistingDivergences` | integer 0..500 | `25` |
-| `invariantConformance.adjudication.enabled` | boolean | `false` |
-| `invariantConformance.adjudication.maxAdjudications` | integer 1..500 | `25` |
-
-Rules:
-
-- with it disabled, `conformance check` still exits `0` and writes an empty report
-  carrying the warning `Invariant-conformance review is disabled. Set
-  invariantConformance.enabled to true to run it.`;
-- the deterministic core makes no provider call; its bounds limit repository
-  traversal only. Peer derivation reads sibling files, so its bounds are both
-  per-declaration and per-run;
-- a peer set larger than `maxPeersPerDeclaration` is truncated in file-then-line
-  order rather than dropped, so a large directory still yields a bounded,
-  reproducible comparison;
-- `maxDivergences` and `maxPreExistingDivergences` are separate caps so a flood of
-  pre-existing divergences cannot crowd out the change-attributed ones;
-- `adjudication` is the only part that spends money — one model call per divergence
-  — and is disabled independently of `enabled`, so the deterministic baseline arm is
-  what an adjudicated arm has to beat. Divergences beyond `maxAdjudications` are
-  counted as unadjudicated and are not reported;
-- there is deliberately no `blocking` key, and none is added later. Advisory-only is
-  a spec 24 requirement, not a maturity stage, and the command always exits `0`.
-
 ## Fix
 
 Controls the agentic finding investigation-and-fix job (`12-verification-flow.md`).
@@ -641,9 +603,12 @@ asks for.
 | `review.contextScout` | 2026-07-27 | Context scout (spec 18) |
 | `review.discoveryPosture` | 2026-07-27 | Discovery posture (spec 20) |
 | `review.discoverySampleCount` | 2026-07-27 | Independent sampling (spec 21) |
+| `invariantConformance` | 2026-08-02 | Invariant-conformance review (spec 24) |
 
-The withdrawals are recorded in `_provenance.yaml` and their reasoning in
-`05-review-workflow-and-runtime.md`.
+The withdrawals are recorded in `_provenance.yaml`. The reasoning for the three
+`review.*` keys is in `05-review-workflow-and-runtime.md`; the reasoning for
+`invariantConformance` is in `24-invariant-conformance-review.md`, which is kept
+as a withdrawn spec so the measurement that removed it stays on record.
 
 ## Security
 

@@ -1,14 +1,13 @@
-// The four stages this workflow runs, and the exit-code contract that decides
+// The three stages this workflow runs, and the exit-code contract that decides
 // what each one is allowed to do to the job.
 //
-// ONE stage can fail the job: `review`. The other three are advisory by
+// ONE stage can fail the job: `review`. The other two are advisory by
 // specification, not by configuration — spec 23 states outright that `intent
 // check` "MUST NOT be able to fail a pipeline on fulfilment grounds. This is not
-// configurable", and specs 22 and 24 say the same of `impact check` and
-// `conformance check`. Those commands already exit 0 whatever they report, so
-// the only way this integration could break that guarantee is by inventing a
-// failure of its own. `jobExitCode` below is where that is prevented: it reads
-// the blocking stage and nothing else.
+// configurable", and spec 22 says the same of `impact check`. Those commands
+// already exit 0 whatever they report, so the only way this integration could
+// break that guarantee is by inventing a failure of its own. `jobExitCode` below
+// is where that is prevented: it reads the blocking stage and nothing else.
 //
 // An advisory stage CAN still exit non-zero, for reasons that have nothing to do
 // with what it found: a malformed config file (2) or an unresolvable merge base
@@ -16,7 +15,7 @@
 // still does not fail the job — the review is the gate, and a broken advisory
 // lane must not be able to block a merge.
 
-export type StageId = 'review' | 'intent' | 'impact' | 'conformance'
+export type StageId = 'review' | 'intent' | 'impact'
 
 export type StageKind = 'blocking' | 'advisory'
 
@@ -53,14 +52,6 @@ export const stageDefinitions: readonly StageDefinition[] = [
     label: 'Impact',
     contribution: 'Lists the callers of every symbol this change touched.',
     command: ['impact', 'check']
-  },
-  {
-    id: 'conformance',
-    kind: 'advisory',
-    label: 'Conformance',
-    contribution:
-      'Names declarations that break a convention their peers hold, with the peers cited.',
-    command: ['conformance', 'check']
   }
 ]
 

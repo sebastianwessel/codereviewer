@@ -29,8 +29,8 @@ CLI
   -> quality gate
 ```
 
-The separate `impact check`, `intent check`, and `conformance check` commands are
-advisory lanes reachable only from the CLI. They never run inside `review`, and
+The separate `impact check` and `intent check` commands are advisory lanes
+reachable only from the CLI. They never run inside `review`, and
 `review-workflow` neither imports them nor can be failed by them.
 
 ## Boundary Decisions

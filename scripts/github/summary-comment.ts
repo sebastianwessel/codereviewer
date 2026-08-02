@@ -17,7 +17,6 @@ import {
   sanitizeText
 } from './sanitize.js'
 import type {
-  ConformanceDigest,
   ImpactDigest,
   IntentDigest,
   ReviewDigest,
@@ -51,7 +50,6 @@ export type SummaryCommentInput = {
   readonly review?: ReviewDigest
   readonly intent?: IntentDigest
   readonly impact?: ImpactDigest
-  readonly conformance?: ConformanceDigest
   readonly headSha: string
   /** Link back to the workflow run holding the full artifacts. */
   readonly runUrl?: string
@@ -69,7 +67,6 @@ export type SummaryCommentInput = {
 const MAX_LISTED_FINDINGS = 50
 const MAX_LISTED_OBLIGATIONS = 20
 const MAX_LISTED_SYMBOLS = 15
-const MAX_LISTED_DIVERGENCES = 10
 const MAX_TITLE = 200
 const MAX_DESCRIPTION = 700
 
@@ -243,41 +240,6 @@ const impactSection = (impact: ImpactDigest): string | undefined => {
   ].join('\n')
 }
 
-const conformanceSection = (
-  conformance: ConformanceDigest
-): string | undefined => {
-  if (conformance.status !== 'completed' || conformance.divergences.length === 0) {
-    return undefined
-  }
-
-  const shown = conformance.divergences.slice(0, MAX_LISTED_DIVERGENCES)
-  const list = shown.map((divergence) =>
-    [
-      `- \`${sanitizeLine(divergence.path, 200)}:${divergence.line}\` — ${sanitizeLine(divergence.statement, 300)}`,
-      ...(divergence.question.length === 0
-        ? []
-        : [`  ${sanitizeLine(divergence.question, 240)}`])
-    ].join('\n')
-  )
-
-  return [
-    '### Conformance',
-    '',
-    `${conformance.changeAttributedCount} declaration${conformance.changeAttributedCount === 1 ? '' : 's'} in this change diverge from a convention their peers hold. This is a fact and a question, not a verdict.`,
-    '',
-    ...list,
-    ...(conformance.divergences.length > shown.length
-      ? [`- _…and ${conformance.divergences.length - shown.length} more._`]
-      : []),
-    ...(conformance.preExistingCount > 0
-      ? [
-          '',
-          `_${conformance.preExistingCount} further divergence${conformance.preExistingCount === 1 ? '' : 's'} pre-date this change and are listed only in the artifacts._`
-        ]
-      : [])
-  ].join('\n')
-}
-
 const detailsSection = (input: SummaryCommentInput): string => {
   const rows: string[] = [
     `- Head commit: \`${sanitizeLine(input.headSha, 64)}\``
@@ -358,9 +320,6 @@ export const renderSummaryComment = (input: SummaryCommentInput): string => {
     input.review === undefined ? undefined : findingsSection(input.review),
     input.intent === undefined ? undefined : intentSection(input.intent),
     input.impact === undefined ? undefined : impactSection(input.impact),
-    input.conformance === undefined
-      ? undefined
-      : conformanceSection(input.conformance),
     detailsSection(input)
   ]
 

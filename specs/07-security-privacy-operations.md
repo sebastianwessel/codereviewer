@@ -55,7 +55,7 @@ code, not by model behavior:
 | Artifact write boundary | Writes are allowed only below the configured artifact directory after it resolves under repository root. |
 | Non-destructive git | The only allowed git commands are read-only discovery commands explicitly allowlisted in code. Mutating git commands are impossible through the product API. |
 | No shell expansion | Git and tool invocations use argument-array process APIs. Shell strings are forbidden. |
-| No implicit network | Network is denied by default. The only network path is the explicitly selected model provider endpoint after provider config validation. Every model-backed stage uses that one path and no other: holistic discovery, the semantic finding merge, refutation, the change-intent summarizer, the fix and verification lanes, intent-fulfilment and invariant-conformance checking, and the evaluation match and plausibility judges. Change-intent context providers are filesystem-only in the current phase; later-phase network providers (`platform-API`, `mcp`) contact only explicitly configured, allowlisted endpoints and are the subject of dedicated controls below. No network path can be initiated by model output. |
+| No implicit network | Network is denied by default. The only network path is the explicitly selected model provider endpoint after provider config validation. Every model-backed stage uses that one path and no other: holistic discovery, the semantic finding merge, refutation, the change-intent summarizer, the fix and verification lanes, intent-fulfilment checking, and the evaluation match and plausibility judges. Change-intent context providers are filesystem-only in the current phase; later-phase network providers (`platform-API`, `mcp`) contact only explicitly configured, allowlisted endpoints and are the subject of dedicated controls below. No network path can be initiated by model output. |
 | No repository exfiltration by default | Local providerless and signal-only paths must not send repository content to any network destination. Provider-backed review sends only bounded, redacted, ledger-recorded context to the selected provider. |
 | No prompt/tool authority | Prompts, repository content, skills, and model output cannot grant filesystem, git, shell, network, publishing, or gate authority. |
 | Auditable decisions | Security-relevant allow/deny decisions produce stable, redacted events and testable error codes. |
@@ -380,8 +380,8 @@ A completed `codereviewer impact check` writes one run directory,
 `report.md` rather than only on stdout). A disabled run writes nothing.
 
 `codereviewer config validate`, `eval compare`, `eval recall-report`,
-`eval slice-manifest`, `drift check`, `intent check`, and `conformance check`
-write no artifacts and print to stdout only.
+`eval slice-manifest`, `drift check`, and `intent check` write no artifacts and
+print to stdout only.
 
 Default artifact root is `.codereviewer/`. Generated artifacts are ignored by git.
 User-authored `.codereviewer/config.json`, `.codereviewer/instructions/`, and

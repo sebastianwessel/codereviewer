@@ -34,7 +34,6 @@ tree without the lockfile also changing.
 | CLI `codereviewer drift check` | Public R1 | `drift` | Drift categories | Runs the deterministic drift checks and exits by `drift.failOn`. |
 | CLI `codereviewer impact check` | Public R1 | `change-impact` | Change-impact report contract | Reports dependents of changed symbols as JSON. Advisory: it exits `0` whatever it reports, and only setup/repository errors change the code. Never invoked by `review`. |
 | CLI `codereviewer intent check` | Public R1 | `intent-fulfilment` | Intent-fulfilment report contract | Maps stated obligations to evidence in the change as JSON. Advisory: it exits `0` whatever it reports, and only setup/repository errors change the code. Never invoked by `review`. |
-| CLI `codereviewer conformance check` | Public R1 | `invariant-conformance` | Divergence report contract | Reports peer-pattern divergences as JSON. Advisory: it exits `0` whatever it reports, and only setup/repository errors change the code. Never invoked by `review`. |
 | Library `src/index.ts` | Public R1 | root package | exported TypeScript types | Re-exports stable types/helpers with no side effects. |
 | Config file `.codereviewer/config.json` | Public R1 | `configuration` | `03-contracts/config.schema.json` | Strict JSON config, merged with env and CLI flags. |
 | Report JSON `report.json` | Public R1 | `reporting` | `03-contracts/review-report.schema.json` | Canonical machine-readable run output. |

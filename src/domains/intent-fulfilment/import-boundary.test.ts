@@ -206,17 +206,13 @@ describe('intent-fulfilment import boundary', () => {
     expect(violations).toEqual([])
   })
 
-  test('does not import the other advisory stages', async () => {
-    // The three stages are independently runnable and share no context or output.
-    // Reuse happens through shared code, never through one stage reaching into
-    // another.
+  test('does not import the other advisory stage', async () => {
+    // The advisory stages are independently runnable and share no context or
+    // output. Reuse happens through shared code, never through one stage
+    // reaching into another.
     const violations = (await readSources(domainDirectory)).flatMap((source) =>
       moduleSpecifiersIn(source.source)
-        .filter(
-          (specifier) =>
-            specifier.includes('change-impact') ||
-            specifier.includes('invariant-conformance')
-        )
+        .filter((specifier) => specifier.includes('change-impact'))
         .map((specifier) => `${source.path} imports ${specifier}`)
     )
 

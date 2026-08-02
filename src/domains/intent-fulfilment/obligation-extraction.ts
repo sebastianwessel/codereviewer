@@ -30,9 +30,8 @@ export const ModelObligationExtractionSchema = z.strictObject({
     .optional()
 })
 
-// FIELD ORDER IS LOAD-BEARING, for the same reason it is in the conformance
-// adjudication packet: the serialized packet's shared prefix is what a provider
-// could cache. Nothing per-run unique appears anywhere.
+// FIELD ORDER IS LOAD-BEARING: the serialized packet's shared prefix is what a
+// provider could cache. Nothing per-run unique appears anywhere.
 export const ObligationExtractionInputSchema = z.strictObject({
   maxObligations: z.int().min(1),
   sources: z

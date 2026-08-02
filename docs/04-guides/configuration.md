@@ -396,22 +396,19 @@ adds to the bill.
 
 ## Recipe: enable an advisory stage
 
-The three `check` commands are off by default and reached only by their own
-command — never by `review`. None of them can fail a pipeline, and **none has an
+The two `check` commands are off by default and reached only by their own
+command — never by `review`. Neither can fail a pipeline, and **neither has an
 accuracy measurement**.
 
 ```json
 {
   "changeImpact": { "enabled": true },
-  "invariantConformance": { "enabled": true },
   "intentFulfilment": { "enabled": true }
 }
 ```
 
-`changeImpact` and `invariantConformance` make no provider call in this shape, so
-they cost nothing and their output is reproducible. `invariantConformance.adjudication.enabled`
-(off, separate switch) is the only part that spends money: one bounded call per
-divergence, capped by `adjudication.maxAdjudications`.
+`changeImpact` makes no provider call in this shape, so it costs nothing and its
+output is reproducible.
 
 `intentFulfilment` additionally needs a change-intent source, or it will exit `0`
 with `status: "no-intent"` and a warning saying so — see the change-intent recipe

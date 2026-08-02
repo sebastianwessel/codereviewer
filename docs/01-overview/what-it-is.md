@@ -87,9 +87,9 @@ the whole file. → [Current results](../05-quality/current-results.md)
 
 ---
 
-## Three advisory commands alongside the review
+## Two advisory commands alongside the review
 
-`review` is the only command that can block. Three others run independently, share
+`review` is the only command that can block. Two others run independently, share
 no context with it and with each other, and **always exit `0` whatever they
 report**:
 
@@ -97,12 +97,11 @@ report**:
 | --- | --- |
 | `intent check` | A mapping between a stated intent and the change: the obligations the intent states, each citing the line it was read from, and for each one either the changed lines that evidence it or nothing. Not a verdict. |
 | `impact check` | A deterministic reference report — which symbols the change touched and where they are used. No provider call, so it costs nothing and its output is reproducible. |
-| `conformance check` | Divergences between a changed declaration and its peers: "these N peers do X; this declaration does not", with the peers listed so a human judges. No verdict, no severity. |
 
-**None of the three has an accuracy measurement.** They are implemented and
-runnable; they are not validated. Advisory-only is a spec requirement for
-`intent check` and `conformance check` rather than a default — there is no
-`blocking` key to find, and adding one would be a switch that lies.
+**Neither has an accuracy measurement.** They are implemented and runnable; they
+are not validated. Advisory-only is a spec requirement for `intent check` rather
+than a default — there is no `blocking` key to find, and adding one would be a
+switch that lies.
 
 ---
 

@@ -11,8 +11,8 @@
 // file with NO facts at all. Measured over four real JavaScript repositories
 // (1,046 `.js` files): six declarations in total, and `fastify`'s 701-line
 // `lib/route.js` produced zero. These facts feed the stage-1 support-signal
-// packet, `impact check`'s changed symbols and `conformance check`'s
-// declarations, so a CommonJS codebase degraded all three silently.
+// packet and `impact check`'s changed symbols, so a CommonJS codebase degraded
+// both silently.
 
 import { describe, expect, test } from 'vitest'
 import { extractPolyglotSignals } from './polyglot-signal-extractor.js'
@@ -81,7 +81,7 @@ describe('CommonJS export signals', () => {
     // `h` is now reported twice under different kinds: once as the declaration it
     // is, once as the CommonJS export it becomes. Both are true and downstream
     // consumers want different ones — change-impact seeds from the most visible
-    // kind, conformance from the most inclusive.
+    // kind, the support-signal packet reports both.
     expect(facts.filter((fact) => fact.kind === 'export').map((fact) => fact.name)).toEqual(['h'])
     expect(facts.filter((fact) => fact.kind === 'declaration').map((fact) => fact.name)).toEqual(['h'])
   })

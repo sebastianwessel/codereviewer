@@ -47,7 +47,7 @@ Capabilities and measured variants:
 - [17-real-repository-eval-corpus.md](17-real-repository-eval-corpus.md)
 - [22-change-impact-review.md](22-change-impact-review.md)
 - [23-intent-fulfilment-review.md](23-intent-fulfilment-review.md)
-- [24-invariant-conformance-review.md](24-invariant-conformance-review.md)
+- [24-invariant-conformance-review.md](24-invariant-conformance-review.md) — **withdrawn 2026-08-02**, kept because it records the measurement that withdrew it
 - [25-guarded-region-context.md](25-guarded-region-context.md) — **withdrawn 2026-07-30**, kept because it records the measurement that withdrew it
 - [26-reactive-task-splitting.md](26-reactive-task-splitting.md)
 - [27-discovery-partitioning.md](27-discovery-partitioning.md)

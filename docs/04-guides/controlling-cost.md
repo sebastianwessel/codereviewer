@@ -198,8 +198,6 @@ These paths make no provider call at all:
 - `drift check` (also run as a preflight step inside `review`)
 - `baseline write`
 - `impact check` — deterministic by construction; it makes no provider call at all
-- `conformance check` — unless `invariantConformance.adjudication.enabled` is set,
-  which adds one bounded call per divergence up to `adjudication.maxAdjudications`
 - `intent check` while `intentFulfilment.enabled` is false, or when no provider
   resolves — it reports the reason as a warning and still exits `0`
 - `eval compare`, `eval recall-report`, `eval slice-manifest`
