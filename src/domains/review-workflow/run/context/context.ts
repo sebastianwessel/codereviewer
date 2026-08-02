@@ -14,6 +14,7 @@ import {
 import {
   discoverDeterministicSignalTestMappings,
   type DeterministicSignalExtraction,
+  type SupportSignalFact,
   type SupportSignalSourceFile
 } from '../../../deterministic-signals/index.js'
 import { type ReviewTask } from '../../../review-planning/index.js'
@@ -262,6 +263,32 @@ export const assembleContext = async (
     input.sourceFiles.map((sourceFile) => sourceFile.path)
   )
 
+  // What a MODEL can use out of a deterministic fact, which is not the same thing
+  // as what the engine stores in one.
+  //
+  // `id` and `contentHash` are internal bookkeeping: no prompt refers to a fact id
+  // (the refuter cites evidence ids, which are a different namespace), and the
+  // content hash is the file's, so every fact for one file repeats the same
+  // 64-character hex string. Serializing the raw record put both in front of the
+  // model, and measurement over the 37-case corpus priced them: the facts document
+  // was 26.0% of ALL model input bytes, and inside it `contentHash` was 25.6% and
+  // `id` 8.7% — 3,244 facts carrying just 44 distinct hashes, or 8.9% of every
+  // byte this engine sends, in opaque hex that tokenizes at roughly one token per
+  // two characters. Projecting here rather than narrowing `SupportSignalFact`
+  // keeps the internal record intact for clustering, evidence and change-impact,
+  // which all need the id.
+  const modelFacingSupportSignalFact = (fact: SupportSignalFact) => ({
+    language: fact.language,
+    kind: fact.kind,
+    path: fact.path,
+    name: fact.name,
+    ...(fact.moduleSpecifier === undefined
+      ? {}
+      : { moduleSpecifier: fact.moduleSpecifier }),
+    line: fact.line,
+    summary: fact.summary
+  })
+
   const supportSignalContextsForPaths = (
     task: ReviewTask,
     pathSet: ReadonlySet<string>
@@ -285,7 +312,7 @@ export const assembleContext = async (
       supportSignalFacts.length === 0 && supportSignalTestMappings.length === 0
         ? ''
         : JSON.stringify({
-            facts: supportSignalFacts,
+            facts: supportSignalFacts.map(modelFacingSupportSignalFact),
             testMappings: supportSignalTestMappings
           })
 

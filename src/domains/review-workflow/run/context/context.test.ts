@@ -161,6 +161,29 @@ describe('review runner context assembly', () => {
         'support-signal-output'
       ])
       expect(result.reviewContext).toHaveLength(2)
+
+      // The serialized support-signal document carries only what a model can use.
+      // Fact ids and the file content hash are internal bookkeeping — no prompt
+      // refers to either, and the hash is repeated verbatim on every fact for the
+      // file — so they must not reach a model packet. They stay on the fact
+      // records themselves, which clustering and evidence still need.
+      const supportSignalDocument = result.tasks[0]?.reviewContext.find(
+        (context) => context.kind === 'support-signal-output'
+      )
+      const serializedFacts = JSON.parse(supportSignalDocument?.content ?? '{}')
+
+      expect(serializedFacts.facts).toEqual([
+        {
+          language: 'typescript',
+          kind: 'declaration',
+          path: 'src/a.ts',
+          name: 'alpha',
+          line: 1,
+          summary: 'alpha declaration'
+        }
+      ])
+      expect(supportSignalDocument?.content).not.toContain('fact_alpha')
+      expect(supportSignalDocument?.content).not.toContain(sha256(sourceContent))
     } finally {
       await rm(root, { recursive: true, force: true })
     }
