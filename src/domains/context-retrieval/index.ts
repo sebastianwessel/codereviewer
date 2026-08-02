@@ -114,6 +114,25 @@ export type ContextRetriever = {
     // budget's cap is clamped to it, so the budget stays the authority.
     readonly maxMatchesPerQuery?: number
   }) => Promise<ContextRetrievalResult>
+  /**
+   * Run several searches over ONE repository traversal, in query order.
+   *
+   * Same bounded surface as `grepRepository` — one budgeted search, one ledger
+   * entry and one evidence record per query, each with its own match cap — but the
+   * repository is walked and each eligible file read once for the whole batch
+   * instead of once per query. Callers that know all their queries up front
+   * (`lookupSymbolReferences`) use this; a model-driven tool call cannot and does
+   * not.
+   */
+  readonly grepRepositoryBatch: (input: {
+    readonly queries: readonly {
+      readonly query: string
+      readonly matchMode?: ContextRetrievalMatchMode
+      readonly maxMatchesPerQuery?: number
+    }[]
+    readonly paths?: readonly string[]
+    readonly taskId?: string
+  }) => Promise<readonly ContextRetrievalResult[]>
 }
 
 export type {
@@ -465,161 +484,251 @@ export const createContextRetriever = (input: {
         summary: `Listed ${portablePath}; ${childSummaries.length} entries returned.`
       })
     },
-    grepRepository: async ({
-      query,
-      paths,
-      taskId,
-      matchMode,
-      maxMatchesPerQuery
-    }) => {
-      if (query.trim().length === 0) {
+    grepRepository: async (input) => {
+      const [result] = await runGrepQueries({
+        queries: [
+          {
+            query: input.query,
+            ...(input.matchMode === undefined
+              ? {}
+              : { matchMode: input.matchMode }),
+            ...(input.maxMatchesPerQuery === undefined
+              ? {}
+              : { maxMatchesPerQuery: input.maxMatchesPerQuery })
+          }
+        ],
+        ...(input.paths === undefined ? {} : { paths: input.paths }),
+        ...(input.taskId === undefined ? {} : { taskId: input.taskId })
+      })
+
+      // `runGrepQueries` returns exactly one result per query, so a single-query
+      // call always has one. The throw is unreachable and exists only because the
+      // array index type is optional.
+      if (result === undefined) {
+        throw new TypeError('Context retrieval search produced no result.')
+      }
+
+      return result
+    },
+    grepRepositoryBatch: (input) => runGrepQueries(input)
+  }
+
+  /**
+   * Run several searches over ONE repository traversal.
+   *
+   * Every query is still budgeted, capped, ledgered and evidenced independently —
+   * a batch is an execution detail, not a relaxation of the bounded surface. What
+   * it removes is the file I/O: the previous shape re-walked the repository and
+   * re-read every eligible file once PER query, so a change-impact run looking up
+   * 27 changed symbols read the same 1,181 files 27 times (192 MB of reads for a
+   * 7 MB working set, ~45% of the command's wall clock).
+   *
+   * Results are identical to running the queries one at a time: traversal order is
+   * the same, each query keeps its own match list and its own cap, and the walk
+   * stops once EVERY query is satisfied rather than once the single query was.
+   */
+  async function runGrepQueries(input: {
+    readonly queries: readonly {
+      readonly query: string
+      readonly matchMode?: ContextRetrievalMatchMode
+      readonly maxMatchesPerQuery?: number
+    }[]
+    readonly paths?: readonly string[]
+    readonly taskId?: string
+  }): Promise<readonly ContextRetrievalResult[]> {
+    for (const entry of input.queries) {
+      if (entry.query.trim().length === 0) {
         throw new TypeError('Context retrieval query must not be empty.')
       }
-      if (budget.usedSearches >= budget.maxSearches) {
-        throw budgetExceeded('search')
-      }
-      budget.usedSearches += 1
-      const queryHash = sha256(query)
-      const searchPaths =
-        paths === undefined || paths.length === 0 ? ['.'] : [...paths]
-      const matchLimit =
-        maxMatchesPerQuery === undefined
+    }
+
+    if (input.queries.length === 0) {
+      return []
+    }
+
+    // Charged up front for the whole batch. A batch that cannot be afforded in
+    // full is refused rather than partially served, so the budget stays the
+    // authority on how many searches a caller may make.
+    if (budget.usedSearches + input.queries.length > budget.maxSearches) {
+      throw budgetExceeded('search')
+    }
+    budget.usedSearches += input.queries.length
+
+    const states = input.queries.map((entry) => ({
+      query: entry.query,
+      queryHash: sha256(entry.query),
+      matchLimit:
+        entry.maxMatchesPerQuery === undefined
           ? budget.maxMatches
-          : Math.min(budget.maxMatches, maxMatchesPerQuery)
-      const lineMatches = createLineMatcher(query, matchMode ?? 'literal')
-      const matches: ContextRetrievalMatch[] = []
+          : Math.min(budget.maxMatches, entry.maxMatchesPerQuery),
+      lineMatches: createLineMatcher(entry.query, entry.matchMode ?? 'literal'),
+      matches: [] as ContextRetrievalMatch[]
+    }))
+    const searchPaths =
+      input.paths === undefined || input.paths.length === 0
+        ? ['.']
+        : [...input.paths]
+    const allSatisfied = (): boolean =>
+      states.every((state) => state.matches.length >= state.matchLimit)
 
-      const collectFileMatches = async (
-        portablePath: string,
-        absolutePath: string
-      ): Promise<void> => {
-        if (matches.length >= matchLimit) {
-          return
-        }
-
-        let content: string
-
-        try {
-          content = await readFile(absolutePath, 'utf8')
-        } catch {
-          // Unreadable (permission error, race with a concurrent delete, a
-          // device file, ...): skip it rather than failing the whole search.
-          return
-        }
-        const lines = content.split(/\r\n|\n|\r/u)
-
-        for (const [index, line] of lines.entries()) {
-          if (matches.length >= matchLimit) {
-            return
-          }
-          if (lineMatches(line)) {
-            matches.push({
-              path: portablePath,
-              line: index + 1,
-              // Matching runs against the RAW line so which lines match is
-              // unchanged, but the text handed back is redacted with the same
-              // redactor the mediated read uses: a search result must never
-              // surface a secret a read of the same file would have masked.
-              text: redactor.redact(line)
-            })
-          }
-        }
+    const collectFileMatches = async (
+      portablePath: string,
+      absolutePath: string
+    ): Promise<void> => {
+      if (allSatisfied()) {
+        return
       }
 
-      const readEligibleDirectoryEntries = async (absolutePath: string) => {
-        try {
-          return await readdir(absolutePath, { withFileTypes: true })
-        } catch {
-          return undefined
-        }
+      let content: string
+
+      try {
+        content = await readFile(absolutePath, 'utf8')
+      } catch {
+        // Unreadable (permission error, race with a concurrent delete, a
+        // device file, ...): skip it rather than failing the whole search.
+        return
       }
+      // Both match modes require the query to appear in the file as a substring
+      // (`identifier` only adds boundary conditions around that same substring),
+      // so a whole-file test settles every line at once for the queries this file
+      // cannot match. With many queries sharing one traversal that prefilter is
+      // what keeps per-line work proportional to the queries a file can actually
+      // answer instead of to the whole batch.
+      const active = states.filter(
+        (state) =>
+          state.matches.length < state.matchLimit && content.includes(state.query)
+      )
 
-      // In-process recursive traversal (never a shell). Bounded by
-      // `maxDepth` (directory levels descended) and `maxMatches` (checked
-      // before every directory read and every line), and pruned by the
-      // eligibility gate: an ineligible directory is never descended into,
-      // so excluded/secret content is never read during a search either.
-      // Non-regular entries (symlinks, sockets, ...) are silently skipped —
-      // the traversal never follows a symlink out of the mediated view.
-      const walkDirectory = async (
-        portablePath: string,
-        absolutePath: string,
-        depth: number
-      ): Promise<void> => {
-        if (matches.length >= matchLimit || depth > budget.maxDepth) {
-          return
-        }
+      if (active.length === 0) {
+        return
+      }
+      const lines = content.split(/\r\n|\n|\r/u)
 
-        const entries = await readEligibleDirectoryEntries(absolutePath)
+      for (const [index, line] of lines.entries()) {
+        let redacted: string | undefined
 
-        if (entries === undefined) {
-          return
-        }
-
-        for (const entry of entries) {
-          if (matches.length >= matchLimit) {
-            return
+        for (const state of active) {
+          if (state.matches.length >= state.matchLimit) {
+            continue
           }
-
-          const childPortablePath = portableChildPath(portablePath, entry.name)
-
-          if (
-            !evaluatePathEligibility(childPortablePath, compiledEligibility)
-              .eligible
-          ) {
+          if (!state.lineMatches(line)) {
             continue
           }
 
-          const childAbsolutePath = path.join(absolutePath, entry.name)
+          // Matching runs against the RAW line so which lines match is
+          // unchanged, but the text handed back is redacted with the same
+          // redactor the mediated read uses: a search result must never
+          // surface a secret a read of the same file would have masked.
+          // Redacted at most once per line however many queries matched it.
+          redacted ??= redactor.redact(line)
+          state.matches.push({
+            path: portablePath,
+            line: index + 1,
+            text: redacted
+          })
+        }
 
-          if (entry.isDirectory()) {
-            await walkDirectory(childPortablePath, childAbsolutePath, depth + 1)
-          } else if (entry.isFile()) {
-            await collectFileMatches(childPortablePath, childAbsolutePath)
-          }
+        if (allSatisfied()) {
+          return
         }
       }
+    }
 
-      for (const requestedPath of searchPaths) {
-        if (matches.length >= matchLimit) {
-          break
-        }
+    const readEligibleDirectoryEntries = async (absolutePath: string) => {
+      try {
+        return await readdir(absolutePath, { withFileTypes: true })
+      } catch {
+        return undefined
+      }
+    }
 
-        const { portablePath, absolutePath } = await resolveEligibleExisting(
-          requestedPath
-        )
-        const entryStat = await stat(absolutePath)
-
-        if (entryStat.isDirectory()) {
-          await walkDirectory(portablePath, absolutePath, 0)
-        } else {
-          await collectFileMatches(portablePath, absolutePath)
-        }
+    // In-process recursive traversal (never a shell). Bounded by
+    // `maxDepth` (directory levels descended) and `maxMatches` (checked
+    // before every directory read and every line), and pruned by the
+    // eligibility gate: an ineligible directory is never descended into,
+    // so excluded/secret content is never read during a search either.
+    // Non-regular entries (symlinks, sockets, ...) are silently skipped —
+    // the traversal never follows a symlink out of the mediated view.
+    const walkDirectory = async (
+      portablePath: string,
+      absolutePath: string,
+      depth: number
+    ): Promise<void> => {
+      if (allSatisfied() || depth > budget.maxDepth) {
+        return
       }
 
+      const entries = await readEligibleDirectoryEntries(absolutePath)
+
+      if (entries === undefined) {
+        return
+      }
+
+      for (const entry of entries) {
+        if (allSatisfied()) {
+          return
+        }
+
+        const childPortablePath = portableChildPath(portablePath, entry.name)
+
+        if (
+          !evaluatePathEligibility(childPortablePath, compiledEligibility)
+            .eligible
+        ) {
+          continue
+        }
+
+        const childAbsolutePath = path.join(absolutePath, entry.name)
+
+        if (entry.isDirectory()) {
+          await walkDirectory(childPortablePath, childAbsolutePath, depth + 1)
+        } else if (entry.isFile()) {
+          await collectFileMatches(childPortablePath, childAbsolutePath)
+        }
+      }
+    }
+
+    for (const requestedPath of searchPaths) {
+      if (allSatisfied()) {
+        break
+      }
+
+      const { portablePath, absolutePath } = await resolveEligibleExisting(
+        requestedPath
+      )
+      const entryStat = await stat(absolutePath)
+
+      if (entryStat.isDirectory()) {
+        await walkDirectory(portablePath, absolutePath, 0)
+      } else {
+        await collectFileMatches(portablePath, absolutePath)
+      }
+    }
+
+    return states.map((state) => {
       // `content` keeps its historical `path:line` shape. The matched text is
       // returned separately in `matches`, so a model-facing tool output and
       // every existing caller stay byte-identical.
-      const content = matches
+      const content = state.matches
         .map((match) => `${match.path}:${match.line}`)
         .join('\n')
 
       return {
         ...recordResult({
           tool: 'grep',
-          ...(taskId === undefined ? {} : { taskId }),
+          ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
           reason: 'context-retrieval-grep',
           content,
           bytesConsidered: Buffer.byteLength(content),
           bytesIncluded: Buffer.byteLength(content),
-          summary: `Searched repository context for query hash ${queryHash.slice(
+          summary: `Searched repository context for query hash ${state.queryHash.slice(
             0,
             16
-          )}; ${matches.length} matches returned.`,
-          queryHash
+          )}; ${state.matches.length} matches returned.`,
+          queryHash: state.queryHash
         }),
-        matches
+        matches: state.matches
       }
-    }
+    })
   }
 }

@@ -205,6 +205,42 @@ export const writeChangeImpactArtifacts = async (
   )
 }
 
+// Artifact names for one `intent check` run, prefixed for the same reason the
+// impact ones are: a run directory must never present a mapping report under the
+// name every consumer here reads as a REVIEW report.
+export const INTENT_MARKDOWN_ARTIFACT_NAME = 'intent-report.md'
+export const INTENT_JSON_ARTIFACT_NAME = 'intent-report.json'
+
+// `intent check` is advisory and MUST exit 0 whatever it reports (spec 23), so this
+// adds no failure path of its own, exactly as the change-impact writer does. The run
+// is NOT recorded in the run index: the index feeds baseline resolution, which
+// expects a review report, and an entry pointing at a mapping report would hand
+// `baseline write` a document of the wrong shape.
+export const writeIntentFulfilmentArtifacts = async (
+  input: {
+    readonly repositoryRoot: string
+    readonly artifactRoot: string
+    readonly reportJson: string
+    readonly reportMarkdown: string
+  }
+): Promise<void> => {
+  await ensureDirectory(
+    await resolveArtifactWritePath(input.repositoryRoot, input.artifactRoot)
+  )
+  await writeRunArtifact(
+    input.repositoryRoot,
+    input.artifactRoot,
+    INTENT_JSON_ARTIFACT_NAME,
+    input.reportJson
+  )
+  await writeRunArtifact(
+    input.repositoryRoot,
+    input.artifactRoot,
+    INTENT_MARKDOWN_ARTIFACT_NAME,
+    input.reportMarkdown
+  )
+}
+
 export const writePartialReviewArtifacts = async (
   input: {
     readonly repositoryRoot: string

@@ -172,6 +172,74 @@ describe('context retrieval', () => {
     }
   })
 
+  // A batch shares ONE traversal, which is the only reason it exists: the
+  // per-query shape re-walked the repository and re-read every eligible file once
+  // per query. Batching must not change a single result, a single ledger entry, or
+  // the budget it spends, so this pins all three against the per-query path.
+  test('a batched grep matches running the same queries one at a time', async () => {
+    const root = await createTempRepo()
+    const batchLedger: ContextLedgerEntry[] = []
+    const serialLedger: ContextLedgerEntry[] = []
+
+    try {
+      const queries = [
+        { query: 'other', matchMode: 'identifier' as const },
+        { query: 'value', matchMode: 'identifier' as const },
+        { query: 'no-such-symbol', matchMode: 'identifier' as const }
+      ]
+      const batched = await createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxSearches: 3, maxMatches: 5 },
+        ledgerEntries: batchLedger
+      }).grepRepositoryBatch({ queries })
+      const serialRetriever = createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxSearches: 3, maxMatches: 5 },
+        ledgerEntries: serialLedger
+      })
+      const serial = []
+
+      for (const query of queries) {
+        serial.push(await serialRetriever.grepRepository(query))
+      }
+
+      expect(batched.map((result) => result.content)).toEqual(
+        serial.map((result) => result.content)
+      )
+      expect(batched.map((result) => result.matches)).toEqual(
+        serial.map((result) => result.matches)
+      )
+      expect(batched.map((result) => result.summary)).toEqual(
+        serial.map((result) => result.summary)
+      )
+      expect(batchLedger).toHaveLength(serialLedger.length)
+      expect(serialRetriever.budget().usedSearches).toBe(3)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a batched grep refuses a batch the search budget cannot afford in full', async () => {
+    const root = await createTempRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxSearches: 2 }
+      })
+
+      await expect(
+        retriever.grepRepositoryBatch({
+          queries: [{ query: 'a' }, { query: 'b' }, { query: 'c' }]
+        })
+      ).rejects.toThrow(/search budget exceeded/iu)
+      // Refused whole: nothing was charged, so the caller can retry smaller.
+      expect(retriever.budget().usedSearches).toBe(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('grep recursively finds matches in nested directories', async () => {
     const root = await createEligibilityFixtureRepo()
 
