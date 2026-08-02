@@ -195,8 +195,41 @@ export const renderMarkdownReport = (input: unknown): string => {
   lines.push('', '## Cost And Timing', '')
   lines.push(`- Duration: ${report.run.durationMs} ms`)
 
+  // Spend and tokens, stated on every report rather than left to a JSON field.
+  // This engine bills a provider per run and the reader is the person paying, so
+  // the amount belongs beside the findings — the same place the PR comment already
+  // puts it. `costUsd` was previously printed as a bare number (`Cost: 2.2276`),
+  // which reads as a count of something rather than as money.
+  //
+  // Tokens are reported alongside because cost alone cannot be acted on: input
+  // dominates output by roughly 23:1 here, so a reader deciding whether to narrow
+  // `paths.include` needs to see WHICH side is large. `cachedInputTokens` is a
+  // SUBSET of `inputTokens`, never an addition, and is shown because a warm cache
+  // can change spend severalfold with no change to the review itself — a run that
+  // looks cheap next to yesterday's may differ only in cache warmth.
   if (report.run.costUsd !== undefined) {
-    lines.push(`- Cost: ${report.run.costUsd}`)
+    lines.push(`- Cost: $${report.run.costUsd.toFixed(4)}`)
+  } else {
+    // Never silently omitted: a missing cost means tokens or prices were
+    // unavailable, and a reader must be able to tell that from "this was free".
+    lines.push('- Cost: unavailable (token counts or model prices were missing)')
+  }
+
+  if (report.run.inputTokens !== undefined) {
+    const cached =
+      report.run.cachedInputTokens === undefined
+        ? ''
+        : ` (${report.run.cachedInputTokens.toLocaleString('en-US')} cached)`
+
+    lines.push(
+      `- Input tokens: ${report.run.inputTokens.toLocaleString('en-US')}${cached}`
+    )
+  }
+
+  if (report.run.outputTokens !== undefined) {
+    lines.push(
+      `- Output tokens: ${report.run.outputTokens.toLocaleString('en-US')}`
+    )
   }
 
   return `${lines.join('\n')}\n`
