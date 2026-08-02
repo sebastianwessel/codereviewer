@@ -404,6 +404,7 @@ Enable it with:
 
 ```
 codereviewer intent check [--config <path>] [--base-ref <ref>] [--head-ref <ref>]
+                         [--format json|markdown]
 ```
 
 | Flag | Value | Notes |
@@ -411,9 +412,29 @@ codereviewer intent check [--config <path>] [--base-ref <ref>] [--head-ref <ref>
 | `--config` | path | Config file path override. |
 | `--base-ref` | git ref | Overrides `review.baseRef`. |
 | `--head-ref` | git ref | Overrides `review.headRef`. |
+| `--format` | `json` (default), `markdown` | What goes to stdout. The Markdown artifact is written either way. |
 
 `intent` accepts no subcommand other than `check` (`Expected command: intent
-check`, exit `2`). Stdout is the report JSON; nothing is written to disk.
+check`, exit `2`). Stdout is the report JSON by default, so existing scripted use
+is unchanged; `--format markdown` puts the rendered mapping there instead.
+
+A **completed** run also writes a run directory under
+[`paths.artifactDir`](./configuration/review.md#paths), the same place `review`
+writes its artifacts:
+
+| Artifact | Content |
+| --- | --- |
+| `intent-report.md` | The rendered mapping — obligations the change does not evidence first, then the undecidable ones, then the evidenced ones with their citations, then changed files no obligation cites. |
+| `intent-report.json` | The same report, byte-identical to what `--format json` prints. |
+
+The directory is named `intent-<uuid>` and the path of the Markdown file is
+printed to **stderr** so stdout stays exactly one JSON document. Intent runs are
+**not** recorded in the run index: that index feeds baseline resolution, which
+expects a review report. The four outcomes that map nothing — `disabled`,
+`no-intent`, `unusable-intent`, `provider-unavailable` — write nothing at all.
+`no-intent` is the ordinary outcome for a change with a thin description, and a
+run directory per invocation for it would litter a repository that never asked
+for the stage.
 
 **This command reports a mapping, not a verdict.** It reads the change's stated
 intent — the pull-request description, a linked ticket, a commit body, whatever

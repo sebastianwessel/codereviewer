@@ -39,9 +39,12 @@ Two important artifact groups live **outside** it:
     │   ├── fix-report.json
     │   ├── verification-report.json
     │   └── error.json
-    └── impact-<uuid>/          # one completed `impact check`
-        ├── impact-report.md
-        └── impact-report.json
+    ├── impact-<uuid>/          # one completed `impact check`
+    │   ├── impact-report.md
+    │   └── impact-report.json
+    └── intent-<uuid>/          # one completed `intent check`
+        ├── intent-report.md
+        └── intent-report.json
 ```
 
 `.codereviewer/**` is in the default [`paths.exclude`](./configuration/review.md#paths),
@@ -193,6 +196,27 @@ A **completed** `impact check` writes its own run directory under
 The path of the Markdown file is printed to stderr. A **disabled** run writes
 nothing. These runs are deliberately **not** recorded in `index.json`: the index
 feeds baseline resolution, which expects a review report.
+
+## `intent check` artifacts
+
+A **completed** `intent check` writes its own run directory under
+`paths.artifactDir`, named `intent-<uuid>`:
+
+| File | Contents |
+| --- | --- |
+| `intent-report.md` | The rendered mapping. Obligations this change does not evidence come first, then the ones the judgement could not decide, then the evidenced ones with the path, line and side of every citation. Each entry shows the line of the stated intent it was read from, so an obligation you disagree with can be rejected at source. |
+| `intent-report.json` | The same report, identical to `--format json` on stdout. |
+
+The path of the Markdown file is printed to stderr. The four outcomes that map
+nothing — `disabled`, `no-intent`, `unusable-intent`, `provider-unavailable` —
+write nothing. Like impact runs, these are deliberately **not** recorded in
+`index.json`.
+
+The document says what the change does and does not **show**, never what is
+undone: an obligation with no evidence here may have been satisfied by an earlier
+change, deliberately deferred, or genuinely missed, and the report cannot tell
+which. Reading `not-evidenced` as "not done" is this stage's dominant measured
+error, not a wrong answer from it.
 
 ## Log file
 

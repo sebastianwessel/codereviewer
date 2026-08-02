@@ -129,16 +129,32 @@ bounds a single network call and is the only deadline that exists.
   information failure, and it is the reason the iterative review-fix-re-review
   loop matters more than any single-pass tuning.
   → [What limits recall](../05-quality/what-limits-recall.md)
-- **`impact check` now has one measurement; the other two have none.** Scored
-  against the 27 out-of-diff expectations — the population it exists for — it
-  localises **20 of 27 (74.1%)** inside a symbol it flagged as changed. That is
-  COVERAGE, not detection: it reports risk and never claims a defect, so the figure
-  is not comparable to the review stage's recall. `intent check` and
-  `conformance check` are implemented and runnable but have never been scored. Treat their output
-  as a prompt for a human, not as a result. (`intent check`'s *precision* has been
-  diagnosed offline, which is a different thing from an accuracy measurement — the
-  diagnosis found the dominant failure to be a question mismatch rather than
-  judgement quality.)
+- **`impact check` now has one measurement.** Scored against the 27 out-of-diff
+  expectations — the population it exists for — it localises **20 of 27 (74.1%)**
+  inside a symbol it flagged as changed. That is COVERAGE, not detection: it
+  reports risk and never claims a defect, so the figure is not comparable to the
+  review stage's recall. `conformance check` is implemented and runnable but has
+  never been scored; treat its output as a prompt for a human, not as a result.
+- **`intent check` is the most-measured stage here, and none of its numbers
+  describe the engine that ships.** Four scored rounds over two corpora put
+  end-to-end outstanding recall at **81.2%** and outstanding precision at
+  **51.5%** on intent written *before* the change — but every one of those runs
+  predates the 2026-08-01 removal of the citation-aptness stage and the
+  `evidenced`/`not-evidenced` rename, and none carries an engine provenance
+  sidecar, so the corpus's own scorer now refuses to score them. Re-read under the
+  outstanding list the current engine builds, the same stored runs give **78.3%
+  recall at 55.6% precision** — the removed stage was adding 18 entries of which
+  15 were already done.
+- **That lane's repeatability is now measured, and it is the limit on every figure
+  above.** Three cases run twice against one pinned engine, identical inputs:
+  **87.0% verdict agreement** on statements both runs produced, and only **83.6%**
+  of statements reproduced at all. The same three cases across the rename scored
+  **86.7%** — the lane disagrees with *itself* as much as it disagrees with its
+  predecessor. No single-run intent figure, published here or elsewhere, has a
+  variance band, and a difference smaller than that gap cannot be attributed to
+  anything. Its dominant *precision* failure remains a question mismatch — the run
+  correctly reporting "this diff does not evidence it" against an answer key
+  asking "does it hold at head" — rather than judgement quality.
 - **A single run is not a result.** Seed-to-seed variance on the real-repository
   corpus is about 5 percentage points of recall (sd ≈ 4.8pp). A headline figure is
   a mean, never the best run, and an effect below roughly 10pp cannot be resolved

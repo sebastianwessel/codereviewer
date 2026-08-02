@@ -25,6 +25,7 @@ export {
   createIntentFulfilmentLane,
   type IntentFulfilmentLane
 } from './intent-fulfilment-lane.js'
+export { renderIntentFulfilmentMarkdown } from './intent-markdown.js'
 export {
   ChangeCitationSchema,
   ExtraScopeEntrySchema,

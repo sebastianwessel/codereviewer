@@ -18,6 +18,67 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-08-02 — `intent check`'s repeatability measured for the first time: 87.0% verdict agreement against ITSELF, which is the limit on every intent figure in this ledger
+
+Artifacts: `.codereviewer/eval/intent-corpus-realistic/score-2026-08-02-repeatability.txt`,
+`.../score-2026-08-02-current-engine-list.txt`, pre-registration at
+`.../prereg-2026-08-02-postrename.md`, runs preserved under
+`.../runs-2026-08-02-postrename/` and `.../runs-2026-08-02-postrename-repeat/`.
+Engine pinned at `54ea0c0` with a dependency digest, provenance sidecar per case.
+
+**Why this round exists.** Three commits changed the domain after the entry below
+was measured: `21b9a1c` removed the citation-aptness stage, `ecd69bf` renamed the
+two decided statuses **in the judgement prompt as well as the schema**, `70cde9b`
+made the obligation limit refuse instead of truncate. None of the 28 stored runs
+carries an `engine.json`, so `score.mjs` refuses to score them at all. Every intent
+figure in this ledger therefore describes an engine that no longer exists.
+
+**1. The aptness removal, re-read exactly on the stored runs** (`score.mjs
+--no-aptness`; the stage only ever downgraded an already-decided verdict, so
+dropping its flag reconstructs the list the current engine would build from answers
+it already gave). Pre-written arm, primary reading:
+
+| | as run | current engine's list |
+| --- | ---: | ---: |
+| outstanding recall, reported | 84.6% (88/104) | **81.7% (85/104)** |
+| outstanding recall, end-to-end | 81.2% (56/69) | **78.3% (54/69)** |
+| outstanding precision | 51.5% (88/171) | **55.6% (85/153)** |
+| false-satisfied | 6.0% (16/265) | **6.7% (19/283)** |
+
+The stage was adding **18 entries to the pre-written arm's outstanding list, 15 of
+them already done** — 16.7% precision on its own additions against the lane's 51.5%.
+Its removal was decided on the *other* corpus; this corroborates it on this one.
+It costs 2.9pp of end-to-end recall and buys 4.1pp of precision.
+
+**2. Whether the rename moved answers — and the noise floor that question needs.**
+Three cases (`pw11` the purest question-mismatch case, `pw08` the opposite shape,
+`ph01` the cheapest control), pre-registered before running, matched across rounds
+by the statement matcher `carryover.mjs` already used.
+
+| arm | statements matched | verdict agreement | spend |
+| --- | ---: | ---: | ---: |
+| stored round → current engine | 80.4% (45/56) | **86.7% (39/45)** | $0.3298 |
+| current engine → **itself, same inputs** | 83.6% (46/55) | **87.0% (40/46)** | $0.2681 |
+
+**The lane disagrees with itself as much as it disagrees with its predecessor.** The
+pre-registered falsification bar was 80% agreement (rename detectable) versus ≥95%
+same-engine (rename real); the control landed at 87.0%, so the rename is not
+detectable at this sample size and the stored hand ground truth can be carried
+forward. What the control actually establishes is larger than what it was run for:
+**one in eight verdicts flips on identically-worded statements, one in six
+statements is not reproduced at all, and identical inputs cost 19% more one run than
+the next** ($0.3298 vs $0.2681). No intent figure in this ledger — including 81.2%
+and 51.5% — has ever had a variance band, and every one of them is a single run.
+
+**What this does NOT establish.** Nothing about the corpus at large: n=3, one repeat.
+It is a repeatability probe and a carry-forward check, not a re-measurement, and the
+28-case round below is still the only scored population.
+
+Total provider spend for this entry: **$0.5979** (three cases twice). The
+counterfactual in part 1 cost nothing — it re-reads stored artifacts.
+
+---
+
 ## 2026-08-01 — Spec 23's "extraction is the bottleneck" diagnosis was 60% a BINDING CAP. Re-measured uncapped: end-to-end recall 53.6% → 81.2%
 
 Detail: `reports/2026-08-01-intent-uncapped-remeasurement.md`. Capped runs preserved

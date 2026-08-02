@@ -8,7 +8,15 @@
 // It carries spec 23's two exit-code rows: "Cannot fail a pipeline on fulfilment
 // grounds" and "Absent intent reports plainly and exits successfully".
 import { execFileSync } from 'node:child_process'
-import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
@@ -320,6 +328,100 @@ describe('intent CLI', { timeout: 20_000 }, () => {
       // strongest case a gate would want to fail on. It still exits 0.
       expect(parseReport(notEvidenced.stdout).summary.notEvidencedStatusCount).toBe(1)
       expect(parseReport(notEvidenced.stdout).summary.evidencedCount).toBe(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // A report a reviewer has to go looking for is not in the workflow they use.
+  // `review` writes `report.md` into a run directory; this puts the mapping in the
+  // same place, and names it so the two schemas can never be confused.
+  test('writes a rendered mapping into a run directory, and names it on stderr', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeConfig(
+        root,
+        { enabled: true },
+        { provider: { id: 'openai', model: 'sentinel-model' } }
+      )
+      await writeTicket(root, 'Reject tokens older than five minutes.')
+      const result = await check(root, {
+        cwd: root,
+        environment: { OPENAI_API_KEY: 'sk-test' },
+        providerImport: async () => ({
+          openai: () => new ScriptedIntentProvider({ status: 'not-evidenced' })
+        })
+      })
+
+      const runDirectories = await readdir(join(root, '.codereviewer', 'runs'))
+      expect(runDirectories).toHaveLength(1)
+      expect(runDirectories[0]).toMatch(/^intent-/u)
+
+      const markdown = await readFile(
+        join(root, '.codereviewer', 'runs', runDirectories[0] ?? '', 'intent-report.md'),
+        'utf8'
+      )
+      expect(markdown).toContain('# Intent Fulfilment Report')
+      expect(markdown).toContain('## Not evidenced by this change (1)')
+
+      // stdout stays exactly one JSON document: a script reading it must keep
+      // working, so the artifact path goes to stderr.
+      expect(() => parseReport(result.stdout)).not.toThrow()
+      expect(result.stderr).toContain(
+        `.codereviewer/runs/${runDirectories[0]}/intent-report.md`
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // `no-intent` is the ORDINARY outcome for most changes. A run directory per
+  // invocation for a capability that is off by default, and that nothing ever
+  // enumerates again, would litter a repository whose owner never asked for it.
+  test('an outcome that mapped nothing leaves no run directory behind', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeConfig(root, { enabled: true })
+      const result = await check(root)
+
+      expect(parseReport(result.stdout).status).toBe('no-intent')
+      await expect(readdir(join(root, '.codereviewer', 'runs'))).rejects.toThrow()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('--format markdown puts the rendered mapping on stdout instead of JSON', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeConfig(root, { enabled: true })
+      const result = await runCli(
+        ['intent', 'check', '--base-ref', 'main~1', '--head-ref', 'HEAD', '--format', 'markdown'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain('# Intent Fulfilment Report')
+      expect(result.stdout).toContain('## Nothing was mapped')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects a format it does not implement rather than ignoring it', async () => {
+    const root = await createRepository()
+
+    try {
+      const result = await runCli(
+        ['intent', 'check', '--format', 'html'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('--format must be one of json, markdown')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
