@@ -152,6 +152,23 @@ bounds a single network call and is the only deadline that exists.
   outstanding list the current engine builds, the same stored runs give **78.3%
   recall at 55.6% precision** — the removed stage was adding 18 entries of which
   15 were already done.
+- **That 55.6% was measuring a question the lane is not asked, and the corrected
+  figure is 95.4%.** The answer key graded every obligation on whether it HOLDS AT
+  HEAD; spec 23 says plainly that the lane can only answer "do these lines evidence
+  this obligation?". "Outstanding precision" was never one of spec 23's three named
+  metrics — the scorer invented it, and its numerator asked the head question of an
+  answer given to the diff question. One case carries 33 obligations, zero genuine
+  leftovers, and 18 flagged, because it judges the second of two commits against
+  clauses the first satisfied. A second hand label was added over 153 rows and both
+  precisions are now reported side by side, never one instead of the other:
+  **lane precision 95.4% (146/153)** on what it is asked, **list precision 55.6%**
+  on what a reader assumes the list means. The relabel is not tuning to the engine:
+  the same labels surfaced 8 genuine misses the old metric could not see, and
+  convict the lane harder on a metric that did not previously exist —
+  **40% (8/20) of hand-labelled `evidenced` rows cite something that is not
+  evidence**, including specification prose the commit itself rewrites. Spec 23
+  ranks a confident satisfaction claim as the expensive error, so that 40% is now
+  the stage's real open defect, not the precision headline.
 - **That lane's repeatability is now measured, and it is the limit on every figure
   above.** Three cases run twice against one pinned engine, identical inputs:
   **87.0% verdict agreement** on statements both runs produced, and only **83.6%**
