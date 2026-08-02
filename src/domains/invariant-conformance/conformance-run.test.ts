@@ -327,6 +327,112 @@ describe('invariant conformance run', () => {
     ])
   })
 
+  // Test files are excluded on BOTH sides. A test declaration's siblings are other
+  // test declarations, and the pattern they share is the vocabulary of the test
+  // harness — "43 of 60 siblings call `assertNoOutput`, this one does not" is true
+  // and worthless. The first real-repository measurement of this capability found
+  // that the majority of everything it reported had this shape, and that tests were
+  // where the near-duplicate structure that produces the floods lives.
+  describe('test files', () => {
+    test('a sibling test file supplies no peers', async () => {
+      const changed = handler('remove', ['  return load(request)'])
+      const root = await createRepository({
+        'src/handlers/remove.ts': changed,
+        // Unanimous among the siblings, and every sibling is a test. Before the
+        // exclusion this reported `remove` as the odd one out for not calling
+        // `requireAuth` like the tests around it do.
+        'src/handlers/read.test.ts':
+          guardedHandler('readOne') + guardedHandler('readAll'),
+        'src/handlers/write.spec.ts': guardedHandler('writeOne')
+      })
+      const report = await runInvariantConformance({
+        repositoryRoot: root,
+        config: enabledConfig,
+        baseRef: 'main',
+        headRef: 'HEAD',
+        generatedAt,
+        ...createSeams(root),
+        runGit: gitFor('src/handlers/remove.ts', changed.split('\n').length)
+      })
+
+      // The seed still landed, so this is the peers being excluded rather than
+      // the changed file failing to parse.
+      expect(report.summary.changedDeclarationCount).toBe(1)
+      expect(report.scope.peerFileCount).toBe(0)
+      expect(report.summary.peerSetCount).toBe(0)
+      expect(report.warnings).toEqual([
+        'No changed declaration had a sibling declaration in its own file or directory, so no peer set could be built.'
+      ])
+    })
+
+    test('a changed test file seeds nothing and says so', async () => {
+      const changed = handler('remove', ['  return load(request)'])
+      const root = await createRepository({
+        'src/handlers/remove.test.ts': changed,
+        'src/handlers/read.ts': guardedHandler('readOne') + guardedHandler('readAll'),
+        'src/handlers/write.ts': guardedHandler('writeOne')
+      })
+      const report = await runInvariantConformance({
+        repositoryRoot: root,
+        config: enabledConfig,
+        baseRef: 'main',
+        headRef: 'HEAD',
+        generatedAt,
+        ...createSeams(root),
+        runGit: gitFor('src/handlers/remove.test.ts', changed.split('\n').length)
+      })
+
+      expect(report.scope.changedFileCount).toBe(0)
+      expect(report.summary.changedDeclarationCount).toBe(0)
+      // Nothing was read for peers either: with the only changed file excluded
+      // there is no directory left to look in.
+      expect(report.scope.peerFileCount).toBe(0)
+      // The silence is explained. Without this the report is empty, carries no
+      // warning at all, and reads like a capability that failed.
+      expect(report.warnings).toEqual([
+        "1 changed test file(s) were excluded from conformance analysis: a test declaration's siblings are other tests, and what they share is test-harness vocabulary rather than a protective convention of the system under review."
+      ])
+    })
+
+    test('a peer whose test convention is in its content, not its name, is excluded too', async () => {
+      // One language declares a test with an attribute rather than a filename
+      // affix, so the name-based filter cannot see it. The file is read and then
+      // dropped, which is the only reason the predicate runs twice.
+      const changed = [
+        'pub fn remove(request: &Request) -> Response {',
+        '    load(request)',
+        '}',
+        ''
+      ].join('\n')
+      const guarded = (name: string): string =>
+        [
+          `pub fn ${name}(request: &Request) -> Response {`,
+          '    require_auth(request);',
+          '    load(request)',
+          '}',
+          ''
+        ].join('\n')
+      const root = await createRepository({
+        'src/store.rs': changed,
+        // Named like production, and the only file that could supply a peer.
+        'src/helper.rs': `#[test]\n${guarded('read_one')}${guarded('read_all')}`
+      })
+      const report = await runInvariantConformance({
+        repositoryRoot: root,
+        config: enabledConfig,
+        baseRef: 'main',
+        headRef: 'HEAD',
+        generatedAt,
+        ...createSeams(root),
+        runGit: gitFor('src/store.rs', changed.split('\n').length)
+      })
+
+      expect(report.summary.changedDeclarationCount).toBe(1)
+      expect(report.scope.peerFileCount).toBe(0)
+      expect(report.summary.peerSetCount).toBe(0)
+    })
+  })
+
   test('counts an unreadable file rather than failing the report', async () => {
     const changed = handler('remove', ['  return load(request)'])
     const root = await createRepository({ 'src/handlers/remove.ts': changed })

@@ -91,3 +91,29 @@ describe('ruby test destinations', () => {
     }
   )
 })
+
+describe('python whole-module test naming', () => {
+  // The affix forms (`test_x.py`, `x_test.py`) put the subject in the filename. A
+  // module whose entire stem is `test`/`tests` puts it in the package: it is the
+  // test module OF its package, with nothing left in the name to affix to. It was
+  // read as production, which on a large test module misfiled every reference in
+  // it at once.
+  test.each([
+    'tests.py',
+    'tests/admin_scripts/tests.py',
+    'app/accounts/test.py'
+  ])('%s is a test destination', (path) => {
+    expect(classifyReferenceDestination(path)).toBe('test')
+  })
+
+  test.each([
+    'src/testing.py',
+    'src/testutils.py',
+    'src/testdata.py',
+    'src/latest.py'
+  ])('%s is production', (path) => {
+    // The stem is matched exactly, not as a prefix: these are production helpers
+    // about tests, and a `test*` prefix rule would swallow them.
+    expect(classifyReferenceDestination(path)).toBe('source')
+  })
+})

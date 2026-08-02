@@ -13,10 +13,27 @@ import {
 const isEcmascriptTestPath = (path: string): boolean =>
   /(?:^|[./_-])(?:test|spec)\.(?:[cm]?[jt]sx?)$/u.test(path)
 
+// Python names a test module in three forms, and the third was missing.
+//
+// `test_<subject>.py` and `<subject>_test.py` carry the subject in the filename. A
+// module whose ENTIRE stem is `test`/`tests` carries it in the package instead:
+// `<package>/tests.py` is the test module of that package, and there is no subject
+// left in the name for an affix to attach to. It is the same convention with the
+// subject moved one level up, and the language's own test discovery walks the
+// package looking for exactly this shape.
+//
+// The stem is matched EXACTLY rather than as a prefix. `testing.py`, `testutils.py`
+// and `testdata.py` are production helpers *about* tests, and a `test*` prefix would
+// sweep them in. Demoting production code into the test bucket is the costlier
+// mistake, so the widening stops at the bare stem.
 const isPythonTestPath = (path: string): boolean => {
   const name = path.split('/').at(-1) ?? path
 
-  return /^test_.+\.py$/u.test(name) || /_test\.py$/u.test(name)
+  return (
+    /^test_.+\.py$/u.test(name) ||
+    /_test\.py$/u.test(name) ||
+    /^tests?\.py$/u.test(name)
+  )
 }
 
 const isGoTestPath = (path: string): boolean => path.endsWith('_test.go')

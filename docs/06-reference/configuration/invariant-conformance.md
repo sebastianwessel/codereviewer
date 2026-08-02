@@ -83,6 +83,23 @@ divergence is not a finding.
 excluded from review is excluded here too, so it can neither be a changed file
 nor supply a peer.
 
+### Test files are never compared
+
+Test files are excluded on both sides and there is no setting to include them:
+a changed test file seeds no declaration, and a sibling test file supplies no
+peer. A test function's siblings are other test functions, and what they share is
+the vocabulary of the test harness rather than a protective convention of the
+system under review — "most sibling declarations call this assertion helper and
+this one does not" is true and tells a reviewer nothing. Test files are also
+where near-duplicate structure is densest, so including them produced most of
+the report on a repository that has many of them.
+
+What counts as a test file is each language's own convention (`*_test.go`,
+`test_*.py`, `*.test.ts`, `*_spec.rb`, a Rust file declaring a test), the same
+definition `impact check` splits production dependents from test dependents
+with. When a change touches only test files the report is empty and warns that
+they were excluded, so the silence is never unexplained.
+
 ## Related
 
 - [CLI reference](../cli.md#codereviewer-conformance-check)

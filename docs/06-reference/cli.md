@@ -628,7 +628,10 @@ Enable it with:
 Every step is deterministic and none of it involves a model.
 
 1. **Seed.** The declarations whose body the diff touched, from the same
-   deterministic signal extractors `review` uses.
+   deterministic signal extractors `review` uses. **Test files are skipped**, as
+   a seed and as a peer: a test's siblings are other tests, and the pattern they
+   share is the vocabulary of the test harness rather than a convention of the
+   system under review.
 2. **Peer set.** Sibling declarations of the same kind, in the same language, at
    the same nesting depth, in the changed declaration's own file and its own
    directory. Nothing wider is searched.
