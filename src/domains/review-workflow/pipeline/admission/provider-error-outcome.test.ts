@@ -38,7 +38,7 @@ describe('model admission provider-error outcome', () => {
     })
   })
 
-  test('creates recovered provider-error admission outcomes', () => {
+  test('reports the candidate as unadjudicated, not as recovered', () => {
     expect(
       refutationProviderErrorOutcome({
         candidate: candidate(),
@@ -71,7 +71,7 @@ describe('model admission provider-error outcome', () => {
         {
           code: 'provider_timeout',
           stage: 'refutation-check',
-          recovered: true,
+          recovered: false,
           message: 'provider timed out'
         }
       ]

@@ -225,7 +225,9 @@ export const runSemanticFindingMerge = async (
         providerIssueForError({
           error,
           stage: 'semantic_finding_merge',
-          recovered: true
+          // Not recovered: this file's candidates go unmerged, so duplicates
+          // that the merge existed to collapse survive into admission.
+          recovered: false
         })
       )
       continue

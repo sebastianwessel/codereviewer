@@ -773,7 +773,7 @@ describe('semantic finding merge inside discovery', () => {
     expect(result.candidates).toHaveLength(2)
     expect(result.rejectedFindings).toEqual([])
     expect(result.providerIssues).toHaveLength(1)
-    expect(result.providerIssues[0]?.recovered).toBe(true)
+    expect(result.providerIssues[0]?.recovered).toBe(false)
   })
 })
 
@@ -1025,7 +1025,7 @@ describe('discovery call failure tolerance', () => {
     // it. A dropped case would silently corrupt any comparison built on the run.
     expect(result.candidates).toEqual([])
     expect(result.providerIssues).toHaveLength(1)
-    expect(result.providerIssues[0]?.recovered).toBe(true)
+    expect(result.providerIssues[0]?.recovered).toBe(false)
   })
 
   test('an unrecognised error still propagates', async () => {

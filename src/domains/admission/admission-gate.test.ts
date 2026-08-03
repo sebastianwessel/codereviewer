@@ -806,6 +806,61 @@ describe('baseline and quality gate', () => {
     })
   })
 
+  // `failOnProviderError` defaults to true and was declared by two specs, but
+  // the gate never read it: it saw only what survived, so a discovery or
+  // refutation outage shrank the set it measures and it passed over the
+  // remainder. A provider failure made a change MORE likely to clear the gate.
+  test('an unrecovered provider issue fails the gate on its own', () => {
+    expect(
+      evaluateQualityGate({
+        admittedFindings: [],
+        thresholds: { maxHigh: 0 },
+        providerIssues: [{ recovered: false }]
+      })
+    ).toMatchObject({
+      passed: false,
+      // Nothing to name: the failure is that findings are MISSING.
+      failingFindingIds: []
+    })
+  })
+
+  test('a recovered provider issue does not fail the gate', () => {
+    // A retry that succeeded lost nothing, and must stay visible in the report
+    // without failing the run.
+    expect(
+      evaluateQualityGate({
+        admittedFindings: [],
+        thresholds: { maxHigh: 0 },
+        providerIssues: [{ recovered: true }]
+      }).passed
+    ).toBe(true)
+  })
+
+  test('an issue that does not say whether it recovered is treated as unrecovered', () => {
+    // `recovered` is optional on the contract. Reading absence as recovery is
+    // absence read as clearance, on the field that exists to report trouble.
+    expect(
+      evaluateQualityGate({
+        admittedFindings: [],
+        thresholds: { maxHigh: 0 },
+        providerIssues: [{}]
+      }).passed
+    ).toBe(false)
+  })
+
+  test('failOnProviderError: false turns the provider check off and nothing else', () => {
+    expect(
+      evaluateQualityGate({
+        admittedFindings: [],
+        thresholds: { maxHigh: 0, failOnProviderError: false },
+        providerIssues: [{ recovered: false }]
+      })
+    ).toMatchObject({
+      passed: true,
+      thresholds: expect.objectContaining({ failOnProviderError: false })
+    })
+  })
+
   test('quality gate ignores artifact-only findings', () => {
     const admitted = admitCandidate({
       candidate,

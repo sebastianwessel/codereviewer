@@ -131,8 +131,13 @@ export const runDiscoveryCall = async (
       throw error
     }
 
+    // NOT recovered. The retrying paths above return their own result; reaching
+    // here means the call was abandoned and this task contributed no candidates.
+    // Reporting that as recovered told a reader the run had coped, and left the
+    // quality gate — which fails on an unrecovered issue — with nothing to fire
+    // on, so a provider outage read as a clean review.
     return emptyResult([
-      providerIssueForError({ error, stage: input.stage, recovered: true })
+      providerIssueForError({ error, stage: input.stage, recovered: false })
     ])
   }
 }

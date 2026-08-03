@@ -188,7 +188,7 @@ describe('runSemanticFindingMerge', () => {
     expect(outcome.mergeCallCount).toBe(1)
   })
 
-  test('a failed merge call degrades to no grouping and a recovered provider issue', async () => {
+  test('a failed merge call degrades to no grouping and an UNrecovered provider issue', async () => {
     const first = candidate({ id: 'cand_9999999999999999', startLine: 2, title: 'One' })
     const second = candidate({ id: 'cand_aaaaaaaaaaaaaaaa', startLine: 3, title: 'Two' })
 
@@ -205,7 +205,7 @@ describe('runSemanticFindingMerge', () => {
     // the review: both candidates survive and the failure stays visible.
     expect(outcome.rejectedFindings).toEqual([])
     expect(outcome.providerIssues).toHaveLength(1)
-    expect(outcome.providerIssues[0]?.recovered).toBe(true)
+    expect(outcome.providerIssues[0]?.recovered).toBe(false)
     expect(outcome.providerIssues[0]?.stage).toBe('semantic_finding_merge')
   })
 

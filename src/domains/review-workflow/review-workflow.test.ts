@@ -2160,7 +2160,7 @@ describe('review workflow', () => {
     expect(result.providerIssues).toEqual([
       expect.objectContaining({
         stage: 'refutation-check',
-        recovered: true
+        recovered: false
       })
     ])
 

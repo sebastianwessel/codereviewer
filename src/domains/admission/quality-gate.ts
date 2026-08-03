@@ -27,10 +27,32 @@ const severityThresholdKey: Readonly<
   medium: 'maxMedium'
 }
 
+// A provider issue this gate treats as a failure: one the run did not recover
+// from, meaning some part of the review did not happen. `recovered` is optional
+// on the contract, and an issue that does not say must be read as unrecovered --
+// the same rule the rest of this gate follows for an unknown baseline status.
+const isUnrecovered = (issue: {
+  readonly recovered?: boolean | undefined
+}): boolean => issue.recovered !== true
+
+/**
+ * The deterministic pass/fail for a completed review run.
+ *
+ * `failOnProviderError` (default `true`) is why `providerIssues` is an input.
+ * Without it the gate saw only what survived: a discovery call that failed
+ * contributed no candidates, a refutation that failed rejected its candidate
+ * unadjudicated, and the gate passed over the smaller set. A provider outage
+ * made a change MORE likely to clear the gate than a healthy run would have,
+ * and the run exited 0. Findings that were never produced cannot be counted,
+ * so the gate has to be told the search was incomplete.
+ */
 export const evaluateQualityGate = (
   input: {
     readonly admittedFindings: readonly AdmittedFinding[]
     readonly thresholds: QualityGateThresholds
+    readonly providerIssues?:
+      | readonly { readonly recovered?: boolean | undefined }[]
+      | undefined
   }
 ): QualityGateResult => {
   const baselineFilteringApplied = input.thresholds.failOnNewOnly === true
@@ -66,14 +88,21 @@ export const evaluateQualityGate = (
     }
   }
 
+  const failOnProviderError = input.thresholds.failOnProviderError ?? true
+  const unrecoveredProviderIssues =
+    failOnProviderError &&
+    (input.providerIssues ?? []).some((issue) => isUnrecovered(issue))
+
   return {
-    passed: failingFindingIds.length === 0,
+    // An unrecovered provider issue fails the gate on its own: it has no
+    // finding to name, because the failure is that findings are MISSING.
+    passed: failingFindingIds.length === 0 && !unrecoveredProviderIssues,
     failingFindingIds: [...new Set(failingFindingIds)],
     thresholds: {
       maxCritical: input.thresholds.maxCritical ?? null,
       maxHigh: input.thresholds.maxHigh ?? null,
       maxMedium: input.thresholds.maxMedium ?? null,
-      failOnProviderError: input.thresholds.failOnProviderError ?? true,
+      failOnProviderError,
       failOnNewOnly: input.thresholds.failOnNewOnly ?? false
     },
     baselineFilteringApplied

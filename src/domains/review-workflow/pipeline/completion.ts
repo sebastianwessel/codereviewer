@@ -334,7 +334,8 @@ export const completeReviewWorkflow = (
   })
   const qualityGate = evaluateQualityGate({
     admittedFindings: baseline.admittedFindings,
-    thresholds: input.workflowInput.qualityGate
+    thresholds: input.workflowInput.qualityGate,
+    providerIssues
   })
 
   return ReviewWorkflowOutputSchema.parse({

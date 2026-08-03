@@ -172,7 +172,7 @@ describe('model admission candidate review', () => {
     ])
   })
 
-  test('reports a provider-error resolution as a recovered provider issue', () => {
+  test('reports a provider-error resolution as an unrecovered provider issue', () => {
     const outcome = reviewCandidateForAdmission({
       workflowInput: workflowInput(),
       candidate: modelCandidate,
@@ -185,7 +185,7 @@ describe('model admission candidate review', () => {
 
     expect(outcome.admissionCandidates).toEqual([])
     expect(outcome.providerIssues).toEqual([
-      expect.objectContaining({ stage: 'refutation-check', recovered: true })
+      expect.objectContaining({ stage: 'refutation-check', recovered: false })
     ])
     expect(outcome.rejectedFindings).toEqual([
       expect.objectContaining({

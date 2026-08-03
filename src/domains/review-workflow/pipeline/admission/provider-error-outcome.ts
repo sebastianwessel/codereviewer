@@ -49,7 +49,11 @@ export const refutationProviderErrorOutcome = (
       providerIssueForError({
         error: input.error,
         stage: input.stage,
-        recovered: true
+        // Not recovered: the candidate was never adjudicated. It is rejected as
+        // `needs-more-evidence`, which removes it from the gate's input — so
+        // calling this recovered let a refutation outage shrink the very set the
+        // gate is measuring, and pass.
+        recovered: false
       })
     ],
     admissionDecisions: [
