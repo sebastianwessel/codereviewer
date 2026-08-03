@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest'
-import { ReviewCommentDraftSchema } from '../../shared/contracts/index.js'
+import {
+  REVIEW_COMMENT_BODY_MAX,
+  ReviewCommentDraftSchema
+} from '../../shared/contracts/index.js'
 import {
   admitCandidate,
   type AdmissionPolicy,
@@ -169,6 +172,111 @@ describe('neutral review-comment drafts', () => {
     })
 
     expect(drafts[0]!.suggestion).toBeUndefined()
+  })
+
+  // The description used to absorb every byte left over, so a long one pushed the
+  // body to the cap and the apply-ready block had nowhere to go — dropped for
+  // EVERY platform, with the body still reading "Suggested fix: <summary>". The
+  // suggestion's room is now reserved before the description is sized.
+  test('a long description does not cost the finding its suggestion', () => {
+    const report = createReportFixture()
+    const finding = report.admittedFindings[0]!
+    const drafts = buildReviewCommentDrafts({
+      ...report,
+      admittedFindings: [
+        {
+          ...finding,
+          // At the contract's own 1200-char bound, with a replacement large
+          // enough that the two together exceed the body cap. Something has to
+          // give, and it must not be the fix.
+          description: 'This description is very long. '.repeat(40).slice(0, 1200),
+          location: { path: 'src/app.ts', startLine: 12, endLine: 13, side: 'new' },
+          fixProposal: {
+            summary: 'Guard the null case.',
+            evidenceIds: finding.admissionEvidenceIds,
+            safety: 'manual-review',
+            edits: [
+              {
+                path: 'src/app.ts',
+                startLine: 12,
+                endLine: 13,
+                replacement: 'const line = 1\n'.repeat(120)
+              }
+            ]
+          }
+        }
+      ]
+    })
+
+    expect(drafts[0]!.suggestion?.replacement).toBe('const line = 1\n'.repeat(120))
+    expect(drafts[0]!.body.length).toBeLessThanOrEqual(REVIEW_COMMENT_BODY_MAX)
+    // The description is what gave way, and it says so with the truncation mark.
+    expect(drafts[0]!.body).toContain('…')
+  })
+
+  // A replacement too large to carry even with the reservation. The fix is
+  // withheld — and the body says so, and says where the replacement survives. It
+  // is NOT `review-comments.json`: when this layer drops the suggestion, the
+  // neutral artifact has no `suggestion` field either.
+  test('a suggestion too large to carry is disclosed, not silently dropped', () => {
+    const report = createReportFixture()
+    const finding = report.admittedFindings[0]!
+    const drafts = buildReviewCommentDrafts({
+      ...report,
+      admittedFindings: [
+        {
+          ...finding,
+          location: { path: 'src/app.ts', startLine: 12, endLine: 13, side: 'new' },
+          fixProposal: {
+            summary: 'Replace the whole block.',
+            evidenceIds: finding.admissionEvidenceIds,
+            safety: 'manual-review',
+            edits: [
+              {
+                path: 'src/app.ts',
+                startLine: 12,
+                endLine: 13,
+                replacement: 'const line = 1\n'.repeat(260)
+              }
+            ]
+          }
+        }
+      ]
+    })
+
+    expect(drafts[0]!.suggestion).toBeUndefined()
+    expect(drafts[0]!.body).toContain('was computed for this finding')
+    expect(drafts[0]!.body).toContain('fixProposal.edits')
+    expect(drafts[0]!.body.length).toBeLessThanOrEqual(REVIEW_COMMENT_BODY_MAX)
+  })
+
+  // The counterweight: a finding with no eligible replacement must NOT claim one
+  // was computed and withheld. A note that fires when nothing was lost is a note
+  // readers learn to skip.
+  test('a finding whose fix was never suggestion-eligible says nothing about one', () => {
+    const report = createReportFixture()
+    const finding = report.admittedFindings[0]!
+    const drafts = buildReviewCommentDrafts({
+      ...report,
+      admittedFindings: [
+        {
+          ...finding,
+          location: { path: 'src/app.ts', startLine: 12, endLine: 13, side: 'new' },
+          fixProposal: {
+            summary: 'Two separate edits.',
+            evidenceIds: finding.admissionEvidenceIds,
+            safety: 'manual-review',
+            edits: [
+              { path: 'src/app.ts', startLine: 12, endLine: 13, replacement: 'a' },
+              { path: 'src/app.ts', startLine: 20, endLine: 20, replacement: 'b' }
+            ]
+          }
+        }
+      ]
+    })
+
+    expect(drafts[0]!.suggestion).toBeUndefined()
+    expect(drafts[0]!.body).not.toContain('was computed for this finding')
   })
 
   test('escapes Markdown metacharacters in untrusted body text', () => {

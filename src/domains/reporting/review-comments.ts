@@ -59,14 +59,20 @@ const editMatchesTargetRange = (
   edit.endLine === targetRange.endLine &&
   edit.endLine >= edit.startLine
 
-// The structured suggestion is emitted only when a single admitted fix edit maps
-// exactly to the comment range, the fix is manual-review, the redacted
-// replacement carries no triple-backtick fence, and a canonically rendered
-// suggestion still fits the body cap.
-const suggestionFor = (
+// Whether a finding's fix can be represented as a structured suggestion AT ALL:
+// a single admitted edit mapping exactly to the comment range, manual-review
+// safety, and a redacted replacement carrying no triple-backtick fence (which
+// would break out of the block).
+//
+// Deliberately NOT a fit check. Whether the rendered block fits the body cap is a
+// budgeting question, and answering it here is what made the suggestion the thing
+// that lost: `bodyFor` gave the description every byte left over, so the body
+// landed AT the cap and no block could ever be appended. A finding with a long
+// description silently lost its apply-ready fix on every platform, while the body
+// still read "Suggested fix: <summary>".
+const eligibleReplacement = (
   finding: AdmittedFinding,
-  targetRange: ReviewCommentTargetRange,
-  body: string
+  targetRange: ReviewCommentTargetRange
 ): string | undefined => {
   const edits = finding.fixProposal?.edits ?? []
 
@@ -80,18 +86,22 @@ const suggestionFor = (
 
   const replacement = normalizedReplacement(edits[0]!)
 
-  // A replacement that itself contains a code fence cannot be represented
-  // without letting it break out of the block. Drop the suggestion in that case.
-  if (replacement.includes(CODE_FENCE)) {
-    return undefined
-  }
-
-  // Body-cap fit is checked against a canonical (```suggestion) rendering. A
-  // replacement that cannot fit degrades to a prose-only draft.
-  const canonical = `${body}\n\n${renderFencedBlock(`${CODE_FENCE}suggestion`, replacement)}`
-
-  return canonical.length <= REVIEW_COMMENT_BODY_MAX ? replacement : undefined
+  return replacement.includes(CODE_FENCE) ? undefined : replacement
 }
+
+// What appending the canonical (```suggestion) block costs a body. Measured
+// against the canonical fence because that is what the neutral draft promises;
+// a platform whose own fence is longer makes its own room (see
+// `review-comment-renderers.ts`).
+const fencedBlockCost = (replacement: string): number =>
+  `\n\n${renderFencedBlock(`${CODE_FENCE}suggestion`, replacement)}`.length
+
+// Said in the body when a replacement WAS computed and could not be carried. The
+// pointer is `report.json`, not `review-comments.json`: when this layer drops the
+// suggestion the neutral artifact has no `suggestion` field either, so the only
+// place the replacement survives is the finding's `fixProposal.edits`.
+const SUGGESTION_WITHHELD_NOTE =
+  'A concrete apply-ready replacement was computed for this finding but does not fit a review comment. It is recorded in full in `report.json` under this finding\'s `fixProposal.edits`.'
 
 // Rendered-length caps for the prose this body carries. They are stated in the
 // RENDERED domain — escaping can grow a string severalfold, so a cap applied to
@@ -218,11 +228,21 @@ const proofLines = (
 // keeps the promise — a long description now costs itself, not the proof, and
 // the previous blind `slice(0, REVIEW_COMMENT_BODY_MAX)` would have cut from the
 // end, dropping the proof off findings with the most to say.
+// The description is the only elastic part, and it is sized LAST — after the
+// title, the proof, the fix summary, any withheld-suggestion note, and the room a
+// suggestion block will need. Everything else is fixed-cost and reserved, so a
+// long description costs itself and nothing else.
+//
+// `reservedForSuggestion` is what makes that true of the suggestion too. Without
+// it the description absorbed the whole remaining budget, the body landed at the
+// cap, and the block that was supposed to follow had nowhere to go.
 const bodyFor = (
   finding: AdmittedFinding,
   input: {
     readonly evidenceById: ReadonlyMap<string, EvidenceRecord>
     readonly refutationById: ReadonlyMap<string, RefutationResult>
+    readonly reservedForSuggestion: number
+    readonly suggestionWithheld: boolean
   }
 ): string => {
   const assemble = (description: string): string =>
@@ -238,6 +258,11 @@ const bodyFor = (
             '',
             `Suggested fix: ${clampRendered(finding.fixProposal.summary, FIX_SUMMARY_MAX)}`
           ]),
+      // Assembled with the body, so its cost is reserved like every other fixed
+      // part. Added as a note rather than left out: "Suggested fix: <summary>"
+      // above it otherwise tells the reader a fix exists and never tells them a
+      // concrete one was computed and dropped.
+      ...(input.suggestionWithheld ? ['', SUGGESTION_WITHHELD_NOTE] : []),
       '',
       `Finding: ${safeText(finding.id)}`
     ].join('\n')
@@ -245,7 +270,9 @@ const bodyFor = (
   return assemble(
     clampRendered(
       finding.description,
-      REVIEW_COMMENT_BODY_MAX - assemble('').length
+      REVIEW_COMMENT_BODY_MAX -
+        assemble('').length -
+        input.reservedForSuggestion
     )
   )
 }
@@ -272,14 +299,34 @@ const draftFor = (
   }
 
   const targetRange = targetRangeFor(finding)
-  const body = bodyFor(finding, input)
-  const replacement = suggestionFor(finding, targetRange, body)
+  const replacement = eligibleReplacement(finding, targetRange)
+  const reservedForSuggestion =
+    replacement === undefined ? 0 : fencedBlockCost(replacement)
+  const reservedBody = bodyFor(finding, {
+    ...input,
+    reservedForSuggestion,
+    suggestionWithheld: false
+  })
+  // Even with the reservation a replacement can be too large to carry — the cap
+  // bounds the whole comment, and a very long replacement exceeds it on its own.
+  // Then the fix is withheld and the body SAYS so, rather than the reader being
+  // told a fix exists with no way to reach it.
+  const fits =
+    replacement !== undefined &&
+    reservedBody.length + reservedForSuggestion <= REVIEW_COMMENT_BODY_MAX
+  const body = fits
+    ? reservedBody
+    : bodyFor(finding, {
+        ...input,
+        reservedForSuggestion: 0,
+        suggestionWithheld: replacement !== undefined
+      })
 
   return ReviewCommentDraftSchema.parse({
     path: finding.location.path,
     targetRange,
     body,
-    ...(replacement === undefined ? {} : { suggestion: { replacement } }),
+    ...(fits ? { suggestion: { replacement } } : {}),
     findingId: finding.id,
     severity: finding.severity,
     category: finding.category

@@ -720,8 +720,16 @@ describe('admission gate', () => {
     // marker may itself be truncated at the boundary, which is acceptable).
     expect(result.status).toBe('admitted')
     expect(result.admittedFinding?.title.length).toBeLessThanOrEqual(120)
+    // The security property, and the only one that must never bend: the
+    // credential is gone. It is gone whether or not the `[REDACTED]` marker
+    // survives the cut.
     expect(result.admittedFinding?.title).not.toContain('b:c@')
-    expect(result.admittedFinding?.title).toContain('REDACTED')
+    expect(result.admittedFinding?.title).not.toContain('a://b')
+    // And the cut announces itself. This replaces an assertion that the whole
+    // word `REDACTED` survived — which the comment above already disclaimed as
+    // boundary-dependent, and which the truncation mark shifted by one
+    // character. Asserting the mark is the claim that is actually true here.
+    expect(result.admittedFinding?.title).toContain('…')
   })
 })
 

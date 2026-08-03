@@ -134,11 +134,29 @@ A strict schema under `src/shared/contracts/`:
   `targetRange` (the eligibility rules below). Never a pre-rendered fenced block.
 - `findingId`, `severity`, `category` — carried from the finding.
 
-Suggestion eligibility (unchanged from current behavior, moved into the neutral
-layer): exactly one fix edit, `fixProposal.safety` is `manual-review`, the edit
-path and line range match `targetRange` exactly, the replacement contains no
-triple-backtick fence, and the rendered result fits the body cap. When
-any check fails, the draft carries the prose fix summary but no `suggestion`.
+Suggestion eligibility, in the neutral layer: exactly one fix edit,
+`fixProposal.safety` is `manual-review`, the edit path and line range match
+`targetRange` exactly, and the replacement contains no triple-backtick fence.
+When any of those fails, the fix could never be a suggestion and the draft
+carries the prose fix summary alone.
+
+Fitting the body cap is NOT one of those checks, and must not be treated as one.
+Eligibility asks whether the fix can be represented; fitting is a budgeting
+question, and answering it as eligibility made the suggestion the thing that
+lost. The body's only elastic part is the description, which is sized LAST —
+after the title, the proof, the fix summary, and the room the suggestion block
+will need. A long description therefore costs itself and never the fix. Before
+this reservation existed the description absorbed the whole remaining budget, the
+body landed at the cap, and the apply-ready replacement was dropped for every
+platform on any finding with a long description.
+
+When a replacement is too large to carry even with the reservation, the draft
+omits `suggestion` and the body MUST say that a concrete replacement was computed
+and where it is recorded — the finding's `fixProposal.edits` in `report.json`,
+because a draft that dropped its suggestion carries none in
+`review-comments.json` either. Silence is forbidden here: the body already reads
+"Suggested fix: <summary>", which tells the reader a fix exists, so saying
+nothing tells them one exists and gives them no way to reach it.
 
 The caps are contract constants, not configuration: a body is at most **3 000**
 characters and a `replacement` at most **4 000**. The replacement bound is
