@@ -284,6 +284,12 @@ const runDiscoveryPass = async (params: {
   }
 }
 
+// Cut to a contract bound, leaving a visible mark inside the bound so the result
+// still satisfies the schema. `…` rather than three dots: one character buys the
+// most room back.
+const markCut = (value: string, max: number): string =>
+  value.length <= max ? value : `${value.slice(0, max - 1).trimEnd()}…`
+
 const candidateFromFinding = (
   task: WorkflowReviewTask,
   raw: unknown
@@ -317,8 +323,12 @@ const candidateFromFinding = (
     taskId: task.id,
     category: finding.category,
     severity: finding.severity,
-    title: finding.title.slice(0, 120),
-    description: finding.description.slice(0, 1200),
+    // Marked, not bare-sliced. The refuter adjudicates this description and a
+    // human reads it in the report; a sentence that stops mid-clause with no mark
+    // reads as the model's complete thought, so a reader weighs an argument whose
+    // ending was removed here. The mark costs three characters of the cap.
+    title: markCut(finding.title, 120),
+    description: markCut(finding.description, 1200),
     location: {
       path: finding.path,
       startLine: finding.startLine,

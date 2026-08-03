@@ -80,6 +80,9 @@ export const createCoverageSummary = (
   input: {
     readonly sourceFiles: readonly SupportSignalSourceFile[]
     readonly contextLedger: readonly ContextLedgerEntry[]
+    // Required, not optional: a caller that forgets it would restore the exact
+    // hole this field exists to close, silently and with a passing certificate.
+    readonly skippedFileCount: number
   }
 ): CoverageSummary => {
   const files = input.sourceFiles.map((file) => {
@@ -120,6 +123,7 @@ export const createCoverageSummary = (
 
   return {
     status: incompleteReasons.length === 0 ? 'complete' : 'incomplete',
+    excludedFileCount: input.skippedFileCount,
     reviewableFileCount: files.length,
     coveredFileCount: files.filter((file) => file.status === 'complete').length,
     reviewableBytes,

@@ -96,6 +96,34 @@ describe('review runner results', () => {
     })
   })
 
+  // A certificate that counts only the files which REACHED review can read
+  // "500 of 500 reviewable — complete" while three hundred were dropped before it.
+  // The Skipped Files section keeps `report.md` honest, but a CI step branching on
+  // `coverage.status` alone saw a clean proof.
+  test('the coverage certificate states how many files never reached review', () => {
+    const entry = createContextLedgerEntry({
+      kind: 'file',
+      path: 'src/a.ts',
+      taskId: 'task_a',
+      reason: 'task-context-source-chunk',
+      decision: 'included',
+      bytesConsidered: 7,
+      bytesIncluded: 7,
+      content: 'let a=1'
+    })
+    const coverage = createCoverageSummary({
+      sourceFiles: [{ path: 'src/a.ts', content: 'let a=1' }],
+      contextLedger: [entry],
+      skippedFileCount: 300
+    })
+
+    // Every file that DID reach review was covered, so the status is honest…
+    expect(coverage.status).toBe('complete')
+    expect(coverage.reviewableFileCount).toBe(1)
+    // …and the certificate now also says what it never opened.
+    expect(coverage.excludedFileCount).toBe(300)
+  })
+
   test('summarizes complete and incomplete source coverage from ledger entries', () => {
     const completeEntry = createContextLedgerEntry({
       kind: 'file',
@@ -123,7 +151,8 @@ describe('review runner results', () => {
         { path: 'src/a.ts', content: 'let a=1' },
         { path: 'src/b.ts', content: 'let b=22' }
       ],
-      contextLedger: [completeEntry, partialEntry]
+      contextLedger: [completeEntry, partialEntry],
+      skippedFileCount: 0
     })
 
     expect(coverage.status).toBe('incomplete')
@@ -232,7 +261,8 @@ describe('review runner results', () => {
           bytesIncluded: 7,
           content: 'let a=1'
         })
-      ]
+      ],
+      skippedFileCount: 0
     })
 
     const report = createReviewReport({
@@ -351,7 +381,8 @@ describe('review runner results', () => {
     } as const
     const coverage = createCoverageSummary({
       sourceFiles: [{ path: 'src/a.ts', content: sourceContent }],
-      contextLedger: [sourceEntry]
+      contextLedger: [sourceEntry],
+      skippedFileCount: 0
     })
     const observability = createNoContentEventRecorder()
     const { logger, records } = createInfoLogger()

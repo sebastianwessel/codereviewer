@@ -193,6 +193,7 @@ const reviewReport = (
   },
   coverage: {
     status: coverageStatus,
+    excludedFileCount: 0,
     reviewableFileCount: 1,
     coveredFileCount: coverageStatus === 'complete' ? 1 : 0,
     reviewableBytes: 100,

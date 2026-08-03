@@ -27,6 +27,7 @@ describe('review runner errors', () => {
     expect(
       createCoverageIncompleteError({
         status: 'incomplete',
+        excludedFileCount: 0,
         reviewableFileCount: 2,
         coveredFileCount: 1,
         reviewableBytes: 20,
@@ -42,6 +43,7 @@ describe('review runner errors', () => {
       recoverable: true,
       exitCode: 1,
       details: {
+        excludedFileCount: 0,
         reviewableFileCount: 2,
         coveredFileCount: 1,
         reviewableBytes: 20,

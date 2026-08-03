@@ -87,6 +87,16 @@ export const CoverageFileSchema = z
 
 export const CoverageSummarySchema = z.strictObject({
   status: z.enum(['complete', 'incomplete']),
+  // Files that never reached review at all — excluded by `review.maxFiles`, too
+  // large for `review.maxFileBytes`, binary, deleted, unsupported.
+  //
+  // The counts below have always been over the files that DID reach review, so a
+  // run that dropped 300 of 800 changed files could report "500 of 500
+  // reviewable — complete". The Skipped Files section keeps `report.md` honest,
+  // but a machine reading `coverage.status` alone — which is exactly what a CI
+  // step does — saw a clean certificate. A proof of what was read has to state
+  // what was never opened, or it is a proof of nothing.
+  excludedFileCount: z.int().min(0),
   reviewableFileCount: z.int().min(0),
   coveredFileCount: z.int().min(0),
   reviewableBytes: z.int().min(0),

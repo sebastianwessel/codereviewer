@@ -34,6 +34,7 @@ const createReport = (
     },
     coverage: {
       status: 'complete',
+      excludedFileCount: 0,
       reviewableFileCount: 0,
       coveredFileCount: 0,
       reviewableBytes: 0,

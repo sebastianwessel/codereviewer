@@ -107,6 +107,10 @@ export const createCoverageIncompleteError = (
   recoverable: true,
   exitCode: 1,
   details: {
+    // Included for the same reason it is on the certificate: a coverage failure
+    // that names only the files which reached review says nothing about the ones
+    // that never did.
+    excludedFileCount: coverage.excludedFileCount,
     reviewableFileCount: coverage.reviewableFileCount,
     coveredFileCount: coverage.coveredFileCount,
     reviewableBytes: coverage.reviewableBytes,

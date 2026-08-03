@@ -96,7 +96,8 @@ describe('review runner quality failure helpers', () => {
   test('creates coverage-incomplete partial failures with admission shared context', () => {
     const coverage = createCoverageSummary({
       sourceFiles: [{ path: 'src/a.ts', content: 'let alpha = 1' }],
-      contextLedger: []
+      contextLedger: [],
+      skippedFileCount: 0
     })
 
     const failure = createReviewRunnerCoverageFailure({
@@ -106,6 +107,9 @@ describe('review runner quality failure helpers', () => {
 
     expect(failure.structuredError.code).toBe('coverage_incomplete')
     expect(failure.structuredError.details).toEqual({
+      // Named in the failure too: a coverage error that counts only the files
+      // which reached review says nothing about the ones that never did.
+      excludedFileCount: 0,
       reviewableFileCount: 1,
       coveredFileCount: 0,
       reviewableBytes: 13,

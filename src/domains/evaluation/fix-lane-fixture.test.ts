@@ -246,6 +246,7 @@ describe('fix-lane fixture', () => {
               },
               coverage: {
                 status: 'complete',
+                excludedFileCount: 0,
                 reviewableFileCount: 2,
                 coveredFileCount: 2,
                 reviewableBytes: 2,

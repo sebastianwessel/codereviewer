@@ -18,6 +18,7 @@ const validReport = {
   },
   coverage: {
     status: 'complete',
+    excludedFileCount: 0,
     reviewableFileCount: 1,
     coveredFileCount: 1,
     reviewableBytes: 120,

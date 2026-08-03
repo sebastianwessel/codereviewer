@@ -101,7 +101,8 @@ export const prepareReviewRunnerCompletionState = (
   const completedAt = input.now()
   const coverage = createCoverageSummary({
     sourceFiles: input.sourceFiles,
-    contextLedger: effectiveContextLedger
+    contextLedger: effectiveContextLedger,
+    skippedFileCount: input.skippedFiles.length
   })
   // Fold the dedicated summarizer's tokens into the run's provider usage so they
   // count toward run cost.

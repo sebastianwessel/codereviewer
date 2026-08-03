@@ -320,6 +320,14 @@ const renderScope = (report: ReviewReport): readonly string[] => {
       ? []
       : [`- Merge base: ${inlineCode(run.mergeBaseRef)}`]),
     `- Files read in full: ${coverage.coveredFileCount} of ${coverage.reviewableFileCount} reviewable (${coverage.coveredBytes.toLocaleString('en-US')} of ${coverage.reviewableBytes.toLocaleString('en-US')} bytes). Coverage status: ${safeText(coverage.status)} — a statement that the source reached a model, not that every defect in it was found.`,
+    // The line above counts only files that REACHED review, so on its own it can
+    // read "complete" while hundreds never got that far. Stated next to it rather
+    // than left to the Skipped Files section further down the page.
+    ...(coverage.excludedFileCount === 0
+      ? []
+      : [
+          `- Files excluded before review even began: ${coverage.excludedFileCount}. They are NOT in the counts above. See "Skipped Files" for why.`
+        ]),
     ...(report.skippedFiles.length === 0
       ? []
       : [
