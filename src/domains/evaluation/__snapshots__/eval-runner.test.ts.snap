@@ -1352,7 +1352,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "severityWeightedRecall": 1,
     "unlistedRealFindingCount": 0,
   },
-  "metricsVersion": "2026-08-01.discovery-telemetry",
+  "metricsVersion": "2026-08-03.plausibility-source-window",
   "provenance": {
     "answerKeyDigest": "8a0f6c4247b62cb5ae0d182f93ca56547fb831d783599d2c4d19626a6452d8e2",
     "answerKeyDigestByCase": {

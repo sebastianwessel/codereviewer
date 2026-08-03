@@ -188,10 +188,20 @@ positive:
 | --- | --- |
 | No judge (offline run) or no file reader | No finding credited; **no warning** — nothing was attempted |
 | Source file unreadable | Genuine false positive + provider issue `plausibility_source_unavailable` |
+| File over the byte cap AND the finding's line outside the window that fit | Genuine false positive + provider issue `plausibility_source_line_omitted`. The judge is not asked at all: scoring a finding against code that was cut away is how a real defect gets recorded as implausible. |
 | Judge call failed after retries | Genuine false positive + provider issue with the normalized error code |
 
 Fail-closed findings are surfaced as the case warning
 `eval-plausibility-fail-closed:<n>`.
+
+The new-side content the judge reads always opens with a completeness marker. A
+file that fits is passed whole and says so; one that does not is passed as a
+window **centred on the finding's line** — never a blind prefix, because the code
+supporting a finding is rarely at the top of a file — and says which lines it
+covers, and that absence of support outside them is not evidence the finding is
+wrong. The marker is stated in both cases for the reason the "None:" line exists
+above: the judge must never have to guess whether a short section means a short
+file.
 
 ---
 

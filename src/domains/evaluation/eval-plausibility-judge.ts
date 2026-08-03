@@ -10,13 +10,24 @@ import type { EvalCase } from './eval-fixture.schema.js'
 
 export const EVAL_PLAUSIBILITY_JUDGE_STAGE = 'eval_plausibility_judge'
 
-// The plausibility judge must see the whole changed file the reviewer saw, not a
-// narrow window: a judge given too little context under-credits real findings by
-// answering "cannot confirm". The file is nevertheless bounded so a pathological
-// input can never blow up the prompt. 64 KiB comfortably holds a real changed
-// source file while capping adversarial input. This is a judgment call; the cap
-// is deliberately generous, not tight.
+// The plausibility judge should see the whole changed file the reviewer saw, not
+// a narrow window: a judge given too little context under-credits real findings
+// by answering "cannot confirm". The file is nevertheless bounded so a
+// pathological input can never blow up the prompt. 64 KiB comfortably holds a
+// real changed source file while capping adversarial input. This is a judgment
+// call; the cap is deliberately generous, not tight. It bounds the WHOLE file
+// section the judge reads, disclosure lines included. When it does bind, the
+// content is a window centred on the finding, always announced as partial --
+// never a silent prefix (see prepareEvalPlausibilitySource).
 export const EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP = 64_000
+
+// The disclosure lines travel in the same bounded prompt as the content they
+// describe, so they are paid for out of the same cap: a notice that pushed the
+// prompt past the cap would defeat the cap it exists to explain. 1 KiB is far
+// more than the header/footer pair needs (two fixed sentences plus a handful of
+// numbers), and it is deliberately not tight -- the content it displaces is a
+// rounding error against a 64 KiB budget.
+const EVAL_PLAUSIBILITY_DISCLOSURE_RESERVE_BYTES = 1_024
 
 // A finding already credited as a real defect elsewhere in the SAME file, either
 // because it matched an expected finding or because an earlier call in this same
@@ -44,7 +55,10 @@ export type EvalPlausibilityJudgeInput = {
   readonly category: string
   readonly path: string
   readonly line: number
-  // Bounded and redacted new-side file content (see prepareEvalPlausibilitySource).
+  // Bounded and redacted new-side file content, carrying its own completeness
+  // disclosure line (see prepareEvalPlausibilitySource). Always the `text` that
+  // helper produced, never raw source: the judge must never be handed content
+  // that was cut without being told so.
   readonly fileContent: string
   // Findings already credited as real defects in this same file, earlier in this
   // same run (see EvalAlreadyCountedFinding). Optional and typically absent for a
@@ -107,9 +121,10 @@ const evalPlausibilityJudgeJsonSchema: JsonValue = {
 // of manufacturing additional distinct defects out of one.
 const plausibilityJudgeInstructions = [
   'You are auditing whether a code review finding describes a GENUINE defect that is actually present in the shown code.',
-  'You are given the finding (title, description, severity, category, location) and the new-side content of the whole file the reviewer saw.',
+  'You are given the finding (title, description, severity, category, location) and the new-side file content the reviewer saw, introduced by a marker line stating whether that content is complete or partial.',
   'Answer plausible=true only when the code shown actually contains the defect the finding describes.',
   'Answer plausible=false when the finding misreads the code, is a style or taste preference, or is not supported by what the code shows.',
+  'When the marker line says the content is partial, the shown range is centred on the finding location: judge from that range, and treat code outside it as unknown rather than as evidence against the finding.',
   'Do not require the finding to match any expected list; decide only from the code in front of you.',
   'You may also be given a list of findings already counted as real defects earlier in this same review, each with its own title, description, and line number.',
   'When that list is non-empty, also decide whether the finding under review describes the SAME underlying defect as one of those already-counted findings, merely restated at a different location, as opposed to a distinct defect of its own.',
@@ -148,31 +163,195 @@ const findingSummary = (input: EvalPlausibilityJudgeInput): string =>
     input.fileContent
   ].join('\n')
 
-// Bound and redact new-side source before it is sent to the plausibility judge.
-// Redaction runs first so a secret can never survive by landing across the byte
-// boundary; truncation then caps the redacted text. Reuses the shared redactor.
-export const prepareEvalPlausibilitySource = (content: string): string => {
-  const redacted = redactText(content)
+// New-side source prepared for the plausibility judge: the exact text the judge
+// reads for the file, plus what the caller needs to know about what the cap did
+// to it.
+export type EvalPlausibilitySource = {
+  // Disclosure line, content, and (when partial) a closing marker. This is what
+  // goes into `EvalPlausibilityJudgeInput.fileContent` verbatim.
+  readonly text: string
+  // True when the byte cap forced a cut, i.e. the judge is NOT looking at the
+  // whole file.
+  readonly partial: boolean
+  // True only when the cap itself removed the finding's location line from the
+  // content. A single field rather than "partial AND line not in range" so a
+  // caller cannot half-apply the check: this is the one condition under which
+  // the judge would be asked to confirm a defect at a line it was never shown.
+  // It stays false for content that was not cut -- a location past the end of a
+  // file we handed over IN FULL is the reviewer's own bad line number, not a
+  // loss this module caused, and the judge sees exactly what it always saw.
+  readonly findingLineOmittedByCap: boolean
+}
 
-  if (Buffer.byteLength(redacted, 'utf8') <= EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP) {
-    return redacted
-  }
+const byteLength = (value: string): number => Buffer.byteLength(value, 'utf8')
 
+// Longest prefix of `value` fitting `budget` bytes, found by binary search on
+// code-unit length so a multi-byte character is never split down the middle.
+const boundedPrefix = (value: string, budget: number): string => {
   let low = 0
-  let high = redacted.length
+  let high = value.length
   while (low < high) {
     const mid = Math.ceil((low + high) / 2)
-    if (
-      Buffer.byteLength(redacted.slice(0, mid), 'utf8') <=
-      EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP
-    ) {
+    if (byteLength(value.slice(0, mid)) <= budget) {
       low = mid
     } else {
       high = mid - 1
     }
   }
 
-  return redacted.slice(0, low)
+  return value.slice(0, low)
+}
+
+// Splits into the lines an editor would number, so a range this module discloses
+// means the same thing as the `path:line` the finding cites. A trailing newline
+// produces a final empty element that is not a line of code; counting it would
+// report a file one line longer than every other tool does.
+const splitLines = (content: string): readonly string[] => {
+  const lines = content.split('\n')
+
+  return lines.length > 1 && lines[lines.length - 1] === ''
+    ? lines.slice(0, -1)
+    : lines
+}
+
+// Grows a window outward from the finding's line, alternating sides, until the
+// next line in either direction no longer fits. Centring on the finding is the
+// whole point: the code that supports a finding is rarely at the top of a file,
+// so a blind prefix is the worst possible guess about which bytes matter.
+const buildLineWindow = (
+  lines: readonly string[],
+  anchorIndex: number,
+  budget: number
+): { readonly startIndex: number; readonly endIndex: number; readonly text: string } => {
+  const anchor = lines[anchorIndex] ?? ''
+  if (byteLength(anchor) > budget) {
+    // Pathological single line (a minified or generated file has exactly one).
+    // Nothing can be centred; the caller still discloses the cut.
+    return {
+      startIndex: anchorIndex,
+      endIndex: anchorIndex,
+      text: boundedPrefix(anchor, budget)
+    }
+  }
+
+  let startIndex = anchorIndex
+  let endIndex = anchorIndex
+  let used = byteLength(anchor)
+  let preferBefore = true
+
+  for (;;) {
+    const beforeIndex = startIndex - 1
+    const afterIndex = endIndex + 1
+    // +1 per line for the newline that rejoins it to the window.
+    const beforeFits =
+      beforeIndex >= 0 && used + byteLength(lines[beforeIndex] ?? '') + 1 <= budget
+    const afterFits =
+      afterIndex < lines.length &&
+      used + byteLength(lines[afterIndex] ?? '') + 1 <= budget
+    if (!beforeFits && !afterFits) {
+      break
+    }
+
+    const takeBefore = beforeFits && (preferBefore || !afterFits)
+    const index = takeBefore ? beforeIndex : afterIndex
+    used += byteLength(lines[index] ?? '') + 1
+    if (takeBefore) {
+      startIndex = index
+    } else {
+      endIndex = index
+    }
+    preferBefore = !preferBefore
+  }
+
+  return {
+    startIndex,
+    endIndex,
+    text: lines.slice(startIndex, endIndex + 1).join('\n')
+  }
+}
+
+// Stated even when nothing was omitted, for the same reason `alreadyCountedSummary`
+// emits an explicit "None:" line: the judge must never have to guess whether a
+// section is short because the file is short or because something was cut.
+const completeContentNotice = (totalLines: number): string =>
+  `[FILE CONTENT COMPLETE: all ${totalLines} lines of the file are shown; nothing was omitted.]`
+
+// Unmissable, and phrased so the judge cannot read the omission as evidence. A
+// finding whose supporting code was cut away used to come back plausible=false
+// with a confident reason -- and that verdict feeds adjustedPrecision, a number
+// this project publishes, so a silent cut here does not merely lose context, it
+// corrupts a published measurement.
+const partialContentNotice = (
+  input: {
+    readonly startLine: number
+    readonly endLine: number
+    readonly totalLines: number
+    readonly line: number
+    readonly includesFindingLine: boolean
+  }
+): string =>
+  [
+    `[FILE CONTENT PARTIAL: lines ${input.startLine}-${input.endLine} of ${input.totalLines} are shown.`,
+    input.includesFindingLine
+      ? `The shown range is centred on the finding's location line ${input.line}.`
+      : `The finding's location line ${input.line} is outside both this range and this file.`,
+    'The rest of the file exceeded the size limit for this prompt and was NOT included.',
+    `Absence of supporting code outside lines ${input.startLine}-${input.endLine} is NOT evidence that the finding is wrong.`,
+    'Judge only from what is shown, and do not answer plausible=false because code you would need to see lies outside the shown range.]'
+  ].join(' ')
+
+const partialContentClosingNotice = (
+  input: { readonly startLine: number; readonly endLine: number; readonly totalLines: number }
+): string =>
+  `[END OF PARTIAL FILE CONTENT: lines ${input.startLine}-${input.endLine} of ${input.totalLines}. The file continues outside this range; what is not shown here is NOT evidence against the finding.]`
+
+// Bound and redact new-side source before it is sent to the plausibility judge.
+// Redaction runs first so a secret can never survive by landing across the byte
+// boundary; the window is then cut from the redacted text. Reuses the shared
+// redactor.
+export const prepareEvalPlausibilitySource = (
+  input: {
+    readonly content: string
+    // The finding's location line, so a cut can be centred on the code that has
+    // to be present rather than on the top of the file.
+    readonly line: number
+  }
+): EvalPlausibilitySource => {
+  const redacted = redactText(input.content)
+  const lines = splitLines(redacted)
+  const totalLines = lines.length
+  const contentBudget =
+    EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP - EVAL_PLAUSIBILITY_DISCLOSURE_RESERVE_BYTES
+
+  if (byteLength(redacted) <= contentBudget) {
+    return {
+      text: `${completeContentNotice(totalLines)}\n${redacted}`,
+      partial: false,
+      findingLineOmittedByCap: false
+    }
+  }
+
+  const anchorIndex = Math.min(Math.max(input.line - 1, 0), totalLines - 1)
+  const window = buildLineWindow(lines, anchorIndex, contentBudget)
+  const startLine = window.startIndex + 1
+  const endLine = window.endIndex + 1
+  const includesFindingLine = input.line >= startLine && input.line <= endLine
+
+  return {
+    text: [
+      partialContentNotice({
+        startLine,
+        endLine,
+        totalLines,
+        line: input.line,
+        includesFindingLine
+      }),
+      window.text,
+      partialContentClosingNotice({ startLine, endLine, totalLines })
+    ].join('\n'),
+    partial: true,
+    findingLineOmittedByCap: !includesFindingLine
+  }
 }
 
 // The plausibility judge is independent from the semantic-match judge but shares
@@ -278,8 +457,9 @@ export type EvalPlausibilityOutcome = {
   readonly plausible: boolean
   readonly reason: string
   // False when the judgment could not be completed (provider error after
-  // retries, or the source file could not be read). Such findings stay counted
-  // as genuine false positives and are surfaced as a run warning.
+  // retries, the source file could not be read, or the byte cap could not keep
+  // the finding's own line). Such findings stay counted as genuine false
+  // positives and are surfaced as a run warning.
   readonly judged: boolean
   // True when the judge decided this finding restates a defect already credited
   // in this file (a match, or an earlier unlisted-real credit in this same run)
@@ -338,7 +518,10 @@ const addCredited = (
 // Fail-closed everywhere: with no judge (offline run) or no reader, no finding
 // is credited as real and no warning is raised (there was nothing to attempt).
 // A judge call or file read that fails leaves the finding a genuine false
-// positive AND records a fail-closed warning plus a provider issue.
+// positive AND records a fail-closed warning plus a provider issue. So does a
+// file so large that the bounded window cannot contain the finding's own line:
+// a verdict reached without the cited code is not a verdict, and this one feeds
+// a published precision number.
 //
 // Restatement collapsing. A precision audit found that a majority of a run's
 // "unlisted-real" evidence was the SAME defect restated at a neighbouring line: a
@@ -419,6 +602,36 @@ export const judgeUnmatchedFindingsPlausibility = async (
       continue
     }
 
+    const source = prepareEvalPlausibilitySource({
+      content: rawContent,
+      line: finding.location.startLine
+    })
+
+    if (source.findingLineOmittedByCap) {
+      // The cap could not keep the finding's own line. Asking anyway would get a
+      // confident verdict on code the judge was never shown, and that verdict is
+      // an input to adjustedPrecision, a published number. Fail closed instead:
+      // the finding stays a genuine false positive (never credited real, so the
+      // engine can never be flattered by our own cut) and the loss is surfaced.
+      outcomes.push({
+        findingId: finding.id,
+        plausible: false,
+        reason: 'Finding location line fell outside the bounded source window; failed closed.',
+        judged: false,
+        restatesAlreadyCounted: false
+      })
+      failClosedFindingIds.push(finding.id)
+      providerIssues.push({
+        code: 'plausibility_source_line_omitted',
+        stage: EVAL_PLAUSIBILITY_JUDGE_STAGE,
+        recovered: false,
+        message:
+          'The finding location line could not be included in the bounded new-side content for plausibility judging.'
+      })
+
+      continue
+    }
+
     try {
       const alreadyCountedFindings = creditedByPath.get(finding.location.path) ?? []
       const judged = await input.judge({
@@ -428,7 +641,7 @@ export const judgeUnmatchedFindingsPlausibility = async (
         category: finding.category,
         path: finding.location.path,
         line: finding.location.startLine,
-        fileContent: prepareEvalPlausibilitySource(rawContent),
+        fileContent: source.text,
         alreadyCountedFindings
       })
       // Only a finding the judge deems genuinely plausible can be a restatement:

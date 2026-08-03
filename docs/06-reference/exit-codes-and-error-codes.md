@@ -172,6 +172,7 @@ These never set an exit code on their own; they appear in `run.warnings` in
 | `External change-intent provider "<id>" produced nothing and was skipped. Check that it points at content this change has.` | The provider worked and had nothing to give — an empty inbox, a mistyped directory, no changed file matching its globs. Worded apart from the failure above because the action is different: check where it points. |
 | Claim-provider warnings | A `verification` claim provider failed; the lane continues and reports an empty or partial result. |
 | `plausibility_source_unavailable` | (eval) A finding's source file could not be read for plausibility judging; the judge fails closed for that finding. |
+| `plausibility_source_line_omitted` | (eval) The file was larger than the judge's byte cap and the finding's own location line fell outside the window that fit, so the judge was not asked. The finding fails closed rather than being scored against code it was never shown. |
 
 ## Related
 

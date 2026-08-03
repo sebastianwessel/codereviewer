@@ -97,7 +97,8 @@ export {
   type EvalPlausibilityJudgeInput,
   type EvalPlausibilityJudgeResult,
   type EvalPlausibilityOutcome,
-  type EvalPlausibilityResult
+  type EvalPlausibilityResult,
+  type EvalPlausibilitySource
 } from './eval-plausibility-judge.js'
 export {
   DEFAULT_MINIMUM_JUDGE_AGREEMENT,

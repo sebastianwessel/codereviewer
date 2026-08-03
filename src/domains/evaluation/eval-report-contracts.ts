@@ -305,7 +305,16 @@ export const EvalMetricGroupSchema = z.strictObject({
 // recorded, because the run that would have produced them is over and its debug
 // log was off. A comparison that pooled such a report would read "no discovery
 // calls" where the truth is "not recorded".
-export const EVAL_METRICS_VERSION = '2026-08-01.discovery-telemetry'
+//
+// `plausibility-source-window`: the plausibility judge used to receive a blind
+// PREFIX of an oversized file, unmarked, so a real finding whose supporting code
+// sat past the cut came back plausible=false with a confident reason. The window
+// is now centred on the finding's line and its completeness is always stated, and
+// a file whose window cannot hold that line fails closed instead of being judged.
+// For identical review output that changes which findings are credited
+// unlisted-real, hence `adjustedPrecision`, `unlistedRealFindingCount`, and
+// `genuineFalsePositiveCount`, on any case with a file above the cap.
+export const EVAL_METRICS_VERSION = '2026-08-03.plausibility-source-window'
 
 export const EvalReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),

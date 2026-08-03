@@ -60,28 +60,119 @@ const evalCase: EvalCase = parseEvalCases([
 const alwaysReader = async (): Promise<string> => 'const value = compute()\n'
 
 describe('prepareEvalPlausibilitySource', () => {
-  test('redacts secrets in the new-side source before it reaches the judge', () => {
-    const prepared = prepareEvalPlausibilitySource(
-      'const key = "sk-abcdefghijklmnop0123456789"\n'
-    )
+  // A file of `lineCount` numbered filler lines, each wide enough that a few
+  // thousand of them blow past the byte cap.
+  const wideFile = (lineCount: number): string =>
+    Array.from(
+      { length: lineCount },
+      (_unused, index) => `line ${index + 1} ${'x'.repeat(200)}`
+    ).join('\n')
 
-    expect(prepared).not.toContain('sk-abcdefghijklmnop0123456789')
-    expect(prepared).toContain('[REDACTED]')
+  test('redacts secrets in the new-side source before it reaches the judge', () => {
+    const prepared = prepareEvalPlausibilitySource({
+      content: 'const key = "sk-abcdefghijklmnop0123456789"\n',
+      line: 1
+    })
+
+    expect(prepared.text).not.toContain('sk-abcdefghijklmnop0123456789')
+    expect(prepared.text).toContain('[REDACTED]')
   })
 
-  test('bounds oversized source to the byte cap without splitting code points', () => {
-    const huge = 'a'.repeat(EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP + 5000)
-    const prepared = prepareEvalPlausibilitySource(huge)
+  test('bounds oversized source, disclosure included, to the byte cap', () => {
+    const prepared = prepareEvalPlausibilitySource({
+      content: wideFile(2000),
+      line: 1000
+    })
 
-    expect(Buffer.byteLength(prepared, 'utf8')).toBeLessThanOrEqual(
+    expect(Buffer.byteLength(prepared.text, 'utf8')).toBeLessThanOrEqual(
       EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP
     )
   })
 
-  test('leaves small clean source unchanged', () => {
+  test('leaves small clean source unchanged apart from an explicit completeness line', () => {
     const source = 'export const add = (a: number, b: number) => a + b\n'
+    const prepared = prepareEvalPlausibilitySource({ content: source, line: 1 })
 
-    expect(prepareEvalPlausibilitySource(source)).toBe(source)
+    expect(prepared.partial).toBe(false)
+    expect(prepared.findingLineOmittedByCap).toBe(false)
+    // Stated even when nothing was cut, so the judge never has to guess whether
+    // a short section means a short file or an omission.
+    expect(prepared.text).toContain('[FILE CONTENT COMPLETE: all 1 lines')
+    expect(prepared.text).toContain(source)
+  })
+
+  // The defect this fixes: the cut used to be a blind PREFIX, so a finding at a
+  // line past the cap was judged against code that could not contain it, and the
+  // judge answered plausible=false with confidence -- corrupting adjustedPrecision.
+  test('centres the window on the finding line instead of taking a blind prefix', () => {
+    const prepared = prepareEvalPlausibilitySource({
+      content: wideFile(2000),
+      line: 1900
+    })
+
+    expect(prepared.partial).toBe(true)
+    expect(prepared.findingLineOmittedByCap).toBe(false)
+    expect(prepared.text).toContain('line 1900 ')
+    // Content around the finding on BOTH sides, and none of the far-away prefix.
+    expect(prepared.text).toContain('line 1899 ')
+    expect(prepared.text).toContain('line 1901 ')
+    expect(prepared.text).not.toContain('line 1 x')
+  })
+
+  test('discloses a cut in the text the judge reads, naming the covered range', () => {
+    const prepared = prepareEvalPlausibilitySource({
+      content: wideFile(2000),
+      line: 1900
+    })
+
+    expect(prepared.text).toMatch(
+      /^\[FILE CONTENT PARTIAL: lines \d+-\d+ of 2000 are shown\./
+    )
+    expect(prepared.text).toContain("centred on the finding's location line 1900")
+    // The judge must not read the omission as evidence, and must not be left to
+    // discover the omission only if it happens to re-read the header.
+    expect(prepared.text).toContain('is NOT evidence that the finding is wrong')
+    expect(prepared.text.trimEnd()).toMatch(
+      /\[END OF PARTIAL FILE CONTENT: lines \d+-\d+ of 2000\..*]$/
+    )
+  })
+
+  test('reports a finding line the cap could not keep', () => {
+    const prepared = prepareEvalPlausibilitySource({
+      content: wideFile(2000),
+      line: 999_999
+    })
+
+    expect(prepared.partial).toBe(true)
+    expect(prepared.findingLineOmittedByCap).toBe(true)
+  })
+
+  // A location past the end of a file we handed over IN FULL is a bad line
+  // number, not a loss this module caused: the judge sees everything there is.
+  test('does not blame the cap for a bad line number in a complete file', () => {
+    const prepared = prepareEvalPlausibilitySource({
+      content: 'const value = compute()\n',
+      line: 900
+    })
+
+    expect(prepared.partial).toBe(false)
+    expect(prepared.findingLineOmittedByCap).toBe(false)
+  })
+
+  // A minified or generated file can be one enormous line. Nothing can be
+  // centred, but the cut must still be bounded and disclosed rather than silent.
+  test('bounds and discloses a single line larger than the whole budget', () => {
+    const prepared = prepareEvalPlausibilitySource({
+      content: 'x'.repeat(EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP * 2),
+      line: 1
+    })
+
+    expect(prepared.partial).toBe(true)
+    expect(prepared.findingLineOmittedByCap).toBe(false)
+    expect(prepared.text).toContain('[FILE CONTENT PARTIAL: lines 1-1 of 1')
+    expect(Buffer.byteLength(prepared.text, 'utf8')).toBeLessThanOrEqual(
+      EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP
+    )
   })
 })
 
@@ -204,6 +295,90 @@ describe('judgeUnmatchedFindingsPlausibility', () => {
     expect(result.providerIssues[0]).toMatchObject({
       code: 'plausibility_source_unavailable',
       stage: 'eval_plausibility_judge'
+    })
+  })
+
+  test('tells the judge the file content is complete when nothing was cut', async () => {
+    const seen: EvalPlausibilityJudgeInput[] = []
+    const judge: EvalPlausibilityJudge = async (input) => {
+      seen.push(input)
+
+      return { plausible: true, reason: 'genuine' }
+    }
+    await judgeUnmatchedFindingsPlausibility({
+      evalCase,
+      unmatchedFindings: [finding()],
+      matchedFindings: [],
+      judge,
+      readFileContent: alwaysReader
+    })
+
+    expect(seen[0]?.fileContent).toContain('[FILE CONTENT COMPLETE')
+  })
+
+  // Before this fix the judge was handed a blind prefix of an oversized file with
+  // no marker at all, so it scored a finding whose supporting code had been cut
+  // away as implausible -- and that verdict feeds adjustedPrecision.
+  test('hands the judge a finding-centred window and an explicit partial marker', async () => {
+    const seen: EvalPlausibilityJudgeInput[] = []
+    const judge: EvalPlausibilityJudge = async (input) => {
+      seen.push(input)
+
+      return { plausible: true, reason: 'genuine' }
+    }
+    const huge = Array.from(
+      { length: 2000 },
+      (_unused, index) => `line ${index + 1} ${'x'.repeat(200)}`
+    ).join('\n')
+
+    const result = await judgeUnmatchedFindingsPlausibility({
+      evalCase,
+      unmatchedFindings: [
+        finding({ location: { path: 'src/app.ts', startLine: 1900, side: 'new' } })
+      ],
+      matchedFindings: [],
+      judge,
+      readFileContent: async () => huge
+    })
+
+    expect(result.unlistedRealFindingIds).toEqual(['find_plaus1'])
+    expect(seen[0]?.fileContent).toContain('[FILE CONTENT PARTIAL')
+    expect(seen[0]?.fileContent).toContain('line 1900 ')
+    expect(seen[0]?.fileContent).not.toContain('line 1 x')
+  })
+
+  test('fails closed instead of judging when the cap cannot keep the finding line', async () => {
+    let judgeCalls = 0
+    const judge: EvalPlausibilityJudge = async () => {
+      judgeCalls += 1
+
+      return { plausible: true, reason: 'would say genuine' }
+    }
+    const huge = Array.from(
+      { length: 2000 },
+      (_unused, index) => `line ${index + 1} ${'x'.repeat(200)}`
+    ).join('\n')
+
+    const result = await judgeUnmatchedFindingsPlausibility({
+      evalCase,
+      unmatchedFindings: [
+        finding({ location: { path: 'src/app.ts', startLine: 999_999, side: 'new' } })
+      ],
+      matchedFindings: [],
+      judge,
+      readFileContent: async () => huge
+    })
+
+    // Never asked, therefore never credited: a cut of ours must not be able to
+    // move adjustedPrecision in either direction without saying so.
+    expect(judgeCalls).toBe(0)
+    expect(result.unlistedRealFindingIds).toEqual([])
+    expect(result.failClosedFindingIds).toEqual(['find_plaus1'])
+    expect(result.outcomes[0]).toMatchObject({ plausible: false, judged: false })
+    expect(result.providerIssues[0]).toMatchObject({
+      code: 'plausibility_source_line_omitted',
+      stage: 'eval_plausibility_judge',
+      recovered: false
     })
   })
 })

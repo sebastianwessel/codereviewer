@@ -539,6 +539,7 @@ describe('eval runner', () => {
         droppedCount: 3,
         suppressedByIdCount: 0,
         suppressedByLocationCount: 0,
+        cappedByLimitCount: 0,
         contextOverflowSplitCount: 0,
         mergeCallCount: 0,
         mergeGroupCount: 0,

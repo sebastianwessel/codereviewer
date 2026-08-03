@@ -260,7 +260,16 @@ judge decides whether the finding is a genuine defect in the actual code:
 - It receives the finding (title, description, severity, category, location) and
   the finding's new-side file content, bounded and redacted. It must see the same
   file the reviewer saw, not a narrow window: a judge given too little context
-  under-credits real findings by answering "cannot confirm".
+  under-credits real findings by answering "cannot confirm". A file that fits the
+  byte bound is therefore passed whole.
+- When a file does not fit the bound, the content is a window centred on the
+  finding's location line, never a prefix: the code that supports a finding is
+  rarely at the top of a file. The content the judge reads always opens with an
+  explicit completeness marker — either that the whole file is shown, or that it
+  is partial, which line range is covered, and that absence of supporting code
+  outside that range is not evidence the finding is wrong. A cut the judge is not
+  told about produces a confident `plausible = false` on a real finding, and that
+  verdict feeds `adjustedPrecision`, a published number.
 - It returns a boolean `plausible` decision and a report-safe reason. No numeric
   confidence.
 - `plausible = true` marks the finding a real-but-unlisted defect; `false` marks
@@ -271,9 +280,13 @@ reviewer reported. It only reclassifies the reviewer's own unmatched output for
 precision accounting.
 
 Fail-closed: a plausibility judgment that cannot be completed (provider error
-after retries) leaves the finding counted as a raw false positive and is surfaced
-as a warning. The engine never assumes an unjudged finding is real — precision is
-only ever credited by an affirmative `plausible` decision.
+after retries, an unreadable source file, or a file so large that the bounded
+window cannot contain the finding's own location line) leaves the finding counted
+as a raw false positive and is surfaced as a warning. The engine never assumes an
+unjudged finding is real — precision is only ever credited by an affirmative
+`plausible` decision. The judge is not asked at all when the window could not
+keep the cited line: a verdict reached without the cited code would be a guess,
+and a guess must not be able to move `adjustedPrecision` in either direction.
 
 Reliability mirrors the match judge: the plausibility judge is scored against a
 committed calibration set of findings labeled genuine or spurious against sample

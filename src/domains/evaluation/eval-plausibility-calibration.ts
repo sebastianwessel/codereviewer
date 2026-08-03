@@ -284,7 +284,10 @@ export const scorePlausibilityCalibration = async (
         category: pair.category,
         path: pair.path,
         line: pair.line,
-        fileContent: prepareEvalPlausibilitySource(pair.code)
+        fileContent: prepareEvalPlausibilitySource({
+          content: pair.code,
+          line: pair.line
+        }).text
       })
       scoredPairCount += 1
       if (judged.plausible === pair.isGenuine) {
