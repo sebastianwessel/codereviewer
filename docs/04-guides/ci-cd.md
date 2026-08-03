@@ -93,7 +93,8 @@ flowchart TD
   F --> G{"Exit code"}
   G -- 0 --> H["Publish artifacts<br/>(SARIF, comments)"]
   G -- 1 --> I["Gate failed:<br/>publish artifacts, then fail the job"]
-  G -- "2 / 3 / 4 / 5" --> J["Run failed:<br/>read error.json, upload partial artifacts"]
+  G -- "2 / 3" --> J["Failed before the run had state:<br/>read stderr, no artifacts exist"]
+  G -- "4 / 5" --> K["Run failed mid-flight:<br/>read error.json, upload partial artifacts"]
 ```
 
 ### Full history is mandatory
@@ -163,10 +164,10 @@ Branch your pipeline on the exit code, not on parsing stdout.
 | Code | Meaning | Typical CI response |
 | --- | --- | --- |
 | `0` | Run completed, quality gate passed | Publish artifacts, continue |
-| `1` | A gate failed: quality gate, drift gate, `coverage_incomplete`, `cost_budget_exceeded`, or the eval regression gate | Publish artifacts, then fail the job |
-| `2` | Configuration or usage error | Fail fast; fix config or flags |
-| `3` | Repository/filesystem error (missing merge base, unreadable report) | Fail; usually a checkout problem |
-| `4` | Provider error (auth, rate limit, context length, timeout, 5xx) | Fail or retry the job |
+| `1` | A gate failed: quality gate (on findings, **or on an unrecovered provider issue**), drift gate, `coverage_incomplete`, `cost_budget_exceeded`, or the eval regression gate | Publish artifacts, then fail the job |
+| `2` | Configuration or usage error | Fail fast; fix config or flags. **No artifacts exist** |
+| `3` | Repository/filesystem error (missing merge base, unreadable report) | Fail; usually a checkout problem. **No artifacts exist** |
+| `4` | Provider error (auth, rate limit, context length, timeout, 5xx), or an `intent check` input limit | Fail or retry the job |
 | `5` | Admission, reporting or internal error | Fail; file a bug with `error.json` |
 
 On success stdout carries a single JSON object:
@@ -176,8 +177,14 @@ On success stdout carries a single JSON object:
 ```
 
 On failure stderr carries `{ "code": …, "message": … }`, plus `artifactDir`
-when partial artifacts were written. Full mapping:
-[exit-codes-and-error-codes.md](../06-reference/exit-codes-and-error-codes.md).
+**only when partial artifacts were written**. Do not have CI read `error.json`
+on every non-zero exit: a failure before the run has state — bad flags, invalid
+config, a missing merge base — writes nothing at all, so exits `2` and `3`
+normally leave no run directory to read. Guard the upload step on the
+`artifactDir` field, or on the directory existing. Full mapping:
+[exit-codes-and-error-codes.md](../06-reference/exit-codes-and-error-codes.md),
+and [partial-and-failed-runs.md](../08-operations/partial-and-failed-runs.md) for
+exactly which failures leave a partial set.
 
 ---
 
@@ -278,6 +285,14 @@ The gathered text is redacted, bounded and summarized into a short brief that
 is injected as **untrusted, informational context**. It cannot approve a
 finding, change a severity, or affect the baseline or the gate. See
 [prompt-injection-and-untrusted-input.md](../07-security/prompt-injection-and-untrusted-input.md).
+
+**Check `run.warnings` after wiring this up.** A provider that contributed
+nothing says so — *"External change-intent provider "…" produced nothing and was
+skipped. Check that it points at content this change has."* — which is what a
+mistyped `dir` or a non-matching `include` glob looks like. A provider that
+errored says *"failed and was skipped"* instead. Either way the review runs
+without the brief and exits normally, so the warning is the only signal that the
+context you paid a pipeline step to fetch never reached the reviewer.
 
 ---
 
@@ -476,10 +491,17 @@ for `merge-base` to resolve. `BITBUCKET_PIPELINE_UUID` and
 
 ## The advisory stages in CI
 
-`intent check` and `impact check` are separate commands and separate jobs. They
-**always exit `0`**, whatever they report — that is a spec requirement, not a
-default, and there is no `blocking` key to change it. So a pipeline consumes them
-by reading the JSON on stdout, not by branching on the exit code.
+`intent check` and `impact check` are separate commands and separate jobs.
+**Nothing either reports can set a non-zero exit code** — that is a spec
+requirement, not a default, and there is no `blocking` key to change it. So a
+pipeline consumes them by reading the JSON on stdout, not by branching on the
+exit code.
+
+The exception is not a verdict: `intent check` exits `4` when the change, the
+stated intent, or the extracted obligation count exceeds one of its three input
+limits, refusing to judge an input it cannot see whole. Treat that as a job
+configuration problem — narrow the ref range, or point `contextSources` at less
+intent — not as a finding about the change.
 
 **Neither has an accuracy measurement.** Add them as informational jobs whose
 output a human reads, once `review` is trusted — not as part of an initial
@@ -502,12 +524,16 @@ that cannot run says so in its report rather than failing a job.
 
 ## Cost in CI
 
-A default run costs **two provider calls per review task**: one holistic
-discovery call and one refutation call. Refutation is batched — a single call
-adjudicates every candidate of that task and returns one verdict per candidate
-— so cost scales with tasks, not with findings.
+A default run costs **two provider calls per discovery partition**: one holistic
+discovery call and one batched refutation call. A partition is
+`aiReview.maxFilesPerDiscoveryCall` changed files wide (default `2`), so a task
+covering more files costs proportionally more — a task of eight changed files is
+four partitions, or eight calls, not two. Refutation is batched per partition, so
+cost scales with partitions, not with findings. A semantic merge call is added
+only for a file that produced two or more candidates, which is rare at today's
+roughly one candidate per file.
 
-Enabling the dedicated security pass adds another call per task. Set
+Enabling the dedicated security pass adds another call per partition. Set
 `review.maxCostUsd` so a pathological change fails the job instead of quietly
 spending. Full arithmetic: [controlling-cost.md](controlling-cost.md).
 

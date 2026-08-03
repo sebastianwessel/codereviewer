@@ -13,28 +13,51 @@ how far it got and why it stopped.
 | --- | --- | --- |
 | Completed, gate passed | `0` | Full artifact set |
 | Completed, gate failed | `1` | Full artifact set (`qualityGate.passed: false`) |
+| Completed, gate result absent | `5` | Full artifact set, `quality_gate_missing` on stderr — see below |
 | Failed | `1`–`5` depending on category | Partial set with `error.json`, **or** nothing at all — see below |
 
 A gate failure is a **completed run**, not a failure. It produces the same
 reports as a passing run.
 
+`quality_gate_missing` is the third row's whole story: every completed run
+evaluates its gate, so a completed report carrying none is an internal
+inconsistency. The CLI used to summarize that absence as
+`qualityGatePassed: true` at exit `0` — absence read as clearance, on the one
+surface a pipeline branches on. It now fails at exit `5` **after** the artifacts
+are written and the run is indexed as completed, so the run directory is the
+evidence for the bug report.
+
 ---
 
 ## Degradation before failure
 
-Several classes of trouble never fail the run at all. They are recorded as
-**recovered provider issues** in `report.json` under `providerIssues`, with
-`recovered: true`, so the degradation is visible rather than silent.
+Several classes of trouble never fail the run at all. They are recorded in
+`report.json` under `providerIssues`, so the degradation is visible rather than
+silent.
 
-| Situation | Behavior |
-| --- | --- |
-| A refutation call fails (packet or provider error) | Every candidate of that task is recorded as `needs-more-evidence` with reason `provider-error`. The run continues. |
-| A refutation batch exceeds the provider input budget | The batch splits in half and each half retries. Only a single candidate that still does not fit becomes a packet failure. |
-| A discovery call hits the agent-loop budget, returns malformed structured JSON, or fails output validation | That call contributes no findings; a recovered provider issue is recorded. The run continues. |
-| A change-intent provider fails | A run warning is recorded; the review proceeds without the brief. |
-| The model summarizer fails | The stage falls back to the deterministic digest summary. |
-| A verification claim runs out of tool-call budget | The claim ends with an `uncertain` verdict. |
-| A file is larger than `review.maxFileBytes` | It is skipped and listed in `skippedFiles`. |
+**`recovered` means a retry succeeded, not "the run kept going".** A call that
+failed and whose work was dropped records `recovered: false`, because something
+the review was supposed to do did not happen. An issue with no `recovered` field
+is read as unrecovered.
+
+| Situation | `recovered` | Behavior |
+| --- | --- | --- |
+| A refutation call fails (packet or provider error) | `false` | Every candidate of that task is recorded as `needs-more-evidence` with reason `provider-error` — rejected unadjudicated. The run continues. |
+| A refutation batch exceeds the provider input budget | no issue recorded | The batch splits in half and each half retries; a retry that succeeds is not a degradation. Only a single candidate that still does not fit becomes a packet failure. |
+| A discovery call hits the agent-loop budget, returns malformed structured JSON, or fails output validation | `false` | That call contributes no findings. The run continues. |
+| A semantic merge call fails | `false` | Its file is left ungrouped; every candidate survives. The run continues. |
+| A change-intent provider fails, or produces nothing | — (a run warning, not a provider issue) | The review proceeds without the brief. |
+| The model summarizer fails | — | The stage falls back to the deterministic digest summary. |
+| A verification claim runs out of tool-call budget | — | The claim ends with an `uncertain` verdict. |
+| A file is larger than `review.maxFileBytes` | — | It is skipped and listed in `skippedFiles`. |
+
+**An unrecovered provider issue fails the quality gate on its own**, under the
+default `qualityGate.failOnProviderError: true`. That is exit `1` with an
+**empty** `failingFindingIds`: there is no finding to name, because the failure
+is that findings are missing. Before this was enforced, an outage shrank the set
+the gate measured — so a change was *more* likely to clear the gate during a
+provider failure than on a healthy run. Set `failOnProviderError: false` to turn
+the check off; it changes nothing else.
 
 Always read `providerIssues` and `run.warnings` before concluding a clean run
 was a thorough one.
@@ -174,7 +197,7 @@ They never carry raw provider messages or tool output.
 | Cause | Action |
 | --- | --- |
 | `provider_rate_limited` | Re-run. Lower `review.maxConcurrentTasks`, or raise `provider.retryMaxDelayMs`. |
-| `provider_context_length` | Lower `review.depth`, set `review.contextMaxBytes`, or narrow `paths.include`. |
+| `provider_context_length` | Narrow the scope (`paths.include`, `paths.exclude`, a smaller ref range), or set `review.contextMaxBytes`. **Not `review.depth`** — it does not bound the packet, only the mediated retrieval budget. |
 | `provider_auth` | Fix the credential; not retried by design. |
 | `coverage_incomplete` | Check `skippedFiles` and `paths.exclude`; something reviewable was not assigned to a task. |
 | `cost_budget_exceeded` | Raise `review.maxCostUsd`, or reduce scope and optional passes. |

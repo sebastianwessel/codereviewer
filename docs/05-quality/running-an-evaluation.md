@@ -1,8 +1,8 @@
 # Running An Evaluation
 
 How to hydrate a corpus, run `eval run`, and read what it produces — including
-the one behaviour that surprises everybody: the gate is hard-coded to demand
-perfection and will fail.
+the gate, which is a selectable profile and whose default deliberately says
+nothing about review quality.
 
 ---
 
@@ -86,7 +86,8 @@ codereviewer eval run [flags]
 
 ### Flags that are actually parsed
 
-This is the complete list, from `runEval` in `src/cli/index.ts`.
+Every flag `runEval` declares in `src/cli/index.ts`. Anything else is rejected
+with exit `2` before the run starts.
 
 | Flag | Value | Effect |
 | --- | --- | --- |
@@ -96,6 +97,7 @@ This is the complete list, from `runEval` in `src/cli/index.ts`.
 | `--review-mode <mode>` | `local` \| `ci` \| `pr` \| `full` | Override `review.mode` for this invocation only |
 | `--review-depth <depth>` | `fast` \| `balanced` \| `thorough` | Override `review.depth` for this invocation only |
 | `--max-concurrent-tasks <n>` | integer 1–32 | Override `review.maxConcurrentTasks` for this invocation only |
+| `--gate-profile <profile>` | `stable` \| `strict` | Override `evaluation.regressionGate.profile` for this invocation only |
 | `--log-level <level>` | log level | Override logging level |
 | `--debug` | — | Shorthand for `--log-level debug` |
 | `--log-file <path>` | path | Write logs to a file instead of the default sink |
@@ -109,7 +111,7 @@ provider calls without editing repository config.
 
 | Not a flag | Reality |
 | --- | --- |
-| Any threshold flag (`--min-recall`, `--max-false-positives`, …) | **Thresholds are hard-coded.** See below. |
+| A per-threshold flag (`--min-recall`, `--max-false-positives`, …) | `--gate-profile` selects a whole threshold set; individual values move through `evaluation.regressionGate.overrides` in config. See below. |
 | `--semantic-judge`, `--judge-findings` | Semantic scoring is not a mode. Both judges are constructed whenever a provider is configured. |
 | A seed or temperature flag | Judge sampling pins temperature to `0` where the alias supports it; the review itself uses the configured alias defaults. |
 | A model flag | The model comes from provider config. |
@@ -138,28 +140,46 @@ serialize the cases themselves.
 
 ---
 
-## The hard-coded gate
+## The regression gate
 
-`eval run` builds its regression thresholds inline. They are **not configurable,
-not read from config, and not settable by any flag**:
+The gate resolves in one place (`resolveEvalRegressionGateThresholds` in
+`src/cli/index.ts`): a **profile**, then any **overrides** layered on top.
 
-```ts
-thresholds: {
-  minParseValidity: 1,
-  minRecall: 1,
-  maxFalsePositiveCount: 0,
-  failOnProviderError: true
-}
+```
+profile (stable | strict)  ←  --gate-profile, or evaluation.regressionGate.profile
+        +
+overrides                  ←  evaluation.regressionGate.overrides
 ```
 
-Read literally: **100% recall on every expected finding, and zero raw false
-positives.** Note that the false-positive threshold is checked against the *raw*
-`falsePositiveCount`, so every real-but-unlisted defect the reviewer correctly
-found counts against it too.
+| Threshold | `stable` (default) | `strict` |
+| --- | --- | --- |
+| `minParseValidity` | `1` | `1` |
+| `failOnProviderError` | `true` | `true` |
+| `minRecall` | *not gated* | `1` |
+| `maxFalsePositiveCount` | *not gated* | `0` |
 
-**Consequence:** essentially any provider-backed run against a corpus with
-expected findings fails the gate and exits `1`. A recent 30-case
-real-repository run on `openai/gpt-5.3-codex` failed with:
+**`stable` gates only on what cannot vary between seeds.** Parse validity and
+provider errors are mechanical: on a given run each is satisfied or it is not.
+Recall is a mean over a model-backed run that this project has measured varying
+by several percentage points seed-to-seed on its primary corpus, so a default
+gate on it would fail depending on which side of the band a run landed — worse
+than the old gate, which at least failed for the same reason every time. The raw
+`falsePositiveCount` has the same problem from the other end: it counts every
+unmatched admitted finding, including real defects the answer key never listed
+(measured raw precision as low as 44% on a corpus later judged ~83% precise).
+Gating on either by default made a non-zero exit the normal outcome, and a signal
+that always fires carries no information.
+
+**`strict` is the bar `stable` replaced** — perfect recall, zero tolerated false
+positives — kept as a named opt-in for a maintainer cutting a release who has
+verified it holds for their own fixture set:
+
+```bash
+codereviewer eval run --gate-profile strict
+```
+
+Under `strict`, a 30-case real-repository run on `openai/gpt-5.3-codex` failed
+with:
 
 ```
 recall below threshold: 0.55 < 1
@@ -167,17 +187,31 @@ falsePositiveCount above threshold: 8 > 0
 ```
 
 — on a run whose adjusted precision was 100% and whose genuine false positives
-were zero.
+were zero. That is the failure mode the default now avoids.
 
-> **Do not use `eval run`'s exit code as a quality signal.** Read the metrics in
-> `eval-summary.md` / `eval-report.json`, and compare runs with
-> [`eval compare`](comparing-runs.md). The gate is only meaningful on a fully
-> negative fixture set, where it degenerates to "no findings, no provider errors".
+**Individual thresholds are configuration, not flags.** The
+`EvalRegressionThresholds` contract carries more keys than either profile sets
+(`minPrecision`, `minProductRecall`, `minSeverityWeightedF1`,
+`maxCommentsPerKloc`, `maxCommentsPerDiffHunk`, `maxIncompleteCoverageRate`,
+`maxContextMutationRate`, `maxCostUsd`, `maxDurationMs`), and every one of them
+is settable through `evaluation.regressionGate.overrides`, which wins over the
+resolved profile key by key:
 
-The wider `EvalRegressionThresholds` contract supports many more keys
-(`minPrecision`, `minProductRecall`, `maxCommentsPerKloc`, `maxCostUsd`, …) and
-`runEvaluation` honours whatever it is given — but the CLI never passes them.
-Programmatic callers of `runEvaluation` can set them; CLI users cannot.
+```json
+{
+  "evaluation": {
+    "regressionGate": {
+      "profile": "stable",
+      "overrides": { "minProductRecall": 0.4 }
+    }
+  }
+}
+```
+
+> **A passing gate is still not a quality reading.** `stable` says the run
+> executed cleanly, nothing more. Read the metrics in `eval-summary.md` /
+> `eval-report.json`, and compare runs with
+> [`eval compare`](comparing-runs.md).
 
 ---
 
@@ -200,9 +234,11 @@ only copy of an expensive benchmark report. The run id is
 Keep the archived path — [`eval compare`](comparing-runs.md) takes two report
 paths, and the top-level copy is overwritten by the next run.
 
-> **Gotcha: `generatedAt` is a constant.** The CLI passes a fixed
-> `2026-06-20T00:00:02.000Z` into every report, so `generatedAt` cannot be used
-> to order or identify runs. Use the run-archive directory name instead.
+`generatedAt` is the real wall clock of the run. It was once a committed literal,
+which made every report claim the same instant; a test still pins it, so a
+fixture report stays byte-reproducible while a production run stamps the time it
+actually ran. The run-archive directory name (`YYYYMMDDTHHMMSS-<uuid>`, UTC) is
+still the more reliable identifier, because it is unique.
 
 ### Reading `eval-summary.md`
 
@@ -227,10 +263,11 @@ provider error rate, cost.
 
 | Code | When |
 | --- | --- |
-| `0` | Gate passed (in practice: a fully negative corpus with no provider errors) |
-| `1` | Gate failed — **expected** on any corpus with expected findings |
-| `2` | Usage/config error: unknown flag value, missing `--config` path, `eval run selected no cases` |
+| `0` | Gate passed. Under `stable` this is the ordinary outcome: it means every case parsed and no provider call errored |
+| `1` | Gate failed. Under `stable` that is a parse failure or a provider error; under `strict`, **expected** on any corpus with expected findings |
+| `2` | Usage/config error: unknown flag, unknown flag value, a `--config` path that does not exist, `eval run selected no cases` |
 | `3` | Repository/filesystem error |
+| `5` | Internal failure, including un-hydrated slices |
 
 Un-hydrated slices surface as an internal error from `runEval`'s catch, with the
 message naming the offending case ids and pointing at `npm run eval:hydrate`.

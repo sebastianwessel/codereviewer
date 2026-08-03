@@ -363,9 +363,11 @@ Facts to know:
 - Read `scoring.judgeTrustworthy` in the report first. A run whose judge falls
   below `evaluation.minJudgeAgreement` (default `0.9`) against the committed
   calibration set reports its own quality metrics as untrustworthy.
-- The regression gate thresholds are literals in the CLI, not configuration.
-  Exit `1` means the gate failed, which is not the same as "your case is
-  broken".
+- The regression gate is a profile: `stable` by default (parse validity and
+  provider errors only), `strict` on request, with per-threshold
+  `evaluation.regressionGate.overrides`. Exit `1` means the gate failed, which is
+  not the same as "your case is broken" — under `strict` it is the ordinary
+  outcome of any corpus with expected findings.
 - Model output is non-deterministic. A small difference between two runs is
   noise. Compare reports, and treat a single run as a sample.
 

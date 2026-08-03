@@ -42,15 +42,27 @@ The command was not recognized, or a required argument was missing.
 
 The full command set is `config validate`, `review`, `baseline write`,
 `eval run`, `eval compare`, `eval recall-report`, `eval slice-manifest`,
-`drift check`.
+`drift check`, `impact check`, `intent check`.
 
-Two parsing rules cause most surprises:
+Three parsing rules cause most surprises:
 
-- A flag and its value are **two separate tokens**. `--config=path` is not
-  supported; use `--config path`.
-- **Unknown flags are silently ignored.** A typo like `--base_ref` is not an
-  error — it is simply not applied, and the run uses the configured default.
-  If a flag seems to have no effect, check its spelling first.
+- **Unknown flags are rejected, before the command does any work.** A typo like
+  `--base_ref` exits `2` with `usage_error` naming the flag. That is deliberate:
+  a parser that ignored a flag it does not implement let a run proceed as though
+  the flag had been honoured, which this project paid for twice — an A/B whose
+  config flag never reached the run compared a build against itself for about
+  $11.50, and `eval run --help` ran a full default evaluation instead of printing
+  usage.
+- **The option set is per command.** A flag one command accepts is still unknown
+  to another. Only `--config` is global. `--debug`, `--log-level` and `--log-file`
+  are accepted by `review` and `eval run` **only** — the other five commands
+  reject them with exit `2`, because being told an option is unknown beats having
+  it silently ignored.
+- **`--flag=value` and `--flag value` are equivalent**, for every flag on every
+  command, `--config` and `--file` included. The joined form used to pass the
+  unknown-flag check and then be dropped by the value parsers, so `--config=path`
+  validated and the run proceeded on defaults at exit `0`. If a flag seems to have
+  no effect, that is no longer why — check the precedence chain below.
 
 ### `config_error` — exit 2
 
@@ -59,7 +71,8 @@ the submitted value.
 
 | Symptom | Cause |
 | --- | --- |
-| `Unrecognized key` | Every config object is strict. Check spelling and nesting; the [configuration reference](../06-reference/configuration/README.md) has the exact shape. |
+| `Unrecognized key` | Every config object is strict. Check spelling and nesting; the [configuration reference](../06-reference/configuration/README.md) has the exact shape. Removed blocks (`review.contextScout`, `review.guardedRegionContext`, `invariantConformance`, `security.signals`) land here — delete them. |
+| `The configuration file "…" does not exist` | A config file named by `--config` or `CODEREVIEWER_CONFIG_PATH` is not there. A **named** file that is missing stops the run; continuing on defaults would review with settings nobody asked for and report success. A missing file at the **default** path is only the `config-file-missing` warning. |
 | A `security.*` key "must be false" | `allowShell`, `allowNetwork`, `allowFilesystemWrite` and `captureContentTelemetry` accept the literal `false` only. There is no override. |
 | `aiReview.requireRefutation` rejected | It accepts the literal `true` only. Refutation cannot be disabled. |
 | `Path must be repository-relative` / `must not traverse above root` | A configured path escapes the repository root. |
@@ -200,8 +213,14 @@ Reduce pressure with `review.maxConcurrentTasks`, or raise
 
 ### `provider_context_length` — exit 4
 
-The packet exceeded the model's context window. Not retried. Lower
-`review.depth`, set `review.contextMaxBytes`, or narrow `paths.include`.
+The packet exceeded the model's context window. Not retried at the provider, but
+the task is halved and each half retried until the pieces are accepted; only a
+unit that cannot be split further fails, as `review_task_indivisible`.
+
+`review.depth` is **not** the dial — it does not bound the packet at all, only the
+mediated retrieval budget. Narrow the scope (`paths.include`, `paths.exclude`, a
+smaller ref range), set `review.contextMaxBytes` to lower the packet ceiling, or
+configure a model with a larger context window.
 
 ### `task_packet_budget_exceeded` — exit 4
 
@@ -236,6 +255,29 @@ Not an error — the gate did its job. `report.json` lists
 - Adjust `qualityGate.maxCritical` / `maxHigh` / `maxMedium`.
 - Adopt a baseline so only new findings count — see
   [ci-cd.md](../04-guides/ci-cd.md).
+
+### Exit 1 with `qualityGatePassed: false` and an **empty** `failingFindingIds`
+
+The gate failed on an unrecovered provider issue, not on a finding. There is
+nothing to name because the failure is that findings are **missing**: a discovery
+call that errored contributed no candidates, a failed refutation rejected its
+candidates unadjudicated, a failed semantic merge left a file ungrouped. Read
+`providerIssues` in `report.json` — an issue with `recovered: false`, or with no
+`recovered` field at all, is what fired.
+
+Before this was enforced, an outage shrank the set the gate measured, so a change
+was *more* likely to clear the gate during a provider failure than on a healthy
+run. Re-run it; if the provider is genuinely unavailable, fix that first.
+`qualityGate.failOnProviderError: false` turns the check off and changes nothing
+else.
+
+### `quality_gate_missing` — exit 5
+
+A completed run's report carried no quality gate result. Every completed run
+evaluates its gate, so this is an internal inconsistency and the run refuses to
+be reported as passing one. The full artifact set **is** written and the run is
+indexed as completed before this fires, so attach the run directory to the bug
+report.
 
 ### `drift_gate_failed` — exit 1
 
@@ -274,10 +316,10 @@ reports what was spent rather than stopping it. See
 | --- | --- |
 | Too many low-value findings | Raise `aiReview.actionableSeverityThreshold`; set `promotionPolicy.modelWeakOrRefuted` to `rejected` |
 | Report has a large "needs more evidence" section | Same: `promotionPolicy.modelWeakOrRefuted: "rejected"` |
-| Findings exist but no inline comments | `reporting.reviewComments.enabled` must be true, and only `inline` findings on the new side of a reviewed diff range become drafts. Lower `review.inlineSeverityThreshold` |
+| Findings exist but no inline comments | `reporting.reviewComments.enabled` must be true, and a finding needs a reported line that falls inside a reviewed hunk. Lower `review.inlineSeverityThreshold` |
 | Misses a second defect in a file where it found one | Known limitation, no dial. Three passes built for it were measured and [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md) |
 | Misses security issues specifically | `security.dedicatedPass.enabled: true` |
-| Misses defects that depend on unchanged code | No dial worth recommending. `review.crossFileRetrieval` measured net negative; the context scout was [removed](../03-concepts/optional-capabilities/context-scout.md) |
+| Misses defects that depend on unchanged code | `review.crossFileRetrieval` is the dial and is **on by default** — its old net-negative verdict was measuring a truncation bug and does not stand. But out-of-diff recall is 0 of 27 on the 37-case corpus, and every miss sat in a file shown in full, so this is attention, not information. The context scout was [removed](../03-concepts/optional-capabilities/context-scout.md) for the same reason |
 | Two runs disagree | Expected. Model output is non-deterministic; a small difference between runs is noise. Measure on a corpus, not on one run — see the [quality docs](../05-quality/README.md) |
 
 Depth guidance and the full dial list: [tuning-noise-and-recall.md](../04-guides/tuning-noise-and-recall.md).

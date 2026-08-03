@@ -8,9 +8,9 @@ connects them.
 
 The engine is built around one asymmetry:
 
-- **Discovery is recall-oriented.** One model call per task reads the whole
-  changed file (not just the hunk) and is told to enumerate every concrete defect
-  it can justify. It is allowed to be generous, because what it produces are
+- **Discovery is recall-oriented.** Each discovery call reads the whole changed
+  file (not just the hunk) and is told to enumerate every concrete defect it can
+  justify. It is allowed to be generous, because what it produces are
   *candidates*, not findings.
 - **Everything after discovery removes what cannot be proven.** An independent
   refutation call adjudicates the candidates, and a deterministic admission gate
@@ -36,8 +36,8 @@ flowchart TD
     Ctx["3b · Context assembly<br/>bounded packets + context ledger"]
   end
   subgraph model["Model-driven — bounded provider calls"]
-    Disc["4 · Holistic discovery<br/>1 call per task → candidate findings"]
-    Ref["5 · Refutation<br/>1 batched call per task → verdicts"]
+    Disc["4 · Holistic discovery<br/>1 call per partition → candidate findings"]
+    Ref["5 · Refutation<br/>1 batched call per partition → verdicts"]
   end
   subgraph det2["Deterministic — admission and output"]
     Adm["6 · Admission + severity floor<br/>scope, evidence, duplicates, redaction"]
@@ -103,11 +103,15 @@ not fully assigned to tasks fails the run as `coverage incomplete`.
 
 ### 4. Holistic discovery
 
-By default this is **exactly one general model call per task**. The reviewer gets
-the diff plus the whole changed files and follows a fixed method — understand the
-intent, trace control and data flow on every path, verify against the intent,
-then sweep defect classes — and returns findings that are converted into
-*candidate findings* (deduplicated, capped at 12 per task). One additional pass
+**One general model call per partition** — a task is cut into slices of
+`aiReview.maxFilesPerDiscoveryCall` changed files (default `2`) and each gets its
+own call, because yield tracks call count rather than how much code a call is
+shown. The reviewer gets the diff plus the whole changed files, holds the
+mediated repo tools unless `review.crossFileRetrieval` is disabled, and follows a
+fixed method — understand the intent, trace control and data flow on every path,
+verify against the intent, then sweep defect classes — returning findings that
+are converted into *candidate findings* (deduplicated, capped at 12 per call).
+One additional pass
 exists and is **off by default**: the dedicated security pass. It is purely
 additive and does not bypass anything downstream. Once every candidate for a task
 exists, a **semantic finding merge** groups the candidates that describe the same
@@ -118,8 +122,9 @@ none at all otherwise — and keeps one representative per group.
 ### 5. Refutation
 
 An independent refuter adjudicates the candidates. The call is **batched per
-task**: one call receives *all* of that task's candidates plus the shared review
-context and must return exactly one verdict per candidate — `proved`, `refuted`,
+discovery partition**: one call receives *all* of that partition's candidates
+plus the shared review context and must return exactly one verdict per candidate
+— `proved`, `refuted`,
 or `needs-more-evidence`. Batching exists because the per-candidate packet resent
 the same changed file once per candidate, which dominated the run's input tokens.
 A candidate the model does not adjudicate is treated as `needs-more-evidence`,
@@ -169,7 +174,8 @@ them, because it holds no network or write permission.
 
 | Claim | Reality |
 | --- | --- |
-| `review.mode` selects a review strategy | It is recorded in the report and in observability attributes and nothing branches on it. Budgets and clustering come from `review.depth`. |
-| Refutation costs one call per candidate | One batched call per task adjudicates all of that task's candidates. |
-| Discovery makes two passes | One general call per task. The dedicated security pass is a separate opt-in, disabled by default. |
+| `review.mode` selects a review strategy | It is recorded in the report and in observability attributes and nothing branches on it. Clustering comes from `review.depth`, which otherwise only sets the mediated-retrieval budget — `balanced` and `thorough` plan identical tasks. |
+| Refutation costs one call per candidate | One batched call per discovery partition adjudicates all of that partition's candidates. |
+| Discovery makes one call per task | One general call per **partition**: a task above `aiReview.maxFilesPerDiscoveryCall` (default `2`) changed files is spread across several. The dedicated security pass is a separate opt-in, disabled by default, and costs one further call per partition. |
+| The reviewer has no tools | It holds the mediated `repo_read` / `repo_list` / `repo_grep` tools by default (`review.crossFileRetrieval.enabled`). |
 | Deterministic signals produce findings | They inform clustering and context. The trusted-rule promotion table is currently empty, so no signal becomes a finding by itself. |

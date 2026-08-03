@@ -398,8 +398,10 @@ adds to the bill.
 ## Recipe: enable an advisory stage
 
 The two `check` commands are off by default and reached only by their own
-command — never by `review`. Neither can fail a pipeline, and **neither has an
-accuracy measurement**.
+command — never by `review`. Neither can fail a pipeline on what it reports, and
+**neither has an accuracy measurement**. `intent check` does exit `4` when one of
+its three input limits binds, refusing to judge an input it cannot see whole; see
+[the CLI reference](../06-reference/cli.md#exit-codes-and-the-three-input-limits).
 
 ```json
 {

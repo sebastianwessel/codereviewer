@@ -113,11 +113,15 @@ measured against it, and what has actually worked — is in
 [What limits recall](what-limits-recall.md). It is the page to read before
 proposing a fix.
 
-A measurement caveat that belongs with these splits: the semantic matcher assigns
-findings to expectations greedily in order, so with two expectations and two findings
-a loose accept for the first can strand the second. Most cases emit only one finding,
-so the effect on these numbers is probably small, but it confounds precisely the
-multi-defect measurement.
+A measurement caveat that belongs with these splits: the splits above were scored
+by a matcher that assigned findings to expectations **greedily in order**, so with
+two expectations and two findings a loose accept for the first could strand the
+second — confounding precisely the multi-defect measurement they are about. Most
+cases emit only one finding, so the effect on these numbers is probably small. The
+matcher has since been replaced by maximum-cardinality bipartite matching
+(`eval-matcher.ts`): no expectation is stranded when some assignment could have
+matched it, and the pairing is identical wherever the greedy one was already
+optimal.
 
 ## What was tried against it, and removed
 
@@ -201,6 +205,9 @@ Hydration alone, which costs no provider spend:
 npm run eval:corpus:hydrate
 ```
 
-The regression gate is hard-coded to demand 100% recall and zero false positives, so
-this exits non-zero on any realistic run. The report, not the exit code, is the
-output. See [Running an evaluation](running-an-evaluation.md).
+The default `stable` gate profile thresholds only parse validity and provider
+errors, so a clean run of this corpus exits `0` while saying nothing about recall.
+Passing `--gate-profile strict` restores the old bar — 100% recall, zero raw false
+positives — which exits non-zero on any realistic run. Either way the report, not
+the exit code, is the output. See
+[Running an evaluation](running-an-evaluation.md#the-regression-gate).

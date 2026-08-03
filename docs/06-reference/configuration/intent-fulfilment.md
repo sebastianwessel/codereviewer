@@ -94,8 +94,11 @@ that adds a gate. Two reasons, and the second is the binding one:
   **73–88%** when the same call is also asked to explain its judgement. A hard
   gate built on that judgement would be wrong most of the time it fired.
 
-`intent check` therefore always exits `0`, and the schema rejects a `blocking`
-key (`strictObject`) rather than accepting a setting that does nothing.
+Nothing `intent check` reports can therefore set a non-zero exit code, and the
+schema rejects a `blocking` key (`strictObject`) rather than accepting a setting
+that does nothing. The three input limits above are the one exception, and they
+are not a verdict: exit `4` means the command refused to judge an input it could
+not see whole.
 
 ## Scope reuse
 

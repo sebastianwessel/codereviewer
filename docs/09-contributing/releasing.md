@@ -125,10 +125,19 @@ is not possible even from a laptop.
 
 ## What ships
 
-`files` is `["dist", "schema"]`, plus the `README.md` and `package.json` npm
-always includes. The tarball is 497 files: compiled `.js`, the `.d.ts` they are
-described by, `schema/codereviewer-config.schema.json` and the README. No tests,
-no fixtures, no evaluation corpora, no `.codereviewer/`, no source maps.
+`files` is `["dist", "schema", "types"]`, plus the `README.md` and `package.json`
+npm always includes. The tarball carries the compiled `.js` and `.d.ts` under
+`dist/`, the two committed entry declarations under `types/` that the `exports`
+map's `types` conditions point at, `schema/codereviewer-config.schema.json` and
+the README. No tests, no fixtures, no evaluation corpora, no `.codereviewer/`,
+no source maps.
+
+`types/` is **not** build output and is not regenerated: `types/index.d.ts` and
+`types/cli.d.ts` re-export `dist/` and exist to carry a
+`/// <reference types="node" />` directive into the consumer's program. Three
+shipped declarations name `Buffer` in a public type position, and without that
+directive a consumer compiling against the package gets TS2591 errors raised
+inside our own declarations. Dropping `types` from `files` reintroduces that.
 
 Every packing step prints the full file list into the job summary. Read it if
 you change `files`, `tsconfig.build.json` or where a module lives.

@@ -1,10 +1,13 @@
 # Cross-File Retrieval
 
-> **Verdict: net negative. Do not enable.** Built, bounded, hardened, and measured
-> three times on the corpus designed to favour it. It lost recall every time.
+> **On by default since 2026-08-01. The earlier "net negative" verdict is
+> withdrawn** — those three arms were measuring a per-read truncation the model
+> was never told about, not the capability. Two re-runs with the cut disclosed led
+> on every dimension measured. No specific gain is claimed for it.
 
 Spec: [`specs/16-agentic-cross-file-discovery.md`](../../../specs/16-agentic-cross-file-discovery.md) —
-status *Approved (capability off by default; measured net negative)*, 2026-07-24.
+status *Approved (capability enabled by default since 2026-08-01; the earlier
+"measured net negative" verdict is overturned)*.
 
 Every recall, precision and cost figure on this page was measured on
 `openai/gpt-5.3-codex`. The verdict is a verdict for that model.
@@ -23,8 +26,9 @@ code looks it up. Catching that requires the callee's **body**, not its signatur
 
 ## How it works
 
-When enabled, the discovery agent for a task is given the mediated
-`repo_read` / `repo_list` / `repo_grep` tools and a per-task tool-call budget.
+The discovery agent for a task is given the mediated `repo_read` / `repo_list` /
+`repo_grep` tools and a per-task tool-call budget. This is the default; set
+`enabled: false` to take the tools away.
 
 ```mermaid
 flowchart LR
@@ -57,18 +61,27 @@ flowchart LR
 
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `review.crossFileRetrieval.enabled` | boolean | `false` | |
+| `review.crossFileRetrieval.enabled` | boolean | `true` | |
 | `review.crossFileRetrieval.maxToolCallsPerTask` | integer 1–500 | `100` | Runaway-loop guard, not a context ration |
-| `review.crossFileRetrieval.maxBytesPerRead` | integer 1000–200000 | `24000` | Retrieval reads whole files; one oversized read measurably diluted a review, so a retrieved file is bounded to an excerpt and the model narrows with `repo_grep` |
+| `review.crossFileRetrieval.maxBytesPerRead` | integer 1000–4000000 | *unset* | A read is not cut in advance. The reviewer locates what it needs with `repo_grep` and re-reads that line range; when a real limit binds, the provider says so and the read budget is halved on retry. Setting this is a deliberate operator choice and still binds, with the cut disclosed to the reviewer |
 
 Disabled, discovery issues no tool call and is configured with no tools and a
-single step — the run is byte-for-byte unchanged.
+single step — the run is byte-for-byte identical to a build without the
+capability.
 
 ## Measured evidence
 
-All arms on the real-repository corpus, which exists precisely to give cross-file
+### The three arms that produced the withdrawn verdict
+
+All on the real-repository corpus, which exists precisely to give cross-file
 retrieval a fair test (the checkouts are full repositories, so the evidence for a
 cross-file defect is actually reachable). 2026-07-24 / 2026-07-25.
+
+**Read these as a measurement of the per-read cap, not of the capability.** Every
+retrieved file was cut at `maxBytesPerRead` and the model was never told, so a
+reviewer concluded a guard was absent from code it had seen only part of — and
+the files most worth consulting are exactly the large ones that were cut. The
+numbers below are reported unchanged; what they measured is what changed.
 
 | Corpus size | Baseline recall | With retrieval | Cases gained / lost | Cost | Precision |
 | --- | --- | --- | --- | --- | --- |
@@ -84,24 +97,36 @@ cross-file defect is actually reachable). 2026-07-24 / 2026-07-25.
   holds. An earlier reading that credited the mechanism with flipping that case is
   **withdrawn**.
 
+### The two runs that reversed it
+
+The second of the two hypotheses below — *a truncated excerpt of an unfamiliar
+file misleads more than it informs* — turned out to be the whole effect. The cap
+was removed (spec 28) and the remaining cut disclosed to the reviewer, and two
+independent runs then put retrieval ahead on **every** measured dimension: recall
+up both times (**+5.7pp, +2.3pp**), adjusted precision at **100%** both times
+against 97.4% and 95.0%, cost **down** both times (**−8%, −5%**), latency inside
+noise, and zero provider errors across all four arms.
+
 ## Verdict
 
-Three measurements, all on the corpus built to favour the capability, all pointing
-the same way. It stays off.
+**On by default.** Neither run's recall gain is statistically significant, and no
+specific improvement is claimed — one model, one corpus. But significance is the
+bar for *claiming* a benefit, not for permitting a default that is free, harmless
+and directionally positive twice. If a regression ever appears, this is the first
+switch to flip.
 
-Re-enabling requires a **changed mechanism and a multi-seed measurement**, not a
-configuration change. Two hypotheses are worth testing first:
+What this does **not** fix is the larger blind spot. Measured on the 37-case
+corpus, recall on defects outside the diff is **0 of 27**, and every one of those
+27 sat in a file the reviewer had already been shown in full — none needed
+retrieval at all. That is an attention failure, not an information failure.
 
-1. tool-use mode itself diverts the model's attention from the diff to retrieval;
-2. a truncated excerpt of an unfamiliar file misleads more than it informs.
-
-The public literature names the same effect: tool use costs accuracy when context
-selection and reasoning happen in one step, and the recommended remedy is to
-pre-assemble context or delegate retrieval to a separate agent. That remedy was
-built here as the [context scout](context-scout.md) — and then
+The remaining open hypothesis is the first of the two this page originally listed:
+that tool-use mode itself diverts attention from the diff to retrieval. The public
+literature names the effect — tool use costs accuracy when context selection and
+reasoning happen in one step — and its recommended remedy, delegating retrieval to
+a separate agent, was built here as the [context scout](context-scout.md) and then
 [removed](context-scout.md) without ever being validly measured, once a controlled
 experiment showed the reviewer largely does not read the context it already has.
-Neither approach to this blind spot has earned its place.
 
 ## Where it lives
 

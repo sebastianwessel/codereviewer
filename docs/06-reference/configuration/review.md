@@ -10,13 +10,13 @@ Read the [strict-object rule and precedence](./README.md) first. Nesting matters
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
 | `review.mode` | `"local"` \| `"ci"` \| `"pr"` \| `"full"` | `"local"` | Run mode. `pr` does not publish anything; publishing is out of scope. |
-| `review.depth` | `"fast"` \| `"balanced"` \| `"thorough"` | `"balanced"` | Budget preset. Affects context caps and retrieval caps only, never scope. |
+| `review.depth` | `"fast"` \| `"balanced"` \| `"thorough"` | `"balanced"` | Task shape and the mediated-retrieval budget, never scope and never the packet. `fast` plans one task per file; `balanced` and `thorough` plan identical tasks and differ only in the retrieval budget. |
 | `review.baseRef` | git ref | `"main"` | Diff base. Must not start with `-`. Overridable per run with `review --base-ref`. |
 | `review.headRef` | git ref | `"HEAD"` | Diff head. Must not start with `-`. Overridable with `review --head-ref`. |
 | `review.maxConcurrentTasks` | integer 1–32 | `4` | Caps concurrently active review tasks and provider calls. |
 | `review.maxFiles` | integer 1–10000 | `500` | Intake hard cap; files beyond it are skipped with reason `too-many-files`. |
 | `review.maxFileBytes` | integer 1–5000000 | `500000` | Files larger than this are skipped with reason `too-large`. |
-| `review.contextMaxBytes` | integer 10000–10000000 | *unset* | Lowers the packet ceiling and the cross-file per-read cap. **Leave it unset**: the provider then decides whether a packet is too large (see below). |
+| `review.contextMaxBytes` | integer 10000–10000000 | *unset* | Lowers the ceiling on one serialized model-input packet. Nothing else — it does not touch the cross-file per-read cap. **Leave it unset**: the provider then decides whether a packet is too large (see below). |
 | `review.inlineSeverityThreshold` | severity | `"high"` | Minimum severity for a finding to be eligible for inline presentation. Reporting only — it does not affect admission or the gate. |
 | `review.maxCostUsd` | number ≥ 0 | *unset* | Hard stop when the accumulated run cost exceeds it (`cost_budget_exceeded`, exit `1`). Enforced **only** when token counts and prices are both available; otherwise the run records the warning `cost-unavailable` and no cap applies. When unset, no cost cap is enforced at all. |
 
@@ -33,14 +33,12 @@ beyond any current model. That guard exists to stop a pathological packet being
 serialized into memory; it fails **before** the provider call
 (`task_packet_budget_exceeded`, exit `4`) rather than truncating source.
 
-When you **do** set `contextMaxBytes`, it lowers that ceiling, and it also caps
-`maxBytesPerRead` for cross-file retrieval:
-
-| `depth` | Cross-file `maxBytesPerRead` when unset |
-| --- | --- |
-| `fast` | 60 000 |
-| `balanced` | 120 000 |
-| `thorough` | 240 000 |
+When you **do** set `contextMaxBytes`, it lowers that 8 MB ceiling and does
+nothing else. It is **not** a cap on cross-file reads: that is
+`crossFileRetrieval.maxBytesPerRead`, which is unset by default and independent
+of this key and of `depth` alike. A per-depth read cap of 60 / 120 / 240 KB used
+to exist and was removed by spec 28 — it was sized against an assumed context
+window and cut retrieved files mid-read without telling the model.
 
 If the lowered ceiling binds, the run stops loudly rather than truncating: recovery
 is a larger value, unsetting it, or reduced scope.
@@ -89,16 +87,16 @@ narrows a large file itself, using `repo_grep` to locate what it needs and then
 re-reading that line range. Setting the value is a deliberate operator choice and
 still binds, with the cut disclosed to the reviewer rather than silent.
 
-Agentic cross-file discovery. When enabled, the discovery agent may call the
-mediated `repo_read` / `repo_list` / `repo_grep` tools to inspect files outside
-the changed set. Its candidates pass the same refutation and admission as any
-other. Disabled, discovery is single-shot with no tools.
+Agentic cross-file discovery. The discovery agent may call the mediated
+`repo_read` / `repo_list` / `repo_grep` tools to inspect files outside the
+changed set; its candidates pass the same refutation and admission as any other.
+Set `enabled: false` and discovery is single-shot with no tools.
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `review.crossFileRetrieval.enabled` | boolean | `false` | Master switch. |
+| `review.crossFileRetrieval.enabled` | boolean | **`true`** | Master switch. |
 | `review.crossFileRetrieval.maxToolCallsPerTask` | integer 1–500 | `100` | Runaway-loop guard on mediated tool calls per task. It is not a context ration — models self-limit well below it. |
-| `review.crossFileRetrieval.maxBytesPerRead` | integer 1000–200000 | `24000` | Per-read byte cap for cross-file reads. Large single reads measurably dilute a review. |
+| `review.crossFileRetrieval.maxBytesPerRead` | integer 1000–4000000 | *unset* | Per-read byte cap. Unset means a read is not cut in advance. Setting it is a deliberate operator choice and still binds, with the cut disclosed to the reviewer rather than silent. |
 
 ### `review.guardedRegionContext` — removed
 
@@ -131,7 +129,8 @@ the block. What it was and why it went:
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `aiReview.enabled` | boolean | *unset* | When unset, model-backed review runs iff `provider` is configured. Set `false` to force a deterministic-only run even with a provider present. |
+| `aiReview.enabled` | boolean | `true` | Model-backed review runs when this is `true` **and** a `provider` is configured. Set `false` to force a deterministic-only run even with a provider present. It is a plain boolean, not a tri-state: it used to be optional, which made `undefined` and `true` behave identically and forced every reader to test `=== false`. |
+| `aiReview.maxFilesPerDiscoveryCall` | integer ≥ 1 | `2` | Changed files one discovery call reviews; a task covering more is partitioned across several calls. See above. |
 | `aiReview.requireRefutation` | `true` (literal) | `true` | Every model candidate must survive the refutation pass before admission. `false` is not an accepted value. |
 | `aiReview.deterministicSignalMode` | `"support"` \| `"disabled"` | `"support"` | `support` injects deterministic facts into model packets (materially better recall). `disabled` keeps the facts for task clustering and admission contradiction checks but sends none to the model — cheaper, lower recall. |
 | `aiReview.actionableSeverityThreshold` | severity | `"medium"` | Severity floor for a MODEL-origin finding to be admitted as actionable. Below it, findings are recorded as rejected with reason `below-threshold` (still auditable in `report.json`). Trusted deterministic-rule findings are exempt. Lower to `low`/`info` to surface more. |

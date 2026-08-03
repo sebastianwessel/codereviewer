@@ -52,6 +52,8 @@ each other's internal files.
 | `index.ts` | Command dispatch and per-command orchestration |
 | `args.ts` | Pure argument parsers — no IO, no runtime state |
 | `run-artifacts.ts` | Writing run artifacts and maintaining the run index |
+| `baseline-source.ts` | Resolving and validating the report `baseline write` builds from — the source of `baseline_source_unavailable` and `baseline_source_invalid` |
+| `review-completion.ts` | The one rule about what a completed run may tell a machine: an absent quality gate is `quality_gate_missing` (exit `5`), never a reported pass |
 | `eval-case-runner.ts` | Running one evaluation case through the review pipeline |
 
 `main.ts` is intentionally thin; everything testable lives in `index.ts` and
@@ -110,6 +112,13 @@ parsing, hashing or error normalization inside a domain.
 | `shared-context/` | The run's shared-context snapshot (candidates, verdicts, admission decisions) |
 | `verification/` | The optional verification and fix lanes: claim providers, the investigation agent, apply-checks, corroboration |
 
+### Advisory stages, reached only by their own command
+
+| Domain | Owns |
+| --- | --- |
+| `change-impact/` | `impact check` (spec 22): changed-symbol seeding from the diff, identifier-bounded reference search, contract-change reading, the report and its Markdown render. Makes no provider call |
+| `intent-fulfilment/` | `intent check` (spec 23): obligation extraction, per-obligation judgement, the separate explanation call, the three refusing input limits in `intent-limits.ts`, and the Markdown render |
+
 ### Output and quality
 
 | Domain | Owns |
@@ -162,6 +171,7 @@ Concept-level detail lives in [the concepts section](../03-concepts/review-lifec
 | `08-dependencies-and-release.md` | Dependencies and release |
 | `09-readiness-self-audit.md` | Readiness self-audit |
 | `11-` … `17-` | Feature specs: external context ingestion, verification flow, review comments, security-focused review, cross-file discovery, real-repository eval corpus. `14` and `18` through `21` are retired and never reused |
+| `22-` … `28-` | Later feature specs: change-impact review, intent-fulfilment review, invariant-conformance review (`24`, capability removed), guarded-region context (`25`, both arms removed), reactive task splitting, discovery partitioning, targeted reads. A spec for a removed capability is kept, not deleted — the measurement that killed it is the record |
 | `_registry.yaml`, `_provenance.yaml` | Spec registry and provenance |
 
 `specs/README.md` and `specs/00-conventions.md` define the source-of-truth

@@ -31,10 +31,10 @@ Three corollaries worth internalising:
 
 - **That band was measured on a 16-expected-finding version of the corpus.** All
   four recall values are exact multiples of 1/16, so the entire observed spread
-  was ±1 finding around 13. The corpus has since grown to 36 cases and 58
+  was ±1 finding around 13. The corpus has since grown to 37 cases and 87
   findings; the band has not been re-measured at that size.
 - **Denominator size sets the resolution.** One finding is worth ~6.3 points on a
-  16-finding corpus, ~1.7 points on the current 58-finding one, and ~7.1 points
+  16-finding corpus, ~1.1 points on the current 87-finding one, and ~7.1 points
   on the 14-finding proof-quality slices. A smaller corpus quantises recall more
   coarsely and needs *more* seeds, not fewer.
 - **The 4.4-point figure belongs to that corpus, that configuration, and that
@@ -175,12 +175,14 @@ Treat any of these as a stop sign, not a footnote.
 > and it names those cases. Comparing a filtered run against a fuller one is
 > ordinary work; the shared cases changing underneath you is not.
 
-> Comparing gate status is not useful in practice: with the
-> [hard-coded thresholds](running-an-evaluation.md#the-hard-coded-gate), both
-> sides of any real comparison read `FAIL`. Compare metrics.
+> Comparing gate status says little: under the default `stable`
+> [profile](running-an-evaluation.md#the-regression-gate) both sides of a clean
+> comparison read `PASS` regardless of quality, and under `strict` both read
+> `FAIL`. Compare metrics.
 
-> `generatedAt` is a fixed constant in every CLI-produced report, so it cannot
-> distinguish base from head. Identify runs by their archive directory.
+> `generatedAt` is the run's real wall clock, so it orders reports — but two runs
+> started in the same second collide. Identify runs by their archive directory,
+> which is unique.
 
 ---
 

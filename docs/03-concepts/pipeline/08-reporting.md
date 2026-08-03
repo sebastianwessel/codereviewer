@@ -27,7 +27,7 @@ Artifacts are written into `<paths.artifactDir>/<runId>/` — by default
 | Artifact | Written when | Contents |
 | --- | --- | --- |
 | `report.json` | always | The full validated report, recursively redacted, including an `artifacts` list of the other rendered files |
-| `report.md` | `reporting.formats` includes `markdown` | Human summary: run header, quality gate, coverage, actionable severity/category counts, actionable findings (with fix proposal and edits), an *Unresolved — Needs Human Decision* section for the artifact-only findings including why each stayed unresolved, and the rejected-candidate list |
+| `report.md` | `reporting.formats` includes `markdown` | The human document. Sections in order below |
 | `report.sarif` | `reporting.formats` includes `sarif` | SARIF 2.1.0 for code-scanning ingestion |
 | `review-comments.json` | `reporting.reviewComments.enabled` | Platform-neutral inline comment drafts |
 | `review-comments.<platform>.json` | `reporting.reviewComments.enabled` | The same drafts rendered for the detected/pinned platform |
@@ -43,6 +43,21 @@ artifacts are already durable.
 
 > `report.json` is written regardless of `reporting.formats`; the `json` entry in
 > that list does not gate it. `formats` controls the Markdown and SARIF renders.
+
+### What `report.md` contains, in order
+
+| Block | Always? | What it is for |
+| --- | --- | --- |
+| Title, then **what this document is** | yes | Stated before anything else, because the most consequential thing a reader can get wrong is what the report's *silence* means. It says plainly that this is a diff-scoped search of what one run could prove, and that an absent finding is not an absent defect. |
+| **Measured reliability**, with the model it was measured on | yes | The error rates printed where the reader is, rather than left in an evaluation report nobody opens: in-diff recall, out-of-diff recall, adjusted precision, and the fact that two runs over one commit do not produce the same report. Rounding a rate to "usually" lets a reader supply their own optimistic number. |
+| `## Scope of this search` | yes | Run id, mode and depth, a `- Model:` line naming provider and model (or *not recorded* — never omitted, since every rate and price quoted here belongs to one model), base/head/merge-base, and coverage read as *bytes that reached a model*, not as defects found. |
+| `## Summary` | yes | Actionable count by severity and category, the gate line, the unresolved count, the rejected-candidate count. |
+| `## Bounds that bound` | only when there are any | Incomplete-coverage reasons and every `run.warnings` entry. These used to appear only in the JSON, so a stale baseline or a degraded stage was invisible in the document people are told to read. |
+| `## Actionable Findings (n)` | yes | The reason to open the file. Empty renders an explicit *this run proved no defect it could act on* — a statement about the search, never about the change. |
+| `## Unresolved - Needs Human Decision (n)` | only when there are any | The artifact-only findings, each with why it stayed unresolved. |
+| `## Rejected Candidates (n)`, `## Refutation Results (n)` | yes | The audit trail: what was proposed and thrown out, and on what verdict. |
+| `## Provider Issues (n)`, `## Skipped Files (n)` | only when there are any | What the run could not do, and what it never read. |
+| `## Cost And Timing` | yes | Duration, tokens, and cost — or an explicit *unavailable*, never a silent omission that would read as free. |
 
 ### SARIF
 

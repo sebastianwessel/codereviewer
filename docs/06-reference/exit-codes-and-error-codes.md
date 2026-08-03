@@ -18,10 +18,10 @@ never echo submitted values.
 | Code | Meaning |
 | --- | --- |
 | `0` | Run completed; quality gate passed or no gate configured. |
-| `1` | Run completed; a gate failed (quality gate, drift gate, coverage, cost budget, or the eval regression gate). |
+| `1` | Run completed; a gate failed (quality gate, drift gate, coverage, cost budget, or the eval regression gate). The quality gate also fails on an unrecovered provider issue, with an empty `failingFindingIds`. |
 | `2` | Config, provider setup, credentials, path, or CLI usage error. |
 | `3` | Repository intake or filesystem error. |
-| `4` | Provider/model runtime error. |
+| `4` | Provider/model runtime error, or an input the engine refused to process in part rather than whole. |
 | `5` | Internal invariant violation (admission, report rendering, unknown failure). |
 
 Exit `1` is a **completion signal, not a crash**: artifacts are complete and the
@@ -29,9 +29,11 @@ report is valid.
 
 ## Category → exit code / recoverability
 
-Every structured error carries a category, which fixes its exit code:
+Every structured error carries a category. The category supplies the **default**
+exit code below, which is what the error normalizer assigns when it classifies a
+raw thrown value:
 
-| Category | Exit code | Recoverable |
+| Category | Default exit code | Recoverable |
 | --- | --- | --- |
 | `config` | `2` | yes |
 | `repository` | `3` | yes |
@@ -40,6 +42,12 @@ Every structured error carries a category, which fixes its exit code:
 | `admission` | `5` | no |
 | `report` | `5` | no |
 | `internal` | `5` | no |
+
+**The category does not fix the exit code.** A structured error carries its own
+`exitCode` and keeps it. The three `intent check` input limits are the case that
+proves it: they are category `config` and exit `4`, because they are not a
+configuration mistake to fix but an input the command declined to judge in part.
+Read the `code`, not the category, when mapping to a CI action.
 
 ## Generic codes
 
@@ -101,6 +109,21 @@ Provider setup problems are **config** errors (exit `2`), not provider errors:
 | `eval_semantic_judge_missing` | An eval case with expected findings was scored without the semantic judge (no provider). |
 | `provider_*` setup codes | See the table above. |
 
+Three `config`-category codes exit `4` rather than `2`. They are `intent check`'s
+input limits: the command refuses an input it cannot see whole instead of judging
+part of it and reporting obligations as not-evidenced whose evidence was never
+shown. Nothing is truncated in any of the three.
+
+| Code | Exit | When |
+| --- | --- | --- |
+| `intent_change_too_large` | `4` | The change has more citable lines than `intentFulfilment.maxChangeLines` allows. |
+| `intent_text_too_large` | `4` | The stated intent is larger than `intentFulfilment.maxIntentBytes` allows. |
+| `intent_too_many_obligations` | `4` | The stated intent yielded at least as many obligations as `intentFulfilment.maxObligations` allows. |
+
+Each message names the offending size, the configured limit, and a recovery — and
+where the limit is already at its schema maximum it says so instead of advising a
+raise that cannot work.
+
 ### `repository` (exit 3)
 
 | Code | When |
@@ -142,9 +165,11 @@ These never set an exit code on their own; they appear in `run.warnings` in
 
 | Signal | Meaning |
 | --- | --- |
-| `config-file-missing` | No config file found; defaults were used. |
+| `config-file-missing` | No config file at the **default** path; defaults were used. A file named by `--config` or `CODEREVIEWER_CONFIG_PATH` that does not exist is a `config_error` at exit `2` instead — a named file that is missing is a mistake, not a fallback. |
 | `baseline-missing` | A baseline was explicitly configured but the file is absent. Findings are marked `unknown` and treated as new. |
 | `cost-unavailable` | Token counts or prices were unavailable, so cost was not computed and `review.maxCostUsd` could not be enforced. |
+| `External change-intent provider "<id>" failed and was skipped.` | The provider errored. The review continues without its contribution. |
+| `External change-intent provider "<id>" produced nothing and was skipped. Check that it points at content this change has.` | The provider worked and had nothing to give — an empty inbox, a mistyped directory, no changed file matching its globs. Worded apart from the failure above because the action is different: check where it points. |
 | Claim-provider warnings | A `verification` claim provider failed; the lane continues and reports an empty or partial result. |
 | `plausibility_source_unavailable` | (eval) A finding's source file could not be read for plausibility judging; the judge fails closed for that finding. |
 

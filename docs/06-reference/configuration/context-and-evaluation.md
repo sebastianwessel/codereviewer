@@ -50,27 +50,72 @@ a missing required key fails validation with exit `2`. The network providers
 ```
 
 Ingested context is **untrusted input**. It informs the review but cannot change
-scope, severity, admission, the baseline, or the gate. A provider that fails at
-run time is non-fatal and surfaces as a run warning.
+scope, severity, admission, the baseline, or the gate.
+
+A provider that does not contribute is non-fatal and surfaces as a run warning,
+in one of two wordings, because the two call for different actions:
+
+- *"…failed and was skipped."* — the provider errored.
+- *"…produced nothing and was skipped. Check that it points at content this
+  change has."* — the provider worked and had nothing to give. An empty inbox, a
+  mistyped `dir`, or `include` globs no changed file matches all land here. This
+  case used to be silent: a misconfigured source was indistinguishable from one
+  that was never configured, and the review ran with no change-intent context and
+  said so nowhere.
 
 ## `evaluation`
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
 | `evaluation.minJudgeAgreement` | number 0–1 | `0.9` | Minimum semantic-judge agreement against the committed calibration set. The judge is the sole authority for every eval quality metric, so a run below this bar reports `scoring.judgeTrustworthy = false`. It marks metrics untrustworthy — **it does not fail the regression gate**. |
+| `evaluation.regressionGate.profile` | `"stable"` \| `"strict"` | `"stable"` | Which threshold set `eval run` gates on. Overridable per run with `eval run --gate-profile`. |
+| `evaluation.regressionGate.overrides` | object | `{}` | Per-threshold values layered on top of the resolved profile. Any key set here wins over the profile's value for the same key. |
 
 There is deliberately no `evaluation.enabled` key: case selection is driven by
 `eval run` CLI flags, not config, so an `enabled` flag would have been accepted
 and then silently ignored.
 
-### The `eval run` regression gate is not configurable
+### The `eval run` regression gate
 
-`minJudgeAgreement` is the only evaluation knob the CLI honors. The regression
-thresholds themselves are hard-coded in `src/cli/index.ts` — 100 % parse
-validity, 100 % recall, zero false positives, fail on provider error — and there
-are no flags to change them. Expect `eval run` to exit `1` on essentially any
-provider-backed benchmark run and read the metrics from the artifacts instead.
-Details in [cli.md](../cli.md#the-regression-gate-is-hard-coded).
+The gate is a **profile** plus per-threshold overrides. Both are configuration;
+the profile is also a CLI flag.
+
+| Threshold | `stable` (default) | `strict` |
+| --- | --- | --- |
+| `minParseValidity` | `1` | `1` |
+| `failOnProviderError` | `true` | `true` |
+| `minRecall` | *not gated* | `1` |
+| `maxFalsePositiveCount` | *not gated* | `0` |
+
+`stable` gates only on signals with no run-to-run sampling variance: output
+either parsed or it did not, a provider call either errored or it did not.
+It deliberately does not gate on recall or on the raw false-positive count.
+Recall is a mean over a non-deterministic run, and the raw false-positive count
+includes real defects the answer key never listed — gating on either by default
+made a non-zero exit the normal outcome of every run, and a signal that always
+fires carries no information.
+
+`strict` is the older all-or-nothing bar, kept as a named opt-in for a maintainer
+who has verified perfect recall holds for their own fixture set.
+
+`overrides` accepts every key of the threshold contract, not just the four above:
+`minPrecision`, `minSeverityWeightedF1`, `minProductRecall`, `maxCommentsPerKloc`,
+`maxCommentsPerDiffHunk`, `maxIncompleteCoverageRate`, `maxContextMutationRate`,
+`maxCostUsd`, `maxDurationMs`, plus the four profile keys. Set one to tighten a
+single signal without leaving the `stable` shape:
+
+```json
+{
+  "evaluation": {
+    "regressionGate": {
+      "profile": "stable",
+      "overrides": { "minProductRecall": 0.4 }
+    }
+  }
+}
+```
+
+Details in [cli.md](../cli.md#the-regression-gate-has-two-profiles).
 
 ## Related
 

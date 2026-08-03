@@ -90,15 +90,21 @@ Every admitted finding is labelled with how it may be surfaced:
 | `summary-only` | Reported, counted by the quality gate, but not inline |
 | `artifact-only` | Present in the artifacts only; excluded from the gate and from the human-facing summary |
 
-`inline` requires **all** of: location side `new`, a valid line range, overlap
-with an actual diff hunk, and severity at or above
+`inline` requires **all** of: a location that is not on the old side, a reported
+line provably inside a reviewed diff hunk, and severity at or above
 `review.inlineSeverityThreshold` (default `high`).
 
-> Worth knowing: discovery stamps model candidates with location side `file`,
-> so today model-origin findings resolve to `summary-only` and the review-comment
-> renderer (which requires `inline` **and** side `new`) emits no drafts for them.
-> Only candidates created with side `new` — the trusted deterministic-rule path,
-> whose template table is currently empty — can reach `inline`.
+> **Model findings can reach `inline`.** Discovery stamps its candidates with
+> location side `file` — it shows the model line-numbered file content, not a
+> diff, so it never asks the model to guess which side of a hunk a line belongs
+> to. Requiring side `new` here therefore made inline eligibility unreachable for
+> every model finding, and the review-comment surface produced zero drafts on
+> every run. A whole-file location now earns eligibility when its reported line
+> falls inside a reviewed hunk, which admission is the only stage able to check
+> because it is the only one holding the diff ranges. With no diff ranges at all
+> there is no hunk to prove it against, and a defect merely exposed elsewhere in
+> a changed file is still reported — just with no changed line to anchor a
+> comment to.
 
 `artifact-only` is applied after the fact to candidates the refuter marked
 `needs-more-evidence` (under the default promotion policy) and to non-trusted

@@ -75,14 +75,22 @@ alternative produces a number that looks fine and means nothing.
 
 ## Read this before running anything
 
-> **`eval run`'s quality gate is hard-coded and demands perfection.**
-> The thresholds are not configurable and are not CLI flags. They are fixed in
-> `src/cli/index.ts` at `minParseValidity: 1`, `minRecall: 1`,
-> `maxFalsePositiveCount: 0`, `failOnProviderError: true`. Any provider-backed
-> run against a corpus with expected findings will fail the gate and exit `1`.
-> **A non-zero exit from `eval run` is normal and is not a regression signal.**
-> Read the metrics; ignore the gate.
-> → [Running an evaluation](running-an-evaluation.md#the-hard-coded-gate)
+> **`eval run`'s gate is a profile, and the default one does not gate on
+> quality.** `stable` — the default — thresholds only `minParseValidity: 1` and
+> `failOnProviderError: true`: output either parsed or it did not, a provider
+> call either errored or it did not. Neither has run-to-run sampling variance.
+> Recall and the raw false-positive count are **not** gated by default, because a
+> gate on a mean that moves several points seed-to-seed fires unpredictably, and
+> the raw false-positive count charges the reviewer for real defects the answer
+> key never listed.
+>
+> `strict` restores the old all-or-nothing bar (perfect recall, zero false
+> positives) as an explicit opt-in, via `--gate-profile strict` or
+> `evaluation.regressionGate.profile`. Individual thresholds move through
+> `evaluation.regressionGate.overrides`.
+>
+> **The gate still is not a quality reading.** Read the metrics.
+> → [Running an evaluation](running-an-evaluation.md#the-regression-gate)
 
 ---
 

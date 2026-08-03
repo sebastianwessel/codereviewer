@@ -80,7 +80,8 @@ flowchart TD
 | `security.dedicatedPass.enabled` | boolean | `false` |
 
 With it disabled, no security pass runs and the general review is byte-for-byte
-unchanged (the same task set, the same single discovery call per task).
+unchanged (the same task set, the same one general discovery call per
+partition). Enabled, it costs one further call per partition — not one per task.
 
 ## Measured evidence
 

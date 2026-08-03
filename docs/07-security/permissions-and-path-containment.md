@@ -37,9 +37,11 @@ npm run cli -- config validate
 There is no override flag, no environment variable, and no escalation path.
 Granting any of these requires a spec change and a code change, by design.
 
-`security.signals` is present as configuration and carries no behavior in this
-phase. `security.dedicatedPass` is a review-quality option, not a permission —
-it adds a security-focused discovery call and grants no new capability.
+There is no `security.signals` key: the deterministic security-signal evidence
+layer has no implementation, and the block is strict, so a config that still sets
+it fails validation with exit code `2`. It ships alongside the layer, not before
+it. `security.dedicatedPass` is a review-quality option, not a permission — it
+adds a security-focused discovery call and grants no new capability.
 
 ---
 

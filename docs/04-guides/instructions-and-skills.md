@@ -136,11 +136,17 @@ be requested.
 
 ### The cost of enabling skills
 
-With no skills mounted, each review agent runs single-shot: `maxSteps: 1` and
+With no skills mounted, a review agent runs single-shot: `maxSteps: 1` and
 built-in tools disabled. Mounting at least one skill raises the allowance to
 `maxSteps: 4` and enables the `allowTools` set. That is a real change in call
 shape: agents may take extra steps, which costs tokens and time. Measure before
 and after — see [controlling-cost.md](controlling-cost.md).
+
+The discovery agent is the exception, and it is already past single-shot by
+default: with `review.crossFileRetrieval.enabled` it carries the mediated repo
+tools and a step allowance sized to its whole tool-call budget, whatever the
+skill setting. Mounting a skill on top of that adds the skill's own tools; it
+does not change the step allowance, which is already the larger of the two.
 
 ---
 

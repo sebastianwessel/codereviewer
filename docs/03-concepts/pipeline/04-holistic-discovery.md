@@ -8,17 +8,30 @@ survive refutation and admission.
 
 ## What it receives
 
-One workflow task: its paths, the per-path unified diff segment, the full
-line-numbered content of its changed files, optional support-signal facts,
-optional referenced-definition digests, optional change-intent brief, plus
-instructions, skills metadata, and a shared digest.
+One **partition** of a workflow task: its paths, the per-path unified diff
+segment, the full line-numbered content of its changed files, optional
+support-signal facts, optional referenced-definition digests, optional
+change-intent brief, plus instructions, skills metadata, and a shared digest.
 
 ## What it does
 
-**By default, exactly one general model call per task.** The reviewer is a single
-agent invocation with no tools and no conversation history — it sees its
-instructions and its packet, and nothing else, so no discovery call is ever
-influenced by what another discovery call answered. The prompt fixes the method:
+**One general model call per partition, not per task.** A task is cut into
+partitions of `aiReview.maxFilesPerDiscoveryCall` changed files (default `2`) and
+each partition gets its own call, sequentially, against the same provider; their
+candidates are unioned. A task at or below the limit is one partition, so a small
+change is unaffected. Yield tracks call count, not code volume — a file that gets
+any attention yields about 1.2 findings however much else the call was shown — so
+partitioning is what raises the share of files actually looked at.
+
+The reviewer carries **no conversation history**: it sees its instructions and
+its packet and nothing else, so no discovery call is ever influenced by what
+another answered. It is **not** tool-free. With
+`review.crossFileRetrieval.enabled` — on by default — the discovery agent holds
+the mediated `repo_read` / `repo_list` / `repo_grep` tools and a step allowance
+large enough to spend its whole tool-call budget and still emit findings. Turn
+that off and discovery is a single-step invocation with no tools.
+
+The prompt fixes the method:
 
 1. **Understand the intent** — what behaviour, invariant, or contract the change
    introduces or modifies.
@@ -51,26 +64,31 @@ explicit `critical` → `info` rubric that the report and the gate later rely on
 ### Turning findings into candidates
 
 Each returned finding must carry a category, severity, title, description, a path
-from the task's `paths`, and a positive `startLine`; anything missing a required
-field or pointing outside the task is dropped. Survivors get a deterministic
-candidate id derived from task id, path, start line, and title, with the title
-capped at 120 and the description at 1200 characters.
+from the **partition's** `paths`, and a positive `startLine`; anything missing a
+required field or pointing outside the partition is dropped — a finding must stay
+restricted to the files its own call was shown, or admission would anchor it
+against content that call never read. Survivors get a deterministic candidate id
+derived from the partition id, path, start line, and title, with the title capped
+at 120 and the description at 1200 characters.
 
-At most **12 candidates per task** are kept from the general pass; the dedicated
-security pass may add up to **8 more** on top. The cap exists because every
-candidate costs downstream refutation budget — it is not the precision mechanism.
-Refutation is.
+At most **12 candidates per discovery call** are kept from the general pass; the
+dedicated security pass may add up to **8 more** per call. Both caps are per
+call, so a partitioned task's ceiling scales with its partition count. The cap
+exists because every candidate costs downstream refutation budget — it is not the
+precision mechanism. Refutation is. Measurement says it does not bind: at roughly
+1.2 findings per file attended to, a call rarely approaches 12.
 
 ## The one optional extra pass
 
-Discovery has exactly one optional additional call, and it is off by default. It
+Discovery has exactly one optional additional pass, and it is off by default. It
 is *additive*: it may only add candidates at locations the general pass did not
 already claim, is capped, and its candidates face the same refutation and
-admission as any other.
+admission as any other. It is partitioned on the same terms as the general pass,
+so it costs one further call per partition — not one per task.
 
 | Pass | Config key | What it asks |
 | --- | --- | --- |
-| Dedicated security pass | `security.dedicatedPass.enabled` (`false`) | A security-only call with a generic OWASP/CWE checklist and a source→sink method; capped at 8 additional candidates |
+| Dedicated security pass | `security.dedicatedPass.enabled` (`false`) | A security-only call per partition, with a generic OWASP/CWE checklist and a source→sink method; capped at 8 additional candidates per call |
 
 Three further passes — an enumeration sweep, a diverse-lens second pass, and an
 un-anchored pass over bounded units with the diff withheld — were built, measured,
@@ -79,9 +97,9 @@ cost. A **context scout** that pre-selected extra symbol context was also
 [removed](../optional-capabilities/context-scout.md), on mechanism rather than on a
 measurement.
 
-One opt-in remains that changes what discovery is shown: **cross-file retrieval**
-(`review.crossFileRetrieval.enabled`) gives the reviewer mediated `repo_read` /
-`repo_list` / `repo_grep` tools. It is described in
+One further setting changes what discovery may see: **cross-file retrieval**
+(`review.crossFileRetrieval.enabled`, **on by default**) gives the reviewer
+mediated `repo_read` / `repo_list` / `repo_grep` tools. It is described in
 [Optional capabilities](../optional-capabilities/README.md).
 
 ## Semantic finding merge
@@ -141,10 +159,11 @@ arrived carrying every earlier call's output attributed to the model itself.
 
 ```mermaid
 flowchart TD
-  P["task packet"] --> G["general discovery call"]
+  T["review task"] --> P["partitions · maxFilesPerDiscoveryCall changed files each"]
+  P --> G["one general discovery call per partition"]
   G --> SE{"security.dedicatedPass.enabled?"}
-  SE -- yes --> SP["security-only call (additive, ≤ 8 more)"]
-  SE -- no --> C["candidates, deduped · ≤ 12 general (+ ≤ 8 security)"]
+  SE -- yes --> SP["security-only call per partition (additive, ≤ 8 more each)"]
+  SE -- no --> C["candidates, deduped · ≤ 12 general (+ ≤ 8 security) per call"]
   SP --> C
   C --> M{"≥ 2 candidates in one file?"}
   M -- no --> O["candidates for refutation"]
@@ -157,35 +176,38 @@ flowchart TD
 
 Candidate findings (id, task id, category, severity, title, description,
 location, `proposedBy: 'review-agent'`, no evidence ids yet), the `duplicate`
-rejections produced by the semantic merge, plus any recovered provider issues.
-Candidates are not findings and are never reported as such.
+rejections produced by the semantic merge, plus any provider issues. Candidates
+are not findings and are never reported as such.
 
 ## What can go wrong
 
 | Situation | Behaviour |
 | --- | --- |
-| The model returns malformed or truncated JSON | The call yields no findings and is recorded as a **recovered** provider issue; the task and the run continue |
-| The agent exhausts its step allowance | Same: recovered provider issue, no findings from that call |
-| A finding points outside the task's paths, or omits a required field | Dropped; counted in the run's debug metrics |
-| More than 12 valid findings | Excess is discarded by the cap |
+| The model returns malformed or truncated JSON | The call yields no findings and is recorded as an **unrecovered** provider issue (`recovered: false`); the task and the run continue, and the quality gate fails on the issue under the default `failOnProviderError` |
+| The agent exhausts its step allowance | Same: unrecovered provider issue, no findings from that call |
+| A finding points outside its partition's paths, or omits a required field | Dropped; counted in the run's debug metrics |
+| More than 12 valid findings from one call | Excess is discarded by the cap |
 | A genuine provider failure (auth, budget, network exhaustion) | Fails the task and the run, writing partial artifacts |
+| The provider refuses the packet as oversized | The partition is halved and each half retried, recursively; only a unit that cannot be split further fails, as `review_task_indivisible` |
 | The security pass reports a location the general pass already flagged | Its candidate is suppressed — the extra pass can only add |
-| The semantic merge call fails, or returns a group naming a candidate that does not exist | No grouping for that file, recorded as a **recovered** provider issue; every candidate survives |
+| The semantic merge call fails, or returns a group naming a candidate that does not exist | No grouping for that file, recorded as an **unrecovered** provider issue; every candidate survives |
 | The merge puts one candidate in two groups | Only the first group is honoured — an ambiguous merge resolves towards leaving candidates alone |
 
-Recovering from a bad response instead of failing is deliberate: letting one
+Continuing after a bad response instead of failing is deliberate: letting one
 malformed response fail the whole task would silently discard every other finding
 it had, and in an evaluation would drop the case from the comparison entirely.
+The issue is still recorded unrecovered, so the run does not read as clean.
 
 ## Configuration keys
 
 | Key | Default | Effect |
 | --- | --- | --- |
 | `provider.*` | unset | No provider means no discovery at all |
-| `aiReview.enabled` | unset (on) | `false` disables the model stages |
+| `aiReview.enabled` | `true` | `false` disables the model stages |
+| `aiReview.maxFilesPerDiscoveryCall` | `2` | Changed files one discovery call reviews; above it, the task is partitioned |
 | `review.maxConcurrentTasks` | `4` | Discovery parallelism |
-| `security.dedicatedPass.enabled` | `false` | Adds the security-only call |
-| `review.crossFileRetrieval.*` | disabled | Gives the reviewer mediated repo tools |
+| `security.dedicatedPass.enabled` | `false` | Adds the security-only call per partition |
+| `review.crossFileRetrieval.*` | enabled | Gives the reviewer mediated repo tools |
 | `instructions.*`, `skills.*` | — | Extra reviewer instructions and skills |
 
 Each enabled pass is reserved in the run's child-agent call budget, so turning

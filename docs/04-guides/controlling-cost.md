@@ -16,28 +16,31 @@ change even when the call count does.
 
 ## How many provider calls a run makes
 
-The unit is the **review task**, not the file and not the finding.
+The unit is the **discovery partition** — `aiReview.maxFilesPerDiscoveryCall`
+changed files of one review task, default `2` — not the task, not the file and
+not the finding. A task at or below that width is a single partition.
 
 | Stage | Calls | Condition |
 | --- | --- | --- |
-| Holistic discovery | 1 per task | Always (with a provider configured) |
-| Dedicated security pass | 1 per task | `security.dedicatedPass.enabled` |
+| Holistic discovery | 1 per partition | Always (with a provider configured) |
+| Dedicated security pass | 1 per partition | `security.dedicatedPass.enabled` |
 | Semantic finding merge | 1 per file that has ≥ 2 candidates | Always — and today that is almost never, because discovery averages about one candidate per file |
-| **Refutation** | **1 per task** | Always, whenever the task produced candidates |
+| **Refutation** | **1 per partition** | Always, whenever the partition produced candidates |
 | Change-intent summarizer | 1 per run | `contextSources.enabled` and the summary mode resolves to `model` |
 | Verification lane | 1 bounded agent loop per claim (≤ `verification.maxToolCallsPerClaim` tool calls) | `verification.enabled` |
 | Fix lane | 1 bounded agent loop per eligible admitted finding | `fix.enabled` |
 
-### Refutation is batched — one call per task, not per candidate
+### Refutation is batched — one call per partition, not per candidate
 
-A single refutation call adjudicates **every candidate of a task at once** and
-returns one verdict per candidate. The task's review context — the changed
-file — is therefore sent once, not once per candidate.
+A single refutation call adjudicates **every candidate of a partition at once**
+and returns one verdict per candidate. The review context — the changed file — is
+therefore sent once, not once per candidate.
 
 A batch that does not fit the provider input budget, even after the packet
 sheds its optional context, is split in half and each half retried. Splitting
-is bounded and rare: an oversized task degrades into a few more calls rather
-than losing its candidates. Budget for it as `1 + a small allowance` per task.
+is bounded and rare: an oversized batch degrades into a few more calls rather
+than losing its candidates. Budget for it as `1 + a small allowance` per
+partition.
 
 ### The semantic merge only fires when it has something to merge
 
@@ -49,17 +52,17 @@ when discovery produces several candidates for one file.
 So the baseline cost of a default run is:
 
 ```
-calls ≈ 2 × taskCount   (one discovery + one refutation per task)
+partitions ≈ Σ ceil(changedFilesInTask / aiReview.maxFilesPerDiscoveryCall)
+calls      ≈ 2 × partitions   (one discovery + one refutation each)
 ```
 
-Each optional pass you enable adds `1 × taskCount` to the discovery side. The
-security pass is the only one that remains, and enabling it takes a task from 2
-calls to 3.
+Each optional pass you enable adds `1 × partitions` to the discovery side. The
+security pass is the only one that remains, and enabling it takes a partition
+from 2 calls to 3.
 
-The larger multiplier is `aiReview.maxFilesPerDiscoveryCall` (default 2): a task
-covering more files than that is split across several calls, each with its own
-refutation. That is deliberate — it is the only measured lever on recall — but it
-is also where the calls go.
+Partitioning is where the calls go, and it is deliberate — it is the only
+measured lever on recall. A task of eight changed files is four partitions at the
+default, so eight calls rather than two.
 
 ---
 

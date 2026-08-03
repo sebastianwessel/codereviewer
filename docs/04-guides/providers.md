@@ -201,8 +201,11 @@ Raw provider messages are redacted before they reach stderr, logs or artifacts.
 
 If the refutation call for a task fails, that task's candidates are recorded as
 `needs-more-evidence` with reason `provider-error` and the run continues. The
-failure is recorded as a recovered provider issue. A failure that aborts the
-whole run still writes partial artifacts — see
+failure is recorded as an **unrecovered** provider issue — those candidates were
+never adjudicated — which fails the quality gate under the default
+`qualityGate.failOnProviderError`, at exit `1` with an empty
+`failingFindingIds`. A failure that aborts the whole run still writes partial
+artifacts — see
 [partial-and-failed-runs.md](../08-operations/partial-and-failed-runs.md).
 
 ---

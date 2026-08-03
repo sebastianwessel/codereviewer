@@ -40,6 +40,14 @@ flowchart LR
 Each task carries the ids of the facts, evidence, and candidates that belong to
 its paths, plus a deterministic id derived from its kind and path list.
 
+`balanced` and `thorough` plan **identical** tasks. Depth's only other effect is
+the mediated-retrieval budget below; it does not change what is reviewed, and it
+does not bound the packet.
+
+A task is not the unit a model call sees. Discovery cuts it again into
+partitions of `aiReview.maxFilesPerDiscoveryCall` changed files (default `2`) —
+see [holistic discovery](04-holistic-discovery.md).
+
 ## 3b · Context assembly
 
 Each planned task is turned into one or more *workflow tasks*, each with a
@@ -85,14 +93,20 @@ halved and each half retried, recursing until the pieces are accepted:
   is deliberately counted apart from transient retry: an oversize split and a
   rate-limit retry have different causes and different meanings.
 
-| Depth | Cross-file retrieval caps (reads / searches / matches / depth / bytes per read) |
+| Depth | Cross-file retrieval caps (reads / searches / matches / traversal depth) |
 | --- | --- |
-| `fast` | 200 / 100 / 50 / 4 / 60 000 B |
-| `balanced` | 1 200 / 600 / 150 / 8 / 120 000 B |
-| `thorough` | 4 800 / 2 400 / 320 / 12 / 240 000 B |
+| `fast` | 200 / 100 / 50 / 4 |
+| `balanced` | 1 200 / 600 / 150 / 8 |
+| `thorough` | 4 800 / 2 400 / 320 / 12 |
 
-- These caps bound only the mediated repository retriever, exercised by the optional
+- These caps bound only the mediated repository retriever, exercised by the
   cross-file capabilities. They no longer size the review packet.
+- **There is no per-depth byte cap on a read.** Depth once also set 60 / 120 /
+  240 KB per read — sized against an assumed context window, which is exactly
+  what spec 28 forbids — and it cut retrieved files mid-read while telling the
+  model nothing. A read is no longer cut in advance; only an explicitly
+  configured `review.crossFileRetrieval.maxBytesPerRead` binds, and the cut is
+  disclosed when it does.
 - The **packet ceiling** for one serialized model input is 8 MB — roughly 2M tokens,
   far beyond any current model. It is a runaway guard against serializing a
   pathological packet into memory, not a limit on how much review may be sent, and

@@ -78,10 +78,10 @@ flowchart LR
 | Layer | Notes |
 | --- | --- |
 | 1. Schema defaults | Applied by Zod after merging. |
-| 2. Config file | `--config <path>` > `CODEREVIEWER_CONFIG_PATH` > `.codereviewer/config.json`. |
+| 2. Config file | `--config <path>` > `CODEREVIEWER_CONFIG_PATH` > `.codereviewer/config.json`. A file requested by either of the first two that does not exist is a `config_error` (exit `2`), not a fallback to defaults; only the default path may be absent, and that records the `config-file-missing` warning. |
 | 3. Process environment | Only the documented `CODEREVIEWER_*` keys map into config; see [environment.md](../environment.md). |
 | 4. `.env` file | Loaded from the repository root, best-effort. **Its values override process environment values.** Invalid `.env` syntax is a config error. `eval run` skips `.env` entirely. |
-| 5. CLI flags | `review`/`eval run` `--debug`, `--log-level`; `eval run` `--review-mode`, `--review-depth`, `--max-concurrent-tasks`. |
+| 5. CLI flags | `review`/`eval run` `--debug`, `--log-level` (the other five commands reject these); `eval run` `--review-mode`, `--review-depth`, `--max-concurrent-tasks`, `--gate-profile`. |
 
 Merging is a deep merge for plain objects; arrays are **replaced wholesale**, not
 concatenated. Setting `paths.exclude` therefore discards the whole default

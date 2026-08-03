@@ -110,7 +110,9 @@ requirement, not a configuration default — spec 23 states it outright: the
 command "MUST NOT be able to fail a pipeline on fulfilment grounds. This is not
 configurable", because the measured spurious-rejection rate of model
 requirement-conformance judgement is 26–36% and is not accurate enough to gate
-on. Both commands exit `0` whatever they report, and
+on. Nothing either command reports can set a non-zero exit code — `intent check`
+exits `4` only when an input limit binds and it declines to judge a partial
+input, which is a refusal to answer rather than an answer — and
 `jobExitCode` in [`stage-outcomes.ts`](../../scripts/github/stage-outcomes.ts)
 reads the blocking stage and nothing else, so an advisory outcome has no way to
 reach the job's exit code even if one of them errors.
@@ -300,8 +302,10 @@ outcome under `codereviewer-run-<pr number>` and kept for 14 days. See
 
 ## Cost
 
-The blocking review dominates: two provider calls per review task (discovery and
-a batched refutation), so cost scales with tasks, not with findings.
+The blocking review dominates: two provider calls per discovery partition
+(discovery and a batched refutation), where a partition is
+`aiReview.maxFilesPerDiscoveryCall` changed files of a task, default `2`. Cost
+therefore scales with changed files, not with findings.
 `intent check` adds one extraction call, one judgement call per obligation, and
 one explanation call — measured at roughly $0.008 per obligation on
 `openai/gpt-5.3-codex`, which is the model every cost figure in these docs was

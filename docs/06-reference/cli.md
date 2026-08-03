@@ -3,9 +3,9 @@
 Binary: `codereviewer` (`package.json` `bin` → `dist/cli/main.js`).
 From a source checkout: `npm run cli -- <command> [flags]`.
 
-Every command is a fixed word pair or single word. There is no `--help`, no
-`--version`, and no abbreviated/`=`-joined flag form: a flag and its value are
-two separate argv tokens (`--config path`, never `--config=path`).
+Every command is a fixed word pair or single word. There is no `--help` and no
+`--version`. A flag and its value may be written either way: `--config path` and
+`--config=path` are both accepted, everywhere.
 
 Source of truth: [`src/cli/index.ts`](../../src/cli/index.ts) (command dispatch)
 and [`src/cli/args.ts`](../../src/cli/args.ts) (parsers). Only the flags listed
@@ -24,7 +24,7 @@ below are parsed.
 | `eval slice-manifest` | Emit a manifest (with digest) for a benchmark slice directory. | `0`, `2`, `3` |
 | `drift check` | Run the drift gate. | `0`, `1`, `2`, `3` |
 | `impact check` | List the symbols a change touched and where they are referenced. | `0`, `2`, `3` |
-| `intent check` | Map the change's stated intent onto the change, obligation by obligation. | `0`, `2`, `3` |
+| `intent check` | Map the change's stated intent onto the change, obligation by obligation. | `0`, `2`, `3`, `4` |
 
 Anything else exits `2` with `{"code":"usage_error", ...}` on stderr and the
 message `Expected command: config validate, review, baseline write, eval run,
@@ -33,8 +33,11 @@ check, or intent check`.
 
 `review` is the only command that can fail a pipeline on what it found.
 `impact check` and `intent check` are advisory: they run independently of each
-other and of `review`, share none of each other's context or output, and always
-exit `0` when they run at all.
+other and of `review`, share none of each other's context or output, and neither
+can exit non-zero on what it reported. `intent check` does refuse to run on an
+input it cannot see whole — three input limits fail the command with exit `4`
+rather than judging a partial input, which is a different thing from a verdict.
+See [its exit codes](#exit-codes-and-the-three-input-limits).
 
 See [exit-codes-and-error-codes.md](./exit-codes-and-error-codes.md) for the
 full mapping.
@@ -43,11 +46,11 @@ full mapping.
 
 | Rule | Detail |
 | --- | --- |
-| Unknown flags | **Rejected before the command does any work**, with exit `2` and `{"code":"usage_error"}` naming the flag. Every command declares its own option set; a flag one command accepts is still unknown to another. A parser that ignored a flag it does not implement would let a run proceed as though the flag had been honoured, which this project paid for twice. |
-| Flag/value form | `--flag value`. `--flag=value` is not supported; it is checked on the flag name alone, so a known flag in the joined form is rejected by name rather than mistaken for an unknown one. |
-| Missing value | Throws a usage/config error → exit `2` with `code: "config_error"` (the CLI classifies raw `TypeError` from parsing as a config error). |
-| Repeated flags | Only `--file`, `--case`, and `eval recall-report --report` accept repetition. For all others the **first** occurrence wins (`indexOf`). |
-| Leading-dash values | Rejected for `--config`, `--log-level`, `--log-file`, `--case`, `eval recall-report --report`, `--review-mode`, `--review-depth`, `--max-concurrent-tasks`. Accepted (and passed through to validation) for `--base-ref`, `--head-ref`, `--file`, `--files`, `--slice-root`, `--base`, `--head`, `baseline write --report`. A git ref starting with `-` is later rejected by the schema. |
+| Unknown flags | **Rejected before the command does any work**, with exit `2` and `{"code":"usage_error"}` naming the flag. Every command declares its own option set; a flag one command accepts is still unknown to another. A parser that ignored a flag it does not implement would let a run proceed as though the flag had been honoured, which this project paid for twice. Only `--config` is global. `--debug` / `--log-level` / `--log-file` are declared by `review` and `eval run` alone — the five other commands reject them with exit `2`, because being told an option is unknown beats being silently ignored. |
+| Flag/value form | `--flag value` and `--flag=value` are equivalent, for every flag on every command, including `--config` and `--file`. The joined form used to be accepted by the unknown-flag check and then dropped by the value parsers, so `--config=path` passed validation and the run proceeded on defaults at exit `0`; the parsers now read both spellings. |
+| Missing value | Throws a usage/config error → exit `2` with `code: "config_error"` (the CLI classifies raw `TypeError` from parsing as a config error). An empty joined value (`--config=`) is a missing value, not an empty string. |
+| Repeated flags | Only `--file`, `--case`, and `eval recall-report --report` accept repetition. For all others the **first** occurrence wins, and a joined occurrence wins over a space-separated one wherever both appear. |
+| Leading-dash values | In the **space-separated** form, rejected for `--config`, `--log-level`, `--log-file`, `--case`, `eval recall-report --report`, `--review-mode`, `--review-depth`, `--max-concurrent-tasks`, `--gate-profile`; accepted (and passed through to validation) for `--base-ref`, `--head-ref`, `--file`, `--files`, `--slice-root`, `--base`, `--head`, `baseline write --report`. The check exists to stop the next flag being eaten as a value, which the joined form cannot do, so `--flag=-x` is generally passed through to the value's own validation instead. A git ref starting with `-` is rejected by the schema either way. |
 | Output | Success payloads go to **stdout**; errors go to **stderr** as a single JSON object `{ "code": ..., "message": ... }`. |
 
 ## `codereviewer config validate`
@@ -62,7 +65,11 @@ codereviewer config validate [--config <path>]
 
 Stdout: the fully merged, defaulted, **redacted** config as pretty JSON
 (secrets masked, `baseUrl`/`endpoint` reduced to `scheme://host`). A missing
-config file is not an error — defaults validate on their own.
+config file at the **default** path is not an error — defaults validate on their
+own, and the run records the `config-file-missing` warning. A file named
+explicitly, by `--config` or `CODEREVIEWER_CONFIG_PATH`, that does not exist is a
+`config_error` at exit `2`: continuing on defaults there would run with settings
+nobody asked for and report success.
 
 Any failure exits `2` with `{"code":"config_error"}` unless the underlying error
 already carries its own structured exit code.
@@ -132,7 +139,7 @@ report. A source it cannot validate never yields an empty baseline and exit `0`.
 ```
 codereviewer eval run [--config <path>] [--slice-root <dir>] [--case <id>]...
                       [--review-mode <mode>] [--review-depth <depth>]
-                      [--max-concurrent-tasks <n>]
+                      [--max-concurrent-tasks <n>] [--gate-profile <profile>]
                       [--debug | --log-level <level>] [--log-file <path>]
 ```
 
@@ -144,6 +151,7 @@ codereviewer eval run [--config <path>] [--slice-root <dir>] [--case <id>]...
 | `--review-mode` | `local`\|`ci`\|`pr`\|`full` | no | CLI-precedence override of `review.mode`. |
 | `--review-depth` | `fast`\|`balanced`\|`thorough` | no | CLI-precedence override of `review.depth`. |
 | `--max-concurrent-tasks` | integer 1–32 | no | CLI-precedence override of `review.maxConcurrentTasks`. Out of range → exit `2`. |
+| `--gate-profile` | `stable`\|`strict` | no | CLI-precedence override of `evaluation.regressionGate.profile` for this run only. Any other value → exit `2`. |
 | `--debug` / `--log-level` / `--log-file` | as for `review` | no | Same semantics. |
 
 `eval run` **does not read the repository `.env` file** (`loadDotEnv: false`),
@@ -447,10 +455,32 @@ supplies — turns it into discrete obligations, and for each one says either
 "these changed lines address it" or "nothing here does". It does **not** say
 whether the change is complete, correct, or acceptable.
 
-Because of that, **the exit code is always `0`** when the command runs at all,
-including when no obligation is evidenced. Only a configuration or usage
-failure (`2`) or a repository failure such as an unresolvable ref (`3`) changes
-it.
+Because of that, **nothing it reports can set a non-zero exit code**. A run that
+evidences no obligation at all exits `0`.
+
+### Exit codes, and the three input limits
+
+| Exit | When |
+| --- | --- |
+| `0` | The command ran and produced a report — any `status`, any mapping. |
+| `2` | Configuration or usage failure. |
+| `3` | Repository failure, such as an unresolvable ref. |
+| `4` | An input limit bound. The command refused to judge an input it could not see whole. |
+
+The three limits at exit `4` are not verdicts on the change — they are the
+command declining to answer from a partial input:
+
+| Code | When | Recovery |
+| --- | --- | --- |
+| `intent_change_too_large` | The change has more citable lines than `intentFulfilment.maxChangeLines` allows (default `5000`, which is also the ceiling). | Narrow the base/head range, or split the change. |
+| `intent_text_too_large` | The stated intent exceeds `intentFulfilment.maxIntentBytes` (default `100000`, ceiling `200000`). | Raise the limit, or point `contextSources` at the section under review rather than the whole document. |
+| `intent_too_many_obligations` | The intent yielded at least as many obligations as `intentFulfilment.maxObligations` allows (default `100`, which is also the ceiling). | Check the change against a smaller slice of the stated intent and run the rest separately. |
+
+Each fails **before** any truncation: the message says what bound, what the
+configured value is, and whether raising it is possible at all. The alternative —
+truncating — produced a plausible-looking report from an input the command had
+only partly seen, and reported obligations as not-evidenced whose evidence was
+simply never shown.
 
 ### Why this one can never gate
 

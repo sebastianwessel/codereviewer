@@ -102,7 +102,8 @@ the diff changes nothing about what the reviewer answers.
 - [What limits recall](../../05-quality/what-limits-recall.md) — the enumeration
   gap, why attention follows the diff, and every intervention measured against it
 - [Cross-file retrieval](cross-file-retrieval.md) — the *other* approach to the
-  same blind spot, measured and net negative; it still exists, off by default
+  same blind spot. Its net-negative verdict was withdrawn (it was measuring a
+  truncation bug) and it is now on by default
 - [Extra discovery passes (removed)](extra-discovery-passes.md) — three further
   removals, each with a real (failed) measurement behind it
 - [Optional capabilities](README.md) — what actually ships as a switch

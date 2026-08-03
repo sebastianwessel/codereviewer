@@ -150,7 +150,7 @@ how far cross-file retrieval may range.
 ## The optional discovery passes
 
 All of the ones below are **off by default** (cross-file retrieval is *on* — see its
-own section). Each one adds provider calls per task — see
+own section). Each one adds provider calls per discovery partition — see
 [controlling-cost.md](controlling-cost.md) for the arithmetic before you turn
 one on.
 
@@ -187,7 +187,7 @@ not a context ration.
 { "security": { "dedicatedPass": { "enabled": true } } }
 ```
 
-A second, security-only discovery call per task applying a generic OWASP/CWE
+A second, security-only discovery call per partition applying a generic OWASP/CWE
 checklist (access control, injection, SSRF, insecure deserialization, secrets,
 cryptography, path traversal, misconfiguration, security-relevant races) with a
 source-to-sink method.

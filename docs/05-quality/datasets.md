@@ -9,7 +9,7 @@ and recall on an exhaustive one are not the same quantity.
 | Default fixture pack | `eval/fixtures/sample-eval-cases.json` | 7 | **0** | none | False-positive suppression only |
 | Code Review Bench-style | `eval/benchmarks/code-review-bench-style/` | 59 | 133 | **required** | Recall/precision on real PRs, changed files only |
 | Proof-quality slices | `eval/fixtures/proof-quality-slices/` | 15 | 14 | none | Trustworthy recall on an exhaustive key |
-| Real-repository cross-file | `eval/corpora/real-repo-cross-file/manifest.json` | 36 | 80 | **required** | Cross-file recall on full checkouts, and review of multi-file diffs |
+| Real-repository cross-file | `eval/corpora/real-repo-cross-file/manifest.json` | 37 | 87 | **required** | Cross-file recall on full checkouts, and review of multi-file diffs |
 | Fix-lane fixture | `eval/fixtures/typescript/fix-lane/repo/` | 1 (test-only) | — | none | Fix-lane judgment, via a hermetic test |
 
 ---
@@ -294,10 +294,14 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
 
 **Cannot:**
 
-- **Line accuracy.** All expectations are `path-semantic`, so `lineOverlaps` is
-  never credited — yet they *do* carry `lineRange`, so the denominator is not
-  empty. `lineAccuracy` reports `0.0%` over a non-zero check count and means
-  nothing here.
+- **Line accuracy.** All expectations are `path-semantic`, and only a `path-line`
+  expectation can satisfy the line check, so nothing here enters the denominator:
+  `lineAccuracy` reports `n/a (0 checked)`. It used to count these expectations
+  in the denominator while leaving the numerator unreachable, and so reported
+  `0.0%` — a metric that structurally could not pass, displayed as one that had
+  failed. Line placement on this corpus is measurable only through the diagnostic
+  `linePlacementRate`, which scores every matched expectation carrying a
+  `lineRange` regardless of match mode.
   → [the full explanation](metrics.md#location-and-priority-accuracy)
 - **Nit-tier behaviour.** No nit expectations exist; `nitRecall` reports its
   empty value of `1`.

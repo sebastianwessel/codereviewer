@@ -166,7 +166,7 @@ accident:
   directory instead is spec-drift.
 - Use `.codereviewer` paths; the obsolete artifact root is security-drift.
 - A documented CLI command must be one of `config`, `review`, `baseline`,
-  `eval`, `drift`.
+  `eval`, `drift`, `impact`, `intent`.
 - Subjective wording is flagged as ambiguity: unmeasurable superlatives,
   vague quality adjectives, and conditional hedges that leave the requirement
   untestable. Write measurable acceptance criteria instead. (The exact phrase

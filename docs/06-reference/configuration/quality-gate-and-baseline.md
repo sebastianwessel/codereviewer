@@ -11,7 +11,7 @@ Evaluated over **admitted** findings after baseline filtering.
 | `qualityGate.maxCritical` | integer ≥ 0 | `0` | Maximum tolerated `critical` findings. |
 | `qualityGate.maxHigh` | integer ≥ 0 | `0` | Maximum tolerated `high` findings. |
 | `qualityGate.maxMedium` | integer ≥ 0 | *unset* | Maximum tolerated `medium` findings. Unset means medium findings never fail the gate. |
-| `qualityGate.failOnProviderError` | boolean | **`true`** | When `true`, an unrecovered provider issue fails the gate. |
+| `qualityGate.failOnProviderError` | boolean | **`true`** | When `true`, an unrecovered provider issue fails the gate — with an empty `failingFindingIds`, since the failure is that findings are missing rather than present. An issue with no `recovered` field counts as unrecovered. Setting `false` turns the check off and changes nothing else. |
 | `qualityGate.failOnNewOnly` | boolean | *unset* | When unset, resolves at runtime to `baseline.failOnNewOnly` (which itself defaults to `true`). Set explicitly to decouple the gate from baseline reporting. |
 
 There is no `maxLow` or `maxInfo` key. Low/info model findings are normally

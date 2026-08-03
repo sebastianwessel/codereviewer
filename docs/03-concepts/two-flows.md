@@ -7,8 +7,8 @@ same machine. Everything else in the architecture follows from this split.
 | --- | --- | --- |
 | Job | discover defects in a change | verify claims; judge findings and propose fixes |
 | Input | changed files + diff (a pre-assembled packet) | claims, and this run's admitted findings |
-| Control | single-shot model calls over a deterministic packet | bounded agent loop |
-| Tools | **none** | mediated `read` / `list` / `grep` |
+| Control | one model call per pre-assembled packet, no conversation carried | bounded agent loop |
+| Tools | mediated `repo_read` / `repo_list` / `repo_grep` during discovery (`review.crossFileRetrieval`, on by default) | mediated `read` / `list` / `grep` |
 | Determinism | reproducible packet; non-deterministic model output | non-deterministic (agentic) |
 | Output | candidate findings → admitted findings → gate | verdicts, finding judgments, apply-checked fixes |
 | Default | on (with a provider configured) | off (`verification.enabled`, `fix.enabled`) |
@@ -29,11 +29,12 @@ wiring in [`src/cli/index.ts`](../../src/cli/index.ts).
   quality gate are code paths. The investigation flow is advisory by construction:
   a `false-positive` judgment never removes a finding from the gate and never
   changes severity in the default mode.
-- **Tool use is not free.** Handing the *reviewing* agent repository tools was
-  built, hardened, and measured three times, and it lost recall every time — see
-  [cross-file retrieval](optional-capabilities/cross-file-retrieval.md). The
-  tools-off reviewer is not a limitation the project has yet to overcome; it is
-  the configuration that measures best.
+- **Tool use is bounded, not banned.** The reviewing agent does hold repository
+  tools, but it is still asked its question once, over a packet deterministic code
+  assembled — the retrieval budget and step allowance are enforced in code. Three
+  measurements once recorded the tools as costing recall; that verdict was
+  measuring a per-read truncation and is withdrawn. See
+  [cross-file retrieval](optional-capabilities/cross-file-retrieval.md).
 - **Different jobs need different grounding.** The investigation agent reads the
   actual files rather than a review packet, so its false-positive judgment is
   better grounded than the single-shot review can be — but it runs after
@@ -44,9 +45,9 @@ wiring in [`src/cli/index.ts`](../../src/cli/index.ts).
 ```mermaid
 flowchart TD
   A[intake: diff, changed files, eligibility] --> B[deterministic task packets]
-  B --> C{{REVIEW FLOW — single-shot, no tools}}
-  C --> C1[holistic discovery per task]
-  C1 --> C2[batched refutation per task]
+  B --> C{{REVIEW FLOW — one call per packet, no conversation}}
+  C --> C1[holistic discovery per partition]
+  C1 --> C2[batched refutation per partition]
   C2 --> C3[deterministic admission]
   C3 --> D[baseline + quality gate]
   D --> E[reports: json, markdown, sarif]
@@ -69,17 +70,22 @@ flowchart TD
 ## The review flow in one paragraph
 
 Deterministic code computes the diff, applies the eligibility gate, groups changed
-files into tasks, and builds one packet per task: the unified diff segment, the
-full line-numbered changed files, bounded referenced-definition digests, and —
-when enabled — a change-intent brief. The model is asked once per task to
-enumerate concrete defects. Every candidate then passes a batched refutation call
-and deterministic admission. The discovery agent is configured with **no tools and
-a single step**; the one optional capability that adds a call
-([the dedicated security pass](optional-capabilities/dedicated-security-pass.md))
-adds *another single-shot call*, it does not turn the reviewer into an agent. The single
-exception is [cross-file retrieval](optional-capabilities/cross-file-retrieval.md),
-which does hand the reviewer tools — and is off by default because measurement
-said it costs recall.
+files into tasks, cuts each task into partitions of
+`aiReview.maxFilesPerDiscoveryCall` changed files (default `2`), and builds one
+packet per partition: the unified diff segment, the full line-numbered changed
+files, bounded referenced-definition digests, and — when enabled — a
+change-intent brief. The model is asked **once per partition** to enumerate
+concrete defects; the candidates are unioned. Refutation then adjudicates them in
+one batched call per partition, and admission is deterministic code. The
+[dedicated security pass](optional-capabilities/dedicated-security-pass.md) adds
+another call per partition when enabled.
+
+What the reviewer is *not* is tool-free. With
+[cross-file retrieval](optional-capabilities/cross-file-retrieval.md) — **on by
+default** — the discovery agent holds the mediated `repo_read` / `repo_list` /
+`repo_grep` tools and a step allowance sized to its tool-call budget. Its old
+"costs recall" verdict was measuring a per-read truncation and has been
+withdrawn. Disable it and discovery is a single-step, tool-free call.
 
 ## The investigation flow in one paragraph
 

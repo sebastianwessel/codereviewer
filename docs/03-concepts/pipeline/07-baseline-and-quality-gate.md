@@ -73,17 +73,25 @@ the report alone.
 
 | Failure | Mechanism |
 | --- | --- |
-| Quality gate not passed | CLI exit code `1`; artifacts are still written in full |
+| Quality gate not passed — on severity counts, or on an unrecovered provider issue | CLI exit code `1`; artifacts are still written in full |
 | Coverage incomplete | Run fails before the gate; partial artifacts written |
 | Cost over `review.maxCostUsd` | Run fails before the gate; partial artifacts written |
 | Provider task failure or run timeout | Run fails; partial artifacts plus `error.json` |
 | Drift gate | Run fails in preflight, before any provider call |
 
-> `qualityGate.failOnProviderError` (default `true`) is recorded in the report's
-> `qualityGate.thresholds`, but the *review* gate's pass/fail is computed purely
-> from severity counts. The flag is consumed by the evaluation harness's
-> regression gate. A provider failure during a review run does not need this
-> flag to be noticed: it fails the run outright.
+> `qualityGate.failOnProviderError` (default `true`) is enforced by this gate,
+> not only recorded in `qualityGate.thresholds`. An **unrecovered** provider
+> issue fails the gate on its own, with an empty `failingFindingIds` — there is
+> no finding to name, because the failure is that findings are missing. An issue
+> carrying no `recovered` field is read as unrecovered.
+>
+> The reason is the direction of the error. Without the check, a failed discovery
+> call contributed no candidates and a failed refutation rejected its candidates
+> unadjudicated, so the gate passed over the smaller set: a provider outage made
+> a change MORE likely to clear the gate than a healthy run, at exit `0`.
+> Findings that were never produced cannot be counted, so the gate has to be told
+> the search was incomplete. Setting the flag to `false` turns the check off and
+> changes nothing else.
 
 ## What it emits
 
@@ -116,7 +124,7 @@ the report alone.
 | `qualityGate.maxHigh` | `0` | Fail above this many high findings |
 | `qualityGate.maxMedium` | unset | Omitted means never fail on medium |
 | `qualityGate.failOnNewOnly` | unset → `baseline.failOnNewOnly` | Restrict the gate to new/unknown findings |
-| `qualityGate.failOnProviderError` | `true` | Recorded in the report; enforced by the evaluation regression gate |
+| `qualityGate.failOnProviderError` | `true` | Fail the gate when the run carries an unrecovered provider issue |
 | `review.maxCostUsd` | unset | Fails the run when exceeded |
 
 See also: [Exit codes](../../06-reference/exit-codes-and-error-codes.md) and

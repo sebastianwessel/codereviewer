@@ -31,13 +31,14 @@ deterministic preflight rules and never reaches the model:
 | Non-representative member of a semantic merge group | Already rejected as `duplicate` by discovery |
 | Any candidate, when no refuter is available | Passed to admission unrefuted (this only happens when the model stages are not running) |
 
-### One batched call per task
+### One batched call per discovery partition
 
-The refutable candidates are grouped by the task that raised them, and **each
-group is adjudicated by a single call**. Every candidate in a group shares one
-review context, so batching sends that context once instead of once per
-candidate — the per-candidate packet re-sent the changed file for every candidate
-and dominated the run's input tokens.
+The refutable candidates are grouped by the task id that raised them — and since
+discovery partitions a task, each partition carries its own id, so a partitioned
+task is adjudicated in one batch **per partition**. Every candidate in a group
+shares one review context, so batching sends that context once instead of once
+per candidate — the per-candidate packet re-sent the changed file for every
+candidate and dominated the run's input tokens.
 
 The refuter must return exactly one verdict entry per candidate, each carrying
 the `candidateId` copied verbatim, and is told explicitly to judge each candidate
@@ -68,8 +69,8 @@ merits.
 flowchart TD
   C["candidates"] --> F{"model-proposed AND in a changed file?"}
   F -- no --> P["deterministic preflight outcome"]
-  F -- yes --> G["group by task"]
-  G --> B["one batched refutation call per task"]
+  F -- yes --> G["group by discovery partition"]
+  G --> B["one batched refutation call per partition"]
   B --> V{"verdict per candidate"}
   V -- "proved" --> A["→ admission"]
   V -- "needs-more-evidence" --> N{"promotionPolicy.modelWeakOrRefuted"}
@@ -146,7 +147,7 @@ degrades exactly as an unretried failure would.
 
 | Situation | Behaviour |
 | --- | --- |
-| Provider error during the call | Every candidate in that batch is recorded as `needs-more-evidence` with reason `provider-error`, plus a **recovered** provider issue — the run continues rather than failing |
+| Provider error during the call | Every candidate in that batch is recorded as `needs-more-evidence` with reason `provider-error`, plus an **unrecovered** provider issue (`recovered: false`) — the run continues rather than failing, but those candidates were never adjudicated, so the quality gate fails on the issue under the default `failOnProviderError` |
 | Model's response fails output validation or cannot be parsed as a structured object | Retried once over the identical packet; only if the retry also fails does the batch degrade to the provider-error outcome above |
 | Packet cannot be built even after shedding | Batch splits; a single unsplittable candidate becomes a `refutation-packet` provider error |
 | Model omits a candidate from its verdict list | That candidate is `needs-more-evidence` — never silently admitted |

@@ -14,7 +14,7 @@ Precedence: config file < process environment < `.env` < CLI flags. See
 
 | Variable | Config path | Type / accepted values |
 | --- | --- | --- |
-| `CODEREVIEWER_CONFIG_PATH` | config file location | repository-relative path. Used only when `--config` is absent. |
+| `CODEREVIEWER_CONFIG_PATH` | config file location | repository-relative path. Used only when `--config` is absent. A path set here that does not exist is a `config_error` (exit `2`), not a fallback to defaults. |
 | `CODEREVIEWER_REVIEW_MODE` | `review.mode` | `local` \| `ci` \| `pr` \| `full` |
 | `CODEREVIEWER_REVIEW_DEPTH` | `review.depth` | `fast` \| `balanced` \| `thorough` |
 | `CODEREVIEWER_BASE_REF` | `review.baseRef` | string (must not start with `-`) |

@@ -93,8 +93,8 @@ the whole file. → [Current results](../05-quality/current-results.md)
 ## Two advisory commands alongside the review
 
 `review` is the only command that can block. Two others run independently, share
-no context with it and with each other, and **always exit `0` whatever they
-report**:
+no context with it and with each other, and **nothing either of them reports can
+set a non-zero exit code**:
 
 | Command | What it produces |
 | --- | --- |
@@ -105,6 +105,12 @@ report**:
 are not validated. Advisory-only is a spec requirement for `intent check` rather
 than a default — there is no `blocking` key to find, and adding one would be a
 switch that lies.
+
+Refusing to answer is not the same as reporting a verdict. `intent check` exits
+`4` when the change, the stated intent, or the obligation count exceeds one of
+its three input limits, because judging part of an input and presenting the
+result as complete is the one failure this command must not have. See
+[the CLI reference](../06-reference/cli.md#exit-codes-and-the-three-input-limits).
 
 ---
 

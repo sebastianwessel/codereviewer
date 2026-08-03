@@ -84,11 +84,28 @@ listed there (it is the document carrying the list).
 | `skippedFiles` | array | `path` + reason: `deleted`, `binary`, `too-large`, `too-many-files`, `excluded`, `unsupported`, `error`. |
 | `qualityGate` | object, optional | `passed`, `failingFindingIds`, `thresholds`, `baselineFilteringApplied`. |
 | `refutationResults` | array | Per-candidate refutation verdicts. |
-| `providerIssues` | array | `code`, `stage`, `recovered`, `message`. |
+| `providerIssues` | array | `code`, `stage`, `recovered`, `message`. `recovered` means a retry succeeded; `false` or absent means work was dropped, and fails the quality gate under `qualityGate.failOnProviderError`. |
 | `resolvedBaselineEntries` | array, optional | Present when `baseline.includeResolvedInReport` is enabled. |
+| `discovery` | object, optional | What **discovery** produced, before refutation and admission — `totals` plus a per-task row in `tasks`. Absent means *not recorded* (a run with no discovery call, or a report predating the field), which is not the same claim as a recorded zero. See below. |
 | `artifacts` | array | The non-JSON artifacts written for this run. |
 
 String values in `report.json` pass through redaction before writing.
+
+#### `discovery`
+
+`totals` is the run-wide sum; `tasks[]` carries the same shape per task, plus
+`taskId`, so two runs can be compared case by case rather than only in aggregate.
+Both use these fields:
+
+| Field | Notes |
+| --- | --- |
+| `callCount` | Discovery calls actually issued: one per partition per pass, plus any produced by a reactive split. Yield is call-bound, so no other number here means anything without this one. |
+| `rawFindingCount` | Findings the model returned, counted **before** the schema parse, the scope filter, the per-call cap, and the merge. The only figure that reflects what discovery produced rather than what later stages let through. |
+| `rawFindingsPerCall` | The same figure per call, in issue order; length equals `callCount`. A total cannot show the shape of the distribution, and a hard ceiling at one finding per call implies a different fix from a broad spread with the same mean. |
+| `candidateCount` | Candidates surviving collection: post-parse, post-scope, post-cap, post-suppression, before the semantic merge. |
+| `droppedCount`, `suppressedByIdCount`, `suppressedByLocationCount` | Raw findings that never became candidates, separated by cause — a parse failure is a different problem from a duplicate. |
+| `contextOverflowSplitCount` | Times the provider refused a packet and it was halved. Counted apart from transient retry, which has a different cause. |
+| `mergeCallCount`, `mergeGroupCount`, `mergedAwayCount` | Semantic-merge counters. "Not firing" (no calls) and "nothing to merge" (calls, no groups) are indistinguishable from a candidate count alone and have opposite fixes. |
 
 ### `run-summary.json`
 
