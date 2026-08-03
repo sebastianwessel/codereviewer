@@ -379,9 +379,21 @@ A completed `codereviewer impact check` writes one run directory,
 `impact-report.json` (spec 22 requires the rendered report to land beside
 `report.md` rather than only on stdout). A disabled run writes nothing.
 
+A completed `codereviewer intent check` writes one run directory,
+`<artifactDir>/intent-<uuid>/`, containing `intent-report.md` and
+`intent-report.json`, for the same reason the impact one does: the report has to
+land beside `report.md` rather than only on stdout. Every non-completed outcome
+(`disabled`, `no-intent`, `provider-unavailable`, and the other statuses that
+mapped nothing) writes nothing.
+
+Neither the impact nor the intent run directory is recorded in the run index:
+the index feeds baseline resolution, which expects a review report, and an entry
+pointing at a reference or mapping report would hand `baseline write` a document
+of the wrong shape.
+
 `codereviewer config validate`, `eval compare`, `eval recall-report`,
-`eval slice-manifest`, `drift check`, and `intent check` write no artifacts and
-print to stdout only.
+`eval slice-manifest`, and `drift check` write no artifacts and print to stdout
+only.
 
 Default artifact root is `.codereviewer/`. Generated artifacts are ignored by git.
 User-authored `.codereviewer/config.json`, `.codereviewer/instructions/`, and

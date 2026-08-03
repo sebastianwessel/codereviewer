@@ -75,9 +75,11 @@ export type AdmissionPolicy = {
   // check is skipped and admission behaves exactly as before.
   readonly taskSourceChunkRanges?: readonly TaskSourceChunkRange[]
   readonly minimumSeverity?: Severity
-  // Minimum severity for a model-origin candidate to be admitted as actionable.
-  // Trusted deterministic-rule candidates are exempt. Below this, the candidate
-  // is rejected as below-threshold (recorded as a rejected finding).
+  // Minimum severity for a candidate to be admitted as actionable. Below this,
+  // the candidate is rejected as below-threshold (recorded as a rejected
+  // finding). No candidate is exempt — see the floor itself, which records why
+  // the "trusted deterministic rule" exemption was removed. This comment still
+  // claimed the exemption existed.
   readonly actionableSeverityThreshold?: Severity
   readonly inlineSeverityThreshold: Severity
   readonly provenance: Omit<FindingProvenance, 'instructionHashes' | 'skillHashes'> & {

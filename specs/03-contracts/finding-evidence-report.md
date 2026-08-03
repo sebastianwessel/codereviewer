@@ -31,12 +31,20 @@ Severity = "critical" | "high" | "medium" | "low" | "info"
 FindingCategory = "bug" | "security" | "performance" | "maintainability" | "compatibility" | "policy" | "test"
 EvidenceKind = "diff" | "file" | "symbol" | "diagnostic" | "command" | "model-rationale" | "config" | "policy" | "data-flow" | "related-location" | "rule" | "baseline" | "deterministic-signal" | "tool-read" | "tool-search" | "refutation"
 AdmissionStatus = "admitted" | "rejected" | "needs-more-evidence"
-RejectReason = "schema-invalid" | "location-invalid" | "not-in-scope" | "insufficient-evidence" | "duplicate" | "below-threshold" | "unsafe-content" | "provider-error" | "refuted"
+RejectReason = "schema-invalid" | "location-invalid" | "not-in-scope" | "insufficient-evidence" | "duplicate" | "below-threshold" | "unsafe-content" | "provider-error" | "refuted" | "deterministic-contradiction" | "weak-evidence" | "static-analysis-duplicate"
 ReporterEligibility = "inline" | "summary-only" | "artifact-only"
 ReportFormat = "json" | "markdown" | "sarif"
 BaselineStatus = "new" | "existing" | "resolved" | "unknown"
 RefutationVerdict = "proved" | "refuted" | "needs-more-evidence" | "provider-error"
 ```
+
+The last three `RejectReason` members were already in `RejectReasonSchema` and in
+the generated `review-report.schema.json`; this alias had simply not been updated,
+so a consumer written against the prose would reject a valid report. `weak-evidence`
+is live — a refutation that leaves a candidate unproved records it with status
+`needs-more-evidence`. `deterministic-contradiction` and `static-analysis-duplicate`
+have **no producer in the implementation today**: they remain in the contract because
+a consumer must still accept them, not because anything emits them.
 
 ## Path Contract
 

@@ -225,11 +225,19 @@ present in the environment; no provider is assumed as a default.
 `maxCostUsd` is unset unless configured, and `maxConcurrentTasks` defaults to
 `4` at every depth. The only per-depth defaults are the context-retrieval caps:
 
-| Depth | `maxReads` | `maxSearches` | `maxMatches` | `maxDepth` | cross-file `maxBytesPerRead` |
-| --- | --- | --- | --- | --- | --- |
-| `fast` | `200` | `100` | `50` | `4` | `60000` |
-| `balanced` | `1200` | `600` | `150` | `8` | `120000` |
-| `thorough` | `4800` | `2400` | `320` | `12` | `240000` |
+| Depth | `maxReads` | `maxSearches` | `maxMatches` | `maxDepth` |
+| --- | --- | --- | --- | --- |
+| `fast` | `200` | `100` | `50` | `4` |
+| `balanced` | `1200` | `600` | `150` | `8` |
+| `thorough` | `4800` | `2400` | `320` | `12` |
+
+Depth does NOT derive a cross-file `maxBytesPerRead`. This table previously
+carried a per-depth column of `60000`/`120000`/`240000`; **spec 28 (Approved,
+2026-07-31) supersedes it** and forbids sizing a per-read limit against a context
+window at all. What binds a read now is the runaway guard on the retrieval budget
+(`4000000` bytes, sized against memory rather than context), unless an operator
+explicitly configures `crossFileRetrieval.maxBytesPerRead`, which still binds and
+still discloses when it does.
 
 R1 cost reporting is intentionally conservative. Cost is computed only from token
 counts: prices come from configured `costs.*` values, or, for
@@ -265,13 +273,17 @@ selected provider adapters expose reliable usage data at the task boundary.
 
 `review.contextMaxBytes` is unset by default and MUST stay unset unless an
 operator deliberately wants a local ceiling: the provider decides whether a packet
-is too large (spec 26). When set it lowers both the 8,000,000-byte packet ceiling
-and the depth-derived cross-file `maxBytesPerRead`, and it MUST refuse rather than
-truncate when it binds.
+is too large (spec 26). When set it lowers the 8,000,000-byte packet ceiling, and
+it MUST refuse rather than truncate when it binds.
 
-The per-depth cross-file `maxBytesPerRead` values applied when
-`crossFileRetrieval.maxBytesPerRead` is unset are listed in *Depth Budget
-Defaults* above.
+`review.contextMaxBytes` does NOT lower the cross-file `maxBytesPerRead`. That
+coupling, and the depth-derived per-read values it scaled, were both removed by
+**spec 28 (Approved, 2026-07-31)**, which supersedes the earlier text here: a
+per-read limit MUST NOT be sized against a context window. When
+`crossFileRetrieval.maxBytesPerRead` is unset, the retrieval budget's own runaway
+guard applies instead, and the only thing that shrinks it is an actual provider
+`context_length_exceeded` (bounded halving with a loud failure at the floor, per
+spec 28).
 
 A byte-level packet budget was previously derived from depth. It was removed
 because bytes are a poor proxy for tokens and the values fired on 37% of this

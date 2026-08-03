@@ -460,8 +460,10 @@ the same spec.
 - Preconditions: `changeImpact.enabled`, off by default. When disabled the
   command still exits `0` and reports itself disabled rather than erroring.
 - Side effects: repository reads only, all through the mediated retriever so
-  path containment, the eligibility gate, and redaction apply. No artifact is
-  written; output is stdout.
+  path containment, the eligibility gate, and redaction apply. A completed run
+  also writes `impact-report.md` and `impact-report.json` into an
+  `<artifactDir>/impact-<uuid>/` run directory, which is not entered in the run
+  index; a `disabled` run writes nothing.
 - Final state: exit `0` with the impact summary, or a structured error.
 - Verification: change-impact traversal and CLI tests.
 
@@ -474,7 +476,10 @@ the same spec.
 - Preconditions: `intentFulfilment.enabled`, off by default. When disabled, or
   enabled with no provider configured, the lane reports that rather than failing:
   nothing in it can fail the run.
-- Side effects: provider calls only. No artifact is written; output is stdout.
+- Side effects: provider calls, and on a completed run `intent-report.md` and
+  `intent-report.json` written into an `<artifactDir>/intent-<uuid>/` run
+  directory, which is not entered in the run index. Every non-completed outcome
+  writes nothing.
 - Final state: advisory only. The command MUST NOT be able to fail a pipeline on
   fulfilment grounds, and that is a requirement rather than a default: there is
   deliberately no `blocking` configuration key, because the measured spurious-

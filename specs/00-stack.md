@@ -11,14 +11,21 @@ Date: 2026-07-31
 | Module system | ESM only | `package.json` has `"type": "module"`; global invariant `INV-ESM-001`. |
 | Language | TypeScript `NodeNext`, strict mode | `tsconfig.json`; architecture spec. |
 | Package manager | npm with committed `package-lock.json` | dependency and release spec. |
-| Orchestration | `@purista/harness` `^1.6.0` | `package.json` dependency range. |
+| Orchestration | `@purista/harness` `^1.7.1` | `package.json` dependency range. |
 | Validation | Zod `^4.4.3` | `package.json` dependency range. |
-| Tests | Vitest `^4.1.9` | `package.json` dev dependency range. |
-| Dev runner | tsx `^4.22.4` | `package.json` dev dependency range. |
+| Tests | Vitest `^4.1.10` | `package.json` dev dependency range. |
+| Dev runner | tsx `^4.23.1` | `package.json` dev dependency range. |
 
 Version evidence is the committed `package.json` range plus `package-lock.json`,
-not a point-in-time registry lookup, so this table cannot drift from the installed
-tree without the lockfile also changing.
+not a point-in-time registry lookup. **The table is a hand-copied transcription of
+those ranges and nothing enforces it**: `drift check` reads `README.md`, `docs/`,
+and `specs/` for links, stale paths, ambiguity, CLI-command drift, and the
+generated config schema, and it does not read `package.json` at all. So the table
+does drift — it carried `^1.6.0`/`^4.1.9`/`^4.22.4` after the tree had moved to
+`^1.7.1`/`^4.1.10`/`^4.23.1`. Treat `package.json` as the source of truth and this
+table as a summary that must be re-checked whenever a range here changes. A drift
+check that parsed these rows and compared each range against the matching
+`package.json` entry would close it; none exists today.
 
 ## Public API Inventory
 

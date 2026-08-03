@@ -35,7 +35,11 @@ Date: 2026-07-21
 15. Run refutation once per task, adjudicating every candidate that task raised.
 16. Admit or reject candidates against the admission gate.
 17. Match actionable admitted findings against baseline.
-18. Evaluate optional quality gate.
+18. Evaluate optional quality gate. Every completed run evaluates its gate, so a
+    completed report that carries no gate result is an internal inconsistency and
+    fails with `quality_gate_missing`, category `internal`, exit code 5, not
+    recoverable. It must not be defaulted to "passed": a run cannot be reported
+    as clearing a gate that was never evaluated.
 19. Record available token/cost metadata, then compute the coverage certificate.
     An incomplete certificate fails the run with `coverage_incomplete`, and a run
     over `review.maxCostUsd` fails with `cost_budget_exceeded`; both are category
@@ -185,9 +189,11 @@ Task limits:
   signal extractor or reviewer produces evidence that references it;
 - deterministic support signals remain available for context, contradiction,
   and admission safety even when a provider-backed model is configured. Signal
-  output is not the main actionable finding source by default, but a narrow
-  trusted-rule allowlist may seed deterministic candidates directly when the
-  rule has local evidence and a concrete remediation.
+  output is not an actionable finding source: the narrow trusted-rule allowlist
+  that once seeded deterministic candidates directly, and exempted them from the
+  severity floor, was removed as eval-gaming (its only producer was a map of
+  benchmark-specific rule IDs). No allowlist of that shape exists, and a
+  deterministic candidate now clears the same floor as any other.
 - workflow context assembly injects bounded "referenced-definition" context for
   unchanged dependency files that the changed files import. For each task it
   resolves the changed files' RELATIVE imports (`./`/`../`) to existing repo
@@ -832,10 +838,15 @@ sharing a call must not make one candidate's verdict depend on another's.
   86.7% with two genuine false positives and no net recall gain, so it was reverted.
   A future attempt needs a mechanism that separates a type violated by an attacker at
   a boundary from one violated by a caller that cannot exist.
-- Model-origin candidates below `aiReview.actionableSeverityThreshold` (default
-  `medium`) are rejected as `below-threshold` rather than admitted as actionable,
-  keeping the actionable surface focused on impactful runtime/security defects.
-  Trusted deterministic-rule candidates are exempt from this floor.
+- Candidates below `aiReview.actionableSeverityThreshold` (default `medium`), or
+  below the base `minimumSeverity` when no actionable threshold is set, are
+  rejected as `below-threshold` rather than admitted as actionable, keeping the
+  actionable surface focused on impactful runtime/security defects. **There is
+  deliberately no exemption from this floor, for any origin.** The trusted
+  deterministic-rule exemption this spec previously described was removed: its
+  only producer was a map of benchmark-specific rule IDs, which is eval-gaming,
+  and an exemption left standing with no producer is not neutral — it is a bypass
+  of the severity floor waiting for something to trigger it.
 - Provider failures during refutation record a recovered provider issue and keep
   the candidate out of actionable output. Unrecovered provider issues must
   remain visible in JSON, Markdown, and eval summaries. Provider issue
@@ -887,7 +898,9 @@ resolution:
 5. Emit drift findings for configured categories.
 
 Preflight findings are split into warnings and hard errors by `drift.failOn`
-and `drift.warnOn`. Hard errors stop before provider resolution and before any
+alone: a category listed there gates as an error, and every category not listed
+gates as a warning. There is no `drift.warnOn` key — warning is the default, not
+a second list. Hard errors stop before provider resolution and before any
 network-capable path. Warnings are included in run summary and reports.
 
 ## Context Ledger

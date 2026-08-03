@@ -245,13 +245,3 @@ Two caveats on the figures, so nobody re-derives them:
   can be re-issued for a specific line range.
 - Any cross-file recall improvement is demonstrated by measurement (cross-file recall
   vs the 0% baseline) without a regression to overall recall or adjusted precision.
-
-## Known Divergences From This Spec
-
-Recorded 2026-08-01. **These are unmet requirements, not amendments.** Everything
-above stands as written; this section exists so the gap is visible rather than silent
-— the same discipline that eventually exposed the truncation defect above.
-
-| Requirement | State of the implementation |
-| --- | --- |
-| *Truncation Must Be Disclosed*: `repo_read` MUST accept an optional line range | The tool schema declares `startLine`/`endLine`, the tool description and the truncation notice both instruct the model to use them, and the retriever serves a range — but the shared bounded-tool wrapper (`RetrievalTools.read`) is typed `{ path }` and forwards only `path`, so the range is discarded on the way through. The remedy the model is told to use does nothing, and a model that hits a cut re-reads the identical prefix and burns its tool-call budget. The same wrapper serves spec 12's investigation lane, so the defect is shared. |

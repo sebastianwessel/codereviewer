@@ -33,6 +33,21 @@ shape locally.
 - self-contained slice cases from `eval/fixtures/slices/<case-id>/slice.json`
   with source files under `eval/fixtures/slices/<case-id>/repo/`.
 
+**The default selection proves nothing about recall, and must never be quoted as
+if it did.** `eval/fixtures/slices/` does not exist in the repository — the
+loader treats a missing slice root as an empty one and returns no cases from it —
+so the default run is exactly the seven cases in `sample-eval-cases.json`, every
+one of which declares `expectedFindings: []`. With no expectation anywhere in the
+selection, recall has no denominator: the run can only demonstrate that a case with
+no expected finding produces none. It is a false-positive and plumbing check, not a
+quality measurement.
+
+The positive slices live under `eval/fixtures/proof-quality-slices/` — 15 slices,
+12 carrying expected findings (14 in total) and 3 deliberate controls with none —
+and nothing loads them by default. They are reachable only through
+`eval run --slice-root eval/fixtures/proof-quality-slices`, which replaces the
+default selection rather than adding to it.
+
 `codereviewer eval run --slice-root <path>` loads only slice cases from the
 repository-relative directory at `<path>`. The directory must contain
 `<case-id>/slice.json` and `<case-id>/repo/` entries. This mode exists for
@@ -385,9 +400,26 @@ conversation history on 2026-07-27 (see *Conversation History* in
 `05-review-workflow-and-runtime.md`), and like every run before 2026-08-01 they
 were produced by an UNPINNED engine — the harness pinned the repository under
 test but invoked the engine from the live working tree, and no scored artifact
-from that period records which engine produced it. Both scorers now refuse to pool
-cases whose engine sidecars disagree, and runs with no sidecar are reported as
-unknown-engine rather than as agreeing.
+from that period records which engine produced it.
+
+**No scored artifact records engine identity today either, and no guard covers
+it.** `EvalReportProvenance` carries `answerKeyDigest`, `answerKeyDigestByCase`,
+`configHash`, and an optional `providerId`/`modelName` — nothing that identifies
+the engine build that produced the review output. The two guards that do exist
+are:
+
+- `metricsVersion`, which both the comparison renderer and the significance
+  module refuse to cross, because a metrics-version change alters what a metric
+  reports for identical review output; and
+- `answerKeyDigest`, which the comparison renderer refuses to cross per shared
+  case and the significance module refuses to cross in aggregate, because
+  pooling runs scored against different expectations computes a rate over a
+  population that never existed.
+
+Neither guard can detect a mixed-engine pool, and neither is a proxy for one: two
+runs of different engine builds against the same answer key and the same metrics
+version pool silently. Anyone pooling or comparing runs across an engine change
+has to establish engine identity out of band.
 
 The blended recall figure is not interpretable on its own on the real-repository
 corpus, because a large share of its expectations lie in unchanged code and the
@@ -1007,14 +1039,18 @@ than the eval report contract carrying a special-cased "test mode".
 
 Drift checks produce deterministic findings that can participate in CI gates.
 
+`drift.failOn` is the only gate list. A category named in it gates as an error;
+every category not named in it gates as a warning. There is no `drift.warnOn`
+key, so "warning" below is the absence of an entry rather than a second list.
+
 | Finding Category | Default | Gate Source |
 | --- | --- | --- |
-| Documentation drift | warning | `drift.warnOn` |
-| Spec drift | warning | `drift.warnOn` |
-| Implementation drift | warning | `drift.warnOn` |
-| Generated artifact drift | hard error | `drift.failOn` |
-| Ambiguity | warning | `drift.warnOn` |
-| Security drift | hard error | `drift.failOn` |
+| Documentation drift | warning | not in `drift.failOn` |
+| Spec drift | warning | not in `drift.failOn` |
+| Implementation drift | warning | not in `drift.failOn` |
+| Generated artifact drift | hard error | `drift.failOn` default |
+| Ambiguity | warning | not in `drift.failOn` |
+| Security drift | hard error | `drift.failOn` default |
 
 Ambiguity examples include subjective requirements that request maximum
 quality, security, speed, cleanliness, or robustness without a measurable,
