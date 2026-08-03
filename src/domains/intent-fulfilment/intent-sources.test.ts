@@ -12,10 +12,15 @@ import { describe, expect, test } from 'vitest'
 import type { ContextFragment } from '../context-ingestion/index.js'
 import { resolveIntentCitation, toIntentSources } from './intent-sources.js'
 
-const fragment = (origin: string, body: string): ContextFragment => ({
+const fragment = (
+  origin: string,
+  body: string,
+  truncated = false
+): ContextFragment => ({
   origin,
   kind: 'inbox',
   body,
+  truncated,
   metadata: {}
 })
 
@@ -50,6 +55,32 @@ describe('toIntentSources', () => {
 
     expect(truncated).toBe(true)
     expect(sources[0]?.lines).toEqual(['aaaa', 'bbbb'])
+  })
+
+  test('carries a cut the PROVIDER made, which this budget cannot see', () => {
+    // The body arrived already clipped at the provider's `maxFileBytes`, so it fits
+    // this budget by construction — the cut is what makes it fit. Measured here,
+    // every signal says the intent was read whole, which is how a 200 KB ticket
+    // clipped to 64 KB was reported as complete intent.
+    const { truncated, providerTruncatedOrigins } = toIntentSources(
+      [
+        fragment('inbox:a', 'Reject expired tokens.', true),
+        fragment('inbox:b', 'Log the refusal.')
+      ],
+      4_000
+    )
+
+    expect(truncated).toBe(false)
+    expect(providerTruncatedOrigins).toEqual(['inbox:a'])
+  })
+
+  test('reports no provider cut when every body arrived whole', () => {
+    // The flag has to be able to be false for the same run shape, or the disclosure
+    // it feeds says nothing.
+    expect(
+      toIntentSources([fragment('inbox:a', 'Reject expired tokens.')], 4_000)
+        .providerTruncatedOrigins
+    ).toEqual([])
   })
 })
 

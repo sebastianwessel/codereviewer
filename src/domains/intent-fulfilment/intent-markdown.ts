@@ -199,9 +199,17 @@ const renderSummary = (report: IntentFulfilmentReport): readonly string[] => {
   ]
 }
 
-// Bounds a reader cannot discount unless they can see them. The intent limits refuse
-// the run rather than truncating it, so `obligationsTruncated` is always false and is
-// not rendered; the two below are the bounds that can still bind silently.
+// Bounds a reader cannot discount unless they can see them. This capability's own
+// limits refuse the run rather than truncating it, so `obligationsTruncated` is
+// always false and is not rendered; the two below are the bounds that can still bind
+// silently.
+//
+// `intentTruncated` reports a cut made UPSTREAM of this capability, by the
+// `contextSources` provider that fetched the source, so the sentence names that cap
+// and not `intentFulfilment.maxIntentBytes` — which refuses the run and never
+// reaches a report. Naming the wrong knob is worse than naming none: it sends a
+// reader to raise a limit that was never the one that bound, they see the same
+// report again, and they conclude the disclosure was noise.
 const renderBounds = (report: IntentFulfilmentReport): readonly string[] => {
   const bounds: string[] = []
 
@@ -213,7 +221,7 @@ const renderBounds = (report: IntentFulfilmentReport): readonly string[] => {
 
   if (report.scope.intentTruncated) {
     bounds.push(
-      'The stated intent was cut to fit `intentFulfilment.maxIntentBytes`, so obligations stated after the cut were never read.'
+      'The stated intent reached this command already cut: a `contextSources` provider trimmed at least one source to its `maxFileBytes` cap. Whatever those sources state after the cut was never read, so every list below — including the not-evidenced one — is a floor and not a total. Raise `maxFileBytes` on the provider that supplied them and re-run to hold the change to the whole of the intent.'
     )
   }
 

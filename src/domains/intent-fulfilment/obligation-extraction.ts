@@ -11,6 +11,7 @@
 // ticket writes it (spec 11's trust boundary), and the instructions say so.
 
 import { z } from 'zod'
+import { truncateForContract } from '../../shared/text/truncate.js'
 import type { IntentSource } from './intent-sources.js'
 
 // The model-bound OUTPUT schema, loose on purpose: `line` accepts whatever a
@@ -69,6 +70,12 @@ export type ExtractedObligation = {
 // Longer than this and the "single checkable statement" is a paragraph. Truncated
 // rather than dropped: the citation is what makes the entry usable, and it
 // survives truncation.
+//
+// The cut is MARKED, through the shared helper, because this string is the bold
+// headline of every obligation row in `intent-markdown.ts`. A bare slice ends the
+// headline mid-clause — "Reject tokens older than five minutes unless the caller
+// holds" — and a reader has no way to tell that from an obligation the extraction
+// genuinely stated that way, so they judge the change against half a requirement.
 const MAX_STATEMENT_LENGTH = 300
 
 /** Builds the extraction packet from the line-addressed intent sources. */
@@ -104,7 +111,10 @@ export const normalizeObligationExtraction = (
   }
 
   return (parsed.data.obligations ?? []).flatMap((obligation) => {
-    const statement = obligation.statement.trim().slice(0, MAX_STATEMENT_LENGTH)
+    const statement = truncateForContract(
+      obligation.statement.trim(),
+      MAX_STATEMENT_LENGTH
+    )
     const line = Math.trunc(obligation.line)
     const origin = obligation.origin.trim()
 

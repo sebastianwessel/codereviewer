@@ -11,6 +11,7 @@
 // after the verdict is immovable.
 
 import { z } from 'zod'
+import { truncateForContract } from '../../shared/text/truncate.js'
 import {
   ObligationStatusSchema,
   type Obligation,
@@ -51,6 +52,13 @@ export type FulfilmentExplanationRunner = (
 // The report schema caps the stored value at the same length. Truncated rather
 // than rejected: a long explanation is still a usable one, and losing it would
 // leave the report with no prose at all.
+//
+// Marked, through the shared helper that reserves the mark inside the cap so the
+// result still satisfies the schema's `.max(2000)`. Prose cut without a mark ends
+// on a sentence that simply stops, and this is the section of the report a reader
+// most readily takes as the whole account — an explanation whose final clause was
+// "…but nothing evidences the audit-log requirement" is one that reads as complete
+// after the clause is gone.
 const MAX_EXPLANATION_LENGTH = 2_000
 
 /** Resolves whatever the explanation call returned, or `undefined`. */
@@ -63,9 +71,11 @@ export const normalizeFulfilmentExplanation = (
     return undefined
   }
 
-  const explanation = parsed.data.explanation
-    ?.trim()
-    .slice(0, MAX_EXPLANATION_LENGTH)
+  const trimmed = parsed.data.explanation?.trim()
+  const explanation =
+    trimmed === undefined
+      ? undefined
+      : truncateForContract(trimmed, MAX_EXPLANATION_LENGTH)
 
   return explanation === undefined || explanation.length === 0
     ? undefined

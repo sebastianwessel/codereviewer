@@ -50,6 +50,37 @@ describe('normalizeObligationExtraction', () => {
     ).toEqual([{ origin: 'inbox:a', line: 2, statement: 'Log the refusal.' }])
   })
 
+  test('marks a statement it had to cut, because that string is the row headline', () => {
+    // `intent-markdown.ts` renders the statement as the bold headline of the row. A
+    // bare slice ends it mid-clause and a reader cannot tell that from an obligation
+    // stated that way, so they weigh the change against half a requirement.
+    const [obligation] =
+      normalizeObligationExtraction({
+        obligations: [
+          {
+            origin: 'inbox:a',
+            line: 1,
+            statement: `${'Reject expired tokens. '.repeat(20)}unless the caller holds an override grant.`
+          }
+        ]
+      })
+
+    expect(obligation?.statement.length).toBeLessThanOrEqual(300)
+    expect(obligation?.statement.endsWith('…')).toBe(true)
+    expect(obligation?.statement).not.toContain('override grant')
+  })
+
+  test('leaves a statement that fits exactly as the model stated it', () => {
+    // The mark must be evidence of a cut, so text that was not cut cannot carry it.
+    const statement = 'a'.repeat(300)
+
+    expect(
+      normalizeObligationExtraction({
+        obligations: [{ origin: 'inbox:a', line: 1, statement }]
+      })
+    ).toEqual([{ origin: 'inbox:a', line: 1, statement }])
+  })
+
   test('coerces a line a model spelled as a string', () => {
     expect(
       normalizeObligationExtraction({

@@ -33,6 +33,22 @@ rather than advising you to raise it.
 }
 ```
 
+### When the intent arrives already cut
+
+`contextSources` providers bound each source at their own
+[`maxFileBytes`](./context-and-evaluation.md#contextsources) — **64000 by default**,
+which is *below* `maxIntentBytes`. A long ticket thread is therefore clipped before
+`intent check` ever sees it, and what arrives fits every limit above precisely
+because it was clipped.
+
+That one is **disclosed rather than refused**: the cap is not this command's to set,
+and refusing on it would stop runs the limits above are sized to complete. When it
+happens the run completes and says so in three places — `scope.intentTruncated` is
+`true`, a warning names the cut sources and the cap, and `intent-report.md` states
+above the obligation lists that they are a floor rather than a total. Raise
+`maxFileBytes` on the provider that supplied the source and re-run to hold the change
+to the whole of the intent.
+
 ## What the statuses mean: `evidenced`, not "done"
 
 Every obligation in the report carries one of three statuses, and they are all

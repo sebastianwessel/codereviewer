@@ -660,6 +660,111 @@ describe('a limit that would bind refuses instead of truncating', () => {
     }
   })
 
+  test('DISCLOSES a stated intent the ingestion provider had already cut', async () => {
+    // The defect this replaces: `scope.intentTruncated` could only ever be written
+    // `false`. The one branch that would have set it true throws first, and the
+    // byte budget measures the body it was handed — which a provider cut fits by
+    // construction. So a ticket clipped at `maxFileBytes` produced a checklist read
+    // from part of it, published as intent read whole.
+    //
+    // Disclosed rather than refused: `maxFileBytes` defaults to 64 000, BELOW
+    // `maxIntentBytes`'s 100 000, so refusing on it would stop runs spec 23 sized
+    // this capability to complete, against a cap spec 23 does not own.
+    const root = await createRepository()
+    const cutIntent = {
+      contextSources: {
+        enabled: true,
+        providers: [
+          { type: 'inbox', dir: '.codereviewer/context', maxFileBytes: 40 }
+        ]
+      }
+    }
+
+    try {
+      const report = await run(root, {
+        config: configWith(cutIntent),
+        agents: scriptedAgents({
+          obligations: [
+            { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject old tokens.' }
+          ],
+          judgements: [
+            { status: 'evidenced', evidence: [{ path: 'src/token.ts', line: 2 }] }
+          ]
+        })
+      })
+
+      expect(report.status).toBe('completed')
+      expect(report.scope.intentTruncated).toBe(true)
+      expect(
+        report.warnings.some(
+          (warning) =>
+            warning.includes('maxFileBytes') &&
+            warning.includes('inbox:tracker/A-1')
+        )
+      ).toBe(true)
+      // The cap that bound is the provider's, so the warning must not send a reader
+      // to raise the one that did not.
+      expect(report.warnings.join(' ')).not.toContain('maxIntentBytes')
+
+      // And it survives onto the reports that map nothing: "no checkable obligation
+      // is in this text" is a different statement when part of the text is missing.
+      const withoutModel = await run(root, { config: configWith(cutIntent) })
+
+      expect(withoutModel.status).toBe('provider-unavailable')
+      expect(withoutModel.scope.intentTruncated).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('says its measured intent size is a floor when the provider had already cut', async () => {
+    // `intentBytes` is summed over the bodies that arrived. When those were already
+    // clipped, the sum understates the intent, and reporting it as the size sends an
+    // operator to raise `maxIntentBytes` to a value the real intent still exceeds —
+    // so the second run refuses exactly like the first.
+    const root = await createRepository()
+
+    try {
+      for (const id of ['A-2', 'A-3']) {
+        await writeFile(
+          join(root, '.codereviewer', 'context', `ticket-${id}.md`),
+          [
+            '---',
+            'source: tracker',
+            `id: ${id}`,
+            '---',
+            ...Array.from(
+              { length: 20 },
+              (_, index) => `Requirement ${index + 1} states something checkable.`
+            ),
+            ''
+          ].join('\n')
+        )
+      }
+
+      await expect(
+        run(root, {
+          config: configWith({
+            intentFulfilment: { enabled: true, maxIntentBytes: 256 },
+            contextSources: {
+              enabled: true,
+              providers: [
+                { type: 'inbox', dir: '.codereviewer/context', maxFileBytes: 200 }
+              ]
+            }
+          }),
+          agents: scriptedAgents({ obligations: [], judgements: [] })
+        })
+      ).rejects.toMatchObject({
+        code: 'intent_text_too_large',
+        message: expect.stringContaining('at least'),
+        details: { intentBytesIsLowerBound: true }
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('carries no warning branch for a truncated intent, because none can fire', async () => {
     // Dead-branch regression guard, and the only kind of test an unreachable branch
     // admits. A warning saying obligations were "extracted from a bounded part" of
@@ -681,5 +786,11 @@ describe('a limit that would bind refuses instead of truncating', () => {
     expect(source).not.toMatch(/obligations were extracted from/u)
     // Exactly one `intentTruncated` branch remains, and it is the one that throws.
     expect([...source.matchAll(/if \(intentTruncated\)/gu)]).toHaveLength(1)
+    // The OTHER cause of a partial intent is a different branch on a different
+    // condition, and unlike the removed warning it can fire: the provider's
+    // `maxFileBytes` is not this capability's cap to refuse on, so that loss is
+    // disclosed. This guard is about the warning that could never run, not about
+    // the one that reports a cut somebody else made.
+    expect(source).toContain('providerCutIntentWarning(providerTruncatedOrigins)')
   })
 })

@@ -111,6 +111,19 @@ const UNUSABLE_INTENT_WARNING =
 const EXTRACTION_FAILED_WARNING =
   'The obligation extraction call did not complete; no obligations were extracted.'
 
+// The stated intent arrived already cut, and every list in the report is therefore
+// a floor. Named as such where a reader will see it: the ceiling that bound is the
+// PROVIDER's `maxFileBytes`, not `intentFulfilment.maxIntentBytes`, and pointing at
+// the second knob would send someone to raise a limit that was never reached.
+const providerCutIntentWarning = (origins: readonly string[]): string =>
+  `The stated intent was cut before this command saw it: a contextSources ` +
+  `provider trimmed ${origins.length} source(s) to its maxFileBytes cap ` +
+  `(${origins.join(', ')}). Anything those sources state past the cut was never ` +
+  `read, so the obligations below are what the visible part asks for and not ` +
+  `necessarily all the intent asks for. Raise maxFileBytes on the provider that ` +
+  `supplied them (up to 1000000) and re-run to check the change against the whole ` +
+  `of it.`
+
 const diffMapsByPath = (
   intake: RepositoryIntake
 ): ReadonlyMap<string, DiffMap> =>
@@ -199,6 +212,10 @@ type EmptyReportInput = {
   readonly changedFileCount?: number
   readonly intentFragmentCount?: number
   readonly intentOrigins?: readonly string[]
+  // Carried onto the empty reports too. A run that gathered a cut ticket and then
+  // read no obligation out of it reports `unusable-intent`, and "nothing checkable
+  // in this text" is a very different statement when part of the text was missing.
+  readonly intentTruncated?: boolean
   readonly uncitedObligationCount?: number
   // Present on the paths reached AFTER the extraction call: it spent tokens even
   // though there is no mapping to show for them, and a run that cost money must
@@ -221,7 +238,7 @@ const emptyReport = (input: EmptyReportInput): IntentFulfilmentReport =>
       changedLineCount: 0,
       changedLinesTruncated: false,
       intentOrigins: input.intentOrigins ?? [],
-      intentTruncated: false
+      intentTruncated: input.intentTruncated ?? false
     },
     summary: {
       intentFragmentCount: input.intentFragmentCount ?? 0,
@@ -327,10 +344,18 @@ export const runIntentFulfilment = async (
   }
 
   const intentOrigins = fragments.map((fragment) => fragment.origin)
-  const { sources, truncated: intentTruncated } = toIntentSources(
-    fragments,
-    input.config.intentFulfilment.maxIntentBytes
-  )
+  const {
+    sources,
+    truncated: intentTruncated,
+    providerTruncatedOrigins
+  } = toIntentSources(fragments, input.config.intentFulfilment.maxIntentBytes)
+  // The OTHER way the stated intent can be partial, and the only one that can reach
+  // a report: a `contextSources` provider cut the body at its own `maxFileBytes`
+  // before this domain was handed it. Nothing here can measure that — the cut is
+  // what makes the body fit every budget downstream — so it is read off the
+  // fragment. Disclosed rather than refused, because that cap defaults BELOW
+  // `maxIntentBytes` and is not this capability's to set; see `intent-limits.ts`.
+  const intentCutByProvider = providerTruncatedOrigins.length > 0
 
   // REFUSE rather than extract obligations from part of a ticket: the checklist
   // would silently omit requirements the intent states. See `intent-limits.ts`.
@@ -340,8 +365,15 @@ export const runIntentFulfilment = async (
         (total, fragment) => total + Buffer.byteLength(fragment.body, 'utf8'),
         0
       ),
-      maxIntentBytes: input.config.intentFulfilment.maxIntentBytes
+      maxIntentBytes: input.config.intentFulfilment.maxIntentBytes,
+      // The sum above is taken over the bodies that arrived, and a body a provider
+      // already cut is smaller than the intent it stands for.
+      intentBytesIsLowerBound: intentCutByProvider
     })
+  }
+
+  if (intentCutByProvider) {
+    warnings.push(providerCutIntentWarning(providerTruncatedOrigins))
   }
 
   if (input.agents === undefined || sources.length === 0) {
@@ -353,6 +385,7 @@ export const runIntentFulfilment = async (
       changedFileCount: intake.changedFiles.length,
       intentFragmentCount: fragments.length,
       intentOrigins,
+      intentTruncated: intentCutByProvider,
       warnings: [
         ...warnings,
         input.agents === undefined ? NO_PROVIDER_WARNING : UNUSABLE_INTENT_WARNING
@@ -381,6 +414,7 @@ export const runIntentFulfilment = async (
       changedFileCount: intake.changedFiles.length,
       intentFragmentCount: fragments.length,
       intentOrigins,
+      intentTruncated: intentCutByProvider,
       warnings: [...warnings, EXTRACTION_FAILED_WARNING],
       usage: input.usage?.()
     })
@@ -426,6 +460,7 @@ export const runIntentFulfilment = async (
       changedFileCount: intake.changedFiles.length,
       intentFragmentCount: fragments.length,
       intentOrigins,
+      intentTruncated: intentCutByProvider,
       uncitedObligationCount,
       warnings: [...warnings, UNUSABLE_INTENT_WARNING],
       usage: input.usage?.()
@@ -503,11 +538,15 @@ export const runIntentFulfilment = async (
     )
   }
 
-  // NO "a limit bound this run" WARNING EXISTS HERE, DELIBERATELY. All three limits
-  // refuse above rather than truncate, so a run that reaches this point hit none of
-  // them. A warning describing a bounded intent or a bounded checklist could
-  // therefore never fire, and a branch that cannot fire is one nobody can trust.
-  // See `intent-limits.ts` for why refusing is the whole point.
+  // NO "a limit of OURS bound this run" WARNING EXISTS HERE, DELIBERATELY. All three
+  // of this capability's limits refuse above rather than truncate, so a run that
+  // reaches this point hit none of them, and a warning saying otherwise could never
+  // fire — a branch that cannot fire is one nobody can trust. See `intent-limits.ts`
+  // for why refusing is the whole point.
+  //
+  // The one bound that CAN have bound a run reaching here belongs to another domain:
+  // a `contextSources` provider's `maxFileBytes`. That warning is pushed at the
+  // point the fact is known, next to the refusal it is not.
 
   // The explanation is a SEPARATE call over the frozen mapping above, and it runs
   // last for that reason: everything it reads is already decided and it has no
@@ -540,7 +579,12 @@ export const runIntentFulfilment = async (
       changedLineCount: surface.changedLineCount,
       changedLinesTruncated: surface.truncated,
       intentOrigins,
-      intentTruncated
+      // The value reaching a report is always the provider's cut: the
+      // `maxIntentBytes` cause refuses ~200 lines above and produces no report at
+      // all. Before the fragment carried its own flag this field could only ever be
+      // written `false`, so a ticket clipped to 64 KB was published as intent read
+      // whole — a denied loss rather than a disclosed one.
+      intentTruncated: intentCutByProvider
     },
     summary: {
       intentFragmentCount: fragments.length,

@@ -41,6 +41,17 @@
 // to match. That context is best-effort enrichment which the reviewer works without
 // by design, so dropping some of it degrades a result rather than invalidating it —
 // it needs to be VISIBLE, which it now is, not fatal.
+//
+// NOR IS THE PROVIDER'S PER-FILE CAP TURNED INTO A FOURTH REFUSAL, and that call is
+// deliberate. `contextSources` providers cut a body at `maxFileBytes`, which
+// DEFAULTS TO 64 000 — below `maxIntentBytes`'s own 100 000 default. Refusing on it
+// would mean an 80 KB ticket, which spec 23 sized this capability to read, stops the
+// run against a knob spec 23 does not own and never chose; spec 23 calls a limit
+// that binds on ordinary input "the same defect wearing an error message". So that
+// loss is DISCLOSED instead — on `scope.intentTruncated`, in a warning, and in the
+// rendered report above the obligation list — which is the third of the three
+// honest answers to a bound that binds. The run still refuses when the SUM exceeds
+// `maxIntentBytes`, and says then that the figure it measured is a floor.
 
 import {
   createStructuredError,
@@ -109,14 +120,26 @@ export const intentChangeTooLargeError = (input: {
 export const intentTooLargeError = (input: {
   readonly intentBytes: number
   readonly maxIntentBytes: number
+  // Set when at least one gathered body had ALREADY been cut by its
+  // `contextSources` provider. `intentBytes` is summed over the bodies this
+  // command was handed, so those bodies understate the intent they stand for and
+  // the total is a floor rather than the size. Stating it as the size would send
+  // an operator to raise `maxIntentBytes` to a value the real intent still does
+  // not fit under, and the second run would refuse for the same reason.
+  readonly intentBytesIsLowerBound?: boolean
 }): StructuredError =>
   createStructuredError({
     code: 'intent_text_too_large',
     message:
-      `The stated intent is larger (${input.intentBytes} bytes) than ` +
+      `The stated intent is larger (${input.intentBytesIsLowerBound === true ? 'at least ' : ''}${input.intentBytes} bytes) than ` +
       `intentFulfilment.maxIntentBytes allows (${input.maxIntentBytes}). ` +
       'Extracting obligations from part of it would produce a checklist missing ' +
       'requirements the intent states. ' +
+      (input.intentBytesIsLowerBound === true
+        ? 'That size is a lower bound: a contextSources provider had already cut ' +
+          'at least one source at its own maxFileBytes cap, so the stated intent ' +
+          'is larger than the figure above. '
+        : '') +
       recoveryFor({
         key: 'maxIntentBytes',
         configured: input.maxIntentBytes,
@@ -130,6 +153,7 @@ export const intentTooLargeError = (input: {
     exitCode: 4,
     details: {
       intentBytes: input.intentBytes,
+      intentBytesIsLowerBound: input.intentBytesIsLowerBound === true,
       maxIntentBytes: input.maxIntentBytes
     }
   })

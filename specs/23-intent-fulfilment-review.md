@@ -8,6 +8,8 @@ Second Amendment: 2026-07-31 — two demoting designs rejected; **annotates, nev
 stage is REMOVED. `intent check` has no citation-aptness call.**
 Vocabulary: 2026-08-01 — the report says `evidenced` / `not-evidenced`, never
 `addressed` / `unaddressed` (see *Output Vocabulary* below)
+Provider-cut intent: 2026-08-03 — a source the ingestion provider had already cut is
+**disclosed, never refused** (see *Limits Refuse; They Never Truncate*)
 
 ## Output Vocabulary (2026-08-01): `evidenced`, not `addressed`
 
@@ -345,6 +347,32 @@ class as the configuration and repository errors this command already exits on.
 Context that is genuinely optional enrichment — the reviewer's referenced
 definitions — is the documented exception: dropping some of it degrades a result
 rather than invalidating one, so it MUST be reported but need not be fatal.
+
+### A Cut This Capability Did Not Make (2026-08-03)
+
+Spec 11's `contextSources` providers bound each source at their own `maxFileBytes`
+before this command is handed it — default **64 000** bytes, ceiling 1 000 000. That
+cut is not one of the three limits above. It **MUST NOT refuse the run**, and it
+**MUST be disclosed**.
+
+Two reasons, and the first is decisive:
+
+- that cap defaults **below** `maxIntentBytes` (64 000 against 100 000), so refusing
+  on it would stop runs this spec deliberately sized the capability to complete. This
+  section's own test applies: *a value at which real input refuses the run is not a
+  safe limit; it is the same defect wearing an error message* — and this one is not
+  even a value this spec chose;
+- the remedy lives in a different configuration block, so `intent_text_too_large`
+  would name a knob that was never reached and send a reader to raise it for nothing.
+
+Disclosure MUST reach a human rather than only a JSON field. `scope.intentTruncated`
+is true; a warning names the cut origins and `maxFileBytes`; and the rendered report
+states, above the obligation lists, that every list is a floor rather than a total.
+
+The loss is invisible to measurement downstream — a body cut to fit is a body that
+fits — so the fact MUST travel on the fragment from the only place both sizes were
+ever known. For the same reason `intent_text_too_large` MUST say that its reported
+intent size is a **lower bound** whenever any gathered body arrived already cut.
 
 ## The Output Is A Search Result, Not A Certificate
 

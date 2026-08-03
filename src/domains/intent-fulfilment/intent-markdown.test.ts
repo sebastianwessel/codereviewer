@@ -218,7 +218,7 @@ describe('what a reader can act on', () => {
     expect(markdown).toContain('could not change it')
   })
 
-  test('bounds that bound are disclosed', () => {
+  test('bounds that bound are disclosed, each naming the cap that actually bound', () => {
     const markdown = renderIntentFulfilmentMarkdown(
       report([obligation({ id: 'obl_1' })], {
         changedLinesTruncated: true,
@@ -227,7 +227,27 @@ describe('what a reader can act on', () => {
     )
 
     expect(markdown).toContain('maxChangeLines')
-    expect(markdown).toContain('maxIntentBytes')
+    // `intentTruncated` reports a cut the `contextSources` provider made upstream —
+    // `intentFulfilment.maxIntentBytes` refuses the run and never reaches a report.
+    // Naming that knob sends a reader to raise a limit that was never reached, they
+    // get the same report back, and they learn to discount the disclosure.
+    expect(markdown).toContain('maxFileBytes')
+    expect(markdown).not.toContain('maxIntentBytes')
+    // And it says what the cut costs the reader, not merely that it happened.
+    expect(markdown).toContain('floor and not a total')
+  })
+
+  // The disclosure has to be where a human reads, above the list it qualifies —
+  // a reader who reaches the obligations first has already drawn the conclusion.
+  test('the cut intent is disclosed before the obligations it undercounts', () => {
+    const markdown = renderIntentFulfilmentMarkdown(
+      report([obligation({ id: 'obl_1' })], { intentTruncated: true })
+    )
+
+    expect(markdown.indexOf('## Bounds that bound')).toBeGreaterThan(-1)
+    expect(markdown.indexOf('## Bounds that bound')).toBeLessThan(
+      markdown.indexOf('## Not evidenced by this change')
+    )
   })
 
   test('spend is money and tokens are broken out', () => {

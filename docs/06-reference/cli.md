@@ -482,6 +482,16 @@ truncating — produced a plausible-looking report from an input the command had
 only partly seen, and reported obligations as not-evidenced whose evidence was
 simply never shown.
 
+One cut is **disclosed instead of refused**, because the cap belongs to the
+ingestion providers rather than to this command: a `contextSources` provider that
+trimmed a source at its own `maxFileBytes` (default `64000`, *below*
+`maxIntentBytes`) lets the run complete with `scope.intentTruncated: true`, a
+warning naming the cut sources, and a paragraph above the obligation lists in
+`intent-report.md` saying they are a floor rather than a total. `intent_text_too_large`
+also reports its measured intent size as *at least* N bytes when any source arrived
+already cut, since the figure is summed over bodies that understate what they stand
+for. See [`intentFulfilment`](./configuration/intent-fulfilment.md#when-the-intent-arrives-already-cut).
+
 ### Why this one can never gate
 
 Advisory here is a **requirement**, not a default, and it is not configurable.
