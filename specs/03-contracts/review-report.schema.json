@@ -117,6 +117,11 @@
             "incomplete"
           ]
         },
+        "excludedFileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
         "reviewableFileCount": {
           "type": "integer",
           "minimum": 0,
@@ -202,6 +207,7 @@
       },
       "required": [
         "status",
+        "excludedFileCount",
         "reviewableFileCount",
         "coveredFileCount",
         "reviewableBytes",
