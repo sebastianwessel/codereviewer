@@ -3,7 +3,7 @@
 // yields no callable model -- must surface a classified, non-fatal warning
 // instead of degrading to the deterministic digest with zero visible signal.
 // See `selectSummarizer` in ./change-intent-context.ts.
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -56,9 +56,15 @@ describe('prepareReviewRunnerChangeIntentContext — model summarizer availabili
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'change-intent-context-'))
-    // An empty inbox: ingestion legitimately gathers nothing, so these tests
-    // isolate summarizer-selection visibility from provider-ingestion content.
+    // A NON-empty inbox, which is what actually isolates summarizer-selection
+    // visibility from provider ingestion. The inbox used to be left empty, which
+    // isolated nothing once an empty inbox became a warning of its own (spec
+    // 11): every assertion below would have carried that unrelated warning.
     await mkdir(path.join(root, '.codereviewer', 'context'), { recursive: true })
+    await writeFile(
+      path.join(root, '.codereviewer', 'context', 'ticket.md'),
+      '# Ticket\n\nRotate the session token on sign-in.\n'
+    )
   })
 
   afterEach(async () => {

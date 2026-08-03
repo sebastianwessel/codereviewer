@@ -37,14 +37,28 @@ export type ChangeIntentContextResult = {
   readonly warnings: readonly string[]
 }
 
-const warningsForFailedProviders = (
+// Spec 11: "A provider that produces nothing -- missing payload, unreachable
+// host, empty inbox, no matching changed files, timeout -- emits a warning and
+// the review continues without it."
+//
+// Only a THROWING provider used to warn. A provider that returned no fragments
+// was indistinguishable from one that was never configured: a mistyped inbox
+// directory resolves to nothing, yields `[]`, is recorded `failed: false`, and
+// the review runs with no change-intent context and says so nowhere. The user
+// configured a source and was never told it contributed nothing.
+//
+// The two cases are worded apart because they call for different actions:
+// "failed" means the provider errored, "produced nothing" means it worked and
+// had nothing to give -- most often because it is pointed at the wrong place.
+const warningsForUnusedProviders = (
   providerMetrics: ContextIngestionResult['providerMetrics']
 ): readonly string[] =>
   providerMetrics
-    .filter((metric) => metric.failed)
-    .map(
-      (metric) =>
-        `External change-intent provider "${metric.id}" failed and was skipped.`
+    .filter((metric) => metric.failed || metric.fragmentCount === 0)
+    .map((metric) =>
+      metric.failed
+        ? `External change-intent provider "${metric.id}" failed and was skipped.`
+        : `External change-intent provider "${metric.id}" produced nothing and was skipped. Check that it points at content this change has.`
     )
 
 // Why the run fell back to the deterministic digest instead of the requested
@@ -294,7 +308,7 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
   // Kept separate from `warnings`: `failedProviders` feeds step/debug metrics
   // that count ingestion providers specifically, and the summarizer-unavailable
   // warning (prepended below) is not one of those providers.
-  const providerWarnings = warningsForFailedProviders(result.providerMetrics)
+  const providerWarnings = warningsForUnusedProviders(result.providerMetrics)
   const failedProviders = providerWarnings.length
 
   // Spec 11 requires per-provider observability. A single aggregate step reduced

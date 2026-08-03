@@ -131,4 +131,46 @@ describe('context ingestion CLI', () => {
       await rm(root, { recursive: true, force: true })
     }
   })
+
+  // Spec 11 requires a warning from a provider that produces nothing, and names
+  // "empty inbox" among the cases. Only a THROWING provider warned, so a source
+  // pointed at a directory that does not exist contributed nothing and said so
+  // nowhere — indistinguishable from never having configured it.
+  test('a context provider that produces nothing says so', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await mkdir(join(root, 'src'), { recursive: true })
+      await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1\n')
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          contextSources: {
+            enabled: true,
+            providers: [{ type: 'inbox', dir: 'no-such-directory' }]
+          }
+        })
+      )
+
+      const result = await runCli(['review', '--file', 'src/app.ts'], {
+        cwd: root,
+        environment: {}
+      })
+      // Never fatal: a context source is optional by spec.
+      expect(result.exitCode).toBe(0)
+
+      const artifactDir = JSON.parse(result.stdout).artifactDir as string
+      const report = JSON.parse(
+        await readFile(join(root, artifactDir, 'report.json'), 'utf8')
+      )
+      expect(
+        report.run.warnings.some((warning: string) =>
+          warning.includes('produced nothing and was skipped')
+        )
+      ).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 })
