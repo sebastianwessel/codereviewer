@@ -274,10 +274,13 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
       providers: [
         {
           id: 'prior-findings',
-          gather: async () => [
-            priorFindingClaim({ id: 'claim_still1', filePath: 'holds.ts' }),
-            priorFindingClaim({ id: 'claim_fixed1', filePath: 'fixed.ts' })
-          ]
+          gather: async () => ({
+            claims: [
+              priorFindingClaim({ id: 'claim_still1', filePath: 'holds.ts' }),
+              priorFindingClaim({ id: 'claim_fixed1', filePath: 'fixed.ts' })
+            ],
+            withheldByCap: 0
+          })
         }
       ],
       investigateClaim: verifier.investigate
@@ -312,13 +315,16 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
       providers: [
         {
           id: 'prior-findings',
-          gather: async () => [
-            priorFindingClaim({
-              id: 'claim_lg1',
-              filePath: 'holds.ts',
-              detail: `Investigate broadly. ${PLAN_LIST_GREP}`
-            })
-          ]
+          gather: async () => ({
+            claims: [
+              priorFindingClaim({
+                id: 'claim_lg1',
+                filePath: 'holds.ts',
+                detail: `Investigate broadly. ${PLAN_LIST_GREP}`
+              })
+            ],
+            withheldByCap: 0
+          })
         }
       ],
       investigateClaim: verifier.investigate
@@ -396,13 +402,16 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
       providers: [
         {
           id: 'prior-findings',
-          gather: async () => [
-            priorFindingClaim({
-              id: 'claim_loop1',
-              filePath: 'holds.ts',
-              detail: `Never concludes. ${PLAN_LOOP}`
-            })
-          ]
+          gather: async () => ({
+            claims: [
+              priorFindingClaim({
+                id: 'claim_loop1',
+                filePath: 'holds.ts',
+                detail: `Never concludes. ${PLAN_LOOP}`
+              })
+            ],
+            withheldByCap: 0
+          })
         }
       ],
       investigateClaim: verifier.investigate
@@ -442,7 +451,10 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
       providers: [
         {
           id: 'prior-findings',
-          gather: async () => [injected, unrelated]
+          gather: async () => ({
+            claims: [injected, unrelated],
+            withheldByCap: 0
+          })
         }
       ],
       investigateClaim: verifier.investigate

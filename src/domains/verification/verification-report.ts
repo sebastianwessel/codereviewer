@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { FixEditSchema } from '../../shared/contracts/findings/finding.schema.js'
 import { LaneUsageSchema } from '../costs/lane-usage.js'
 import { ContextLedgerEntrySchema } from '../review-planning/index.js'
+import { MAX_CLAIMS_PER_PROVIDER } from './contracts.js'
 import {
   ClaimIdSchema,
   ClaimKindSchema,
@@ -145,6 +146,20 @@ export const emptyVerificationReport = (): VerificationReport =>
 // that maps it to a human-readable run warning agree on the format.
 export const CLAIM_PROVIDER_FAILED_WARNING_PREFIX = 'claim-provider-failed:'
 
+// Prefix for a non-fatal per-provider claim-cap warning. The suffix is
+// `<withheld>:<providerId>` — the COUNT FIRST, because a provider id itself
+// contains a colon (`claims-file:<path>`) and would otherwise make the suffix
+// unparseable.
+export const CLAIM_PROVIDER_CAPPED_WARNING_PREFIX = 'claim-provider-capped:'
+
+const cappedProviderRunWarning = (suffix: string): string => {
+  const separator = suffix.indexOf(':')
+  const withheld = suffix.slice(0, separator)
+  const providerId = suffix.slice(separator + 1)
+
+  return `Verification claim provider "${providerId}" reached the per-provider cap of ${MAX_CLAIMS_PER_PROVIDER} claims; ${withheld} further claim(s) were not investigated.`
+}
+
 // Maps the verification report's no-content warnings to run-warning strings the
 // review report surfaces, mirroring the change-intent provider-failure warning:
 // a failed claim provider is non-fatal and shows up as a run warning so the
@@ -152,10 +167,22 @@ export const CLAIM_PROVIDER_FAILED_WARNING_PREFIX = 'claim-provider-failed:'
 export const runWarningsForVerificationReport = (
   report: VerificationReport
 ): string[] =>
-  report.warnings.map((warning) =>
-    warning.startsWith(CLAIM_PROVIDER_FAILED_WARNING_PREFIX)
-      ? `Verification claim provider "${warning.slice(
-          CLAIM_PROVIDER_FAILED_WARNING_PREFIX.length
-        )}" failed and was skipped.`
-      : warning
-  )
+  report.warnings.map((warning) => {
+    if (warning.startsWith(CLAIM_PROVIDER_FAILED_WARNING_PREFIX)) {
+      return `Verification claim provider "${warning.slice(
+        CLAIM_PROVIDER_FAILED_WARNING_PREFIX.length
+      )}" failed and was skipped.`
+    }
+
+    // A capped provider is a partial answer, not a failure: the claims that were
+    // investigated are sound, and the ones past the cap were never judged. Both
+    // belong in the run warnings, because `claimCount` reports the post-cap
+    // number and nothing else in the report distinguishes the two runs.
+    if (warning.startsWith(CLAIM_PROVIDER_CAPPED_WARNING_PREFIX)) {
+      return cappedProviderRunWarning(
+        warning.slice(CLAIM_PROVIDER_CAPPED_WARNING_PREFIX.length)
+      )
+    }
+
+    return warning
+  })

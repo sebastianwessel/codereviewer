@@ -171,6 +171,7 @@ These never set an exit code on their own; they appear in `run.warnings` in
 | `External change-intent provider "<id>" failed and was skipped.` | The provider errored. The review continues without its contribution. |
 | `External change-intent provider "<id>" produced nothing and was skipped. Check that it points at content this change has.` | The provider worked and had nothing to give — an empty inbox, a mistyped directory, no changed file matching its globs. Worded apart from the failure above because the action is different: check where it points. |
 | Claim-provider warnings | A `verification` claim provider failed; the lane continues and reports an empty or partial result. |
+| `Verification claim provider "<id>" reached the per-provider cap of 200 claims; <n> further claim(s) were not investigated.` | The provider had more eligible claims than one run investigates. The claims that ran are complete; the withheld ones were never judged and never fixed. Narrow the source, or split the work across runs. |
 | `plausibility_source_unavailable` | (eval) A finding's source file could not be read for plausibility judging; the judge fails closed for that finding. |
 | `plausibility_source_line_omitted` | (eval) The file was larger than the judge's byte cap and the finding's own location line fell outside the window that fit, so the judge was not asked. The finding fails closed rather than being scored against code it was never shown. |
 

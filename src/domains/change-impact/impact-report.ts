@@ -27,6 +27,14 @@ import { RepositoryRelativePathSchema } from '../../shared/contracts/index.js'
 // The text exists so a reader can recognise the reference without opening the
 // file; the path and line are what locate it. Capping keeps one pathological line
 // from dominating the report.
+//
+// The cut is MARKED (`truncateForContract`) even though `path:line` sits beside
+// it. The address says where the line is, not that something was removed from it,
+// and this text is here precisely so the reader does NOT have to open the file —
+// so "open it and see" is not the disclosure. Unmarked, an excerpt of a
+// 5000-character minified line is indistinguishable from a line that is exactly
+// 300 characters long, and `if (a && b)` cut at the cap is a different, valid,
+// misleading statement.
 export const MAX_REFERENCE_TEXT_LENGTH = 300
 
 export const ChangedSymbolKindSchema = z.enum([

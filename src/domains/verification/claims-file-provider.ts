@@ -4,7 +4,7 @@ import type { VerificationClaimsFileProviderSchema } from '../../shared/contract
 import { ClaimSchema } from '../../shared/contracts/verification/verification.schema.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
 import type { z } from 'zod'
-import { MAX_CLAIMS_PER_PROVIDER, type ClaimProvider } from './contracts.js'
+import { capProviderClaims, type ClaimProvider } from './contracts.js'
 import { redactClaim } from './redact-claim.js'
 import { isFileNotFoundError } from '../../shared/errors/error-normalizer.js'
 
@@ -40,7 +40,7 @@ export const createClaimsFileProvider = (config: ClaimsFileConfig): ClaimProvide
         )
       } catch (error) {
         if (isFileNotFoundError(error)) {
-          return []
+          return { claims: [], withheldByCap: 0 }
         }
         throw error
       }
@@ -51,14 +51,19 @@ export const createClaimsFileProvider = (config: ClaimsFileConfig): ClaimProvide
         throw new TypeError(`Claims file "${config.path}" must contain a JSON array.`)
       }
 
-      const claims = parsed
-        .slice(0, MAX_CLAIMS_PER_PROVIDER)
-        .flatMap((entry) => {
-          const result = ClaimSchema.safeParse(entry)
-          return result.success ? [result.data] : []
-        })
+      // The cap is applied to ENTRIES, so `withheldByCap` counts exactly what the
+      // cap held back and never absorbs the malformed entries dropped below —
+      // two different losses that would be indistinguishable if merged.
+      const { kept, withheldByCap } = capProviderClaims(parsed)
+      const claims = kept.flatMap((entry) => {
+        const result = ClaimSchema.safeParse(entry)
+        return result.success ? [result.data] : []
+      })
 
-      return claims.map((claim) => redactClaim(claim, redactor.redact))
+      return {
+        claims: claims.map((claim) => redactClaim(claim, redactor.redact)),
+        withheldByCap
+      }
     }
   }
 }

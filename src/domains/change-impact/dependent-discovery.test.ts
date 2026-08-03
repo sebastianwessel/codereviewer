@@ -2,6 +2,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
+import { TRUNCATION_MARK } from '../../shared/text/truncate.js'
 import type { ChangedSymbol } from './changed-symbols.js'
 import { discoverDependents } from './dependent-discovery.js'
 import { MAX_REFERENCE_TEXT_LENGTH } from './impact-report.js'
@@ -233,6 +234,10 @@ describe('dependent discovery', () => {
       )
 
       expect(generatedReference?.text).toHaveLength(MAX_REFERENCE_TEXT_LENGTH)
+      // A cut line is not the line at that address. Unmarked, a 300-character
+      // excerpt of a 600-character line is indistinguishable from a line that is
+      // exactly 300 characters long.
+      expect(generatedReference?.text.endsWith(TRUNCATION_MARK)).toBe(true)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

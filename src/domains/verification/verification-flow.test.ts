@@ -8,6 +8,7 @@ import {
 } from '../../shared/contracts/verification/verification.schema.js'
 import type { ClaimProvider } from './contracts.js'
 import {
+  runWarningsForVerificationReport,
   VerificationReportSchema,
   type ModelVerdict
 } from './verification-report.js'
@@ -30,7 +31,18 @@ const makeClaim = (overrides: Partial<Claim> = {}): Claim =>
 
 const staticProvider = (claims: readonly Claim[], id = 'static'): ClaimProvider => ({
   id,
-  gather: async () => claims
+  gather: async () => ({ claims, withheldByCap: 0 })
+})
+
+// A provider that hit `MAX_CLAIMS_PER_PROVIDER` and says how many claims it left
+// behind.
+const cappedProvider = (
+  claims: readonly Claim[],
+  withheldByCap: number,
+  id = 'capped'
+): ClaimProvider => ({
+  id,
+  gather: async () => ({ claims, withheldByCap })
 })
 
 const failingProvider = (id = 'failing'): ClaimProvider => ({
@@ -344,6 +356,43 @@ describe('runVerificationFlow', () => {
     expect(report.warnings).toContain('claim-provider-failed:bad')
     expect(report.verdicts).toHaveLength(1)
     expect(report.claimCount).toBe(1)
+  })
+
+  // `claimCount` counts what was investigated, so a capped provider and a
+  // provider that had exactly that many claims report the same number. Without
+  // this warning a reader concludes every eligible finding was judged.
+  test('a provider that hit its claim cap says how many claims went uninvestigated', async () => {
+    const verify: ClaimAgentRunner = async () => ({
+      verdict: { status: 'confirmed', rationale: 'ok', citedEvidenceIds: [] }
+    })
+
+    const { report } = await runVerificationFlow({
+      ...baseFlowInput(repositoryRoot),
+      providers: [cappedProvider([makeClaim()], 7, 'claims-file:.codereviewer/claims.json')],
+      investigateClaim: verify
+    })
+
+    expect(report.warnings).toContain(
+      'claim-provider-capped:7:claims-file:.codereviewer/claims.json'
+    )
+    expect(report.claimCount).toBe(1)
+    expect(runWarningsForVerificationReport(report)).toEqual([
+      'Verification claim provider "claims-file:.codereviewer/claims.json" reached the per-provider cap of 200 claims; 7 further claim(s) were not investigated.'
+    ])
+  })
+
+  test('a provider that stayed under its claim cap warns about nothing', async () => {
+    const verify: ClaimAgentRunner = async () => ({
+      verdict: { status: 'confirmed', rationale: 'ok', citedEvidenceIds: [] }
+    })
+
+    const { report } = await runVerificationFlow({
+      ...baseFlowInput(repositoryRoot),
+      providers: [cappedProvider([makeClaim()], 0)],
+      investigateClaim: verify
+    })
+
+    expect(report.warnings).toEqual([])
   })
 
   test('no providers yields an empty report and never runs the agent', async () => {

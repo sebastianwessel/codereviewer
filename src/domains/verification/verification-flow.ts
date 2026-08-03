@@ -35,6 +35,7 @@ import type { ContextLedgerEntry } from '../review-planning/index.js'
 import type { ClaimProvider } from './contracts.js'
 import { fingerprintsForClaim } from './claim-fingerprints.js'
 import {
+  CLAIM_PROVIDER_CAPPED_WARNING_PREFIX,
   CLAIM_PROVIDER_FAILED_WARNING_PREFIX,
   ModelVerdictSchema,
   VerificationReportSchema,
@@ -210,7 +211,24 @@ const gatherClaims = async (
         repositoryRoot: input.repositoryRoot,
         ...(input.signal === undefined ? {} : { signal: input.signal })
       })
-      claims.push(...gathered)
+      claims.push(...gathered.claims)
+
+      // A claim the per-provider cap withheld is never judged and never fixed.
+      // `claimCount` records the POST-cap number and this array used to carry
+      // provider FAILURES only, so a run that investigated 200 of 900 admitted
+      // findings was indistinguishable from one that investigated all of them.
+      if (gathered.withheldByCap > 0) {
+        input.logger?.warn?.(
+          'Claim provider hit the per-provider claim cap; the claims beyond it were not investigated.',
+          {
+            provider_id: provider.id,
+            withheld_claims: gathered.withheldByCap
+          }
+        )
+        warnings.push(
+          `${CLAIM_PROVIDER_CAPPED_WARNING_PREFIX}${gathered.withheldByCap}:${provider.id}`
+        )
+      }
     } catch {
       // Claim provider failures are non-fatal (spec 12): record a no-content
       // warning that names only the provider id and proceed without its claims.

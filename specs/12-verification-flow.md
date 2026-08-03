@@ -258,6 +258,11 @@ Keys are defined in `04-configuration-and-providers.md`:
   tool output appears in logs, traces, or events.
 - A claim provider that fails at run time is non-fatal and surfaces as a run
   warning; the flow proceeds without that provider's claims.
+- A claim provider bounded by the per-provider claim cap is non-fatal and surfaces
+  as a run warning naming the provider and how many claims it withheld. The
+  report's `claimCount` counts the claims that were investigated, so without this
+  warning a run that judged 200 of 900 admitted findings is indistinguishable from
+  one that judged all the findings it had.
 - A run that reaches no claim source produces an empty report and does not fail.
 
 ## Testing

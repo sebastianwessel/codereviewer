@@ -16,7 +16,11 @@ import {
   fingerprintEvidenceRefs,
   fingerprintKey
 } from './claim-fingerprints.js'
-import { MAX_CLAIMS_PER_PROVIDER, type ClaimProvider } from './contracts.js'
+import {
+  capProviderClaims,
+  type ClaimGatherOutput,
+  type ClaimProvider
+} from './contracts.js'
 import { redactClaim } from './redact-claim.js'
 import { isFileNotFoundError } from '../../shared/errors/error-normalizer.js'
 
@@ -83,7 +87,7 @@ const claimFromBaselineEntry = (entry: BaselineEntry): Claim => {
 const claimsFromPriorFindingsSource = (
   parsed: unknown,
   sourcePath: string
-): readonly Claim[] => {
+): ClaimGatherOutput => {
   if (Array.isArray(parsed)) {
     const baseline = BaselineFileSchema.safeParse(parsed)
 
@@ -93,9 +97,12 @@ const claimsFromPriorFindingsSource = (
       )
     }
 
-    return baseline.data
-      .slice(0, MAX_CLAIMS_PER_PROVIDER)
-      .map((entry) => claimFromBaselineEntry(entry))
+    const capped = capProviderClaims(baseline.data)
+
+    return {
+      claims: capped.kept.map((entry) => claimFromBaselineEntry(entry)),
+      withheldByCap: capped.withheldByCap
+    }
   }
 
   const report = ReviewReportSchema.safeParse(parsed)
@@ -106,9 +113,12 @@ const claimsFromPriorFindingsSource = (
     )
   }
 
-  return report.data.admittedFindings
-    .slice(0, MAX_CLAIMS_PER_PROVIDER)
-    .map((finding) => claimFromAdmittedFinding(finding))
+  const capped = capProviderClaims(report.data.admittedFindings)
+
+  return {
+    claims: capped.kept.map((finding) => claimFromAdmittedFinding(finding)),
+    withheldByCap: capped.withheldByCap
+  }
 }
 
 /**
@@ -142,14 +152,17 @@ export const createPriorFindingsProvider = (
         )
       } catch (error) {
         if (isFileNotFoundError(error)) {
-          return []
+          return { claims: [], withheldByCap: 0 }
         }
         throw error
       }
 
-      const claims = claimsFromPriorFindingsSource(JSON.parse(raw), config.report)
+      const gathered = claimsFromPriorFindingsSource(JSON.parse(raw), config.report)
 
-      return claims.map((claim) => redactClaim(claim, redactor.redact))
+      return {
+        claims: gathered.claims.map((claim) => redactClaim(claim, redactor.redact)),
+        withheldByCap: gathered.withheldByCap
+      }
     }
   }
 }

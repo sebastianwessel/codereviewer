@@ -45,7 +45,7 @@ describe('createCurrentFindingsProvider', () => {
       minSeverity: 'medium'
     })
 
-    const claims = await provider.gather({ repositoryRoot: '/repo' })
+    const { claims } = await provider.gather({ repositoryRoot: '/repo' })
     expect(claims).toHaveLength(1)
     const claim = ClaimSchema.parse(claims[0])
     expect(claim.kind).toBe('current-finding')
@@ -74,7 +74,7 @@ describe('createCurrentFindingsProvider', () => {
       minSeverity: 'high'
     })
 
-    const claims = await provider.gather({ repositoryRoot: '/repo' })
+    const { claims } = await provider.gather({ repositoryRoot: '/repo' })
     expect(claims.map((claim) => claim.id)).toEqual([
       currentFindingClaimId('find_high')
     ])
@@ -89,7 +89,7 @@ describe('createCurrentFindingsProvider', () => {
       minSeverity: 'info'
     })
 
-    const claims = await provider.gather({ repositoryRoot: '/repo' })
+    const { claims } = await provider.gather({ repositoryRoot: '/repo' })
     expect(claims).toHaveLength(2)
   })
 

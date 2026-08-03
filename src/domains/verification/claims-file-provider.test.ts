@@ -37,7 +37,7 @@ describe('claims-file provider', () => {
         path: '.codereviewer/claims.json'
       })
 
-      const claims = await provider.gather(gatherInput(root))
+      const { claims } = await provider.gather(gatherInput(root))
       expect(claims).toHaveLength(1)
       expect(claims[0]).toMatchObject({ id: 'claim_00000001', kind: 'analyzer' })
       expect(claims[0]?.detail).toContain('[REDACTED]')
@@ -56,7 +56,10 @@ describe('claims-file provider', () => {
         path: '.codereviewer/claims.json'
       })
 
-      expect(await provider.gather(gatherInput(root))).toEqual([])
+      expect(await provider.gather(gatherInput(root))).toEqual({
+        claims: [],
+        withheldByCap: 0
+      })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -72,9 +75,15 @@ describe('claims-file provider', () => {
       )
 
       const provider = createClaimsFileProvider({ type: 'claims-file', path: 'claims.json' })
-      const claims = await provider.gather(gatherInput(root))
+      const result = await provider.gather(gatherInput(root))
 
-      expect(claims.map((claim) => claim.id)).toEqual(['claim_00000001', 'claim_00000002'])
+      expect(result.claims.map((claim) => claim.id)).toEqual([
+        'claim_00000001',
+        'claim_00000002'
+      ])
+      // A malformed entry is not a capped one. Folding it into `withheldByCap`
+      // would make the run warning claim the cap dropped a claim it never saw.
+      expect(result.withheldByCap).toBe(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -93,7 +102,7 @@ describe('claims-file provider', () => {
     }
   })
 
-  test('bounds the number of claims read from a single file', async () => {
+  test('bounds the number of claims read from a single file and reports how many it withheld', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-claims-'))
 
     try {
@@ -105,7 +114,8 @@ describe('claims-file provider', () => {
       const provider = createClaimsFileProvider({ type: 'claims-file', path: 'claims.json' })
       const result = await provider.gather(gatherInput(root))
 
-      expect(result).toHaveLength(MAX_CLAIMS_PER_PROVIDER)
+      expect(result.claims).toHaveLength(MAX_CLAIMS_PER_PROVIDER)
+      expect(result.withheldByCap).toBe(10)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

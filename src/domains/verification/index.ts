@@ -4,7 +4,12 @@
 // runner enforces per-claim bounds in code and produces the verification report;
 // and the corroboration helper cross-witnesses verdicts against general-review
 // findings.
-export { MAX_CLAIMS_PER_PROVIDER, type ClaimGatherInput, type ClaimProvider } from './contracts.js'
+export {
+  MAX_CLAIMS_PER_PROVIDER,
+  type ClaimGatherInput,
+  type ClaimGatherOutput,
+  type ClaimProvider
+} from './contracts.js'
 export { createClaimsFileProvider } from './claims-file-provider.js'
 export { createPriorFindingsProvider } from './prior-findings-provider.js'
 export {

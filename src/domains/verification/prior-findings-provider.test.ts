@@ -5,6 +5,7 @@ import { describe, expect, test } from 'vitest'
 import type { AdmittedFinding } from '../../shared/contracts/findings/finding.schema.js'
 import type { ReviewReport } from '../../shared/contracts/report/review-report.schema.js'
 import { ClaimSchema } from '../../shared/contracts/verification/verification.schema.js'
+import { TRUNCATION_MARK } from '../../shared/text/truncate.js'
 import { buildBaselineEntries, renderBaselineJson } from '../admission/index.js'
 import { fingerprintsForClaim } from './claim-fingerprints.js'
 import { createPriorFindingsProvider } from './prior-findings-provider.js'
@@ -59,6 +60,7 @@ const reportFixture = (admittedFindings: readonly AdmittedFinding[]): ReviewRepo
   },
   coverage: {
     status: 'complete',
+    excludedFileCount: 0,
     reviewableFileCount: 0,
     coveredFileCount: 0,
     reviewableBytes: 0,
@@ -91,7 +93,7 @@ describe('prior-findings provider', () => {
         report: '.codereviewer/runs/report.json'
       })
 
-      const claims = await provider.gather(gatherInput(root))
+      const { claims } = await provider.gather(gatherInput(root))
       expect(claims).toHaveLength(1)
       const claim = claims[0]
       expect(claim?.kind).toBe('prior-finding')
@@ -129,7 +131,7 @@ describe('prior-findings provider', () => {
         report: '.codereviewer/baseline.json'
       })
 
-      const claims = await provider.gather(gatherInput(root))
+      const { claims } = await provider.gather(gatherInput(root))
       expect(claims).toHaveLength(2)
       const claim = claims[0]
       expect(claim?.kind).toBe('prior-finding')
@@ -150,6 +152,48 @@ describe('prior-findings provider', () => {
     }
   })
 
+  // The reader of these fields is a MODEL. A baseline entry with many
+  // fingerprints overruns the claim's title and question caps, and an unmarked
+  // cut lands mid-hash: the agent is then shown a fingerprint list that looks
+  // complete and whose last entry is a hash that was never recorded.
+  test('marks a baseline claim whose fingerprint list overruns the title and question caps', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-prior-'))
+
+    try {
+      const baseline = buildBaselineEntries([
+        {
+          fingerprints: Array.from({ length: 20 }, (_, index) => ({
+            algorithm: 'v1',
+            value: `${index}`.padStart(40, 'f')
+          }))
+        }
+      ])
+      await mkdir(path.join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        path.join(root, '.codereviewer', 'baseline.json'),
+        renderBaselineJson(baseline)
+      )
+
+      const provider = createPriorFindingsProvider({
+        type: 'prior-findings',
+        report: '.codereviewer/baseline.json'
+      })
+
+      const { claims } = await provider.gather(gatherInput(root))
+
+      expect(claims[0]?.title.endsWith(TRUNCATION_MARK)).toBe(true)
+      expect(claims[0]?.question.endsWith(TRUNCATION_MARK)).toBe(true)
+      // The mark is reserved inside the cap, never added on top of it.
+      expect(claims[0]?.title.length).toBeLessThanOrEqual(200)
+      expect(claims[0]?.question.length).toBeLessThanOrEqual(500)
+      // Still a valid `Claim`: the contract bounds are what the mark makes room
+      // for.
+      expect(() => ClaimSchema.parse(claims[0])).not.toThrow()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('yields no claims when the prior report is missing', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-prior-'))
 
@@ -159,7 +203,10 @@ describe('prior-findings provider', () => {
         report: '.codereviewer/runs/report.json'
       })
 
-      expect(await provider.gather(gatherInput(root))).toEqual([])
+      expect(await provider.gather(gatherInput(root))).toEqual({
+        claims: [],
+        withheldByCap: 0
+      })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -205,7 +252,7 @@ describe('prior-findings provider', () => {
     }
   })
 
-  test('bounds the number of claims derived from a single report', async () => {
+  test('bounds the number of claims derived from a single report and reports how many it withheld', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-prior-'))
 
     try {
@@ -219,8 +266,9 @@ describe('prior-findings provider', () => {
         report: 'report.json'
       })
 
-      const claims = await provider.gather(gatherInput(root))
-      expect(claims).toHaveLength(MAX_CLAIMS_PER_PROVIDER)
+      const result = await provider.gather(gatherInput(root))
+      expect(result.claims).toHaveLength(MAX_CLAIMS_PER_PROVIDER)
+      expect(result.withheldByCap).toBe(10)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

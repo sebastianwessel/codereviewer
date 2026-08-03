@@ -24,7 +24,7 @@ import { createRedactor } from '../../shared/redaction/redactor.js'
 import { sha256 } from '../../shared/hash/hash.js'
 import { truncateForContract } from '../../shared/text/truncate.js'
 import { fingerprintEvidenceRefs } from './claim-fingerprints.js'
-import { MAX_CLAIMS_PER_PROVIDER, type ClaimProvider } from './contracts.js'
+import { capProviderClaims, type ClaimProvider } from './contracts.js'
 import { redactClaim } from './redact-claim.js'
 
 const CLAIM_QUESTION_MAX = 500
@@ -76,7 +76,9 @@ export const eligibleCurrentFindings = (
  * findings at or above `minSeverity` become claims (the fix lane runs on exactly
  * the findings that can block the pipeline by default). Gathering is synchronous
  * and cannot fail — the findings are already in memory — so it never contributes
- * a provider-failure warning.
+ * a provider-failure warning. It can still hit the per-provider cap, which it
+ * reports rather than absorbing: an unfixed finding past the cap is the loss the
+ * fix lane exists to avoid.
  */
 export const createCurrentFindingsProvider = (
   config: CurrentFindingsProviderConfig
@@ -85,11 +87,17 @@ export const createCurrentFindingsProvider = (
 
   return {
     id: 'current-findings',
-    gather: async () =>
-      eligibleCurrentFindings(config.findings, config.minSeverity)
-        .slice(0, MAX_CLAIMS_PER_PROVIDER)
-        .map((finding) =>
+    gather: async () => {
+      const { kept, withheldByCap } = capProviderClaims(
+        eligibleCurrentFindings(config.findings, config.minSeverity)
+      )
+
+      return {
+        claims: kept.map((finding) =>
           redactClaim(claimFromAdmittedFinding(finding), redactor.redact)
-        )
+        ),
+        withheldByCap
+      }
+    }
   }
 }
