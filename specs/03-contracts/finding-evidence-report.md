@@ -445,7 +445,16 @@ Rules:
   report-safe `code`, optional `stage`, optional `recovered`, and redacted
   optional `message` fields; provider issues are not rendered as SARIF
   diagnostic results;
-- cap rendered results through `reporting.sarif.maxResults`;
+- cap rendered results through `reporting.sarif.maxResults`, and DISCLOSE the cut
+  when it binds: emit one `runs[].invocations[].toolExecutionNotifications` entry
+  at level `warning`, naming the number of withheld findings, the eligible total,
+  `reporting.sarif.maxResults`, and where the complete set lives, with its
+  descriptor defined in `tool.driver.notifications`. The disclosure is required
+  because a code-scanning consumer treats a result absent from a run under the
+  same `automationDetails.id` as RESOLVED, so a silent cut reports withheld
+  findings as fixed. `invocations` is emitted only when the cap withholds results;
+  `executionSuccessful` stays `true`, since the run succeeded and only results
+  were withheld;
 - define every referenced `ruleId` in `tool.driver.rules`;
 - validate the rendered file before writing it.
 

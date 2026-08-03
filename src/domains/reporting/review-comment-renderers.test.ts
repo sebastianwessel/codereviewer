@@ -92,7 +92,39 @@ describe('review-comment renderers', () => {
     }
   })
 
-  test('a suggestion that overflows the body cap degrades to prose only', () => {
+  test('GitLab says a computed replacement was withheld when its longer fence overflows the cap', () => {
+    // Sized so the canonical ```suggestion rendering fits the 3000-character cap
+    // exactly (2780 + 2 + 218) and GitLab's ```suggestion:-2+0 fence pushes it
+    // five characters over. This is the draft the neutral layer admits: it checked
+    // the fit against the canonical fence.
+    const tightDraft: ReviewCommentDraft = {
+      path: 'src/app.ts',
+      targetRange: { startLine: 12, endLine: 14 },
+      body: 'x'.repeat(2780),
+      suggestion: { replacement: 'y'.repeat(200) },
+      findingId: 'find_tight',
+      severity: 'high',
+      category: 'bug'
+    }
+
+    // The same draft keeps its apply-ready block on GitHub, which is what makes
+    // silence on GitLab a loss rather than a nothing.
+    expect(renderReviewComments([tightDraft], 'github')[0]!.body).toContain(
+      '```suggestion\nyyy'
+    )
+
+    const comment = renderReviewComments([tightDraft], 'gitlab')[0]!
+
+    expect(comment.body).not.toContain('```')
+    // The prose is untouched; only the block is gone, and the body says so and
+    // names where the replacement is.
+    expect(comment.body.startsWith(tightDraft.body)).toBe(true)
+    expect(comment.body).toContain('A ready-to-apply replacement was computed')
+    expect(comment.body).toContain('`review-comments.json`')
+    expect(comment.body.length).toBeLessThanOrEqual(3000)
+  })
+
+  test('a suggestion that overflows the body cap discloses the loss, trimming prose to fit', () => {
     const overflowDraft: ReviewCommentDraft = {
       path: 'src/app.ts',
       targetRange: { startLine: 1, endLine: 1 },
@@ -106,5 +138,9 @@ describe('review-comment renderers', () => {
 
     expect(comment.body).not.toContain('```')
     expect(comment.body.length).toBeLessThanOrEqual(3000)
+    // No room for both the whole body and the sentence: the sentence wins, and
+    // the cut it forced is marked rather than hidden.
+    expect(comment.body).toContain('A ready-to-apply replacement was computed')
+    expect(comment.body).toContain('…')
   })
 })

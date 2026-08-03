@@ -9,13 +9,20 @@ Output formats, logs and traces, and the prices used to compute run cost.
 | `reporting.formats` | array of `"json"` \| `"markdown"` \| `"sarif"` | `["json", "markdown", "sarif"]` | Which report renderers run. **`report.json` is always written** even if `"json"` is absent — it is the canonical machine-readable artifact. Only Markdown and SARIF can actually be switched off. |
 | `reporting.sarif.target` | `"generic"` \| `"github"` | `"generic"` | SARIF dialect. `github` shapes the output for GitHub code scanning. |
 | `reporting.sarif.category` | non-empty string | `"codereviewer"` | SARIF run category. |
-| `reporting.sarif.maxResults` | integer 1–25000 | `5000` | Cap on SARIF results emitted. |
+| `reporting.sarif.maxResults` | integer 1–25000 | `5000` | Cap on SARIF results emitted. When it withholds findings, `report.sarif` says so in `runs[].invocations[].toolExecutionNotifications` — see below. |
 | `reporting.reviewComments.enabled` | boolean | `false` | Writes platform-neutral inline review-comment drafts (including one-click fix suggestions) as **local artifacts only**. No network publishing happens, ever. |
 | `reporting.reviewComments.platform` | `"github"` \| `"gitlab"` \| `"bitbucket"` \| `"generic"` \| `"auto"` | `"auto"` | Renderer selection. `auto` detects from CI environment, then the git `origin` remote host, then falls back to `generic`. An explicit value skips detection. |
 
 There is no `reporting.sarif.redact` key. Every rendered report format redacts
 secret-shaped text unconditionally, so a toggle for it would have had nothing to
 switch.
+
+When `reporting.sarif.maxResults` withholds findings, `report.sarif` carries a
+`warning`-level entry in `runs[].invocations[].toolExecutionNotifications` naming
+how many findings were withheld, the cap that withheld them, and where the full
+set is. Read it, because code scanning treats a finding that is missing from a
+run as **resolved**: without that entry, withheld findings would silently read as
+fixed. `report.json` and `report.md` are never capped.
 
 With `reviewComments.enabled`, two files are written per run:
 `review-comments.json` (neutral, the source of truth) and

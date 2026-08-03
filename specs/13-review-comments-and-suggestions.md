@@ -184,6 +184,20 @@ Renderers are pure and deterministic. Redaction, Markdown escaping, the
 fence-breakout guard, and the body-length cap are enforced once in the neutral
 layer and inherited by every renderer.
 
+The inherited cap can still bind in a renderer, because the neutral layer sizes
+the body against the canonical ` ```suggestion ` fence while GitLab's fence
+carries an offset suffix (` ```suggestion:-x+y `). A draft that fits for GitHub
+can therefore overflow on GitLab. When a renderer cannot fit the suggestion
+block, it must not drop it silently: the body already states the prose fix
+summary, so silence tells the reader a fix exists while hiding that a concrete,
+apply-ready replacement was computed for those exact lines. The body instead
+carries one sentence stating that a ready-to-apply replacement was computed, does
+not fit this platform's comment size limit, and is recorded in full in
+`review-comments.json`. Room for that sentence is made by trimming the prose with
+the truncation mark — never by dropping the sentence — since the untrimmed body
+survives verbatim in `review-comments.json` and the finding id is a field on the
+rendered record.
+
 ## Artifacts
 
 - `review-comments.json` — the neutral drafts (structured suggestion). Written

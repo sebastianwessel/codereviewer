@@ -107,13 +107,15 @@ const EVIDENCE_SUMMARY_MAX = 120
 const CITED_EVIDENCE_MAX = 3
 const TRUNCATION_MARK = '…'
 
-// Escape first, then cut, so `max` bounds the rendered text rather than the raw
-// field. The cut is pulled back off a trailing escape: half of `&amp;` renders as
-// literal `&amp` and a dangling `\` escapes whatever follows it, which here is the
-// newline separating this line from the next one.
-const clampRendered = (value: string, max: number): string => {
-  const text = safeText(value)
-
+// Cut ALREADY-ESCAPED Markdown to `max` rendered characters, marking the cut. The
+// cut is pulled back off a trailing escape: half of `&amp;` renders as literal
+// `&amp` and a dangling `\` escapes whatever follows it, which here is the newline
+// separating this line from the next one.
+//
+// Exported because the platform renderers have to make room in a finished body
+// (see `review-comment-renderers.ts`), and a second copy of an escape-aware cut is
+// a second place for it to drift into producing a dangling backslash.
+export const clampEscaped = (text: string, max: number): string => {
   if (text.length <= max) {
     return text
   }
@@ -126,6 +128,11 @@ const clampRendered = (value: string, max: number): string => {
 
   return `${cut}${TRUNCATION_MARK}`
 }
+
+// Escape first, then cut, so `max` bounds the rendered text rather than the raw
+// field.
+const clampRendered = (value: string, max: number): string =>
+  clampEscaped(safeText(value), max)
 
 // The addresses the finding is anchored to. An evidence record's own summary is
 // only rendered when it has no location: with one, the ADDRESS is the checkable

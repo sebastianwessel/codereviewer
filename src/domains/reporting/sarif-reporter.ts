@@ -309,16 +309,94 @@ const buildRules = (
     })
 }
 
+// The notification id the withheld-results disclosure reports under. Defined in
+// `tool.driver.notifications` as well as referenced from the notification, so the
+// reference resolves instead of dangling.
+const RESULTS_WITHHELD_NOTIFICATION_ID = 'codereviewer/sarif-results-withheld'
+
+type SarifNotificationDescriptor = {
+  readonly id: string
+  readonly shortDescription: {
+    readonly text: string
+  }
+}
+
+type SarifInvocation = {
+  readonly executionSuccessful: boolean
+  readonly toolExecutionNotifications: readonly [
+    {
+      readonly descriptor: { readonly id: string }
+      readonly level: 'warning'
+      readonly message: { readonly text: string }
+    }
+  ]
+}
+
+// A capped result list is not read as "there is more". Code scanning resolves any
+// alert whose result is ABSENT from a later run under the same
+// `automationDetails.id`, so a silent `maxResults` cut does not read as "not
+// shown" — it reads as "fixed", and the withheld findings disappear off the
+// security dashboard with no trace anywhere in this file. SARIF's own channel for
+// a tool reporting something about its own run is
+// `runs[].invocations[].toolExecutionNotifications`, so the cut announces itself
+// there, naming what it dropped, the key that dropped it, and where the whole set
+// still lives. Emitted only when the cap actually binds: a notification on every
+// run would train consumers to ignore it.
+const resultsWithheldDisclosure = (input: {
+  readonly withheld: number
+  readonly eligible: number
+  readonly maxResults: number
+}): {
+  readonly notifications: readonly [SarifNotificationDescriptor]
+  readonly invocations: readonly [SarifInvocation]
+} => ({
+  notifications: [
+    {
+      id: RESULTS_WITHHELD_NOTIFICATION_ID,
+      shortDescription: {
+        text: 'Some findings were withheld from this SARIF run by the configured result cap.'
+      }
+    }
+  ],
+  invocations: [
+    {
+      // The run itself succeeded; what failed to arrive is results, and that is
+      // what the notification says. Reporting `false` here would make a code
+      // scanning upload read as a failed analysis, which is a different claim.
+      executionSuccessful: true,
+      toolExecutionNotifications: [
+        {
+          descriptor: { id: RESULTS_WITHHELD_NOTIFICATION_ID },
+          level: 'warning',
+          message: {
+            text: `${input.withheld} of ${input.eligible} findings are withheld from this SARIF run because reporting.sarif.maxResults is ${input.maxResults}. A consumer that treats a result missing from a run as resolved will report those findings as fixed; they are not. Raise reporting.sarif.maxResults to emit them, and read report.json or report.md for the complete set.`
+          }
+        }
+      ]
+    }
+  ]
+})
+
 export const renderSarifReport = (
   input: unknown,
   options: SarifRenderOptions
 ): string => {
   const report: ReviewReport = validateReviewReport(input)
-  const includedFindings = sortAdmittedFindings(
+  const eligibleFindings = sortAdmittedFindings(
     report.admittedFindings.filter(
       (finding) => finding.reporterEligibility !== 'artifact-only'
     )
-  ).slice(0, options.maxResults)
+  )
+  const includedFindings = eligibleFindings.slice(0, options.maxResults)
+  const withheld = eligibleFindings.length - includedFindings.length
+  const disclosure =
+    withheld === 0
+      ? undefined
+      : resultsWithheldDisclosure({
+          withheld,
+          eligible: eligibleFindings.length,
+          maxResults: options.maxResults
+        })
   const results = includedFindings.map(renderResult)
   const rules = buildRules(includedFindings)
   const properties =
@@ -339,12 +417,18 @@ export const renderSarifReport = (
           driver: {
             name: 'codereviewer',
             informationUri: SARIF_INFORMATION_URI,
-            rules
+            rules,
+            ...(disclosure === undefined
+              ? {}
+              : { notifications: disclosure.notifications })
           }
         },
         automationDetails: {
           id: options.category
         },
+        ...(disclosure === undefined
+          ? {}
+          : { invocations: disclosure.invocations }),
         ...properties,
         results
       }

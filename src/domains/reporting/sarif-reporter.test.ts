@@ -459,7 +459,7 @@ describe('SARIF reporter', () => {
     expect(JSON.stringify(sarif)).not.toContain('example.invalid')
   })
 
-  test('caps SARIF results deterministically', () => {
+  test('caps SARIF results deterministically and says what the cap withheld', () => {
     const report = createReportFixture()
     const sarif = JSON.parse(
       renderSarifReport(
@@ -486,5 +486,38 @@ describe('SARIF reporter', () => {
     )
 
     expect(sarif.runs[0].results).toHaveLength(2)
+
+    // A result absent from a run reads as RESOLVED to a code-scanning consumer,
+    // so the cut has to announce itself in SARIF's own channel rather than only
+    // shortening the list.
+    const invocation = sarif.runs[0].invocations[0]
+
+    expect(invocation.executionSuccessful).toBe(true)
+
+    const notification = invocation.toolExecutionNotifications[0]
+
+    expect(notification.level).toBe('warning')
+    expect(notification.message.text).toContain('1 of 3 findings are withheld')
+    expect(notification.message.text).toContain(
+      'reporting.sarif.maxResults is 2'
+    )
+    // The descriptor reference resolves against the driver instead of dangling.
+    expect(sarif.runs[0].tool.driver.notifications).toEqual([
+      expect.objectContaining({ id: notification.descriptor.id })
+    ])
+  })
+
+  test('emits no withheld-results notification when every finding is reported', () => {
+    const sarif = JSON.parse(
+      renderSarifReport(createReportFixture(), {
+        category: 'codereviewer',
+        maxResults: 25,
+        target: 'github'
+      })
+    )
+
+    // A notification on every run would train consumers to ignore it.
+    expect(sarif.runs[0].invocations).toBeUndefined()
+    expect(sarif.runs[0].tool.driver.notifications).toBeUndefined()
   })
 })

@@ -11,7 +11,11 @@ import {
   type ReviewCommentDraft,
   type Severity
 } from '../../shared/contracts/index.js'
-import { CODE_FENCE, renderFencedBlock } from './review-comments.js'
+import {
+  CODE_FENCE,
+  clampEscaped,
+  renderFencedBlock
+} from './review-comments.js'
 
 type RenderedCommentBase = {
   readonly path: string
@@ -47,8 +51,29 @@ export type RenderedReviewComment =
   | LineAnchoredRenderedComment
   | RangeAnchoredRenderedComment
 
+// What the body says instead of the block it could not carry. The body already
+// says "Suggested fix: <summary>", so dropping the block without this sentence
+// tells the reader a fix exists while hiding that a concrete, apply-ready one was
+// computed for these exact lines and then withheld — the reader has no reason to
+// go looking for it. The neutral artifact is named because it is where the
+// structured replacement actually is.
+const SUGGESTION_WITHHELD_NOTICE =
+  'A ready-to-apply replacement was computed for this fix but does not fit this platform\'s comment size limit; it is recorded in full in `review-comments.json`.'
+
 // Append a rendered suggestion block only when the combined body still fits the
 // cap, so truncation can never cut through a code fence.
+//
+// The cap can bind here even though the neutral layer already checked it: it sizes
+// the body against the canonical ` ```suggestion ` fence, while GitLab's fence
+// carries an offset suffix (` ```suggestion:-2+0 `), so a draft that fits for
+// GitHub can overflow by those few characters on GitLab. When that happens the
+// loss is DISCLOSED rather than dropped.
+//
+// Room for the notice is made by trimming the prose, not by dropping the notice:
+// the untrimmed body is written verbatim to `review-comments.json` (the artifact
+// the notice names) and the finding id survives as a field on this record, so a
+// visibly marked trim costs a reader nothing they cannot recover, while a silently
+// missing sentence costs them the fix itself.
 const bodyWithBlock = (
   draft: ReviewCommentDraft,
   openingFence: string
@@ -59,7 +84,16 @@ const bodyWithBlock = (
 
   const combined = `${draft.body}\n\n${renderFencedBlock(openingFence, draft.suggestion.replacement)}`
 
-  return combined.length <= REVIEW_COMMENT_BODY_MAX ? combined : draft.body
+  if (combined.length <= REVIEW_COMMENT_BODY_MAX) {
+    return combined
+  }
+
+  const prose = clampEscaped(
+    draft.body,
+    REVIEW_COMMENT_BODY_MAX - SUGGESTION_WITHHELD_NOTICE.length - 2
+  )
+
+  return `${prose}\n\n${SUGGESTION_WITHHELD_NOTICE}`
 }
 
 // Fields every platform carries verbatim from the neutral draft.
