@@ -25,6 +25,7 @@ import type {
 } from '../../shared/contracts/index.js'
 import {
   inlineCode,
+  NO_REFUTATION_VERDICT,
   pluralize,
   safeText,
   sortAdmittedFindings,
@@ -111,7 +112,7 @@ const renderProof = (
     refutation === undefined
       ? // Deliberately NOT the wording used for an unresolved finding below: the
         // two say different things and a reader must be able to tell them apart.
-        '- Survived refutation: no verdict was recorded against this finding, so what it survived cannot be shown here.'
+        `- Survived refutation: ${NO_REFUTATION_VERDICT}`
       : `- Survived refutation (${safeText(refutation.verdict)}): ${safeText(refutation.summary)}`
   )
 

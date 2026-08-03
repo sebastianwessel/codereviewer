@@ -2,6 +2,75 @@
 
 Status: Approved
 Date: 2026-07-23
+Amended: 2026-08-03 — the comment body carries its proof (see *Amendment* below)
+
+## Amendment (2026-08-03): the comment body carries its proof
+
+The original body was **severity, category, title, description, finding id, and
+the fix summary**. Every one of those is the engine's own claim about itself.
+Nothing in the comment let a reviewer check any of it, so an inline comment could
+only be believed or ignored — and it is the surface most reviewers actually read,
+because it sits in the diff next to the code while `report.md` sits in an
+artifact directory.
+
+**What forced it is a rendering property, not a new measurement.** With no
+verdict line at all, a finding that survived a full refutation and a finding that
+was never adjudicated produced **byte-identical comment bodies**. The distinction
+existed in the report the whole time — the finding carries `refutationId` and
+`evidenceIds` — and the comment discarded it. That is reproduced deterministically
+in `review-comments.test.ts` ("says a missing verdict is missing instead of
+omitting the line"); no provider run was needed to establish it and none was made.
+
+Two standing measurements say what that costs. On the 37-case real-repository
+corpus with the engine pinned, adjusted precision is 95-99%: roughly one comment
+in twenty is wrong, so a reviewer who cannot check one is being asked to act on a
+claim that fails at a known rate. And `report.md` plus the pull-request summary
+comment were both given a checkable proof in `d9d98b6`; that commit recorded this
+surface as the one remaining hole and did not close it, because this spec
+enumerated the body fields and widening them is a spec change.
+
+### What the body must now carry
+
+Additional to the fields above, in this order — title, description, proof, fix
+summary, finding id:
+
+- **The refutation verdict and the refuter's one-sentence summary**, when one is
+  recorded against the finding. It is bounded, not full: `report.md` prints every
+  check and every evidence record because a reader who opened it came to audit,
+  while a reader meeting this comment in a diff has a line or two of attention.
+- **An explicit statement when no verdict was recorded.** The line MUST NOT be
+  omitted in that case, and its wording MUST differ from the wording used for an
+  unresolved finding — "nothing was recorded" and "the refuter could not decide"
+  are different facts, and a reader who cannot tell them apart cannot weigh
+  either.
+- **The addresses the finding rests on**: the cited evidence records as
+  `kind at path:line`, at most **three**, with the remainder pointed at the run
+  report. An evidence id with no record in the report MUST be named as such
+  rather than dropped — a hole a reader can see beats one they cannot.
+
+### What the body must NOT carry
+
+**The run-level reliability rates.** They are stated once per review, in the
+summary comment on the same pull request, and repeating them on every inline
+comment is wrong twice over: the rates are mostly about what SILENCE means
+(recall), and a comment that exists raises no question about silence; and an
+aggregate printed beside one finding reads as that finding's probability, which
+is not what an aggregate says. The per-finding verdict and evidence this
+amendment adds are strictly stronger for a reader holding one comment — something
+to check instead of a base rate to apply.
+
+### Consequences for the caps
+
+The body cap is unchanged at 3 000 characters, but it may no longer be applied as
+a blind tail truncation: the proof follows the description, so cutting from the
+end would strip the proof off precisely the findings with the most to say. The
+description is therefore the only elastic field — every other prose field has a
+fixed cap, applied to the RENDERED text (escaping can grow a string severalfold,
+so a cap on the raw field does not bound what the reader gets) and cut so it can
+never end inside a Markdown escape or an HTML entity.
+
+Renderers are unaffected: the proof is assembled once in the neutral layer, and a
+platform renderer still only turns the structured suggestion into native syntax.
 
 ## Purpose
 
@@ -57,8 +126,9 @@ A strict schema under `src/shared/contracts/`:
 - `path` — repository-relative path (new side).
 - `targetRange` — `{ startLine, endLine }` on the new side the comment anchors
   to.
-- `body` — redacted, Markdown-escaped comment text (severity, category, title,
-  description, finding id, and the fix summary when present).
+- `body` — redacted, Markdown-escaped comment text: severity, category, title,
+  description, the proof (refutation verdict and cited evidence addresses, per
+  the *Amendment* above), the fix summary when present, and the finding id.
 - `suggestion` — optional `{ replacement }`: the structured replacement for
   `targetRange`. Present only when a single admitted fix edit maps exactly to
   `targetRange` (the eligibility rules below). Never a pre-rendered fenced block.
@@ -156,6 +226,10 @@ removed — it is an unmet requirement, not a withdrawn one.
   remote over generic) and explicit override.
 - Snapshot: rendered output excludes raw source beyond the redacted,
   eligibility-checked replacement, and never emits an unterminated fence.
+- Proof (2026-08-03 amendment): a finding with a recorded verdict and one without
+  do not render the same body; a missing evidence record is named; the citation
+  list is capped and the remainder pointed at the report; and a description that
+  fills the cap loses its own tail rather than the proof.
 
 ## Acceptance
 
@@ -169,3 +243,6 @@ removed — it is an unmet requirement, not a withdrawn one.
 - The core issues no network request and publishes nothing.
 - A replacement containing a code fence, or an edit that does not map exactly to
   the comment range, yields a prose summary and no suggestion block.
+- Every draft states what its finding survived, or that no verdict was recorded
+  against it, and the addresses it rests on — on every platform, because the
+  proof is assembled once in the neutral layer.

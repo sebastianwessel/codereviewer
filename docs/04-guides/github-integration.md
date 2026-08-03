@@ -193,6 +193,11 @@ pull-request review (`event: COMMENT`).
   `reporterEligibility: inline` — that is, whose reported line falls inside a
   reviewed diff range — get one at all. Everything else is in the summary
   comment.
+- **Each comment can be checked.** The body states what refutation returned
+  against that finding — or that no verdict was recorded, which it says rather
+  than leaving out — and the evidence addresses the finding rests on. The
+  measured reliability rates are not repeated per comment; they are in the
+  summary comment once.
 - **Suggestions stay applicable.** The rendered body is posted as-is. It is not
   re-escaped, because a ` ```suggestion ` block is code GitHub applies to the
   file and escaping it would silently corrupt every one-click fix. Spec 13's

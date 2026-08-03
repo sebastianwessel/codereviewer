@@ -88,6 +88,17 @@ export const pluralize = (
   plural: string
 ): string => `${count} ${count === 1 ? singular : plural}`
 
+// What a surface says when a finding carries no refutation verdict. It is NOT
+// the sentence used for an unresolved finding: "nothing was recorded" and "the
+// refuter could not decide" are different facts about the same field, and a
+// reader who cannot tell them apart cannot weigh either.
+//
+// Shared because two surfaces now print it — `report.md` and the inline review
+// comment — and the whole point of the wording is that it does not overclaim.
+// Two copies is two places for one of them to drift into "unverified".
+export const NO_REFUTATION_VERDICT =
+  'no verdict was recorded against this finding, so what it survived cannot be shown here.'
+
 export const createReportArtifact = (
   format: ReportFormat,
   path: string,

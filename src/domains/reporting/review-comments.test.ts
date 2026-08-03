@@ -215,6 +215,147 @@ describe('neutral review-comment drafts', () => {
   })
 })
 
+// An inline comment is the surface most reviewers read instead of the report, and
+// it used to carry nothing a reader could check: severity, category, title,
+// description, finding id, fix summary — every one of them the engine's own claim
+// about itself. These tests hold the proof on it.
+describe('the proof an inline comment carries', () => {
+  const refutation = {
+    id: 'refute_join1',
+    candidateId: 'cand_join1',
+    verdict: 'proved',
+    summary: 'Looked for a caller-side guard; none exists.',
+    evidenceIds: ['ev_diff1'],
+    checks: [
+      {
+        kind: 'proof-review',
+        result: 'passed',
+        summary: 'The claim follows from the cited line.',
+        evidenceIds: ['ev_diff1']
+      }
+    ]
+  }
+
+  const bodyFor = (report: unknown): string => {
+    const drafts = buildReviewCommentDrafts(report)
+
+    expect(drafts).toHaveLength(1)
+
+    return drafts[0]!.body
+  }
+
+  test('states the verdict it survived and the address it rests on', () => {
+    const report = createReportFixture()
+    const body = bodyFor({
+      ...report,
+      refutationResults: [refutation],
+      admittedFindings: [
+        { ...report.admittedFindings[0]!, refutationId: 'refute_join1' }
+      ]
+    })
+
+    expect(body).toContain(
+      '- **Survived refutation** (proved): Looked for a caller-side guard; none exists.'
+    )
+    // The evidence ADDRESS, not the bare id the body never resolved.
+    expect(body).toContain('- **Rests on:** diff at `src/app.ts:4`')
+  })
+
+  // The failure this surface is being fixed for: with no verdict line at all, a
+  // finding that survived refutation and one that was never adjudicated rendered
+  // as the same comment.
+  test('says a missing verdict is missing instead of omitting the line', () => {
+    const report = createReportFixture()
+    const withRefutation = bodyFor({
+      ...report,
+      refutationResults: [refutation],
+      admittedFindings: [
+        { ...report.admittedFindings[0]!, refutationId: 'refute_join1' }
+      ]
+    })
+    const withoutRefutation = bodyFor(report)
+
+    expect(withoutRefutation).toContain(
+      '- **Survived refutation:** no verdict was recorded against this finding, so what it survived cannot be shown here.'
+    )
+    expect(withoutRefutation).not.toBe(withRefutation)
+  })
+
+  test('names an evidence id whose record is missing rather than dropping it', () => {
+    const body = bodyFor({ ...createReportFixture(), evidence: [] })
+
+    expect(body).toContain(
+      '`ev_diff1` (no evidence record for this id is in the report)'
+    )
+  })
+
+  test('cites at most three addresses and points at the report for the rest', () => {
+    const report = createReportFixture()
+    const evidenceRecord = report.evidence[0]!
+    const evidenceIds = ['ev_diff1', 'ev_diff2', 'ev_diff3', 'ev_diff4', 'ev_diff5']
+    const body = bodyFor({
+      ...report,
+      evidence: evidenceIds.map((id, index) => ({
+        ...evidenceRecord,
+        id,
+        location: { ...evidenceRecord.location, startLine: index + 1 }
+      })),
+      admittedFindings: [{ ...report.admittedFindings[0]!, evidenceIds }]
+    })
+
+    expect(body).toContain(
+      '- **Rests on:** diff at `src/app.ts:1`; diff at `src/app.ts:2`; diff at `src/app.ts:3`; and 2 more in the run report'
+    )
+    expect(body).not.toContain('src/app.ts:4')
+  })
+
+  // The body has a hard cap, and the proof sits after the description. A blind
+  // tail truncation would therefore take the proof off exactly the findings with
+  // the most to say, so the description is what gives way instead.
+  test('a description that fills the cap loses its own tail, never the proof', () => {
+    const report = createReportFixture()
+    const finding = report.admittedFindings[0]!
+    // Worst case for the cap: every character escapes to five (`&` -> `&amp;`),
+    // at the contract's maximum description length.
+    const body = bodyFor({
+      ...report,
+      refutationResults: [refutation],
+      admittedFindings: [
+        {
+          ...finding,
+          description: '&'.repeat(1200),
+          refutationId: 'refute_join1'
+        }
+      ]
+    })
+
+    expect(body.length).toBeLessThanOrEqual(3000)
+    expect(body).toContain('- **Survived refutation** (proved):')
+    expect(body).toContain('- **Rests on:** diff at `src/app.ts:4`')
+    expect(body).toContain(`Finding: ${finding.id}`)
+    // Cut short, and cut where a reader can see it — never mid-entity, which
+    // would render as a literal `&amp`.
+    expect(body).toContain('…')
+    expect(body).not.toMatch(/&[A-Za-z#][A-Za-z0-9]*…/u)
+  })
+
+  test('bounds a refutation summary that would crowd out the finding', () => {
+    const report = createReportFixture()
+    const body = bodyFor({
+      ...report,
+      refutationResults: [
+        { ...refutation, summary: `${'r'.repeat(999)}!` }
+      ],
+      admittedFindings: [
+        { ...report.admittedFindings[0]!, refutationId: 'refute_join1' }
+      ]
+    })
+
+    expect(body).toContain(`${'r'.repeat(399)}…`)
+    expect(body).not.toContain('!')
+  })
+})
+
 // This is the assertion that would have caught the review-comment surface
 // shipping at zero: every model-origin finding was stamped `side: 'file'`, which
 // no admitted finding could turn into an inline draft, so the whole feature
