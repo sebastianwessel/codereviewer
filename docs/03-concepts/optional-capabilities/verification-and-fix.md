@@ -58,7 +58,11 @@ Provider failures are non-fatal run warnings.
 ### Bounds — enforced by code, not the model
 
 - `verification.maxToolCallsPerClaim` (default `12`, range 1–50)
-- per-call byte and match caps (`maxBytesPerRead` `20000`, `maxMatches` `20`)
+- a match cap (`maxMatches` `20`) and an optional per-read byte cap
+  (`maxBytesPerRead`, **unset by default** — a read is not cut in advance; a
+  provider that refuses the context narrows the reads and retries, and a claim
+  that still does not fit ends `uncertain` with bound reason
+  `context-length-exceeded` rather than being answered from a truncated file)
 - a per-claim token budget and the run timeout
 
 Exceeding a bound ends the claim with an `uncertain` status and no
@@ -121,7 +125,7 @@ the witnessing claim ids, surfaced in the flow's own report.
 | `verification.enabled` | boolean | `false` |
 | `verification.providers` | array of `claims-file` / `prior-findings` | `[]` |
 | `verification.maxToolCallsPerClaim` | integer 1–50 | `12` |
-| `verification.maxBytesPerRead` | integer ≥1 | `20000` |
+| `verification.maxBytesPerRead` | integer 1000–4000000 | *unset* |
 | `verification.maxMatches` | integer ≥1 | `20` |
 | `fix.enabled` | boolean | `false` |
 | `fix.minSeverity` | severity | unset → resolves to `aiReview.actionableSeverityThreshold` (default `medium`) |

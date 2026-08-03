@@ -46,15 +46,24 @@ const WHAT_THIS_IS =
 // for the same reason: rounding a rate to "usually" lets a reader supply their own
 // optimistic figure, and the optimistic figure is the expensive one here.
 //
-// Sources, all on the 37-case real-repository corpus with the engine pinned:
-// in-diff recall 61-68% over three runs (sd 0.66pp), adjusted precision 95-99%,
-// out-of-diff recall 0 of 27 — a hard zero over a full denominator, not missing
-// data — and 94.2% of reported findings landing inside the diff. The out-of-diff
-// population is not a defect of this stage but its scope boundary, and `impact
-// check` is the stage that covers it (20 of 27, 74.1%), so it is named here rather
-// than left as an unexplained hole.
+// Sources: `reports/eval-results-ledger.md`, 2026-08-02, three runs at pinned
+// engine `6781a26` on the 37-case real-repository corpus. That entry exists so
+// this prose cannot drift from the measurement it cites, and it had: the ranges
+// here read 61-68% and 95-99%, which no run in that set produced, and the sd
+// quoted for in-diff recall was the BLENDED one. The measured figures are
+// in-diff recall 61.7/60.0/61.7 (mean 61.1%, sd 0.96pp), adjusted precision
+// 100/97.3/100 (mean 99.1%), out-of-diff recall 0 of 27 — a hard zero over a
+// full denominator, not missing data — and 94.2% of reported findings landing
+// inside the diff.
+//
+// The mean and its spread are stated rather than a range, because a range
+// invites a reader to pick the end that suits them.
+//
+// The out-of-diff population is not a defect of this stage but its scope
+// boundary, and `impact check` is the stage that covers it (20 of 27, 74.1%), so
+// it is named here rather than left as an unexplained hole.
 const MEASURED_RELIABILITY =
-  'Measured reliability, so these findings can be weighed rather than trusted. On a 37-case real-repository corpus with the engine pinned: about **3 in 5** defects sitting INSIDE the diff were found (in-diff recall 61-68% across three runs), and **0 of 27** defects sitting outside the diff in the very same changed files were found — a measured zero over a full denominator, and by design, since this stage is diff-scoped and `impact check` is the stage that covers that population. Of what it does report, roughly **19 in 20** stand up under review (adjusted precision 95-99%), and 94.2% of it lands inside the diff. Two runs over the same commit do not produce the same report.'
+  'Measured reliability, so these findings can be weighed rather than trusted. On a 37-case real-repository corpus with the engine pinned: about **3 in 5** defects sitting INSIDE the diff were found (in-diff recall mean 61.1% over three runs, standard deviation 0.96pp), and **0 of 27** defects sitting outside the diff in the very same changed files were found — a measured zero over a full denominator, and by design, since this stage is diff-scoped and `impact check` is the stage that covers that population. Of what it does report, roughly **99 in 100** stand up under review (adjusted precision mean 99.1%), and 94.2% of it lands inside the diff. Two runs over the same commit do not produce the same report.'
 
 // The sentence that has to be right when the list is short, and the one most
 // easily replaced by a congratulation. Reused wherever an empty findings list is

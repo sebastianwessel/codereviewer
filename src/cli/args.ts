@@ -36,9 +36,11 @@ export const loggingCliOptions: readonly string[] = [
 // implement cannot be trusted, so unknown options are rejected before any
 // command does work.
 //
-// `--option=value` is accepted as a spelling and checked on the name alone, so a
-// command whose parsers only understand the space-separated form still rejects
-// the joined form by name rather than mistaking it for an unknown option.
+// `--option=value` is checked on the name alone. That used to be a mitigation:
+// the value parsers understood only the space-separated form, so this at least
+// rejected an unknown flag by name instead of mistaking the joined spelling for
+// one. Every parser now understands both spellings, so it is simply the name
+// check it looks like.
 //
 // Note what is deliberately NOT treated as an option: a bare `-` or a token
 // starting with a single dash. Those are values (a git ref cannot start with

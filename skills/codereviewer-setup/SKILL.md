@@ -85,11 +85,12 @@ own opening paragraph.
 
 On a 37-case real-repository corpus with the engine pinned:
 
-- **In-diff recall 61–68%** across three runs — about 3 in 5 defects sitting
-  inside the diff.
+- **In-diff recall mean 61.1%** over three runs (sd 0.96pp) — about 3 in 5
+  defects sitting inside the diff.
 - **0 of 27** for defects sitting elsewhere in a changed file. A measured zero
   over a full denominator, and by design: this stage is diff-scoped.
-- **Adjusted precision 95–99%** — roughly 19 in 20 of what it reports stands up.
+- **Adjusted precision mean 99.1%** — roughly 99 in 100 of what it reports
+  stands up.
 - 94.2% of what it reports lands inside the diff.
 - Two runs over the same commit do not produce the same report.
 

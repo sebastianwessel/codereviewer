@@ -50,7 +50,8 @@ In this order:
 Be honest with the user about what is and is not fixable by configuration.
 
 **Measured, on the 37-case real-repository corpus with the engine pinned: in-diff
-recall is 61–68% across three runs, and recall on defects outside the diff is 0
+recall is a mean 61.1% over three runs (sd 0.96pp), and recall on defects
+outside the diff is 0
 of 27 — and every one of those 27 sat in a file the reviewer had already been
 shown in full.** None of them needed extra context or retrieval. That is an
 attention problem, not an information problem, and no configuration key addresses
@@ -152,7 +153,7 @@ per task.
 
 `aiReview.requireRefutation` accepts the literal `true` only. Every model-origin
 candidate is independently adjudicated before it can be admitted. That is the
-mechanism the measured 95–99% adjusted precision rests on; there is no fast path
+mechanism the measured 99.1% mean adjusted precision rests on; there is no fast path
 around it.
 
 `security.allowShell`, `security.allowNetwork`, `security.allowFilesystemWrite`

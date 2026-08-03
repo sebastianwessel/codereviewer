@@ -92,9 +92,13 @@ describe('Markdown reporter', () => {
   test('states the measured error rates and what an absent finding does not mean', () => {
     const rendered = renderMarkdownReport(createReportFixture())
 
-    expect(rendered).toContain('in-diff recall 61-68% across three runs')
+    // These must match `reports/eval-results-ledger.md` (2026-08-02, engine
+    // 6781a26) exactly. The prose once quoted ranges no run in that set produced.
+    expect(rendered).toContain(
+      'in-diff recall mean 61.1% over three runs, standard deviation 0.96pp'
+    )
     expect(rendered).toContain('**0 of 27**')
-    expect(rendered).toContain('adjusted precision 95-99%')
+    expect(rendered).toContain('adjusted precision mean 99.1%')
     expect(rendered).toContain(
       'the absence of a finding is not the absence of a defect'
     )

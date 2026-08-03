@@ -201,7 +201,7 @@ const proofLines = (
 // a comment that exists raises no question about silence. The one rate that bears
 // on a finding in hand is precision, and this body carries something strictly
 // better: the verdict and the evidence for THIS finding, which a reader can check
-// instead of applying a base rate to it. Restating "about 19 in 20 hold up" on
+// instead of applying a base rate to it. Restating "about 99 in 100 hold up" on
 // every comment would also read as a per-comment probability, which is not what
 // an aggregate says. It is stated once, in the summary comment on the same pull
 // request.

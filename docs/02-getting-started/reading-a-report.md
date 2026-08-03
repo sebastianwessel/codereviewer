@@ -47,9 +47,9 @@ actually used:
 
 | population | result |
 | --- | --- |
-| defects inside the diff | found about 3 in 5 (in-diff recall 61–68% over three runs) |
+| defects inside the diff | found about 3 in 5 (in-diff recall mean 61.1% over three runs, sd 0.96pp) |
 | defects outside the diff, in the same changed files | **0 of 27** — by design; `impact check` covers that population |
-| findings it reports that hold up | about 19 in 20 (adjusted precision 95–99%) |
+| findings it reports that hold up | about 99 in 100 (adjusted precision mean 99.1%) |
 | findings that land inside the diff | 94.2% |
 
 Two consequences worth stating plainly, because they are what the rates mean for
@@ -58,7 +58,9 @@ a reviewer:
 - **An empty findings list is not a clearance.** Roughly two in five defects
   inside the diff are missed.
 - **Two runs over the same commit do not produce the same report.** Run-to-run
-  standard deviation on recall is 0.66pp.
+  standard deviation is 0.96pp on in-diff recall, and 0.66pp on blended recall.
+  The two are different populations; quoting the blended figure for the in-diff
+  rate understates the spread of the number above it.
 
 → [What limits recall](../05-quality/what-limits-recall.md),
 [Current results](../05-quality/current-results.md)
