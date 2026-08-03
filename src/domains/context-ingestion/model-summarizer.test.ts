@@ -67,6 +67,57 @@ describe('model summarizer', () => {
     }).summarize([fragment], { maxBytes: 50 })
 
     expect(Buffer.byteLength(brief.text, 'utf8')).toBeLessThanOrEqual(50)
+    // The brief WAS cut, so it says so. `truncated` was hard-coded `false`, which
+    // made the intent report state the intent had been seen whole.
+    expect(brief.truncated).toBe(true)
+  })
+
+  test('a brief that fits is not reported as truncated', async () => {
+    const object = vi.fn(async () => ({
+      object: { brief: 'Intent: reject expired tokens.' },
+      usage: { inputTokens: 10, outputTokens: 8 }
+    }))
+
+    const brief = await createModelSummarizer({
+      modelAlias: modelAliasWith(object as never)
+    }).summarize([fragment], { maxBytes: 4000 })
+
+    expect(brief.truncated).toBe(false)
+    expect(brief.origins).toEqual(['inbox:jira/PROJ-1'])
+  })
+
+  // A fragment whose text fell entirely beyond the input cut was still named in
+  // `origins`, so the brief claimed provenance for source the model never saw.
+  test('origins name only the fragments the model was actually shown', async () => {
+    const object = vi.fn(async () => ({
+      object: { brief: 'Intent: something.' },
+      usage: { inputTokens: 10, outputTokens: 8 }
+    }))
+    // Big enough to consume the whole input budget on its own, so the second
+    // fragment is not shown to the model AT ALL — the case that used to be
+    // reported as a source of the brief regardless.
+    const first: ContextFragment = {
+      origin: 'inbox:jira/PROJ-1',
+      kind: 'inbox',
+      title: 'First ticket',
+      body: 'x'.repeat(5000),
+      metadata: {}
+    }
+    const second: ContextFragment = {
+      origin: 'inbox:jira/PROJ-2',
+      kind: 'inbox',
+      title: 'Second ticket',
+      body: 'Reject tokens older than five minutes.',
+      metadata: {}
+    }
+
+    const brief = await createModelSummarizer({
+      modelAlias: modelAliasWith(object as never)
+    }).summarize([first, second], { maxBytes: 40 })
+
+    expect(brief.origins).toEqual(['inbox:jira/PROJ-1'])
+    expect(brief.origins).not.toContain('inbox:jira/PROJ-2')
+    expect(brief.truncated).toBe(true)
   })
 
   test('invokes a class-based provider as a method, not through a detached reference', async () => {

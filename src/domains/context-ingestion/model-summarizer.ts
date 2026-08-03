@@ -32,18 +32,65 @@ const summarizerSchema: JsonValue = {
   }
 } as const
 
+// What the model was actually shown, and what that cost.
+//
+// This used to join every section and truncate the joined string, then report
+// `origins` for EVERY fragment and `truncated: false` unconditionally. So a
+// fragment whose text fell entirely beyond the cut was still named as a source
+// of the brief, and a brief built from a cut input asserted it was complete.
+// That is not an undisclosed loss but a denied one — the report states the
+// intent was seen whole.
+//
+// Built per fragment, the way `digest-summarizer.ts` already does it, so
+// `origins` names what survived and `truncated` reports what happened.
 const fragmentsToPrompt = (
   fragments: readonly ContextFragment[],
   maxBytes: number
-): string => {
-  const sections = fragments.map((fragment) => {
-    const heading = fragment.title ?? fragment.origin
-    return `## ${heading} (${fragment.kind})\n${fragment.body.trim()}`
-  })
+): {
+  readonly prompt: string
+  readonly origins: readonly string[]
+  readonly truncated: boolean
+} => {
+  // Roughly four times the output cap of raw input to work from, bounded so a
+  // large thread cannot blow the request budget.
+  const inputBudget = maxBytes * 4
+  const separatorBytes = Buffer.byteLength('\n\n', 'utf8')
+  const sections: string[] = []
+  const origins: string[] = []
+  let usedBytes = 0
+  let truncated = false
 
-  // Give the model roughly four times the output cap of raw input to work from,
-  // bounded so a large thread cannot blow the request budget.
-  return truncateToUtf8Bytes(sections.join('\n\n'), maxBytes * 4)
+  for (const fragment of fragments) {
+    const remaining =
+      inputBudget - usedBytes - (sections.length === 0 ? 0 : separatorBytes)
+
+    if (remaining <= 0) {
+      truncated = true
+      break
+    }
+
+    const heading = fragment.title ?? fragment.origin
+    const section = `## ${heading} (${fragment.kind})\n${fragment.body.trim()}`
+    const fitted = truncateToUtf8Bytes(section, remaining)
+
+    if (fitted.length === 0) {
+      truncated = true
+      break
+    }
+
+    sections.push(fitted)
+    origins.push(fragment.origin)
+    usedBytes +=
+      (sections.length === 1 ? 0 : separatorBytes) +
+      Buffer.byteLength(fitted, 'utf8')
+
+    if (fitted.length < section.length) {
+      truncated = true
+      break
+    }
+  }
+
+  return { prompt: sections.join('\n\n'), origins, truncated }
 }
 
 /**
@@ -72,16 +119,14 @@ export const createModelSummarizer = (input: {
     // inside the adapter, ingestion silently degrades to the deterministic digest,
     // and the model summarization mode never actually runs. Every other model call
     // in this codebase invokes the provider the same way, for the same reason.
+    const prepared = fragmentsToPrompt(fragments, summarizeInput.maxBytes)
     const response = await input.modelAlias.provider.object<{
       readonly brief: string
     }>({
       model: input.modelAlias.model,
       messages: [
         { role: 'system', content: summarizerInstructions },
-        {
-          role: 'user',
-          content: fragmentsToPrompt(fragments, summarizeInput.maxBytes)
-        }
+        { role: 'user', content: prepared.prompt }
       ],
       schema: summarizerSchema,
       schemaName: 'change_intent_brief',
@@ -103,15 +148,18 @@ export const createModelSummarizer = (input: {
         : { reasoningTokens: response.usage.reasoningTokens })
     })
 
-    const text = truncateToUtf8Bytes(
-      String(response.object.brief).trim(),
-      summarizeInput.maxBytes
-    )
+    const brief = String(response.object.brief).trim()
+    const text = truncateToUtf8Bytes(brief, summarizeInput.maxBytes)
 
     return {
       text,
-      origins: fragments.map((fragment) => fragment.origin),
-      truncated: false,
+      // Only the fragments the model was actually shown. Naming a fragment whose
+      // text fell beyond the input cut claims provenance the brief does not have.
+      origins: prepared.origins,
+      // True when the INPUT was cut, or when the model's own brief came back
+      // longer than the output cap and was cut here. Either way the brief is not
+      // the whole of what it claims to summarize.
+      truncated: prepared.truncated || text.length < brief.length,
       mode: 'model'
     }
   }

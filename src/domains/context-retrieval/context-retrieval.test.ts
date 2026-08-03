@@ -283,7 +283,13 @@ describe('context retrieval', () => {
         paths: ['src']
       })
 
-      expect(result.content).toBe('')
+      // No matches — and the reason is stated. A depth-pruned search used to
+      // return an empty string, which reads as "there is nothing there" rather
+      // than "there are places I did not look".
+      expect(result.matches).toEqual([])
+      expect(result.content).toContain('NOT EXHAUSTIVE')
+      expect(result.content).toContain('deeper than 1 levels')
+      expect(result.summary).toContain('search depth bound reached')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -559,6 +565,60 @@ describe('context retrieval grep modes', () => {
 
       expect(tightened.matches).toHaveLength(2)
       expect(untouched.matches).toHaveLength(4)
+
+      // The cut one says it was cut; the complete one says nothing, because
+      // there is nothing to say. A notice on a complete search would train the
+      // model to ignore it.
+      expect(tightened.content).toContain('TRUNCATED')
+      expect(tightened.content).toContain('match cap of 2 was reached')
+      expect(tightened.summary).toContain('more exist')
+      expect(untouched.content).not.toContain('TRUNCATED')
+      expect(untouched.summary).not.toContain('more exist')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Reaching the cap exactly is not the same as being cut by it. The extra match
+  // is collected precisely so the two can be told apart, rather than inferred
+  // from "we returned exactly N".
+  test('a search that finds exactly the cap is not reported as truncated', async () => {
+    const root = await createSymbolFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxSearches: 1, maxMatches: 10 }
+      })
+      const exact = await retriever.grepRepository({
+        query: 'get',
+        paths: ['src/many.ts'],
+        matchMode: 'identifier',
+        maxMatchesPerQuery: 4
+      })
+
+      expect(exact.matches).toHaveLength(4)
+      expect(exact.content).not.toContain('TRUNCATED')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a directory listing cut at the cap names what it did not show', async () => {
+    const root = await createSymbolFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxReads: 2, maxMatches: 1 }
+      })
+      const listed = await retriever.listRepositoryDirectory({ path: 'src' })
+
+      // Without this the model concludes a file is not in a directory it only
+      // saw one entry of.
+      expect(listed.content).toContain('TRUNCATED')
+      expect(listed.content).toMatch(/1 of \d+ eligible entries shown/u)
+      expect(listed.summary).toMatch(/1 of \d+ eligible entries returned/u)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

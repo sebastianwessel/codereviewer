@@ -471,7 +471,15 @@ export const createContextRetriever = (input: {
           )}`
         })
       )
-      const content = childSummaries.join('\n')
+      // A listing cut at the cap said "N entries returned" and nothing else, so
+      // a model that saw a fifth of a directory concluded a file was not in it.
+      // The count that was cut is named, in the text the model reads, for the
+      // same reason a truncated READ is (see `truncationNotice`).
+      const listingCut =
+        eligibleEntryNames.length > childSummaries.length
+          ? `\n[TRUNCATED: ${childSummaries.length} of ${eligibleEntryNames.length} eligible entries shown. Absence of a name below this point is NOT evidence it is missing — list a subdirectory directly, or use repo_grep.]`
+          : ''
+      const content = `${childSummaries.join('\n')}${listingCut}`
 
       return recordResult({
         tool: 'list',
@@ -481,7 +489,7 @@ export const createContextRetriever = (input: {
         content,
         bytesConsidered: Buffer.byteLength(content),
         bytesIncluded: Buffer.byteLength(content),
-        summary: `Listed ${portablePath}; ${childSummaries.length} entries returned.`
+        summary: `Listed ${portablePath}; ${childSummaries.length} of ${eligibleEntryNames.length} eligible entries returned.`
       })
     },
     grepRepository: async (input) => {
@@ -554,22 +562,38 @@ export const createContextRetriever = (input: {
     }
     budget.usedSearches += input.queries.length
 
-    const states = input.queries.map((entry) => ({
-      query: entry.query,
-      queryHash: sha256(entry.query),
-      matchLimit:
+    // One match past the cap is collected on purpose. Whether a search was cut
+    // then becomes a FACT — there is a match that did not fit — instead of the
+    // inference "we returned exactly the cap, so maybe there were more". The
+    // extra is dropped before the result is assembled, so callers see at most
+    // `matchLimit`. `symbol-reference-lookup.ts` already resolves the same
+    // question the same way.
+    const states = input.queries.map((entry) => {
+      const matchLimit =
         entry.maxMatchesPerQuery === undefined
           ? budget.maxMatches
-          : Math.min(budget.maxMatches, entry.maxMatchesPerQuery),
-      lineMatches: createLineMatcher(entry.query, entry.matchMode ?? 'literal'),
-      matches: [] as ContextRetrievalMatch[]
-    }))
+          : Math.min(budget.maxMatches, entry.maxMatchesPerQuery)
+
+      return {
+        query: entry.query,
+        queryHash: sha256(entry.query),
+        matchLimit,
+        collectLimit: matchLimit + 1,
+        lineMatches: createLineMatcher(entry.query, entry.matchMode ?? 'literal'),
+        matches: [] as ContextRetrievalMatch[]
+      }
+    })
+    // Set when the traversal declined to descend because `maxDepth` was reached.
+    // A depth-pruned search returns fewer matches, or none, and is otherwise
+    // indistinguishable from a search that looked everywhere and found nothing —
+    // which turns "I did not look there" into "there is nothing there".
+    let depthPruned = false
     const searchPaths =
       input.paths === undefined || input.paths.length === 0
         ? ['.']
         : [...input.paths]
     const allSatisfied = (): boolean =>
-      states.every((state) => state.matches.length >= state.matchLimit)
+      states.every((state) => state.matches.length >= state.collectLimit)
 
     const collectFileMatches = async (
       portablePath: string,
@@ -596,7 +620,8 @@ export const createContextRetriever = (input: {
       // answer instead of to the whole batch.
       const active = states.filter(
         (state) =>
-          state.matches.length < state.matchLimit && content.includes(state.query)
+          state.matches.length < state.collectLimit &&
+          content.includes(state.query)
       )
 
       if (active.length === 0) {
@@ -608,7 +633,7 @@ export const createContextRetriever = (input: {
         let redacted: string | undefined
 
         for (const state of active) {
-          if (state.matches.length >= state.matchLimit) {
+          if (state.matches.length >= state.collectLimit) {
             continue
           }
           if (!state.lineMatches(line)) {
@@ -654,7 +679,13 @@ export const createContextRetriever = (input: {
       absolutePath: string,
       depth: number
     ): Promise<void> => {
-      if (allSatisfied() || depth > budget.maxDepth) {
+      if (allSatisfied()) {
+        return
+      }
+
+      if (depth > budget.maxDepth) {
+        depthPruned = true
+
         return
       }
 
@@ -706,28 +737,55 @@ export const createContextRetriever = (input: {
     }
 
     return states.map((state) => {
+      // The over-fetched match is evidence that more exist; it is not returned.
+      const capReached = state.matches.length > state.matchLimit
+      const matches = state.matches.slice(0, state.matchLimit)
       // `content` keeps its historical `path:line` shape. The matched text is
       // returned separately in `matches`, so a model-facing tool output and
       // every existing caller stay byte-identical.
-      const content = state.matches
+      const content = matches
         .map((match) => `${match.path}:${match.line}`)
         .join('\n')
+      // A search that was cut used to return exactly N hits and say "N matches
+      // returned", so the model concluded "these are all the callers" — the very
+      // reasoning step cross-file retrieval and claim investigation exist to
+      // perform. `bytesConsidered` equals `bytesIncluded` for a grep by
+      // construction, so the read path's `truncationNotice` can never fire here;
+      // the notice has to be part of the content.
+      //
+      // Depth pruning is disclosed separately because it is a different claim: a
+      // match cap means "there are more of these", while a depth bound means
+      // "there are places I did not look at all".
+      const cutNotices = [
+        capReached
+          ? `[TRUNCATED: the match cap of ${state.matchLimit} was reached and more matches exist. These are NOT all the matches. Narrow the query, or pass \`paths\` to search a subtree.]`
+          : '',
+        depthPruned
+          ? `[NOT EXHAUSTIVE: directories deeper than ${budget.maxDepth} levels below the search root were not descended into. Absence of a match is NOT evidence there is none. Pass \`paths\` to search a deeper subtree directly.]`
+          : ''
+      ].filter((notice) => notice.length > 0)
+      const contentWithNotices =
+        cutNotices.length === 0
+          ? content
+          : `${content}${content.length === 0 ? '' : '\n'}${cutNotices.join('\n')}`
 
       return {
         ...recordResult({
           tool: 'grep',
           ...(input.taskId === undefined ? {} : { taskId: input.taskId }),
           reason: 'context-retrieval-grep',
-          content,
-          bytesConsidered: Buffer.byteLength(content),
-          bytesIncluded: Buffer.byteLength(content),
+          content: contentWithNotices,
+          bytesConsidered: Buffer.byteLength(contentWithNotices),
+          bytesIncluded: Buffer.byteLength(contentWithNotices),
           summary: `Searched repository context for query hash ${state.queryHash.slice(
             0,
             16
-          )}; ${state.matches.length} matches returned.`,
+          )}; ${matches.length} matches returned${
+            capReached ? ' (match cap reached; more exist)' : ''
+          }${depthPruned ? ' (search depth bound reached; not exhaustive)' : ''}.`,
           queryHash: state.queryHash
         }),
-        matches: state.matches
+        matches
       }
     })
   }
