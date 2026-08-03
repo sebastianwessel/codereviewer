@@ -13,6 +13,7 @@
 import { z } from 'zod'
 import { truncateForContract } from '../../shared/text/truncate.js'
 import {
+  INTENT_EXPLANATION_MAX,
   ObligationStatusSchema,
   type Obligation,
   type ExtraScopeEntry
@@ -59,7 +60,6 @@ export type FulfilmentExplanationRunner = (
 // most readily takes as the whole account — an explanation whose final clause was
 // "…but nothing evidences the audit-log requirement" is one that reads as complete
 // after the clause is gone.
-const MAX_EXPLANATION_LENGTH = 2_000
 
 /** Resolves whatever the explanation call returned, or `undefined`. */
 export const normalizeFulfilmentExplanation = (
@@ -75,7 +75,7 @@ export const normalizeFulfilmentExplanation = (
   const explanation =
     trimmed === undefined
       ? undefined
-      : truncateForContract(trimmed, MAX_EXPLANATION_LENGTH)
+      : truncateForContract(trimmed, INTENT_EXPLANATION_MAX)
 
   return explanation === undefined || explanation.length === 0
     ? undefined

@@ -19,7 +19,7 @@ import {
 } from '../../shared/contracts/findings/finding.schema.js'
 import type { Verdict } from '../../shared/contracts/verification/verification.schema.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
-import { truncateForContract } from '../../shared/text/truncate.js'
+import { truncateToFieldBound } from '../../shared/text/truncate.js'
 import { currentFindingClaimId } from './current-findings-provider.js'
 import { applyFixEdits } from './apply-check.js'
 import type {
@@ -27,8 +27,6 @@ import type {
   ClaimObservation,
   FixOutcome
 } from './verification-report.js'
-
-const FIX_PROPOSAL_SUMMARY_MAX = 1200
 
 // Reads the current bytes of a repository file the agent already investigated.
 // Returns `undefined` when the file cannot be read (deleted, ineligible), which
@@ -64,7 +62,10 @@ const enrichedFixProposal = (
   const evidenceIds = [...new Set(finding.evidenceIds)]
 
   return FixProposalSchema.parse({
-    summary: truncateForContract(redact(verdict.rationale), FIX_PROPOSAL_SUMMARY_MAX),
+    summary: truncateToFieldBound(
+      redact(verdict.rationale),
+      FixProposalSchema.shape.summary
+    ),
     evidenceIds,
     safety: 'manual-review',
     edits: verdict.fixEdits

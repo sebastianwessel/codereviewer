@@ -22,7 +22,10 @@ import {
 } from '../../shared/contracts/index.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
 import { sha256 } from '../../shared/hash/hash.js'
-import { truncateForContract } from '../../shared/text/truncate.js'
+import {
+  truncateToFieldBound,
+  type BoundedStringField
+} from '../../shared/text/truncate.js'
 
 export const CandidateFindingSchema = z.strictObject({
   id: CandidateIdSchema,
@@ -131,7 +134,15 @@ const makeRejectedFinding = (
     candidateId: input.candidateId,
     status: input.status ?? 'rejected',
     reason: input.reason,
-    message: createRedactor().redact(input.message).slice(0, 500),
+    // The reason a finding was SUPPRESSED, and it is sourced from strings longer
+    // than its own bound, so cutting is routine rather than exotic. A bare
+    // `.slice(0, 500)` restated the contract's number here AND cut without a
+    // mark, so a reader saw a reason that stopped and could not tell the end had
+    // been removed.
+    message: truncateToFieldBound(
+      createRedactor().redact(input.message),
+      RejectedFindingSchema.shape.message
+    ),
     ...(input.evidenceIds === undefined
       ? {}
       : { evidenceIds: [...input.evidenceIds] }),
@@ -375,33 +386,20 @@ const reporterEligibilityFor = (
     ? 'inline'
     : 'summary-only'
 
-// Read the `max(n)` length from a (possibly optional) Zod string field. Used so
-// redaction caps are derived from the destination schema rather than hard-coded,
-// keeping them from drifting away from the contract they must satisfy.
-const stringFieldMax = (schema: {
-  readonly maxLength?: number | null
-  readonly unwrap?: () => { readonly maxLength?: number | null }
-}): number => {
-  if (typeof schema.maxLength === 'number') {
-    return schema.maxLength
-  }
-
-  const unwrapped = schema.unwrap?.()
-
-  return typeof unwrapped?.maxLength === 'number'
-    ? unwrapped.maxLength
-    : Number.POSITIVE_INFINITY
-}
-
 // Redaction can lengthen text (a short configured secret becomes `[REDACTED]`),
 // so the result is truncated back to its contract cap. Without this, a redacted
 // title/description could exceed AdmittedFindingSchema's limit and fail
 // validation at admission time.
+//
+// This file invented deriving the cap from the destination field, which is the
+// right idea and is now shared: `truncateToFieldBound` is that helper, so the
+// four hard-coded copies of a bound elsewhere could be deleted rather than
+// audited. The local version returned `Number.POSITIVE_INFINITY` for a field with
+// no `.max(n)` — a bound that fails to bind, silently — and the shared one throws.
 const redactCandidateField = (
   value: string,
-  schema: Parameters<typeof stringFieldMax>[0]
-): string =>
-  truncateForContract(createRedactor().redact(value), stringFieldMax(schema))
+  field: BoundedStringField
+): string => truncateToFieldBound(createRedactor().redact(value), field)
 
 const redactedCandidate = (candidate: CandidateFinding): CandidateFinding => ({
   ...candidate,

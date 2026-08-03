@@ -187,11 +187,18 @@ export const VerificationCheckSchema = z.strictObject({
   evidenceIds: z.array(ContractIdSchema)
 })
 
+// Sized to its ONLY producer. The refuter is asked for a rationale within 1200
+// characters (`rationaleSummary` in the discovery contract), so a destination
+// below 1200 does not guard against a runaway model — it guarantees a cut on
+// ordinary output. This was 1000, and the last 200 characters of a refutation
+// argument are where its qualifications live.
+export const REFUTATION_SUMMARY_MAX = 1200
+
 export const RefutationResultSchema = z.strictObject({
   id: ContractIdSchema,
   candidateId: CandidateIdSchema,
   verdict: RefutationVerdictSchema,
-  summary: z.string().min(1).max(1000),
+  summary: z.string().min(1).max(REFUTATION_SUMMARY_MAX),
   evidenceIds: z.array(ContractIdSchema),
   checks: z.array(VerificationCheckSchema)
 })
@@ -252,7 +259,17 @@ export const AdmittedFindingSchema = z.strictObject({
 // Max length for a rejection message. Exported so the construction sites that
 // copy model-authored summaries into `RejectedFinding.message` truncate to the
 // same cap (single source of truth) instead of hard-coding the number.
-export const REJECTED_FINDING_MESSAGE_MAX = 500
+//
+// Sized to its producer for the same reason as `REFUTATION_SUMMARY_MAX`: the
+// refutation rationale that lands here is written to 1200 characters, so 500 —
+// the previous value — discarded 58% of it. This is the field that says WHY A
+// FINDING WAS SUPPRESSED, read by someone asking whether a suppression was
+// right, and more than half the answer was being removed before they saw it.
+//
+// Not a noise risk, measured rather than assumed: over the 37-case corpus the
+// median run rejects zero candidates and the worst rejects four, and the section
+// that renders them is one a reader opens deliberately.
+export const REJECTED_FINDING_MESSAGE_MAX = 1200
 
 export const RejectedFindingSchema = z.strictObject({
   candidateId: CandidateIdSchema,

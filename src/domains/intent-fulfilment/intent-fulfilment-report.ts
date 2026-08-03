@@ -84,12 +84,23 @@ export const ObligationStatusSchema = z.enum([
   'undetermined'
 ])
 
+// Exported so the extraction that PRODUCES an obligation cuts to the same bound
+// the contract enforces, instead of restating the number. The bound was
+// previously enforced only by the producer — the contract accepted any length —
+// so the two could not disagree loudly, only quietly.
+export const OBLIGATION_STATEMENT_MAX = 300
+
+// Same reason, for the prose summary the explanation call produces.
+export const INTENT_EXPLANATION_MAX = 2_000
+
 const obligationBase = {
   id: z.string().min(1),
   // Where in the stated intent this obligation came from.
   source: IntentCitationSchema,
-  // The obligation as a single checkable statement.
-  statement: z.string().min(1)
+  // The obligation as a single checkable statement. Bounded because it is
+  // rendered as the bold headline of every row: an unbounded statement is a
+  // paragraph where the reader expects a sentence.
+  statement: z.string().min(1).max(OBLIGATION_STATEMENT_MAX)
 }
 
 export const ObligationSchema = z.discriminatedUnion('status', [
@@ -214,7 +225,7 @@ export const IntentFulfilmentReportSchema = z.strictObject({
   // follow-up must not share one model call). Absent when the explanation call
   // did not run or returned nothing usable — the mapping is the output, and the
   // prose is a convenience over it.
-  explanation: z.string().min(1).max(2_000).optional(),
+  explanation: z.string().min(1).max(INTENT_EXPLANATION_MAX).optional(),
   warnings: z.array(z.string()),
   usage: LaneUsageSchema.optional()
 })

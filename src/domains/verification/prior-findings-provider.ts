@@ -9,7 +9,7 @@ import {
 } from '../../shared/contracts/verification/verification.schema.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
 import { sha256 } from '../../shared/hash/hash.js'
-import { truncateForContract } from '../../shared/text/truncate.js'
+import { truncateToFieldBound } from '../../shared/text/truncate.js'
 import type { z } from 'zod'
 import { BaselineFileSchema, type BaselineEntry } from '../admission/index.js'
 import {
@@ -27,10 +27,6 @@ import { isFileNotFoundError } from '../../shared/errors/error-normalizer.js'
 type PriorFindingsConfig = z.infer<typeof VerificationPriorFindingsProviderSchema>
 
 
-const CLAIM_TITLE_MAX = 200
-const CLAIM_QUESTION_MAX = 500
-const CLAIM_DETAIL_MAX = 2000
-
 // A claim carries at most this many `fingerprint:<algorithm>` evidence refs, so a
 // baseline entry with many fingerprints cannot exceed the `Claim.evidenceRefs`
 // cap. The refs are what let a verdict be matched back to the baselined finding.
@@ -41,12 +37,12 @@ const claimFromAdmittedFinding = (finding: AdmittedFinding): Claim =>
     id: `claim_${sha256(`prior-finding:${finding.id}`).slice(0, 24)}`,
     kind: 'prior-finding',
     title: finding.title,
-    detail: truncateForContract(finding.description, CLAIM_DETAIL_MAX),
+    detail: truncateToFieldBound(finding.description, ClaimSchema.shape.detail),
     location: finding.location,
     source: 'prior-finding',
-    question: truncateForContract(
+    question: truncateToFieldBound(
       `Does the prior finding still hold in the current code, or has it been fixed: ${finding.title}?`,
-      CLAIM_QUESTION_MAX
+      ClaimSchema.shape.question
     ),
     evidenceRefs: fingerprintEvidenceRefs(finding.fingerprints)
   })
@@ -63,15 +59,18 @@ const claimFromBaselineEntry = (entry: BaselineEntry): Claim => {
   return ClaimSchema.parse({
     id: `claim_${sha256(`prior-baseline:${entry.fingerprints.map(fingerprintKey).join('|')}`).slice(0, 24)}`,
     kind: 'prior-finding',
-    title: truncateForContract(`Baselined finding ${keys}`, CLAIM_TITLE_MAX),
-    detail: truncateForContract(
+    title: truncateToFieldBound(
+      `Baselined finding ${keys}`,
+      ClaimSchema.shape.title
+    ),
+    detail: truncateToFieldBound(
       `A previous run baselined a finding recorded under fingerprint(s) ${keys}. The baseline stores fingerprints only, so no location, title, or description of the finding is available; establish from the current code whether a defect matching this fingerprint is still present.`,
-      CLAIM_DETAIL_MAX
+      ClaimSchema.shape.detail
     ),
     source: 'prior-finding',
-    question: truncateForContract(
+    question: truncateToFieldBound(
       `Does the baselined finding recorded under fingerprint(s) ${keys} still hold in the current code, or has it been fixed?`,
-      CLAIM_QUESTION_MAX
+      ClaimSchema.shape.question
     ),
     evidenceRefs: fingerprints.map((fingerprint) => ({
       key: `fingerprint:${fingerprint.algorithm}`,

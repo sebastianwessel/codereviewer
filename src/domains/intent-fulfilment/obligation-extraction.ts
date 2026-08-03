@@ -12,6 +12,7 @@
 
 import { z } from 'zod'
 import { truncateForContract } from '../../shared/text/truncate.js'
+import { OBLIGATION_STATEMENT_MAX } from './intent-fulfilment-report.js'
 import type { IntentSource } from './intent-sources.js'
 
 // The model-bound OUTPUT schema, loose on purpose: `line` accepts whatever a
@@ -76,7 +77,6 @@ export type ExtractedObligation = {
 // headline mid-clause — "Reject tokens older than five minutes unless the caller
 // holds" — and a reader has no way to tell that from an obligation the extraction
 // genuinely stated that way, so they judge the change against half a requirement.
-const MAX_STATEMENT_LENGTH = 300
 
 /** Builds the extraction packet from the line-addressed intent sources. */
 export const obligationExtractionInputFor = (
@@ -113,7 +113,7 @@ export const normalizeObligationExtraction = (
   return (parsed.data.obligations ?? []).flatMap((obligation) => {
     const statement = truncateForContract(
       obligation.statement.trim(),
-      MAX_STATEMENT_LENGTH
+      OBLIGATION_STATEMENT_MAX
     )
     const line = Math.trunc(obligation.line)
     const origin = obligation.origin.trim()

@@ -22,13 +22,10 @@ import {
 } from '../../shared/contracts/verification/verification.schema.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
 import { sha256 } from '../../shared/hash/hash.js'
-import { truncateForContract } from '../../shared/text/truncate.js'
+import { truncateToFieldBound } from '../../shared/text/truncate.js'
 import { fingerprintEvidenceRefs } from './claim-fingerprints.js'
 import { capProviderClaims, type ClaimProvider } from './contracts.js'
 import { redactClaim } from './redact-claim.js'
-
-const CLAIM_QUESTION_MAX = 500
-const CLAIM_DETAIL_MAX = 2000
 
 /**
  * Deterministic claim id for a `current-finding` claim derived from a finding id.
@@ -43,12 +40,12 @@ const claimFromAdmittedFinding = (finding: AdmittedFinding): Claim =>
     id: currentFindingClaimId(finding.id),
     kind: 'current-finding',
     title: finding.title,
-    detail: truncateForContract(finding.description, CLAIM_DETAIL_MAX),
+    detail: truncateToFieldBound(finding.description, ClaimSchema.shape.detail),
     location: finding.location,
     source: 'current-finding',
-    question: truncateForContract(
+    question: truncateToFieldBound(
       `Is this a real defect; if so, what is the minimal fix: ${finding.title}?`,
-      CLAIM_QUESTION_MAX
+      ClaimSchema.shape.question
     ),
     evidenceRefs: fingerprintEvidenceRefs(finding.fingerprints)
   })

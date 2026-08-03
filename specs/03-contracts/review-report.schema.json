@@ -731,7 +731,7 @@
           },
           "message": {
             "type": "string",
-            "maxLength": 500
+            "maxLength": 1200
           },
           "evidenceIds": {
             "type": "array",
@@ -1141,7 +1141,7 @@
           "summary": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 1000
+            "maxLength": 1200
           },
           "evidenceIds": {
             "type": "array",

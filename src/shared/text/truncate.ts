@@ -37,3 +37,54 @@ export const truncateForContract = (value: string, maxLength: number): string =>
 
   return `${value.slice(0, maxLength - TRUNCATION_MARK.length).trimEnd()}${TRUNCATION_MARK}`
 }
+
+// A Zod string field, possibly wrapped in `.optional()`, whose `.max(n)` is the
+// bound its value must satisfy.
+export type BoundedStringField = {
+  readonly maxLength?: number | null
+  readonly unwrap?: () => { readonly maxLength?: number | null }
+}
+
+/**
+ * Truncate a value to the bound its DESTINATION FIELD declares.
+ *
+ * Prefer this over `truncateForContract` wherever the destination is a schema
+ * field. Passing a number means the number exists twice — once in the schema and
+ * once at the call site — and the two drift apart silently, because nothing fails
+ * when the copy is merely SMALLER than the contract. Four such copies existed:
+ * `FIX_PROPOSAL_SUMMARY_MAX`, and three claim caps declared once in each of two
+ * providers. Every one of them happened to be correct, which is what makes the
+ * shape worth removing rather than auditing.
+ *
+ * Here the number exists once, in the schema, and the call site names the field
+ * instead of restating its size.
+ */
+export const truncateToFieldBound = (
+  value: string,
+  field: BoundedStringField
+): string => truncateForContract(value, stringFieldBound(field))
+
+/**
+ * The `max(n)` a Zod string field declares, unwrapping `.optional()`.
+ *
+ * Throws when the field declares none. The earlier version of this returned
+ * `Number.POSITIVE_INFINITY`, which meant "truncate this to its field's bound"
+ * quietly did not truncate when the field had no bound — a limit failing to bind
+ * and producing a plausible result instead of an error, which is the exact shape
+ * this codebase keeps finding. A caller asking for a bound that does not exist
+ * has made a programming error and should be told, at the first call.
+ */
+export const stringFieldBound = (field: BoundedStringField): number => {
+  const declared =
+    typeof field.maxLength === 'number'
+      ? field.maxLength
+      : field.unwrap?.()?.maxLength
+
+  if (typeof declared !== 'number') {
+    throw new TypeError(
+      'truncateToFieldBound was given a schema field that declares no maximum length. Add a `.max(n)` to the field, or use `truncateForContract` with an explicit bound.'
+    )
+  }
+
+  return declared
+}
