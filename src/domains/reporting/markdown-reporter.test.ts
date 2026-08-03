@@ -100,6 +100,41 @@ describe('Markdown reporter', () => {
     )
   })
 
+  // A rate is a property of a model. Quoted without one, it invites the reader
+  // to assume it holds for whatever they ran, and the fixture's model is not the
+  // model any of those rates were measured on.
+  test('names the model the rates were measured on, and says when this run used another', () => {
+    const rendered = renderMarkdownReport(createReportFixture())
+
+    expect(rendered).toContain('openai/gpt-5.3-codex')
+    expect(rendered).toContain('This run used')
+    expect(rendered).toContain('openai/gpt-5-mini')
+    expect(rendered).toContain('were not measured on it')
+    // And the price is attributed too, for the same reason.
+    expect(rendered).toContain('- Model: `openai/gpt-5-mini`')
+  })
+
+  test('a run on the measured model is not warned about', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      run: { ...report.run, provider: 'openai', model: 'gpt-5.3-codex' }
+    })
+
+    expect(rendered).toContain('which is the model this run used')
+    expect(rendered).not.toContain('were not measured on it')
+  })
+
+  test('a run that recorded no model says so rather than claiming a match', () => {
+    const report = createReportFixture()
+    const { model: _model, ...runWithoutModel } = report.run
+    const rendered = renderMarkdownReport({ ...report, run: runWithoutModel })
+
+    expect(rendered).toContain('did not record which model produced it')
+    expect(rendered).toContain('- Model: not recorded')
+    expect(rendered).not.toContain('which is the model this run used')
+  })
+
   // The most expensive thing this document can do is read as a clearance. It
   // used to open with `Passed: yes` above five empty headings.
   test('a report with nothing to act on does not read as a clearance', () => {

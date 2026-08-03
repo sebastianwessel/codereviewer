@@ -99,6 +99,53 @@ export const pluralize = (
 export const NO_REFUTATION_VERDICT =
   'no verdict was recorded against this finding, so what it survived cannot be shown here.'
 
+// The provider and model every published accuracy rate in this repository was
+// measured on. Recorded from the eval artifacts themselves (`provenance.
+// providerId` / `provenance.modelName` on the saved eval report), not from an
+// environment file, so it is a property of the measurement rather than of
+// whatever happens to be configured now.
+//
+// It is a single constant because it is a claim about evidence: a rate quoted
+// without it invites the reader to assume it holds for their model, and it does
+// not. Changing it means new measurements were taken, and every rate quoted
+// beside it must be re-derived from those runs in the same commit.
+export const MEASURED_ON_PROVIDER = 'openai'
+export const MEASURED_ON_MODEL = 'gpt-5.3-codex'
+
+/**
+ * The sentence that ties a published rate to the model it was measured on, and
+ * to the model this run actually used.
+ *
+ * A rate is a property of a model, not of the engine: the same prompts against
+ * a different provider, or a newer version of the same model, are not the thing
+ * that was measured. So the comparison is made for the reader rather than left
+ * to them — a run on another model is told, in the same breath as the rate, that
+ * the rate is not a measurement of it.
+ *
+ * An unknown model is reported as unknown. It must not fall back to "matches",
+ * which would be absence read as agreement.
+ */
+export const renderMeasuredOn = (
+  run: {
+    readonly provider?: string | undefined
+    readonly model?: string | undefined
+  }
+): string => {
+  const measured = `${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}`
+
+  if (run.model === undefined) {
+    return `Measured on ${inlineCode(measured)}. This run did not record which model produced it, so whether those rates describe it cannot be determined here.`
+  }
+
+  const used = `${run.provider ?? 'unknown provider'}/${run.model}`
+
+  if (used === measured) {
+    return `Measured on ${inlineCode(measured)}, which is the model this run used.`
+  }
+
+  return `Measured on ${inlineCode(measured)}. **This run used ${inlineCode(used)}**, so the rates above were not measured on it and may not describe it — a different model changes what is found and what is proved, not just what it costs.`
+}
+
 export const createReportArtifact = (
   format: ReportFormat,
   path: string,

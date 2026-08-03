@@ -27,6 +27,7 @@ import {
   inlineCode,
   NO_REFUTATION_VERDICT,
   pluralize,
+  renderMeasuredOn,
   safeText,
   sortAdmittedFindings,
   validateReviewReport
@@ -295,9 +296,11 @@ const renderScope = (report: ReviewReport): readonly string[] => {
     '## Scope of this search',
     '',
     `- Run: ${inlineCode(run.runId)} (mode ${safeText(run.mode)}, depth ${safeText(run.depth)})`,
-    ...(run.model === undefined
-      ? []
-      : [`- Model: ${inlineCode(run.model)}`]),
+    // Always a line, never dropped, and carrying the provider as well as the
+    // model name: every rate and every price this document quotes is a property
+    // of one specific model, so a report that cannot say which one has to say
+    // THAT rather than leave the reader to assume the measured one.
+    `- Model: ${run.model === undefined ? 'not recorded' : inlineCode(`${run.provider ?? 'unknown provider'}/${run.model}`)}`,
     ...(run.baseRef === undefined
       ? []
       : [`- Base: ${inlineCode(run.baseRef)}`]),
@@ -485,6 +488,8 @@ const renderCost = (report: ReviewReport): readonly string[] => {
   const lines: string[] = [
     '## Cost And Timing',
     '',
+    // The model this cost was paid to is on the scope line above, not repeated
+    // here: one statement of run identity, in the section that states it.
     `- Duration: ${run.durationMs.toLocaleString('en-US')} ms`
   ]
 
@@ -546,7 +551,7 @@ export const renderMarkdownReport = (input: unknown): string => {
     '',
     WHAT_THIS_IS,
     '',
-    MEASURED_RELIABILITY,
+    `${MEASURED_RELIABILITY} ${renderMeasuredOn(report.run)}`,
     '',
     ...renderScope(report),
     ...renderSummary(report, { actionable, unresolved }),

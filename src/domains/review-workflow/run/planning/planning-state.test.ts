@@ -99,7 +99,7 @@ describe('review runner planning state', () => {
       observability,
       logger,
       prepareDeterministicSignalStartAttributes: () => ({
-        structuralEngine: 'typescript-compiler+ast-grep',
+        structuralEngine: 'ast-grep',
         astGrepVersion: 'ast-grep@test',
         fileCount: 1
       }),
@@ -108,7 +108,7 @@ describe('review runner planning state', () => {
         evidence: [evidence],
         testMappings: [],
         startAttributes: {
-          structuralEngine: 'typescript-compiler+ast-grep',
+          structuralEngine: 'ast-grep',
           astGrepVersion: 'ast-grep@test',
           fileCount: 1
         },
@@ -117,7 +117,7 @@ describe('review runner planning state', () => {
           evidenceCount: 1,
           languageCount: 1,
           testMappingCount: 0,
-          structuralEngine: 'typescript-compiler+ast-grep',
+          structuralEngine: 'ast-grep',
           astGrepVersion: 'ast-grep@test'
         }
       }),
@@ -155,7 +155,7 @@ describe('review runner planning state', () => {
       {
         step: 'deterministic_signals',
         attributes: {
-          structuralEngine: 'typescript-compiler+ast-grep',
+          structuralEngine: 'ast-grep',
           astGrepVersion: 'ast-grep@test',
           fileCount: 1
         }
@@ -181,7 +181,7 @@ describe('review runner planning state', () => {
           evidenceCount: 1,
           languageCount: 1,
           testMappingCount: 0,
-          structuralEngine: 'typescript-compiler+ast-grep',
+          structuralEngine: 'ast-grep',
           astGrepVersion: 'ast-grep@test'
         }
       },

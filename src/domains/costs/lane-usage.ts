@@ -11,6 +11,16 @@ import { summarizeRunCost, type RunTokenUsage } from './token-cost.js'
 // once in comment wording, and a lane whose usage block disagreed with the others
 // would be silently mispriced rather than fail.
 export const LaneUsageSchema = z.strictObject({
+  // Which model produced this lane's output. Recorded because every number a
+  // lane publishes -- its cost, and the measured accuracy rates its report
+  // quotes -- is a property of a specific model, not of the engine. A lane run
+  // against a different provider or a newer model version is not covered by a
+  // rate measured on this one, and without the identity on the artifact there is
+  // no way to tell afterwards which case a saved report was.
+  //
+  // Absent only when no provider was resolved (a lane that made no model call).
+  providerId: z.string().min(1).optional(),
+  modelName: z.string().min(1).optional(),
   inputTokens: z.int().min(0),
   outputTokens: z.int().min(0),
   // A SUBSET of `inputTokens`, already counted there.
@@ -44,6 +54,11 @@ export const summarizeLaneUsage = (input: {
   })
 
   return {
+    // Carried through from the same inputs the price was computed from, so the
+    // identity on the record and the identity the cost was derived from cannot
+    // disagree.
+    ...(input.providerId === undefined ? {} : { providerId: input.providerId }),
+    ...(input.modelName === undefined ? {} : { modelName: input.modelName }),
     inputTokens: input.usage.inputTokens,
     outputTokens: input.usage.outputTokens,
     ...(input.usage.cachedInputTokens === undefined

@@ -22,11 +22,11 @@ describe('review runner deterministic signal preparation', () => {
       evidenceCount: result.evidence.length,
       languageCount: 1,
       testMappingCount: result.testMappings.length,
-      structuralEngine: 'typescript-compiler+ast-grep',
+      structuralEngine: 'ast-grep',
       astGrepVersion: expect.stringMatching(/^ast-grep@/)
     })
     expect(result.startAttributes).toEqual({
-      structuralEngine: 'typescript-compiler+ast-grep',
+      structuralEngine: 'ast-grep',
       astGrepVersion: result.metrics.astGrepVersion,
       fileCount: 1
     })

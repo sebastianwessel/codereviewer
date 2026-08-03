@@ -13,7 +13,11 @@ import {
   type SupportSignalTestMapping
 } from '../../../deterministic-signals/index.js'
 
-const structuralEngine = 'typescript-compiler+ast-grep' as const
+// Written into `observability.json` on every run, so it has to name the engine
+// that actually ran. It said `typescript-compiler+ast-grep` after the TypeScript
+// extractor was deleted and ast-grep became the single engine for all supported
+// languages -- provenance describing a component that no longer exists.
+const structuralEngine = 'ast-grep' as const
 const astGrepVersionAttribute = `ast-grep@${astGrepVersion}`
 
 export type DeterministicSignalStepStartAttributes = {

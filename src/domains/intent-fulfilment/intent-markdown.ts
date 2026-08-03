@@ -24,7 +24,12 @@
 // Pure: it takes a report and returns a string. No filesystem, no clock, no
 // configuration. The CLI decides where the string goes.
 
-import { inlineCode, pluralize, safeText } from '../reporting/index.js'
+import {
+  inlineCode,
+  pluralize,
+  renderMeasuredOn,
+  safeText
+} from '../reporting/index.js'
 import type {
   ChangeCitation,
   IntentFulfilmentReport,
@@ -152,6 +157,9 @@ const renderExplanation = (
 const renderScope = (report: IntentFulfilmentReport): readonly string[] => [
   `- Status: ${safeText(report.status)}`,
   `- Generated: ${safeText(report.generatedAt)}`,
+  // Always a line, for the reason the review report states it: the measured
+  // rates above and the cost below are both properties of one specific model.
+  `- Model: ${report.usage?.modelName === undefined ? 'not recorded' : inlineCode(`${report.usage.providerId ?? 'unknown provider'}/${report.usage.modelName}`)}`,
   `- Base: ${inlineCode(report.scope.baseRef)}`,
   `- Head: ${inlineCode(report.scope.headRef)}`,
   ...(report.scope.mergeBaseRef === undefined
@@ -229,6 +237,9 @@ const renderUsage = (report: IntentFulfilmentReport): readonly string[] => {
   return [
     '## Cost',
     '',
+    // Named before the money: a price without the model it was paid to is not
+    // comparable to anything.
+    `- Model: ${usage.modelName === undefined ? 'not recorded' : inlineCode(`${usage.providerId ?? 'unknown provider'}/${usage.modelName}`)}`,
     // Omitted rather than zeroed when pricing could not be determined, so a run
     // whose price is unknown does not read as a free one.
     ...(usage.costUsd === undefined
@@ -278,7 +289,17 @@ export const renderIntentFulfilmentMarkdown = (
     '',
     WHAT_THIS_IS,
     '',
-    MEASURED_RELIABILITY,
+    // The lane's own usage record carries the identity, because that is where
+    // the provider was resolved. A report written before the field existed says
+    // so rather than assuming the measured model.
+    `${MEASURED_RELIABILITY} ${renderMeasuredOn({
+      ...(report.usage?.providerId === undefined
+        ? {}
+        : { provider: report.usage.providerId }),
+      ...(report.usage?.modelName === undefined
+        ? {}
+        : { model: report.usage.modelName })
+    })}`,
     '',
     ...renderScope(report),
     ...renderSummary(report),

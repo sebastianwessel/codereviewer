@@ -3613,7 +3613,7 @@ describe('review workflow', () => {
         type: 'step-ended',
         step: 'deterministic_signals',
         attributes: expect.objectContaining({
-          structuralEngine: 'typescript-compiler+ast-grep',
+          structuralEngine: 'ast-grep',
           astGrepVersion: expect.stringMatching(/^ast-grep@/u),
           languageCount: 1,
           testMappingCount: 2

@@ -43,7 +43,10 @@ export {
 export {
   createReportArtifact,
   inlineCode,
+  MEASURED_ON_MODEL,
+  MEASURED_ON_PROVIDER,
   pluralize,
+  renderMeasuredOn,
   safeRedactedText,
   safeText,
   sortAdmittedFindings,

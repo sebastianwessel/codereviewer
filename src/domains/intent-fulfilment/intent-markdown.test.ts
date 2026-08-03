@@ -245,6 +245,36 @@ describe('what a reader can act on', () => {
     expect(markdown).toContain('- Cost: $0.1251')
     expect(markdown).toContain('- Input tokens: 382,152 (366,080 cached)')
   })
+
+  // The 1-in-29 and 1-in-10 rates above the table were measured on one model.
+  // Printed without it, a reader on another model reads them as their own.
+  test('the rates name the model they were measured on, and the run names its own', () => {
+    const markdown = renderIntentFulfilmentMarkdown(
+      report([obligation({ id: 'obl_1' })], {
+        usage: {
+          providerId: 'anthropic',
+          modelName: 'some-other-model',
+          inputTokens: 10,
+          outputTokens: 4
+        }
+      })
+    )
+
+    expect(markdown).toContain('openai/gpt-5.3-codex')
+    expect(markdown).toContain('were not measured on it')
+    expect(markdown).toContain('- Model: `anthropic/some-other-model`')
+  })
+
+  test('a lane that recorded no model says so rather than claiming a match', () => {
+    const markdown = renderIntentFulfilmentMarkdown(
+      report([obligation({ id: 'obl_1' })], {
+        usage: { inputTokens: 10, outputTokens: 4 }
+      })
+    )
+
+    expect(markdown).toContain('did not record which model produced it')
+    expect(markdown).toContain('- Model: not recorded')
+  })
 })
 
 describe('the outcomes that map nothing', () => {

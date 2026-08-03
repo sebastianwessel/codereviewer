@@ -12,12 +12,28 @@ describe('summarizeLaneUsage', () => {
       prices
     })
 
+    // The identity the price was computed from is recorded on the record: a cost
+    // without the model it was paid to cannot be compared to anything.
     expect(usage).toEqual({
+      providerId: 'openai',
+      modelName: 'test-model',
       inputTokens: 1_000_000,
       outputTokens: 500_000,
       costUsd: 2
     })
     expect(LaneUsageSchema.parse(usage)).toEqual(usage)
+  })
+
+  test('omits the identity when no provider was resolved', () => {
+    // A lane that made no model call reports no model, rather than an empty
+    // string that would render as a model name.
+    const usage = summarizeLaneUsage({
+      usage: { inputTokens: 10, outputTokens: 4 },
+      prices
+    })
+
+    expect(Object.hasOwn(usage, 'providerId')).toBe(false)
+    expect(Object.hasOwn(usage, 'modelName')).toBe(false)
   })
 
   test('omits the optional token fields rather than zeroing them', () => {
