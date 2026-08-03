@@ -111,6 +111,7 @@ import {
   writeReviewArtifacts,
   writeRunArtifact
 } from './run-artifacts.js'
+import { qualityGateOfCompletedRun } from './review-completion.js'
 import { runEvalCase } from './eval-case-runner.js'
 
 export type CliResult = {
@@ -708,14 +709,15 @@ const runReview = async (
       }
     })
 
+    // Throws `quality_gate_missing` (exit 5) rather than defaulting when a
+    // completed report carries no gate. See `review-completion.ts`.
+    const qualityGate = qualityGateOfCompletedRun(report)
+
     return {
-      exitCode:
-        report.qualityGate?.passed === false
-          ? 1
-          : 0,
+      exitCode: qualityGate.passed ? 0 : 1,
       stdout: jsonResult({
         runId: report.run.runId,
-        qualityGatePassed: report.qualityGate?.passed ?? true,
+        qualityGatePassed: qualityGate.passed,
         artifactDir: runArtifactRoot
       }),
       stderr: ''

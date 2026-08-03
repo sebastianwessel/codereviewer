@@ -15,6 +15,7 @@ import {
 import type {
   CodeReviewerConfig,
   EvidenceRecord,
+  QualityGateResult,
   ReviewReport
 } from '../../../shared/contracts/index.js'
 import {
@@ -34,8 +35,15 @@ import type { ReviewWorkflowOutput } from '../pipeline/contracts.js'
 
 export type ReviewRunnerAdmissionState = Pick<
   ReviewReport,
-  'admittedFindings' | 'rejectedFindings' | 'qualityGate'
+  'admittedFindings' | 'rejectedFindings'
 > & {
+  // Required, unlike `ReviewReport.qualityGate`, which is optional because a
+  // report can be written for a run that never reached the gate. Admission is
+  // past that point: both paths below call `evaluateQualityGate`, which returns
+  // a result unconditionally, and the provider workflow's output contract
+  // requires one. Inheriting the report's optionality here only handed every
+  // consumer a value it had to invent — and the invented one was `passed: true`.
+  readonly qualityGate: QualityGateResult
   readonly evidence: readonly EvidenceRecord[]
   readonly candidateFindings: readonly CandidateFinding[]
   readonly refutationResults: ReviewReport['refutationResults']

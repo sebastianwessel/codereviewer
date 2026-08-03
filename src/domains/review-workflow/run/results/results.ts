@@ -4,6 +4,7 @@ import {
   type CodeReviewerConfig,
   type CoverageSummary,
   type EvidenceRecord,
+  type QualityGateResult,
   type ReviewReport
 } from '../../../../shared/contracts/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
@@ -182,7 +183,9 @@ export const createReviewReport = (input: {
   readonly rejectedFindings: ReviewReport['rejectedFindings']
   readonly evidence: readonly EvidenceRecord[]
   readonly skippedFiles: readonly ReviewReport['skippedFiles'][number][]
-  readonly qualityGate: ReviewReport['qualityGate']
+  // Required even though the report field is optional: this builds a COMPLETED
+  // report, and a completed run has always evaluated its gate.
+  readonly qualityGate: QualityGateResult
   readonly refutationResults: ReviewReport['refutationResults']
   readonly providerIssues: ReviewReport['providerIssues']
   // Spec 27. Carried onto the report so a run's yield can be read against the
@@ -307,7 +310,7 @@ export const prepareReviewRunnerSuccessResult = (
     rejected_finding_count: result.reportMetrics.rejectedFindingCount,
     evidence_count: result.reportMetrics.evidenceCount,
     coverage_status: input.coverage.status,
-    quality_gate_passed: input.admission.qualityGate?.passed ?? true
+    quality_gate_passed: input.admission.qualityGate.passed
   })
 
   return result

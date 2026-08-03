@@ -4,6 +4,7 @@ import {
   EvidenceRecordSchema
 } from '../../../../shared/contracts/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
+import { evaluateQualityGate } from '../../../admission/index.js'
 import type { ReviewRunnerAdmissionState } from '../admission.js'
 import { createCoverageSummary } from './results.js'
 import {
@@ -52,7 +53,9 @@ const admission = {
   candidateFindings: [],
   admittedFindings: [],
   rejectedFindings: [],
-  qualityGate: undefined,
+  // Admission always carries a gate result; this is the one a run with no
+  // admitted findings produces.
+  qualityGate: evaluateQualityGate({ admittedFindings: [], thresholds: {} }),
   refutationResults: [],
   providerIssues: [],
   contextLedgerEntries: [],

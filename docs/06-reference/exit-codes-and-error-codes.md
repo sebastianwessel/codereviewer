@@ -131,6 +131,7 @@ Provider setup problems are **config** errors (exit `2`), not provider errors:
 | --- | --- |
 | `sarif_invalid` | Rendered SARIF failed its own validation. |
 | `report_error` | Writing a reporting artifact failed. |
+| `quality_gate_missing` | A completed run's report carried no quality gate result. Every completed run evaluates its gate, so this is an internal inconsistency; the run fails instead of being reported as passing. The run directory is written and is the evidence for the bug report. |
 | `unknown_error` | Unclassified internal failure. |
 
 ## Non-fatal signals

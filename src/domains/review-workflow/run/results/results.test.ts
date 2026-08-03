@@ -5,6 +5,7 @@ import {
   EvidenceRecordSchema
 } from '../../../../shared/contracts/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
+import { evaluateQualityGate } from '../../../admission/index.js'
 import { createNoContentEventRecorder } from '../../../observability/index.js'
 import { createContextLedgerEntry } from '../../../review-planning/context-ledger.js'
 import type { ReviewRunnerAdmissionState } from '../admission.js'
@@ -40,6 +41,13 @@ const createInfoLogger = (): {
 
   return { logger, records }
 }
+
+// A completed run always carries a gate result, so the fixtures below use the one
+// a run with no admitted findings produces rather than omitting it.
+const emptyRunQualityGate = evaluateQualityGate({
+  admittedFindings: [],
+  thresholds: {}
+})
 
 describe('review runner results', () => {
   test('creates run summaries with provider and cost metadata', () => {
@@ -234,7 +242,7 @@ describe('review runner results', () => {
       rejectedFindings: [],
       evidence: [],
       skippedFiles: [],
-      qualityGate: undefined,
+      qualityGate: emptyRunQualityGate,
       refutationResults: [],
       providerIssues: []
     })
@@ -270,7 +278,7 @@ describe('review runner results', () => {
       rejectedFindings: [],
       evidence: [],
       skippedFiles: [],
-      qualityGate: undefined,
+      qualityGate: emptyRunQualityGate,
       refutationResults: [],
       providerIssues: [],
       discovery
@@ -309,7 +317,7 @@ describe('review runner results', () => {
       candidateFindings: [],
       admittedFindings: [],
       rejectedFindings: [],
-      qualityGate: undefined,
+      qualityGate: emptyRunQualityGate,
       refutationResults: [],
       providerIssues: [],
       contextLedgerEntries: [],
