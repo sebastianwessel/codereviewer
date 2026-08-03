@@ -143,16 +143,25 @@ const collectSourceFiles = async (
 ): Promise<{
   readonly files: readonly ChangeSurfaceSourceFile[]
   readonly unreadableFileCount: number
+  readonly unmappedFileCount: number
 }> => {
   const byPath = diffMapsByPath(intake)
   const removedByPath = parseRemovedLines(intake.rawDiff)
   const files: ChangeSurfaceSourceFile[] = []
   let unreadableFileCount = 0
+  let unmappedFileCount = 0
 
   for (const changedFile of intake.changedFiles) {
     const diffMap = byPath.get(changedFile.path)
 
     if (diffMap === undefined) {
+      // Counted, not just skipped. Its neighbour below has counted unreadable
+      // files from the start; this branch dropped a changed file from the whole
+      // report — it contributes no citable line AND no extra-scope row — so a
+      // file the change touched was absent from every list with nothing saying
+      // why. Rare (a file intake recorded but the diff parser did not map), and
+      // rare is exactly when a silent hole is hardest to notice.
+      unmappedFileCount += 1
       continue
     }
 
@@ -174,7 +183,7 @@ const collectSourceFiles = async (
     })
   }
 
-  return { files, unreadableFileCount }
+  return { files, unreadableFileCount, unmappedFileCount }
 }
 
 // Changed files no obligation's evidence cites.
@@ -236,7 +245,6 @@ const emptyReport = (input: EmptyReportInput): IntentFulfilmentReport =>
       headRef: input.headRef,
       changedFileCount: input.changedFileCount ?? 0,
       changedLineCount: 0,
-      changedLinesTruncated: false,
       intentOrigins: input.intentOrigins ?? [],
       intentTruncated: input.intentTruncated ?? false
     },
@@ -293,7 +301,7 @@ export const runIntentFulfilment = async (
     ...(input.runGit === undefined ? {} : { runGit: input.runGit }),
     ...(input.signal === undefined ? {} : { signal: input.signal })
   })
-  const { files, unreadableFileCount } = await collectSourceFiles(
+  const { files, unreadableFileCount, unmappedFileCount } = await collectSourceFiles(
     intake,
     input.readChangedFile
   )
@@ -302,6 +310,16 @@ export const runIntentFulfilment = async (
   if (unreadableFileCount > 0) {
     warnings.push(
       `${unreadableFileCount} changed file(s) could not be read and were left out of the change the obligations are checked against.`
+    )
+  }
+
+  // Worded apart from the unreadable case above because the causes differ: that
+  // one is a file the filesystem would not give up, this one is a file the diff
+  // parser produced no hunks for. Both leave the file out of every list in the
+  // report, which is the part a reader needs told.
+  if (unmappedFileCount > 0) {
+    warnings.push(
+      `${unmappedFileCount} changed file(s) had no mapped diff hunks and were left out of the change the obligations are checked against. They appear in no obligation's evidence and in no extra-scope row.`
     )
   }
 
@@ -577,7 +595,6 @@ export const runIntentFulfilment = async (
         : { mergeBaseRef: intake.repositorySnapshot.mergeBaseRef }),
       changedFileCount: intake.changedFiles.length,
       changedLineCount: surface.changedLineCount,
-      changedLinesTruncated: surface.truncated,
       intentOrigins,
       // The value reaching a report is always the provider's cut: the
       // `maxIntentBytes` cause refuses ~200 lines above and produces no report at

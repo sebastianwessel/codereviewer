@@ -559,7 +559,6 @@ and all of them exit `0`:
     "mergeBaseRef": "9f1c2ab...",
     "changedFileCount": 2,
     "changedLineCount": 2,
-    "changedLinesTruncated": false,
     "intentOrigins": ["inbox:tracker/A-1"],
     "intentTruncated": false
   },

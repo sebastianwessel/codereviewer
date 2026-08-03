@@ -36,7 +36,6 @@ const report = (
     readonly warnings?: readonly string[]
     readonly explanation?: string
     readonly extraScope?: readonly { readonly path: string; readonly changedLineCount: number }[]
-    readonly changedLinesTruncated?: boolean
     readonly intentTruncated?: boolean
     readonly usage?: IntentFulfilmentReport['usage']
   } = {}
@@ -53,7 +52,6 @@ const report = (
       headRef: 'HEAD',
       changedFileCount: 2,
       changedLineCount: 40,
-      changedLinesTruncated: overrides.changedLinesTruncated ?? false,
       intentOrigins: ['pull-request'],
       intentTruncated: overrides.intentTruncated ?? false
     },
@@ -221,18 +219,18 @@ describe('what a reader can act on', () => {
   test('bounds that bound are disclosed, each naming the cap that actually bound', () => {
     const markdown = renderIntentFulfilmentMarkdown(
       report([obligation({ id: 'obl_1' })], {
-        changedLinesTruncated: true,
         intentTruncated: true
       })
     )
 
-    expect(markdown).toContain('maxChangeLines')
-    // `intentTruncated` reports a cut the `contextSources` provider made upstream —
-    // `intentFulfilment.maxIntentBytes` refuses the run and never reaches a report.
-    // Naming that knob sends a reader to raise a limit that was never reached, they
-    // get the same report back, and they learn to discount the disclosure.
+    // Only ONE bound can reach a report, and it is the provider's cut. Both of
+    // this command's own caps — `maxIntentBytes` and `maxChangeLines` — REFUSE the
+    // run when they bind, so a report exists only where neither did. Naming
+    // either here sends a reader to raise a limit that was never reached; they
+    // get the same report back and learn to discount the disclosure.
     expect(markdown).toContain('maxFileBytes')
     expect(markdown).not.toContain('maxIntentBytes')
+    expect(markdown).not.toContain('maxChangeLines')
     // And it says what the cut costs the reader, not merely that it happened.
     expect(markdown).toContain('floor and not a total')
   })

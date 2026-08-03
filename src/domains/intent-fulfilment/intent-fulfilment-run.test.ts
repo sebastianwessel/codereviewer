@@ -506,6 +506,55 @@ describe('intent fulfilment run', () => {
     }
   })
 
+  // The sibling of the unreadable-file warning, which has counted from the start.
+  // A changed file the diff parser produced no hunks for was dropped in silence:
+  // it contributes no citable line AND no extra-scope row, so a file the change
+  // touched was absent from every list in the report with nothing saying why.
+  test('a changed file with no mapped diff hunks is reported, not dropped in silence', async () => {
+    const root = await createRepository()
+
+    try {
+      // Present on disk and named by `--name-status`, so it reaches intake — and
+      // then finds no hunks, which is the branch under test.
+      await writeFile(join(root, 'src', 'unmapped.ts'), 'export const x = 1\n')
+      const agents = scriptedAgents({
+        obligations: [
+          { origin: 'inbox:tracker/A-1', line: 1, statement: 'Reject expired tokens.' }
+        ],
+        judgements: [{ status: 'not-evidenced' }]
+      })
+      // `--name-status` names a third file that the unified diff never maps.
+      const report = await run(root, {
+        config: configWith({ intentFulfilment: { enabled: true } }),
+        agents,
+        runGit: scriptedGit({
+          ...gitOutputs,
+          [`diff --name-status ${mergeBaseSha} HEAD`]:
+            'M\tsrc/token.ts\nM\tsrc/unrelated.ts\nM\tsrc/unmapped.ts\n',
+          [`diff --unified=0 ${mergeBaseSha} HEAD -- src/token.ts src/unrelated.ts src/unmapped.ts`]:
+            gitOutputs[
+              `diff --unified=0 ${mergeBaseSha} HEAD -- src/token.ts src/unrelated.ts`
+            ] as string
+        })
+      })
+
+      expect(
+        report.warnings.some((warning) =>
+          warning.includes('had no mapped diff hunks')
+        )
+      ).toBe(true)
+      // And it says what the omission costs a reader, which is the part that
+      // makes the warning worth reading.
+      expect(
+        report.warnings.some((warning) =>
+          warning.includes('no extra-scope row')
+        )
+      ).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('the report schema carries no finding, severity, or gate field', () => {
     // The distinction the whole capability rests on: a mapping is NOT a finding.
     // Spec 23 forbids this command from failing a pipeline on fulfilment grounds,

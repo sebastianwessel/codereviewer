@@ -213,12 +213,6 @@ const renderSummary = (report: IntentFulfilmentReport): readonly string[] => {
 const renderBounds = (report: IntentFulfilmentReport): readonly string[] => {
   const bounds: string[] = []
 
-  if (report.scope.changedLinesTruncated) {
-    bounds.push(
-      'The changed lines were cut to fit `intentFulfilment.maxChangeLines`, so the judgement was not shown the whole change. An obligation below may be evidenced by a line it never saw.'
-    )
-  }
-
   if (report.scope.intentTruncated) {
     bounds.push(
       'The stated intent reached this command already cut: a `contextSources` provider trimmed at least one source to its `maxFileBytes` cap. Whatever those sources state after the cut was never read, so every list below — including the not-evidenced one — is a floor and not a total. Raise `maxFileBytes` on the provider that supplied them and re-run to hold the change to the whole of the intent.'

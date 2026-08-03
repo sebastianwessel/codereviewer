@@ -190,9 +190,17 @@ export const IntentFulfilmentReportSchema = z.strictObject({
     headRef: z.string().min(1),
     mergeBaseRef: z.string().min(1).optional(),
     changedFileCount: z.int().min(0),
-    // The lines a judgement was allowed to cite, and whether the bound cut them.
+    // The lines a judgement was allowed to cite.
+    //
+    // There is deliberately no `changedLinesTruncated` beside it. The only thing
+    // that cuts these lines is `intentFulfilment.maxChangeLines`, and reaching it
+    // REFUSES the run with `intent_change_too_large` — so a report exists only
+    // when nothing was cut, and the field could never be written anything but
+    // `false`. A contract slot no producer can fill is a capability that looks
+    // real: it invited a reader to check it, and checking it would always have
+    // said "nothing was cut" whether or not that was the interesting question.
+    // The refusal is the disclosure here, and it names the cap and the remedy.
     changedLineCount: z.int().min(0),
-    changedLinesTruncated: z.boolean(),
     // Which change-intent sources the obligations were read from, by spec 11's
     // origin label.
     intentOrigins: z.array(z.string().min(1)),
