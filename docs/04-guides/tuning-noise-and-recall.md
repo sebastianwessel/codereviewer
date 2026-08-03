@@ -14,6 +14,10 @@ Change **one dial at a time** and measure. Per-case model variance is real, so
 a small difference between two runs is noise, not a result. See the
 [quality docs](../05-quality/README.md) for how to measure a change honestly.
 
+Every measured figure quoted on this page came from `openai/gpt-5.3-codex`. What
+a dial buys is a property of the model behind it, so on another model these are
+starting points to re-measure, not results to inherit.
+
 ---
 
 ## The decision path

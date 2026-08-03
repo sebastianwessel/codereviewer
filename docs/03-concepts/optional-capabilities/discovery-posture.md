@@ -15,7 +15,9 @@ validation with exit code `2`. Remove the key.
 ## What was measured
 
 36-case / 80-expectation real-repository corpus, **4 seeds per arm**, paired
-finding-level test.
+finding-level test, on `openai/gpt-5.3-codex`. Every figure on this page is a
+property of that model — the posture was a prompt change, and what a prompt buys
+is not transferable between models.
 
 | | `precise` | `investigative` |
 | --- | ---: | ---: |

@@ -51,8 +51,9 @@ The headline count is **`summary.notEvidencedCount`**: `not-evidenced` plus
 **Why these words, and not `addressed` / `unaddressed`.** The judgement is shown only
 the changed lines, so it can answer *"do these lines evidence this obligation?"* and
 not *"does this hold at head?"*. The old labels answered the second question in the
-reader's head. Measured on the realistic corpus, **54 of this lane's 83 false
-positives (65%) were obligations the judgement had reported correctly** — satisfied by
+reader's head. Measured on the realistic corpus, on `openai/gpt-5.3-codex`, **54 of
+this lane's 83 false positives (65%) were obligations the judgement had reported
+correctly** — satisfied by
 an earlier commit, by existing code, or by a prohibition that required no change at
 all — and were counted as errors because `unaddressed` was read as "not done". The
 verdicts did not change with the rename; only the words did. Read a

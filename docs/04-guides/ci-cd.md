@@ -127,11 +127,12 @@ again after each round of fixes. That is a measured recommendation rather than a
 process preference.
 
 A single discovery pass answers the diff and largely stops there. The measured
-split on the 37-case real-repository corpus: of 87 expected findings, the 60
-sitting inside the diff were found at **66.7%**, and the 27 sitting elsewhere in a
-changed file were found at **0 of 27** — in files the reviewer had been shown in
-full. So the lever with the most headroom is not a better single review; it is a
-second one, against a different diff.
+split on the 37-case real-repository corpus, on `openai/gpt-5.3-codex`: of 87
+expected findings, the 60 sitting inside the diff were found at **66.7%**, and
+the 27 sitting elsewhere in a changed file were found at **0 of 27** — in files
+the reviewer had been shown in full. Both rates are properties of that model. So
+the lever with the most headroom is not a better single review; it is a second
+one, against a different diff.
 
 Each round of fixes changes the diff, which moves the anchor, so the next defect in
 that file becomes the one the reviewer is pointed at. **That mechanism is the

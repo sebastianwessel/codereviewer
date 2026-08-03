@@ -6,6 +6,10 @@
 
 Spec: [`specs/15-security-focused-review.md`](../../../specs/15-security-focused-review.md), 2026-07-24.
 
+Every recall, precision and cost figure on this page was measured on
+`openai/gpt-5.3-codex`. The verdict is a verdict for that model — attention is
+finite per prompt *per model*, so the tradeoff below is not transferable.
+
 ## The problem it addresses
 
 Two evidence sources shaped this design, and neither one was intuition:

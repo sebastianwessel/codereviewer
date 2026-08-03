@@ -16,7 +16,9 @@ fails validation with exit code `2`. Remove the key.
 ## What was measured
 
 36-case / 80-expectation real-repository corpus, **3 seeds per arm**, paired
-finding-level test.
+finding-level test, on `openai/gpt-5.3-codex`. Every figure on this page —
+including the union ceiling below — is a property of that model's sampling
+behaviour and does not describe another one.
 
 | | `k = 1` | `k = 3` |
 | --- | ---: | ---: |

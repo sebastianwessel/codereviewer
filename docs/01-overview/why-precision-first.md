@@ -79,6 +79,10 @@ admitted one correct finding the rule had been suppressing, but adjusted
 precision fell from 100% to 86.7% with two genuine false positives and no net
 recall gain, so the change was reverted.
 
+That measurement, and every other rate on this page, ran on
+`openai/gpt-5.3-codex`. Each one is a property of that model rather than of the
+engine, and says nothing about another provider or model.
+
 ### 3. Admission is deterministic
 
 The final gate is ordinary code. A candidate becomes an actionable finding only

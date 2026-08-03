@@ -13,6 +13,13 @@ deviation **4.4 percentage points**. A single-seed change must move recall by mo
 than roughly twice that before it can be distinguished from noise. A headline
 figure is the mean across seeds, never the best observed run.
 
+Every recall, precision and cost figure measured *here* — on this page and in the
+capability pages it links to — came from `openai/gpt-5.3-codex`. A verdict below
+is a verdict for that model; on another one the same capability may trade
+differently, and none of these measurements would carry over. The 26–36% and
+73–88% rates further down are the exception: they are from published research on
+models judging requirement conformance, not from a run of this engine.
+
 ## Decision table
 
 | Capability | Config key | Default | What it buys | Cost | Measured verdict |

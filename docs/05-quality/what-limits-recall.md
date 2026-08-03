@@ -16,6 +16,11 @@ single review, what has been tried against it, and how those verdicts are
 decided. Numbers here name their source; the raw runs are in
 [Current results](current-results.md).
 
+Every number on this page was measured on `openai/gpt-5.3-codex`. The limit
+described here is a behaviour of that model under this engine, not a property of
+the engine alone — on another model the enumeration gap has not been measured at
+all, and none of these rates would carry over.
+
 > **Every number on this page predates a harness change that has not been
 > re-measured.** See [A caveat that applies to every number
 > here](#a-caveat-that-applies-to-every-number-here) at the end. It is not a

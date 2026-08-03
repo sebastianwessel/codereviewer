@@ -41,7 +41,9 @@ prove, not a certificate that the change is correct.
 
 The second states the **measured error rates**, so a finding can be weighed
 rather than trusted. On the 37-case real-repository corpus with the engine
-pinned:
+pinned, against `openai/gpt-5.3-codex` — the rates are a property of that model,
+and the report says so on its own face, comparing it against the model the run
+actually used:
 
 | population | result |
 | --- | --- |
@@ -69,7 +71,7 @@ a reviewer:
 ## Scope of this search
 
 - Run: `run_5f2c9d` (mode ci, depth balanced)
-- Model: `gpt-5.3-codex`
+- Model: `openai/gpt-5.3-codex`
 - Base: `main`
 - Head: `feat/session-rotation`
 - Merge base: `9c41ab2`

@@ -9,6 +9,10 @@ All metrics are aggregated **across cases** (counts are summed, then the ratio i
 taken), never averaged per case. Rates are rounded to 6 decimal places and
 clamped to `[0, 1]`.
 
+The definitions here are model-independent; the illustrative figures are not.
+Every measured rate quoted on this page came from `openai/gpt-5.3-codex`, and a
+rate is a property of the model that produced it.
+
 ---
 
 ## Read this first: three traps

@@ -159,7 +159,7 @@ found counts against it too.
 
 **Consequence:** essentially any provider-backed run against a corpus with
 expected findings fails the gate and exits `1`. A recent 30-case
-real-repository run failed with:
+real-repository run on `openai/gpt-5.3-codex` failed with:
 
 ```
 recall below threshold: 0.55 < 1

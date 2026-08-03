@@ -54,7 +54,9 @@ partitioned across several calls whose findings are unioned (spec 27).
 call regardless of how much code it is shown, so how many calls a change is spread
 across is the main lever on how many defects it finds.
 
-A sweep on the largest benchmark changes:
+A sweep on the largest benchmark changes, on `openai/gpt-5.3-codex` — the model
+behind every measured figure on this page, and the model the one-problem-per-call
+behaviour was observed in:
 
 | Files per call | Defects found | False alarms | Relative cost |
 | --- | --- | --- | --- |

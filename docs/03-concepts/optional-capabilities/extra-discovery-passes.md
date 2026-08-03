@@ -39,7 +39,10 @@ defect.
 
 ## What was measured — the first two
 
-30-case / 42-finding real-repository corpus, **3 seeds per arm**.
+30-case / 42-finding real-repository corpus, **3 seeds per arm**. Every recall,
+precision and cost figure on this page was measured on `openai/gpt-5.3-codex`;
+all three passes were prompt-level interventions, so their verdicts belong to
+that model and not to the idea.
 
 | Arm | Recall (3 seeds) | Mean | Cost |
 | --- | --- | ---: | ---: |

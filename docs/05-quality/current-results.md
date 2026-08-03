@@ -4,6 +4,11 @@ What the engine measures at today, on which corpus, with what caveats. Every num
 here is dated and names the corpus it came from, because a recall figure without a
 corpus is meaningless — the same engine scores 36% on one and 55% on another.
 
+Every number here — recall, precision, cost, every table below — was measured on
+`openai/gpt-5.3-codex`. The model is part of the measurement for the same reason
+the corpus is: a rate is a property of the model that produced it, and none of
+this is evidence about another provider or model.
+
 Read [Metrics](metrics.md) first if the terms are unfamiliar, and
 [Datasets](datasets.md) for what each corpus can and cannot show.
 

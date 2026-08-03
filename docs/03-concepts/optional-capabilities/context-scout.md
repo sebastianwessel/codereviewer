@@ -38,7 +38,8 @@ Three reasons, each of which holds without any measurement of the scout itself.
 ### 1. It adds context to a reviewer that is not reading the context it already has
 
 The decisive number comes from a controlled decomposition experiment run on
-2026-07-27, at production model, prompt, and temperature:
+2026-07-27, at production prompt and temperature against `openai/gpt-5.3-codex` —
+the model every figure on this page was measured on:
 
 | | Diff shown | Diff withheld |
 | --- | ---: | ---: |

@@ -303,8 +303,9 @@ outcome under `codereviewer-run-<pr number>` and kept for 14 days. See
 The blocking review dominates: two provider calls per review task (discovery and
 a batched refutation), so cost scales with tasks, not with findings.
 `intent check` adds one extraction call, one judgement call per obligation, and
-one explanation call — measured at roughly $0.008 per obligation.
-`impact check` makes **no** provider call at all.
+one explanation call — measured at roughly $0.008 per obligation on
+`openai/gpt-5.3-codex`, which is the model every cost figure in these docs was
+measured on. `impact check` makes **no** provider call at all.
 
 Set `review.maxCostUsd` in `codereviewer.github.json` so a pathological change
 fails the job instead of quietly spending. Full arithmetic:

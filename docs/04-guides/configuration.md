@@ -93,7 +93,8 @@ from the environment. The path must resolve inside the repository root.
 An unrecognised flag is rejected before any work happens — `--config` with no
 value, or a misspelled option, exits `2` naming the problem. That is deliberate: a
 parser that silently ignores a flag it does not implement has already cost this
-project a ~$11.50 A/B comparison of a build against itself.
+project a ~$11.50 A/B comparison of a build against itself — that figure, like
+every cost published in these docs, was spent on `openai/gpt-5.3-codex`.
 
 ---
 

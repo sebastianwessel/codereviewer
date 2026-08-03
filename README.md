@@ -16,8 +16,12 @@ modifies your code, and never executes it.
 
 Measured on a 37-case corpus of real repositories, checked out in full at the
 commit before the upstream fix, with the engine pinned at a known commit and zero
-provider errors. 2026-07-31; it supersedes every earlier figure this project has
-published.
+provider errors, against `openai/gpt-5.3-codex`. 2026-07-31; it supersedes every
+earlier figure this project has published. **Every model-backed rate and cost
+quoted on this page is a property of that model**, not of the engine — a
+different model changes what is found and what is proved, not only what it costs.
+The one exception is `impact check`, which makes no provider call, so its figure
+below is model-independent.
 
 | | |
 | --- | ---: |

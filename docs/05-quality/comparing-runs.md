@@ -38,8 +38,9 @@ Three corollaries worth internalising:
   on the 14-finding proof-quality slices. A smaller corpus quantises recall more
   coarsely and needs *more* seeds, not fewer.
 - **The 4.4-point figure belongs to that corpus, that configuration, and that
-  model.** Re-measure the band when any of them changes; do not carry the number
-  across.
+  model — `openai/gpt-5.3-codex`**, which is also the model behind every other
+  measured figure on this page. Re-measure the band when any of the three
+  changes; do not carry the number across.
 
 An A/B whose effect is smaller than the band is not a null result — it is an
 *unmeasured* result. Say so, rather than reporting the direction of the noise.

@@ -69,9 +69,11 @@ codereviewer review --base-ref origin/main --head-ref HEAD \
 ### What a first real review should look like
 
 Calibrate before you read it, or you will misread a working install as a broken
-one. On a 37-case corpus of real repositories the engine finds **~61%** of the in-diff
-known defects at **100% adjusted precision**. A short report is the normal case —
-a long one would be the surprise.
+one. On a 37-case corpus of real repositories, against `openai/gpt-5.3-codex`,
+the engine finds **~61%** of the in-diff known defects at **100% adjusted
+precision**. A short report is the normal case — a long one would be the
+surprise. Both rates here were measured on that model; on a different one they
+are not a calibration.
 
 Two consequences for a first run:
 

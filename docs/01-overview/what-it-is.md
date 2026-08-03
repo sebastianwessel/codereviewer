@@ -80,6 +80,9 @@ defects at **100% adjusted precision** for about **$2.24** per run. Split by whe
 the defect lives: **66.7%** for the 60 expectations inside the diff, **0 of 27**
 for the ones sitting elsewhere in a changed file.
 
+Measured on `openai/gpt-5.3-codex`. Those rates and that cost are properties of
+that model, not of the engine, and do not transfer to another one.
+
 Read the second half of that sentence as the product's actual shape. What it
 reports is almost always real; it finds fewer than half the defects present; and
 it finds essentially nothing the change does not point at — even when it was shown

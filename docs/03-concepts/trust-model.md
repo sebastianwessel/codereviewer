@@ -96,6 +96,10 @@ first suggested.
 | First reading | 16-case real-repository corpus, 16 findings | 62.5% → 81.3% and 87.5% | **Withdrawn as a headline.** That corpus was later measured at a 4.4pp standard deviation across seeds of one identical configuration, so a swing that size is partly its own noise, and the best observed run should never have been quoted. |
 | Trustworthy A/B | 59-case benchmark, **133 expected findings** — eight times the evidence | **32.3% → 36.1%** | matched findings 43 → 48, product recall 39.4% → 43.3%, plausibility-confirmed unlisted-real findings 76 → 86, genuine false positives **identical at 4**, adjusted precision 91.5% → 92.3% |
 
+Both rows were measured on `openai/gpt-5.3-codex`. The guard is a prompt change,
+so what it buys is a property of the model that reads it, and neither figure is
+evidence about another model.
+
 So the honest effect is roughly **four percentage points of recall at no precision
 cost**, not eighteen.
 

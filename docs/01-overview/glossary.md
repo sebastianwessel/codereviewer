@@ -39,7 +39,7 @@ the evaluation harness.
 | **Fingerprint** | A stable hash used for de-duplication and baseline matching. Baseline files store fingerprints verbatim; they are never recomputed against a different source state. |
 | **Baseline** | A committed file (`baseline.path`, default `.codereviewer/baseline.json`) listing the fingerprints of findings you have accepted. Produced by `baseline write` from a completed report — the `review` command never writes it, so a review cannot suppress its own findings. |
 | **Baseline status** | Per-finding classification against the baseline: `new`, `existing`, `resolved`, or `unknown`. `qualityGate.failOnNewOnly` (default true) fails only on `new`. |
-| **Quality gate** | The deterministic pass/fail computed from severity thresholds (`maxCritical`, `maxHigh`, `maxMedium`), `failOnProviderError`, `failOnNewOnly`, and optionally `minProductRecall`. A failed gate is exit code `1` — a quality signal, not a crash. |
+| **Quality gate** | The deterministic pass/fail computed from severity thresholds (`maxCritical`, `maxHigh`, `maxMedium`), `failOnProviderError`, and `failOnNewOnly`. A failed gate is exit code `1` — a quality signal, not a crash. Distinct from the eval regression gate, which thresholds corpus metrics that a review run does not compute. |
 | **Provider issue** | A normalized, redacted record of provider trouble (timeout, rate limit, error), with a stage and a `recovered` flag. Recovered issues stay visible; they are not hidden by a successful run. |
 | **Drift finding** | A deterministic preflight result about documentation/spec/implementation/generated-artifact/security drift or ambiguity. Generated-artifact and security drift are hard errors by default; the rest are warnings. |
 

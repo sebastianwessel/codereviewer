@@ -104,10 +104,10 @@ The record is in
 
 An `invariantConformance` block and a third advisory command, `conformance
 check`, existed until 2026-08-02. Both were removed after the capability's own
-firing-rate measurement put it at **7.0 reports per PR-sized range against a
-pre-registered kill criterion of ≈0.5**, with **zero true positives across
-roughly 300 hand-judged divergences**. A config that still sets the block fails
-validation with exit code `2`. The record is in
+firing-rate measurement, on `openai/gpt-5.3-codex`, put it at **7.0 reports per
+PR-sized range against a pre-registered kill criterion of ≈0.5**, with **zero
+true positives across roughly 300 hand-judged divergences**. A config that still
+sets the block fails validation with exit code `2`. The record is in
 [invariant-conformance review (removed)](../03-concepts/optional-capabilities/invariant-conformance.md).
 
 Defaults that are **on**: `aiReview.requireRefutation` (a literal `true` — not a
@@ -123,6 +123,12 @@ bounds a single network call and is the only deadline that exists.
 ---
 
 ## Quality numbers: what can and cannot be claimed
+
+Every model-backed number in this section was measured on `openai/gpt-5.3-codex`.
+A rate is a property of the model that produced it, so none of it is evidence
+about any other provider or model — quote the model with the figure or do not
+quote the figure. The `impact check` figure below is the one exception: that
+command makes no provider call, so its coverage is model-independent.
 
 - **The current headline, and the only figure that should be quoted for the review
   stage:** **~61% in-diff recall at ~99% adjusted precision, ~$2.20**, on a 37-case

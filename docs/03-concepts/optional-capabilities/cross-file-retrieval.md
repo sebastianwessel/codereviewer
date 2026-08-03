@@ -6,6 +6,9 @@
 Spec: [`specs/16-agentic-cross-file-discovery.md`](../../../specs/16-agentic-cross-file-discovery.md) —
 status *Approved (capability off by default; measured net negative)*, 2026-07-24.
 
+Every recall, precision and cost figure on this page was measured on
+`openai/gpt-5.3-codex`. The verdict is a verdict for that model.
+
 ## The problem it addresses
 
 Holistic discovery sees only the changed files, the diff, and bounded

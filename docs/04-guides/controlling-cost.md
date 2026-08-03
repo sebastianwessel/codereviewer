@@ -6,6 +6,12 @@ things you configure. This guide shows how each knob moves them.
 Input tokens dominate: every call carries the changed source, the diff and the
 review context, while the response is a short JSON object.
 
+The call arithmetic on this page is structural and holds for any model. The
+dollar figures published elsewhere in these docs are not: they were measured on
+`openai/gpt-5.3-codex`, and both the per-token price and the tokens a model
+spends change with the model, so a per-run bill does not carry across a model
+change even when the call count does.
+
 ---
 
 ## How many provider calls a run makes

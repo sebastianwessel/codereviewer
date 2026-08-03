@@ -51,6 +51,10 @@ alternative produces a number that looks fine and means nothing.
    across seeds**, never the best observed run.
    → [Comparing runs](comparing-runs.md#the-variance-band)
 
+   Those figures, and every measured figure published in these quality docs, came
+   from `openai/gpt-5.3-codex`. A rate is a property of the model that produced
+   it, so the model is named with the number wherever one is quoted.
+
 5. **A number is reported with what invalidates it.**
    Measurement here is expected to survive its own history, so a change that
    makes earlier runs incomparable is stated before the numbers rather than

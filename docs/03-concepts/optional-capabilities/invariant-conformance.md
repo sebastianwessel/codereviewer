@@ -25,6 +25,9 @@ run on 2026-08-02.
 | firing rate, PR-sized ranges | **7.0 reports / range** | ≈0.5 — missed by **14x** |
 | true positives, n≈300 hand-judged divergences, five codebases | **0** | — |
 
+Measured on `openai/gpt-5.3-codex`, which is also the model behind the
+adjudicator rates below.
+
 Zero true positives across roughly 300 hand-judged divergences from five
 codebases — three independent censuses, a 64,201-declaration population
 diagnostic, and a stratified adjudication sample of 165. Not a weak signal: no
