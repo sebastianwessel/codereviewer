@@ -221,6 +221,7 @@ describe('workflow handler', () => {
             droppedCount: 3,
             suppressedByIdCount: 1,
             suppressedByLocationCount: 0,
+            cappedByLimitCount: 0,
             contextOverflowSplitCount: 0,
             mergeCallCount: 0,
             mergeGroupCount: 0,

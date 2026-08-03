@@ -46,6 +46,7 @@ export const summarizeDiscoveryTelemetry = (
       suppressedByLocationCount: sumOf(
         (task) => task.suppressedByLocationCount
       ),
+      cappedByLimitCount: sumOf((task) => task.cappedByLimitCount),
       contextOverflowSplitCount: sumOf(
         (task) => task.contextOverflowSplitCount
       ),

@@ -1289,6 +1289,11 @@
               "minimum": 0,
               "maximum": 9007199254740991
             },
+            "cappedByLimitCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
             "contextOverflowSplitCount": {
               "type": "integer",
               "minimum": 0,
@@ -1318,6 +1323,7 @@
             "droppedCount",
             "suppressedByIdCount",
             "suppressedByLocationCount",
+            "cappedByLimitCount",
             "contextOverflowSplitCount",
             "mergeCallCount",
             "mergeGroupCount",
@@ -1368,6 +1374,11 @@
                 "minimum": 0,
                 "maximum": 9007199254740991
               },
+              "cappedByLimitCount": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
               "contextOverflowSplitCount": {
                 "type": "integer",
                 "minimum": 0,
@@ -1401,6 +1412,7 @@
               "droppedCount",
               "suppressedByIdCount",
               "suppressedByLocationCount",
+              "cappedByLimitCount",
               "contextOverflowSplitCount",
               "mergeCallCount",
               "mergeGroupCount",

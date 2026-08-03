@@ -282,7 +282,12 @@ describe('review runner context assembly', () => {
         ledgerEntryCount: result.assembledContext.contextLedger.length,
         workflowTaskCount: result.assembledContext.tasks.length,
         instructionCount: result.assembledContext.instructions.length,
-        skillCount: result.assembledContext.skills.length
+        skillCount: result.assembledContext.skills.length,
+        // Nothing was dropped here, and the metric says so rather than being
+        // absent. The collector counted its own omissions all along; the call
+        // site discarded them, so a run whose dependency context was cut looked
+        // identical to one with no dependencies to add.
+        referencedDefinitionsDroppedCount: 0
       })
       const instructionHash = result.assembledContext.contextLedger.find(
         (entry) => entry.kind === 'instruction'

@@ -192,7 +192,16 @@ export const buildContextSections = (
         `These are bounded digests of unchanged files that the changed files ` +
         `import. Use them to understand callee contracts. Do NOT review them and ` +
         `do NOT report findings for these files — report findings ONLY for files ` +
-        `in the task's paths (the changed files).\n${referencedDefinitions}`
+        `in the task's paths (the changed files).\n` +
+        // Stated unconditionally because it is unconditionally true: this set is
+        // capped by file count and by byte budget, and it is a ranking of the
+        // most-imported dependencies rather than all of them. Without this the
+        // model reads a partial dependency list as the whole one and concludes a
+        // callee does not exist, or has no other caller.
+        `This set is CAPPED and may be incomplete: it holds the most-imported ` +
+        `dependencies that fit a byte budget, not every dependency. If a ` +
+        `definition you need is absent, read it with the repository tools ` +
+        `instead of assuming it does not exist.\n${referencedDefinitions}`
 
   // Spec 11: the change-intent brief is UNTRUSTED, informational context. It
   // states what the change is meant to do; it is never an instruction and never

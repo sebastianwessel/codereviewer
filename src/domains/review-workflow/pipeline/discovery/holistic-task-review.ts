@@ -149,6 +149,13 @@ type CollectedCandidates = {
   readonly dropped: number
   readonly suppressedByLocation: number
   readonly suppressedById: number
+  // Findings this call returned that the per-call cap refused. Every OTHER loss
+  // cause here has had a counter from the start; this one had a bare `break`
+  // placed before any counting, so a real defect the model found was discarded
+  // before refutation and left no trace at all. The in-file note that
+  // measurement says the cap does not bind is a reason this is cheap, not a
+  // reason to keep it silent — an unbinding cap costs one integer to prove.
+  readonly cappedByLimit: number
 }
 
 const collectCandidates = (params: {
@@ -161,11 +168,15 @@ const collectCandidates = (params: {
   let dropped = 0
   let suppressedByLocation = 0
   let suppressedById = 0
+  let cappedByLimit = 0
   let added = 0
 
   for (const raw of params.findings) {
     if (added >= params.maxToAdd) {
-      break
+      // Counted, not broken out of: the remaining findings are a real quantity
+      // and the run has to be able to say how many it refused.
+      cappedByLimit += 1
+      continue
     }
     const candidate = candidateFromFinding(params.task, raw)
     if (candidate === undefined) {
@@ -184,7 +195,7 @@ const collectCandidates = (params: {
     added += 1
   }
 
-  return { dropped, suppressedByLocation, suppressedById }
+  return { dropped, suppressedByLocation, suppressedById, cappedByLimit }
 }
 
 type DiscoveryPassResult = {
@@ -228,6 +239,7 @@ const runDiscoveryPass = async (params: {
   let dropped = 0
   let suppressedByLocation = 0
   let suppressedById = 0
+  let cappedByLimit = 0
 
   for (const partition of params.partitions) {
     const call = await runDiscoveryCall({
@@ -259,6 +271,7 @@ const runDiscoveryPass = async (params: {
     dropped += collected.dropped
     suppressedByLocation += collected.suppressedByLocation
     suppressedById += collected.suppressedById
+    cappedByLimit += collected.cappedByLimit
   }
 
   return {
@@ -267,7 +280,7 @@ const runDiscoveryPass = async (params: {
     findingCount,
     splitCount,
     rawFindingsPerCall,
-    collected: { dropped, suppressedByLocation, suppressedById }
+    collected: { dropped, suppressedByLocation, suppressedById, cappedByLimit }
   }
 }
 
@@ -408,6 +421,8 @@ export const runModelBackedHolisticTaskReview = async (
   const suppressedByIdCount =
     general.collected.suppressedById +
     (security?.collected.suppressedById ?? 0)
+  const cappedByLimitCount =
+    general.collected.cappedByLimit + (security?.collected.cappedByLimit ?? 0)
 
   const discovered = [...candidatesById.values()]
 
@@ -449,6 +464,7 @@ export const runModelBackedHolisticTaskReview = async (
     droppedCount,
     suppressedByIdCount,
     suppressedByLocationCount,
+    cappedByLimitCount,
     contextOverflowSplitCount: splitCount,
     mergeCallCount: merge?.mergeCallCount ?? 0,
     mergeGroupCount: merge?.groupCount ?? 0,
@@ -473,6 +489,7 @@ export const runModelBackedHolisticTaskReview = async (
     general_candidate_count: generalCandidateCount,
     suppressed_by_location_count: suppressedByLocationCount,
     suppressed_by_id_count: suppressedByIdCount,
+    capped_by_limit_count: cappedByLimitCount,
     security_candidate_count: discovered.length - generalCandidateCount,
     // Both merge counters are recorded from the start, and both are needed:
     // "the merge is not firing" (no calls) and "there was nothing to merge"

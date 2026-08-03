@@ -130,6 +130,14 @@ export const DiscoveryTelemetrySchema = z.strictObject({
   droppedCount: z.int().min(0),
   suppressedByIdCount: z.int().min(0),
   suppressedByLocationCount: z.int().min(0),
+  // Raw findings the PER-CALL CANDIDATE CAP refused. It was the only loss cause
+  // here without a counter: the collection loop broke out before counting, so a
+  // finding the model actually produced was discarded before refutation and left
+  // no trace — recoverable only by subtracting every other counter from
+  // `rawFindingCount`, which is not a thing a reader does. Nothing in this schema
+  // is more important to keep honest, because a capped finding is a defect the
+  // engine found and then threw away.
+  cappedByLimitCount: z.int().min(0),
   // Spec 26: how many times the provider refused a packet and it was halved. Named
   // apart from transient retry on purpose — an oversize split and a rate-limit retry
   // have different causes and different meanings.

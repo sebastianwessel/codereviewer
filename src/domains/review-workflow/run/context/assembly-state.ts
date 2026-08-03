@@ -33,14 +33,32 @@ export const prepareReviewRunnerContextAssemblyState = async (input: {
     tasks: input.tasks
   })
   contextAssemblyStep.end({
-    ledgerEntryCount: contextState.metrics.ledgerEntryCount
+    ledgerEntryCount: contextState.metrics.ledgerEntryCount,
+    referencedDefinitionsDroppedCount:
+      contextState.metrics.referencedDefinitionsDroppedCount
   })
   input.logger.debug('Context assembly completed.', {
     ledger_entry_count: contextState.metrics.ledgerEntryCount,
     workflow_task_count: contextState.metrics.workflowTaskCount,
     instruction_count: contextState.metrics.instructionCount,
-    skill_count: contextState.metrics.skillCount
+    skill_count: contextState.metrics.skillCount,
+    referenced_definitions_dropped_count:
+      contextState.metrics.referencedDefinitionsDroppedCount
   })
+
+  // Warned rather than left to a debug line, because it changes what the
+  // reviewer was shown: dependency digests the caps kept out are callee
+  // contracts the model then reasons about without. Only when it actually
+  // happened — a warning that fires on every run is one nobody reads.
+  if (contextState.metrics.referencedDefinitionsDroppedCount > 0) {
+    input.logger.warn(
+      'Referenced-definition context was capped; some imported dependencies were not shown to the reviewer.',
+      {
+        referenced_definitions_dropped_count:
+          contextState.metrics.referencedDefinitionsDroppedCount
+      }
+    )
+  }
 
   return contextState
 }

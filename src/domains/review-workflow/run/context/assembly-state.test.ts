@@ -96,7 +96,8 @@ describe('review runner context assembly state', () => {
         skills: [],
         skillDefinitions: {},
         skillIds: [],
-        contextLedger: []
+        contextLedger: [],
+        referencedDefinitionsDroppedCount: 0
       },
       instructionHashes: ['instruction-hash'],
       skillHashes: ['skill-hash'],
@@ -104,7 +105,8 @@ describe('review runner context assembly state', () => {
         ledgerEntryCount: 3,
         workflowTaskCount: 1,
         instructionCount: 1,
-        skillCount: 1
+        skillCount: 1,
+        referencedDefinitionsDroppedCount: 0
       }
     }
     let receivedInput:
@@ -151,7 +153,10 @@ describe('review runner context assembly state', () => {
       {
         step: 'context_assembly',
         attributes: {
-          ledgerEntryCount: 3
+          ledgerEntryCount: 3,
+          // Zero, and recorded as zero: a run that dropped dependency digests
+          // must be distinguishable from one that had none to drop.
+          referencedDefinitionsDroppedCount: 0
         }
       }
     ])
@@ -163,7 +168,8 @@ describe('review runner context assembly state', () => {
           ledger_entry_count: 3,
           workflow_task_count: 1,
           instruction_count: 1,
-          skill_count: 1
+          skill_count: 1,
+          referenced_definitions_dropped_count: 0
         }
       }
     ])

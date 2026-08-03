@@ -681,6 +681,36 @@ describe('the discovery packet', () => {
     })
 
     expect(result.candidates).toHaveLength(HOLISTIC_MAX_CANDIDATES)
+    // The five it refused are COUNTED. They were dropped by a bare `break` that
+    // ran before any counter, so a defect the model actually found vanished
+    // before refutation and left no trace in the report — every other loss cause
+    // here has had a counter from the start.
+    expect(result.discovery?.cappedByLimitCount).toBe(5)
+  })
+
+  test('a task under the cap reports nothing capped', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput,
+      taskInput,
+      task,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([
+            {
+              category: 'bug',
+              severity: 'high',
+              title: 'Defect 1',
+              description: 'Defect 1, reported at line 1.',
+              path: 'src/app.ts',
+              startLine: 1
+            }
+          ]),
+        semanticMerge: async () => ({ groups: [] })
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.discovery?.cappedByLimitCount).toBe(0)
   })
 })
 

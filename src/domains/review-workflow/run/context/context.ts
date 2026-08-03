@@ -55,6 +55,7 @@ export type ContextAssemblyResult = {
   readonly skillDefinitions: SkillsConfig
   readonly skillIds: readonly string[]
   readonly contextLedger: readonly ContextLedgerEntry[]
+  readonly referencedDefinitionsDroppedCount: number
 }
 
 export type ReviewRunnerContextStateMetrics = {
@@ -62,6 +63,12 @@ export type ReviewRunnerContextStateMetrics = {
   readonly workflowTaskCount: number
   readonly instructionCount: number
   readonly skillCount: number
+  // Dependency digests the referenced-definition caps kept out, summed over
+  // every task. Zero is the expected case and the one worth noticing when it
+  // stops being true: a run whose dependency context was cut reviewed something
+  // different from one whose was not, and before this the difference was
+  // invisible — the counts were computed and discarded at the call site.
+  readonly referencedDefinitionsDroppedCount: number
 }
 
 export type ReviewRunnerContextState = ReviewRunnerProvenanceHashes & {
@@ -256,6 +263,7 @@ export const assembleContext = async (
         ).slice(0, 16)}`
 
   const tasks: WorkflowReviewTask[] = []
+  let referencedDefinitionsDropped = 0
   const testMappings = discoverDeterministicSignalTestMappings(input.sourceFiles)
   // Every changed/source file path: referenced-definition resolution must never
   // surface one of these (they are reviewed directly, not injected as context).
@@ -320,8 +328,16 @@ export const assembleContext = async (
   const collapseVisibilityDuplicates = (
     facts: readonly SupportSignalFact[]
   ): readonly ReturnType<typeof modelFacingSupportSignalFact>[] => {
+    // Keyed with `JSON.stringify` rather than a NUL-delimited template.
+    // NUL is the ideal separator on paper -- it cannot occur in a path or an
+    // identifier -- but embedding it makes this SOURCE FILE binary, and every
+    // tool that skips binaries then skips the file in silence: `grep -r` finds
+    // no match here, including for this project's own drift checker. That cost
+    // real time on 2026-08-03, when a search for a symbol's callers came back
+    // empty and the code it lives in was very nearly deleted as unused.
+    // `JSON.stringify` is unambiguous for the same reason and stays printable.
     const coordinate = (fact: SupportSignalFact): string =>
-      `${fact.path} ${fact.name} ${fact.line}`
+      JSON.stringify([fact.path, fact.name, fact.line])
     const publicCoordinates = new Set(
       facts
         .filter((fact) => fact.kind === 'public-symbol')
@@ -424,21 +440,30 @@ export const assembleContext = async (
     // task's changed files import (relative imports only). Context only — these
     // never enter task.paths and are not review targets. `allSourcePaths` covers
     // every changed file so a dependency that happens to be changed is excluded.
-    const referencedDefinitionContexts: ContextInput[] =
+    // The collector counts what its caps kept out, with the comment "count them
+    // so the omission is reportable" — and this call site used to read `.digests`
+    // and throw both counts away, so nothing was reported anywhere. A task whose
+    // dependency view was cut looked exactly like one with no dependencies.
+    const referenced =
       input.config.aiReview.deterministicSignalMode === 'disabled'
-        ? []
-        : (
-            await collectReferencedDefinitions({
-              repositoryRoot: input.repositoryRoot,
-              taskPaths: task.paths,
-              facts: input.analysis.facts,
-              knownPaths: allSourcePaths
-            })
-          ).digests.map((digest) => ({
-            kind: 'referenced-definition' as const,
-            path: digest.path,
-            content: digest.content
-          }))
+        ? { digests: [], droppedByFileCap: 0, droppedByBudget: 0 }
+        : await collectReferencedDefinitions({
+            repositoryRoot: input.repositoryRoot,
+            taskPaths: task.paths,
+            facts: input.analysis.facts,
+            knownPaths: allSourcePaths
+          })
+
+    referencedDefinitionsDropped +=
+      referenced.droppedByFileCap + referenced.droppedByBudget
+
+    const referencedDefinitionContexts: ContextInput[] = referenced.digests.map(
+      (digest) => ({
+        kind: 'referenced-definition' as const,
+        path: digest.path,
+        content: digest.content
+      })
+    )
 
     // A task with nothing to show the reviewer produces no workflow task at all.
     if (taskContexts.length > 0) {
@@ -468,7 +493,8 @@ export const assembleContext = async (
     skills: staticContext.skills,
     skillDefinitions: staticContext.skillDefinitions,
     skillIds: staticContext.skillIds,
-    contextLedger
+    contextLedger,
+    referencedDefinitionsDroppedCount: referencedDefinitionsDropped
   }
 }
 
@@ -484,7 +510,9 @@ export const prepareReviewRunnerContextState = async (
       ledgerEntryCount: assembledContext.contextLedger.length,
       workflowTaskCount: assembledContext.tasks.length,
       instructionCount: assembledContext.instructions.length,
-      skillCount: assembledContext.skills.length
+      skillCount: assembledContext.skills.length,
+      referencedDefinitionsDroppedCount:
+        assembledContext.referencedDefinitionsDroppedCount
     }
   }
 }
