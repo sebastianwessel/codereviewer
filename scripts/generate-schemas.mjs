@@ -11,6 +11,10 @@ const schemas = [
     schema: CodeReviewerConfigSchema,
     title: 'CodeReviewerConfig',
     id: 'https://codereviewer.local/schemas/config.schema.json',
+    // A config is AUTHORED. Every block has a default, so the output view would
+    // publish all of them as `required` and an editor validating against it
+    // would mark an empty config -- which the loader accepts -- as invalid.
+    direction: 'input',
     outputPaths: [
       resolve(workspaceRoot, 'schema/codereviewer-config.schema.json'),
       resolve(workspaceRoot, 'specs/03-contracts/config.schema.json')
@@ -20,6 +24,9 @@ const schemas = [
     schema: ReviewReportSchema,
     title: 'ReviewReport',
     id: 'https://codereviewer.local/schemas/review-report.schema.json',
+    // A report is PRODUCED. A consumer validating one it read back is looking
+    // at post-default values and should be told what it can rely on.
+    direction: 'output',
     outputPaths: [
       resolve(workspaceRoot, 'specs/03-contracts/review-report.schema.json')
     ]
@@ -61,7 +68,8 @@ function serializeSchema(schemaDefinition) {
   const schema = toDraft202012JsonSchema(
     schemaDefinition.schema,
     schemaDefinition.title,
-    schemaDefinition.id
+    schemaDefinition.id,
+    schemaDefinition.direction
   )
 
   return `${JSON.stringify(schema, null, 2)}\n`

@@ -3,6 +3,7 @@
   "type": "object",
   "properties": {
     "review": {
+      "default": {},
       "type": "object",
       "properties": {
         "mode": {
@@ -73,6 +74,7 @@
           "minimum": 0
         },
         "crossFileRetrieval": {
+          "default": {},
           "type": "object",
           "properties": {
             "enabled": {
@@ -91,24 +93,9 @@
               "maximum": 4000000
             }
           },
-          "required": [
-            "enabled",
-            "maxToolCallsPerTask"
-          ],
           "additionalProperties": false
         }
       },
-      "required": [
-        "mode",
-        "depth",
-        "baseRef",
-        "headRef",
-        "maxConcurrentTasks",
-        "maxFiles",
-        "maxFileBytes",
-        "inlineSeverityThreshold",
-        "crossFileRetrieval"
-      ],
       "additionalProperties": false
     },
     "provider": {
@@ -178,16 +165,12 @@
       },
       "required": [
         "id",
-        "model",
-        "temperature",
-        "timeoutMs",
-        "maxRetries",
-        "retryBackoffMs",
-        "retryMaxDelayMs"
+        "model"
       ],
       "additionalProperties": false
     },
     "instructions": {
+      "default": {},
       "type": "object",
       "properties": {
         "files": {
@@ -203,13 +186,10 @@
           "type": "string"
         }
       },
-      "required": [
-        "files",
-        "inline"
-      ],
       "additionalProperties": false
     },
     "skills": {
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -243,14 +223,10 @@
           }
         }
       },
-      "required": [
-        "enabled",
-        "directories",
-        "allowTools"
-      ],
       "additionalProperties": false
     },
     "paths": {
+      "default": {},
       "type": "object",
       "properties": {
         "include": {
@@ -294,14 +270,10 @@
           "minLength": 1
         }
       },
-      "required": [
-        "include",
-        "exclude",
-        "artifactDir"
-      ],
       "additionalProperties": false
     },
     "baseline": {
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -322,15 +294,10 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "enabled",
-        "path",
-        "failOnNewOnly",
-        "includeResolvedInReport"
-      ],
       "additionalProperties": false
     },
     "qualityGate": {
+      "default": {},
       "type": "object",
       "properties": {
         "maxCritical": {
@@ -358,14 +325,10 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "maxCritical",
-        "maxHigh",
-        "failOnProviderError"
-      ],
       "additionalProperties": false
     },
     "aiReview": {
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -403,16 +366,10 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "enabled",
-        "requireRefutation",
-        "deterministicSignalMode",
-        "actionableSeverityThreshold",
-        "maxFilesPerDiscoveryCall"
-      ],
       "additionalProperties": false
     },
     "promotionPolicy": {
+      "default": {},
       "type": "object",
       "properties": {
         "modelWeakOrRefuted": {
@@ -424,12 +381,10 @@
           ]
         }
       },
-      "required": [
-        "modelWeakOrRefuted"
-      ],
       "additionalProperties": false
     },
     "contextSources": {
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -467,10 +422,7 @@
                   }
                 },
                 "required": [
-                  "type",
-                  "dir",
-                  "maxFiles",
-                  "maxFileBytes"
+                  "type"
                 ],
                 "additionalProperties": false
               },
@@ -505,10 +457,7 @@
                   }
                 },
                 "required": [
-                  "type",
-                  "include",
-                  "maxFiles",
-                  "maxFileBytes"
+                  "type"
                 ],
                 "additionalProperties": false
               }
@@ -516,6 +465,7 @@
           }
         },
         "summary": {
+          "default": {},
           "type": "object",
           "properties": {
             "mode": {
@@ -532,20 +482,13 @@
               "maximum": 20000
             }
           },
-          "required": [
-            "maxBytes"
-          ],
           "additionalProperties": false
         }
       },
-      "required": [
-        "enabled",
-        "providers",
-        "summary"
-      ],
       "additionalProperties": false
     },
     "verification": {
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -615,16 +558,10 @@
           "maximum": 9007199254740991
         }
       },
-      "required": [
-        "enabled",
-        "providers",
-        "maxToolCallsPerClaim",
-        "maxBytesPerRead",
-        "maxMatches"
-      ],
       "additionalProperties": false
     },
     "changeImpact": {
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -650,15 +587,10 @@
           "maximum": 32
         }
       },
-      "required": [
-        "enabled",
-        "maxChangedSymbols",
-        "maxReferencesPerSymbol",
-        "maxSearchDepth"
-      ],
       "additionalProperties": false
     },
     "intentFulfilment": {
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -684,15 +616,10 @@
           "maximum": 5000
         }
       },
-      "required": [
-        "enabled",
-        "maxObligations",
-        "maxIntentBytes",
-        "maxChangeLines"
-      ],
       "additionalProperties": false
     },
     "fix": {
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -710,12 +637,10 @@
           ]
         }
       },
-      "required": [
-        "enabled"
-      ],
       "additionalProperties": false
     },
     "security": {
+      "default": {},
       "type": "object",
       "properties": {
         "allowShell": {
@@ -739,6 +664,7 @@
           "const": false
         },
         "dedicatedPass": {
+          "default": {},
           "type": "object",
           "properties": {
             "enabled": {
@@ -746,22 +672,13 @@
               "type": "boolean"
             }
           },
-          "required": [
-            "enabled"
-          ],
           "additionalProperties": false
         }
       },
-      "required": [
-        "allowShell",
-        "allowNetwork",
-        "allowFilesystemWrite",
-        "captureContentTelemetry",
-        "dedicatedPass"
-      ],
       "additionalProperties": false
     },
     "reporting": {
+      "default": {},
       "type": "object",
       "properties": {
         "formats": {
@@ -781,6 +698,7 @@
           }
         },
         "sarif": {
+          "default": {},
           "type": "object",
           "properties": {
             "target": {
@@ -803,14 +721,10 @@
               "maximum": 25000
             }
           },
-          "required": [
-            "target",
-            "category",
-            "maxResults"
-          ],
           "additionalProperties": false
         },
         "reviewComments": {
+          "default": {},
           "type": "object",
           "properties": {
             "enabled": {
@@ -829,21 +743,13 @@
               ]
             }
           },
-          "required": [
-            "enabled",
-            "platform"
-          ],
           "additionalProperties": false
         }
       },
-      "required": [
-        "formats",
-        "sarif",
-        "reviewComments"
-      ],
       "additionalProperties": false
     },
     "evaluation": {
+      "default": {},
       "type": "object",
       "properties": {
         "minJudgeAgreement": {
@@ -853,6 +759,7 @@
           "maximum": 1
         },
         "regressionGate": {
+          "default": {},
           "type": "object",
           "properties": {
             "profile": {
@@ -864,6 +771,7 @@
               ]
             },
             "overrides": {
+              "default": {},
               "type": "object",
               "properties": {
                 "minParseValidity": {
@@ -930,20 +838,13 @@
               "additionalProperties": false
             }
           },
-          "required": [
-            "profile",
-            "overrides"
-          ],
           "additionalProperties": false
         }
       },
-      "required": [
-        "minJudgeAgreement",
-        "regressionGate"
-      ],
       "additionalProperties": false
     },
     "drift": {
+      "default": {},
       "type": "object",
       "properties": {
         "enabled": {
@@ -981,19 +882,14 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "enabled",
-        "failOn",
-        "includeDocs",
-        "includeSpecs",
-        "includeGenerated"
-      ],
       "additionalProperties": false
     },
     "observability": {
+      "default": {},
       "type": "object",
       "properties": {
         "logging": {
+          "default": {},
           "type": "object",
           "properties": {
             "level": {
@@ -1010,12 +906,10 @@
               ]
             }
           },
-          "required": [
-            "level"
-          ],
           "additionalProperties": false
         },
         "openTelemetry": {
+          "default": {},
           "type": "object",
           "properties": {
             "enabled": {
@@ -1042,21 +936,13 @@
               "minLength": 1
             }
           },
-          "required": [
-            "enabled",
-            "headers",
-            "serviceName"
-          ],
           "additionalProperties": false
         }
       },
-      "required": [
-        "logging",
-        "openTelemetry"
-      ],
       "additionalProperties": false
     },
     "costs": {
+      "default": {},
       "type": "object",
       "properties": {
         "inputPerMillion": {
@@ -1075,27 +961,6 @@
       "additionalProperties": false
     }
   },
-  "required": [
-    "review",
-    "instructions",
-    "skills",
-    "paths",
-    "baseline",
-    "qualityGate",
-    "aiReview",
-    "promotionPolicy",
-    "contextSources",
-    "verification",
-    "changeImpact",
-    "intentFulfilment",
-    "fix",
-    "security",
-    "reporting",
-    "evaluation",
-    "drift",
-    "observability",
-    "costs"
-  ],
   "additionalProperties": false,
   "$id": "https://codereviewer.local/schemas/config.schema.json",
   "title": "CodeReviewerConfig"
