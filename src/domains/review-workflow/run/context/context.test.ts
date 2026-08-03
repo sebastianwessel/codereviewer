@@ -98,6 +98,48 @@ describe('review runner context assembly', () => {
     ])
   })
 
+  // Redaction can LENGTHEN text: a matched secret becomes `prefix + '[REDACTED]'`.
+  // The budget used to be measured on the raw file and then applied to the
+  // redacted string, so the tail of an instruction could be cut while the ledger
+  // recorded `included` and equal byte counts — a record asserting no loss while
+  // losing. Both now measure the text the model actually receives.
+  test('an instruction that redaction lengthens is not silently cut', async () => {
+    const root = await createTempDir()
+
+    try {
+      const secret = 'sk-proj-abcdefghijklmnopqrstuvwxyz012345'
+      await writeFile(
+        join(root, 'AGENTS.md'),
+        `Never leak ${secret}. Keep this trailing sentence intact.`
+      )
+      const config = CodeReviewerConfigSchema.parse({
+        instructions: { files: ['AGENTS.md'] }
+      })
+
+      const result = await prepareReviewRunnerContextState({
+        repositoryRoot: root,
+        config,
+        sourceFiles: [{ path: 'src/a.ts', content: 'export const a = 1\n' }],
+        analysis: { facts: [], evidence: [] },
+        tasks: [taskFor('src/a.ts')]
+      })
+      const instruction = result.assembledContext.instructions[0]
+
+      expect(instruction?.content).not.toContain(secret)
+      // The sentence AFTER the redaction survives: the budget grew with the text.
+      expect(instruction?.content).toContain('Keep this trailing sentence intact.')
+
+      const entry = result.assembledContext.contextLedger.find(
+        (ledgerEntry) => ledgerEntry.kind === 'instruction'
+      )
+
+      expect(entry?.decision).toBe('included')
+      expect(entry?.bytesIncluded).toBe(entry?.bytesConsidered)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('assembles instructions, source chunks, support-signal context, and ledger entries', async () => {
     const root = await createTempDir()
 

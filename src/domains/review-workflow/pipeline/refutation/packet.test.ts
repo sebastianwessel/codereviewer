@@ -294,8 +294,35 @@ describe('finding refutation packet', () => {
     ])
     expect(packet.reviewContext).toEqual([context])
     expect(packet.supportSignalCandidates).toEqual([])
-    expect(packet.sharedDigest).toBe(
-      '(shared digest omitted for refutation packet budget)'
-    )
+    // The support signals were shed, so the notice NAMES them. It used to say
+    // only that the digest was gone, and the emptied array read to the refuter as
+    // "there is no corroboration" rather than "it was withheld".
+    expect(packet.sharedDigest).toContain('WITHHELD')
+    expect(packet.sharedDigest).toContain('the shared digest')
+    expect(packet.sharedDigest).toContain('the deterministic support signals')
+    // And what the absence must NOT be read as. A candidate refuted because the
+    // budget removed its support produces no output at all, so the mistake is
+    // invisible downstream.
+    expect(packet.sharedDigest).toContain('needs-more-evidence')
+  })
+
+  test('naming the withheld context is the last thing shed, not the first', () => {
+    // Every rung of the ladder carries the notice, including the one that empties
+    // the review context — the rung whose silence was most costly, because the
+    // refuter's instructions treat review context as evidentiary.
+    // Large enough that shedding the digest and the signals still does not fit,
+    // so the ladder reaches its last rung. 10000 is the schema floor for the cap.
+    const context = reviewContext('decisive context '.repeat(1200))
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput({ maxTaskInputBytes: 10000 }),
+      task: task([context]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate],
+      sharedDigest: 'large admitted digest '.repeat(700)
+    })
+
+    expect(packet.reviewContext).toEqual([])
+    expect(packet.sharedDigest).toContain('the review context')
+    expect(packet.sharedDigest).toContain('artefact of the budget')
   })
 })

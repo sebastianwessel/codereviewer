@@ -119,6 +119,25 @@ const createFindingRefutationBatchInput = (
   })
 }
 
+// What the refuter is told when a rung of the ladder below sheds something.
+//
+// The first rung already replaced the shared digest with a visible marker. The
+// next two set `supportSignalCandidates` and `reviewContext` to EMPTY ARRAYS, and
+// the refuter's instructions treat review context as evidentiary — so an emptied
+// packet read as "there is no context and no corroboration" rather than "these
+// were withheld", and the candidate was refuted or marked weak on the strength of
+// an absence the engine itself created. A refuted finding produces no output at
+// all, so nothing downstream could show what had been suppressed.
+//
+// One notice, carried on the digest field, because that is text the refuter
+// already reads. It names what is missing AND what missing must not be taken to
+// mean — absence of support is unproven, which is `needs-more-evidence`, not
+// refuted.
+const budgetOmissionNotice = (omitted: readonly string[]): string =>
+  `(WITHHELD from this refutation packet to fit the provider input budget: ${omitted.join(
+    ', '
+  )}. Their absence here is an artefact of the budget, NOT evidence against any candidate. A claim you cannot support from what remains is UNPROVEN — answer needs-more-evidence rather than refuting it.)`
+
 // Shed the least load-bearing context first when a batch packet exceeds the
 // provider input budget: the shared digest, then deterministic support signals,
 // then the review context. A batch that still does not fit is reported so the
@@ -139,7 +158,7 @@ const fitFindingRefutationBatchInputToBudget = (
 
   const withoutSharedDigest = FindingRefutationBatchInputSchema.parse({
     ...refutationInput,
-    sharedDigest: '(shared digest omitted for refutation packet budget)'
+    sharedDigest: budgetOmissionNotice(['the shared digest'])
   })
 
   if (serializedBytes(withoutSharedDigest) <= maxTaskInputBytes) {
@@ -148,6 +167,10 @@ const fitFindingRefutationBatchInputToBudget = (
 
   const withoutSupportSignals = FindingRefutationBatchInputSchema.parse({
     ...withoutSharedDigest,
+    sharedDigest: budgetOmissionNotice([
+      'the shared digest',
+      'the deterministic support signals'
+    ]),
     supportSignalCandidates: []
   })
 
@@ -157,6 +180,11 @@ const fitFindingRefutationBatchInputToBudget = (
 
   const withoutReviewContext = FindingRefutationBatchInputSchema.parse({
     ...withoutSupportSignals,
+    sharedDigest: budgetOmissionNotice([
+      'the shared digest',
+      'the deterministic support signals',
+      'the review context'
+    ]),
     reviewContext: []
   })
 

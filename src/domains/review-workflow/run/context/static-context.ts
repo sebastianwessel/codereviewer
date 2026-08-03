@@ -26,6 +26,12 @@ export type StaticReviewContext = {
   readonly contextLedger: readonly ContextLedgerEntry[]
 }
 
+// The budget is computed over the text the model will ACTUALLY receive, which is
+// the redacted one. It used to be computed over the raw file and then applied to
+// the redacted string, and redaction can LENGTHEN text -- a matched secret becomes
+// `prefix + '[REDACTED]'`. So the tail of a model-facing instruction or SKILL.md
+// could be cut while the ledger recorded `decision: 'included'` with
+// `bytesIncluded === bytesConsidered`: a record asserting no loss while losing.
 const maxDocumentBytesFor = (content: string): number => utf8ByteLength(content)
 
 const loadInstructionContexts = async (
@@ -42,37 +48,38 @@ const loadInstructionContexts = async (
       await resolveExistingPathInsideRoot(input.repositoryRoot, instructionPath),
       'utf8'
     )
+    const redacted = redactText(content)
     const ledgerEntry = createTextContextLedgerEntry({
       kind: 'instruction',
       path: instructionPath,
       reason: 'instruction-context',
-      text: content,
-      maxBytes: maxDocumentBytesFor(content)
+      text: redacted,
+      maxBytes: maxDocumentBytesFor(redacted)
     })
 
     input.ledger.push(ledgerEntry)
     instructions.push({
       path: instructionPath,
-      content: sliceUtf8Bytes(redactText(content), ledgerEntry.bytesIncluded),
+      content: sliceUtf8Bytes(redacted, ledgerEntry.bytesIncluded),
       allowed: true,
       ledgerEntryId: ledgerEntry.id
     })
   }
 
   if (input.config.instructions.inline.trim().length > 0) {
-    const inlineContent = input.config.instructions.inline
+    const redactedInline = redactText(input.config.instructions.inline)
     const ledgerEntry = createTextContextLedgerEntry({
       kind: 'instruction',
       path: '.codereviewer/inline-instructions',
       reason: 'instruction-context',
-      text: inlineContent,
-      maxBytes: maxDocumentBytesFor(inlineContent)
+      text: redactedInline,
+      maxBytes: maxDocumentBytesFor(redactedInline)
     })
 
     input.ledger.push(ledgerEntry)
     instructions.push({
       path: '.codereviewer/inline-instructions',
-      content: sliceUtf8Bytes(redactText(inlineContent), ledgerEntry.bytesIncluded),
+      content: sliceUtf8Bytes(redactedInline, ledgerEntry.bytesIncluded),
       allowed: true,
       ledgerEntryId: ledgerEntry.id
     })
@@ -108,12 +115,13 @@ const loadSkillContexts = async (
       await resolveExistingPathInsideRoot(input.repositoryRoot, skill.path),
       'utf8'
     )
+    const redacted = redactText(content)
     const ledgerEntry = createTextContextLedgerEntry({
       kind: 'skill',
       path: skill.path,
       reason: 'skill-context',
-      text: content,
-      maxBytes: maxDocumentBytesFor(content)
+      text: redacted,
+      maxBytes: maxDocumentBytesFor(redacted)
     })
 
     input.ledger.push(ledgerEntry)
