@@ -19,10 +19,16 @@ describe('unknownCliOption', () => {
   test('accepts a command option and every global option', () => {
     expect(
       unknownCliOption(
-        ['--slice-root', 'a', ...globalCliOptions.filter((o) => o !== '--debug')],
+        ['--slice-root', 'a', ...globalCliOptions],
         ['--slice-root']
       )
     ).toBeUndefined()
+  })
+
+  // Only `--config` is global. The logging flags were global while only two
+  // commands read them, so the other five accepted and ignored them.
+  test('the logging flags are not global', () => {
+    expect(globalCliOptions).toEqual(['--config'])
   })
 
   test('names the first unrecognized option', () => {
@@ -74,6 +80,37 @@ describe('command-level rejection', () => {
 
     expect(result.exitCode).toBe(2)
     expect(result.stderr).toContain('--nope')
+  })
+
+  // A flag a command does not implement must be REJECTED, not accepted and
+  // dropped. These four read no log level, so `--log-level debug` used to exit 0
+  // having logged nothing.
+  test.each([
+    ['config validate', ['config', 'validate']],
+    ['drift check', ['drift', 'check']],
+    ['impact check', ['impact', 'check']],
+    ['intent check', ['intent', 'check']]
+  ])('%s rejects a logging flag it does not implement', async (_name, args) => {
+    const result = await cli([...args, '--log-level', 'debug'])
+
+    expect(result.exitCode).toBe(2)
+    expect(result.stderr).toContain('--log-level')
+  })
+
+  // `--name=value` passed the unknown-option check by name and was then dropped
+  // by the four parsers that located their option with `indexOf`. A config path
+  // that never arrives runs the DEFAULT configuration and exits 0.
+  test('--config=<path> reaches the loader instead of being dropped', async () => {
+    const result = await cli(['config', 'validate', '--config=does-not-exist.json'])
+
+    expect(result.exitCode).not.toBe(0)
+    expect(result.stdout).toBe('')
+  })
+
+  test('--log-level=<value> is honoured, and an invalid one is rejected', async () => {
+    const result = await cli(['review', '--file', 'src/app.ts', '--log-level=nonsense'])
+
+    expect(result.exitCode).toBe(2)
   })
 
   test('a command option is not rejected by another command that lacks it', async () => {

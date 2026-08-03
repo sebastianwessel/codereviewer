@@ -3,9 +3,20 @@
 // with an actionable message). No IO or runtime state lives here.
 import { ReviewLogLevelSchema } from '../domains/observability/index.js'
 
-// Options every command accepts, wherever it appears in the argument list.
-export const globalCliOptions: readonly string[] = [
-  '--config',
+// Options every command accepts, wherever they appear in the argument list.
+//
+// Only `--config` is genuinely global: every command loads configuration. The
+// logging flags used to sit here too, which made all seven commands ACCEPT
+// them while only `review` and `eval run` read them -- so `intent check
+// --log-level debug` exited 0 having logged nothing, the accept-and-ignore
+// failure the comment below says this project has already paid for twice.
+// They are declared by the two commands that implement them instead.
+export const globalCliOptions: readonly string[] = ['--config']
+
+// The logging flags, for the commands that honour them. A command that does not
+// call `parseLogLevelOverride`/`parseLogFileOverride` must NOT list these: being
+// told an option is unknown is strictly better than being silently ignored.
+export const loggingCliOptions: readonly string[] = [
   '--debug',
   '--log-level',
   '--log-file'
@@ -60,18 +71,13 @@ export const unknownCliOption = (
 }
 
 export const parseConfigPath = (args: readonly string[]): string | undefined => {
-  const configIndex = args.indexOf('--config')
+  const configPath = parseOptionValue(args, '--config')
 
-  if (configIndex === -1) {
+  if (configPath === undefined) {
     return undefined
   }
 
-  const configPath = args[configIndex + 1]
-  if (
-    configPath === undefined ||
-    configPath.length === 0 ||
-    configPath.startsWith('-')
-  ) {
+  if (configPath.startsWith('-')) {
     throw new TypeError('--config requires a path')
   }
 
@@ -165,6 +171,58 @@ export const parseOptionValues = (
   return values
 }
 
+// Reads an option's value AND returns the arguments with that option removed,
+// accepting `--name value` and `--name=value` alike.
+//
+// The consuming parsers strip the option before handing the rest to a command,
+// so they cannot use `parseOptionValue`: they need to know WHICH tokens to drop,
+// and that differs between the two spellings (two tokens or one). Locating the
+// option by `indexOf` alone -- which is what they did -- made the joined form
+// invisible to them while `unknownCliOption` accepted it by name, so
+// `--config=path` passed validation and was then dropped, and the run proceeded
+// on defaults at exit 0. That is the same silent drop the comment above
+// `inlineOptionValue` describes, in the four parsers that did not go through it.
+const takeOptionValue = (
+  args: readonly string[],
+  optionName: string,
+  missingValueMessage: string
+): { readonly value?: string; readonly args: readonly string[] } => {
+  const prefix = `${optionName}=`
+  const inlineIndex = args.findIndex((arg) => arg.startsWith(prefix))
+
+  if (inlineIndex !== -1) {
+    const value = (args[inlineIndex] as string).slice(prefix.length)
+
+    if (value.length === 0) {
+      throw new TypeError(missingValueMessage)
+    }
+
+    return {
+      value,
+      args: args.filter((_arg, index) => index !== inlineIndex)
+    }
+  }
+
+  const optionIndex = args.indexOf(optionName)
+
+  if (optionIndex === -1) {
+    return { args }
+  }
+
+  const value = args[optionIndex + 1]
+
+  if (value === undefined || value.length === 0 || value.startsWith('-')) {
+    throw new TypeError(missingValueMessage)
+  }
+
+  return {
+    value,
+    args: args.filter(
+      (_arg, index) => index !== optionIndex && index !== optionIndex + 1
+    )
+  }
+}
+
 export const parseIntegerOption = (
   args: readonly string[],
   optionName: string,
@@ -223,63 +281,42 @@ export const parseLogLevelOverride = (
     }
   }
 
-  const logLevelIndex = args.indexOf('--log-level')
-  if (logLevelIndex === -1) {
-    return {
-      args
-    }
-  }
+  const taken = takeOptionValue(
+    args,
+    '--log-level',
+    '--log-level requires a value'
+  )
 
-  const value = args[logLevelIndex + 1]
-  if (value === undefined || value.length === 0 || value.startsWith('-')) {
-    throw new TypeError('--log-level requires a value')
+  if (taken.value === undefined) {
+    return { args: taken.args }
   }
 
   return {
-    level: ReviewLogLevelSchema.parse(value),
-    args: args.filter(
-      (_arg, index) => index !== logLevelIndex && index !== logLevelIndex + 1
-    )
+    level: ReviewLogLevelSchema.parse(taken.value),
+    args: taken.args
   }
 }
 
 export const parseLogFileOverride = (
   args: readonly string[]
 ): { readonly logFile?: string; readonly args: readonly string[] } => {
-  const logFileIndex = args.indexOf('--log-file')
-  if (logFileIndex === -1) {
-    return {
-      args
-    }
+  const taken = takeOptionValue(args, '--log-file', '--log-file requires a path')
+
+  if (taken.value === undefined) {
+    return { args: taken.args }
   }
 
-  const value = args[logFileIndex + 1]
-  if (value === undefined || value.length === 0 || value.startsWith('-')) {
-    throw new TypeError('--log-file requires a path')
-  }
-
-  return {
-    logFile: value,
-    args: args.filter(
-      (_arg, index) => index !== logFileIndex && index !== logFileIndex + 1
-    )
-  }
+  return { logFile: taken.value, args: taken.args }
 }
 
 export const parseExplicitFiles = (
   args: readonly string[]
 ): readonly string[] | undefined => {
-  const files: string[] = []
-
-  for (const [index, value] of args.entries()) {
-    if (value === '--file') {
-      const file = args[index + 1]
-      if (file === undefined || file.length === 0) {
-        throw new TypeError('--file requires a path')
-      }
-      files.push(file)
-    }
-  }
+  // `parseOptionValues` understands both spellings; the hand-rolled loop that
+  // stood here understood only `--file path`, so `--file=path` was accepted by
+  // name and then dropped, and the run reviewed the whole diff instead of the
+  // one file that was asked for.
+  const files: string[] = [...parseOptionValues(args, '--file')]
 
   const filesValue = parseOptionValue(args, '--files')
   if (filesValue !== undefined) {

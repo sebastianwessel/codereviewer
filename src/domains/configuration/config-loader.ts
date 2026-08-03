@@ -4,6 +4,7 @@ import {
   CodeReviewerConfigSchema,
   type CodeReviewerConfig
 } from '../../shared/contracts/index.js'
+import { createStructuredError } from '../../shared/errors/error-normalizer.js'
 
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
@@ -82,9 +83,23 @@ const parseJsonObject = (content: string): JsonObject => {
   return parsed as JsonObject
 }
 
+// A config file that is absent means two different things, and reading them the
+// same way is what makes the second one dangerous.
+//
+// At the DEFAULT path, absence is the ordinary case: most repositories have no
+// config file and the defaults are the intended settings. At a path the user
+// NAMED -- `--config <path>` or `CODEREVIEWER_CONFIG_PATH` -- absence is a
+// mistake, and continuing on defaults runs a review with settings nobody asked
+// for while reporting success. This project has already paid for exactly that:
+// an A/B whose config flag never reached the run cost roughly $11.50 to compare
+// a build against itself, and the run exited 0 throughout.
+//
+// So a requested path that does not exist is a `config` error, and the default
+// path that does not exist is a warning.
 const readConfigFile = async (
   repositoryRoot: string,
-  configPath: string
+  configPath: string,
+  requestedExplicitly: boolean
 ): Promise<JsonObject | undefined> => {
   try {
     return parseJsonObject(
@@ -100,6 +115,17 @@ const readConfigFile = async (
       'code' in error &&
       error.code === 'ENOENT'
     ) {
+      if (requestedExplicitly) {
+        throw createStructuredError({
+          code: 'config_error',
+          message: `The configuration file "${configPath}" does not exist. It was requested explicitly, so the run stops here rather than continuing on default settings.`,
+          category: 'config',
+          recoverable: false,
+          exitCode: 2,
+          details: { configPath }
+        })
+      }
+
       return undefined
     }
 
@@ -345,11 +371,14 @@ export const loadCodeReviewerConfig = async (
     options.environment ?? {},
     options.loadDotEnv ?? true
   )
-  const configPath =
-    options.configPath ??
-    configPathFromEnvironment(environment) ??
-    defaultReviewConfigPath
-  const fileConfig = await readConfigFile(options.repositoryRoot, configPath)
+  const requestedConfigPath =
+    options.configPath ?? configPathFromEnvironment(environment)
+  const configPath = requestedConfigPath ?? defaultReviewConfigPath
+  const fileConfig = await readConfigFile(
+    options.repositoryRoot,
+    configPath,
+    requestedConfigPath !== undefined
+  )
   const warnings = fileConfig === undefined ? ['config-file-missing'] : []
   const environmentConfig = configFromEnvironment(environment)
   const cliConfig = options.cliConfig ?? {}
