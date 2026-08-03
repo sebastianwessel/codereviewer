@@ -127,6 +127,15 @@ or a fresh orphan branch).
 npm run cli -- baseline write --report .codereviewer/runs/<runId>/report.json
 ```
 
+### `baseline_source_invalid` — exit 3
+
+> The file at "…" is valid JSON but is not a review report.
+
+The path resolved to something that is not a run's `report.json` — most often a
+`run-summary.json`, an eval report, or an already-written `baseline.json`. Pass
+the report itself. `details.firstSchemaIssue` names the field that decided it,
+which distinguishes a wrong-file mistake from a truncated report.
+
 ### `repository_error` / `repository_timeout` — exit 3
 
 A filesystem or git operation failed. Check that the working directory is a git

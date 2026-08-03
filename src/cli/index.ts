@@ -54,10 +54,6 @@ import {
   type ReviewLogSink
 } from '../domains/observability/index.js'
 import {
-  latestRunWithReport,
-  parseRunIndex
-} from '../domains/reporting/index.js'
-import {
   buildBaselineEntries,
   renderBaselineJson
 } from '../domains/admission/index.js'
@@ -72,7 +68,6 @@ import {
 import { loadCodeReviewerConfig } from '../domains/configuration/config-loader.js'
 import { createRedactedConfigSummary } from '../domains/configuration/config-summary.js'
 import {
-  createStructuredError,
   isFileSystemError,
   isZodError,
   normalizeError,
@@ -87,6 +82,7 @@ import {
   type CodeReviewerConfig
 } from '../shared/contracts/index.js'
 import {
+  loggingCliOptions,
   parseConfigPath,
   unknownCliOption,
   parseEnumOption,
@@ -102,7 +98,6 @@ import {
   IMPACT_MARKDOWN_ARTIFACT_NAME,
   INTENT_MARKDOWN_ARTIFACT_NAME,
   jsonResult,
-  readRunIndex,
   recordRunInIndex,
   resolveArtifactWritePath,
   writeChangeImpactArtifacts,
@@ -111,6 +106,7 @@ import {
   writeReviewArtifacts,
   writeRunArtifact
 } from './run-artifacts.js'
+import { resolveBaselineSourceReport } from './baseline-source.js'
 import { qualityGateOfCompletedRun } from './review-completion.js'
 import { runEvalCase } from './eval-case-runner.js'
 
@@ -577,7 +573,13 @@ const runReview = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
-  const unrecognized = unknownCliOption(args, ['--base-ref', '--head-ref', '--file', '--files'])
+  const unrecognized = unknownCliOption(args, [
+    ...loggingCliOptions,
+    '--base-ref',
+    '--head-ref',
+    '--file',
+    '--files'
+  ])
 
   if (unrecognized !== undefined) {
     return usageError(`Unknown option ${unrecognized}`)
@@ -754,51 +756,6 @@ const runReview = async (
   }
 }
 
-const resolveBaselineSourceReport = async (
-  input: {
-    readonly repositoryRoot: string
-    readonly artifactDir: string
-    readonly explicitReportPath: string | undefined
-  }
-): Promise<{ readonly reportPath: string; readonly content: string }> => {
-  const reportPath =
-    input.explicitReportPath ??
-    latestRunWithReport(
-      parseRunIndex(await readRunIndex(input.repositoryRoot, input.artifactDir))
-    )?.reportPath
-
-  if (reportPath === undefined) {
-    throw createStructuredError({
-      code: 'baseline_source_unavailable',
-      message:
-        'No completed review report was found to build a baseline from. Run a review first, or pass --report <path>.',
-      category: 'repository',
-      recoverable: true,
-      exitCode: 3,
-      details: { artifactDir: input.artifactDir }
-    })
-  }
-
-  try {
-    return {
-      reportPath,
-      content: await readFile(
-        await resolveExistingPathInsideRoot(input.repositoryRoot, reportPath),
-        'utf8'
-      )
-    }
-  } catch {
-    throw createStructuredError({
-      code: 'baseline_source_unavailable',
-      message: 'The review report to build a baseline from could not be read.',
-      category: 'repository',
-      recoverable: true,
-      exitCode: 3,
-      details: { reportPath }
-    })
-  }
-}
-
 const runBaselineWrite = async (
   args: readonly string[],
   options: CliRunOptions
@@ -816,12 +773,7 @@ const runBaselineWrite = async (
       artifactDir: loadedConfig.config.paths.artifactDir,
       explicitReportPath: parseOptionValue(args, '--report')
     })
-    const report = JSON.parse(source.content) as {
-      readonly admittedFindings?: readonly {
-        readonly fingerprints: readonly unknown[]
-      }[]
-    }
-    const entries = buildBaselineEntries(report.admittedFindings ?? [])
+    const entries = buildBaselineEntries(source.report.admittedFindings)
     const baselinePath = await resolveArtifactWritePath(
       options.cwd,
       loadedConfig.config.baseline.path
@@ -848,7 +800,15 @@ const runEval = async (
   args: readonly string[],
   options: CliRunOptions
 ): Promise<CliResult> => {
-  const unrecognized = unknownCliOption(args, ['--case', '--gate-profile', '--max-concurrent-tasks', '--review-depth', '--review-mode', '--slice-root'])
+  const unrecognized = unknownCliOption(args, [
+    ...loggingCliOptions,
+    '--case',
+    '--gate-profile',
+    '--max-concurrent-tasks',
+    '--review-depth',
+    '--review-mode',
+    '--slice-root'
+  ])
 
   if (unrecognized !== undefined) {
     return usageError(`Unknown option ${unrecognized}`)

@@ -911,10 +911,12 @@ Quality gate config:
 | `maxMedium` | integer >= 0 | no fail |
 | `failOnProviderError` | boolean | `true` |
 | `failOnNewOnly` | boolean | value from baseline config |
-| `minProductRecall` | number 0..1 | unset (no fail) |
 
-When set, `minProductRecall` fails the gate if `productRecall` falls below the
-threshold.
+These are the only keys. In particular the review gate does not threshold on
+`productRecall`: recall is measured against a corpus of expected findings, and a
+review run has no such corpus — it reviews a change whose true defects are
+exactly what it is trying to discover. `minProductRecall` is a threshold of the
+**Eval Regression Gate** below, which does have expectations to measure against.
 
 Gate result:
 

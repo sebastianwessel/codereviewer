@@ -108,6 +108,7 @@ Provider setup problems are **config** errors (exit `2`), not provider errors:
 | `repository_error` | Generic filesystem/git failure. |
 | `merge_base_unavailable` | No merge base exists between `baseRef` and `headRef`. |
 | `baseline_source_unavailable` | `baseline write` found no completed report, or could not read the one given via `--report`. |
+| `baseline_source_invalid` | `baseline write` read the source file, but it is not a review report (invalid JSON, or JSON that does not satisfy the report contract). |
 
 ### `provider` (exit 4)
 

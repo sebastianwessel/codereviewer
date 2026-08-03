@@ -1521,7 +1521,15 @@ Rules:
   must not recompute fingerprints, because recomputation without the original
   source state would produce values that cannot match a later run;
 - the command fails with `baseline_source_unavailable`, category `repository`,
-  exit code 3 when no source report can be resolved;
+  exit code 3 when no source report can be resolved or the resolved one cannot
+  be read;
+- the source report must be validated against the report contract before any
+  baseline is derived from it. A file that is not valid JSON, or that parses but
+  is not a review report, fails with `baseline_source_invalid`, category
+  `repository`, exit code 3. It must not be read as a report with no admitted
+  findings: an unusable source cannot produce an empty baseline and exit 0,
+  because that would report a baseline as built from a file that is not a report
+  and would silently suppress nothing;
 - writing the baseline is an explicit operation. The `review` command must never
   write the baseline file, so that a review run cannot suppress its own
   findings.

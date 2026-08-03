@@ -123,7 +123,9 @@ parent directories. Stdout:
 { "baselinePath": "…", "sourceReportPath": "…", "entryCount": 0 }
 ```
 
-Exits `3` with `baseline_source_unavailable` when no report can be found or read.
+Exits `3` with `baseline_source_unavailable` when no report can be found or read,
+and `3` with `baseline_source_invalid` when the file it did read is not a review
+report. A source it cannot validate never yields an empty baseline and exit `0`.
 
 ## `codereviewer eval run`
 
