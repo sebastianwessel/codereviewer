@@ -120,6 +120,23 @@ describe('model summarizer', () => {
     expect(brief.truncated).toBe(true)
   })
 
+  // A fragment the PROVIDER already cut arrives short enough to fit every budget
+  // here, so measuring what we were handed can only ever find our own cuts. The
+  // brief then reports a summary of half a ticket as complete.
+  test('reports a fragment the provider already cut, even though it fits the input budget', async () => {
+    const object = vi.fn(async () => ({
+      object: { brief: 'Intent: something.' },
+      usage: { inputTokens: 10, outputTokens: 8 }
+    }))
+
+    const brief = await createModelSummarizer({
+      modelAlias: modelAliasWith(object as never)
+    }).summarize([{ ...fragment, truncated: true }], { maxBytes: 4000 })
+
+    expect(brief.truncated).toBe(true)
+    expect(brief.origins).toEqual(['inbox:jira/PROJ-1'])
+  })
+
   test('invokes a class-based provider as a method, not through a detached reference', async () => {
     // Regression: the summarizer read `provider.object` into a local and called
     // it detached. Provider adapters are CLASSES that reach for `this` (the

@@ -12,7 +12,18 @@ import { createChangedFilesProvider } from './changed-files-provider.js'
 export type ProviderGatherMetric = {
   readonly id: string
   readonly type: ContextProviderConfig['type']
+  // The two counts below exist because every other number here is measured
+  // AFTER the provider's bounds were applied, and a bound that has already been
+  // applied leaves no trace in what it produced. `fragmentCount` alone cannot
+  // distinguish a provider that matched twenty files from one that matched two
+  // hundred and kept twenty, and `bytes` alone cannot distinguish a whole file
+  // from its first 64 000 bytes. Both losses were unreportable; both are now
+  // counted and warned about.
+  /** Sources matched before the provider's `maxFiles` cap. */
+  readonly matchedCount: number
   readonly fragmentCount: number
+  /** Emitted fragments whose body the provider cut at its `maxFileBytes` cap. */
+  readonly truncatedFragmentCount: number
   readonly bytes: number
   readonly failed: boolean
 }
@@ -102,14 +113,18 @@ export const gatherContextFragments = async (
       providerId = provider.id
 
       const gathered = await provider.gather(gatherInput)
-      const redacted = gathered.map((fragment) =>
+      const redacted = gathered.fragments.map((fragment) =>
         redactFragment(fragment, input.redact)
       )
       fragments.push(...redacted)
       providerMetrics.push({
         id: provider.id,
         type: config.type,
+        matchedCount: gathered.matchedCount,
         fragmentCount: redacted.length,
+        truncatedFragmentCount: redacted.filter(
+          (fragment) => fragment.truncated === true
+        ).length,
         bytes: redacted.reduce(
           (total, fragment) => total + Buffer.byteLength(fragment.body, 'utf8'),
           0
@@ -123,7 +138,9 @@ export const gatherContextFragments = async (
       providerMetrics.push({
         id: providerId,
         type: config.type,
+        matchedCount: 0,
         fragmentCount: 0,
+        truncatedFragmentCount: 0,
         bytes: 0,
         failed: true
       })

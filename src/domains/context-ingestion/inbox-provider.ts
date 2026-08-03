@@ -27,15 +27,20 @@ export const createInboxProvider = (config: InboxConfig): ContextProvider => ({
     ).catch(() => undefined)
 
     if (directory === undefined) {
-      return []
+      return { fragments: [], matchedCount: 0 }
     }
 
     const entries = await readdir(directory, { withFileTypes: true })
-    const fileNames = entries
+    const matchedNames = entries
       .filter((entry) => entry.isFile() && entry.name.endsWith('.md'))
       .map((entry) => entry.name)
       .sort()
-      .slice(0, config.maxFiles)
+    // The sort is LEXICOGRAPHIC on the filename, so `PROJ-1010.md` beats
+    // `PROJ-99.md` and a directory of thirty tickets keeps whichever twenty sort
+    // first. That is a stable order, not a relevance order, and the cap is a
+    // plain slice — so the caller is handed `matchedCount` and reports what was
+    // left out rather than presenting the survivors as "the context".
+    const fileNames = matchedNames.slice(0, config.maxFiles)
 
     const fragments: ContextFragment[] = []
 
@@ -46,7 +51,8 @@ export const createInboxProvider = (config: InboxConfig): ContextProvider => ({
       )
       const raw = await readFile(filePath, 'utf8')
       const { metadata, body } = parseFrontmatter(raw)
-      const boundedBody = truncateToUtf8Bytes(body.trim(), config.maxFileBytes)
+      const trimmedBody = body.trim()
+      const boundedBody = truncateToUtf8Bytes(trimmedBody, config.maxFileBytes)
 
       if (boundedBody.length === 0) {
         continue
@@ -61,10 +67,14 @@ export const createInboxProvider = (config: InboxConfig): ContextProvider => ({
         kind: 'inbox',
         ...(title === undefined || title.length === 0 ? {} : { title }),
         body: boundedBody,
+        // A long ticket thread cut at the per-file cap keeps its opening and
+        // loses the acceptance criteria that usually close it. Recorded here
+        // because this is the last point where the full length is still known.
+        truncated: boundedBody.length < trimmedBody.length,
         metadata
       })
     }
 
-    return fragments
+    return { fragments, matchedCount: matchedNames.length }
   }
 })

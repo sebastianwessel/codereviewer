@@ -252,6 +252,15 @@ reviewer prompt and the summarizer must enforce these principles:
 - Evaluation and benchmark runs use no context providers so results stay
   reproducible. This is a property of the committed evaluation configuration, not of
   code: nothing forces `contextSources` off for an eval run.
+- A provider that produces only PART of what it matched emits a warning too. Both
+  per-provider bounds discard content, so nothing measured downstream can detect
+  them — a body cut at the byte cap is by construction small enough to fit every
+  later budget, and a file dropped at the file cap is never counted at all. A
+  provider therefore reports its pre-cap match count and marks every fragment
+  whose body it cut, and the run warns once per bound that actually bound, naming
+  the provider and the amount withheld. A fragment cut at the per-file cap also
+  makes the resulting `ChangeIntentBrief` report `truncated: true`; a brief that
+  summarizes part of a ticket MUST NOT report itself complete.
 - Ingestion is bounded per provider by a maximum file count and a per-file byte cap
   (`inbox`: 20 files, 64 000 bytes each; `changed-files`: the same caps over globs
   defaulting to `**/*.md`), and the brief by `summary.maxBytes` (default 4 000). A

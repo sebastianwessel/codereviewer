@@ -46,6 +46,15 @@ export const createDigestSummarizer = (): ContextSummarizer => ({
 
       sections.push(fitted)
       origins.push(fragment.origin)
+
+      if (fragment.truncated === true) {
+        // The section fits the digest's budget, but only because the provider
+        // already cut this body at its per-file cap. Judging truncation by
+        // whether the text fits here reports a brief built from half a ticket as
+        // complete — the cut text is exactly the text that fits.
+        truncated = true
+      }
+
       usedBytes +=
         (sections.length === 1 ? 0 : separatorBytes) +
         Buffer.byteLength(fitted, 'utf8')

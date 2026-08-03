@@ -93,6 +93,19 @@ describe('digest summarizer', () => {
     expect(brief.truncated).toBe(true)
     expect(Buffer.byteLength(brief.text, 'utf8')).toBeLessThanOrEqual(120)
   })
+
+  test('reports a fragment the provider already cut, even though it fits here', async () => {
+    // The digest judged truncation solely by its own byte cap, so a ticket cut
+    // to its first 64 000 bytes by the provider fit comfortably and the brief
+    // asserted the intent had been seen whole.
+    const brief = await createDigestSummarizer().summarize(
+      [{ ...fragment('a', 'first half of the ticket'), truncated: true }],
+      { maxBytes: 4000 }
+    )
+
+    expect(brief.truncated).toBe(true)
+    expect(brief.origins).toEqual(['a'])
+  })
 })
 
 describe('changed-files provider', () => {
@@ -104,7 +117,7 @@ describe('changed-files provider', () => {
       maxFileBytes: 1000
     })
 
-    const fragments = await provider.gather({
+    const { fragments, matchedCount } = await provider.gather({
       repositoryRoot: '/repo',
       changedFiles: [
         { path: 'specs/05.md', content: 'spec body' },
@@ -117,6 +130,50 @@ describe('changed-files provider', () => {
       'changed-file:specs/05.md',
       'changed-file:docs/readme.md'
     ])
+    expect(matchedCount).toBe(2)
+    expect(fragments.every((fragment) => fragment.truncated === false)).toBe(true)
+  })
+
+  test('reports how many files matched before the maxFiles cap', async () => {
+    // The cap is a plain slice, so the five files past it left no trace at all:
+    // `fragments.length` is the POST-cap count, and a provider that matched two
+    // files and one that matched seven were indistinguishable.
+    const provider = createChangedFilesProvider({
+      type: 'changed-files',
+      include: ['**/*.md'],
+      maxFiles: 2,
+      maxFileBytes: 1000
+    })
+
+    const { fragments, matchedCount } = await provider.gather({
+      repositoryRoot: '/repo',
+      changedFiles: Array.from({ length: 7 }, (_unused, index) => ({
+        path: `docs/${index}.md`,
+        content: 'body'
+      }))
+    })
+
+    expect(fragments).toHaveLength(2)
+    expect(matchedCount).toBe(7)
+  })
+
+  test('a body cut at the per-file byte cap says it was cut', async () => {
+    // Nothing downstream can rediscover this: the cut body is smaller than the
+    // cap, so every later size check passes and the brief claims completeness.
+    const provider = createChangedFilesProvider({
+      type: 'changed-files',
+      include: ['**/*.md'],
+      maxFiles: 10,
+      maxFileBytes: 20
+    })
+
+    const { fragments } = await provider.gather({
+      repositoryRoot: '/repo',
+      changedFiles: [{ path: 'docs/long.md', content: 'x'.repeat(500) }]
+    })
+
+    expect(fragments[0]?.truncated).toBe(true)
+    expect(Buffer.byteLength(fragments[0]?.body ?? '', 'utf8')).toBeLessThanOrEqual(20)
   })
 })
 
@@ -138,12 +195,14 @@ describe('inbox provider', () => {
         maxFileBytes: 64_000
       })
 
-      const fragments = await provider.gather(gatherInput(root))
+      const { fragments, matchedCount } = await provider.gather(gatherInput(root))
       expect(fragments).toHaveLength(1)
+      expect(matchedCount).toBe(1)
       expect(fragments[0]).toMatchObject({
         origin: 'inbox:jira/PROJ-1',
         kind: 'inbox',
-        title: 'Reject tokens'
+        title: 'Reject tokens',
+        truncated: false
       })
       expect(fragments[0]?.body).toContain('5 minutes')
     } finally {
@@ -161,7 +220,64 @@ describe('inbox provider', () => {
         maxFiles: 20,
         maxFileBytes: 64_000
       })
-      expect(await provider.gather(gatherInput(root))).toEqual([])
+      expect(await provider.gather(gatherInput(root))).toEqual({
+        fragments: [],
+        matchedCount: 0
+      })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('reports how many files matched before the maxFiles cap', async () => {
+    // The survivors are chosen by LEXICOGRAPHIC filename, so they are not "the
+    // most relevant 20" — and the tickets past the cap disappeared without a
+    // count, so nothing could report that most of the intent went unread.
+    const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-inbox-'))
+
+    try {
+      const directory = path.join(root, '.codereviewer', 'context')
+      await mkdir(directory, { recursive: true })
+
+      for (const name of ['a.md', 'b.md', 'c.md', 'd.md']) {
+        await writeFile(path.join(directory, name), `Intent in ${name}\n`)
+      }
+
+      const provider = createInboxProvider({
+        type: 'inbox',
+        dir: '.codereviewer/context',
+        maxFiles: 2,
+        maxFileBytes: 64_000
+      })
+
+      const { fragments, matchedCount } = await provider.gather(gatherInput(root))
+      expect(fragments).toHaveLength(2)
+      expect(matchedCount).toBe(4)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a body cut at the per-file byte cap says it was cut', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-inbox-'))
+
+    try {
+      const directory = path.join(root, '.codereviewer', 'context')
+      await mkdir(directory, { recursive: true })
+      await writeFile(
+        path.join(directory, 'ticket.md'),
+        `---\nsource: jira\nid: PROJ-1\n---\n${'y'.repeat(500)}\n`
+      )
+
+      const provider = createInboxProvider({
+        type: 'inbox',
+        dir: '.codereviewer/context',
+        maxFiles: 20,
+        maxFileBytes: 30
+      })
+
+      const { fragments } = await provider.gather(gatherInput(root))
+      expect(fragments[0]?.truncated).toBe(true)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -200,10 +316,42 @@ describe('runContextIngestion', () => {
       })
 
       expect(result.brief).toBeUndefined()
-      expect(result.providerMetrics[0]).toMatchObject({ failed: true, fragmentCount: 0 })
+      expect(result.providerMetrics[0]).toMatchObject({
+        failed: true,
+        fragmentCount: 0,
+        matchedCount: 0,
+        truncatedFragmentCount: 0
+      })
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+
+  test('carries the bounds each provider applied into its metric', async () => {
+    // `fragmentCount` and `bytes` are both measured AFTER the bounds ran, so a
+    // provider that read a tenth of the matching files and cut every one of them
+    // reported the same numbers as one that read everything whole.
+    const result = await runContextIngestion({
+      providers: [
+        { type: 'changed-files', include: ['**/*.md'], maxFiles: 2, maxFileBytes: 10 }
+      ],
+      repositoryRoot: '/repo',
+      changedFiles: Array.from({ length: 5 }, (_unused, index) => ({
+        path: `docs/${index}.md`,
+        content: 'z'.repeat(300)
+      })),
+      summarizer: createDigestSummarizer(),
+      maxBytes: 4000,
+      redact: identity
+    })
+
+    expect(result.providerMetrics[0]).toMatchObject({
+      matchedCount: 5,
+      fragmentCount: 2,
+      truncatedFragmentCount: 2,
+      failed: false
+    })
+    expect(result.brief?.truncated).toBe(true)
   })
 
   test('no fragments yields no brief', async () => {

@@ -48,7 +48,8 @@ const emptyAssembledContext: ContextAssemblyResult = {
   skills: [],
   skillDefinitions: {},
   skillIds: [],
-  contextLedger: []
+  contextLedger: [],
+  referencedDefinitionsDroppedCount: 0
 }
 
 describe('prepareReviewRunnerChangeIntentContext — model summarizer availability', () => {
@@ -235,6 +236,90 @@ describe('prepareReviewRunnerChangeIntentContext — model summarizer availabili
       observability: createNoContentEventRecorder(),
       logger
     })
+
+    expect(result.warnings).toEqual([])
+  })
+})
+
+// Spec 11 warns about a provider that produced NOTHING. A provider that produced
+// something bounded was silent in exactly the way that matters most: the review
+// ran on a fraction of the stated intent and every number in the run said the
+// source had been consumed.
+describe('prepareReviewRunnerChangeIntentContext — provider bounds', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'change-intent-bounds-'))
+    await mkdir(path.join(root, '.codereviewer', 'context'), { recursive: true })
+  })
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  const runWith = async (providers: readonly Record<string, unknown>[]) => {
+    const config = CodeReviewerConfigSchema.parse({
+      contextSources: {
+        enabled: true,
+        providers,
+        summary: { mode: 'digest' }
+      }
+    })
+
+    return prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: root,
+      config,
+      assembledContext: emptyAssembledContext,
+      sourceFiles: [],
+      environment: {},
+      observability: createNoContentEventRecorder(),
+      logger: createCapturingLogger().logger
+    })
+  }
+
+  test('says how many files the maxFiles cap withheld', async () => {
+    for (const name of ['a.md', 'b.md', 'c.md', 'd.md', 'e.md']) {
+      await writeFile(
+        path.join(root, '.codereviewer', 'context', name),
+        `Intent stated in ${name}\n`
+      )
+    }
+
+    const result = await runWith([
+      { type: 'inbox', dir: '.codereviewer/context', maxFiles: 2 }
+    ])
+
+    expect(result.warnings).toEqual([
+      'External change-intent provider "inbox:.codereviewer/context" matched 5 files but contributed 2; 3 were dropped and their content is not in the review. Raise its maxFiles cap or point the provider at fewer files.'
+    ])
+  })
+
+  test('says how many files the maxFileBytes cap cut', async () => {
+    await writeFile(
+      path.join(root, '.codereviewer', 'context', 'ticket.md'),
+      `---\nsource: jira\nid: PROJ-1\n---\n${'x'.repeat(400)}\n`
+    )
+
+    const result = await runWith([
+      { type: 'inbox', dir: '.codereviewer/context', maxFileBytes: 40 }
+    ])
+
+    expect(result.warnings).toEqual([
+      'External change-intent provider "inbox:.codereviewer/context" cut 1 of 1 files at its maxFileBytes cap; the review sees the beginning of each, not the whole. Raise maxFileBytes if the intent is stated further down.'
+    ])
+  })
+
+  test('stays quiet when nothing was withheld or cut', async () => {
+    // The counterweight: a bound that did not bind must not warn, or the warning
+    // stops meaning anything.
+    await writeFile(
+      path.join(root, '.codereviewer', 'context', 'ticket.md'),
+      '---\nsource: jira\nid: PROJ-1\n---\nRotate the session token on sign-in.\n'
+    )
+
+    const result = await runWith([
+      { type: 'inbox', dir: '.codereviewer/context' }
+    ])
 
     expect(result.warnings).toEqual([])
   })

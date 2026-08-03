@@ -63,6 +63,22 @@ in one of two wordings, because the two call for different actions:
   that was never configured, and the review ran with no change-intent context and
   said so nowhere.
 
+A provider that contributes only **part** of what it matched warns as well, once
+per bound that actually bound:
+
+- *"…matched N files but contributed M; K were dropped…"* — `maxFiles` cut the
+  file list. The kept files are the first ones in provider order (diff order for
+  `changed-files`, filename order for `inbox`), which is stable but is not a
+  relevance ranking: `PROJ-1010.md` sorts before `PROJ-99.md`.
+- *"…cut N of M files at its maxFileBytes cap…"* — the review sees the beginning
+  of each of those files, not the whole. Acceptance criteria stated at the end of
+  a long ticket are the usual casualty.
+
+Both bounds are applied by discarding content, so nothing measured afterwards can
+detect them: a truncated body is by construction small enough to fit every later
+budget. Without these warnings a run that read a tenth of the stated intent
+reported the same counts as one that read all of it.
+
 ## `evaluation`
 
 | Key | Type | Default | What it does |

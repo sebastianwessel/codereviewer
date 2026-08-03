@@ -80,6 +80,15 @@ const fragmentsToPrompt = (
 
     sections.push(fitted)
     origins.push(fragment.origin)
+
+    if (fragment.truncated === true) {
+      // The section fits this budget, but only because the provider already cut
+      // the body at its per-file cap. Measuring the text we were handed can only
+      // ever find the cuts made here, so a brief summarizing half a ticket would
+      // otherwise report itself complete.
+      truncated = true
+    }
+
     usedBytes +=
       (sections.length === 1 ? 0 : separatorBytes) +
       Buffer.byteLength(fitted, 'utf8')

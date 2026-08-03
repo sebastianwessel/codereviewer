@@ -6,6 +6,7 @@ export type {
   ContextFragment,
   ContextFragmentKind,
   ContextGatherInput,
+  ContextGatherOutput,
   ContextProvider,
   ContextSummarizer,
   SummarizeInput

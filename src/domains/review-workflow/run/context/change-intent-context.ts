@@ -61,6 +61,37 @@ const warningsForUnusedProviders = (
         : `External change-intent provider "${metric.id}" produced nothing and was skipped. Check that it points at content this change has.`
     )
 
+// The other half of the same principle, for a provider that produced SOMETHING.
+//
+// Both bounds a provider applies are invisible in what it hands back: `maxFiles`
+// drops whole files before anyone counts them, and `maxFileBytes` cuts a body so
+// that every later measurement finds a body that fits. A run that read twenty of
+// two hundred tickets, each cut at 64 000 bytes, reported exactly the same
+// numbers as one that read the change intent whole. That is a plausible,
+// incomplete answer with nothing marking it as incomplete.
+//
+// Reported as two warnings rather than one because the remedies differ: too many
+// sources is `maxFiles`, sources too long is `maxFileBytes`.
+const warningsForBoundedProviders = (
+  providerMetrics: ContextIngestionResult['providerMetrics']
+): readonly string[] =>
+  providerMetrics.flatMap((metric) => {
+    const withheld = metric.matchedCount - metric.fragmentCount
+
+    return [
+      ...(withheld > 0
+        ? [
+            `External change-intent provider "${metric.id}" matched ${metric.matchedCount} files but contributed ${metric.fragmentCount}; ${withheld} were dropped and their content is not in the review. Raise its maxFiles cap or point the provider at fewer files.`
+          ]
+        : []),
+      ...(metric.truncatedFragmentCount > 0
+        ? [
+            `External change-intent provider "${metric.id}" cut ${metric.truncatedFragmentCount} of ${metric.fragmentCount} files at its maxFileBytes cap; the review sees the beginning of each, not the whole. Raise maxFileBytes if the intent is stated further down.`
+          ]
+        : [])
+    ]
+  })
+
 // Why the run fell back to the deterministic digest instead of the requested
 // model summarizer. Absent (not just "false") whenever the digest was the
 // deliberate choice -- `summary.mode: 'digest'`, no provider configured, or AI
@@ -320,7 +351,9 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     input.logger.debug('Context ingestion provider completed.', {
       provider_id: metric.id,
       provider_type: metric.type,
+      matched_count: metric.matchedCount,
       fragment_count: metric.fragmentCount,
+      truncated_fragment_count: metric.truncatedFragmentCount,
       bytes: metric.bytes,
       failed: metric.failed
     })
@@ -330,7 +363,10 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
       summarizerSelection.modelSummarizerUnavailableReason
     ),
     ...warningForSummarizerFallback(result.summarizerFallbackReason),
-    ...providerWarnings
+    ...providerWarnings,
+    // Deliberately not folded into `providerWarnings`: `failedProviders` counts
+    // providers that gave nothing, and a bounded provider gave something.
+    ...warningsForBoundedProviders(result.providerMetrics)
   ]
 
   if (result.brief === undefined) {
