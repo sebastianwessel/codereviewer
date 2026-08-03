@@ -41,6 +41,12 @@ export const VerificationBoundReasonSchema = z.enum([
   'tool-call-budget-exceeded',
   'aborted',
   'invalid-verdict',
+  // The provider refused the investigation as too large, and narrowing what a
+  // read returns did not make it fit. Distinct from `agent-error` on purpose: a
+  // reader seeing "the agent could not complete" looks for a broken agent, and
+  // this is a context that will not fit however many times it is retried. Naming
+  // it is what makes the limit actionable instead of merely inconclusive.
+  'context-length-exceeded',
   'agent-error'
 ])
 

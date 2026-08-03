@@ -40,12 +40,21 @@ const failingProvider = (id = 'failing'): ClaimProvider => ({
   }
 })
 
+// `maxBytesPerRead` is deliberately absent: production leaves it unset, so the
+// default path under test is the one without a proactive per-read cut. Cases
+// that need an explicit cap pass one.
 const baseFlowInput = (repositoryRoot: string) => ({
   repositoryRoot,
   maxToolCallsPerClaim: 5,
-  maxBytesPerRead: 20_000,
   maxMatches: 20
 })
+
+// A provider refusing the request as too large, in the shape the harness raises
+// and `isContextLengthExceeded` reads.
+const contextOverflowError = (): Error =>
+  Object.assign(new Error('provider refused the request'), {
+    reason: 'context_length_exceeded'
+  })
 
 describe('runVerificationFlow', () => {
   let repositoryRoot: string
@@ -271,6 +280,54 @@ describe('runVerificationFlow', () => {
 
     expect(observedContentBytes).toBeLessThanOrEqual(100)
     expect(report.observations[0]?.bytesRead).toBeLessThanOrEqual(100)
+  })
+
+  // The limit is not pre-empted by a byte cap chosen in advance; it is recovered
+  // from when the provider actually says so.
+  test('a provider that refuses the context is retried against narrowed reads', async () => {
+    let attempts = 0
+    const verify: ClaimAgentRunner = async ({ tools }) => {
+      attempts += 1
+      await tools.read({ path: 'app.ts' })
+
+      if (attempts === 1) {
+        throw contextOverflowError()
+      }
+
+      return {
+        verdict: { status: 'confirmed', rationale: 'fits now', citedEvidenceIds: [] }
+      }
+    }
+
+    const { report } = await runVerificationFlow({
+      ...baseFlowInput(repositoryRoot),
+      providers: [staticProvider([makeClaim()])],
+      investigateClaim: verify
+    })
+
+    expect(attempts).toBe(2)
+    expect(report.verdicts[0]?.status).toBe('confirmed')
+    // A recovered claim is not a bounded one.
+    expect(report.observations[0]?.boundReason).toBeUndefined()
+  })
+
+  test('a context refusal that narrowing cannot fix is named, not called an agent error', async () => {
+    const verify: ClaimAgentRunner = async () => {
+      throw contextOverflowError()
+    }
+
+    const { report } = await runVerificationFlow({
+      ...baseFlowInput(repositoryRoot),
+      providers: [staticProvider([makeClaim()])],
+      investigateClaim: verify
+    })
+
+    // `agent-error` would send a reader looking for a broken agent. This is a
+    // context that will not fit, and the rationale says what to do about it.
+    expect(report.observations[0]?.boundReason).toBe('context-length-exceeded')
+    expect(report.verdicts[0]?.status).toBe('uncertain')
+    expect(report.verdicts[0]?.rationale).toContain('context length')
+    expect(report.verdicts[0]?.rationale).toContain('Nothing was truncated')
   })
 
   test('a claim provider failure is non-fatal and surfaces as a warning', async () => {

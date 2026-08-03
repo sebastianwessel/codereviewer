@@ -217,8 +217,28 @@ Keys are defined in `04-configuration-and-providers.md`:
 - `verification` — the claim-verification job, disabled by default: `enabled`,
   claim `providers` (a discriminated union on `type`; implemented types are
   `claims-file` and `prior-findings`), and the bounds `maxToolCallsPerClaim`
-  (1–50, default 12), `maxBytesPerRead` (default 20 000), and `maxMatches`
-  (default 20). Invalid configuration fails validation with exit code `2`.
+  (1–50, default 12), `maxBytesPerRead` (1 000–4 000 000, **unset by default**),
+  and `maxMatches` (default 20). Invalid configuration fails validation with exit
+  code `2`.
+
+  `maxBytesPerRead` is unset for the reason spec 28 gives for the general
+  review's equivalent: a per-read byte cap chosen in advance cuts a file
+  mid-read, and a claim resolved against the first N bytes of a file is not a
+  claim resolved against the file. It defaulted to 20 000 under a comment saying
+  it mirrored the context-retrieval defaults, which stopped being true when spec
+  28 removed those. Setting it remains a deliberate operator choice, still binds,
+  and the resulting cut is disclosed in the tool output the investigator reads.
+
+  What replaces it is a limit that ANNOUNCES itself. When the provider refuses
+  the investigation as exceeding its context length, the read budget is narrowed
+  and the claim is retried — reads first, because the overflow came from what a
+  tool returned. Each retry is logged and continues to spend the same per-claim
+  tool-call budget rather than being granted a fresh one, and the number of
+  narrowing attempts is bounded because every attempt is a paid model call. A
+  claim that still does not fit ends `uncertain` with bound reason
+  `context-length-exceeded` and a rationale naming the cause and the remedy —
+  never as a generic agent error, and never by truncating the context to force it
+  through.
 - `fix` — the finding investigation-and-fix job, disabled by default. `enabled`
   is the single switch for the whole single pass (judgment and fix together).
   `minSeverity` is optional and resolved at run time to

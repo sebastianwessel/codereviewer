@@ -113,7 +113,12 @@ export const runInvestigationFlow = async (
       repositoryRoot: input.repositoryRoot,
       investigateClaim: investigator.investigate,
       maxToolCallsPerClaim: input.config.verification.maxToolCallsPerClaim,
-      maxBytesPerRead: input.config.verification.maxBytesPerRead,
+      // Omitted when unset so the retriever's own default applies — a runaway
+      // guard, not a content policy. Passing `undefined` explicitly would be the
+      // same thing, but omitting it says which of the two this is.
+      ...(input.config.verification.maxBytesPerRead === undefined
+        ? {}
+        : { maxBytesPerRead: input.config.verification.maxBytesPerRead }),
       maxMatches: input.config.verification.maxMatches,
       paths,
       ...(input.logger === undefined ? {} : { logger: input.logger }),

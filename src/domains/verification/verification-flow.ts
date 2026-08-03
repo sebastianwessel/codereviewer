@@ -30,6 +30,7 @@ import {
   isToolCallBudgetExceededError,
   type RetrievalTools
 } from '../context-retrieval/index.js'
+import { isContextLengthExceeded } from '../../shared/errors/context-overflow.js'
 import type { ContextLedgerEntry } from '../review-planning/index.js'
 import type { ClaimProvider } from './contracts.js'
 import { fingerprintsForClaim } from './claim-fingerprints.js'
@@ -67,7 +68,10 @@ export type RunVerificationFlowInput = {
   readonly repositoryRoot: string
   readonly investigateClaim: ClaimAgentRunner
   readonly maxToolCallsPerClaim: number
-  readonly maxBytesPerRead: number
+  // Optional, and omitted rather than defaulted when the operator has not set
+  // one: the retriever's own runaway guard then applies. See the config schema
+  // for why a proactive per-read cap was removed here.
+  readonly maxBytesPerRead?: number | undefined
   readonly maxMatches: number
   readonly paths?: ContextRetrievalEligibilityConfig | undefined
   readonly logger?: Logger | undefined
@@ -91,8 +95,56 @@ const BOUND_RATIONALES: Record<VerificationBoundReason, string> = {
     'Verification ended without a conclusive verdict: the run was cancelled or timed out before the claim could be resolved.',
   'invalid-verdict':
     'Verification ended without a conclusive verdict: the agent returned a verdict that did not satisfy the verdict contract.',
+  'context-length-exceeded':
+    'Verification ended without a conclusive verdict: the provider refused the investigation as exceeding its context length, and narrowing what each read returns did not make it fit. Nothing was truncated to force it through. Configure a model with a larger context window, or narrow the claim.',
   'agent-error':
     'Verification ended without a conclusive verdict: the verification agent could not complete the investigation.'
+}
+
+// How many times one claim may be retried against a narrowed read budget.
+//
+// `reduceReadBudget` halves toward its own floor and would terminate on its own,
+// but every attempt is a paid agent run, so the bound is stated here rather than
+// left to emerge from the arithmetic. Halving converges on the provider's real
+// limit quickly — the first refusal already happens near it — so a small number
+// is enough, and a claim that still does not fit after this is reported as not
+// fitting rather than retried into a bill.
+const MAX_READ_NARROWING_ATTEMPTS = 3
+
+const investigateWithNarrowingReads = async (
+  input: {
+    readonly claim: Claim
+    readonly tools: RetrievalTools
+    readonly retriever: { readonly reduceReadBudget: () => boolean }
+    readonly investigateClaim: ClaimAgentRunner
+    readonly logger?: Logger | undefined
+    readonly signal?: AbortSignal | undefined
+  }
+): Promise<ClaimAgentResult> => {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await input.investigateClaim({
+        claim: input.claim,
+        tools: input.tools,
+        ...(input.signal === undefined ? {} : { signal: input.signal })
+      })
+    } catch (error) {
+      if (
+        !isContextLengthExceeded(error) ||
+        attempt >= MAX_READ_NARROWING_ATTEMPTS ||
+        !input.retriever.reduceReadBudget()
+      ) {
+        throw error
+      }
+
+      // Visible rather than silent: a claim answered against narrowed reads was
+      // investigated differently from one that was not.
+      input.logger?.warn?.(
+        'Provider refused the claim investigation as too large; narrowing reads and retrying.',
+        { claim_kind: input.claim.kind, attempt: attempt + 1 }
+      )
+    }
+  }
 }
 
 const isAbort = (error: unknown, signal: AbortSignal | undefined): boolean =>
@@ -192,7 +244,9 @@ export const runVerificationFlow = async (
       repositoryRoot: input.repositoryRoot,
       ledgerEntries: contextLedger,
       budget: {
-        maxBytesPerRead: input.maxBytesPerRead,
+        ...(input.maxBytesPerRead === undefined
+          ? {}
+          : { maxBytesPerRead: input.maxBytesPerRead }),
         maxMatches: input.maxMatches,
         // The unified per-claim tool-call counter governs the loop, so the
         // retriever's own per-kind read/search counters are set to the same cap
@@ -220,9 +274,23 @@ export const runVerificationFlow = async (
       })
     } else {
       try {
-        const result = await input.investigateClaim({
+        // A provider that refuses the investigation as too large is RECOVERED
+        // FROM, not pre-empted by a byte cap chosen in advance: the reads are
+        // narrowed and the claim is retried, which is the same order the
+        // discovery lane uses (reads first — the overflow came from what a tool
+        // returned, so shrinking that is what makes the next attempt smaller).
+        //
+        // The retry reuses `bounded`, so it continues spending the SAME per-claim
+        // tool-call budget rather than being handed a fresh one, and it reuses
+        // `retriever`, whose budget `reduceReadBudget` has just halved in place.
+        // When the budget cannot be narrowed further, or the attempts run out,
+        // the error propagates to the handler below and is named for what it is.
+        const result = await investigateWithNarrowingReads({
           claim,
           tools: bounded.tools,
+          retriever,
+          investigateClaim: input.investigateClaim,
+          ...(input.logger === undefined ? {} : { logger: input.logger }),
           ...(input.signal === undefined ? {} : { signal: input.signal })
         })
         const parsedVerdict = ModelVerdictSchema.safeParse(result.verdict)
@@ -266,7 +334,13 @@ export const runVerificationFlow = async (
           ? 'tool-call-budget-exceeded'
           : isAbort(error, input.signal)
             ? 'aborted'
-            : 'agent-error'
+            : // Named for what it is. Reaching here means the reads were already
+              // narrowed as far as they go and the context still did not fit, so
+              // reporting it as a generic agent error would send the reader
+              // looking for a broken agent.
+              isContextLengthExceeded(error)
+              ? 'context-length-exceeded'
+              : 'agent-error'
         input.logger?.warn?.('Claim verification did not complete.', {
           claim_kind: claim.kind,
           bound_reason: boundReason

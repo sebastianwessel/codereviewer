@@ -38,8 +38,22 @@ they cannot change admission, severity, gates, or the baseline.
 | `verification.enabled` | boolean | `false` | Master switch. With `false` no claim provider runs and no `verification-report.json` is written. |
 | `verification.providers` | array of claim-provider objects | `[]` | See the union below. |
 | `verification.maxToolCallsPerClaim` | integer 1–50 | `12` | Deterministic bound on the investigation loop. Exceeding it ends the claim with an `uncertain` verdict rather than looping. |
-| `verification.maxBytesPerRead` | integer ≥ 1 | `20000` | Per-read byte cap for the mediated read tool. |
+| `verification.maxBytesPerRead` | integer 1000–4000000 | *unset* | Per-read byte cap for the mediated read tool. Unset means a read is not cut in advance. Setting it is a deliberate operator choice and still binds, with the cut disclosed to the investigator rather than silent. |
 | `verification.maxMatches` | integer ≥ 1 | `20` | Cap on search matches returned to the agent. |
+
+`maxBytesPerRead` is unset for the same reason
+[`review.crossFileRetrieval.maxBytesPerRead`](review.md) is: a per-read cap
+chosen in advance cuts a file mid-read, and a claim resolved against the first N
+bytes of a file is not a claim resolved against the file. It used to default to
+`20000`.
+
+The limit that replaces it announces itself. If the provider refuses the
+investigation as exceeding its context length, the read budget is narrowed and
+the claim is retried — a bounded number of times, because each attempt is a paid
+model call, and each one is logged. A claim that still does not fit ends
+`uncertain` with bound reason `context-length-exceeded`, whose rationale names
+the cause and the remedy. Nothing is truncated to force it through, and it is
+never reported as a generic agent error.
 
 ### Claim-provider union
 

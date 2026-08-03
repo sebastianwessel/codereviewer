@@ -58,11 +58,13 @@ describe('CodeReviewerConfigSchema', () => {
       includeGenerated: true
     })
     expect(parsed.reporting.formats).toEqual(['json', 'markdown', 'sarif'])
+    // `maxBytesPerRead` ABSENT here for the same reason it is absent from
+    // cross-file retrieval below: a proactive per-read cut chosen in advance
+    // resolves a claim against a prefix of a file and calls it the file.
     expect(parsed.verification).toEqual({
       enabled: false,
       providers: [],
       maxToolCallsPerClaim: 12,
-      maxBytesPerRead: 20000,
       maxMatches: 20
     })
   })
@@ -212,7 +214,14 @@ describe('CodeReviewerConfigSchema', () => {
       { type: 'prior-findings', report: '.codereviewer/baseline.json' }
     ])
     expect(enabled.verification.maxToolCallsPerClaim).toBe(8)
-    expect(enabled.verification.maxBytesPerRead).toBe(20000)
+    // Unset unless an operator asks for it; an explicit cap still binds, and the
+    // cut it causes is disclosed to the investigator rather than silent.
+    expect(enabled.verification.maxBytesPerRead).toBeUndefined()
+    expect(
+      CodeReviewerConfigSchema.parse({
+        verification: { enabled: true, maxBytesPerRead: 8000 }
+      }).verification.maxBytesPerRead
+    ).toBe(8000)
     expect(enabled.verification.maxMatches).toBe(20)
   })
 

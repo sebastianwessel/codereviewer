@@ -382,10 +382,24 @@ export const VerificationConfigSchema = z.strictObject({
   // Deterministic bound on the investigate_claim agent loop: exceeding it ends the
   // claim with an `uncertain` verdict rather than looping unboundedly.
   maxToolCallsPerClaim: z.int().min(1).max(50).default(12),
-  // Mirrors the context-retrieval domain's read/search budget defaults so the
-  // verification tools behave consistently with the general review's mediated
-  // reads.
-  maxBytesPerRead: z.int().min(1).default(20000),
+  // Optional per-read byte cap. UNSET by default, for the same reason
+  // `review.crossFileRetrieval.maxBytesPerRead` is (spec 28): no proactive cut.
+  //
+  // It defaulted to 20,000 — roughly 500 lines — under a comment saying it
+  // "mirrors the context-retrieval domain's defaults". It stopped mirroring
+  // anything when spec 28 removed that domain's cap, and the reason spec 28
+  // removed it applies here unchanged: a byte cap chosen in advance cuts the
+  // file mid-read, and the files most worth consulting during an investigation
+  // are precisely the large ones it cuts. A claim resolved against the first
+  // 500 lines of a file is not a claim resolved against the file.
+  //
+  // What replaces it is not a bigger guess. The investigator narrows its own
+  // read by line range after locating what it needs with `repo_grep`; a cut that
+  // does happen is disclosed in the tool output the model reads; and a provider
+  // that genuinely refuses the context says so, which is handled where the claim
+  // runs rather than pre-empted here. Setting this is a deliberate operator
+  // choice and still binds, with the cut disclosed.
+  maxBytesPerRead: z.int().min(1000).max(4000000).optional(),
   maxMatches: z.int().min(1).default(20)
 })
 

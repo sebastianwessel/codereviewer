@@ -12,7 +12,7 @@ import {
 } from '../agent-contracts.js'
 import { createIndivisibleTaskError } from '../packet-budget.js'
 import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
-import { isContextLengthExceeded } from './context-overflow.js'
+import { isContextLengthExceeded } from '../../../../shared/errors/context-overflow.js'
 import { reduceActiveReadBudget } from './cross-file-tools.js'
 import { MAX_REACTIVE_SPLIT_DEPTH, splitTaskInputInHalf } from './reactive-split.js'
 
