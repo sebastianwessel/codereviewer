@@ -12,12 +12,24 @@ codereviewer config validate
 
 ```json
 {
-  "provider": { "id": "openai", "model": "<model-name>" }
+  "provider": { "id": "openai", "model": "gpt-5.3-codex" }
 }
 ```
 
 That is the whole recommended install. Add below only what the project actually
 needs.
+
+Every accuracy rate this project publishes was measured on
+`openai/gpt-5.3-codex`. A different model is allowed and supported, but the rates
+are not a measurement of it — the review report says so itself, naming both
+models, on its `- Model:` line and in its opening paragraph.
+
+The rest of the `provider` block is optional and already sensible:
+`temperature` (default `0`), `maxOutputTokens` (unset), `reasoningEffort`
+(`minimal`|`low`|`medium`|`high`, unset — raises token cost on reasoning
+models), `timeoutMs` (`120000`, the only time bound that exists), `maxRetries`
+(`2`), `retryBackoffMs` (`500`), `retryMaxDelayMs` (`30000`). `baseUrl` is
+required for, and only meaningful to, `openai-compatible`.
 
 ## Keys that are legitimately project-specific
 
@@ -89,18 +101,35 @@ one. Generate the file with `codereviewer baseline write`.
 
 ### `qualityGate` — loosening a gate that is too strict to adopt
 
+The block has exactly five keys, and this is all of them:
+
 ```json
 {
   "qualityGate": {
     "maxCritical": 0,
     "maxHigh": 0,
     "maxMedium": 5,
-    "failOnProviderError": true
+    "failOnProviderError": true,
+    "failOnNewOnly": true
   }
 }
 ```
 
-`maxMedium` is unset by default, meaning medium findings never fail the gate.
+| Key | Default | Note |
+| --- | --- | --- |
+| `maxCritical` | `0` | |
+| `maxHigh` | `0` | |
+| `maxMedium` | *unset* | Unset means medium findings never fail the gate. |
+| `failOnProviderError` | `true` | |
+| `failOnNewOnly` | *unset* | Falls back to `baseline.failOnNewOnly` at runtime. |
+
+Anything else under `qualityGate` exits `2`. In particular `minProductRecall`,
+`minRecall` and `maxFalsePositiveCount` are **`eval run` regression-gate** keys
+(`evaluation.regressionGate.overrides`) and have nothing to do with a review.
+
+An **absent** gate result on a completed run is not a pass: the CLI fails with
+`quality_gate_missing` (exit `5`). There is no configuration that turns the gate
+off.
 
 ### `reporting.reviewComments` — if the pipeline will post inline comments
 
@@ -154,9 +183,12 @@ Writing any of these exits `2`:
   always exit `0`.
 - `evaluation.enabled` — eval case selection is driven by `eval run` flags.
 - `review.contextScout` — the capability was removed.
-- `invariantConformance` — `conformance check` was removed on 2026-08-02 after
-  its own firing-rate measurement failed the kill criterion the spec fixed in
-  advance. The whole block exits `2`, including `{ "enabled": false }`.
+- `invariantConformance` — the capability was removed on 2026-08-02 after its own
+  firing-rate measurement failed the kill criterion its spec fixed in advance.
+  The whole block exits `2`, including `{ "enabled": false }`. There are three
+  stages, not four.
+- `qualityGate.minProductRecall` and every other eval threshold — see the
+  `qualityGate` recipe above.
 
 ## Keys that accept only one value
 
@@ -180,6 +212,28 @@ Nested objects deep-merge; arrays replace wholesale. Note that `.env` is read
 **after** the process environment and therefore wins — never ship one into a CI
 image. (`eval run` does not read `.env` at all.)
 
-`CODEREVIEWER_PROVIDER_ID` and `CODEREVIEWER_PROVIDER_MODEL` are the two
-environment variables worth knowing; the rest are in the project's
-`docs/06-reference/environment.md`.
+## Environment variables
+
+This is the complete set of variables mapped into configuration. Anything else
+named `CODEREVIEWER_*` is ignored.
+
+| Variable | Maps to |
+| --- | --- |
+| `CODEREVIEWER_CONFIG_PATH` | Config file location (same as `--config`) |
+| `CODEREVIEWER_PROVIDER_ID` | `provider.id` |
+| `CODEREVIEWER_PROVIDER_MODEL` | `provider.model` |
+| `CODEREVIEWER_PROVIDER_BASE_URL` | `provider.baseUrl` |
+| `CODEREVIEWER_PROVIDER_REASONING_EFFORT` | `provider.reasoningEffort` |
+| `CODEREVIEWER_REVIEW_MODE` | `review.mode` |
+| `CODEREVIEWER_REVIEW_DEPTH` | `review.depth` |
+| `CODEREVIEWER_BASE_REF` / `CODEREVIEWER_HEAD_REF` | `review.baseRef` / `review.headRef` |
+| `CODEREVIEWER_ARTIFACT_DIR` | `paths.artifactDir` |
+| `CODEREVIEWER_SKILLS_DIR` | `skills.directories` |
+| `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `aiReview.deterministicSignalMode` |
+| `CODEREVIEWER_LOG_LEVEL` | `observability.logging.level` |
+| `CODEREVIEWER_OPENTELEMETRY_ENABLED` / `_ENDPOINT` / `_HEADERS` | OpenTelemetry export |
+| `CODEREVIEWER_COST_INPUT_PER_MILLION` / `_CACHED_INPUT_PER_MILLION` / `_OUTPUT_PER_MILLION` | `costs.*` pricing overrides |
+
+Provider **credentials** are never config keys. The adapter reads them from the
+environment itself: `OPENAI_API_KEY`; `AWS_REGION` / `AWS_ACCESS_KEY_ID` /
+`AWS_SECRET_ACCESS_KEY`; `AZURE_AI_ENDPOINT` / `AZURE_AI_API_KEY`.

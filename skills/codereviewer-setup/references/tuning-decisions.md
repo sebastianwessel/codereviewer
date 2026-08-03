@@ -49,12 +49,22 @@ In this order:
 
 Be honest with the user about what is and is not fixable by configuration.
 
-**Measured, on the 37-case real-repository corpus: recall on defects outside the
-diff is 0 of 27 — and every one of those 27 sat in a file the reviewer had already
-been shown in full.** None of them needed extra context or retrieval. That is an
+**Measured, on the 37-case real-repository corpus with the engine pinned: in-diff
+recall is 61–68% across three runs, and recall on defects outside the diff is 0
+of 27 — and every one of those 27 sat in a file the reviewer had already been
+shown in full.** None of them needed extra context or retrieval. That is an
 attention problem, not an information problem, and no configuration key addresses
 it. A context scout that pre-selected the missing symbols was built and removed
 for exactly this reason.
+
+Two things to be clear about before tuning against these numbers:
+
+- They were measured on `openai/gpt-5.3-codex`. On another model they are not a
+  measurement of anything; the report itself prints that warning.
+- `impact check` is the stage aimed at the out-of-diff population — it localises
+  20 of 27 of them inside a symbol it flags as changed. That is coverage of a
+  risk surface, not defect detection, and it reports references rather than
+  findings.
 
 So:
 
@@ -107,9 +117,11 @@ In order of leverage:
    stale branch point.
 6. **Set `review.maxCostUsd`** so a runaway change fails loudly.
 
-The arithmetic: a default run is **2 provider calls per review task** — one
-discovery, one refutation. Refutation is batched, so one call adjudicates all of a
-task's candidates and cost scales with tasks, not findings.
+The arithmetic: a review task costs **one refutation call plus one discovery call
+per two changed files** (`aiReview.maxFilesPerDiscoveryCall`, default `2`;
+a task covering more is partitioned and the candidates unioned). Refutation is
+batched, so one call adjudicates all of a task's candidates and cost scales with
+tasks and file count, not with findings.
 
 `review.maxConcurrentTasks` (default 4) changes throughput and rate-limit
 pressure. It does **not** change the number of calls or the total cost.
@@ -140,5 +152,12 @@ per task.
 
 `aiReview.requireRefutation` accepts the literal `true` only. Every model-origin
 candidate is independently adjudicated before it can be admitted. That is the
-mechanism the 100% adjusted precision figure rests on; there is no fast path
+mechanism the measured 95–99% adjusted precision rests on; there is no fast path
 around it.
+
+`security.allowShell`, `security.allowNetwork`, `security.allowFilesystemWrite`
+and `security.captureContentTelemetry` accept the literal `false` only. The
+engine does not execute shell commands, does not reach the network outside the
+configured provider, does not write outside its artifact directory, and does not
+capture source content in telemetry — and none of that is negotiable through
+config.

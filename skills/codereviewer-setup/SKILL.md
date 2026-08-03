@@ -1,6 +1,6 @@
 ---
 name: codereviewer-setup
-description: Set up the CodeReviewer engine in a repository — pick a provider, write a minimal config, verify it without spending money, wire a CI job, and only then turn on gates. Use when asked to install, configure, adopt, or add CodeReviewer to a project, or to wire AI code review into a pipeline.
+description: Set up the CodeReviewer engine in a repository — pick a provider, write a minimal config, verify it without spending money, wire a CI job, and only then turn on gates. Also covers running and reading its three stages (review, intent check, impact check). Use when asked to install, configure, adopt, run, tune, or add CodeReviewer to a project, or to wire AI code review into a pipeline.
 ---
 
 # Setting up CodeReviewer in a repository
@@ -15,30 +15,95 @@ wrong thing, in someone else's pull request, on a Friday.
 
 ## What you are setting up
 
-Three commands, all real:
+Three independently runnable stages. They share no context and no output.
 
-| Command | Blocks a pipeline? | Costs money? |
-| --- | --- | --- |
-| `review` | Yes — exit `1` on gate failure | Yes |
-| `intent check` | No, never — always exits `0` | Yes, when enabled and a provider resolves |
-| `impact check` | No, never | No — deterministic |
+| Stage | Command | Blocks a pipeline? | Costs money? |
+| --- | --- | --- | --- |
+| Review | `review` | Yes — exit `1` on gate failure | Yes |
+| Intent | `intent check` | No, never — always exits `0` | Yes, when enabled and a provider resolves |
+| Impact | `impact check` | No, never | No — deterministic, makes no provider call |
+
+Advisory is a spec requirement for the two `check` stages, not a default: there
+is no `blocking` key to find, and writing one exits `2`.
 
 Set up `review` first and alone. The advisory two are additions for a team that
 already trusts the review output, not part of an initial install.
 
+The remaining commands:
+
+- `config validate` — free, step 4 below.
+- `baseline write` — step 6 below.
+- `drift check` — a maintenance gate for **this engine's own repository**
+  (it scans `README.md`, `docs/`, `specs/` and a generated schema path). Do not
+  wire it into a target project.
+- `eval run` / `eval compare` / `eval recall-report` / `eval slice-manifest` —
+  the measurement harness for engine development. Never part of a user setup;
+  `eval run`'s regression-gate keys (including `minProductRecall`) have nothing
+  to do with the review quality gate.
+
+## The flag surface, in full
+
+Only these flags are parsed. An unknown flag is **rejected before the command
+does any work** (exit `2`, `usage_error`, naming the flag) — a flag one command
+accepts is still unknown to another.
+
+| Command | Flags |
+| --- | --- |
+| `config validate` | `--config` |
+| `review` | `--config`, `--base-ref`, `--head-ref`, `--file` (repeatable), `--files a,b,c`, `--debug`, `--log-level`, `--log-file` |
+| `baseline write` | `--config`, `--report` |
+| `impact check` | `--config`, `--base-ref`, `--head-ref`, `--format json\|markdown` |
+| `intent check` | `--config`, `--base-ref`, `--head-ref`, `--format json\|markdown` |
+
+Always write a flag and its value as **two argv tokens** (`--base-ref main`). The
+`--flag=value` spelling is honoured by some parsers and not by others
+(`--config`, `--file`), so it is not a form to rely on.
+
+`--config`, `--debug`, `--log-level` and `--log-file` are global; the last three
+only take effect on `review` and `eval run`, which build a logger. `--file` /
+`--files` bypass git diffing entirely. There is no `--help`, no `--version`, no
+`--repo`, and no mode/depth/severity/threshold flag on `review` — those are
+config keys or environment variables.
+
+## It is language-neutral
+
+Deterministic support signals are extracted by **one AST engine, ast-grep**, for
+seven languages: TypeScript (`.ts .tsx .mts .cts`), JavaScript
+(`.js .jsx .mjs .cjs`), Python (`.py`), Go (`.go`), Rust (`.rs`), Java
+(`.java`), Ruby (`.rb`). A TypeScript-compiler-based extractor once existed and
+was deleted.
+
+Files in any other language still get a **full model review** — they simply
+arrive with fewer structural hints. Do not describe this as a
+TypeScript/JavaScript tool, and do not tell a Python or Go team it is not for
+them.
+
 ## What it measurably does
 
-Say this to the user before they invest in the setup; it is the difference between
-a tool they keep and one they rip out in a month.
+Say this before the user invests in the setup. The report says it too, in its
+own opening paragraph.
 
-On a 37-case corpus of real repositories, the review stage measures **46.0%
-recall at 100% adjusted precision, ~$2.24 per run**. Split by where the defect
-lives: **66.7% for defects inside the diff, 0 of 27 for defects elsewhere in a
-changed file**. What it reports is almost always real; it does not find
-everything, and it finds essentially nothing the change does not point at.
+On a 37-case real-repository corpus with the engine pinned:
 
-The two advisory stages have **no accuracy measurement at all**. Do not present
-them as validated.
+- **In-diff recall 61–68%** across three runs — about 3 in 5 defects sitting
+  inside the diff.
+- **0 of 27** for defects sitting elsewhere in a changed file. A measured zero
+  over a full denominator, and by design: this stage is diff-scoped.
+- **Adjusted precision 95–99%** — roughly 19 in 20 of what it reports stands up.
+- 94.2% of what it reports lands inside the diff.
+- Two runs over the same commit do not produce the same report.
+
+**Every one of those rates was measured on `openai/gpt-5.3-codex`.** A rate is a
+property of a model, not of the engine. If the user configures a different
+provider or model, the rates above do not describe their setup and must not be
+quoted at them — the report itself prints the warning, naming both the measured
+model and the one the run used, and every report carries a `- Model:` line.
+
+`intent check` has its own measured rates, printed in its own report: about 1 in
+29 obligations it calls *evidenced* is still outstanding at head, and about 1 in
+10 genuinely outstanding obligations never appear on the list. `impact check`
+has one measurement — it localises 20 of 27 out-of-diff expectations inside a
+symbol it flagged — which is coverage, not detection.
 
 Consequences for how you set it up:
 
@@ -51,10 +116,8 @@ Consequences for how you set it up:
 
 ## Step 1 — Check the ground
 
-Before writing anything:
-
 ```bash
-node --version          # must be >= 24.15.0
+node --version          # must be >= 24.15.0 (.nvmrc pins 24.15.0)
 git rev-parse --git-dir # must be a git repository
 ```
 
@@ -62,10 +125,13 @@ Confirm you are at the **repository root**. The CLI reviews `process.cwd()` and
 has no `--repo` flag; config, `.env`, the baseline, and all artifacts resolve
 under it.
 
-Then decide how the CLI will be invoked. The package is `"private": true` and
-unpublished, so there is no `npm install -g` and no `npx`. Two options:
+Then decide how the CLI will be invoked. The package declares a `codereviewer`
+bin (`dist/cli/main.js`) and is publishable, but **no version has been published
+to npm**, so there is no `npm install -g` and no `npx`. Run it from a source
+checkout:
 
-- **A** — the target repo *is* the engine checkout: `npm run cli -- <args>`.
+- **A** — the target repo *is* the engine checkout: `npm run cli -- <args>`
+  (runs TypeScript through `tsx` and loads `.env`).
 - **B** — separate repos: build the engine once (`npm run build`) and invoke
   `node <engine>/dist/cli/main.js <args>` with the target repo as the working
   directory.
@@ -78,20 +144,27 @@ invocation line differs.
 Ask which one the organisation already has credentials and an approval path for.
 Do not pick on model quality — pick on what they can legally send code to.
 
-| `provider.id` | Install | Credentials read from |
+| `provider.id` | Adapter package | Credentials read from |
 | --- | --- | --- |
 | `openai` | `@purista/harness-openai` | `OPENAI_API_KEY` |
 | `openai-compatible` | `@purista/harness-openai` | `OPENAI_API_KEY` + a required `provider.baseUrl` |
-| `bedrock` | `@purista/harness-bedrock` | `AWS_REGION` + the AWS credential chain |
+| `bedrock` | `@purista/harness-bedrock` | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
 | `azure` | `@purista/harness-azure-foundry` | `AZURE_AI_ENDPOINT`, `AZURE_AI_API_KEY` |
 
-Only the adapter for the configured provider is imported, so install exactly one.
-`openai-compatible` must implement the OpenAI **Responses** API — a chat-completions
-gateway will fail on the first call.
+Adapters are optional peer packages imported dynamically; only the one for the
+configured provider is loaded, so install exactly one. Inside the checkout,
+`npm run provider:install:openai` / `:bedrock` / `:azure` are thin wrappers
+around `npm install`.
 
-`provider.model` is free text and is never validated against a catalogue. A wrong
-name surfaces as a provider error on the first call, which is one reason step 4
-exists.
+`openai-compatible` must implement the OpenAI **Responses** API — a
+chat-completions gateway fails on the first call. A missing adapter is a
+**config** error (`provider_adapter_missing`, exit `2`), and its message names
+the `npm install` command; a missing credential is `provider_credentials_missing`
+(exit `2`) and names the variable, never the value.
+
+`provider.model` is free text and is never validated against a catalogue. A
+wrong name surfaces as a provider error on the first call, which is one reason
+step 4 exists.
 
 ## Step 3 — Write the smallest config that works
 
@@ -101,25 +174,27 @@ Naming a provider and a model is enough. Everything else has a measured default.
 {
   "provider": {
     "id": "openai",
-    "model": "<model-name>"
+    "model": "gpt-5.3-codex"
   }
 }
 ```
 
-Write that to `.codereviewer/config.json` and stop. Resist adding keys.
+Write that to `.codereviewer/config.json` and stop. Resist adding keys. A
+missing config file is not an error — defaults validate on their own, and the
+run records a `config-file-missing` warning.
 
 Two things you must **not** do here:
 
 - **Do not put credentials in the config file.** They are read from the
   environment by the adapter. Add `.env` to `.gitignore` if you create one.
 - **Do not pre-tune.** Every default in this engine was set by measurement, and
-  several were measured *against* the intuitive value. A limit you set because it
-  felt safe is a limit that will degrade the answer silently.
+  several were measured *against* the intuitive value. A limit you set because
+  it felt safe is a limit that will degrade the answer silently.
 
 If you need to justify a key beyond those two, read
 [references/config-recipes.md](references/config-recipes.md) — it lists the small
-set of keys that are legitimately project-specific (mostly `paths.exclude`) and
-the ones people reach for wrongly.
+set of keys that are legitimately project-specific (mostly `paths.exclude`), the
+ones people reach for wrongly, and the ones that do not exist.
 
 ## Step 4 — Verify without spending anything
 
@@ -136,7 +211,6 @@ that is the fastest way to catch a hand-written config.
 Then prove the plumbing with a run that makes **no provider call at all**:
 
 ```bash
-git stash list >/dev/null            # ensure you are on a branch with a diff
 codereviewer review --base-ref <base> --head-ref HEAD
 ```
 
@@ -147,14 +221,14 @@ reporting and the gate — everything but model discovery. It costs nothing.
 Check three things in the output:
 
 1. Exit code `0` and a `runId` on stdout.
-2. `report.md` → **Coverage** shows the file count you expected.
+2. `report.md` → **Scope of this search** shows the file count you expected.
 3. `report.md` → **Skipped Files** contains nothing surprising.
 
-If the file count is wrong, fix `paths.include` / `paths.exclude` now. Discovering
-it after a paid run is the same information for money.
+If the file count is wrong, fix `paths.include` / `paths.exclude` now.
+Discovering it after a paid run is the same information for money.
 
-Common failure here: `merge_base_unavailable` (exit `3`) — a shallow clone.
-Full history is mandatory; there is no fallback, deliberately.
+Common failure here: `merge_base_unavailable` (exit `3`) — a shallow clone. Full
+history is mandatory; there is no fallback, deliberately.
 
 ## Step 5 — Run it for real, once, and read the report
 
@@ -162,35 +236,52 @@ Restore the provider block, set the credential in the environment, and run the
 same command. Then **actually read `report.md`** with the user. This is the step
 people skip and the reason gates get enabled badly.
 
-Point them at the sections in this order:
+`review` writes one run directory under `paths.artifactDir`
+(default `.codereviewer/runs/<runId>/`): `report.json`, `report.md`,
+`report.sarif`, `run-summary.json`, `context-ledger.json`, `shared-context.json`,
+`observability.json` — plus `error.json` on a failed run.
+
+Point them at these `report.md` sections, in this order:
 
 - **Actionable Findings** — what it wants them to act on.
-- **Unresolved – Needs Human Decision** — suspicions the engine could not settle.
-  Excluded from the gate on purpose. A team that never reads this section gets the
-  strict half of a precision-first design without the compensating half.
-- **Rejected Candidates** — where the volume went, if the report feels thin.
-- **Cost And Timing** — what the run actually cost.
+- **Unresolved - Needs Human Decision** — suspicions the engine could neither
+  prove nor disprove. Excluded from the gate on purpose. A team that never reads
+  this section gets the strict half of a precision-first design without the
+  compensating half.
+- **Rejected Candidates** and **Refutation Results** — where the volume went, if
+  the report feels thin.
+- **Scope of this search** — the run id, the `- Model:` line, the refs, and how
+  much source was actually read. Coverage means *the source reached a model*,
+  never *every defect was found*.
+- **Cost And Timing** — what the run actually cost. Cost is reported as
+  `unavailable` when token counts or model prices are missing, never as free.
 
 Ask them one question: *would you have wanted these comments on your PR?* If the
 answer is no, tune before you gate — see
-[references/tuning-decisions.md](references/tuning-decisions.md). If the answer is
-yes, continue.
+[references/tuning-decisions.md](references/tuning-decisions.md). If the answer
+is yes, continue.
 
 ## Step 6 — Take a baseline before the gate blocks anything
 
-The default gate is strict: `maxCritical: 0`, `maxHigh: 0`. On any repository with
-existing debt that fails immediately and for reasons nobody on the team caused.
+The default gate is strict: `maxCritical: 0`, `maxHigh: 0`. On any repository
+with existing debt that fails immediately, for reasons nobody on the team caused.
 
 Run a review on the default branch, then:
 
 ```bash
-codereviewer baseline write
+codereviewer baseline write            # newest completed run in the run index
+codereviewer baseline write --report .codereviewer/runs/<runId>/report.json
 ```
 
-It reads the newest completed report and writes the fingerprints of its admitted
-findings to `.codereviewer/baseline.json`. Commit that file. With
+It writes the fingerprints of the source report's admitted findings to
+`baseline.path` (default `.codereviewer/baseline.json`). Commit that file. With
 `baseline.failOnNewOnly` (default `true`), only findings that are `new` or
 `unknown` can fail the gate.
+
+The source report is validated against the report contract. A file that is not a
+review report fails with `baseline_source_invalid` (exit `3`) rather than
+producing an empty baseline and exit `0`; no report found or readable at all is
+`baseline_source_unavailable` (exit `3`).
 
 Fingerprints anchor on the **content** of the reported line, not its number, so
 edits elsewhere in the file do not resurrect a suppressed finding — but editing
@@ -222,10 +313,14 @@ Branch on the **exit code**, never on parsing stdout:
 | --- | --- |
 | `0` | Completed, gate passed |
 | `1` | Completed, a gate failed — a quality signal, not a crash |
-| `2` | Configuration or usage error |
+| `2` | Configuration, provider setup, credential, or usage error |
 | `3` | Repository / filesystem error (usually a shallow clone) |
-| `4` | Provider error |
-| `5` | Internal error |
+| `4` | Provider runtime error |
+| `5` | Internal invariant violation — file a bug with `error.json` |
+
+Exit `5` includes `quality_gate_missing`: a completed run whose report carries no
+gate result. **An absent gate is an error, never a silent pass.** If you ever see
+it, the run directory is the evidence; do not retry around it.
 
 Set a cost tripwire while it is advisory, so a pathological change fails loudly
 rather than quietly spending:
@@ -234,17 +329,40 @@ rather than quietly spending:
 { "review": { "maxCostUsd": 5 } }
 ```
 
-It is checked *after* the run completes — a tripwire, not a mid-run brake.
+It is checked *after* the run completes (`cost_budget_exceeded`, exit `1`) — a
+tripwire, not a mid-run brake, and it cannot be enforced at all when the provider
+reported no token counts.
 
 ## Step 8 — Promote to a required check
 
 Only after the team has seen a week of runs and agrees the findings are worth
-acting on:
+acting on.
 
-- Make the job a **required status check** so exit `1` blocks the merge instead of
-  posting an advisory comment somebody scrolls past.
-- Keep re-running on every push to the branch. Each round of fixes moves the diff,
-  which moves what the reviewer is pointed at.
+The review quality gate has exactly five keys, and these are all of them:
+
+```json
+{
+  "qualityGate": {
+    "maxCritical": 0,
+    "maxHigh": 0,
+    "maxMedium": 5,
+    "failOnProviderError": true,
+    "failOnNewOnly": true
+  }
+}
+```
+
+`maxCritical` and `maxHigh` default to `0`; `maxMedium` is unset by default,
+meaning medium findings never fail the gate; `failOnProviderError` defaults to
+`true`; `failOnNewOnly` is unset and falls back to `baseline.failOnNewOnly` at
+runtime. Anything else under `qualityGate` exits `2`.
+
+Then:
+
+- Make the job a **required status check** so exit `1` blocks the merge instead
+  of posting an advisory comment somebody scrolls past.
+- Keep re-running on every push to the branch. Each round of fixes moves the
+  diff, which moves what the reviewer is pointed at.
 - Keep the baseline current on the default branch.
 
 If the team is not ready to block, leave it advisory. An ignored red check is
@@ -252,39 +370,78 @@ worse than an honest advisory one.
 
 ## Step 9 — Advisory stages, later or never
 
-Add these only once `review` is trusted, one at a time, and tell the user plainly
-that **none of them has an accuracy measurement**:
+Add these only once `review` is trusted, one at a time.
 
 | Stage | Enable with | Cost |
 | --- | --- | --- |
 | `impact check` | `changeImpact.enabled` | Free — no provider call |
-| `intent check` | `intentFulfilment.enabled` **and** a `contextSources` provider | ~1 call per obligation |
+| `intent check` | `intentFulfilment.enabled` **and** a `contextSources` provider | 1 extraction call + 1 call per obligation + 1 explanation call |
 
-`intent check` reports nothing useful without a configured change-intent source —
-it will exit `0` with a `no-intent` status and a warning saying so. Wire the
-pipeline to write the ticket/PR body into `.codereviewer/context/` first.
+Both require the literal subcommand `check` and accept
+`--config`, `--base-ref`, `--head-ref`, `--format json|markdown`. Stdout is one
+JSON document by default; `--format markdown` puts the rendered report there
+instead. Either way a **completed** run also writes
+`impact-report.{md,json}` / `intent-report.{md,json}` into a run directory under
+`paths.artifactDir` (`impact-<uuid>` / `intent-<uuid>`), and prints that path to
+stderr. Those directories are **not** in the run index, so `baseline write`
+never sees them.
 
-Neither can fail a pipeline. That is a spec requirement, not a default, and there
-is no `blocking` key to find.
+Runs that mapped nothing write nothing: `impact check` when `disabled`;
+`intent check` when `disabled`, `no-intent`, `unusable-intent` or
+`provider-unavailable`. `no-intent` is the ordinary outcome for a change with a
+thin description — wire the pipeline to write the ticket/PR body into
+`.codereviewer/context/` first, or the stage has nothing to read.
+
+Neither can fail a pipeline. Do not build a CI step that reads their JSON and
+exits non-zero on it; that reintroduces a gate the measurement says is not
+accurate enough to gate on.
+
+## What this tool deliberately does not do
+
+Say these plainly rather than letting a user discover them.
+
+- **It does not publish anything.** No PR comments over the network, no check
+  annotations, no GitHub Action.
+  `reporting.reviewComments.enabled` writes *draft* comment artifacts to disk;
+  posting them is a separate pipeline step with its own token scope.
+- **It does not call a tracker or a forge API.** Change-intent context is
+  filesystem-only: the pipeline fetches it and writes it into
+  `.codereviewer/context/`, so the pipeline owns the credentials and the engine
+  holds none.
+- **It does not apply fixes.** The `fix` lane (off by default) only enriches
+  advisory `fixProposal` metadata; it never edits the repository, and never
+  changes category, severity, admission, or the gate.
+- **It does not replace human review, a linter, a type checker, or SAST.** It
+  assumes those already run.
+- **It does not find defects outside the diff.** 0 of 27, measured. `impact
+  check` is the stage aimed at that population, and it reports references, not
+  findings.
+- **It has no whole-run timeout, and is not resumable.** `provider.timeoutMs`
+  (default `120000`) bounds one call and is the only deadline. A failed run
+  writes partial artifacts and the next invocation re-plans from scratch.
+- **It never truncates source silently.** Budget pressure splits work into more
+  tasks; an oversized packet is a hard pre-call failure
+  (`task_packet_budget_exceeded`, exit `4`), not a trim.
 
 ## Things not to do
 
 - **Do not enable a gate you have not watched run.** The whole point of steps 4–8.
+- **Do not quote the accuracy rates at a user on a different model.** They were
+  measured on `openai/gpt-5.3-codex`; changing provider or model invalidates them.
 - **Do not turn on optional passes to "improve recall".** Several were built,
-  measured, and shipped off *because* they did not help. If you want to change one,
-  measure it — a single run that looks better is not a result.
-- **Do not set byte caps, obligation caps, or line caps to be safe.** Every one of
-  them degrades the answer silently when it binds. They are runaway guards, not
-  rations.
-- **Do not add a whole-run timeout.** There is deliberately none;
-  `provider.timeoutMs` bounds a single call and that is the only time bound.
-- **Do not commit `.env`.** The loader reads it *after* the process environment, so
-  a stray `.env` in a CI image silently overrides the real secrets.
-- **Do not claim this replaces human review, a linter, a type checker, or SAST.**
-  It assumes those already run.
+  measured, and shipped off *because* they did not help. If you want to change
+  one, measure it — a single run that looks better is not a result.
+- **Do not set byte caps, obligation caps, or line caps to be safe.** Every one
+  of them degrades the answer silently when it binds. They are runaway guards,
+  not rations.
+- **Do not commit `.env`.** The loader reads it *after* the process environment,
+  so a stray `.env` in a CI image silently overrides the real secrets.
 
 ## Finishing
 
-Report back to the user with: which provider was configured, the exact config file
-written, whether a baseline was taken, whether CI is advisory or blocking, what the
-first real run cost, and what it found. If any step was skipped, say which and why.
+Report back to the user with: which provider and model were configured, the exact
+config file written, whether a baseline was taken, whether CI is advisory or
+blocking, what the first real run cost, and what it found. If any step was
+skipped, say which and why. If the configured model is not
+`openai/gpt-5.3-codex`, say that the published accuracy rates were not measured
+on it.

@@ -6,8 +6,10 @@ pull requests. Each template marks the single line to change when you promote it
 
 Three facts shape all of them:
 
-1. **The package is unpublished** (`"private": true`). Every job checks out the
-   engine and runs it from source. There is no `npx` form.
+1. **The package is unpublished.** It is publishable — the metadata is complete
+   and it declares a `codereviewer` bin — but no version is on the registry, so
+   there is no `npm install -g` and no `npx` form. Every job checks out the
+   engine and runs it from source.
 2. **The engine reviews the current working directory.** Artifacts land under
    `<cwd>/.codereviewer/runs/<runId>/`.
 3. **Full history is mandatory.** The engine resolves
@@ -93,6 +95,8 @@ Everything collapses to one checkout and the repo's own script:
   runs the model.
 - Pin third-party actions and the engine checkout by commit SHA.
 - Prefer OIDC over long-lived cloud keys for the Bedrock provider.
+- Never bake a `.env` into a CI image. The loader reads it **after** the process
+  environment, so it silently overrides the secrets the job injected.
 
 ### Uploading SARIF to code scanning
 
@@ -184,6 +188,37 @@ and writes it to disk, so it owns the credentials and the engine holds none.
 Frontmatter is optional; `id`, `title` and `source` are read. Enable it with
 `contextSources` (see config-recipes.md).
 
+## Adding the two advisory stages (optional, and only after `review` is trusted)
+
+Run them as their own steps. Both always exit `0`, so no `continue-on-error` is
+needed and none should be added — a step that reads their JSON and exits non-zero
+would reintroduce a gate the measurement says is not accurate enough to gate on.
+
+```yaml
+      - name: Impact (deterministic, free)
+        working-directory: project
+        run: node "$GITHUB_WORKSPACE/engine/dist/cli/main.js" impact check --base-ref "origin/${{ github.base_ref }}" --head-ref HEAD --format markdown >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Intent (needs contextSources and a provider)
+        working-directory: project
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node "$GITHUB_WORKSPACE/engine/dist/cli/main.js" intent check --base-ref "origin/${{ github.base_ref }}" --head-ref HEAD --format markdown >> "$GITHUB_STEP_SUMMARY"
+```
+
+Both accept only `--config`, `--base-ref`, `--head-ref` and
+`--format json|markdown` beyond the global options, and both require the literal
+subcommand `check`. Default stdout is one JSON document, so an existing script
+that parses it keeps working; `--format markdown` puts the rendered report there
+instead. A **completed** run also writes `impact-report.{md,json}` /
+`intent-report.{md,json}` into an `impact-<uuid>` / `intent-<uuid>` directory
+under `paths.artifactDir`, and prints that path to **stderr**. Those directories
+are not in the run index, so `baseline write` never picks one up.
+
+A run that mapped nothing writes nothing at all — `disabled` for impact;
+`disabled`, `no-intent`, `unusable-intent` or `provider-unavailable` for intent.
+`no-intent` is the ordinary outcome when the pipeline supplied no change intent.
+
 ## What to keep from a run
 
 Upload the whole `.codereviewer/runs/` directory, always — it is the audit trail.
@@ -206,7 +241,7 @@ Branch on the exit code, never on parsing stdout.
 | `2` | Configuration or usage error — fail fast |
 | `3` | Repository error, usually a shallow checkout |
 | `4` | Provider error — fail or retry the job |
-| `5` | Internal error — file a bug with `error.json` |
+| `5` | Internal invariant violation — fail, and file a bug with `error.json`. Includes `quality_gate_missing`, a completed run whose report carried no gate result: an absent gate is an error, never a silent pass. |
 
 On success stdout is a single JSON object:
 
