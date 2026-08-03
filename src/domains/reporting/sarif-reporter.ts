@@ -19,6 +19,14 @@ export type SarifRenderOptions = {
   readonly target: SarifTarget
 }
 
+// The tool's own home page, used as `tool.driver.informationUri`. Kept as a
+// constant rather than read from `package.json` at runtime (the published
+// package ships `dist/` without a resolvable path back to the manifest); a unit
+// test asserts it still equals the manifest's `homepage` so the two cannot
+// drift.
+export const SARIF_INFORMATION_URI =
+  'https://github.com/sebastianwessel/codereviewer#readme'
+
 type SarifResult = {
   readonly ruleId: string
   readonly level: 'error' | 'warning' | 'note'
@@ -31,8 +39,12 @@ type SarifResult = {
         readonly artifactLocation: {
           readonly uri: string
         }
+        // `endLine` is present whenever the finding carries one, so a
+        // multi-line defect highlights its whole span instead of collapsing to
+        // its first line (SARIF defaults `endLine` to `startLine`).
         readonly region: {
           readonly startLine: number
+          readonly endLine?: number
         }
       }
     }
@@ -41,6 +53,11 @@ type SarifResult = {
   readonly properties: {
     readonly category: string
     readonly baselineStatus: string
+    // The finding's own security classification, exactly as the contract
+    // carries it. The rule-level projection below is lossy when several
+    // findings share a rule id; this is not.
+    readonly cwe?: readonly string[]
+    readonly securitySeverity?: number
     readonly fixProposal?: {
       readonly summary: string
       readonly evidenceIds: readonly string[]
@@ -146,7 +163,10 @@ const renderResult = (finding: AdmittedFinding): SarifResult => {
             uri: toArtifactUri(finding.location.path)
           },
           region: {
-            startLine: finding.location.startLine
+            startLine: finding.location.startLine,
+            ...(finding.location.endLine === undefined
+              ? {}
+              : { endLine: finding.location.endLine })
           }
         }
       }
@@ -155,6 +175,10 @@ const renderResult = (finding: AdmittedFinding): SarifResult => {
     properties: {
       category: finding.category,
       baselineStatus: finding.baselineStatus,
+      ...(finding.cwe === undefined ? {} : { cwe: [...finding.cwe] }),
+      ...(finding.securitySeverity === undefined
+        ? {}
+        : { securitySeverity: finding.securitySeverity }),
       ...fixProposal
     }
   }
@@ -165,6 +189,53 @@ type SarifRule = {
   readonly name: string
   readonly shortDescription: {
     readonly text: string
+  }
+  readonly helpUri?: string
+  readonly properties?: {
+    readonly tags: readonly string[]
+    readonly 'security-severity'?: string
+  }
+}
+
+// CWE ids travel in `tags` as `external/cwe/cwe-<id>`, the convention CodeQL and
+// GitHub's own SARIF annotators use. The id is lower-cased and otherwise passed
+// through: the contract already constrains it to `CWE-<digits>`, and zero-padding
+// it (a CodeQL habit, not a documented requirement) would invent a spelling the
+// finding never claimed.
+const cweTagFor = (cwe: string): string => `external/cwe/${cwe.toLowerCase()}`
+
+// Per-rule security metadata, accumulated across the findings that reference the
+// rule. `helpUri` is a property of the rule, so the first one wins; CWEs are
+// unioned; `security-severity` takes the maximum, because GitHub shows ONE
+// severity per rule and understating a security score is the direction that
+// costs. Exact per-finding values remain on each result's own properties.
+type SarifRuleAccumulator = {
+  readonly id: string
+  readonly shortDescriptionText: string
+  helpUri: string | undefined
+  readonly cweTags: Set<string>
+  securitySeverity: number | undefined
+}
+
+// GitHub code scanning reads `properties['security-severity']` as a STRING
+// holding a 0.0-10.0 score and bands it: above 9.0 is critical, 7.0 to 8.9 is
+// high, 4.0 to 6.9 is medium, and 0.1 to 3.9 is low. It is honoured only for
+// rules whose `tags` include `security`, so the tag is emitted alongside it. No
+// score is synthesised from `finding.severity`: a CVSS-like number nobody
+// measured would be a fabrication, and a rule with no score simply falls back to
+// the result `level` GitHub already receives.
+const rulePropertiesFor = (
+  accumulator: SarifRuleAccumulator
+): SarifRule['properties'] => {
+  if (accumulator.cweTags.size === 0 && accumulator.securitySeverity === undefined) {
+    return undefined
+  }
+
+  return {
+    tags: ['security', ...[...accumulator.cweTags].sort()],
+    ...(accumulator.securitySeverity === undefined
+      ? {}
+      : { 'security-severity': `${accumulator.securitySeverity}` })
   }
 }
 
@@ -187,25 +258,55 @@ const renderProviderIssue = (
 const buildRules = (
   findings: readonly AdmittedFinding[]
 ): readonly SarifRule[] => {
-  const rulesById = new Map<string, SarifRule>()
+  const rulesById = new Map<string, SarifRuleAccumulator>()
 
   for (const finding of findings) {
     const id = ruleIdFor(finding)
+    const existing = rulesById.get(id)
+    const accumulator = existing ?? {
+      id,
+      shortDescriptionText: safeRedactedText(`${finding.category} finding`),
+      helpUri: undefined,
+      cweTags: new Set<string>(),
+      securitySeverity: undefined
+    }
 
-    if (!rulesById.has(id)) {
-      rulesById.set(id, {
-        id,
-        name: id,
-        shortDescription: {
-          text: safeRedactedText(`${finding.category} finding`)
-        }
-      })
+    if (accumulator.helpUri === undefined && finding.helpUri !== undefined) {
+      accumulator.helpUri = safeRedactedText(finding.helpUri)
+    }
+
+    for (const cwe of finding.cwe ?? []) {
+      accumulator.cweTags.add(cweTagFor(cwe))
+    }
+
+    if (
+      finding.securitySeverity !== undefined &&
+      (accumulator.securitySeverity === undefined ||
+        finding.securitySeverity > accumulator.securitySeverity)
+    ) {
+      accumulator.securitySeverity = finding.securitySeverity
+    }
+
+    if (existing === undefined) {
+      rulesById.set(id, accumulator)
     }
   }
 
-  return [...rulesById.values()].sort((left, right) =>
-    left.id.localeCompare(right.id)
-  )
+  return [...rulesById.values()]
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map((accumulator) => {
+      const properties = rulePropertiesFor(accumulator)
+
+      return {
+        id: accumulator.id,
+        name: accumulator.id,
+        shortDescription: { text: accumulator.shortDescriptionText },
+        ...(accumulator.helpUri === undefined
+          ? {}
+          : { helpUri: accumulator.helpUri }),
+        ...(properties === undefined ? {} : { properties })
+      }
+    })
 }
 
 export const renderSarifReport = (
@@ -237,7 +338,7 @@ export const renderSarifReport = (
         tool: {
           driver: {
             name: 'codereviewer',
-            informationUri: 'https://example.invalid/codereviewer',
+            informationUri: SARIF_INFORMATION_URI,
             rules
           }
         },

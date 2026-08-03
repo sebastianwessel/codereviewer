@@ -1,7 +1,38 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 import { renderSarifReport } from './index.js'
+import { SARIF_INFORMATION_URI } from './sarif-reporter.js'
 import { validateSarifDocument } from './sarif-validation.js'
 import { createReportFixture } from './reporting-fixture.js'
+
+// A security finding carrying every field the SARIF reporter has to project:
+// a stable rule id, CWE classification, a CVSS-like score, a help URL and a
+// multi-line span.
+const securityFinding = (
+  overrides: Record<string, unknown> = {}
+): Record<string, unknown> => {
+  const { fixProposal: _dropped, ...base } = createReportFixture()
+    .admittedFindings[0]!
+
+  return {
+    ...base,
+    category: 'security',
+    severity: 'critical',
+    title: 'User input reaches a SQL query unparameterized',
+    description: 'The request query string is concatenated into the statement.',
+    ruleId: 'security/sql-injection',
+    cwe: ['CWE-89'],
+    securitySeverity: 9.1,
+    helpUri: 'https://cwe.mitre.org/data/definitions/89.html',
+    location: {
+      path: 'src/app.ts',
+      startLine: 12,
+      endLine: 20,
+      side: 'new'
+    },
+    ...overrides
+  }
+}
 
 describe('SARIF reporter', () => {
   test('renders SARIF 2.1.0 with repository-relative locations and fingerprints', () => {
@@ -302,6 +333,130 @@ describe('SARIF reporter', () => {
     expect(result.properties.fixProposal.edits[0].path).toBe(
       'src/my%20folder/a%20file.ts'
     )
+  })
+
+  test('projects CWE, security severity and help URI onto the rule GitHub reads', () => {
+    const report = createReportFixture()
+    const sarif = JSON.parse(
+      renderSarifReport(
+        { ...report, admittedFindings: [securityFinding()] },
+        { category: 'codereviewer', maxResults: 25, target: 'github' }
+      )
+    )
+
+    const rule = sarif.runs[0].tool.driver.rules[0]
+
+    expect(rule.helpUri).toBe('https://cwe.mitre.org/data/definitions/89.html')
+    // GitHub only honours `security-severity` on rules tagged `security`, and
+    // reads it as a STRING it bands (above 9.0 is critical).
+    expect(rule.properties.tags).toEqual([
+      'security',
+      'external/cwe/cwe-89'
+    ])
+    expect(rule.properties['security-severity']).toBe('9.1')
+    expect(typeof rule.properties['security-severity']).toBe('string')
+
+    // The finding's own values stay exact on the result.
+    const result = sarif.runs[0].results[0]
+
+    expect(result.properties.cwe).toEqual(['CWE-89'])
+    expect(result.properties.securitySeverity).toBe(9.1)
+  })
+
+  test('renders the whole line span a finding claims', () => {
+    const report = createReportFixture()
+    const sarif = JSON.parse(
+      renderSarifReport(
+        { ...report, admittedFindings: [securityFinding()] },
+        { category: 'codereviewer', maxResults: 25, target: 'generic' }
+      )
+    )
+
+    expect(
+      sarif.runs[0].results[0].locations[0].physicalLocation.region
+    ).toEqual({ startLine: 12, endLine: 20 })
+  })
+
+  test('omits security metadata and endLine when the finding carries none', () => {
+    // The fixture finding is a `bug` with no CWE, no score, no help URL and a
+    // single-line location, so every field above must be absent rather than
+    // defaulted or synthesised from `severity`.
+    const sarif = JSON.parse(
+      renderSarifReport(createReportFixture(), {
+        category: 'codereviewer',
+        maxResults: 25,
+        target: 'github'
+      })
+    )
+
+    const rule = sarif.runs[0].tool.driver.rules[0]
+    const result = sarif.runs[0].results[0]
+
+    expect(rule.helpUri).toBeUndefined()
+    expect(rule.properties).toBeUndefined()
+    expect(result.properties.cwe).toBeUndefined()
+    expect(result.properties.securitySeverity).toBeUndefined()
+    expect(
+      result.locations[0].physicalLocation.region.endLine
+    ).toBeUndefined()
+  })
+
+  test('unions CWEs and keeps the highest score when findings share a rule', () => {
+    const report = createReportFixture()
+    const sarif = JSON.parse(
+      renderSarifReport(
+        {
+          ...report,
+          admittedFindings: [
+            securityFinding(),
+            securityFinding({
+              id: 'find_second',
+              title: 'A second injection sink under the same rule',
+              cwe: ['CWE-564'],
+              securitySeverity: 4.2,
+              helpUri: undefined,
+              fingerprints: [{ algorithm: 'v1', value: 'second' }]
+            })
+          ]
+        },
+        { category: 'codereviewer', maxResults: 25, target: 'github' }
+      )
+    )
+
+    expect(sarif.runs[0].tool.driver.rules).toHaveLength(1)
+
+    const rule = sarif.runs[0].tool.driver.rules[0]
+
+    expect(rule.properties.tags).toEqual([
+      'security',
+      'external/cwe/cwe-564',
+      'external/cwe/cwe-89'
+    ])
+    // The maximum, never the last-seen: GitHub shows one severity per rule and
+    // understating a security score is the direction that costs.
+    expect(rule.properties['security-severity']).toBe('9.1')
+    expect(rule.helpUri).toBe('https://cwe.mitre.org/data/definitions/89.html')
+  })
+
+  test('advertises the published home page as informationUri', () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL('../../../package.json', import.meta.url), 'utf8')
+    )
+
+    // The constant is not read from the manifest at runtime (the published
+    // package ships `dist/` alone), so this is what stops the two drifting.
+    expect(SARIF_INFORMATION_URI).toBe(manifest.homepage)
+
+    const sarif = JSON.parse(
+      renderSarifReport(createReportFixture(), {
+        category: 'codereviewer',
+        maxResults: 25,
+        target: 'generic'
+      })
+    )
+
+    expect(sarif.runs[0].tool.driver.informationUri).toBe(manifest.homepage)
+    expect(JSON.stringify(sarif)).not.toContain('example.invalid')
   })
 
   test('caps SARIF results deterministically', () => {

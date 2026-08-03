@@ -55,20 +55,51 @@ artifacts are already durable.
 Results carry `partialFingerprints` (from the finding fingerprints, disambiguated
 when two share an algorithm so GitHub's de-duplication keys are not collapsed),
 plus `category`, `baselineStatus`, and the fix proposal with apply-ready edits
-when one exists. `reporting.sarif.maxResults` truncates the result list and
+when one exists. The region carries `endLine` whenever the finding has one, so a
+multi-line defect highlights its whole span rather than its first line.
+`reporting.sarif.maxResults` truncates the result list and
 `reporting.sarif.target: 'github'` applies GitHub-specific rule handling. All
 emitted text is redacted.
+
+A finding that carries security classification — `cwe`, `securitySeverity`, or
+`helpUri` — has it emitted twice, for two different readers. The exact values stay
+on the result (`properties.cwe`, `properties.securitySeverity`), and a
+GitHub-shaped projection goes on the rule: `helpUri`, `properties.tags`
+(`security` plus one `external/cwe/cwe-<id>` entry per CWE) and
+`properties['security-severity']`, the string score GitHub bands into
+critical/high/medium/low and honours only for rules tagged `security`. Because a
+rule can gather several findings, the rule-level score is the highest any of them
+carries and the tags are the union of their CWEs; the per-result values are the
+lossless ones. No score is derived from `severity` — a CVSS-like number nobody
+measured would be invented, and a rule without one falls back to the result
+`level` in the table above. These fields are absent from today's reports:
+nothing in the engine populates them yet (see
+[spec 15](../../../specs/15-security-focused-review.md), *Mechanism 2*), so this
+is the reporter holding up its end of the contract, not a feature of the current
+review.
 
 ### Review comments
 
 Comment drafts are produced only for findings whose `reporterEligibility` is
-`inline` **and** whose location side is `new` — see the eligibility note in
-[stage 6](06-admission-and-severity-floor.md). A draft carries the path, a target
-line range, a redacted and Markdown-escaped body, and optionally a structured
-suggestion. A suggestion is emitted only when the finding has exactly one
-manual-review fix edit that maps exactly onto the comment range, the redacted
-replacement contains no code fence, and the rendered result still fits the body
-cap; otherwise the draft degrades to prose.
+`inline` — the decision is admission's, because that is the stage holding the
+reviewed diff ranges; see the eligibility note in
+[stage 6](06-admission-and-severity-floor.md). The comment layer only drops
+old-side locations, which name a line that no longer exists on the new side. A
+draft carries the path, a target line range, a redacted and Markdown-escaped
+body, and optionally a structured suggestion. A suggestion is emitted only when
+the finding has exactly one manual-review fix edit that maps exactly onto the
+comment range, the redacted replacement contains no code fence, and the rendered
+result still fits the body cap; otherwise the draft degrades to prose.
+
+The body is arranged so the comment can be checked rather than believed: the
+severity, category and title, then the description, then the **proof** — what
+refutation returned against this finding, in the refuter's own words, and the
+evidence addresses it rests on (at most three; the rest are in the report) —
+then the fix summary and the finding id. A finding with no recorded refutation
+verdict says so out loud instead of dropping the line, so a comment that survived
+adjudication and one that was never adjudicated cannot read the same. The
+measured reliability rates are deliberately not repeated on each comment; they
+are stated once, in the pull-request summary comment.
 
 Platform resolution for `reporting.reviewComments.platform: 'auto'`:
 
