@@ -106,7 +106,7 @@ set a non-zero exit code**:
 | Command | What it produces |
 | --- | --- |
 | `intent check` | A mapping between a stated intent and the change: the obligations the intent states, each citing the line it was read from, and for each one either the changed lines that evidence it or nothing. Not a verdict. |
-| `impact check` | A deterministic reference report — which symbols the change touched and where they are used. No provider call, so it costs nothing and its output is reproducible. |
+| `impact check` | A reference report — which symbols the change touched and where they are used — plus, behind a second switch, which of those dependents rely on the part that changed. With that switch off (the default) it makes no provider call, so it costs nothing and its output is reproducible. |
 
 **Neither has an accuracy measurement.** They are implemented and runnable; they
 are not validated. Advisory-only is a spec requirement for `intent check` rather

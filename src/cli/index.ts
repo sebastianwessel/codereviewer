@@ -30,6 +30,7 @@ import {
   type EvalReport,
 } from '../domains/evaluation/index.js'
 import {
+  createChangeImpactLane,
   renderChangeImpactMarkdown,
   runChangeImpact
 } from '../domains/change-impact/index.js'
@@ -1329,17 +1330,26 @@ const checkOutputFormats = ['json', 'markdown'] as const
 
 type CheckOutputFormat = (typeof checkOutputFormats)[number]
 
-// `impact check` (spec 22). It makes NO provider call: the whole command is
-// deterministic, so it costs nothing to run and its output is reproducible.
+// `impact check` (spec 22).
 //
-// What it produces is a REFERENCE report, not findings. Spec 22 requires a
-// change-impact finding to name the contract element a dependent relies upon and
-// the consequence of the change; a deterministic reference list has neither, so
-// nothing here is admitted, given a severity, or allowed to block. The exit code
-// is therefore 0 whatever the report says, and only a configuration (2) or
-// repository (3) failure changes that. This command is also spec 22's own
-// falsifier: its removal criterion is that the capability must beat naming the
-// changed symbols and letting a human grep, and this IS that baseline.
+// It produces a REFERENCE report plus the adjudicated subset of it: the dependents
+// shown to rely on the part of the contract that changed, each with its path, its
+// line, the contract element and the consequence. Nothing here carries a severity —
+// spec 22's findings carry a COMPATIBILITY CLASS instead — and nothing can block.
+// The exit code is 0 whatever the report says, and only a configuration (2) or
+// repository (3) failure changes that. A breaking change is frequently
+// intentional; the command's job is to surface the dependents, not to decide
+// whether breaking them is acceptable.
+//
+// It makes a provider call ONLY for the residue, and only when
+// `changeImpact.adjudication.enabled` is set: everything structural — a removed,
+// relocated or newly added declaration — is settled in code, and a run without a
+// provider still emits those findings and counts the rest as unadjudicated. With
+// adjudication off the command remains fully deterministic and free.
+//
+// The reference list is also spec 22's own falsifier: its removal criterion is
+// that the capability must beat naming the changed symbols and letting a human
+// grep, and that list IS that baseline.
 //
 // Its output goes three places, for one reason each. The JSON stays on stdout so
 // scripted use keeps working. The rendered Markdown lands in the run directory
@@ -1380,14 +1390,41 @@ const runImpact = async (
         }
       })
 
-      return runChangeImpact({
-        repositoryRoot: options.cwd,
+      const logger = createCliLogger({
         config: loadedConfig.config,
-        ...(baseRef === undefined ? {} : { baseRef }),
-        ...(headRef === undefined ? {} : { headRef }),
-        ...(options.now === undefined ? {} : { generatedAt: options.now() }),
-        readChangedFile: mediatedFileReader(retriever)
+        command: 'impact',
+        sink: options.logSink
       })
+      // Absent unless adjudication is enabled AND a provider resolves. Every other
+      // outcome reports `adjudicationStatus: "no-model"`, still emits the findings
+      // that need no model, and still exits 0.
+      const lane = await createChangeImpactLane({
+        config: loadedConfig.config,
+        environment: options.environment ?? {},
+        ...(options.providerImport === undefined
+          ? {}
+          : { providerImport: options.providerImport }),
+        logger
+      })
+
+      try {
+        return await runChangeImpact({
+          repositoryRoot: options.cwd,
+          config: loadedConfig.config,
+          ...(baseRef === undefined ? {} : { baseRef }),
+          ...(headRef === undefined ? {} : { headRef }),
+          ...(options.now === undefined ? {} : { generatedAt: options.now() }),
+          ...(lane === undefined
+            ? {}
+            : {
+                agents: { judgeReliance: lane.judgeReliance },
+                usage: lane.usage
+              }),
+          readChangedFile: mediatedFileReader(retriever)
+        })
+      } finally {
+        await lane?.shutdown()
+      }
     },
     present: async (report, { loadedConfig }) => {
       const markdown = renderChangeImpactMarkdown(report)

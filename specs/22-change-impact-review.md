@@ -76,9 +76,10 @@ stage still reports risk and never claims a defect.
 ### The gap between coverage and value
 
 Every other stage here runs evidence → judgement → an artifact a human reads where
-they already look. `impact check` stops at evidence: JSON on stdout, no rendered
-report, no artifact, no ranking beyond "references in files the change also touched
-come first", and no statement of WHAT changed about a symbol.
+they already look. As recorded 2026-08-01, `impact check` stopped at evidence: JSON
+on stdout, no rendered report, no artifact, no ranking beyond "references in files
+the change also touched come first", and no statement of WHAT changed about a
+symbol.
 
 So a reviewer receives "`scheme` was modified, here are 49 places that mention it".
 That is a bounded, deduplicated, comment-free `grep` — real work, and not yet a
@@ -98,8 +99,17 @@ feature. Two things close the gap, in this order:
    directory, not only on stdout, or it is not in the workflow a reviewer actually
    uses.
 
-Until (1) exists, the 74.1% should be quoted as a scope measurement in this spec
-and NOT as a capability claim in user-facing documentation.
+**Both are now built.** (1) shipped as the deterministic contract delta recorded in
+the audit table below. (2) shipped as `impact-report.md` and `impact-report.json`,
+written into an `impact-<uuid>` run directory under `paths.artifactDir` — the same
+place `review` writes `report.md` — with the Markdown path printed to stderr so
+stdout stays exactly one JSON document. A disabled run writes nothing, because a
+capability that is off by default must not accumulate empty run directories in a
+repository whose owner never asked for it, and impact runs are deliberately absent
+from the run index, which feeds baseline resolution and expects a review report.
+
+The 74.1% remains a scope measurement quoted in this spec and NOT a capability
+claim in user-facing documentation.
 
 ## Requirements
 
@@ -340,7 +350,8 @@ DOI 10.1145/3744916.3773265) is this spec's task done academically. Scoring the
 **identical predictions** at file granularity rather than method granularity moves
 precision **28.2% → 60.9%** and F1 **25.0 → 54.6**. This is free and it is the
 highest evidence-to-cost item found. Findings MUST therefore be reported per
-destination **file**, with the individual sites nested beneath.
+destination **file**, with the individual sites nested beneath. Built 2026-08-05
+as report schema `2.0`.
 
 ### Calibrate expectations: ~28%, not ~87%
 
@@ -349,9 +360,10 @@ list — scores **7.6% precision / 64.7% recall**. Its full LLM layer reaches
 **28.2% precision at the cost of 44% of the recall**.
 
 **If our first measurement lands near 28% precision that is a normal result for
-this task, not a broken implementation.** The diff reviewer's ~87% adjusted
-precision is not the comparison; this is a harder problem with a far weaker
-published ceiling.
+this task, not a broken implementation.** The diff reviewer's adjusted precision
+is not the comparison; this is a harder problem with a far weaker published
+ceiling. (The heading's ~87% was the diff reviewer's figure when this was written;
+it is ~99% today, which only widens the gap and changes nothing about the point.)
 
 ### Adjudication is the entire precision lever
 
@@ -394,13 +406,15 @@ execution.
 A naive symbol diff reports a move, rename, extract, inline, push-down or pull-up
 as a **removal** — the most severe category — when the symbol is present under a
 new name. Refactoring-aware pairing of removals against additions is required
-before a removal may be reported.
+before a removal may be reported. Built 2026-08-05; see "Removal pairing" below
+for the predicate and for what it does and does not catch.
 
 ### Publish a known-not-reported list
 
 Go's `apidiff` documents the five breakages it deliberately does not detect. A
 documented list of what this capability knowingly misses is what stops a
-low-recall tool from reading as a broken one, and it is required.
+low-recall tool from reading as a broken one, and it is required. Published
+2026-08-05; see "What this capability knowingly does not report" below.
 
 ### There is no LLM prior art to beat
 
@@ -409,22 +423,179 @@ A 2026 systematic review covering 43 breaking-change detection techniques report
 beat naming the changed symbols and letting the human grep — is not a modest
 target chosen for humility. **It is the only available baseline.**
 
-## Open Decision: Compatibility Class Instead Of Severity
+## Resolved: Compatibility Class Instead Of Severity
+
+**Decided 2026-08-05. Change-impact findings carry a compatibility class, not spec
+05's severity.** This section previously proposed the change for human decision;
+it now records the resolution and the reasoning, because the reasoning is the part
+a future reader will need.
 
 The recorded tension — four of seven mined expectations are `low` while the
-actionable threshold is `medium` — may be a **category error rather than a
-severity error**. None of japicmp, Revapi or `cargo-semver-checks` rates breaking
-changes by severity at all. They rate them on a **compatibility axis** and leave
-the consequence to the consumer. Revapi's third value, `Potentially Breaking`,
-means precisely "a human must look" — which is this spec's stated output shape,
+actionable threshold is `medium` — was a **category error, not a severity error**.
+
+**None of the established tools rates breaking changes by severity at all.**
+japicmp, Revapi and `cargo-semver-checks` each rate on a **compatibility axis** and
+leave the consequence to the consumer. Revapi's third value, `Potentially
+Breaking`, means precisely "a human must look" — this spec's stated output shape,
 already validated in production tooling.
 
-Proposed resolution, for human decision: give change-impact findings a
-**compatibility class** — `breaks-on-build`, `breaks-at-runtime`, `may-break`,
-`no-impact` — rather than spec 05's severity, and gate on that. Spec 05's rubric
-stays intact and this capability stops passing through a gate calibrated for a
-different question. **This is not a licence to relabel fixtures to fit a gate**,
-which remains forbidden.
+**And spec 05's rubric answers a different question.** It rates "how bad is this
+defect", calibrated so a signalled failure rates below a silent one, correctly,
+because a loud failure is detectable. Change-impact damage is loud almost by
+definition — a crash, an exception, a broken build — so routing it through that
+rubric systematically produced `low`, against a `medium` gate. Spec 05's rubric is
+not wrong; it is the wrong instrument. Both stay intact by separating them.
+
+The class is **mechanism, not judgement**:
+
+| Class | What it states |
+| --- | --- |
+| `breaks-on-build` | The declaration the dependent names is gone. How the dependent uses it does not matter; the reference cannot resolve. |
+| `breaks-at-runtime` | The declaration survives under the same name, so a build sees nothing. What moved is behaviour, and this dependent was shown to rely on the part that moved. |
+| `may-break` | The mechanism is known and the outcome is not — a relocation, or a removal this run could not verify. Revapi's third value: a human must look. |
+| `no-impact` | This engine has no evidence that the dependent relies on a changed part of the contract. **Never "safe"**: a statement about what was shown. |
+
+`no-impact` is an adjudication outcome and is **never reported as a finding** —
+the admission gate refuses it. Reporting one would be manufacturing a finding to
+fill a page, which this spec forbids.
+
+There is **no gate on the class**. The lane is non-blocking and MUST NOT be
+configurable to block, so the class ranks findings for a reader and decides
+nothing. **This is not a licence to relabel fixtures to fit a gate**, which
+remains forbidden.
+
+## Impact Adjudication — Design Step 3
+
+Built 2026-08-05. **Unmeasured**; see the calibration and decision rule below
+before reading any result from it.
+
+### Deterministic first, model only for the residue
+
+The prior-art section above records that of roughly 40 contract categories about
+24 have a deterministic reliance predicate and "beat a grep with no model
+involved", and that the model's job "collapses to roughly ten named yes/no
+questions". The split implemented here follows exactly that line, and the line is
+**structural versus behavioural**, not a heuristic about cost:
+
+- A **structural** change — the declaration is gone, relocated, or newly added —
+  has a reliance predicate that is *already answered*. Discovery established that
+  this file names the symbol, and what changed is whether the name resolves at all.
+  There is no second question about how the dependent uses it. Sending one to a
+  model would pay for an answer already in hand and add a way to get it wrong.
+- A **behavioural** change — the declaration survives under the same name and what
+  moved is what it does — has the reliance predicate "does this use touch the part
+  that moved", which is a reading question about the call site. **That is the
+  residue, and it is the only thing that costs a call.**
+
+| Situation | Adjudicated by | Class |
+| --- | --- | --- |
+| Removed, pairing `none` | code | `breaks-on-build` |
+| Removed, pairing `inconclusive` | code | `may-break` |
+| Moved (paired `same-name`) | code | `may-break` |
+| New | code | `no-impact` |
+| Modified, no contract change detected | code | `no-impact` |
+| Modified with a contract change, model says it relies | model | `breaks-at-runtime` |
+| Modified with a contract change, model says it does not | model | `no-impact` |
+| Anything the model could not settle, or that no model saw | — | **unadjudicated: counted, never reported** |
+
+The last row is load-bearing. An unadjudicated dependent — no provider, a failed
+call, an answer that could not decide, or one past the call cap — is **counted in
+the summary and reported nowhere as a finding**. Reporting the residue as a maybe
+would restate exactly the ~90% noise adjudication exists to remove while looking
+like triage.
+
+### The model call writes no prose
+
+The one model call answers `relies` / `does-not-rely` / `undetermined` and gives a
+line. Its output schema has **no free-text field**, and the consequence sentence
+every finding carries is composed **in code** from the contract dimension. This is
+spec 23's measured constraint applied here: spurious rejection of model
+requirement-conformance judgement runs at 26–36% and rises to **73–88% when the
+same call is also asked to explain its verdict**. A cited line that is not one the
+search located is discarded, which turns the answer into `undetermined`.
+
+### Granularity
+
+Adjudication runs per **(destination file, changed symbol) pair** and findings are
+grouped per **destination file** — one finding per dependent, several reliances
+under it. Per-site adjudication is not reintroduced: the file-granularity result
+above (precision 28.2% → 60.9%) is why the report is file-granular, and a finding
+per site would rebuild the per-method scoring by another name.
+
+### Its own admission gate
+
+Impact findings pass a gate in `change-impact`, composed from shared primitives
+(the redactor, field-bound truncation, hashing) and importing nothing from the
+diff reviewer's `admission` domain. The two policies are opposites: that gate
+admits a finding **inside** the reviewed paths, and an impact finding is outside
+them by construction. The gate rejects a candidate that names no dependent, names
+a dependent this run never located, points at a line the search never found, names
+a symbol that does not reach that dependent, omits the contract element or the
+consequence, carries `no-impact`, or duplicates an already-admitted dependent.
+
+### Separately disabled
+
+`changeImpact.adjudication.enabled` defaults to `false`, **independently of
+`changeImpact.enabled`**. Everything else the command does is deterministic and
+free; adjudication is the only part that can reach a provider, and turning the
+command on must not silently start billing an operator who asked for the reference
+list. `changeImpact.adjudication.maxCalls` bounds model calls only.
+
+## Calibration — What A First Measurement Should Look Like
+
+Recorded **before** any measurement exists, so nobody reads the first number as a
+failure.
+
+- The published deterministic baseline for this exact task scores **7.6% precision
+  / 64.7% recall**. Adding an LLM layer reaches **28.2% precision at the cost of
+  44% of the recall**.
+- **If the first measurement lands near 28% precision that is a normal result for
+  this task, not a broken implementation.** The diff reviewer's ~99% adjusted
+  precision is *not* the comparison; that is a different question with a far
+  stronger instrument behind it.
+- **Adjudication is expected to REDUCE recall relative to the raw reference list,
+  and that is the intended trade.** The reference list is roughly 90% noise by
+  construction; a layer that removes noise removes some signal with it. A run that
+  loses no recall has almost certainly adjudicated nothing.
+- Language-neutral text reading will sit **below** japicmp's F1 0.86 and Revapi's
+  F1 0.91, which are bytecode-complete, single-language and decade-old.
+
+**No performance number for adjudication exists.** None may be invented,
+estimated or extrapolated in this spec, in `docs/`, or in the report. Every
+user-facing statement about it says it is unmeasured.
+
+## Pre-Registered Decision Rule For Adjudication
+
+Fixed **before** the first measurement, per this spec's Evaluation section, and
+scored on the corpus that section specifies (`Q ⊄ P`, breakage proven by upstream
+history, recall reported per reachability class).
+
+The unit is a **destination file**. A predicted file counts as correct when the
+corpus's proven-broken dependent is that file.
+
+- **Promote to enabled by default** only if all four hold on the
+  directly-reachable class: precision **≥ 50%**; recall **≥ 40%** of the
+  dependents the reference list itself contains; the deterministic tier alone does
+  not already match it (adjudication must earn its call cost); and no admitted
+  finding in the corpus names a dependent that is provably unaffected. Adjudication
+  enabled by default still leaves the lane non-blocking.
+- **Keep disabled, and keep shipping it** if it finds real dependents but misses
+  the bar above — precision ≥ 25% with recall ≥ 25% is the "real but noisy" band,
+  and it is the band the published prior art sits in. This is the expected first
+  outcome.
+- **Remove** if either: precision falls below 25%, so a reader is being trained to
+  ignore it; or the model tier does not beat the deterministic tier on the same
+  corpus, in which case the calls buy nothing and the deterministic tier stays on
+  its own.
+
+Two rules that bind regardless of the numbers:
+
+- A single run does not decide anything. This engine's measured run-to-run band is
+  several points wide on much larger denominators, and this corpus will be small.
+- **Fixture-fitted prompt or predicate changes are forbidden**, as everywhere else
+  in this project. A change to the adjudication prompt or to the deterministic
+  predicate must be justified from public knowledge about breaking changes, never
+  from a case it failed.
 
 ## What Is Built, And What This Spec Still Asks For
 
@@ -434,19 +605,141 @@ visible rather than silent, and so the verification matrix below is not read as 
 description of what exists.
 
 Built: design step 2 (bounded, diff-seeded dependent discovery through
-`context-retrieval`), and step 4 as a **reference report** — changed symbol,
-definition site, and its production / test / withheld-non-source reference sites,
-with truncation flags. No provider call, deterministic, `impact check` exits 0
-whatever it reports, and `status: "disabled"` is emitted when the capability is off.
+`context-retrieval`), and step 4 as a **reference report** — production and test
+destination files with the changed symbols reaching them and their sites nested
+beneath, plus a symbol-side table carrying the contract delta, the removal pairing
+and the withheld / truncated counts. `impact check` exits 0 whatever it reports,
+and `status: "disabled"` is emitted when the capability is off.
+
+**Amended 2026-08-05:** step 3 is now built too, and with it the command is no
+longer provider-free — but only when `changeImpact.adjudication.enabled` is set,
+which it is not by default. With adjudication off the command is exactly what this
+section described: deterministic, free and reproducible.
 
 | Requirement | State of the implementation |
 | --- | --- |
 | *Design* step 1 — contract delta | **Partly implemented, 2026-08-01.** Deterministic and text-derived, over six language-neutral dimensions: absence, failure, return shape, guard, mutation, concurrency. Derived from the diff lines inside a symbol's span rather than from a second parse of the base revision — intake already carries the unified diff, so re-parsing every changed file would buy nothing the diff does not already hold. A dimension is reported only when ASYMMETRIC between the added and removed sides, so a body that already threw and still throws says nothing. It reads TEXT: a signal-strength claim ("a caller can observe this"), never a proof, and never a type-system conclusion. Empty means "changed, but not in a way this engine can show reaches a caller" — never "safe". |
-| *Design* step 3 — impact adjudication | Not implemented. |
-| *Requirements*: findings carry the dependent's path and line, the contract element relied upon, and the consequence; a finding without a named dependent is rejected | No finding exists to carry them. Nothing is admitted, nothing carries a severity, and the two matrix rows below that name an admission test have no counterpart. |
-| *Report at file granularity, not per site* | The report groups sites under the **changed symbol**, not the destination file. This is the opposite of the grouping the RIPPLE result mandates, and it is free precision left on the table. |
-| *Removals must be paired with additions before reporting* | Not implemented. `changeKind` is taken straight from intake, so a pure rename is reported today as a deletion — the most severe category — exactly as the section warns. |
-| *Publish a known-not-reported list* | The list does not exist, in this spec or in the user documentation. At least one entry is already known and measured: seeding depends on the deterministic language-support registry, and the JavaScript extractor produced **6 declarations across 1 046 `.js` files** (results ledger, 2026-07-30), so `impact check` is near-blind on a JavaScript repository. |
+| *Design* step 3 — impact adjudication | **Implemented, 2026-08-05, and UNMEASURED.** Deterministic wherever the category admits it; one model call for the residue only. See "Impact Adjudication" above for the split, the compatibility-class mapping and the pre-registered decision rule. Disabled by default, and separately from the command. |
+| *Requirements*: findings carry the dependent's path and line, the contract element relied upon, and the consequence; a finding without a named dependent is rejected | **Implemented, 2026-08-05.** `impactFindings` carries one entry per dependent FILE, each reliance naming the changed symbol, the line in the dependent, the contract element and the consequence. Findings carry a compatibility class and no severity. The gate lives in `change-impact` and imports nothing from the diff reviewer's `admission` domain. |
+| *Report at file granularity, not per site* | **Implemented, 2026-08-05.** `impactedFiles` and `impactedTestFiles` are the report's primary lists, one entry per destination file, with the changed symbols reaching it named on it and their sites nested beneath. `changedSymbols` remains as the symbol-side table — what changed, and how far the search could see — and carries no sites. Schema `2.0`; breaking, with no compatibility layer. |
+| *Removals must be paired with additions before reporting* | **Implemented, 2026-08-05.** See "Removal pairing" below. |
+| *Publish a known-not-reported list* | **Published, 2026-08-05**, in "What this capability knowingly does not report" below and in `docs/06-reference/cli.md`. The entry this row previously named is RETRACTED — see that section's note on the JavaScript extractor. |
+
+## Removal Pairing
+
+Built 2026-08-05, against the "Removals must be paired with additions before
+reporting" requirement above.
+
+**The predicate is the smallest sound one: same name, same language, in a file this
+change adds or modifies.** Signature shape and body similarity are available and
+deliberately unused. The asymmetry is the reason: reporting a move as a deletion
+overstates severity on a refactoring, while a FALSE pairing hides a real deletion —
+and there is no recovery from that, because the report is the only thing telling
+the reader the symbol is gone. Body similarity would reach renames at the cost of
+pairing two unrelated symbols that share boilerplate, so the cheap sound half is
+taken and the remainder is published rather than guessed at.
+
+The searched population is the change itself, never the repository. A move writes
+its destination, so the destination is in the diff by construction; widening the
+search would both cost an unbounded lookup — forbidden above — and pair a removal
+with an unrelated same-named symbol that was always there. Pairing runs over the
+whole candidate set BEFORE the seed cap, so a bound can never turn a move into a
+deletion.
+
+Three outcomes, and they are three different claims:
+
+| `removalPairing.match` | Statement | Reported `changeKind` |
+| --- | --- | --- |
+| `same-name` | This change adds a declaration of the same name, in the same language, elsewhere; its path and line are carried. | `moved` |
+| `none` | Every declaration this change adds, in every file the engine could read, was searched and none carries this name. | `deleted` |
+| `inconclusive` | Some changed file could not be read, so the added declarations were not all searched. Absence of a match is absence of evidence. | `deleted` |
+
+The third outcome exists because of this repository's documented recurring defect
+class: a missing input producing a plausible confident answer instead of an error.
+"We searched and found no replacement" and "we could not search" are different
+statements, and a reader must be able to tell a verified removal from an unverified
+one. `deleted` is still the reported kind — the safe direction — but the claim
+attached to it is the honest one. The schema refuses to hold a `changeKind` and a
+`removalPairing` that disagree.
+
+## What This Capability Knowingly Does Not Report
+
+Required by "Publish a known-not-reported list" above; published here and in
+`docs/06-reference/cli.md`. Every entry below was verified against the
+implementation on 2026-08-05, not assumed. None of them produces an error — they
+produce silence, which is exactly why they are written down.
+
+**Which changed symbols are seeded**
+
+1. Only languages the deterministic registry covers seed anything.
+2. A declaration removed from a file that still exists is invisible: symbols are
+   extracted from the head side, so only a removal that takes the whole file with
+   it is reported.
+3. Constructs the extractor does not treat as declarations are not seeded.
+   Verified: an ECMAScript method assigned onto a prototype
+   (`Router.prototype.route = function route () {}`) and an export installed via
+   `Object.defineProperty` yield no fact.
+4. A change touching no symbol's span — imports, top-level configuration, a file
+   header above the first declaration — seeds nothing.
+5. A symbol's span ends at the next declaration, so a change between two methods of
+   a class is attributed to the earlier method rather than to the class.
+6. `changeImpact.maxChangedSymbols` bounds the population; `changedSymbolsTruncated`
+   is the only signal.
+
+**Which dependents are found**
+
+7. References are matched as text, not resolved as bindings. Verified: an aliased
+   import lists the import line and NOT the `loadUser(...)` call sites; a call
+   through a variable lists the assignment and NOT the `f(...)` call.
+8. Only direct references. There is no transitive closure and no configurable depth.
+9. Whole-line comments are dropped, so a reference inside a block comment or a
+   docstring goes with them.
+10. Non-source destinations are counted, never listed.
+11. The per-symbol cap is spent before the destination split, so a heavily
+    referenced symbol can spend its budget on prose.
+12. `paths.exclude` applies to reference destinations by design.
+
+**What the report claims**
+
+13. The reference lists are NOT adjudicated. Only `impactFindings` is, and only
+    when `changeImpact.adjudication.enabled` is set. A file in `impactedFiles` is
+    a file that USES a changed symbol; published rates for this task put such a
+    list near 90% irrelevant. With adjudication off, nothing at all is triaged.
+14. The contract delta reads six text-visible dimensions. Verified silent: an arity
+    or parameter-list change, a type change, a default-value change, a visibility
+    change. Ordering, resource ownership and serialised values are not covered
+    either.
+15. A rename in place is reported as a removal plus an addition; the pairing
+    predicate is the name.
+16. A symbol moved into a file in a language the registry does not cover is reported
+    as a removal with `match: "none"`, because no readable declaration exists to
+    pair against. This is why that outcome is worded "in any file this engine can
+    read" rather than "anywhere".
+17. No severity, no verdict, no gate. A finding rates COMPATIBILITY and nothing
+    can fail a build.
+18. **Adjudication is unmeasured.** No accuracy number exists for it, here or
+    anywhere. The published prior art for this task reaches 28.2% precision, which
+    is what a first measurement should be read against.
+19. **Absence from `impactFindings` is not a statement that a dependent is
+    unaffected.** Four different situations produce it: adjudication off, no model
+    available, a call that failed or could not decide, and the call cap. The
+    summary's `unadjudicatedPairCount` and `adjudicationStatus` are what tell them
+    apart, and they are reported for exactly that reason.
+20. The residue question is asked over the LOCATED SITES of one file, not over the
+    file's whole text. A dependent whose reliance is visible only in code the
+    search did not match is not adjudicated as relying.
+21. `no-impact` from the model tier is one call's answer on one pair. It is a
+    statement that nothing was shown, not that nothing is there.
+
+**Retraction: the JavaScript blind spot.** The audit table previously named "the
+JavaScript extractor produced 6 declarations across 1 046 `.js` files (results
+ledger, 2026-07-30)" as a known entry. **That measurement predates the single AST
+engine consolidation of 2026-07-31 and no longer holds.** Re-verified 2026-08-05
+against the current extractor: a plain `function` declaration, a `class`, an arrow
+bound to a `const`, `module.exports = x`, `exports.x = …` and ESM exports all yield
+facts, in `.js` as in `.ts`. What remains missing is narrower and is entry 3 above.
+The ledger entry stands as a record of what was true that day; it must not be
+quoted as a current limitation.
 
 **Provenance of the two deterministic runs above.** Both were run against this
 repository's own branch and are recorded only here — neither appears in
@@ -456,7 +749,8 @@ be quoted as corpus results.
 
 ## Verification Matrix
 
-Rows marked (unbuilt) have no counterpart today; see the section above.
+Every row below names a test that exists. A row is added only when the behaviour
+it describes is built.
 
 | Requirement | Test |
 | --- | --- |
@@ -465,8 +759,17 @@ Rows marked (unbuilt) have no counterpart today; see the section above.
 | Reference sites obey the configured include/exclude rules | unit test driving `paths.exclude` through discovery, plus an end-to-end test |
 | Non-source destinations are excluded, and reported rather than dropped | unit test over prose, fixture data and a snapshot; classifier test generated from the language registry |
 | Test call sites are reported separately rather than mixed in or lost | unit test, plus a CLI test over a real repository |
-| A finding without a named dependent is rejected | admission test (unbuilt) |
-| Reports no impact rather than manufacturing findings | unit test |
-| Non-blocking, and not configurable to block | config schema test (asserts the absence of a `blocking` key) |
-| Failure leaves the diff review unaffected | integration test |
-| Instructions stay generic and language-neutral | prompt genericity guard |
+| Findings are reported per destination file, with sites nested beneath | `impacted-files.test.ts` (grouping, ordering, two same-named symbols kept distinct), plus `impact-run` and CLI tests over a real repository |
+| A removal is paired against the declarations the change adds before it is reported | `removal-pairing.test.ts` (pairs a move, refuses a rename and a cross-language name, refuses self-pairing), `changed-symbols.test.ts` (pairing runs before the seed cap), `impact-run.test.ts` (a renamed file reports `moved`) |
+| An unverifiable removal is not presented as a verified one | `removal-pairing.test.ts` and `impact-run.test.ts` (`inconclusive` when a changed file could not be read), Markdown test asserting the two are worded differently |
+| The rendered report lands where a reviewer already looks | CLI test asserting `impact-<uuid>/impact-report.md` and `impact-report.json` under `paths.artifactDir`, plus a test that an unwritable artifact directory still reports and still exits 0 |
+| A finding without a named dependent is rejected | `impact-admission.test.ts` (no path, no reliance, a dependent never located, a line never located, a symbol that does not reach the dependent, missing element or consequence) |
+| A finding carries the dependent's path and line, the contract element and the consequence | `impact-admission.test.ts`, `adjudication.test.ts`, `impact-run.test.ts`, and a Markdown test asserting all four render on one line |
+| Deterministic adjudication needs no model | `adjudication.test.ts` (every deterministic case is driven with a judge that throws on any call), plus `impact-run.test.ts` running with no agents at all and a CLI test asserting exactly one call for two changed symbols |
+| The model is spent on the residue only, and never writes prose | `reliance-judgement.test.ts` (the output schema's field set), `adjudication.test.ts` (the packet and the composed consequence) |
+| Findings carry a compatibility class, not a severity | `impact-run.test.ts` schema-shape test; `impact-report.ts` excludes `no-impact` from a finding by construction |
+| A dependent judged `no-impact` is not reported | `adjudication.test.ts` (deterministic and model paths), `impact-run.test.ts` |
+| Reports no impact rather than manufacturing findings | `impact-run.test.ts` (`adjudicationStatus: "completed"` with an empty finding list and a non-zero `noImpactPairCount`), Markdown test asserting the three kinds of empty are worded apart |
+| Non-blocking, and not configurable to block | config schema test (asserts the absence of a `blocking` key on the block and on `adjudication`) |
+| Failure leaves the diff review unaffected | import-boundary test (no shared code path with `review-workflow`), `adjudication.test.ts` and `impact-run.test.ts` (a throwing provider costs one pair), CLI test (an unresolvable provider still reports and exits 0) |
+| Instructions stay generic and language-neutral | `instructions.test.ts` — the shared prompt genericity guard, plus a test that the guard can still fail this prompt |

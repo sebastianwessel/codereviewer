@@ -133,8 +133,11 @@ bounds a single network call and is the only deadline that exists.
 Every model-backed number in this section was measured on `openai/gpt-5.3-codex`.
 A rate is a property of the model that produced it, so none of it is evidence
 about any other provider or model — quote the model with the figure or do not
-quote the figure. The `impact check` figure below is the one exception: that
-command makes no provider call, so its coverage is model-independent.
+quote the figure. The `impact check` figure below is the one exception: it was
+measured on the command's deterministic core, which makes no provider call, so its
+coverage is model-independent. That core is what runs by default; the command's
+adjudication layer (`changeImpact.adjudication.enabled`, off by default) does call
+a model and is **unmeasured** — no figure for it exists or may be quoted.
 
 - **The current headline, and the only figure that should be quoted for the review
   stage:** **~61% in-diff recall at ~99% adjusted precision**, on a 37-case

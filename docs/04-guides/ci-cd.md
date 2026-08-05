@@ -511,7 +511,9 @@ adoption.
 codereviewer impact check --base-ref "origin/$TARGET" --head-ref HEAD > impact.json
 ```
 
-`impact check` is deterministic and costs nothing. `intent check` needs a
+`impact check` costs nothing unless you also enable
+`changeImpact.adjudication.enabled`, which is the only part of it that calls a
+model. `intent check` needs a
 change-intent source configured — see
 [Supplying change intent](#supplying-change-intent) — and without one it exits
 `0` with `status: "no-intent"` and a warning saying so.

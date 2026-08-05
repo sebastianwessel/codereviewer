@@ -206,7 +206,7 @@ A configuration error exits `2` with a JSON error on stderr.
 | --- | --- | --- |
 | `review` | Run a review. See [Your first review](first-review.md). | **Yes** (exit `1`) |
 | `intent check` | Map a stated intent to the change. Needs `intentFulfilment.enabled` plus a `contextSources` provider. | No — nothing it reports sets a non-zero exit. It does exit `4` when an input limit binds, rather than judging part of the input |
-| `impact check` | Deterministic reference report for the changed symbols. Needs `changeImpact.enabled`. Makes no provider call. | No |
+| `impact check` | Reference report for the changed symbols, plus the dependents shown to rely on what changed. Needs `changeImpact.enabled`. Makes no provider call unless `changeImpact.adjudication.enabled` is also set. | No |
 | `config validate` | Print the effective, redacted configuration. | — |
 | `baseline write` | Write `baseline.path` from a completed report. | — |
 | `drift check` | Run the deterministic documentation/spec/implementation drift check on its own. | Yes (exit `1`) |

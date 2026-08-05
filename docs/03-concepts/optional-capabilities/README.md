@@ -57,10 +57,17 @@ see [context scout (removed)](context-scout.md).
 **Change-impact review** (`changeImpact.enabled`) is also off by default, but it
 does not belong in the table above: it is a separate command
 ([`impact check`](../../06-reference/cli.md#codereviewer-impact-check)), not a
-capability inside `review`, and it makes no model call at all, so it has no cost
-and no recall figure to report. Today it names the symbols a change touched and
-where they are referenced. That is deliberately the floor a fuller capability
-would have to beat, so it ships as a useful baseline rather than as a lever.
+capability inside `review`. It names the symbols a change touched and where they
+are referenced — deliberately the floor a fuller capability would have to beat, so
+it ships as a useful baseline rather than as a lever — and in that shape it makes
+no model call at all, so it has no cost and no recall figure to report.
+
+Its **adjudication layer** (`changeImpact.adjudication.enabled`) is a second
+switch, also off by default, and is the only part of the command that can spend.
+It decides, per dependent, whether that file relies on the part of the contract
+that changed; most of that is settled in code, and only a symbol whose *behaviour*
+moved costs a call. **It is unmeasured** — no accuracy figure for it exists, and
+none may be quoted.
 
 **Intent-fulfilment review** (`intentFulfilment.enabled`) is a separate command
 too ([`intent check`](../../06-reference/cli.md#codereviewer-intent-check)), off

@@ -18,8 +18,15 @@ import {
 } from '../deterministic-signals/index.js'
 import {
   ChangedFileChangeKindSchema,
-  ChangedSymbolKindSchema
+  ChangedSymbolChangeKindSchema,
+  ChangedSymbolKindSchema,
+  type RemovalPairing
 } from './impact-report.js'
+import {
+  indexAddedDeclarations,
+  type AddedDeclaration,
+  type RemovalPairingIndex
+} from './removal-pairing.js'
 
 // The fact kinds that name a symbol other code can depend on. `import` and
 // `module` are excluded: an import names a symbol this file consumes rather than
@@ -39,6 +46,12 @@ export type ChangedSymbolKind = z.infer<typeof ChangedSymbolKindSchema>
 // How the file carrying the symbol changed. `deleted` is the maximal contract
 // change and is why `repository-intake` grew `includeDeletedPaths`.
 export type ChangedFileChangeKind = z.infer<typeof ChangedFileChangeKindSchema>
+
+// How the SYMBOL changed. It is not the file's kind: a removal that pairs with a
+// declaration this change adds is a `moved` symbol in a `deleted` file.
+export type ChangedSymbolChangeKind = z.infer<
+  typeof ChangedSymbolChangeKindSchema
+>
 
 export type ChangedSymbolSourceFile = {
   readonly path: string
@@ -63,12 +76,22 @@ export type ChangedSymbol = {
   // which diff lines belong to which symbol; a second, weaker guess at the span
   // there would disagree with the one that seeded the symbol in the first place.
   readonly spanEndLine: number
-  readonly changeKind: ChangedFileChangeKind
+  readonly changeKind: ChangedSymbolChangeKind
+  // What the pairing search concluded about a removed declaration. Present
+  // exactly when the declaration was removed, which is the same invariant the
+  // report schema enforces.
+  readonly removalPairing?: RemovalPairing
 }
 
 export type CollectChangedSymbolsInput = {
   readonly files: readonly ChangedSymbolSourceFile[]
   readonly maxChangedSymbols: number
+  // Why the head side of this change could not be read in full, when it could
+  // not. Set it and every unpaired removal reports `inconclusive` rather than the
+  // confident `none`: a candidate set with holes in it cannot prove a symbol is
+  // gone. Left unset, the pairing search is treated as having seen everything the
+  // change added, which is the normal case.
+  readonly additionsIncompleteReason?: string
 }
 
 export type CollectChangedSymbolsResult = {
@@ -180,6 +203,44 @@ const factIsChanged = (
   )
 }
 
+// A candidate a removal could have moved to: a declaration this change wrote on
+// the head side. Declarations the change did not touch are excluded on purpose —
+// a symbol that was already there under that name is not evidence that this
+// change relocated anything, and pairing against one would downgrade a real
+// deletion.
+const isAddedDeclaration = (symbol: ChangedSymbol): boolean =>
+  symbol.changeKind !== 'deleted'
+
+const toAddedDeclaration = (symbol: ChangedSymbol): AddedDeclaration => ({
+  name: symbol.name,
+  path: symbol.path,
+  line: symbol.line,
+  language: symbol.language
+})
+
+// Turns a file-level removal into a symbol-level statement. Everything else
+// passes through untouched: only a removal has a pairing question to answer.
+const resolveRemoval = (
+  symbol: ChangedSymbol,
+  pairing: RemovalPairingIndex
+): ChangedSymbol => {
+  if (symbol.changeKind !== 'deleted') {
+    return symbol
+  }
+
+  const removalPairing = pairing.pair({
+    name: symbol.name,
+    path: symbol.path,
+    language: symbol.language
+  })
+
+  return {
+    ...symbol,
+    changeKind: removalPairing.match === 'same-name' ? 'moved' : 'deleted',
+    removalPairing
+  }
+}
+
 const compareChangedSymbols = (
   left: ChangedSymbol,
   right: ChangedSymbol
@@ -193,6 +254,11 @@ const compareChangedSymbols = (
  * hunks. Files in a language `deterministic-signals` does not support contribute
  * no symbols; they are silently ignored rather than failing the run, because a
  * mixed-language change must still report what it can.
+ *
+ * Removals are then paired against the declarations the same change adds, so a
+ * relocated symbol is reported as moved rather than as the most severe category
+ * this report has. See `removal-pairing.ts` for what that predicate does and does
+ * not catch.
  */
 export const collectChangedSymbols = (
   input: CollectChangedSymbolsInput
@@ -284,7 +350,22 @@ export const collectChangedSymbols = (
     }
   }
 
-  const sorted = [...strongestByKey.values()].sort(compareChangedSymbols)
+  const candidates = [...strongestByKey.values()]
+  // Pairing runs over the WHOLE candidate set, before the seed cap. A removal
+  // whose replacement happened to sort past `maxChangedSymbols` would otherwise
+  // be reported as a deletion because of a bound, which is exactly the confident
+  // wrong answer the cap exists to avoid producing.
+  const pairing = indexAddedDeclarations({
+    declarations: candidates
+      .filter(isAddedDeclaration)
+      .map(toAddedDeclaration),
+    ...(input.additionsIncompleteReason === undefined
+      ? {}
+      : { incompleteReason: input.additionsIncompleteReason })
+  })
+  const sorted = candidates
+    .map((symbol) => resolveRemoval(symbol, pairing))
+    .sort(compareChangedSymbols)
 
   return {
     symbols: sorted.slice(0, input.maxChangedSymbols),

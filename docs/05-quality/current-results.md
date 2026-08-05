@@ -77,11 +77,16 @@ file the reviewer had been shown **in full** — the miss is diff-scoped
 attention holding exactly as designed, not a context or retrieval gap. Full
 account: [What limits recall](what-limits-recall.md).
 
-`impact check` is a separate, deterministic command built for exactly that
-population. Scored against the same 27 out-of-diff expectations — the
-population it exists for — it localises **20 of 27 (74.1%)** inside a symbol it
-flagged as changed (same source: `reports/eval-results-ledger.md`, "2026-08-02
-— stage 1, three runs at one pinned engine").
+`impact check` is a separate command built for exactly that population. Scored
+against the same 27 out-of-diff expectations — the population it exists for — its
+deterministic core localises **20 of 27 (74.1%)** inside a symbol it flagged as
+changed (same source: `reports/eval-results-ledger.md`, "2026-08-02 — stage 1,
+three runs at one pinned engine").
+
+That figure covers the deterministic core only. The command's **adjudication
+layer** (`changeImpact.adjudication.enabled`, off by default) is **unmeasured**:
+no figure for it exists, none may be quoted, and the 74.1% above must not be
+read as covering it.
 
 **That 74.1% is coverage, not detection, and it is not comparable to a recall
 figure.** `impact check` reports risk and never claims a defect is present — it

@@ -31,6 +31,10 @@
 // report that silently drops sites looks cleaner than the search actually was.
 // The cost is that a heavily-referenced symbol can spend its cap on non-source
 // matches; `referencesTruncated` is what tells the reader that happened.
+//
+// It does NOT own the report's shape. The report groups by destination FILE
+// (spec 22); this module answers per symbol, because one symbol is what one query
+// searches for. `impacted-files.ts` is the seam between the two.
 
 import { truncateForContract } from '../../shared/text/truncate.js'
 import { lookupSymbolReferences } from '../context-retrieval/index.js'
@@ -39,12 +43,7 @@ import type {
   SymbolReferenceSite
 } from '../context-retrieval/index.js'
 import type { ChangedSymbol } from './changed-symbols.js'
-import { changedSymbolKey } from './contract-changes.js'
-import {
-  MAX_REFERENCE_TEXT_LENGTH,
-  type ChangedSymbolReferences,
-  type SymbolReferenceSiteReport
-} from './impact-report.js'
+import { MAX_REFERENCE_TEXT_LENGTH } from './impact-report.js'
 import { classifyReferenceDestination } from './reference-destination.js'
 
 export type DiscoverDependentsInput = {
@@ -53,30 +52,42 @@ export type DiscoverDependentsInput = {
   readonly maxReferencesPerSymbol: number
   readonly maxSearchDepth: number
   readonly paths?: ContextRetrievalEligibilityConfig
-  // What changed about each symbol's contract, keyed by `changedSymbolKey`.
-  //
-  // Passed in rather than derived here: this module owns reference POLICY and has
-  // no business reading diff text, but it is the module that assembles the
-  // per-symbol report record, so the delta has to arrive here to be carried. A
-  // symbol absent from the map — and a caller that omits it entirely, as the
-  // reference-policy tests do — reports no contract change, which is the same
-  // statement as an empty list and never means "safe".
-  readonly contractChanges?: ReadonlyMap<string, readonly string[]>
 }
 
-const toReportSite = (
+// A located reference, before it is grouped by destination file. The path stays
+// on the site here because grouping is what removes it: once a site sits under
+// its file, repeating the path on every site would be a second copy of the same
+// fact.
+export type DiscoveredReferenceSite = {
+  readonly path: string
+  readonly line: number
+  readonly text: string
+}
+
+// What the search found for one changed symbol. This is the domain's INTERNAL
+// shape, not the report's: the report groups by destination file (spec 22), and
+// `impacted-files.ts` performs that regrouping. Discovery emits per symbol
+// because that is what it searched for, one query per symbol.
+export type SymbolDependents = {
+  readonly symbol: ChangedSymbol
+  readonly references: readonly DiscoveredReferenceSite[]
+  readonly testReferences: readonly DiscoveredReferenceSite[]
+  readonly referencesInDefinitionFile: number
+  readonly referencesInNonSourceFiles: number
+  readonly referencesTruncated: boolean
+}
+
+const toDiscoveredSite = (
   reference: SymbolReferenceSite
-): SymbolReferenceSiteReport => ({
+): DiscoveredReferenceSite => ({
   path: reference.path,
   line: reference.line,
   text: truncateForContract(reference.text, MAX_REFERENCE_TEXT_LENGTH)
 })
 
-// The arrays are mutable because they land directly in a `ChangedSymbolReferences`,
-// whose shape is inferred from the Zod schema.
 type BucketedReferences = {
-  readonly references: SymbolReferenceSiteReport[]
-  readonly testReferences: SymbolReferenceSiteReport[]
+  readonly references: readonly DiscoveredReferenceSite[]
+  readonly testReferences: readonly DiscoveredReferenceSite[]
   readonly nonSourceCount: number
 }
 
@@ -127,11 +138,11 @@ const isCommentLine = (text: string): boolean => {
  * for coupling that this project has no measurement for).
  */
 const rankByLikelyRelevance = (
-  references: readonly SymbolReferenceSiteReport[],
+  references: readonly DiscoveredReferenceSite[],
   changedPaths: ReadonlySet<string>
-): SymbolReferenceSiteReport[] => {
-  const alsoChanged: SymbolReferenceSiteReport[] = []
-  const rest: SymbolReferenceSiteReport[] = []
+): readonly DiscoveredReferenceSite[] => {
+  const alsoChanged: DiscoveredReferenceSite[] = []
+  const rest: DiscoveredReferenceSite[] = []
 
   for (const reference of references) {
     if (changedPaths.has(reference.path)) {
@@ -151,8 +162,8 @@ const bucketByDestination = (
   references: readonly SymbolReferenceSite[],
   changedPaths: ReadonlySet<string>
 ): BucketedReferences => {
-  const production: SymbolReferenceSiteReport[] = []
-  const tests: SymbolReferenceSiteReport[] = []
+  const production: DiscoveredReferenceSite[] = []
+  const tests: DiscoveredReferenceSite[] = []
   let nonSourceCount = 0
 
   for (const reference of references) {
@@ -168,11 +179,11 @@ const bucketByDestination = (
     }
 
     if (destination === 'test') {
-      tests.push(toReportSite(reference))
+      tests.push(toDiscoveredSite(reference))
       continue
     }
 
-    production.push(toReportSite(reference))
+    production.push(toDiscoveredSite(reference))
   }
 
   return {
@@ -184,7 +195,7 @@ const bucketByDestination = (
 
 export const discoverDependents = async (
   input: DiscoverDependentsInput
-): Promise<readonly ChangedSymbolReferences[]> => {
+): Promise<readonly SymbolDependents[]> => {
   if (input.changedSymbols.length === 0) {
     return []
   }
@@ -222,17 +233,7 @@ export const discoverDependents = async (
     const bucketed = bucketByDestination(dependentReferences, changedPaths)
 
     return {
-      name: symbol.name,
-      kind: symbol.kind,
-      language: symbol.language,
-      definitionPath: symbol.path,
-      definitionLine: symbol.line,
-      changeKind: symbol.changeKind,
-      // Copied into a fresh array because the report type is inferred from the
-      // Zod schema and is mutable, while everything upstream of here is readonly.
-      contractChanges: [
-        ...(input.contractChanges?.get(changedSymbolKey(symbol)) ?? [])
-      ],
+      symbol,
       references: bucketed.references,
       testReferences: bucketed.testReferences,
       // Counted, not listed. A symbol referenced only inside its own file is a

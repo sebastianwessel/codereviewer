@@ -170,7 +170,7 @@ describe('dependent discovery', () => {
 
       expect(symbols).toEqual([
         expect.objectContaining({
-          name: 'unusedElsewhere',
+          symbol: expect.objectContaining({ name: 'unusedElsewhere' }),
           references: [],
           referencesInDefinitionFile: 1,
           referencesTruncated: false
@@ -355,7 +355,11 @@ describe('dependent discovery', () => {
     }
   })
 
-  test('carries the seed metadata through so a reference is attributable', async () => {
+  // Discovery answers "where is this used", not "what is this". The seed it was
+  // given comes back attached to the answer so the report assembly can join the
+  // two without re-deriving anything, and a search result can never be attributed
+  // to a symbol other than the one queried.
+  test('returns each result attached to the seed it was searched for', async () => {
     const root = await createRepo()
 
     try {
@@ -366,14 +370,7 @@ describe('dependent discovery', () => {
         maxSearchDepth: 12
       })
 
-      expect(symbols[0]).toMatchObject({
-        name: 'fetchUser',
-        kind: 'export',
-        language: 'typescript',
-        definitionPath: 'src/store.ts',
-        definitionLine: 1,
-        changeKind: 'modified'
-      })
+      expect(symbols[0]?.symbol).toEqual(changedSymbol('fetchUser', 1))
     } finally {
       await rm(root, { recursive: true, force: true })
     }

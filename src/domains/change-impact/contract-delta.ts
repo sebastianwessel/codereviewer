@@ -16,6 +16,41 @@
 // what the change wrote rather than what the type system concluded. It is a
 // signal-strength claim ("a caller can observe this"), never a proof.
 
+// The dimensions, named. They are an ENUM rather than free-form strings because
+// adjudication (spec 22 design step 3) branches on them: a compatibility class and
+// a caller-side consequence are properties of the dimension, and deriving either
+// by matching on a rendered English sentence would make the report's prose
+// load-bearing. The statement a reader sees is derived FROM the dimension, never
+// the other way round.
+export const CONTRACT_DIMENSION_IDS = [
+  'absence',
+  'failure',
+  'return-shape',
+  'guard',
+  'mutation',
+  'concurrency'
+] as const
+
+export type ContractDimensionId = (typeof CONTRACT_DIMENSION_IDS)[number]
+
+/**
+ * One observable change to what callers can rely on.
+ *
+ * `statement` is what the symbol-side table shows; `consequence` is what a
+ * dependent shown to rely on it is exposed to. They are separate because they
+ * answer different questions and are read by different readers: the first is about
+ * the symbol, the second is about a named file that uses it.
+ */
+export type ContractChange = {
+  readonly dimension: ContractDimensionId
+  // Which side of the change the construct appeared on. Carried because losing a
+  // guard is a different claim from gaining one, and a consumer that needs the
+  // distinction should not have to re-derive it from the wording.
+  readonly direction: 'added' | 'removed'
+  readonly statement: string
+  readonly consequence: string
+}
+
 // Contract dimensions, in the order a reviewer cares about them. Each is a pair of
 // language-neutral markers: what the removed lines said, what the added lines say.
 //
@@ -23,52 +58,108 @@
 // supported languages rather than from any one of them — `nil` and `None` and
 // `null` and `undefined` all mean "the caller may now get nothing", and a reader
 // does not care which language spelled it.
+type ContractStatement = {
+  // What the SYMBOL now does. Reads as a continuation of the symbol's name.
+  readonly statement: string
+  // What that does to a dependent SHOWN TO RELY ON IT. Never a claim on its own:
+  // it is only ever emitted attached to an adjudicated reliance, so it describes
+  // an exposure that was established rather than one that was assumed.
+  readonly consequence: string
+}
+
 type ContractDimension = {
-  readonly id: string
+  readonly id: ContractDimensionId
   readonly pattern: RegExp
   // Stated when the construct APPEARS in the change but was not there before.
-  readonly onAdded: string
+  readonly onAdded: ContractStatement
   // Stated when it disappears. Removal is not the mirror of addition — losing a
   // guard is a different claim from gaining one — so both are written out.
-  readonly onRemoved: string
+  readonly onRemoved: ContractStatement
 }
 
 const CONTRACT_DIMENSIONS: readonly ContractDimension[] = [
   {
     id: 'absence',
     pattern: /\b(null|nil|None|undefined|nullptr)\b/u,
-    onAdded: 'may now yield an absent value (null/nil/None) where it previously did not',
-    onRemoved: 'no longer yields an absent value it previously could'
+    onAdded: {
+      statement:
+        'may now yield an absent value (null/nil/None) where it previously did not',
+      consequence:
+        'a use here that assumes a value is present fails when it is absent'
+    },
+    onRemoved: {
+      statement: 'no longer yields an absent value it previously could',
+      consequence:
+        'handling here for the absent case can no longer be reached, so a branch this file relies on is now dead'
+    }
   },
   {
     id: 'failure',
     pattern: /\b(throw|raise|panic|fail|reject)\b/u,
-    onAdded: 'may now fail where it previously did not',
-    onRemoved: 'no longer signals failure the way it previously did'
+    onAdded: {
+      statement: 'may now fail where it previously did not',
+      consequence:
+        'a use here that does not handle a failure propagates it to this file and its own callers'
+    },
+    onRemoved: {
+      statement: 'no longer signals failure the way it previously did',
+      consequence:
+        'failure handling here can no longer be reached, so this file no longer learns about the condition it was written for'
+    }
   },
   {
     id: 'return-shape',
     pattern: /(^|\s)(return|yield)\b/u,
-    onAdded: 'returns something it did not return before',
-    onRemoved: 'stopped returning on a path it previously returned on'
+    onAdded: {
+      statement: 'returns something it did not return before',
+      consequence: 'a use here reads a result whose shape the change moved'
+    },
+    onRemoved: {
+      statement: 'stopped returning on a path it previously returned on',
+      consequence:
+        'a use here can receive nothing on a path that previously produced a result'
+    }
   },
   {
     id: 'guard',
     pattern: /(^|\s)(if|unless|guard|assert|require)\b/u,
-    onAdded: 'gained a condition callers must now satisfy',
-    onRemoved: 'lost a condition it previously enforced'
+    onAdded: {
+      statement: 'gained a condition callers must now satisfy',
+      consequence:
+        'a call from here that does not satisfy the new condition is rejected'
+    },
+    onRemoved: {
+      statement: 'lost a condition it previously enforced',
+      consequence:
+        'this file is no longer protected by a condition it was written against'
+    }
   },
   {
     id: 'mutation',
     pattern: /\b(push|append|delete|splice|clear|insert|remove|assign|set)\b/u,
-    onAdded: 'mutates state it did not mutate before',
-    onRemoved: 'no longer mutates state it previously did'
+    onAdded: {
+      statement: 'mutates state it did not mutate before',
+      consequence: 'state this file holds is changed underneath it'
+    },
+    onRemoved: {
+      statement: 'no longer mutates state it previously did',
+      consequence:
+        'state this file expected to be updated is left as it was'
+    }
   },
   {
     id: 'concurrency',
     pattern: /\b(await|async|lock|mutex|synchronized|spawn|thread|go func)\b/u,
-    onAdded: 'became concurrent or asynchronous in a way callers can observe',
-    onRemoved: 'lost concurrency control it previously had'
+    onAdded: {
+      statement:
+        'became concurrent or asynchronous in a way callers can observe',
+      consequence:
+        'a use here that consumes the result without waiting for it observes an incomplete result'
+    },
+    onRemoved: {
+      statement: 'lost concurrency control it previously had',
+      consequence: 'ordering this file relied on is no longer enforced'
+    }
   }
 ]
 
@@ -94,22 +185,30 @@ export type ContractDeltaInput = {
  */
 export const describeContractDelta = (
   input: ContractDeltaInput
-): readonly string[] => {
+): readonly ContractChange[] => {
   const added = input.addedLines.join('\n')
   const removed = input.removedLines.join('\n')
-  const changes: string[] = []
+  const changes: ContractChange[] = []
 
   for (const dimension of CONTRACT_DIMENSIONS) {
     const inAdded = dimension.pattern.test(added)
     const inRemoved = dimension.pattern.test(removed)
 
     if (inAdded && !inRemoved) {
-      changes.push(dimension.onAdded)
+      changes.push({
+        dimension: dimension.id,
+        direction: 'added',
+        ...dimension.onAdded
+      })
       continue
     }
 
     if (inRemoved && !inAdded) {
-      changes.push(dimension.onRemoved)
+      changes.push({
+        dimension: dimension.id,
+        direction: 'removed',
+        ...dimension.onRemoved
+      })
     }
   }
 

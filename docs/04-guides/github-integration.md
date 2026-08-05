@@ -103,7 +103,7 @@ only one of them is allowed to block.
 | --- | --- | --- | --- |
 | `review` | **blocking** | 05 | Evidence-backed defects in the changed code, filtered by refutation and a deterministic admission gate. Exit code `1` means the quality gate failed. |
 | `intent check` | advisory | [23](../../specs/23-intent-fulfilment-review.md) | Reads obligations out of the pull-request description and maps each to the changed lines that evidence it — or to nothing. |
-| `impact check` | advisory | [22](../../specs/22-change-impact-review.md) | Lists the callers of every symbol the change touched. Deterministic; makes no model call. |
+| `impact check` | advisory | [22](../../specs/22-change-impact-review.md) | Lists the callers of every symbol the change touched, and — behind `changeImpact.adjudication.enabled` — which of them rely on what changed. Makes no model call with that switch off. |
 
 **The two advisory stages can never fail the job.** That is a specification
 requirement, not a configuration default — spec 23 states it outright: the
@@ -342,7 +342,8 @@ therefore scales with changed files, not with findings.
 `intent check` adds one extraction call, one judgement call per obligation, and
 one explanation call — measured at roughly $0.008 per obligation on
 `openai/gpt-5.3-codex`, which is the model every cost figure in these docs was
-measured on. `impact check` makes **no** provider call at all.
+measured on. `impact check` makes **no** provider call at all unless
+`changeImpact.adjudication.enabled` is set, which it is not by default.
 
 Set `review.maxCostUsd` in `codereviewer.github.json` so a pathological change
 fails the job instead of quietly spending. Full arithmetic:

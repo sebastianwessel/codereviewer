@@ -116,7 +116,7 @@ parsing, hashing or error normalization inside a domain.
 
 | Domain | Owns |
 | --- | --- |
-| `change-impact/` | `impact check` (spec 22): changed-symbol seeding from the diff, identifier-bounded reference search, contract-change reading, the report and its Markdown render. Makes no provider call |
+| `change-impact/` | `impact check` (spec 22): changed-symbol seeding from the diff, identifier-bounded reference search, contract-change reading, the report and its Markdown render, plus the adjudication layer (deterministic tier, one model seam for the residue, its own admission gate). Makes no provider call unless `changeImpact.adjudication.enabled` is set |
 | `intent-fulfilment/` | `intent check` (spec 23): obligation extraction, per-obligation judgement, the separate explanation call, the three refusing input limits in `intent-limits.ts`, and the Markdown render |
 
 ### Output and quality

@@ -87,6 +87,7 @@ listed there (it is the document carrying the list).
 | `providerIssues` | array | `code`, `stage`, `recovered`, `message`. `recovered` means a retry succeeded; `false` or absent means work was dropped, and fails the quality gate under `qualityGate.failOnProviderError`. |
 | `resolvedBaselineEntries` | array, optional | Present when `baseline.includeResolvedInReport` is enabled. |
 | `discovery` | object, optional | What **discovery** produced, before refutation and admission — `totals` plus a per-task row in `tasks`. Absent means *not recorded* (a run with no discovery call, or a report predating the field), which is not the same claim as a recorded zero. See below. |
+| `testAdequacy` | object, optional | Which changed source files no changed test file pairs with. Deterministic, free, advisory — never a finding, never gated. Absent means *this run did not compute it*, which is not the same claim as a computed zero. See below. |
 | `artifacts` | array | The non-JSON artifacts written for this run. |
 
 String values in `report.json` pass through redaction before writing.
@@ -106,6 +107,31 @@ Both use these fields:
 | `droppedCount`, `suppressedByIdCount`, `suppressedByLocationCount` | Raw findings that never became candidates, separated by cause — a parse failure is a different problem from a duplicate. |
 | `contextOverflowSplitCount` | Times the provider refused a packet and it was halved. Counted apart from transient retry, which has a different cause. |
 | `mergeCallCount`, `mergeGroupCount`, `mergedAwayCount` | Semantic-merge counters. "Not firing" (no calls) and "nothing to merge" (calls, no groups) are indistinguishable from a candidate count alone and have opposite fixes. |
+
+#### `testAdequacy`
+
+A deterministic, zero-cost observation about the change, present on every
+completed run. It carries no id, no severity and no location, it is not compared
+against any threshold, and it reaches neither `report.sarif` nor the
+review-comment drafts.
+
+| Field | Notes |
+| --- | --- |
+| `consideredFileCount` | Changed files the question could be asked of at all: analysed for this run, in a language the engine supports, and not themselves test material. |
+| `pairedFileCount` | Of those, the ones a test file **in the same change** pairs with, by that language's own naming and location convention. |
+| `unpairedPaths` | The rest, sorted. A path and nothing else. Equals `consideredFileCount` minus `pairedFileCount`. |
+| `changedTestFileCount` | Test-side files the change touched. Stated so the list can be read against it: a change adding tests in a tree of their own pairs nothing by name and is not a change that carries no tests. |
+| `unknown.unsupportedLanguageFileCount` | Changed files in a language the engine does not analyse. **Unknown, not untested** — never in `unpairedPaths`. |
+| `unknown.notAnalysedFileCount` | Changed files that never reached analysis (too large, binary, excluded, over the file cap). Also unknown, for the same reason. |
+
+Files the change **deleted** appear in none of these fields, including the unknown
+counts: a removed file has nothing at head that could carry a test.
+
+**What it cannot know.** It sees only the changed file set. A file in
+`unpairedPaths` may be covered completely by an existing test the change had no
+reason to touch, and nothing here can tell that apart from a file with no test at
+all. It also says nothing about whether any test is *good*: a paired file is a
+file with a test named after it, not a file with a test for this change.
 
 ### `run-summary.json`
 
@@ -207,7 +233,7 @@ A **completed** `impact check` writes its own run directory under
 
 | File | Contents |
 | --- | --- |
-| `impact-report.md` | The rendered change-impact report. Changed symbols whose contract moved and that have dependents come first; dependents are grouped by file, tests are listed separately, and the bounds of the search (per-symbol cap, references in the defining file, matches withheld as non-source) are stated. |
+| `impact-report.md` | The rendered change-impact report. It leads with the dependents shown to rely on the part of the contract that changed, each with its line, the contract element and the consequence — or with a sentence saying which kind of empty an empty list is. Then one section per destination file — the unit a reviewer opens — with the changed symbols reaching it named on it; files using a symbol whose contract moved come first, test files are listed separately, and the bounds of the search (per-symbol cap, references in the defining file, matches withheld as non-source) are stated on the symbol table. |
 | `impact-report.json` | The same report, identical to `--format json` on stdout. |
 
 The path of the Markdown file is printed to stderr. A **disabled** run writes

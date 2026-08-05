@@ -14,6 +14,7 @@ import { describe, expect, test } from 'vitest'
 import { parseGitDiffMaps } from '../repository-intake/index.js'
 import { collectChangedSymbols } from './changed-symbols.js'
 import { changedSymbolKey, collectContractChanges } from './contract-changes.js'
+import { impactedSymbolKey } from './impact-report.js'
 
 const PATH = 'src/store.ts'
 
@@ -40,10 +41,16 @@ const contractChangesFor = (
     rawDiff
   })
 
+  // Reduced to the STATEMENTS a reader sees. The structured dimension beside them
+  // is what adjudication branches on and is asserted in `adjudication.test.ts`;
+  // every case below is about which lines were attributed to which symbol, which
+  // is the same question under either shape.
   return new Map(
     changed.symbols.map((symbol) => [
       symbol.name,
-      changes.get(changedSymbolKey(symbol)) ?? []
+      (changes.get(changedSymbolKey(symbol)) ?? []).map(
+        (change) => change.statement
+      )
     ])
   )
 }
@@ -53,6 +60,38 @@ const diffHeader = [
   `--- a/${PATH}`,
   `+++ b/${PATH}`
 ].join('\n')
+
+describe('the symbol key', () => {
+  test('agrees with the key the report joins on', () => {
+    // REGRESSION. These two spellings of one identity were formatted
+    // independently — one joined on a separator, the other on a space — so every
+    // contract delta silently missed its lookup on the way into adjudication.
+    // Nothing threw; the report simply said a symbol changed nothing observable.
+    // The failure mode is invisible by construction, so it is pinned here.
+    const symbol = {
+      path: 'src/store.ts',
+      name: 'fetchUser',
+      kind: 'export' as const,
+      language: 'typescript' as const,
+      line: 4,
+      spanEndLine: 9,
+      changeKind: 'modified' as const
+    }
+
+    expect(changedSymbolKey(symbol)).toBe(
+      impactedSymbolKey({
+        name: symbol.name,
+        definitionPath: symbol.path,
+        definitionLine: symbol.line
+      })
+    )
+    // And it separates the three parts unambiguously: a path ending in the name
+    // of another symbol must not collide with that symbol.
+    expect(
+      changedSymbolKey({ ...symbol, path: 'src/a', name: 'b' })
+    ).not.toBe(changedSymbolKey({ ...symbol, path: 'src', name: 'a b' }))
+  })
+})
 
 describe('contract changes for a changed symbol', () => {
   test('a body that gained a null return says so', () => {

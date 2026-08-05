@@ -276,11 +276,93 @@ describe('changed symbols', () => {
     ])
 
     expect(
+      result.symbols.map((symbol) => [
+        symbol.name,
+        symbol.changeKind,
+        symbol.removalPairing
+      ])
+    ).toEqual([
+      // Nothing in this change adds either name back, so the removal is the
+      // confident one — and it says so, rather than leaving the reader to assume
+      // the question was asked.
+      ['removedApi', 'deleted', { match: 'none' }],
+      ['alsoRemoved', 'deleted', { match: 'none' }]
+    ])
+  })
+
+  // Spec 22: "Removals must be paired with additions before reporting". A pure
+  // rename or move of a file makes every symbol it declared look deleted — the
+  // most severe category this report has — while the symbol is present, under the
+  // same name, at a new address.
+  test('a symbol whose declaration reappears in an added file is a move, not a deletion', () => {
+    const result = collect([
+      {
+        path: 'src/old/api.ts',
+        content: 'export const legacyApi = () => 1',
+        changeKind: 'deleted',
+        hunks: []
+      },
+      modifiedFile('src/new/api.ts', ['export const legacyApi = () => 1'])
+    ])
+
+    expect(
       result.symbols.map((symbol) => [symbol.name, symbol.changeKind])
     ).toEqual([
-      ['removedApi', 'deleted'],
-      ['alsoRemoved', 'deleted']
+      // Path order, so the added declaration sorts above the removed one.
+      ['legacyApi', 'modified'],
+      ['legacyApi', 'moved']
     ])
+    expect(result.symbols[1]?.removalPairing).toEqual({
+      match: 'same-name',
+      declaration: { name: 'legacyApi', path: 'src/new/api.ts', line: 1 }
+    })
+  })
+
+  test('pairing runs before the seed cap, so a bound cannot turn a move into a deletion', () => {
+    const files: readonly ChangedSymbolSourceFile[] = [
+      {
+        path: 'src/a-gone.ts',
+        content: 'export const relocated = 1',
+        changeKind: 'deleted',
+        hunks: []
+      },
+      // Sorts last, so a cap of 1 drops it from the report entirely.
+      modifiedFile('src/z-new.ts', ['export const relocated = 1'])
+    ]
+    const bounded = collectChangedSymbols({ files, maxChangedSymbols: 1 })
+
+    expect(bounded.truncated).toBe(true)
+    expect(bounded.symbols.map((symbol) => symbol.changeKind)).toEqual(['moved'])
+  })
+
+  test('a removal nobody could verify is not reported as a verified one', () => {
+    const result = collectChangedSymbols({
+      files: [
+        {
+          path: 'src/gone.ts',
+          content: 'export const removedApi = 1',
+          changeKind: 'deleted',
+          hunks: []
+        }
+      ],
+      maxChangedSymbols: 100,
+      additionsIncompleteReason: '2 changed file(s) could not be read.'
+    })
+
+    // The recurring defect class this codebase names: a missing input must not
+    // produce the confident answer. Finding no replacement among declarations that
+    // were never read is absence of evidence, not evidence of absence.
+    expect(result.symbols[0]?.removalPairing).toEqual({
+      match: 'inconclusive',
+      reason: '2 changed file(s) could not be read.'
+    })
+    expect(result.symbols[0]?.changeKind).toBe('deleted')
+  })
+
+  test('a symbol that was not removed carries no removal pairing', () => {
+    const result = collect([modifiedFile('src/a.ts', ['export const kept = 1'])])
+
+    expect(result.symbols[0]?.removalPairing).toBeUndefined()
   })
 
   test('a symbol reported under several fact kinds collapses to its most visible kind', () => {
