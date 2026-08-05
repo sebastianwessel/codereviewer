@@ -74,12 +74,14 @@ Which of those moved recall is not established by this run.
 Two runs landed on 66.7% and one on 71.7%. Until that is understood, treat 2.89pp
 rather than 0.96pp as the current band for judging a stage-1 change.
 
-**Prompt caching is now reachable, which reverses the 2026-07-26 probe.** That probe
-recorded 0 cached tokens on an identical repeat and concluded caching was
-unavailable. Here run 1 cached 5% of its input and runs 2 and 3 cached 79% and 80%,
-cutting review cost from $1.97 to $0.83 and $0.82. **This re-confirms that A/B cost
-figures are confounded by arm order** — an arm running second inherits the first
-arm's warm cache. Quote cold cost, or alternate arm order.
+**Cache utilisation is roughly double what was last recorded.** Caching was fixed on
+2026-07-26 by removing the per-run `runId` UUID from the head of the model-bound
+packet, and measured then at 36–39% cached input on a warm 30-case run. Here run 1
+cached 5% of its input cold, and runs 2 and 3 cached **79% and 80%**, cutting review
+cost from $1.97 to $0.83 and $0.82. So the warm/cold spread is now more than 2x
+rather than the ~30% recorded in July. **This re-confirms that A/B cost figures are
+confounded by arm order** — an arm running second inherits the first arm's warm
+cache. Quote cold cost, or alternate arm order.
 
 Cost for the sweep: **$3.62 review + $0.81 scoring = $4.44** for 3 × 37 cases.
 
