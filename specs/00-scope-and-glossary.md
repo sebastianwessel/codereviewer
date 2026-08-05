@@ -35,21 +35,54 @@ checks are assumed to run in adjacent pipelines.
   findings, plus a rendered artifact for the resolved platform (`github`,
   `gitlab`, `bitbucket`, or `generic`);
 - evaluation runner with golden fixtures and quality metrics;
-- no network PR comment publishing, no automatic code modification, and no
-  GitHub Action implementation in `R1`.
+- a reference GitHub Actions integration (`scripts/github/` plus
+  `.github/workflows/code-review.yml`) that publishes one pull-request summary
+  comment and inline review comments over the GitHub API; it is not part of
+  the published npm package, and the engine itself (`src/`) still makes no
+  network call and holds no forge credentials;
+- no automatic code modification and no CI-native check annotations in `R1`.
+
+## Review scope: pull-request review, not repository audit
+
+`review` answers one question: does this change introduce a defect? Its
+attention is scoped to the reviewed diff — the unified diff plus the full
+content of every changed file — by design, and the measured numbers below
+confirm that scoping holds rather than merely describing an aspiration.
+
+On the 37-case real-repository corpus (`openai/gpt-5.3-codex`, engine
+pinned), `review` has measured roughly 60-67% recall on the defects sitting
+inside the reviewed diff across several recorded runs (most recently a 61.1%
+mean over three pinned runs, 2026-08-02), and **0%** on the defects sitting
+elsewhere in a changed file — 0 of 27 on one measured denominator, replicated
+as 0 of 81 against an independently labeled answer key. Every one of those
+misses was in a file the reviewer had been shown in full: none needed
+retrieval, a larger context window, or a bigger model, so this is not a
+context or retrieval limitation, and giving the reviewer more of either does
+not close it.
+
+This is a scope boundary, stated deliberately rather than left implicit:
+**pull-request review** ("does this change introduce a defect?") and
+**repository audit** ("does this codebase contain a defect, changed or
+not?") are different jobs. `R1` builds the first. A latent, pre-existing
+defect in the untouched part of a changed file is a real defect a reader may
+still want surfaced, and it is out of scope today. This document makes no
+commitment to build a repository-audit mode.
 
 ## Later Scope
 
 The following capabilities are specified as future extension points and must not
 be implemented in `R1` unless a later spec changes scope:
 
-- network pull request comment publishing;
 - CI-native check annotations;
 - full-codebase trend dashboards;
 - automatic fix application;
 - product-owned replacements for external static analysis, formatting, build,
   or unit-test pipelines;
 - remote service or hosted UI.
+
+Network pull-request comment publishing is implemented — see "First Release
+Scope" above — through the optional GitHub Actions integration, not the
+engine itself.
 
 ## Actors And Consumers
 
@@ -103,8 +136,9 @@ be implemented in `R1` unless a later spec changes scope:
 - No database.
 - No long-lived daemon.
 - No automatic code modification.
-- No network PR comment publishing.
-- No GitHub Action implementation.
+- No CI-native check annotations.
+- No repository-wide defect audit. `review` is scoped to the reviewed diff —
+  see "Review scope" above.
 - No model candidate or model-generated confidence score published as
   actionable. Model-origin output requires refutation and admission.
 - No provider SDKs in base dependencies.

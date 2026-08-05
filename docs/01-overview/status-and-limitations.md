@@ -39,15 +39,21 @@ Implemented: local CLI review of a checked-out git repository, base/head diff an
 explicit file-list intake, deterministic support signals, language-neutral
 contracts, provider resolution for OpenAI/OpenAI-compatible/Bedrock/Azure through
 optional packages, holistic discovery + refutation, JSON/Markdown/SARIF reports,
-local review-comment drafts, an evaluation runner with quality gates, and two
+local review-comment drafts, an evaluation runner with quality gates, two
 independently runnable advisory commands (`intent check`, `impact check`) that
-are off by default and cannot fail a pipeline.
+are off by default and cannot fail a pipeline, and a reference GitHub Actions
+integration (`.github/workflows/code-review.yml` plus `scripts/github/`) that
+posts and edits a pull-request summary comment and inline review comments
+through the GitHub API. That integration is not part of the published npm
+package — the engine itself (`src/`) still makes no network call and holds no
+forge credentials; publishing lives entirely in the separate script the
+workflow invokes. See [GitHub integration](../04-guides/github-integration.md).
 
 Explicitly **not** implemented:
 
-- network PR-comment publishing;
-- CI-native check annotations;
-- a GitHub Action;
+- CI-native check annotations (the GitHub Action reports pass/fail through the
+  job's exit code and posts findings as ordinary PR comments — it does not
+  request `checks: write` or create Checks-API annotations);
 - automatic fix application;
 - full-codebase trend dashboards;
 - a remote API server, browser UI, authentication system, database, or
@@ -134,14 +140,23 @@ command makes no provider call, so its coverage is model-independent.
   stage:** **~61% in-diff recall at ~99% adjusted precision, ~$2.20**, on a 37-case
   real-repository corpus with the engine pinned. It supersedes every earlier
   figure. → [Current results](../05-quality/current-results.md)
-- **The known quality limitation is enumeration, and it now has a measured
-  split.** Of 87 expected findings, the 60 inside the diff were found at **~61%**
-  and the 27 sitting elsewhere in a changed file were found at **0 of 27**. Not
-  "low" — zero, over a full denominator. Every one of those 27 was in a file the
-  reviewer had been shown **in full**, so it needed no retrieval, no larger
-  context window and no bigger model. It is an attention failure, not an
-  information failure, and it is the reason the iterative review-fix-re-review
-  loop matters more than any single-pass tuning.
+- **Out-of-diff recall is a scope boundary, not an unqualified deficiency, and
+  it now has a measured split.** `review` answers "does this change introduce a
+  defect", and its attention is scoped to the reviewed diff by design — a
+  different job from a full repository audit ("does this codebase contain a
+  defect, changed or not"), which is not built. Of 87 expected findings, the 60
+  inside the diff were found at **~61%** and the 27 sitting elsewhere in a
+  changed file were found at **0 of 27** — replicated as **0 of 81** against an
+  independently labeled answer key. Not "low" — a measured zero, twice. Every
+  one of those 27 misses was in a file the reviewer had been shown **in full**,
+  so it needed no retrieval, no larger context window and no bigger model: this
+  is diff-scoped attention holding exactly as designed, not a context or
+  retrieval gap that more budget would close. A latent, pre-existing defect in
+  the untouched part of a changed file is therefore out of scope today — it is
+  a real defect a reader may still want surfaced, and this document makes no
+  commitment to build a mode that finds it. It is also the reason the iterative
+  review-fix-re-review loop matters more than any single-pass tuning: each fix
+  changes the diff, which can pull a nearby defect into scope on the next pass.
   → [What limits recall](../05-quality/what-limits-recall.md)
 - **`impact check` now has one measurement.** Scored against the 27 out-of-diff
   expectations — the population it exists for — it localises **20 of 27 (74.1%)**

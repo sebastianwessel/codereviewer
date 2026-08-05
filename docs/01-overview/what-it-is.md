@@ -75,18 +75,24 @@ The default report formats are `json`, `markdown`, and `sarif`
 
 ## What it measures at
 
-On a 37-case corpus of real repositories, `review` finds **~61%** of the in-diff known
-defects at **100% adjusted precision** for about **$2.24** per run. Split by where
-the defect lives: **66.7%** for the 60 expectations inside the diff, **0 of 27**
-for the ones sitting elsewhere in a changed file.
+`review` answers one question: does this change introduce a defect? On a
+37-case corpus of real repositories (engine pinned), it finds **~61%** of the
+defects sitting inside the reviewed diff, at **~99% adjusted precision**, for
+about **$2.20** per run. Of the defects sitting elsewhere in a changed file —
+code the reviewer was shown in full but the diff did not touch — it finds
+**0 of 27**. That split is a scope boundary, not a blended average: `review`
+is built to answer "does this change introduce a defect", not "does this
+codebase contain a defect, changed or not". See
+[Status and limitations](status-and-limitations.md) for the full split and its
+replication.
 
 Measured on `openai/gpt-5.3-codex`. Those rates and that cost are properties of
 that model, not of the engine, and do not transfer to another one.
 
-Read the second half of that sentence as the product's actual shape. What it
-reports is almost always real; it finds fewer than half the defects present; and
-it finds essentially nothing the change does not point at — even when it was shown
-the whole file. → [Current results](../05-quality/current-results.md)
+Read that as the product's actual shape. What it reports is almost always
+real, and its attention follows the diff: it finds roughly six defects in ten
+inside it, and none outside it — even in a file it was shown in full. →
+[Current results](../05-quality/current-results.md)
 
 ---
 
@@ -137,7 +143,7 @@ snippets, secrets, tokens, or raw provider payloads.
 | --- | --- |
 | A linter / formatter / type checker | It assumes those already run in your pipeline and does not duplicate them. |
 | A SAST replacement | It does not reimplement CodeQL/Semgrep-class analysis; local structural parsing is a *support* signal only. |
-| A publisher | No network PR comments, no CI check annotations, no SARIF upload. It writes local files. |
+| A publisher, on its own | The engine makes no network call and writes only local files — no CI check annotations, no SARIF upload to code scanning. Network PR-comment publishing is provided by the separate, optional GitHub Actions integration (`scripts/github/`), not by the engine; see [GitHub integration](../04-guides/github-integration.md). |
 | An auto-fixer | Suggested fixes are text/structured proposals. Nothing is ever applied to your files. |
 | A service | No API server, no browser UI, no database, no daemon, no persisted session state. |
 | A merge authority | Merge and publishing decisions stay deterministic and local; a model verdict alone never blocks or approves. |

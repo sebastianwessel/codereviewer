@@ -123,15 +123,41 @@ writes it, so a review cannot suppress its own findings.
 
 ---
 
+## What "reviewing a change" covers
+
+`review` is scoped to the reviewed diff: the unified diff plus the full
+content of every changed file. That answers "does this change introduce a
+defect", and it is the job this tool is built for.
+
+It is a different question from "does this codebase contain a defect, changed
+or not" — a full repository audit. Measured on the 37-case real-repository
+corpus (`openai/gpt-5.3-codex`, engine pinned), `review` finds roughly
+60-67% of defects sitting inside the reviewed diff and **0%** of defects
+sitting in the untouched part of a changed file, even though it was shown
+that file in full — 0 of 27 on one measured denominator, replicated as 0 of
+81 against an independently labeled answer key. See
+[Status and limitations](status-and-limitations.md) for the numbers and their
+replication. A repository-audit mode is not built, and this document makes no
+commitment to build one — plan for your existing lint/SAST coverage to keep
+owning pre-existing, untouched code.
+
 ## Scope boundaries to plan around
 
 Specified as future work, deliberately **not** implemented today:
 
-- publishing PR comments over the network;
-- CI-native check annotations;
+- CI-native check annotations (a shipped GitHub Action posts PR comments and
+  reports pass/fail through the job's exit code — see
+  [GitHub integration](../04-guides/github-integration.md) — but it does not
+  create Checks-API annotations);
 - automatic fix application;
 - full-codebase trend dashboards;
 - a hosted service or UI.
+
+Network PR-comment publishing is implemented, outside the engine, by the
+optional GitHub Actions integration (`scripts/github/` plus
+`.github/workflows/code-review.yml`); see
+[GitHub integration](../04-guides/github-integration.md). The engine itself
+still makes no network call.
 
 See [Status and limitations](status-and-limitations.md) for the current state,
 and [Operations](../08-operations/) for CI wiring details.
