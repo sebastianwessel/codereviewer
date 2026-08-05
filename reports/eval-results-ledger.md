@@ -70,9 +70,14 @@ disclosure work (grep/list truncation notices and the refutation withholding not
 reaching the model) and today's refutation-context fix for partitioned sub-tasks.
 Which of those moved recall is not established by this run.
 
-**Variance tripled**, 0.96pp → 2.89pp, on the same corpus and the same run count.
-Two runs landed on 66.7% and one on 71.7%. Until that is understood, treat 2.89pp
-rather than 0.96pp as the current band for judging a stage-1 change.
+**The spread is wider — 0.96pp → 2.89pp — but that difference is NOT established.**
+An sd from three runs is barely an estimate: its own 95% interval is [0.50, 6.04]pp
+for the old figure and [1.50, 18.17]pp for the new one, and an F-test on the ratio
+gives F = 9.06 against a critical 19.0 at df 2,2. So "variance tripled" is not a
+finding, and chasing a cause would be chasing noise. The prudent operational choice
+is still to judge a stage-1 change against the wider 2.89pp rather than 0.96pp,
+because under-stating the band is the error that produces false positives — but that
+is caution, not a measured regression in stability.
 
 **Cache utilisation is roughly double what was last recorded.** Caching was fixed on
 2026-07-26 by removing the per-run `runId` UUID from the head of the model-bound
