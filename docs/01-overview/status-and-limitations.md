@@ -137,9 +137,12 @@ quote the figure. The `impact check` figure below is the one exception: that
 command makes no provider call, so its coverage is model-independent.
 
 - **The current headline, and the only figure that should be quoted for the review
-  stage:** **~61% in-diff recall at ~99% adjusted precision, ~$2.20**, on a 37-case
-  real-repository corpus with the engine pinned. It supersedes every earlier
-  figure. → [Current results](../05-quality/current-results.md)
+  stage:** **~61% in-diff recall at ~99% adjusted precision**, on a 37-case
+  real-repository corpus over three runs at one pinned engine. It supersedes every
+  earlier figure. Cost was not recorded for those runs; the nearest measured figure
+  is **~$2.20** for a 37-case run at a different engine pin, so quote it as an
+  order of magnitude and not as part of the headline.
+  → [Current results](../05-quality/current-results.md)
 - **Out-of-diff recall is a scope boundary, not an unqualified deficiency, and
   it now has a measured split.** `review` answers "does this change introduce a
   defect", and its attention is scoped to the reviewed diff by design — a
@@ -200,11 +203,14 @@ command makes no provider call, so its coverage is model-independent.
   anything. Its dominant *precision* failure remains a question mismatch — the run
   correctly reporting "this diff does not evidence it" against an answer key
   asking "does it hold at head" — rather than judgement quality.
-- **A single run is not a result.** Seed-to-seed variance on the real-repository
-  corpus is about 5 percentage points of recall (sd ≈ 4.8pp). A headline figure is
-  a mean, never the best run, and an effect below roughly 10pp cannot be resolved
-  at three seeds. Several recorded experiments are smaller than the instrument
-  that measured them.
+- **A single run is not a result.** A headline figure is a mean, never the best
+  run. Run-to-run variance on the real-repository corpus was measured at one
+  pinned engine on 2026-08-02: **sd 0.96pp** on in-diff recall and 0.66pp
+  blended, over three runs. That supersedes the **±4.8pp** band this project used
+  for months, which was estimated from too few samples and made single-run
+  comparisons unreadable in both directions. Read any experiment recorded against
+  the old band as what it was: several are smaller than the instrument that
+  measured them, and the wider band also hid real effects.
 - **Every run recorded before 2026-08-01 was produced by an unpinned engine.** The
   harnesses pinned the repository under test but invoked the engine from the live
   working tree, and nothing in a scored artefact recorded which engine produced

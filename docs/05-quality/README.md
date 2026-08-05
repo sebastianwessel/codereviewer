@@ -48,7 +48,10 @@ alternative produces a number that looks fine and means nothing.
    configuration on the real-repository corpus produced recall of 81.3%, 87.5%,
    81.3% and 75.0% — mean 81.3%, standard deviation 4.4 percentage points (on a
    16-expected-finding version of that corpus). A headline figure is the **mean
-   across seeds**, never the best observed run.
+   across seeds**, never the best observed run. That 4.4pp figure is historical:
+   three runs at one pinned engine on the current 37-case corpus (2026-08-02)
+   measured a tighter **~1pp** standard deviation — see
+   [Current results](current-results.md#current-headline).
    → [Comparing runs](comparing-runs.md#the-variance-band)
 
    Those figures, and every measured figure published in these quality docs, came
@@ -60,8 +63,12 @@ alternative produces a number that looks fine and means nothing.
    makes earlier runs incomparable is stated before the numbers rather than
    after them. The most recent one is harness-wide: no review agent call
    forwards prior conversation any more, and **every figure recorded before
-   2026-07-27 was produced under the old behaviour**. Whether it helped or hurt
-   is unmeasured.
+   2026-07-27 was produced under the old behaviour**. A paired re-baseline
+   afterwards measured the effect directly: **−0.00pp** recall (p = 0.56, not an
+   accuracy change either way) and a **26% cost reduction**. Figures recorded
+   since 2026-07-27, including the current headline in
+   [Current results](current-results.md#current-headline), are not affected by
+   this caveat.
    → [What limits recall](what-limits-recall.md#a-caveat-that-applies-to-every-number-here)
 
 6. **The corpus has to be able to contain the defect.**

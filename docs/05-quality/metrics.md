@@ -211,7 +211,7 @@ with an explicit denominator count, and the renderer prints
 > A corpus with no scored expectation reports `n/a (0 checked)`. That is the
 > honest reading: the metric is undefined there, not failing.
 >
-> **The real-repository corpus is one of those corpora.** All 42 of its expected
+> **The real-repository corpus is one of those corpora.** All 87 of its expected
 > findings are `path-semantic`, so `lineAccuracy` itself still reports
 > `n/a (0 checked)` there. `lineAccuracy` is only a measurement on corpora built
 > from `path-line` expectations, such as the proof-quality slices; that has not

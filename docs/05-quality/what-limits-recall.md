@@ -21,10 +21,13 @@ described here is a behaviour of that model under this engine, not a property of
 the engine alone — on another model the enumeration gap has not been measured at
 all, and none of these rates would carry over.
 
-> **Every number on this page predates a harness change that has not been
-> re-measured.** See [A caveat that applies to every number
-> here](#a-caveat-that-applies-to-every-number-here) at the end. It is not a
-> footnote — read it before quoting anything.
+> **Every number on this page predates the current pinned-engine baseline** on
+> [Current results](current-results.md#current-headline) (2026-08-02, 61.1% in-diff
+> recall, ~1pp seed variance) and most of it predates the 2026-07-27 harness change
+> described in [A caveat that applies to every number
+> here](#a-caveat-that-applies-to-every-number-here) at the end — read it before
+> quoting anything from this page. It is diagnosis of *why* recall was limited, not
+> a source of current figures.
 
 ---
 
@@ -468,10 +471,14 @@ reason is visible.
 
 The consequence is unavoidable and must not be glossed:
 
-> **Every recall and precision figure this project has ever published was
+> **Every recall and precision figure this project published before 2026-07-27 was
 > produced with history-carrying stages. None of them is comparable to a current
-> run.** That includes every number on this page and in
-> [Current results](current-results.md).
+> run.** That includes every number on this page and the 2026-07-26 headline in
+> [Current results](current-results.md#headline). It does **not** include the
+> 2026-08-02 pinned-engine baseline at the top of that page — those three runs were
+> measured after this suppression shipped, and the paired re-baseline described
+> below is the direct evidence that removing history did not silently reintroduce
+> the effect it was written to rule out.
 
 **It is not an accuracy improvement.** The behaviour was removed because it
 contradicted what those stages are specified to do, **not** because it was shown

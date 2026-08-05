@@ -77,8 +77,9 @@ The default report formats are `json`, `markdown`, and `sarif`
 
 `review` answers one question: does this change introduce a defect? On a
 37-case corpus of real repositories (engine pinned), it finds **~61%** of the
-defects sitting inside the reviewed diff, at **~99% adjusted precision**, for
-about **$2.20** per run. Of the defects sitting elsewhere in a changed file —
+defects sitting inside the reviewed diff, at **~99% adjusted precision**. A
+37-case run costs on the order of **$2.20**, measured at a different engine pin
+than the recall figures. Of the defects sitting elsewhere in a changed file —
 code the reviewer was shown in full but the diff did not touch — it finds
 **0 of 27**. That split is a scope boundary, not a blended average: `review`
 is built to answer "does this change introduce a defect", not "does this

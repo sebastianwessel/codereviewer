@@ -313,16 +313,18 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
   precision to read. In the multi-file cases the incompleteness is deliberate in
   places: `laravel-eloquent-dictionary-key-not-normalized` lists three of the six
   files it touches, because the other three repeat the listed root cause.
-- **The published baseline predates every key change.** The 2026-07-26 run
+- **Most published baselines predate the current key.** The 2026-07-26 run
   scored 30 cases and 42 findings; the key then grew to 58 findings with the
   multi-file cases and to 80 by curating expectations per case, shrank to 74
   across 31 cases when five disclosing cases were removed, and grew again to
-  **87 across 37 cases** with the convergence capture. Any comparison
-  against a run on today's 37/87 corpus is a comparison of different
+  **87 across 37 cases** with the convergence capture on 2026-07-27. Any
+  comparison against a run on today's 37/87 corpus is a comparison of different
   denominators, and the comparison tooling refuses it outright: it compares the
   per-case answer-key digest and will not report a delta across a changed key.
-  **No recall figure published anywhere in this documentation is comparable to a
-  run on today's corpus.**
+  One figure now IS on today's corpus and key: the 2026-08-02 pinned-engine
+  baseline (three runs, engine `6781a26`, 61.1% in-diff recall) — see
+  [Current results](current-results.md#current-headline). Every earlier figure
+  in this documentation remains not comparable to a run on today's corpus.
 - **Checkouts are untrusted input.** Repository content is reviewed, never
   executed; the eligibility gate and redaction apply to it as to any repository.
 - **Cost.** Reviewing full repositories is the expensive corpus. The 30-case run
