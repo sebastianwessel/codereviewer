@@ -1445,6 +1445,26 @@ location, then the lowest candidate index. Non-representative members of a group
 are recorded, not silently dropped, so the merge is auditable and its rate
 observable.
 
+Each non-representative member MUST produce its own `RejectedFinding` with
+`reason: "duplicate"`, following the same contract every other kill in the
+pipeline uses (refutation's kills, the admission gate's fingerprint-collision
+kills) — a merge-away is not a special case with its own shape. A merged-away
+candidate never reaches admission, so this `RejectedFinding` is the ONLY place
+its location and title ever appear in a report; the message MUST therefore
+name and locate both the dropped candidate (title, `path:line`) and the
+representative it was grouped into (candidate id, title, `path:line`), so the
+record is auditable on its own, without cross-referencing internal run state
+the report never exposes. Candidate text embedded this way MUST pass through
+redaction before it reaches the record, the same as any other model-authored
+text reaching an artifact — a merged-away candidate never reaches admission's
+redaction step either.
+
+The discovery telemetry's aggregate `mergedAwayCount` MUST equal the number of
+these individual records for the run; the two MUST NOT be able to disagree.
+An aggregate count that overstates or understates its own per-item records
+would be worse than having no records at all, because a reader would have no
+way to tell which one lied.
+
 This stage MUST be a separate model call from refutation. Refutation asks whether
 a finding is true; merging asks whether two findings are one. Combining unrelated
 judgements into one call is a documented cause of degraded refutation quality.

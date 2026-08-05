@@ -36,6 +36,8 @@ import {
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
+import { redactText } from '../../../../shared/redaction/redactor.js'
+import { truncateToFieldBound } from '../../../../shared/text/truncate.js'
 
 export type SemanticMergeOutcome = {
   // One terminal `duplicate` rejection per NON-representative group member. This
@@ -118,6 +120,22 @@ const representativeOf = (
     return bySpecificity === 0 ? left.index - right.index : bySpecificity
   })[0]!
 
+// `path:line` or `path:startLine-endLine`, the same precision the candidate
+// itself carries. This is what makes a merge record locatable on its own: a
+// merged-away candidate never reaches admission, so its location and title
+// exist NOWHERE else in the report once this stage discards it.
+const locationText = (location: CodeLocation): string =>
+  location.endLine === undefined
+    ? `${location.path}:${location.startLine}`
+    : `${location.path}:${location.startLine}-${location.endLine}`
+
+// Model-authored title text has not passed through admission's redaction yet —
+// a merged-away candidate never reaches `redactedCandidate`, because it never
+// reaches admission at all — so this is the one place that owes it before the
+// text lands in a report artifact.
+const locatable = (candidate: CandidateFinding): string =>
+  `"${redactText(candidate.title)}" (${locationText(candidate.location)})`
+
 const mergedAwayRejection = (
   candidate: CandidateFinding,
   representative: CandidateFinding
@@ -126,7 +144,15 @@ const mergedAwayRejection = (
     candidateId: candidate.id,
     status: 'rejected',
     reason: 'duplicate',
-    message: `Merged into candidate ${representative.id}, which the semantic finding merge grouped with it as one underlying defect.`,
+    // Names and locates BOTH sides: the dropped candidate (this record's own
+    // `candidateId` is an opaque id with no other trace in the report) and the
+    // representative it was merged into, so a human can act on this record
+    // alone rather than cross-referencing internal state that the report never
+    // exposes.
+    message: truncateToFieldBound(
+      `${locatable(candidate)} was merged into candidate ${representative.id} ${locatable(representative)}, which the semantic finding merge grouped with it as one underlying defect.`,
+      RejectedFindingSchema.shape.message
+    ),
     severity: candidate.severity
   })
 

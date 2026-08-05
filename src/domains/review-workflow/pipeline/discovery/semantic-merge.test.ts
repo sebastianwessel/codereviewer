@@ -110,6 +110,76 @@ describe('runSemanticFindingMerge', () => {
     expect(outcome.providerIssues).toEqual([])
   })
 
+  test('records enough on the merged-away candidate alone to locate it and its representative', async () => {
+    // Two candidates the merge model says are the same defect. The survivor is
+    // the lower-indexed one (both `high`, both single-point locations), so
+    // `second` is the one that gets merged away and must carry its own
+    // identity — no other record in a report ever mentions a merged-away
+    // candidate's title or location once this stage discards it.
+    const first = candidate({
+      id: 'cand_1111111111111111',
+      startLine: 2,
+      title: 'Value dereferenced without a null guard'
+    })
+    const second = candidate({
+      id: 'cand_2222222222222222',
+      startLine: 3,
+      title: 'Missing guard before the property access'
+    })
+    const merge = scriptedMerge([{ candidateIds: [first.id, second.id] }])
+
+    const outcome = await runSemanticFindingMerge({
+      task,
+      candidates: [first, second],
+      fileTextByPath,
+      runMerge: merge.runMerge
+    })
+
+    const rejection = outcome.rejectedFindings[0]
+
+    // The record IS the merged-away candidate: recoverable by its own id...
+    expect(rejection?.candidateId).toBe(second.id)
+    // ...and, from the message alone, both its own title and location...
+    expect(rejection?.message).toContain(second.title)
+    expect(rejection?.message).toContain('src/app.ts:3')
+    // ...and the representative it was absorbed into, by id, title, and
+    // location, so a human reading this ONE record (without cross-referencing
+    // admitted findings, which may not even list `first` under this id) can
+    // answer "what was dropped, and what does it now live inside of".
+    expect(rejection?.message).toContain(first.id)
+    expect(rejection?.message).toContain(first.title)
+    expect(rejection?.message).toContain('src/app.ts:2')
+  })
+
+  test('redacts a secret embedded in a merged-away candidate title before it reaches the record', async () => {
+    // A merged-away candidate never reaches admission's `redactedCandidate`
+    // step, because it never reaches admission at all — so if the merge stage
+    // does not redact before embedding the title in the rejection message,
+    // this leaks into a report artifact untouched.
+    const secretTitle = 'Hardcoded key sk-abcdefghijklmnopqrstuvwx1234 in config'
+    const first = candidate({
+      id: 'cand_1313131313131313',
+      startLine: 2,
+      title: 'Hardcoded credential committed to source'
+    })
+    const second = candidate({
+      id: 'cand_1414141414141414',
+      startLine: 3,
+      title: secretTitle
+    })
+    const merge = scriptedMerge([{ candidateIds: [first.id, second.id] }])
+
+    const outcome = await runSemanticFindingMerge({
+      task,
+      candidates: [first, second],
+      fileTextByPath,
+      runMerge: merge.runMerge
+    })
+
+    expect(outcome.rejectedFindings[0]?.message).not.toContain('sk-abcdefghijklmnopqrstuvwx1234')
+    expect(outcome.rejectedFindings[0]?.message).toContain('[REDACTED]')
+  })
+
   test('keeps two distinct defects on the SAME line apart when the model reports no group', async () => {
     const missingGuard = candidate({
       id: 'cand_3333333333333333',
