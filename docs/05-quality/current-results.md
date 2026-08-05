@@ -21,67 +21,100 @@ record of how that figure was reached, not as an alternative to quote instead.
 
 ## Current headline
 
-Measured **2026-08-02** on the **real-repository corpus** as it stands today: 37
+Measured **2026-08-05** on the **real-repository corpus** as it stands today: 37
 cases, 87 expected findings, 27 upstream projects. Model `openai/gpt-5.3-codex`,
-three runs at **one pinned engine** (`6781a26`), the same dependency digest
-verified across all three. This is the current, quotable figure for the review
-stage — it supersedes every earlier figure on this page, including the
-2026-07-26 headline further down.
+engine pinned `db78900`, dependency digest verified **identical to the
+2026-08-02 baseline's digest** before running, so the engine build is the only
+intended difference. Three runs, zero provider errors in any of them. This is
+the current, quotable figure for the review stage — it supersedes the
+2026-08-02 headline further down, which is kept as a dated record of how that
+figure was reached, not as an alternative to quote instead.
 
 | Metric | Value | Per run |
 | --- | ---: | --- |
-| Recall, in-diff | **61.1%** (sd 0.96pp) | 61.7 / 60.0 / 61.7 |
-| Recall, blended | **42.1%** (sd 0.66pp) | 42.5 / 41.4 / 42.5 |
-| Adjusted precision | **99.1%** | 100 / 97.3 / 100 |
-| Recall, out-of-diff | **0 of 27** | 0 / 0 / 0 |
-| Reported findings landing in-diff | **94.2%** (49 of 52) | the 3 strays were all judged real |
+| Recall, in-diff | **68.3%** (sd 2.89pp) | 66.7 / 66.7 / 71.7 |
+| Recall, blended | **47.1%** | 46.0 / 46.0 / 49.4 |
+| Recall, out-of-diff | **0 of 27** — unchanged | 0 / 0 / 0 |
+| Raw precision | **77.8%** | 78.4 / 76.9 / 78.2 |
+| Adjusted precision | **96.2%** | 95.2 / 100 / 93.5 |
+| Line placement | **94.3%** | 92.5 / 95.0 / 95.3 |
+| Severity accuracy | **61.0%** | 60.0 / 65.0 / 58.1 |
 
-Source: `reports/eval-results-ledger.md`, "2026-08-02 — stage 1, three runs at
-one pinned engine".
+Source: `reports/eval-results-ledger.md`, "2026-08-05 — stage 1 re-baselined
+after the instruction and disclosure changes".
 
-**In-diff recall — 61.1% — is the number to quote for "does review find defects
-in the code it was asked to look at."** Blended recall folds in a population
-review does not target (see [Out-of-diff recall and `impact
-check`](#out-of-diff-recall-and-impact-check-two-different-jobs-not-one-scorecard)
-below) and moves with that population's share of the corpus as much as with
-reviewer quality — it is reported here for completeness, not as the headline.
+**In-diff recall — 68.3% — is the number to quote for "does review find defects
+in the code it was asked to look at."** It was measured **higher** than the
+2026-08-02 baseline's 61.1%: the three new runs (66.7–71.7%) do not overlap the
+three old ones (60.0–61.7%) at all, and an exact permutation test over the 20
+ways to split six runs into two arms of three puts one-sided **p = 0.050** —
+the smallest p attainable at three runs per arm, so this is as strong as this
+design can report and no stronger.
 
-**The variance band on this measurement is ~1pp, not the ±4.8pp this project
-quoted for months.** Three runs at one pinned engine and one verified dependency
-digest put the standard deviation at 0.96pp (in-diff) and 0.66pp (blended). The
-older ±4.8pp figure — see [Variance: why single runs prove
-little](#variance-why-single-runs-prove-little) below — was estimated from too
-few samples on a smaller, differently-shaped corpus, and it produced at least
-three wrong calls in one day, including two opposite readings of the same
-change. Use ~1pp as the resolution for a comparison against this baseline. The
-historical ±4.8pp entries below remain accurate descriptions of what *they*
-measured, on the corpus and engine state of the time — they are not a
-substitute for this tighter figure going forward.
+**Which change moved it is not established, and this document does not claim
+one did.** The eval configures no reviewer instructions, so the 2026-08-05
+instruction work — reviewer instructions reaching the discovery call, see
+[Status and limitations](../01-overview/status-and-limitations.md) — is
+**inert on this corpus**: an empty instruction set renders an empty section.
+The delta belongs to the whole span between the two engine pins, which also
+carries the prior session's disclosure work (grep/list truncation notices and
+the refutation withholding notice reaching the model) and a refutation-context
+fix for partitioned sub-tasks. Read this as "measured higher," never as
+"improved by" any one change.
 
-**Cost was not recorded for these three runs.** The nearest measured cost figure
-for a 37-case run is **~$2.20** (2026-08-01, "defaults + cross-file" arm — see
-`reports/eval-results-ledger.md`, "Stage 1 headline at shipped defaults, and the
-cross-file replication"), and it was measured at a **different, earlier engine
-pin**. Quote it as an order-of-magnitude figure for what a run of this size
-costs, not as this run's own cost.
+**Adjusted precision — 96.2% — is not comparable to the earlier 99.1%, and it
+must not be read as a fall or a regression.** `EVAL_METRICS_VERSION` moved
+from `2026-08-01.discovery-telemetry` to `2026-08-03.plausibility-source-window`
+between the two measurements, and that bump's own note states it changes which
+findings are credited unlisted-real — hence `adjustedPrecision`,
+`unlistedRealFindingCount`, and `genuineFalsePositiveCount` — for **identical
+review output** on any case with a file above the cap. The 99.1% → 96.2%
+movement therefore mixes a scorer correction with whatever the engine did, and
+this run cannot separate them. The scorer change does not affect raw
+precision, and raw precision **rose**: 74.9% (2026-08-02) to 77.8% here.
+
+**The variance band is now 2.89pp, not 0.96pp.** Two of the three new runs
+landed on 66.7% and one on 71.7% — three times the spread of the 2026-08-02
+runs, on the same corpus and the same run count. Until that is understood,
+treat **2.89pp**, not 0.96pp, as the current band for judging a further change
+against this baseline. See [Variance: why single runs prove
+little](#variance-why-single-runs-prove-little) below.
+
+**Out-of-diff recall stayed at a hard 0 of 27, in every run — unchanged from
+the 2026-08-02 baseline.** Nothing in this span of changes targeted it, and
+nothing moved it. The scope boundary documented in [Out-of-diff recall and
+`impact check`](#out-of-diff-recall-and-impact-check-two-different-jobs-not-one-scorecard)
+below stands exactly as written.
+
+**Cost is two numbers, not one, and quoting either alone misrepresents the
+other.** A cold-cache run costs **$1.97**; with a warm cache, **$0.82–0.83** —
+more than 2x apart. Prompt caching is reachable at this engine pin, which
+reverses an earlier probe that found it unavailable: the first of the three
+runs cached 5% of its input, and the second and third cached 79% and 80%,
+which is what cut cost from $1.97 to $0.83 and $0.82. That also means an A/B
+run second on a shared cache inherits the first arm's warm cache — quote the
+cold figure, or state which you're quoting. The three-run sweep cost **$3.62
+review + $0.81 scoring = $4.44** for 3 × 37 cases.
 
 ## Out-of-diff recall and `impact check`: two different jobs, not one scorecard
 
 `review` answers "does this change introduce a defect," and its attention is
 scoped to the reviewed diff by design — a different job from a full repository
 audit ("does this codebase contain a defect, changed or not"), which is not
-built. The 2026-08-02 runs above measured **0 of 27** out-of-diff expectations
-found, across all three runs: a measured zero over a full denominator, not
-noise and not a defect in the reviewer. Every one of those 27 misses sat in a
-file the reviewer had been shown **in full** — the miss is diff-scoped
-attention holding exactly as designed, not a context or retrieval gap. Full
-account: [What limits recall](what-limits-recall.md).
+built. The 2026-08-05 runs above measured **0 of 27** out-of-diff expectations
+found, across all three runs — unchanged from the 2026-08-02 baseline: a
+measured zero over a full denominator, not noise and not a defect in the
+reviewer. Every one of those 27 misses sat in a file the reviewer had been
+shown **in full** — the miss is diff-scoped attention holding exactly as
+designed, not a context or retrieval gap. Full account: [What limits
+recall](what-limits-recall.md).
 
 `impact check` is a separate command built for exactly that population. Scored
 against the same 27 out-of-diff expectations — the population it exists for — its
 deterministic core localises **20 of 27 (74.1%)** inside a symbol it flagged as
-changed (same source: `reports/eval-results-ledger.md`, "2026-08-02 — stage 1,
-three runs at one pinned engine").
+changed (measured 2026-08-02, engine `6781a26`; this figure was not re-measured
+at the 2026-08-05 pin — source: `reports/eval-results-ledger.md`, "2026-08-02 —
+stage 1, three runs at one pinned engine").
 
 That figure covers the deterministic core only. The command's **adjudication
 layer** (`changeImpact.adjudication.enabled`, off by default) is **unmeasured**:
@@ -94,24 +127,58 @@ answers "is this location worth a human look," not "is there a defect here."
 Quoting a blended recall (which folds review's in-diff and out-of-diff
 performance into one number) against `impact check`'s coverage, or treating the
 two as substitutes, scores one stage against the other stage's job. Keep the
-two figures — 61.1% in-diff recall for review, 74.1% out-of-diff coverage for
+two figures — 68.3% in-diff recall for review, 74.1% out-of-diff coverage for
 `impact check` — separate and separately labelled wherever either is quoted.
 
 ---
 
 ## Historical record
 
-Everything below predates the current headline above. Some of it also predates
-the 2026-07-27 harness fix described in the warning at the start of the next
-section; the rest is simply an earlier measurement the 2026-08-02 headline has
-since superseded. Read the date on each section before quoting anything from it.
+Everything below predates the [current headline](#current-headline) above. Read
+the date on each section before quoting anything from it.
 
-**Everything below also predates 2026-08-01 engine pinning.** Before that date the
-harness pinned the repository under test but invoked the *engine* from the live
-working tree, so nothing in a scored artefact recorded which engine build produced
-it. Every figure below carries no engine provenance and cannot be pooled with the
-pinned, dependency-digest-verified 2026-08-02 headline above; treat small deltas
-among the historical figures themselves as correspondingly weaker evidence too.
+**The 2026-08-02 entry directly below carries the same engine-pinning and
+dependency-digest guarantees as the current headline above it — it predates
+only the current headline, nothing more.** Everything further below it also
+predates 2026-08-01 engine pinning: before that date the harness pinned the
+repository under test but invoked the *engine* from the live working tree, so
+nothing in a scored artefact recorded which engine build produced it. None of
+those older figures carries engine provenance and none can be pooled with
+either pinned baseline above; treat small deltas among the historical figures
+themselves as correspondingly weaker evidence too.
+
+### 2026-08-02 — stage 1, three runs at one pinned engine
+
+**Superseded by the [current headline](#current-headline) above.** Kept below
+as a dated record of the measurement it replaced.
+
+The figures the report renderer prints to users as of this writing. Recorded
+here so the prose in `markdown-reporter.ts` and `summary-comment.ts` can be
+traced back to the measurement it cites, even though that prose has not yet
+been updated to the current headline above. Engine `6781a26`, same dependency
+digest across all three runs.
+
+| metric | value |
+| --- | ---: |
+| in-diff recall | 61.7 / 60.0 / 61.7 — mean 61.1%, **sd 0.96pp** |
+| blended recall | 42.5 / 41.4 / 42.5 — mean 42.1%, **sd 0.66pp** |
+| adjusted precision | 100 / 97.3 / 100 — mean 99.1% |
+| out-of-diff recall | 0 / 0 / 0 — **0 of 27**, a measured zero over a full denominator |
+| reported findings landing in-diff | 94.2% (49 of 52); the 3 strays were all judged real |
+
+Two consequences worth keeping attached to these numbers.
+
+The **sd was ~0.7pp, not the ±4.8pp** this project used for months. That older
+band was estimated from too few samples and made every single-run comparison
+unreadable in both directions; it produced at least three wrong calls in one
+day, including two opposite readings of the same change. **This figure is
+itself superseded** — the 2026-08-05 re-baseline above measured sd 2.89pp on
+the same corpus and run count. Use 2.89pp, not 0.96pp or ~1pp, as the current
+resolution.
+
+The **out-of-diff zero is a scope boundary, not a defect**. `impact check` covers
+that population at 20 of 27 (74.1%). Quoting a blended recall scores stage 1
+against stage 3's job — the error spec 22 warns about by name.
 
 ### Headline
 
@@ -196,9 +263,9 @@ significant, and no specific improvement is claimed for it — but significance 
 bar for claiming a benefit, not for allowing a change that is free and shows no harm.
 If a regression ever appears, this is the first switch to turn back off.
 
-**Both changes above are already reflected in the current headline's shipped
-defaults.** The 2026-08-02 measurement at the top of this page ran with
-partitioning and cross-file retrieval both on, at their shipped settings.
+**These changes are already reflected in both pinned headlines' shipped
+defaults.** The 2026-08-02 and 2026-08-05 measurements both ran with
+partitioning and cross-file retrieval on, at their shipped settings.
 
 ### What limits recall today
 
@@ -210,7 +277,7 @@ later one in the *same* file 4.7% of the time — while a later expectation in a
 controlled experiment then showed the reviewer answering the whole-file diff rather
 than the code it was handed: only 21% of candidates from a diff-bearing arm pointed
 inside the unit they were shown. This measurement predates the current 37-case /
-87-finding corpus and the 2026-08-02 pinned baseline above; it is the diagnosis that
+87-finding corpus and the pinned baselines above; it is the diagnosis that
 motivated the partitioning default described in the previous section, not a figure
 to quote as the corpus's current shape.
 
@@ -255,8 +322,8 @@ Two qualifications belong with the first two verdicts:
 - **Unproven, not disproven.** With 3 seeds and a baseline deviation of 4.8pp on
   this corpus the resolution is roughly ±5.5pp. A small real effect would be
   invisible. Both were removed as unproven and expensive, not as demonstrated
-  failures. (The 2026-08-02 measurement above put the same kind of comparison,
-  on the current corpus and a pinned engine, at a much tighter ~1pp — see
+  failures. (The pinned-engine measurements above put the same kind of comparison,
+  on the current corpus, at a much tighter resolution — see
   [Variance](#variance-why-single-runs-prove-little) below.)
 - **One signal ran the other way.** The lens pass surfaced more
   plausibility-confirmed defects the answer key never listed — 7.3 per run against
@@ -278,13 +345,17 @@ This has already invalidated conclusions here. An earlier prompt change was repo
 as worth +18.8pp on a 16-finding corpus; measured on 133 findings it is worth about
 +3.8pp. The first figure was largely that small corpus's own noise.
 
-**This ±4.8pp / ±5.5pp band is superseded as the operating figure.** The 2026-08-02
-measurement at the top of this page — three runs at one pinned engine, one verified
-dependency digest, the current 37-case / 87-finding corpus — put the standard
-deviation at 0.96pp (in-diff) and 0.66pp (blended). New comparisons should use ~1pp
-as the resolution, not ±4.8pp. The entries in this section remain correct as
-descriptions of what they measured, on the corpus and engine state of the time; they
-are not a substitute for the tighter current figure.
+**This ±4.8pp / ±5.5pp band was first superseded by a tighter one, which has itself
+since been revised upward.** The 2026-08-02 measurement — three runs at one pinned
+engine, one verified dependency digest, the current 37-case / 87-finding corpus —
+put the standard deviation at 0.96pp (in-diff) and 0.66pp (blended), and was quoted
+for a time as ~1pp resolution. The 2026-08-05 re-baseline, same corpus and run
+count, measured **sd 2.89pp** on in-diff recall instead — three times wider, cause
+not yet understood. **Use 2.89pp, not 0.96pp and not ±4.8pp, as the current
+operating figure.** See the [current headline](#current-headline) above. The
+entries in this section remain correct as descriptions of what they measured, on
+the corpus and engine state of the time; none of them is a substitute for the
+current figure.
 
 ### Other corpora
 
@@ -295,7 +366,7 @@ plausibility judge confirmed 86 unlisted-real findings against 48 matched, so th
 engine finds roughly **2.8× more genuine defects than the key lists**, and its
 recall understates by about that factor. Adjusted precision is the figure worth
 reading there. Note also that 10 of its 59 cases are hand-built negatives rather
-than real pull requests. This corpus was not part of the 2026-08-02 pinned-engine
+than real pull requests. This corpus was not part of either pinned-engine
 measurement above and has no comparably recent figure recorded.
 
 ---
@@ -315,7 +386,7 @@ Stated plainly, because each of these was a wrong number at some point:
   across runs whose recall differs; a recall gain mechanically depresses it by adding
   harder findings to the denominator. Compare on the intersection instead.
 - **The corpus is modest.** 87 findings across 37 cases resolves large effects
-  reliably — the 2026-08-02 pinned baseline's own seed-to-seed spread is ~1pp — but a
+  reliably — the current pinned baseline's own seed-to-seed spread is 2.89pp — but a
   real effect much smaller than that still needs several runs at one pinned engine
   to separate from noise.
 - **All cases are `held-out`** by the anti-contamination policy, but the upstream

@@ -32,12 +32,16 @@ Three corollaries worth internalising:
 - **That band was measured on a 16-expected-finding version of the corpus.** All
   four recall values are exact multiples of 1/16, so the entire observed spread
   was ±1 finding around 13. The corpus has since grown to 37 cases and 87
-  findings, and the band **has** since been re-measured at that size: three runs
-  at one pinned engine (`6781a26`, 2026-08-02) put the standard deviation at
-  0.96pp for in-diff recall and 0.66pp for blended recall — see [Current
-  results](current-results.md#current-headline). That tighter figure is the one
-  to use for a comparison against the current baseline; the 4.4pp figure above
-  describes only the older 16-finding configuration it was measured on.
+  findings, and the band **has** since been re-measured at that size twice: three
+  runs at one pinned engine (`6781a26`, 2026-08-02) first put the standard
+  deviation at 0.96pp for in-diff recall and 0.66pp for blended recall, then a
+  second pinned-engine measurement (`db78900`, 2026-08-05, same corpus and run
+  count) put it at **2.89pp** for in-diff recall instead — three times wider,
+  cause not yet understood. **Use 2.89pp, not 0.96pp**, as the current figure for
+  a comparison against the current baseline — see [Current
+  results](current-results.md#current-headline). Both figures describe only
+  their own engine pin; the 4.4pp figure above describes only the older
+  16-finding configuration it was measured on.
 - **Denominator size sets the resolution.** One finding is worth ~6.3 points on a
   16-finding corpus, ~1.1 points on the current 87-finding one, and ~7.1 points
   on the 14-finding proof-quality slices. A smaller corpus quantises recall more

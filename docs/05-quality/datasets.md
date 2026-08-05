@@ -321,10 +321,12 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
   comparison against a run on today's 37/87 corpus is a comparison of different
   denominators, and the comparison tooling refuses it outright: it compares the
   per-case answer-key digest and will not report a delta across a changed key.
-  One figure now IS on today's corpus and key: the 2026-08-02 pinned-engine
-  baseline (three runs, engine `6781a26`, 61.1% in-diff recall) — see
-  [Current results](current-results.md#current-headline). Every earlier figure
-  in this documentation remains not comparable to a run on today's corpus.
+  Two figures now ARE on today's corpus and key: the 2026-08-02 pinned-engine
+  baseline (three runs, engine `6781a26`, 61.1% in-diff recall) and the current
+  2026-08-05 pinned-engine baseline (three runs, engine `db78900`, 68.3%
+  in-diff recall, sd 2.89pp) — see [Current
+  results](current-results.md#current-headline). Every earlier figure in this
+  documentation remains not comparable to a run on today's corpus.
 - **Checkouts are untrusted input.** Repository content is reviewed, never
   executed; the eligibility gate and redaction apply to it as to any repository.
 - **Cost.** Reviewing full repositories is the expensive corpus. The 30-case run

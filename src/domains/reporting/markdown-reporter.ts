@@ -46,30 +46,42 @@ const WHAT_THIS_IS =
 // for the same reason: rounding a rate to "usually" lets a reader supply their own
 // optimistic figure, and the optimistic figure is the expensive one here.
 //
-// Sources: `reports/eval-results-ledger.md`, 2026-08-02, three runs at pinned
-// engine `6781a26` on the 37-case real-repository corpus. That entry exists so
-// this prose cannot drift from the measurement it cites, and it had: the ranges
-// here read 61-68% and 95-99%, which no run in that set produced, and the sd
-// quoted for in-diff recall was the BLENDED one. The measured figures are
-// in-diff recall 61.7/60.0/61.7 (mean 61.1%, sd 0.96pp), adjusted precision
-// 100/97.3/100 (mean 99.1%), out-of-diff recall 0 of 27 — a hard zero over a
-// full denominator, not missing data — and 94.2% of reported findings landing
-// inside the diff.
+// Sources: `reports/eval-results-ledger.md`, 2026-08-05, three runs at pinned
+// engine `db78900` on the 37-case real-repository corpus. That entry exists so
+// this prose cannot drift from the measurement it cites — it has caught drift
+// twice now, once when the ranges quoted here matched no run in the set, and
+// once when this text kept citing the superseded 2026-08-02 sweep.
+//
+// Measured: in-diff recall 66.7/66.7/71.7 (mean 68.3%, sd 2.89pp), adjusted
+// precision 95.2/100/93.5 (mean 96.2%), out-of-diff recall 0 of 27 — a hard zero
+// over a full denominator, not missing data.
+//
+// Two figures the previous version of this text carried are deliberately gone
+// rather than updated. The share of reported findings landing inside the diff is
+// not derivable from the report's metrics block, so restating it would be
+// quoting a number this file cannot check. And the older adjusted-precision
+// figure is NOT comparable to the current one: the eval's scoring version moved
+// between the two sweeps in a way that changes which findings are credited for
+// identical review output, so the pair cannot be read as a trend and no trend is
+// stated here.
 //
 // The mean and its spread are stated rather than a range, because a range
-// invites a reader to pick the end that suits them.
+// invites a reader to pick the end that suits them. The spread tripled between
+// the two sweeps and the cause is not established, which is itself a reason to
+// state it.
 //
 // The out-of-diff population is not a defect of this stage but its scope
-// boundary, and `impact check` is the stage that covers it (20 of 27, 74.1%), so
-// it is named here rather than left as an unexplained hole.
+// boundary, and `impact check` is the stage that covers it (20 of 27, 74.1%,
+// measured 2026-08-02 on that command's deterministic core), so it is named here
+// rather than left as an unexplained hole.
 const MEASURED_RELIABILITY =
-  'Measured reliability, so these findings can be weighed rather than trusted. On a 37-case real-repository corpus with the engine pinned: about **3 in 5** defects sitting INSIDE the diff were found (in-diff recall mean 61.1% over three runs, standard deviation 0.96pp), and **0 of 27** defects sitting outside the diff in the very same changed files were found — a measured zero over a full denominator, and by design, since this stage is diff-scoped and `impact check` is the stage that covers that population. Of what it does report, roughly **99 in 100** stand up under review (adjusted precision mean 99.1%), and 94.2% of it lands inside the diff. Two runs over the same commit do not produce the same report.'
+  'Measured reliability, so these findings can be weighed rather than trusted. On a 37-case real-repository corpus with the engine pinned: about **7 in 10** defects sitting INSIDE the diff were found (in-diff recall mean 68.3% over three runs, standard deviation 2.89pp), and **0 of 27** defects sitting outside the diff in the very same changed files were found — a measured zero over a full denominator, and by design, since this stage is diff-scoped and `impact check` is the stage that covers that population. Of what it does report, roughly **19 in 20** stand up under review (adjusted precision mean 96.2%). Two runs over the same commit do not produce the same report.'
 
 // The sentence that has to be right when the list is short, and the one most
 // easily replaced by a congratulation. Reused wherever an empty findings list is
 // rendered so the two cannot drift apart.
 const NOTHING_PROVED =
-  'This run proved no defect it could act on. That is a statement about this search and not about the change: roughly two in five defects inside the diff are missed on the measured corpus, and defects outside the diff are not looked for at all. Read it as "this search found nothing", never as "there is nothing to find".'
+  'This run proved no defect it could act on. That is a statement about this search and not about the change: roughly three in ten defects inside the diff are missed on the measured corpus, and defects outside the diff are not looked for at all. Read it as "this search found nothing", never as "there is nothing to find".'
 
 const countBy = <T extends string>(
   values: readonly T[]

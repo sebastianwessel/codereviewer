@@ -92,13 +92,15 @@ describe('Markdown reporter', () => {
   test('states the measured error rates and what an absent finding does not mean', () => {
     const rendered = renderMarkdownReport(createReportFixture())
 
-    // These must match `reports/eval-results-ledger.md` (2026-08-02, engine
-    // 6781a26) exactly. The prose once quoted ranges no run in that set produced.
+    // These must match `reports/eval-results-ledger.md` (2026-08-05, engine
+    // db78900) exactly. The prose once quoted ranges no run in that set produced,
+    // and later kept citing the superseded 2026-08-02 sweep after a re-baseline
+    // had replaced it; this assertion is what catches both.
     expect(rendered).toContain(
-      'in-diff recall mean 61.1% over three runs, standard deviation 0.96pp'
+      'in-diff recall mean 68.3% over three runs, standard deviation 2.89pp'
     )
     expect(rendered).toContain('**0 of 27**')
-    expect(rendered).toContain('adjusted precision mean 99.1%')
+    expect(rendered).toContain('adjusted precision mean 96.2%')
     expect(rendered).toContain(
       'the absence of a finding is not the absence of a defect'
     )

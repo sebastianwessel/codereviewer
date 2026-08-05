@@ -76,19 +76,23 @@ The default report formats are `json`, `markdown`, and `sarif`
 ## What it measures at
 
 `review` answers one question: does this change introduce a defect? On a
-37-case corpus of real repositories (engine pinned), it finds **~61%** of the
-defects sitting inside the reviewed diff, at **~99% adjusted precision**. A
-37-case run costs on the order of **$2.20**, measured at a different engine pin
-than the recall figures. Of the defects sitting elsewhere in a changed file —
-code the reviewer was shown in full but the diff did not touch — it finds
-**0 of 27**. That split is a scope boundary, not a blended average: `review`
-is built to answer "does this change introduce a defect", not "does this
-codebase contain a defect, changed or not". See
+37-case corpus of real repositories, engine pinned `db78900`, it finds
+**68.3%** (sd 2.89pp) of the defects sitting inside the reviewed diff. Adjusted
+precision is **96.2%** — not comparable to an earlier 99.1% figure, because the
+eval's scoring version changed between the two measurements in a way that
+changes what gets credited, independent of review quality; raw precision, which
+that change does not touch, is **77.8%**. A 37-case run costs **$1.97** cold-cache
+or **$0.82–0.83** with a warm cache — more than 2x apart, so neither stands in
+for the other. Of the defects sitting elsewhere in a changed file — code the
+reviewer was shown in full but the diff did not touch — it finds **0 of 27**,
+unchanged from the prior baseline. That split is a scope boundary, not a
+blended average: `review` is built to answer "does this change introduce a
+defect", not "does this codebase contain a defect, changed or not". See
 [Status and limitations](status-and-limitations.md) for the full split and its
 replication.
 
 Measured on `openai/gpt-5.3-codex`. Those rates and that cost are properties of
-that model, not of the engine, and do not transfer to another one.
+that model and that engine pin, and do not transfer to another one.
 
 Read that as the product's actual shape. What it reports is almost always
 real, and its attention follows the diff: it finds roughly six defects in ten

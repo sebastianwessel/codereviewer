@@ -42,26 +42,41 @@ prove, not a certificate that the change is correct.
 
 The second states the **measured error rates**, so a finding can be weighed
 rather than trusted. On the 37-case real-repository corpus with the engine
-pinned, against `openai/gpt-5.3-codex` — the rates are a property of that model,
-and the report says so on its own face, comparing it against the model the run
-actually used:
+pinned `db78900`, against `openai/gpt-5.3-codex` — the rates are a property of
+that model, and the report says so on its own face, comparing it against the
+model the run actually used:
 
 | population | result |
 | --- | --- |
-| defects inside the diff | found about 3 in 5 (in-diff recall mean 61.1% over three runs, sd 0.96pp) |
+| defects inside the diff | found about 2 in 3 (in-diff recall mean 68.3% over three runs, sd 2.89pp) |
 | defects outside the diff, in the same changed files | **0 of 27** — by design; `impact check` covers that population |
-| findings it reports that hold up | about 99 in 100 (adjusted precision mean 99.1%) |
-| findings that land inside the diff | 94.2% |
+| findings it reports that hold up (adjusted) | about 96 in 100 (adjusted precision mean 96.2%) |
+| findings it reports that hold up (raw) | about 78 in 100 (raw precision mean 77.8%) |
+
+**The adjusted-precision figure above is not comparable to an earlier 99.1%
+figure.** The eval's scoring version changed between the two measurements in a
+way that changes which findings are credited as real but unlisted — for
+identical review output — so a movement between them mixes a scorer correction
+with whatever the engine did. Raw precision, which that change does not touch,
+rose over the same span. See [Current results](../05-quality/current-results.md#current-headline)
+for the full accounting.
 
 Two consequences worth stating plainly, because they are what the rates mean for
 a reviewer:
 
-- **An empty findings list is not a clearance.** Roughly two in five defects
+- **An empty findings list is not a clearance.** Roughly one in three defects
   inside the diff are missed.
 - **Two runs over the same commit do not produce the same report.** Run-to-run
-  standard deviation is 0.96pp on in-diff recall, and 0.66pp on blended recall.
-  The two are different populations; quoting the blended figure for the in-diff
-  rate understates the spread of the number above it.
+  standard deviation is 2.89pp on in-diff recall. Earlier measurements put this
+  figure as low as 0.96pp; treat 2.89pp as the current, wider band until the
+  cause of the increase is understood.
+
+> The literal wording the CLI currently prints in this header (the numbers baked
+> into `markdown-reporter.ts` / `summary-comment.ts`) still names the prior
+> 2026-08-02 figures (61.1% recall, sd 0.96pp, 99.1% adjusted precision) as of
+> this writing; the table above states the current measurement from
+> [Current results](../05-quality/current-results.md), and the printed header
+> is due to be re-synced to it.
 
 → [What limits recall](../05-quality/what-limits-recall.md),
 [Current results](../05-quality/current-results.md)

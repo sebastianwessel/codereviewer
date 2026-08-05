@@ -49,8 +49,11 @@ alternative produces a number that looks fine and means nothing.
    81.3% and 75.0% — mean 81.3%, standard deviation 4.4 percentage points (on a
    16-expected-finding version of that corpus). A headline figure is the **mean
    across seeds**, never the best observed run. That 4.4pp figure is historical:
-   three runs at one pinned engine on the current 37-case corpus (2026-08-02)
-   measured a tighter **~1pp** standard deviation — see
+   three runs at one pinned engine on the current 37-case corpus first measured
+   a tighter **0.96pp** standard deviation (2026-08-02), then a second
+   pinned-engine re-baseline on the same corpus and run count measured
+   **2.89pp** instead (2026-08-05) — three times wider, cause not yet
+   understood. **2.89pp is the current band** — see
    [Current results](current-results.md#current-headline).
    → [Comparing runs](comparing-runs.md#the-variance-band)
 

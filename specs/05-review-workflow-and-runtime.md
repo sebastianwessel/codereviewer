@@ -446,13 +446,19 @@ documented, previously inert input now reaches the stage the documentation says
 it reaches, which is asserted at the discovery call boundary rather than at the
 packet field it was already present in.
 
-**A re-baseline is owed.** Every figure measured before 2026-08-05 was produced
-by an engine in which reviewer instructions could not reach discovery. A figure
-measured after it MUST NOT be compared with one measured before it until a
-baseline has been re-run across this change, on runs whose instruction
-configuration is stated. A run with no instructions configured renders no section
-and is unaffected; a run that configures them is sending a prompt no published
-figure covers.
+**The re-baseline has run, and it does not isolate this change.** The
+2026-08-05 re-baseline (`reports/eval-results-ledger.md`, "2026-08-05 — stage 1
+re-baselined after the instruction and disclosure changes") measured in-diff
+recall **higher** than the prior pinned baseline — 68.3% (sd 2.89pp) against
+61.1% — across engine pins `6781a26` → `db78900`. But that eval run configures
+**no reviewer instructions**, so this change renders no section and is inert
+on that corpus; the measured delta belongs to the whole span of changes
+between the two pins, which also includes prior-session disclosure work and a
+refutation-context fix, and this run cannot attribute it to any one of them.
+**This change remains unattributed, not validated.** A run that configures
+reviewer instructions is still sending a prompt no published figure covers,
+and MUST NOT be compared against either pinned baseline above until it is
+itself measured.
 
 ### Discovery Call Failure Policy
 
