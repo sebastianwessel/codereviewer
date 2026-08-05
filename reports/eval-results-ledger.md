@@ -18,6 +18,71 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-08-05 — stage 1 re-baselined after the instruction and disclosure changes
+
+Owed since the 2026-08-05 improvement pass changed what the model sees. Three runs,
+engine pinned `db78900`, dependency digest `52d22c4858028742` — **identical to the
+2026-08-02 baseline's digest**, verified before running, so the engine is the only
+intended difference. 37-case real-repository corpus, `openai/gpt-5.3-codex`,
+`--review-mode pr --review-depth thorough --max-concurrent-tasks 1`. Zero provider
+errors in all three. Artefacts under `.codereviewer/eval/rebaseline-2026-08-05/`.
+
+| metric | 2026-08-02 (`6781a26`) | 2026-08-05 (`db78900`) | comparable? |
+| --- | ---: | ---: | --- |
+| in-diff recall | 61.7 / 60.0 / 61.7 — **61.1%**, sd 0.96pp | 66.7 / 66.7 / 71.7 — **68.3%**, sd 2.89pp | yes |
+| out-of-diff recall | 0 / 0 / 0 — **0 of 27** | 0 / 0 / 0 — **0 of 27** | yes |
+| blended recall | 42.5 / 41.4 / 42.5 — 42.1% | 46.0 / 46.0 / 49.4 — 47.1% | yes |
+| raw precision | 78.7 / 72.0 / 74.0 — 74.9% | 78.4 / 76.9 / 78.2 — 77.8% | yes |
+| line placement | 100 / 97.2 / 100 — 99.1% | 92.5 / 95.0 / 95.3 — **94.3%** | yes |
+| severity accuracy | 59.5 / 50.0 / 54.1 — 54.5% | 60.0 / 65.0 / 58.1 — 61.0% | yes |
+| adjusted precision | 100 / 97.3 / 100 — 99.1% | 95.2 / 100 / 93.5 — 96.2% | **NO** |
+| genuine false positives | 0 / 1 / 0 | 2 / 0 / 3 | **NO** |
+| unlisted-real findings | 10 / 13 / 13 | 9 / 12 / 9 | **NO** |
+
+**In-diff recall rose 7.2pp.** The three new runs do not overlap the three old ones
+at all (60.0–61.7 against 66.7–71.7). An exact permutation test over the 20 ways to
+split six runs into two arms of three puts one-sided **p = 0.050** — which is the
+smallest p attainable at three runs per arm, so this is as strong as this design can
+report and no stronger.
+
+**Out-of-diff stayed at a hard 0 of 27, in every run.** Nothing in this bundle
+targeted it, and nothing moved it. The wall is where it was.
+
+**Three precision-side metrics are NOT comparable across this pair and must not be
+read as a regression.** `EVAL_METRICS_VERSION` moved from
+`2026-08-01.discovery-telemetry` to `2026-08-03.plausibility-source-window`, and that
+bump's own note states it changes which findings are credited unlisted-real — hence
+`adjustedPrecision`, `unlistedRealFindingCount` and `genuineFalsePositiveCount` — for
+**identical review output** on any case with a file above the cap. The 99.1% → 96.2%
+movement therefore mixes a scorer correction with whatever the engine did, and this
+run cannot separate them. Raw precision, which the bump does not touch, went **up**.
+
+`eval compare` **refused this pair outright**: the report contract gained a required
+`cappedByLimitCount` since the baseline was written, so the old report no longer
+parses. The comparison above was computed by hand from both reports' metrics blocks.
+The refusal is the guard behaving correctly and is worth keeping.
+
+**Attribution: unknown, and deliberately not claimed.** The eval run configures no
+reviewer instructions, so the 2026-08-05 instruction work is **inert on this corpus**
+— an empty instruction set renders an empty section. The delta therefore belongs to
+the whole span `6781a26…db78900`, which also carries the previous session's
+disclosure work (grep/list truncation notices and the refutation withholding notice
+reaching the model) and today's refutation-context fix for partitioned sub-tasks.
+Which of those moved recall is not established by this run.
+
+**Variance tripled**, 0.96pp → 2.89pp, on the same corpus and the same run count.
+Two runs landed on 66.7% and one on 71.7%. Until that is understood, treat 2.89pp
+rather than 0.96pp as the current band for judging a stage-1 change.
+
+**Prompt caching is now reachable, which reverses the 2026-07-26 probe.** That probe
+recorded 0 cached tokens on an identical repeat and concluded caching was
+unavailable. Here run 1 cached 5% of its input and runs 2 and 3 cached 79% and 80%,
+cutting review cost from $1.97 to $0.83 and $0.82. **This re-confirms that A/B cost
+figures are confounded by arm order** — an arm running second inherits the first
+arm's warm cache. Quote cold cost, or alternate arm order.
+
+Cost for the sweep: **$3.62 review + $0.81 scoring = $4.44** for 3 × 37 cases.
+
 ## 2026-08-02 — stage 1, three runs at one pinned engine
 
 The figures the report renderer now prints to users. Recorded here so the prose in
