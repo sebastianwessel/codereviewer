@@ -17,6 +17,7 @@ import {
   sanitizeText
 } from './sanitize.js'
 import type {
+  FindingDigest,
   ImpactDigest,
   IntentDigest,
   ReviewDigest,
@@ -65,11 +66,27 @@ export type SummaryCommentInput = {
 }
 
 const MAX_LISTED_FINDINGS = 50
+const MAX_LISTED_UNRESOLVED = 20
 const MAX_LISTED_OBLIGATIONS = 20
 const MAX_LISTED_SYMBOLS = 15
 const MAX_TITLE = 200
 const MAX_DESCRIPTION = 700
 const MAX_WHY_SURVIVED = 400
+
+// A finding admission marked `artifact-only` is one refutation could neither
+// prove nor disprove (`needs-more-evidence`): a real suspicion, deliberately
+// kept as a question for a human rather than dropped. It must never appear
+// mixed into the actionable findings list — that read it as a proved defect —
+// and must never silently vanish either, which is what happened before this
+// field was carried into the digest at all.
+const isUnresolvedFinding = (finding: FindingDigest): boolean =>
+  finding.reporterEligibility === 'artifact-only'
+
+const actionableFindings = (review: ReviewDigest): readonly FindingDigest[] =>
+  review.findings.filter((finding) => !isUnresolvedFinding(finding))
+
+const unresolvedFindings = (review: ReviewDigest): readonly FindingDigest[] =>
+  review.findings.filter(isUnresolvedFinding)
 
 // The measured error rates, on the comment itself rather than in an evaluation
 // report nobody opens. This is the surface most likely to be the ONLY thing a
@@ -107,7 +124,11 @@ const verdictHeadline = (input: SummaryCommentInput): string => {
     return 'Code review could not complete'
   }
 
-  const findingCount = input.review?.findings.length ?? 0
+  // Unresolved (`artifact-only`) findings are open questions, not verdicts, so
+  // they are not counted here — they get their own section and their own
+  // framing further down, not a number folded into "findings to read".
+  const findingCount =
+    input.review === undefined ? 0 : actionableFindings(input.review).length
   const reported =
     findingCount === 0
       ? 'this search reported nothing'
@@ -139,10 +160,11 @@ const stageTable = (input: SummaryCommentInput): string => {
 }
 
 const findingsSection = (review: ReviewDigest): string => {
+  const findings = actionableFindings(review)
   // An empty findings list used to render as no section at all, which left the
   // headline as the only statement about the review and let it be read as a
   // clearance. What the silence means is said out loud instead.
-  if (review.findings.length === 0) {
+  if (findings.length === 0) {
     return [
       '### Findings (0)',
       '',
@@ -150,7 +172,7 @@ const findingsSection = (review: ReviewDigest): string => {
     ].join('\n')
   }
 
-  const ordered = [...review.findings].sort(
+  const ordered = [...findings].sort(
     (left, right) =>
       severityOrder.indexOf(left.severity) - severityOrder.indexOf(right.severity)
   )
@@ -189,9 +211,58 @@ const findingsSection = (review: ReviewDigest): string => {
       : []
 
   return [
-    `### Findings (${review.findings.length})`,
+    `### Findings (${findings.length})`,
     '',
     counts.length === 0 ? '' : `${counts}.`,
+    '',
+    ...lines,
+    ...truncated
+  ]
+    .filter((line) => line !== '')
+    .join('\n')
+}
+
+// A finding here is a real suspicion the refuter could neither prove nor
+// disprove — most often because the deciding evidence sat outside what this
+// run could reach — kept as a question for a human rather than silently
+// dropped. It stays out of the quality gate and out of inline comments on
+// purpose, and it must stay visibly separate from the findings above: folding
+// it into that list would read a "could not decide" as a "confirmed defect",
+// and dropping it would make the omission indistinguishable from "nothing
+// like this exists". Wording follows `report.md`'s "Unresolved - Needs Human
+// Decision" section, shortened for a space-constrained surface.
+const unresolvedSection = (review: ReviewDigest): string | undefined => {
+  const findings = unresolvedFindings(review)
+
+  if (findings.length === 0) {
+    return undefined
+  }
+
+  const ordered = [...findings].sort(
+    (left, right) =>
+      severityOrder.indexOf(left.severity) - severityOrder.indexOf(right.severity)
+  )
+  const shown = ordered.slice(0, MAX_LISTED_UNRESOLVED)
+  const lines = shown.map((finding) =>
+    [
+      `- **${finding.severity}** · ${sanitizeLine(finding.category, 40)} · \`${sanitizeLine(finding.path, 200)}:${finding.startLine}\``,
+      `  ${sanitizeLine(finding.title, MAX_TITLE)}`,
+      ...(finding.whySurvived === undefined
+        ? []
+        : [`  _${sanitizeLine(finding.whySurvived, MAX_WHY_SURVIVED)}_`])
+    ].join('\n')
+  )
+  const truncated =
+    ordered.length > shown.length
+      ? [
+          `\n_${ordered.length - shown.length} further unresolved findings are in the run artifacts._`
+        ]
+      : []
+
+  return [
+    `### Unresolved - Needs Human Decision (${findings.length})`,
+    '',
+    'Open questions, not verdicts: refutation could neither prove nor disprove these from what this run could reach. They do not affect the quality gate and are not posted as inline comments — confirm or dismiss each one yourself.',
     '',
     ...lines,
     ...truncated
@@ -283,6 +354,31 @@ const detailsSection = (input: SummaryCommentInput): string => {
     rows.push(`- Run id: \`${sanitizeLine(input.review.runId, 120)}\``)
     rows.push(`- Coverage: ${sanitizeLine(input.review.coverageStatus, 40)}`)
 
+    // The precision story: a short findings list is credible only if the reader
+    // can see that discovery examined more than it kept. One line, pointing at
+    // the run artifact for the reasons rather than dumping them into the PR.
+    const examinedCount =
+      input.review.findings.length + input.review.rejectedFindingCount
+    const mergedNote =
+      input.review.mergedAwayCount === undefined
+        ? ''
+        : `, ${input.review.mergedAwayCount} merged as duplicates before that`
+
+    rows.push(
+      `- Candidates: ${examinedCount} examined, ${input.review.findings.length} admitted, ${input.review.rejectedFindingCount} rejected${mergedNote} — reasons for each are in the run artifacts.`
+    )
+
+    // Baseline entries store fingerprints only, by design, so a count is
+    // genuinely everything this can say — never which defect it was. Rendered
+    // only when the run actually computed it: absence must not read as zero.
+    if (input.review.resolvedBaselineEntryCount !== undefined) {
+      const count = input.review.resolvedBaselineEntryCount
+
+      rows.push(
+        `- Resolved since baseline: ${count} previously-flagged finding${count === 1 ? '' : 's'} no longer match (baseline stores fingerprints only; no further detail is available).`
+      )
+    }
+
     if (input.review.skippedFileCount > 0) {
       rows.push(`- Skipped files: ${input.review.skippedFileCount}`)
     }
@@ -355,6 +451,7 @@ export const renderSummaryComment = (input: SummaryCommentInput): string => {
     MEASURED_RELIABILITY,
     notes.length === 0 ? undefined : notes.join('\n>\n'),
     input.review === undefined ? undefined : findingsSection(input.review),
+    input.review === undefined ? undefined : unresolvedSection(input.review),
     input.intent === undefined ? undefined : intentSection(input.intent),
     input.impact === undefined ? undefined : impactSection(input.impact),
     stageTable(input),

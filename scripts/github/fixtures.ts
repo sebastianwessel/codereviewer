@@ -70,6 +70,62 @@ export const reviewReportFixture = {
   artifacts: []
 }
 
+// A report shaped like a run that also produced an unresolved (`artifact-only`)
+// suspicion, rejected candidates, a semantic merge, and a baseline with fixed
+// entries — the four pieces of the report that `reviewReportFixture` alone
+// (rejectedFindings empty, no discovery, no baseline) cannot exercise.
+export const reviewReportWithFullAccountingFixture = {
+  ...reviewReportFixture,
+  admittedFindings: [
+    ...reviewReportFixture.admittedFindings,
+    {
+      id: 'find_unresolved1',
+      severity: 'high',
+      category: 'security',
+      title: 'Possible SSRF via the fetched webhook URL',
+      description: 'The handler fetches a URL taken from the request body.',
+      location: { path: 'src/webhooks/deliver.ts', startLine: 17, side: 'file' },
+      baselineStatus: 'new',
+      reporterEligibility: 'artifact-only',
+      refutationId: 'refute_unresolved1',
+      fingerprints: [{ algorithm: 'sha256', value: 'fp3' }]
+    }
+  ],
+  rejectedFindings: [
+    {
+      candidateId: 'cand_rejected1',
+      status: 'rejected',
+      reason: 'refuted',
+      message: 'The route is behind an existing auth middleware.'
+    },
+    {
+      candidateId: 'cand_rejected2',
+      status: 'rejected',
+      reason: 'admission-gate',
+      message: 'Severity below the configured threshold.'
+    }
+  ],
+  refutationResults: [
+    ...reviewReportFixture.refutationResults,
+    {
+      id: 'refute_unresolved1',
+      candidateId: 'cand_unresolved1',
+      verdict: 'needs-more-evidence',
+      summary:
+        'The allow-list this depends on is defined in a config file outside the reviewed diff.',
+      evidenceIds: [],
+      checks: []
+    }
+  ],
+  discovery: {
+    totals: { mergedAwayCount: 4 }
+  },
+  resolvedBaselineEntries: [
+    { algorithm: 'sha256', value: 'resolved_fp1' },
+    { algorithm: 'sha256', value: 'resolved_fp2' }
+  ]
+}
+
 export const renderedGithubCommentsFixture = [
   {
     path: 'src/routes/admin.ts',

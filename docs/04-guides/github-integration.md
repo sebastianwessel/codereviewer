@@ -182,6 +182,39 @@ the comment in the first place.
 
 ---
 
+## What the summary comment says
+
+The comment is not a shortened `report.md`; it renders the same underlying
+`report.json` so that a reviewer who never opens the run artifacts still gets
+an honest picture, not a rosier one.
+
+- **Findings** — every admitted finding whose `reporterEligibility` is
+  `inline` or `summary-only`: the ones this run is prepared to stand behind.
+- **Unresolved - Needs Human Decision** — findings admission marked
+  `artifact-only`: a real suspicion refutation could neither prove nor
+  disprove (verdict `needs-more-evidence`), kept as an open question instead
+  of being dropped. Rendered in its own section, never mixed into the
+  findings above — folding it in would read an undecided suspicion as a
+  proved defect. It does not affect the quality gate and is never posted as
+  an inline comment. This section is present only when the run produced at
+  least one such finding.
+- **Resolved since baseline** — a count, in the collapsed "Run details"
+  block, of baseline entries that no longer match any current finding, i.e.
+  fixed since the baseline was recorded. Shown only when
+  `baseline.includeResolvedInReport` was enabled for the run; a run that
+  never computed it shows nothing, not a zero. The baseline stores
+  fingerprints only, never source, path, or finding text, so a count is
+  genuinely all this line can say — it does not name which defect was fixed.
+- **Candidates** — one line, also in "Run details", giving the precision
+  story behind a short findings list: how many candidates were examined in
+  total, how many were admitted, how many refutation or the deterministic
+  admission gate rejected, and — when the run's discovery telemetry is
+  present — how many were merged away as duplicates before that. The reasons
+  for each rejection are not repeated here; they are in `report.json`'s
+  `rejectedFindings`.
+
+---
+
 ## Inline comments
 
 When [`reporting.reviewComments`](../../specs/13-review-comments-and-suggestions.md)

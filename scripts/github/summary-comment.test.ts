@@ -19,7 +19,8 @@ import {
 import {
   impactReportFixture,
   intentReportFixture,
-  reviewReportFixture
+  reviewReportFixture,
+  reviewReportWithFullAccountingFixture
 } from './fixtures.js'
 
 const stage = (id: string): StageDefinition =>
@@ -231,6 +232,107 @@ describe('renderSummaryComment', () => {
     )
 
     expect(body).toContain('> This pull request comes from a fork.')
+  })
+
+  // A1: an `artifact-only` finding is a suspicion the refuter could neither
+  // prove nor disprove, deliberately kept as a question for a human. Before
+  // this behaviour existed it rendered mixed into the flat findings list,
+  // indistinguishable from a finished, proved defect.
+  describe('unresolved (artifact-only) findings', () => {
+    const reviewWithUnresolved = digestReviewReport(
+      JSON.stringify(reviewReportWithFullAccountingFixture)
+    ) as never
+
+    it('renders unresolved findings in their own section, separate from actionable findings', () => {
+      const body = renderSummaryComment(baseInput({ review: reviewWithUnresolved }))
+
+      expect(body).toContain('### Unresolved - Needs Human Decision (1)')
+      expect(body).toContain('Possible SSRF via the fetched webhook URL')
+    })
+
+    it('does not count an unresolved finding in the actionable Findings section', () => {
+      const body = renderSummaryComment(baseInput({ review: reviewWithUnresolved }))
+
+      // 2 actionable findings from the base fixture; the 3rd, unresolved one is
+      // not counted here even though 3 findings were admitted in total.
+      expect(body).toContain('### Findings (2)')
+      expect(
+        body.indexOf('### Findings (2)')
+      ).toBeLessThan(body.indexOf('### Unresolved'))
+    })
+
+    it('frames unresolved findings as open questions, not verdicts', () => {
+      const body = renderSummaryComment(baseInput({ review: reviewWithUnresolved }))
+
+      expect(body).toContain('Open questions, not verdicts')
+      expect(body).toContain('do not affect the quality gate')
+    })
+
+    it('renders no unresolved section when every finding is actionable', () => {
+      const body = renderSummaryComment(
+        baseInput({
+          review: digestReviewReport(JSON.stringify(reviewReportFixture)) as never
+        })
+      )
+
+      expect(body).not.toContain('Unresolved - Needs Human Decision')
+    })
+  })
+
+  // A2: `resolvedBaselineEntries` is fingerprints only (the baseline discloses
+  // no source, path, or finding text), so the comment can state a count and
+  // nothing more.
+  describe('resolved-since-baseline count', () => {
+    it('states the count when the run computed it', () => {
+      const body = renderSummaryComment(
+        baseInput({
+          review: digestReviewReport(
+            JSON.stringify(reviewReportWithFullAccountingFixture)
+          ) as never
+        })
+      )
+
+      expect(body).toContain('Resolved since baseline: 2')
+    })
+
+    it('omits the line entirely when the run never computed it, rather than implying zero', () => {
+      const body = renderSummaryComment(
+        baseInput({
+          review: digestReviewReport(JSON.stringify(reviewReportFixture)) as never
+        })
+      )
+
+      expect(body).not.toContain('Resolved since baseline')
+    })
+  })
+
+  // A3: the precision story — a short findings list is credible only if the
+  // reader can see that discovery examined more than it kept.
+  describe('candidate accounting', () => {
+    it('states how many candidates were examined, admitted, rejected and merged', () => {
+      const body = renderSummaryComment(
+        baseInput({
+          review: digestReviewReport(
+            JSON.stringify(reviewReportWithFullAccountingFixture)
+          ) as never
+        })
+      )
+
+      expect(body).toContain(
+        'Candidates: 5 examined, 3 admitted, 2 rejected, 4 merged as duplicates before that'
+      )
+    })
+
+    it('omits the merged clause when the report has no discovery telemetry', () => {
+      const body = renderSummaryComment(
+        baseInput({
+          review: digestReviewReport(JSON.stringify(reviewReportFixture)) as never
+        })
+      )
+
+      expect(body).toContain('Candidates: 2 examined, 2 admitted, 0 rejected —')
+      expect(body).not.toContain('merged as duplicates')
+    })
   })
 })
 

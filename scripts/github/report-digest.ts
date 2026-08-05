@@ -67,6 +67,11 @@ const ReviewReportSchema = z.object({
   }),
   coverage: z.object({ status: z.string() }).nullish(),
   admittedFindings: z.array(AdmittedFindingSchema).nullish(),
+  // Every candidate refutation or the deterministic admission gate killed. Not
+  // `AdmittedFinding`s — they never reached admission — so only the count is
+  // parsed; the digest states how many were thrown out, not why, and points the
+  // reader at the run artifact for the reasons.
+  rejectedFindings: z.array(z.unknown()).nullish(),
   refutationResults: z.array(RefutationResultSchema).nullish(),
   skippedFiles: z.array(z.unknown()).nullish(),
   qualityGate: z
@@ -77,6 +82,22 @@ const ReviewReportSchema = z.object({
     .nullish(),
   providerIssues: z
     .array(z.object({ code: z.string(), message: z.string().nullish() }))
+    .nullish(),
+  // Baseline fingerprints that no longer match any current finding — i.e. fixed
+  // since the baseline was recorded. Present (possibly empty) only when
+  // `baseline.includeResolvedInReport` was enabled for the run; absent means the
+  // count was never computed, which is a different fact from a computed zero and
+  // must not collapse into it.
+  resolvedBaselineEntries: z.array(z.unknown()).nullish(),
+  // Spec 27 discovery telemetry. Optional: a deterministic-only run issues no
+  // discovery call and has none to report. Only the one counter this digest
+  // renders is parsed.
+  discovery: z
+    .object({
+      totals: z
+        .object({ mergedAwayCount: z.number().int().min(0).nullish() })
+        .nullish()
+    })
     .nullish()
 })
 
@@ -89,6 +110,16 @@ export type FindingDigest = {
   readonly path: string
   readonly startLine: number
   readonly baselineStatus: string
+  /**
+   * `inline` | `summary-only` | `artifact-only`, carried verbatim from
+   * admission. `artifact-only` marks a finding refutation could neither prove
+   * nor disprove (`needs-more-evidence`): a real suspicion kept as a question
+   * for a human rather than dropped. It is excluded from the quality gate, from
+   * inline comments, and — by the renderer, not this type — from the actionable
+   * findings list. Defaults to `'unknown'` when a report omits the field, which
+   * renders as actionable rather than guessing it away as unresolved.
+   */
+  readonly reporterEligibility: string
   /**
    * What refutation tried against this finding and could not do, in the
    * refuter's own words. Absent when no verdict was recorded against it.
@@ -114,6 +145,29 @@ export type ReviewDigest = {
   readonly warnings: readonly string[]
   readonly providerIssues: readonly string[]
   readonly costUsd?: number
+  /**
+   * Every candidate that reached refutation or the deterministic admission gate
+   * and was thrown out — killed by refutation or the gate, not merged away as a
+   * duplicate. Always a count, defaulting to 0 like `skippedFileCount`: the
+   * engine's own report always carries this array, possibly empty.
+   */
+  readonly rejectedFindingCount: number
+  /**
+   * Candidates the semantic merge folded into another as a duplicate before
+   * refutation ever saw them. Undefined — not 0 — when the report carries no
+   * `discovery` telemetry at all (a deterministic-only run issued no discovery
+   * call), so silence about merging is never confused with a computed zero.
+   */
+  readonly mergedAwayCount?: number
+  /**
+   * Baseline fingerprints resolved since the baseline was recorded (fixed since
+   * then). Undefined — not 0 — when the run never computed this at all
+   * (`baseline.includeResolvedInReport` was off); a computed zero is a fact
+   * worth stating, an uncomputed one is not. The baseline stores fingerprints
+   * only, so a count is genuinely everything this can say — never which defect
+   * it was.
+   */
+  readonly resolvedBaselineEntryCount?: number
 }
 
 const parseJson = (raw: string): unknown => {
@@ -173,6 +227,7 @@ export const digestReviewReport = (raw: string): ReviewDigest | undefined => {
         path: finding.location.path,
         startLine: finding.location.startLine,
         baselineStatus: finding.baselineStatus ?? 'unknown',
+        reporterEligibility: finding.reporterEligibility ?? 'unknown',
         ...(refutation === undefined
           ? {}
           : { whySurvived: `${refutation.verdict}: ${refutation.summary}` }),
@@ -181,13 +236,24 @@ export const digestReviewReport = (raw: string): ReviewDigest | undefined => {
     }
   )
 
+  // Severity counts describe what a reader needs to act on, so — like the
+  // rendered findings list itself — they exclude `artifact-only` findings.
+  // Otherwise the "N high, M medium" line would count suspicions the run could
+  // neither prove nor disprove alongside proved defects, with no way to tell
+  // them apart.
+  const actionableFindings = findings.filter(
+    (finding) => finding.reporterEligibility !== 'artifact-only'
+  )
+  const resolvedBaselineEntries = report.resolvedBaselineEntries
+  const mergedAwayCount = report.discovery?.totals?.mergedAwayCount
+
   return {
     runId: report.run.runId,
     qualityGatePassed: report.qualityGate?.passed ?? true,
     qualityGateEvaluated: report.qualityGate !== undefined && report.qualityGate !== null,
     failingFindingIds: report.qualityGate?.failingFindingIds ?? [],
     findings,
-    severityCounts: countBySeverity(findings),
+    severityCounts: countBySeverity(actionableFindings),
     coverageStatus: report.coverage?.status ?? 'unknown',
     skippedFileCount: report.skippedFiles?.length ?? 0,
     warnings: report.run.warnings ?? [],
@@ -196,9 +262,16 @@ export const digestReviewReport = (raw: string): ReviewDigest | undefined => {
         ? issue.code
         : `${issue.code}: ${issue.message}`
     ),
+    rejectedFindingCount: report.rejectedFindings?.length ?? 0,
     ...(report.run.costUsd === undefined || report.run.costUsd === null
       ? {}
-      : { costUsd: report.run.costUsd })
+      : { costUsd: report.run.costUsd }),
+    ...(mergedAwayCount === undefined || mergedAwayCount === null
+      ? {}
+      : { mergedAwayCount }),
+    ...(resolvedBaselineEntries === undefined || resolvedBaselineEntries === null
+      ? {}
+      : { resolvedBaselineEntryCount: resolvedBaselineEntries.length })
   }
 }
 

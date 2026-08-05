@@ -7,7 +7,8 @@ import {
 import {
   impactReportFixture,
   intentReportFixture,
-  reviewReportFixture
+  reviewReportFixture,
+  reviewReportWithFullAccountingFixture
 } from './fixtures.js'
 
 const json = (value: unknown): string => JSON.stringify(value)
@@ -69,6 +70,81 @@ describe('digestReviewReport', () => {
   it('returns undefined for something that is not a review report', () => {
     expect(digestReviewReport('not json')).toBeUndefined()
     expect(digestReviewReport('{"run":{}}')).toBeUndefined()
+  })
+
+  // A1: `reporterEligibility` used to be parsed by the schema and then dropped
+  // on the floor before it reached `FindingDigest`, which is why the summary
+  // comment could not tell an unresolved suspicion from a finished finding.
+  it('carries reporterEligibility onto each finding', () => {
+    const digest = digestReviewReport(json(reviewReportWithFullAccountingFixture))
+    const byId = new Map(digest?.findings.map((finding) => [finding.id, finding]))
+
+    expect(byId.get('find_high1')?.reporterEligibility).toBe('inline')
+    expect(byId.get('find_medium1')?.reporterEligibility).toBe('summary-only')
+    expect(byId.get('find_unresolved1')?.reporterEligibility).toBe('artifact-only')
+  })
+
+  it('defaults a missing reporterEligibility to "unknown" rather than guessing', () => {
+    const { reporterEligibility: _ignored, ...findingWithoutEligibility } =
+      reviewReportFixture.admittedFindings[0] as Record<string, unknown> & {
+        reporterEligibility: string
+      }
+    const digest = digestReviewReport(
+      json({
+        ...reviewReportFixture,
+        admittedFindings: [findingWithoutEligibility]
+      })
+    )
+
+    expect(digest?.findings[0]?.reporterEligibility).toBe('unknown')
+  })
+
+  // Severity counts describe what a reader must act on, so an artifact-only
+  // suspicion — which is not a proved defect — must not inflate them.
+  it('excludes artifact-only findings from severityCounts', () => {
+    const digest = digestReviewReport(json(reviewReportWithFullAccountingFixture))
+
+    expect(digest?.severityCounts.high).toBe(1)
+  })
+
+  // A3: the precision accounting the comment needs — how many candidates were
+  // examined and how many were thrown out — was parsed by nothing at all.
+  it('counts rejected candidates, defaulting to 0 rather than leaving it undefined', () => {
+    expect(digestReviewReport(json(reviewReportFixture))?.rejectedFindingCount).toBe(0)
+    expect(
+      digestReviewReport(json(reviewReportWithFullAccountingFixture))
+        ?.rejectedFindingCount
+    ).toBe(2)
+  })
+
+  it('carries the merged-away count only when discovery telemetry is present', () => {
+    expect(
+      digestReviewReport(json(reviewReportFixture))?.mergedAwayCount
+    ).toBeUndefined()
+    expect(
+      digestReviewReport(json(reviewReportWithFullAccountingFixture))
+        ?.mergedAwayCount
+    ).toBe(4)
+  })
+
+  // A2: resolved-baseline count. A run that never computed it (no `baseline`
+  // field at all) must render as absent, not as a plausible zero.
+  it('carries the resolved-baseline count only when the report computed it', () => {
+    expect(
+      digestReviewReport(json(reviewReportFixture))?.resolvedBaselineEntryCount
+    ).toBeUndefined()
+    expect(
+      digestReviewReport(json(reviewReportWithFullAccountingFixture))
+        ?.resolvedBaselineEntryCount
+    ).toBe(2)
+  })
+
+  it('treats a computed-but-empty resolvedBaselineEntries as a real zero, not absence', () => {
+    const digest = digestReviewReport(
+      json({ ...reviewReportFixture, resolvedBaselineEntries: [] })
+    )
+
+    expect(digest?.resolvedBaselineEntryCount).toBe(0)
   })
 })
 
