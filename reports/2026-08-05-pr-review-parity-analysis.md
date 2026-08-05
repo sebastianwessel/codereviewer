@@ -21,8 +21,8 @@ the engine alone.
 Measured against what a **strong human reviewer** does on a pull request, this
 engine is at or above human level on exactly one half of the job — **"is the
 changed code correct?"** — and it is more honest, more consistent, cheaper, and
-faster there than any human: in-diff recall 66.7% at ~100% adjusted precision
-(37-case real-repo corpus, shipped defaults, pinned engine, codex), with every
+faster there than any human: in-diff recall 61.1% (sd 0.96pp) at 99.1% adjusted
+precision (37-case real-repo corpus, three runs at one pinned engine, codex), with every
 finding evidence-linked, every limit disclosed, and a principled severity rubric
 humans don't have. It is measurably **absent** on the other half — **"is this
 the right change?"** — the consequence-elsewhere question (0/27 measured
@@ -109,14 +109,14 @@ tests, builds, CodeQL), publishing authority, and auto-applied fixes.
 
 | Measure | Value | Corpus / date |
 |---|---|---|
-| In-diff recall | **66.7%** (40/60) | 37-case real-repo, shipped defaults, pinned engine, 2026-07-31 |
-| Out-of-diff recall | **0.0%** (0/27) | same run; replicated as 0/81 on archived-run analysis |
-| Adjusted precision | **100%** (raw is lower; the pair brackets the truth — precision under an incomplete key is permanently an estimate) | same run |
+| In-diff recall | **61.1%**, sd 0.96pp (61.7 / 60.0 / 61.7) | 37-case real-repo, shipped defaults, engine `6781a26`, 2026-08-02, three runs |
+| Out-of-diff recall | **0.0%** (0/27, all three runs) | same runs; replicated as 0/81 on archived-run analysis |
+| Adjusted precision | **99.1%** (100 / 97.3 / 100). Raw is lower; the pair brackets the truth — precision under an incomplete key is permanently an estimate | same runs |
 | Controlled exhaustive corpus | 85.7% recall / 100% adj. precision | proof-quality corpus, 2026-07-24 |
 | Line placement | 97.2% | 2026-07-26 |
 | Refuter kill rate | 1.4% (precision comes from conservative discovery, not the gate) | 9-run analysis, 2026-07-27 |
 | Cost | $1.20–2.24 per 30–37-case corpus run | 2026-07/08 |
-| Seed variance | sd ≈ 4.8pp — n=1 deltas under ~10pp are noise | 3-seed band, 2026-07-26 |
+| Run variance | sd **0.96pp** in-diff, 0.66pp blended | three pinned runs, 2026-08-02 — supersedes the ±4.8pp band used for months, which was estimated from too few samples |
 
 Position vs commercial AI reviewers (Martian live board, the only
 continuously-run benchmark by a party that sells no reviewer, pulled 2026-07-27):
@@ -133,7 +133,7 @@ Verdicts: **ahead** (better than a strong human), **parity**, **partial**,
 | # | Review function | Engine today | Evidence | Verdict |
 |---|---|---|---|---|
 | 1 | Understand intent & context | Change-intent brief to discovery (CI: on, auto-fed PR title+body); `intent check` maps stated obligations → evidence; commit messages never read (deliberate); reviewer `instructions`/`skills` as a separate trusted channel | spec 11, 23; agent-trace §1–4 | **partial→parity** in CI; the injection-resistant one-way design is **ahead** of human practice |
-| 2 | Correctness of changed code | Whole-file discovery + refutation; edge cases, concurrency, resources, error handling explicitly in the sweep | 66.7% in-diff @ ~100% adj. precision; ~1.2 findings/file ceiling open | **parity-to-ahead** vs median human; below a strong human's ~everything-eventually |
+| 2 | Correctness of changed code | Whole-file discovery + refutation; edge cases, concurrency, resources, error handling explicitly in the sweep | 61.1% in-diff @ 99.1% adj. precision; ~1.2 findings/file ceiling open | **parity-to-ahead** vs median human; below a strong human's ~everything-eventually |
 | 3 | Consequences beyond the diff | Measured **0/27** in `review` (attention, not information — all 27 sat in files shown in full); findings hard-scoped to shown files; `impact check` reports dependents but adjudication (spec 22 step 3) unimplemented | out-of-diff reports; spec 22 | **absent** — the single largest gap vs a strong human |
 | 4 | Security | General sweep on; dedicated pass off (n=1: labeled security fell, +61% cost — honest "unproven"); deterministic source/sink layer (Mechanism 2) unbuilt; measured discovery blind spots: crypto/XSS/SSRF ~0% (not the gate's fault — 1.4% kill rate) | spec 15; security-mechanism baseline 2026-07-24 | **partial** |
 | 5 | Performance | One clause ("expensive work on hot paths"); category exists; no dedicated lens; recall unmeasured | agent-instructions.ts | **partial/thin** |
@@ -242,6 +242,17 @@ Worth stating plainly, because the parity question cuts both ways:
 
 ## 6. Action plan
 
+> **Status, end of 2026-08-05.** Everything in Tier 1 shipped, plus B5, C5 and
+> the whole of B3 except its measurement. What remains is Tier 2's measurement
+> bundle (B1/B2/B4/B6) and the Tier 3 product decisions. Per-item status is
+> marked ✅ below. Three defects were found while building and are worth
+> remembering because none was on this list: reviewer instructions never reached
+> the discovery call at all (loaded, redacted, ledgered, then dropped — refutation
+> was the only stage they affected); the changed-symbol key was spelled two ways
+> so every contract delta missed its lookup; and a partitioned sub-task's
+> candidates matched no planned task, so refutation silently fell back to
+> workflow-wide context. The last two were invisible in aggregate output.
+
 Rules honored throughout: evals are rare and expensive — everything measurable
 is **bundled into the one re-baseline run that is already owed** (this session
 bumped `metricsVersion` and changed model-visible behavior, so the published
@@ -253,11 +264,11 @@ Decision owner marked **[human]** where it is a product/scope call.
 
 | ID | Action | Why |
 |---|---|---|
-| A1 | Carry `reporterEligibility` through `scripts/github/report-digest.ts`; render unresolved findings as their own collapsed "needs human decision" block in the PR summary comment | §4c — the uncertain tier is the compensating half of precision-first and currently reads as ordinary findings |
-| A2 | Surface `resolvedBaselineEntries` as a count ("N baseline findings no longer present") in `report.md` + summary comment | Humans acknowledge fixes; the engine computes this and shows it nowhere |
-| A3 | Add a one-line rejected/merged accounting ("X candidates rejected, Y merged; see artifact") to the summary comment | Rejected findings currently invisible from the PR; visibility is the precision story |
-| A4 | Fix the stale "no GitHub Action / no PR publishing" bullets in `docs/01-overview/status-and-limitations.md` (contradicted by the shipped workflow since 2026-07-31) | Docs drift found during this audit |
-| A5 | Per-item records for semantic-merge drops (currently only an aggregate count — the one suppression channel with no per-item audit trail) | Closes the last silent-ish kill path |
+| A1 ✅ | Carry `reporterEligibility` through `scripts/github/report-digest.ts`; render unresolved findings as their own collapsed "needs human decision" block in the PR summary comment | §4c — the uncertain tier is the compensating half of precision-first and currently reads as ordinary findings |
+| A2 ✅ | Surface `resolvedBaselineEntries` as a count ("N baseline findings no longer present") in `report.md` + summary comment | Humans acknowledge fixes; the engine computes this and shows it nowhere |
+| A3 ✅ | Add a one-line rejected/merged accounting ("X candidates rejected, Y merged; see artifact") to the summary comment | Rejected findings currently invisible from the PR; visibility is the precision story |
+| A4 ✅ | Fix the stale "no GitHub Action / no PR publishing" bullets in `docs/01-overview/status-and-limitations.md` (contradicted by the shipped workflow since 2026-07-31) | Docs drift found during this audit |
+| A5 ✅ | Per-item records for semantic-merge drops (currently only an aggregate count — the one suppression channel with no per-item audit trail) | Closes the last silent-ish kill path |
 
 ### Tier 2 — measurement-gated engine work (bundle with the owed re-baseline)
 
@@ -265,9 +276,9 @@ Decision owner marked **[human]** where it is a product/scope call.
 |---|---|---|---|
 | B1 | **Re-baseline at current HEAD** (3 seeds, pinned engine + pinned `node_modules`, arm order randomized — the cache-warm confound is documented) | metricsVersion bump + disclosure notices now reach the model; current published rates describe engine `6781a26`'s ancestor | This is the instrument, not a bet |
 | B2 | **Enumeration, the one untried lever:** differential/re-derivation prompting (ask for intended behavior, then the nuances between intended and actual — changes the comparison object, not the checklist) + refinement-guided pruning (drop candidates whose induced edit is empty/duplicate). Both from the 2026-07-27 plan's Step 1; neither in the withdrawn graveyard | Sun et al. +4.68pp (p<0.05); Li et al. 28.8→75.0% on logic; our injection-guard precedent shows framing can move recall massively at zero cost | Success: in-diff +≥5pp at ≤+10% cost, adj. precision holds. Kill: any precision drop outside the band |
-| B3 | **Out-of-diff: stop attacking the wall frontally; route around it.** Frontal attacks are exhausted (reframing: 0 movement; un-anchored pass: withdrawn; splitting: harmful). The remaining mechanism with a spec is **impact-check adjudication** (spec 22 step 3): dependents of changed symbols are *enumerated deterministically* — a bounded model judgment per dependent ("does this caller rely on what changed?") converts the reference report into consequence findings without asking discovery to look away from the diff | Impact coverage measured 74.1%; the wall is attention, and adjudication sidesteps attention by making each consequence its own task | Success: >0 of the 27-population equivalent via the impact lane at advisory precision ≥ intent check's band. Kill: firing rate > ~1/PR at <50% precision |
+| B3 ✅ (built, unmeasured) | **Out-of-diff: stop attacking the wall frontally; route around it.** Frontal attacks are exhausted (reframing: 0 movement; un-anchored pass: withdrawn; splitting: harmful). The remaining mechanism with a spec is **impact-check adjudication** (spec 22 step 3): dependents of changed symbols are *enumerated deterministically* — a bounded model judgment per dependent ("does this caller rely on what changed?") converts the reference report into consequence findings without asking discovery to look away from the diff | Impact coverage measured 74.1%; the wall is attention, and adjudication sidesteps attention by making each consequence its own task | Success: >0 of the 27-population equivalent via the impact lane at advisory precision ≥ intent check's band. Kill: firing rate > ~1/PR at <50% precision |
 | B4 | **Spec 16 replication** rides along free (it is on by default now; +5.7pp/p=0.096 needs its replicate before the default is *proven* rather than plausible) | spec16 re-run 2026-08-01 | Confirm or revert default |
-| B5 | **Test-adequacy advisory (new, smallest honest version):** deterministic-only first — "changed production files with zero changed/related test files" as one advisory summary line, from the already-computed `testMappings`. No model call. Measure firing rate + human-judged usefulness on real PRs before any model-backed judgment of test *quality* | The only checklist row with no attempt; deterministic pre-signal is free; conformance lesson says start deterministic, kill on noise | Kill: fires on >~half of legitimately test-free PRs (docs-only, refactor-covered) without a way to suppress |
+| B5 ✅ | **Test-adequacy advisory (new, smallest honest version):** deterministic-only first — "changed production files with zero changed/related test files" as one advisory summary line, from the already-computed `testMappings`. No model call. Measure firing rate + human-judged usefulness on real PRs before any model-backed judgment of test *quality* | The only checklist row with no attempt; deterministic pre-signal is free; conformance lesson says start deterministic, kill on noise | Kill: fires on >~half of legitimately test-free PRs (docs-only, refactor-covered) without a way to suppress |
 | B6 | **Security:** hold the line — keep the dedicated pass off (unproven at n=1, +61% cost); the measured blind spots (crypto/XSS/SSRF at ~0% discovery-side) are the concept doc's M2 case (analyzer/SARIF ingestion: deterministic evidence, model judges reachability). Do not buy more prompting here | spec 15 outcome; enumeration report §"not doing" | M2 is a **[human]** milestone decision, priced in the concept doc |
 
 ### Tier 3 — product/scope decisions **[human]**
@@ -278,7 +289,7 @@ Decision owner marked **[human]** where it is a product/scope call.
 | C2 | **The usefulness instrument** (row 18): the GitHub layer could record, per posted comment, whether it was reacted to/resolved/replied — the Tricorder "effective false positive" signal, the industry's proven second filter, and the only way to ever measure "better than humans" on real PRs rather than fixtures. Privacy/telemetry posture is a product call | Enumeration report §4.1: "We have the first [correctness filter] and no instrument at all for the second" |
 | C3 | **Conversation** (reply-to-author): large integration lift, real parity value — but the commercial field is split on it (CodeRabbit/Greptile/Qodo yes; Copilot/Bugbot/Claude Code explicitly no), so deferring is a defensible position, not a deficiency. Dishonest only if parity is claimed while it is absent | outputs-audit §3.4; §8 |
 | C4 | **Performance lens**: leave incidental, or give it one sweep bullet? Cheap to try inside B1's bundle (one prompt line), but recall for the category is unmeasured — measure before and after or don't bother | inventory §2.5 |
-| C5 | **Path-scoped reviewer instructions**: `instructions.files`/`inline` apply run-global; per-path scoping (monorepo teams steering different areas differently) is universal in the commercial field. Small config-schema + packet-assembly feature; no model-cost implication; decide whether the demand exists before building | context-trace §4; §8 |
+| C5 ✅ | **Path-scoped reviewer instructions**: `instructions.files`/`inline` apply run-global; per-path scoping (monorepo teams steering different areas differently) is universal in the commercial field. Small config-schema + packet-assembly feature; no model-cost implication; decide whether the demand exists before building | context-trace §4; §8 |
 
 ### What NOT to do (measured refusals — do not re-litigate without new evidence)
 
