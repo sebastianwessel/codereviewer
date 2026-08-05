@@ -145,8 +145,8 @@ the block. What it was and why it went:
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `instructions.files` | repository-relative path[] | `[]` | Reviewer instruction files, applied in listed order. Paths are validated; traversal above the root is rejected. Run summaries record path + SHA-256 only. |
-| `instructions.inline` | string | `""` | Inline instructions. Config inline takes precedence over files. |
+| `instructions.files` | `{ path, scope? }[]` | `[]` | Reviewer instruction files, applied in listed order. `path` is repository-relative and validated; traversal above the root is rejected, and a missing file fails the run. Optional `scope` is a non-empty glob-pattern array (same dialect as `paths.include`/`paths.exclude`) that limits the file to review tasks with at least one matching path; a task packet includes it once ANY of its files match. Omitted `scope` applies the file to every task, unchanged from before scoping existed. `scope: []` is rejected. Run summaries record path + SHA-256 only. |
+| `instructions.inline` | string | `""` | Inline instructions, added alongside every `files` entry that applies. Always repository-wide — `inline` has no `scope`; use a scoped file for area-specific free text. |
 
 ## `skills`
 

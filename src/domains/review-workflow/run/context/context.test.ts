@@ -113,7 +113,7 @@ describe('review runner context assembly', () => {
         `Never leak ${secret}. Keep this trailing sentence intact.`
       )
       const config = CodeReviewerConfigSchema.parse({
-        instructions: { files: ['AGENTS.md'] }
+        instructions: { files: [{ path: 'AGENTS.md' }] }
       })
 
       const result = await prepareReviewRunnerContextState({
@@ -158,7 +158,7 @@ describe('review runner context assembly', () => {
       const config = CodeReviewerConfigSchema.parse({
         review: { contextMaxBytes: 10000 },
         instructions: {
-          files: ['AGENTS.md'],
+          files: [{ path: 'AGENTS.md' }],
           inline: 'Inline guidance'
         }
       })
@@ -294,7 +294,7 @@ describe('review runner context assembly', () => {
       const config = CodeReviewerConfigSchema.parse({
         review: { contextMaxBytes: 10000 },
         instructions: {
-          files: ['AGENTS.md']
+          files: [{ path: 'AGENTS.md' }]
         }
       })
 

@@ -53,6 +53,7 @@ const taskWithIntent = (brief: string): WorkflowReviewTask => ({
   candidateIds: [],
   contextEntryIds: [],
   priority: 1,
+  instructions: [],
   reviewContext: [
     {
       kind: 'file',
@@ -74,7 +75,6 @@ const taskInputWithIntent = (brief: string) =>
     reviewedDiffRanges: [{ path: 'src/app.ts', startLine: 1, endLine: 1 }],
     evidence: [],
     candidates: [],
-    instructions: [],
     skills: [],
     sharedDigest: 'digest',
     provenance
@@ -85,7 +85,6 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
   reviewedPaths: ['src/app.ts'],
   evidence: [],
   candidates: [],
-  instructions: [],
   skills: [],
   provenance
 })
@@ -96,7 +95,6 @@ const workflowInputWithSecurityPass = ReviewWorkflowInputSchema.parse({
   securityPassEnabled: true,
   evidence: [],
   candidates: [],
-  instructions: [],
   skills: [],
   provenance
 })

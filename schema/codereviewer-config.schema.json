@@ -177,8 +177,25 @@
           "default": [],
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "scope": {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "path"
+            ],
+            "additionalProperties": false
           }
         },
         "inline": {
@@ -584,6 +601,23 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 32
+        },
+        "adjudication": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "maxCalls": {
+              "default": 40,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

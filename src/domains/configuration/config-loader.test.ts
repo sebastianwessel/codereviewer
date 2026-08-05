@@ -237,7 +237,7 @@ describe('configuration loader', () => {
       await writeFile(
         join(root, 'config.json'),
         JSON.stringify({
-          instructions: { files: ['../instructions.md'] },
+          instructions: { files: [{ path: '../instructions.md' }] },
           skills: { enabled: true, directories: ['skills'] }
         })
       )

@@ -75,7 +75,6 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
   ],
   evidence: [evidence],
   candidates: [candidate],
-  instructions: [],
   skills: [],
   baselineConfigured: false,
   provenance: {

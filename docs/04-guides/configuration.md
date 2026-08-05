@@ -285,7 +285,10 @@ skip detection. Details in [ci-cd.md](ci-cd.md).
 ```json
 {
   "instructions": {
-    "files": [".codereviewer/instructions/house-rules.md"],
+    "files": [
+      { "path": ".codereviewer/instructions/house-rules.md" },
+      { "path": ".codereviewer/instructions/backend-rules.md", "scope": ["backend/**"] }
+    ],
     "inline": "Treat any new public HTTP handler without an authorization check as critical."
   }
 }
@@ -293,7 +296,10 @@ skip detection. Details in [ci-cd.md](ci-cd.md).
 
 Instruction files resolve under the repository root, are redacted before use,
 and are recorded in the context ledger and in each finding's provenance hashes.
-See [instructions-and-skills.md](instructions-and-skills.md).
+An optional `scope` (glob patterns, same dialect as `paths.include`/`exclude`)
+limits a file to review tasks that touch a matching path; omitted, it applies
+everywhere, as in the first entry above. See
+[instructions-and-skills.md](instructions-and-skills.md).
 
 ---
 
@@ -411,7 +417,9 @@ its three input limits binds, refusing to judge an input it cannot see whole; se
 ```
 
 `changeImpact` makes no provider call in this shape, so it costs nothing and its
-output is reproducible.
+output is reproducible. Its adjudication layer is a second switch
+(`changeImpact.adjudication.enabled`, default `false`) and is the only part of the
+command that can spend.
 
 `intentFulfilment` additionally needs a change-intent source, or it will exit `0`
 with `status: "no-intent"` and a warning saying so — see the change-intent recipe

@@ -1067,7 +1067,6 @@ describe('review workflow', () => {
             }
           }
         ],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -1128,7 +1127,6 @@ describe('review workflow', () => {
         reviewedPaths: ['src/app.ts', 'src/util.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -1171,7 +1169,6 @@ describe('review workflow', () => {
       reviewedPaths: ['src/app.ts', 'src/util.ts'],
       evidence: [],
       candidates: [],
-      instructions: [],
       skills: [],
       maxConcurrentTasks: 1,
       reviewContext: [
@@ -1273,7 +1270,6 @@ describe('review workflow', () => {
           ],
           evidence: [],
           candidates: [],
-          instructions: [],
           skills: [],
           maxConcurrentTasks: 6,
           reviewContext: [],
@@ -1320,7 +1316,6 @@ describe('review workflow', () => {
           reviewedPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts', 'src/d.ts'],
           evidence: [],
           candidates: [],
-          instructions: [],
           skills: [],
           maxConcurrentTasks: 2,
           reviewContext: [],
@@ -1369,7 +1364,6 @@ describe('review workflow', () => {
             reviewedPaths: ['src/large.ts'],
             evidence: [],
             candidates: [],
-            instructions: [],
             skills: [],
             reviewContext: [
               {
@@ -1442,7 +1436,6 @@ describe('review workflow', () => {
             reviewedPaths: ['src/large.ts'],
             evidence,
             candidates: [],
-            instructions: [],
             skills: [],
             maxTaskInputBytes: 10000,
             baselineConfigured: false,
@@ -1503,7 +1496,6 @@ describe('review workflow', () => {
           reviewedPaths: ['src/app.ts'],
           evidence: [],
           candidates: [],
-          instructions: [],
           skills: [
             {
               name: 'secure-review',
@@ -1589,7 +1581,6 @@ describe('review workflow', () => {
           }
         ],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -1656,7 +1647,6 @@ describe('review workflow', () => {
         reviewedPaths: ['src/app.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -1720,7 +1710,6 @@ describe('review workflow', () => {
         reviewedPaths: ['src/app.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -1786,7 +1775,6 @@ describe('review workflow', () => {
         reviewedPaths: ['src/app.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -1862,7 +1850,6 @@ describe('review workflow', () => {
         ],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -1939,7 +1926,6 @@ describe('review workflow', () => {
         reviewedPaths: ['src/app.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -2008,7 +1994,6 @@ describe('review workflow', () => {
         reviewedPaths: ['src/app.ts', 'src/helper.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -2123,7 +2108,6 @@ describe('review workflow', () => {
         reviewedPaths: ['src/app.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -2192,7 +2176,6 @@ describe('review workflow', () => {
         ],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -2259,7 +2242,6 @@ describe('review workflow', () => {
         reviewedPaths: ['src/app.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -2310,7 +2292,6 @@ describe('review workflow', () => {
         reviewedPaths: ['src/app.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -2373,7 +2354,6 @@ describe('review workflow', () => {
         reviewedPaths: ['src/BackupCode.tsx'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -2458,7 +2438,6 @@ describe('review workflow', () => {
           }
         ],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -2536,7 +2515,6 @@ describe('review workflow', () => {
           }
         ],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -2626,7 +2604,6 @@ describe('review workflow', () => {
           }
         ],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {
@@ -2737,7 +2714,6 @@ describe('review workflow', () => {
           }
         ],
         candidates: [],
-        instructions: [],
         skills: [],
         reviewContext: [
           {

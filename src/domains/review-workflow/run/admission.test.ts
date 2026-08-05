@@ -87,6 +87,7 @@ const workflowTask: WorkflowReviewTask = {
   candidateIds: [],
   contextEntryIds: [],
   priority: 0,
+  instructions: [],
   reviewContext: []
 }
 

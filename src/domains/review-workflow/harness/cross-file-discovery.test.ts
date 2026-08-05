@@ -114,7 +114,6 @@ const workflowInputFor = (repositoryRoot: string) =>
     reviewedPaths: ['src/app.ts'],
     evidence: [],
     candidates: [],
-    instructions: [],
     skills: [],
     baselineConfigured: false,
     provenance: {

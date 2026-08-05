@@ -31,6 +31,7 @@ import {
 } from '../support/provenance.js'
 import {
   loadStaticReviewContext,
+  selectInstructionsForFiles,
   type InstructionContextDocument,
   type SkillContextDocument
 } from './static-context.js'
@@ -220,10 +221,57 @@ export const assembleContext = async (
       contextEntryIds.push(ledgerEntry.id)
     }
 
+    // Spec 04: which instruction documents this task's packets carry, decided
+    // here — once per task, from the task's own reviewed files — so discovery and
+    // refutation read one resolution instead of each computing their own.
+    //
+    // `paths` is derived from assembly's own context documents and the planner's
+    // task, never from anything a reviewed file says: repository content selects
+    // no instruction. An unscoped instruction is in `included` for every task.
+    const instructionSelection = selectInstructionsForFiles(
+      staticContext.instructions,
+      staticContext.instructionScopes,
+      paths
+    )
+
+    // A scoped-out instruction is DISCLOSED, not merely absent. Without this the
+    // ledger for a task showed nothing at all where the instruction would have
+    // been, which reads identically to "no such instruction was ever configured"
+    // — and an operator whose guidance never reached the reviewer would have had
+    // no way to tell the two apart. `bytesConsidered` is the document's full
+    // size against `bytesIncluded: 0`, so the entry states what was withheld.
+    //
+    // Walks the DOCUMENTS and selects with the skipped paths, rather than
+    // walking the skipped paths and looking each document up: the byte count
+    // then always comes from a document that exists, with no absent-document
+    // branch to answer with a fabricated zero.
+    const skippedInstructionPaths = new Set(
+      instructionSelection.skipped.map((entry) => entry.path)
+    )
+
+    for (const instruction of staticContext.instructions) {
+      if (!skippedInstructionPaths.has(instruction.path)) {
+        continue
+      }
+
+      contextLedger.push(
+        createContextLedgerEntry({
+          kind: 'instruction',
+          path: instruction.path,
+          taskId,
+          reason: 'instruction-scope-excluded',
+          decision: 'skipped',
+          bytesConsidered: utf8ByteLength(instruction.content),
+          bytesIncluded: 0
+        })
+      )
+    }
+
     return {
       ...task,
       id: taskId,
       paths: [...paths],
+      instructions: [...instructionSelection.included],
       factIds: input.analysis.facts
         .filter((fact) => pathSet.has(fact.path))
         .map((fact) => fact.id),

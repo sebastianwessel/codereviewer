@@ -30,6 +30,7 @@ const taskWith = (
   candidateIds: [],
   contextEntryIds: [],
   priority: 0,
+  instructions: [],
   reviewContext
 })
 

@@ -7,6 +7,7 @@ import {
   securityReviewChecklist,
   securityReviewInstruction
 } from './discovery/holistic-task-review.js'
+import { reviewerInstructionsFraming } from './discovery/review-packet.js'
 import {
   crossFileRetrievalInstructions,
   holisticReviewerInstructionsFor,
@@ -139,6 +140,12 @@ describe('prompt genericity guard', () => {
     ['semantic merge', modelSemanticMergeInstructions],
     ['security pass instruction', securityReviewInstruction],
     ['security pass checklist', securityReviewChecklist],
+    // Product-authored framing that rides inside the packet rather than the
+    // instruction channel is still a rule this engine sends to a model, and is
+    // held to the same bar. Only the FRAMING is guarded — the operator's own
+    // instruction text is their content, and this project has no business
+    // banning vocabulary from it.
+    ['reviewer instructions section', reviewerInstructionsFraming],
     // The composed prompt a run actually sends is guarded too, not only the
     // segments in isolation.
     [

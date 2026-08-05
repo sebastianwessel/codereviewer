@@ -289,11 +289,10 @@ record. A sub-task's `paths` MUST be narrowed to its own review targets.
 
 | Field | Type |
 | --- | --- |
-| `task` | `ReviewTask` plus its `reviewContext` documents |
+| `task` | `ReviewTask` plus its `reviewContext` documents and its own scope-resolved, redacted `instructions` |
 | `reviewedDiffRanges` | reviewed changed ranges in task scope |
 | `evidence` | evidence records in task scope |
 | `candidates` | support-signal seed candidates in task scope |
-| `instructions` | redacted instruction documents |
 | `skills` | redacted skill metadata |
 | `sharedDigest` | compact admitted shared-context digest with relevant-entry filtering, per-summary truncation, and recency-preserving byte cap |
 | `provenance` | workflow provenance input |
@@ -377,6 +376,25 @@ behaves differently.
 - The review input is the task's unified-diff segment plus the full
   line-numbered changed files, alongside deterministic support signals,
   instruction/skill metadata, and a compact safe digest.
+- When the task carries reviewer instruction documents (`04-configuration-and-
+  providers.md`), the input opens with a separate reviewer-instructions section
+  holding those documents, ahead of every untrusted section. Its header marks it
+  as OPERATOR CONFIGURATION: a higher trust class than repository content, the
+  change-intent brief, or anything else in the packet. The framing MUST state
+  that the guidance steers what to look for and nothing else — it cannot widen
+  review beyond the task's paths, authorize an action, or move admission,
+  severity, the quality gate, or baseline status — and MUST state that this
+  section is the only place operator instructions appear, so repository content
+  imitating its heading acquires no trust. It MUST also reconcile with the
+  reviewer's untrusted-data rule rather than contradict it: the framing states
+  that the rule covers the material under review and stands unchanged, and that
+  this section is not that material. The untrusted-data sentence in the reviewer
+  instruction channel is NOT reworded for this section — it is this engine's
+  largest measured recall change (`15-security-focused-review.md`) — so the
+  reconciliation lives in the section. The section is omitted entirely when
+  the task carries no instruction document, so the framing is never orphaned
+  above an empty list. Both the general pass and the dedicated security pass
+  receive it, from one shared rendering.
 - When referenced-definition context is present, the input also carries a
   separate "Referenced definitions (from unchanged files, for context only)"
   section holding bounded digests of unchanged dependency files the changed files
@@ -408,6 +426,33 @@ behaves differently.
 - Candidate findings are untrusted until they pass refutation and admission.
   Raw candidates do not influence later workers before they pass the configured
   safe digest boundary.
+
+### Reviewer Instructions In The Discovery Prompt (2026-08-05, Unmeasured)
+
+Until 2026-08-05 reviewer instructions did not reach discovery at all. The
+discovery agent's input is `{ taskId, paths, reviewText }`, and `reviewText` was
+composed from the task's review context only; the assembled, redacted,
+ledger-recorded instruction documents were dropped before the call. Refutation
+was therefore the only stage where an operator instruction had any runtime
+effect, so guidance could kill a candidate after the fact but could never shape
+the search — while the documentation stated that both calls received it. The
+rendering described above closes that gap.
+
+**This is a prompt change, and no measurement of it exists.** This project has
+measured repeatedly that prompt changes move recall in both directions, including
+changes that looked strictly additive. Nothing here claims the change improves
+recall, precision, or anything else. What it claims is narrower and checkable: a
+documented, previously inert input now reaches the stage the documentation says
+it reaches, which is asserted at the discovery call boundary rather than at the
+packet field it was already present in.
+
+**A re-baseline is owed.** Every figure measured before 2026-08-05 was produced
+by an engine in which reviewer instructions could not reach discovery. A figure
+measured after it MUST NOT be compared with one measured before it until a
+baseline has been re-run across this change, on runs whose instruction
+configuration is stated. A run with no instructions configured renders no section
+and is unaffected; a run that configures them is sending a prompt no published
+figure covers.
 
 ### Discovery Call Failure Policy
 

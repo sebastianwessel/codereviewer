@@ -77,8 +77,8 @@ describe('model provider call adapters', () => {
       reviewedDiffRanges: [],
       evidence: [evidence],
       supportSignalCandidates: [],
-      reviewContext: [],
       instructions: [],
+      reviewContext: [],
       skills: [],
       sharedDigest: '(no admitted shared context yet)',
       provenance

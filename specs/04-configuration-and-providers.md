@@ -326,12 +326,57 @@ Rules:
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `files` | string[] | `[]` |
+| `files` | `{ path: string; scope?: string[] }[]` | `[]` |
 | `inline` | string | `""` |
 | `precedence` | fixed | CLI inline > config inline > files in listed order |
 
 Instruction file paths must be repository-relative and must not traverse above
-root. Run summaries record path and SHA-256 hash only.
+root. A configured file that does not exist fails the run; it is never
+silently skipped. Run summaries record path and SHA-256 hash only.
+
+Each file entry MAY declare `scope`: one or more glob patterns, matched with
+the same repository-relative glob matcher `paths.include`/`paths.exclude`
+use (`*`, `**`, `?` — no second matcher implementation). `scope` is REJECTED
+if present and empty; an operator who wants "everywhere" omits the key
+entirely rather than supplying an empty list, so a scope that resolves to
+nothing is always a deliberate, non-empty pattern set rather than an
+ambiguous default.
+
+A review task packet covers a cluster of one or more changed files. An
+instruction whose `scope` is set MUST be included in a packet if, and only
+if, at least one file in that packet's reviewed files matches at least one
+pattern in `scope` (an ANY-file match, not an ALL-files match). This is the
+fail-safe direction: guidance withheld from a packet is invisible to the
+reviewer and unrecoverable, while guidance included for one extra unrelated
+file in a mixed packet is merely additional, visible, discountable content.
+An instruction with no `scope` MUST be included in every packet, identical to
+behavior before scoping was introduced.
+
+An included instruction MUST reach both model calls built from that packet: the
+discovery call and the refutation call. Reaching only refutation is not partial
+delivery of the feature but a different feature — guidance that can kill a
+candidate after the fact and can never shape what discovery looks for. Discovery
+here means every discovery call the packet produces, including the dedicated
+security pass (`15-security-focused-review.md`); no pass is exempt, because an
+operator instruction describes the repository rather than one reviewing lens, and
+a pass whose candidates are adjudicated against an instruction must be shown it.
+
+Instructions are OPERATOR CONFIGURATION and are presented to the model as a
+higher trust class than repository content, pull-request or ticket text, or the
+change-intent brief. That trust is over CONTENT only. Instructions MUST NOT be
+able to expand the reviewer's authority: they cannot authorize publishing or any
+other action, widen review beyond the reviewed paths, or alter admission,
+severity thresholds, the quality gate, or baseline status. Those are deterministic
+code paths that never read instruction text, so the limit holds by construction;
+the prompt states it as well, so a document that claims otherwise is contradicted
+where the model reads it. The rendering MUST also state that operator instructions
+appear in exactly one place, so repository content that imitates the section
+acquires none of its standing.
+
+`inline` has no scope and is always included in every packet: it is a single
+operator-typed string, not a list of documents, so there is no set of
+per-entry scopes it could carry. Area-specific free text is expressed as a
+scoped entry under `files` instead.
 
 ## Skills
 

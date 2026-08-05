@@ -13,7 +13,6 @@ import type {
 } from '../../admission/index.js'
 import { deterministicSignalExtractorVersions } from '../../deterministic-signals/index.js'
 import type {
-  InstructionContextDocument,
   SkillContextDocument,
   WorkflowReviewTask
 } from './context/context.js'
@@ -97,7 +96,9 @@ export const createWorkflowInput = (
     readonly admittedAt: string
     readonly baselineConfigured: boolean
     readonly baselineFingerprints?: readonly BaselineFingerprintRecord[]
-    readonly instructions: readonly InstructionContextDocument[]
+    // Reviewer instructions are not passed here: context assembly resolves each
+    // task's own set against `instructions.files[].scope` and attaches it to the
+    // task, so `tasks` already carries them.
     readonly skills: readonly SkillContextDocument[]
     readonly tasks: readonly WorkflowReviewTask[]
     readonly aiReviewBudget: AiReviewRuntimeBudget
@@ -121,14 +122,14 @@ export const createWorkflowInput = (
     ...contextEvidenceForTasks(input.tasks)
   ],
   candidates: input.candidates.map((candidate) => ({ ...candidate })),
-  instructions: input.instructions.map((instruction) => ({ ...instruction })),
   skills: input.skills.map((skill) => ({ ...skill })),
   reviewContext: input.tasks.flatMap((task) =>
     task.reviewContext.map((context) => ({ ...context }))
   ),
   tasks: input.tasks.map((task) => ({
     ...task,
-    reviewContext: task.reviewContext.map((context) => ({ ...context }))
+    reviewContext: task.reviewContext.map((context) => ({ ...context })),
+    instructions: task.instructions.map((instruction) => ({ ...instruction }))
   })),
   maxConcurrentTasks: input.config.review.maxConcurrentTasks,
   ...(taskInputBudgetFor(input.config) === undefined

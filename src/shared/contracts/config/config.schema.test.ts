@@ -231,7 +231,8 @@ describe('CodeReviewerConfigSchema', () => {
       enabled: false,
       maxChangedSymbols: 50,
       maxReferencesPerSymbol: 25,
-      maxSearchDepth: 12
+      maxSearchDepth: 12,
+      adjudication: { enabled: false, maxCalls: 40 }
     })
 
     const enabled = CodeReviewerConfigSchema.parse({
@@ -246,18 +247,48 @@ describe('CodeReviewerConfigSchema', () => {
       enabled: true,
       maxChangedSymbols: 10,
       maxReferencesPerSymbol: 5,
-      maxSearchDepth: 3
+      maxSearchDepth: 3,
+      adjudication: { enabled: false, maxCalls: 40 }
     })
   })
 
-  // Spec 22 requires blocking to be configurable and non-blocking by default,
-  // but the command currently reports references rather than findings and has
-  // nothing to block on. A `blocking` key would therefore be accepted and then
-  // silently ignored, which is the failure the security `signals` key was removed
-  // for. Rejecting it keeps the config honest until the key does something.
-  test('change impact rejects a blocking key it could not yet honour', () => {
+  // ADJUDICATION IS SEPARATELY OFF, and that is the point of the second switch.
+  // Everything else `impact check` does is deterministic and free; adjudication is
+  // the only part that can reach a provider, so enabling the command must not
+  // silently start billing an operator who asked for the reference list.
+  test('change impact adjudication stays off when the command is turned on', () => {
+    const enabled = CodeReviewerConfigSchema.parse({
+      changeImpact: { enabled: true }
+    })
+
+    expect(enabled.changeImpact.enabled).toBe(true)
+    expect(enabled.changeImpact.adjudication.enabled).toBe(false)
+    expect(
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { adjudication: { enabled: true, maxCalls: 5 } }
+      }).changeImpact.adjudication
+    ).toEqual({ enabled: true, maxCalls: 5 })
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { adjudication: { maxCalls: 0 } }
+      })
+    ).toThrow()
+  })
+
+  // Spec 22 makes the lane non-blocking and states that it "MUST NOT be
+  // configurable to block". This is settled rather than pending: a breaking change
+  // is frequently intentional, so there is nothing to block on, and a `blocking`
+  // key would be accepted and then silently ignored — the failure the security
+  // `signals` key was removed for. The strict object turns setting it into a
+  // configuration error instead of a switch an operator believes gated the build.
+  test('change impact rejects a blocking key it must never honour', () => {
     expect(() =>
       CodeReviewerConfigSchema.parse({ changeImpact: { blocking: true } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { adjudication: { blocking: true } }
+      })
     ).toThrow()
   })
 
@@ -439,5 +470,67 @@ describe('CodeReviewerConfigSchema', () => {
         review: { baseRef: '-bad' }
       })
     ).toThrow()
+  })
+})
+
+describe('InstructionsConfigSchema path scoping', () => {
+  test('accepts an unscoped file entry and leaves scope unset', () => {
+    const parsed = CodeReviewerConfigSchema.parse({
+      instructions: { files: [{ path: 'AGENTS.md' }] }
+    })
+
+    expect(parsed.instructions.files).toEqual([{ path: 'AGENTS.md' }])
+    expect(parsed.instructions.files[0]?.scope).toBeUndefined()
+  })
+
+  test('accepts a scoped file entry', () => {
+    const parsed = CodeReviewerConfigSchema.parse({
+      instructions: {
+        files: [{ path: 'backend/AGENTS.md', scope: ['backend/**', 'services/**'] }]
+      }
+    })
+
+    expect(parsed.instructions.files).toEqual([
+      { path: 'backend/AGENTS.md', scope: ['backend/**', 'services/**'] }
+    ])
+  })
+
+  // An empty scope is rejected rather than accepted as "matches nothing": a
+  // present-but-empty array reads as a mistake, and turning it into a silent
+  // permanent exclusion would hide a configured instruction with nothing
+  // saying why. Delete `scope` to go back to unscoped.
+  test('rejects an empty scope array', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        instructions: { files: [{ path: 'AGENTS.md', scope: [] }] }
+      })
+    ).toThrow()
+  })
+
+  // The pre-scoping shape (`files: string[]`) is a breaking change, on
+  // purpose (no compatibility layer): a bare string is no longer a valid
+  // entry.
+  test('rejects the pre-scoping bare-string file entry shape', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        instructions: { files: ['AGENTS.md'] }
+      })
+    ).toThrow()
+  })
+
+  test('rejects unknown keys on a file entry', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        instructions: { files: [{ path: 'AGENTS.md', globs: ['**'] }] }
+      })
+    ).toThrow()
+  })
+
+  test('inline stays a single unscoped string', () => {
+    const parsed = CodeReviewerConfigSchema.parse({
+      instructions: { inline: 'Repo-wide guidance' }
+    })
+
+    expect(parsed.instructions.inline).toBe('Repo-wide guidance')
   })
 })

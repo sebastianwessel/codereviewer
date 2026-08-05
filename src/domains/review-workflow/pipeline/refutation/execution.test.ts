@@ -67,6 +67,7 @@ const task: WorkflowReviewTask = {
   evidenceIds: ['ev_refutationexecution'],
   candidateIds: ['cand_refutationexecution'],
   contextEntryIds: ['ctx_aaaaaaaaaaaaaaaa'],
+  instructions: [],
   reviewContext: [
     {
       kind: 'file',
@@ -78,10 +79,17 @@ const task: WorkflowReviewTask = {
   priority: 1
 }
 
+// A task carrying one instruction document, as context assembly resolves it.
+// Instructions are irreducible packet content: the refutation budget ladder can
+// shed the digest, the support signals and the review context, never these.
+const taskWithInstruction = (content: string): WorkflowReviewTask => ({
+  ...task,
+  instructions: [{ path: 'AGENTS.md', content, allowed: true }]
+})
+
 const workflowInput = (
   input: {
     readonly maxTaskInputBytes?: number
-    readonly instructionContent?: string
   } = {}
 ): ReviewWorkflowInput =>
   ReviewWorkflowInputSchema.parse({
@@ -92,16 +100,6 @@ const workflowInput = (
     ],
     evidence: [evidence],
     candidates: [candidate],
-    instructions:
-      input.instructionContent === undefined
-        ? []
-        : [
-            {
-              path: 'AGENTS.md',
-              content: input.instructionContent,
-              allowed: true
-            }
-          ],
     skills: [],
     ...(input.maxTaskInputBytes === undefined
       ? {}
@@ -123,11 +121,12 @@ const batchInput = (
       packet: FindingRefutationBatchInput
     ) => Promise<ModelFindingRefutationBatchResult>
     readonly workflowInput?: ReviewWorkflowInput
+    readonly task?: WorkflowReviewTask
     readonly logger?: DebugLogger
   }
 ) => ({
   workflowInput: input.workflowInput ?? workflowInput(),
-  tasks: [task],
+  tasks: [input.task ?? task],
   candidates: input.candidates,
   allCandidates: input.candidates,
   sharedDigest: '(no admitted shared context yet)',
@@ -417,10 +416,7 @@ describe('model admission batched refutation execution', () => {
     // Instructions are irreducible context (the budget ladder cannot shed them), and
     // each candidate carries a maximum-length description. Sized so that a
     // one-candidate packet fits the budget and a two-candidate packet does not.
-    const oversizedInput = workflowInput({
-      maxTaskInputBytes: 10000,
-      instructionContent: 'irreducible instruction '.repeat(290)
-    })
+    const oversizedInput = workflowInput({ maxTaskInputBytes: 10000 })
     const bulky = (source: CandidateFinding): CandidateFinding => ({
       ...source,
       description: source.description.padEnd(1200, ' and it keeps describing')
@@ -429,6 +425,7 @@ describe('model admission batched refutation execution', () => {
     const resolutions = await executeBatchRefutation(
       batchInput({
         workflowInput: oversizedInput,
+        task: taskWithInstruction('irreducible instruction '.repeat(290)),
         candidates: [bulky(candidate), bulky(secondCandidate)],
         refuteFinding: async (packet) => {
           observedBatches.push(packet.candidates.map((entry) => entry.id))
@@ -456,10 +453,8 @@ describe('model admission batched refutation execution', () => {
     let refutationCalls = 0
     const resolutions = await executeBatchRefutation(
       batchInput({
-        workflowInput: workflowInput({
-          maxTaskInputBytes: 10000,
-          instructionContent: 'irreducible instruction '.repeat(800)
-        }),
+        workflowInput: workflowInput({ maxTaskInputBytes: 10000 }),
+        task: taskWithInstruction('irreducible instruction '.repeat(800)),
         candidates: [candidate],
         refuteFinding: async () => {
           refutationCalls += 1

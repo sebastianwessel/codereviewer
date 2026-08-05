@@ -46,6 +46,29 @@ const boundedWorkflowConcurrency = (
     harnessMaxConcurrentTasks
   )
 
+// Every instruction document any task in this run actually carried, deduplicated
+// by path, in first-seen order.
+//
+// Scoping (spec 04) makes the instruction set a property of a task, so the run's
+// set is the union of its tasks' sets rather than a list handed in whole. A run
+// where one instruction is scoped to files nothing touched genuinely did not use
+// that instruction, and its hash must not appear as if it had.
+const instructionsAcrossTasks = (
+  tasks: readonly WorkflowReviewTask[]
+): readonly ContextDocument[] => {
+  const byPath = new Map<string, ContextDocument>()
+
+  for (const task of tasks) {
+    for (const instruction of task.instructions) {
+      if (!byPath.has(instruction.path)) {
+        byPath.set(instruction.path, instruction)
+      }
+    }
+  }
+
+  return [...byPath.values()]
+}
+
 const hashAllowedInstructionContent = (
   instructions: readonly ContextDocument[]
 ): readonly string[] =>
@@ -139,7 +162,9 @@ export const runReviewWorkflowHandler = async (params: {
     reviewed_path_count: input.reviewedPaths.length,
     max_concurrent_tasks: concurrency
   })
-  const instructionHashes = hashAllowedInstructionContent(input.instructions)
+  const instructionHashes = hashAllowedInstructionContent(
+    instructionsAcrossTasks(tasks)
+  )
   const skillHashes = hashAllowedSkillContent(input.skills)
   const shared = createWorkflowSharedContext(input)
   const contextLedgerEntries: ContextLedgerEntry[] = []
@@ -215,7 +240,15 @@ export const runReviewWorkflowHandler = async (params: {
   const mergedCandidates = mergeCandidates(input.candidates, taskCandidates)
   const prepared = await prepareCandidatesForAdmission({
     workflowInput: input,
-    tasks,
+    // Planned tasks AND the sub-tasks discovery actually ran. A candidate carries
+    // the id of the call that raised it, which for a partition (spec 27) or a
+    // reactive half (spec 26) is a synthetic id matching nothing in the planned
+    // list — so refutation looked up the originating task, found none, and fell
+    // back to workflow-wide context for exactly the runs partitioning is on for.
+    // The same union `completeReviewWorkflow` already needs, for the same reason:
+    // the sub-task is the unit that was reviewed, and it is the unit carrying the
+    // instruction set and the review context its candidates must be judged against.
+    tasks: [...tasks, ...reviewedTasks],
     candidates: mergedCandidates.filter(
       (candidate) => !taskRejectedCandidateIds.has(candidate.id)
     ),

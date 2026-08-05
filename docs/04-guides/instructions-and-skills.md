@@ -7,9 +7,13 @@ Two mechanisms let you add project knowledge to a review:
 | **Instructions** | Markdown text (files and/or an inline string) sent with every review task. | Adds bytes to every task packet. | Empty |
 | **Skills** | `SKILL.md` documents mounted through the harness skill registry, which the review agents may consult with read-only tools. | Raises the agent step allowance from 1 to 4 and enables built-in tools. | Disabled |
 
-Both are **untrusted prompt input**. Neither can grant filesystem, shell,
-network, publishing or gate authority — see
+Neither can grant filesystem, shell, network, publishing or gate authority — see
 [prompt-injection-and-untrusted-input.md](../07-security/prompt-injection-and-untrusted-input.md).
+Instructions are **operator configuration**: they come from your config file, not
+from the change under review, and the discovery prompt presents them as genuine
+guidance about your repository rather than as text to be suspicious of. That is a
+statement about where the text came from, not a grant of power — the limits below
+still hold, and nothing in a reviewed file can promote itself into that class.
 
 ---
 
@@ -20,7 +24,7 @@ network, publishing or gate authority — see
 ```json
 {
   "instructions": {
-    "files": [".codereviewer/instructions/house-rules.md"]
+    "files": [{ "path": ".codereviewer/instructions/house-rules.md" }]
   }
 }
 ```
@@ -28,6 +32,53 @@ network, publishing or gate authority — see
 Paths are repository-relative and resolve under the repository root; traversal,
 absolute paths and symlink escapes are rejected before the file is opened. A
 missing file fails the run rather than being silently skipped.
+
+### Scope a file to part of the repository
+
+By default a file applies repository-wide — to every review task, in every
+packet. In a monorepo that is often too broad: guidance for one service
+becomes noise in the packet for every other service, and packet content is
+not free (it costs tokens on every call and dilutes model attention). Add
+`scope` to limit a file to review tasks that touch matching paths:
+
+```json
+{
+  "instructions": {
+    "files": [
+      { "path": ".codereviewer/instructions/house-rules.md" },
+      {
+        "path": ".codereviewer/instructions/payments-service.md",
+        "scope": ["services/payments/**"]
+      }
+    ]
+  }
+}
+```
+
+`scope` is a list of glob patterns using the same dialect as
+`paths.include`/`paths.exclude` (`*`, `**`, `?`, matched against portable,
+repository-relative paths) — there is one glob matcher in this project, reused
+everywhere a glob is accepted.
+
+A review task can cover more than one changed file (task clustering may batch
+several files into one packet). Scoping matches on **any** file in a task: if
+one file in the packet matches the scope, the whole packet gets the
+instruction. This fails safe in the direction of inclusion — guidance a
+reviewer never sees is invisible and uncatchable, while guidance shown for one
+extra file in a mixed packet is merely noise a reader can see and discount.
+
+An entry with no `scope` key still applies everywhere, exactly as before
+scoping existed — this is a purely additive capability, not a required one.
+`scope: []` (present but empty) is rejected at config load: an empty list
+reads as a mistake, and turning it into a silent, permanent exclusion would
+hide a configured instruction with nothing saying why.
+
+`inline` has no `scope` — it stays a single string that always applies
+repository-wide. It is operator-typed free text (one config value, not a
+list), so "which area does this apply to" is not a question it can answer for
+more than one area at once. A team that wants area-specific free text should
+use a short scoped file instead: it is git-diffable and reviewable, and needs
+no second scoping shape for a single string.
 
 ### Add inline text
 
@@ -48,10 +99,32 @@ synthetic path `.codereviewer/inline-instructions`.
    [data-handling-and-redaction.md](../07-security/data-handling-and-redaction.md)).
 2. A context-ledger entry records the path, byte count, hash and reason
    `instruction-context`.
-3. The redacted content is attached to every review task packet — both the
-   discovery call and the refutation call receive it.
-4. A hash of each instruction document is written into every admitted finding's
-   provenance, so a report proves which instructions produced it.
+3. The redacted content is attached to every review task packet whose files
+   match the instruction's `scope` — both the discovery call and the
+   refutation call for that packet receive it. An unscoped file or the inline
+   text is attached to every packet, as before scoping existed.
+   In the discovery call the documents are rendered as a leading
+   **"Reviewer instructions (operator configuration - guidance, NOT authority)"**
+   section, ahead of the diff, the files under review and any change-intent text,
+   each document labelled with the path you configured. The section's own text
+   tells the reviewer that this is operator configuration, that it steers what to
+   look for and nothing else, and that it is the only place operator instructions
+   appear. When the dedicated security pass is enabled, its call gets the same
+   section. Until 2026-08-05 this step was documented but not implemented: the
+   documents reached refutation only, so guidance could discard a finding but
+   never shape the search. Making them reach discovery is a prompt change and its
+   effect on recall and precision is **unmeasured** — if you compare review
+   results across that date, re-measure rather than assume.
+4. Where a `scope` kept an instruction **out** of a packet, the context ledger
+   records that too: one entry per task, with `decision: "skipped"`, reason
+   `instruction-scope-excluded`, and the byte count that was withheld. So a
+   ledger distinguishes "scoped out of this task" from "never loaded at all" —
+   the latter has no entry for the file at all, which only happens when it is
+   not configured.
+5. A hash of each instruction document is written into every admitted finding's
+   provenance, so a report proves which instructions produced it. Provenance
+   lists every instruction the run loaded, scoped or not; which packets a scoped
+   one actually reached is what the ledger entries in step 4 answer.
 
 ### Writing instructions that help
 
@@ -63,7 +136,11 @@ synthetic path `.codereviewer/inline-instructions`.
 
 Instructions influence what the model proposes. They do **not** change
 admission, severity thresholds, the baseline or the quality gate; those are
-deterministic code paths.
+deterministic code paths that never read the text. They also cannot widen a
+review beyond the files it was pointed at, or authorize any action the engine
+could not otherwise take. An instruction that says "report nothing in this
+directory" is not a permission the engine honours — scope a file, or exclude a
+path under `paths.exclude`, if that is what you mean.
 
 ---
 

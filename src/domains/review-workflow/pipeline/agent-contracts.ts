@@ -57,7 +57,20 @@ export const ReviewContextDocumentSchema = z.strictObject({
 })
 
 export const WorkflowReviewTaskSchema = PlannedReviewTaskSchema.extend({
-  reviewContext: z.array(ReviewContextDocumentSchema).default([])
+  reviewContext: z.array(ReviewContextDocumentSchema).default([]),
+  // The reviewer instruction documents THIS task's packets carry, already
+  // resolved against `instructions.files[].scope` (spec 04) by context assembly.
+  // It lives on the task rather than run-wide because a scoped instruction
+  // reaches only the packets whose reviewed files match it, and a task is the
+  // unit a packet is built from — discovery and refutation both read it here, so
+  // the two stages cannot be given different instruction sets for one task.
+  //
+  // A sub-task (a spec 27 partition or a spec 26 reactive half) inherits this
+  // list verbatim through `subTaskFrom`'s spread. That is deliberate: a sub-task
+  // reviews a SUBSET of its parent's files, so re-resolving could only ever
+  // withhold guidance the parent packet was going to show, and withheld guidance
+  // is the direction this scoping is explicitly not allowed to fail in.
+  instructions: z.array(ContextDocumentSchema).default([])
 })
 
 export const WorkflowTaskEventSchema = z.strictObject({
@@ -673,12 +686,17 @@ export type SemanticMergeRunner = (
   signal: AbortSignal | undefined
 ) => Promise<ModelSemanticMergeResult>
 
+// The discovery packet. It carries no `instructions` field of its own: the
+// task's instruction documents ride inside `task.instructions`, resolved per
+// task by context assembly. Copying them to the top level as well would put the
+// same documents in the packet twice and give a reader two places to ask which
+// instructions this task got, which is exactly how the two answers start
+// disagreeing.
 export const TaskReviewInputSchema = z.strictObject({
   task: WorkflowReviewTaskSchema,
   reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
-  instructions: z.array(ContextDocumentSchema),
   skills: z.array(SkillContextDocumentSchema),
   sharedDigest: z.string(),
   provenance: WorkflowProvenanceInputSchema
@@ -800,19 +818,36 @@ export type FindingRefutationResult = z.infer<
 //
 // FIELD ORDER IS A COST CONTRACT, and it is measured. The harness sends this packet
 // as `JSON.stringify(parsedInput)` and Zod emits keys in declaration order, so the
-// four fields above `reviewContext` — all constant for every refutation call of a
-// run — are exactly the shared prompt prefix; everything from `reviewContext` on is
-// per-task. Moving a per-task field above them, or inserting one, truncates that
-// prefix to nothing.
+// four fields above `reviewContext` are exactly the shared prompt prefix; everything
+// from `reviewContext` on is per-task. Moving a per-task field above them, or
+// inserting one, truncates that prefix to nothing.
+//
+// `instructions` is the one qualified member of that head. It is constant for every
+// refutation call of a run UNLESS `instructions.files[].scope` is configured (spec
+// 04), because scoping resolves the set per task — so a run that scopes an
+// instruction to part of the repository shortens its own refutation prefix to
+// `provenance` + the leading bytes of `instructions`. The field is left here rather
+// than demoted below `sharedDigest`: refutation caches nothing either way (see the
+// 968-against-1024 measurement below), and keeping the operator's guidance in the
+// head is what makes the prefix long enough to matter at all if this prompt ever
+// grows past the threshold.
 //
 // What that prefix currently measures (recorded off the real pipeline over the
 // 37-slice real-repo corpus, o200k_base, no provider spend): refuter instructions
 // 783 tokens + static packet head 185 tokens = 968 identical leading tokens. The
 // provider caches only a prefix of at least 1024 tokens, in 128-token increments,
 // so refutation caches NOTHING and is 56 tokens short — while discovery's 1,621-token
-// prefix caches 1,536 per call, which is every cached token a run reports. Configure
-// `instructions.files` and the same measurement gives 1,654 tokens and 1,536 cached,
-// because the instruction document lands inside the head.
+// prefix caches 1,536 per call, which is every cached token a run reports.
+//
+// Configuring `instructions.files` lengthens THIS packet's head, and only this one.
+// This comment used to add that the same configuration raised discovery's measured
+// prefix to 1,654 tokens "because the instruction document lands inside the head";
+// that was never possible. Discovery's cached prefix is its instruction constant,
+// and the instruction documents reached no discovery prompt at all until they were
+// rendered into `reviewText` (spec 04). They still do not lengthen discovery's
+// cached prefix now that they do reach it: `reviewText` opens with a per-task id,
+// so nothing after it is a shared prefix. Whether the added bytes here carry
+// refutation over 1024 depends on the documents' own size and is unmeasured.
 //
 // The gap is deliberately NOT closed here. Padding the prompt to clear 1024 would
 // spend real tokens on every call to buy a discount on the same tokens, and any

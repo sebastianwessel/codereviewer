@@ -100,7 +100,20 @@ const createFindingRefutationBatchInput = (
 
   return FindingRefutationBatchInputSchema.parse({
     provenance: input.workflowInput.provenance,
-    instructions: input.workflowInput.instructions,
+    // The SAME instruction set the originating task's discovery packet carried,
+    // read from the same field, so a scoped instruction cannot reach one stage
+    // and be withheld from the other. Refutation is the stage where a missing
+    // instruction is invisible — a suppressed candidate leaves no trace — so the
+    // two stages agreeing is a correctness property, not tidiness.
+    //
+    // No task means no task-resolved instruction set exists, and there is no
+    // run-wide list to substitute one from. That is the honest empty, and it is
+    // reachable only for a candidate supplied on the workflow input whose taskId
+    // matches nothing the run planned or reviewed; every candidate discovery
+    // raises is adjudicated against the sub-task that actually raised it (see
+    // `runReviewWorkflowHandler`, which passes the reviewed sub-tasks alongside
+    // the planned ones for exactly this lookup).
+    instructions: input.task?.instructions ?? [],
     skills: input.workflowInput.skills,
     sharedDigest: input.sharedDigest,
     reviewContext,

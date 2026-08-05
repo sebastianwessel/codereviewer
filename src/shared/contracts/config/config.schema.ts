@@ -178,8 +178,55 @@ export const ProviderConfigSchema = z
     }
   })
 
+// One configured instruction file, with an optional path scope. `scope`
+// reuses the exact glob dialect `paths.include`/`paths.exclude` already match
+// repository-relative paths with (`shared/glob/glob-matcher.ts`: `*`, `**`,
+// `?`) — there is deliberately no second matcher here, only a second field
+// that gets compiled through the same one.
+//
+// Omitted `scope` keeps this instruction repo-wide, applied to every review
+// task exactly as `instructions.files` behaved before scoping existed: the
+// unscoped case is not a special zero-pattern scope, it is the absence of one,
+// so an operator who never asks for scoping sees byte-for-byte the same
+// config and the same packets as before this change.
+//
+// `scope: []` is rejected (`.min(1)`) rather than accepted as "matches
+// nothing": an empty array reads as a typo or a leftover from removing every
+// pattern, and silently turning it into "never include this instruction"
+// would be exactly the silent-optimism-shaped mistake this project has a
+// standing rule against — the config would parse, the instruction would stop
+// appearing anywhere, and nothing would say why. Delete the key to go back to
+// unscoped, or write at least one real pattern.
+export const InstructionFileEntrySchema = z.strictObject({
+  path: RepositoryRelativePathSchema,
+  scope: z.array(z.string().min(1)).min(1).optional()
+})
+
+// A task packet covers a CLUSTER of files (`aiReview.maxFilesPerDiscoveryCall`
+// batches several changed files into one discovery/refutation call), not one
+// file, so "does this instruction's scope match this packet" needs a rule for
+// a many-files-to-many-patterns comparison. The engine matches on ANY file in
+// the packet matching ANY scope pattern, not on every file matching.
+//
+// This is the fail-safe direction. Guidance a reader never sees is invisible
+// and uncatchable; guidance shown for one extra file in a mixed packet is
+// merely some noise the reader can see and discount. An `all-files-must-match`
+// rule would silently withhold a `backend/**`-scoped instruction from a
+// packet that batches one backend file with one unrelated file purely because
+// task clustering happened to combine them — the exact "absence produces a
+// plausible answer" shape this project keeps finding and fixing elsewhere.
+//
+// `inline` stays a single unscoped string rather than gaining the same
+// `scope` field. It is operator-typed free text (a config value or a CLI/env
+// override), not a checked-in document — there is only ever one of it, so
+// "which area does THIS one apply to" is not a question multiple inline
+// blocks could answer differently. A team that wants area-specific free text
+// already has the strictly better tool for it: a short scoped file under
+// `instructions.files`, which is git-diffable, reviewable, and requires no
+// second scoping shape for a single string. Keeping `inline` simple is a
+// deliberate choice, not an oversight.
 export const InstructionsConfigSchema = z.strictObject({
-  files: z.array(RepositoryRelativePathSchema).default([]),
+  files: z.array(InstructionFileEntrySchema).default([]),
   inline: z.string().default('')
 })
 
@@ -403,21 +450,46 @@ export const VerificationConfigSchema = z.strictObject({
   maxMatches: z.int().min(1).default(20)
 })
 
+// Change-impact adjudication (spec 22 design step 3). Off by default, and
+// SEPARATELY off from the command that hosts it.
+//
+// The second switch is not redundant. Everything else `impact check` does is
+// deterministic and free; adjudication is the only part that can reach a provider,
+// and turning `changeImpact.enabled` on must not silently start billing an
+// operator who asked for the reference list. It also stays off for spec 22's own
+// reason — the capability stays disabled until measured, and this layer is the
+// unmeasured one.
+const ChangeImpactAdjudicationConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  // Upper bound on MODEL calls per run. Deterministic verdicts — a removed,
+  // relocated or newly added declaration — are free and are never bounded by it,
+  // so this caps the residue only: dependents of a symbol whose behaviour moved.
+  //
+  // Binding it is disclosed rather than absorbed: `summary.adjudicationCallsTruncated`
+  // says a bounded run happened, and every pair past the cap is counted as
+  // unadjudicated instead of being reported as a weak finding.
+  maxCalls: z.int().min(1).max(500).default(40)
+})
+
 // Change-impact review (spec 22). Off by default until measured, and reached
 // only by the separate `impact check` command — never by `review`.
 //
-// The bounds below are the whole cost model of the current implementation: it
-// makes no provider call, so the only resource it can spend is repository
-// traversal. They are deliberately per-run and per-symbol rather than one global
+// The bounds below are the whole cost model. The deterministic core makes no
+// provider call and its only resource is repository traversal; the adjudication
+// block above is the one part that can spend, and it is separately disabled. The
+// traversal bounds are deliberately per-run and per-symbol rather than one global
 // pool, because a change touching forty symbols must not let the first symbol
 // consume the entire reference budget.
 //
-// There is deliberately no `blocking` key yet. Spec 22 requires blocking to be
-// configurable and non-blocking by default, but the current command has nothing
-// to block on — it reports references, not findings, and always exits 0. Adding
-// the key now would ship a toggle that silently does nothing, which is the same
-// mistake `SecurityConfigSchema` above records having already made once. Add it
-// in the same change that admits the first impact finding.
+// THERE IS NO `blocking` KEY, AND THERE WILL NOT BE ONE. This is settled, not
+// pending: spec 22 makes the lane non-blocking and states that it "MUST NOT be
+// configurable to block". There is nothing to block on, because a breaking change
+// is frequently intentional and the tool's job is to surface the dependents rather
+// than to decide whether breaking them is acceptable. A `blocking` key would be a
+// switch that changes nothing — worse than absent, because an operator could set it
+// and believe the build was gated. The object is strict, so setting one is a
+// configuration error rather than a silent no-op, which is the mistake
+// `SecurityConfigSchema` above records having already made once.
 export const ChangeImpactConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
   // Upper bound on the changed symbols seeded from the diff. Each seed costs one
@@ -429,7 +501,8 @@ export const ChangeImpactConfigSchema = z.strictObject({
   maxReferencesPerSymbol: z.int().min(1).max(500).default(25),
   // Directory levels the reference search descends from the repository root.
   // Mirrors the context-retrieval traversal bound of the same name.
-  maxSearchDepth: z.int().min(0).max(32).default(12)
+  maxSearchDepth: z.int().min(0).max(32).default(12),
+  adjudication: ChangeImpactAdjudicationConfigSchema.prefault({})
 })
 
 // Intent-fulfilment review (spec 23). Off by default until measured, and reached
@@ -699,6 +772,7 @@ export type CrossFileRetrievalConfig = z.infer<
 >
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 export type InstructionsConfig = z.infer<typeof InstructionsConfigSchema>
+export type InstructionFileEntry = z.infer<typeof InstructionFileEntrySchema>
 export type SkillsConfig = z.infer<typeof SkillsConfigSchema>
 export type PathsConfig = z.infer<typeof PathsConfigSchema>
 export type BaselineConfig = z.infer<typeof BaselineConfigSchema>

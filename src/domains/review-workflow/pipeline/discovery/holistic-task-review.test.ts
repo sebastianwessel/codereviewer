@@ -25,6 +25,7 @@ const task: WorkflowReviewTask = {
   candidateIds: [],
   contextEntryIds: [],
   priority: 1,
+  instructions: [],
   reviewContext: [
     {
       kind: 'file',
@@ -40,7 +41,6 @@ const taskInput = TaskReviewInputSchema.parse({
   reviewedDiffRanges: [{ path: 'src/app.ts', startLine: 1, endLine: 1 }],
   evidence: [],
   candidates: [],
-  instructions: [],
   skills: [],
   sharedDigest: 'digest',
   provenance: {
@@ -57,7 +57,6 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
   reviewedPaths: ['src/app.ts'],
   evidence: [],
   candidates: [],
-  instructions: [],
   skills: [],
   provenance: {
     reviewer: 'review-agent',
@@ -147,7 +146,6 @@ describe('runModelBackedHolisticTaskReview', () => {
       reviewedDiffText: diff,
       evidence: [],
       candidates: [],
-      instructions: [],
       skills: [],
       provenance: {
         reviewer: 'review-agent',
@@ -239,7 +237,6 @@ describe('runModelBackedHolisticTaskReview', () => {
     securityPassEnabled: true,
     evidence: [],
     candidates: [],
-    instructions: [],
     skills: [],
     provenance: {
       reviewer: 'review-agent',
@@ -514,7 +511,6 @@ describe('discovery telemetry', () => {
         reviewedPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         maxFilesPerDiscoveryCall: 1,
         provenance: {
@@ -588,7 +584,6 @@ describe('discovery telemetry', () => {
         reviewedPaths: ['src/large.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         provenance: {
           reviewer: 'review-agent',
@@ -860,7 +855,6 @@ describe('reactive splitting when the provider refuses a packet', () => {
       reviewedPaths: ['src/large.ts'],
       evidence: [],
       candidates: [],
-      instructions: [],
       skills: [],
       provenance: {
         reviewer: 'review-agent',
@@ -965,7 +959,6 @@ describe('reactive splitting when the provider refuses a packet', () => {
         reviewedPaths: ['src/large.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         provenance: {
           reviewer: 'review-agent',
@@ -1102,7 +1095,6 @@ describe('discovery partitioning end to end (spec 27)', () => {
         reviewedPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         ...(maxFilesPerDiscoveryCall === undefined
           ? {}
@@ -1167,7 +1159,6 @@ describe('discovery partitioning end to end (spec 27)', () => {
         reviewedPaths: ['src/a.ts', 'src/b.ts', 'src/c.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         maxFilesPerDiscoveryCall: 1,
         provenance: {

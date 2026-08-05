@@ -88,7 +88,10 @@ const reviewContext = (
   ledgerEntryId: 'ctx_aaaaaaaa'
 })
 
-const task = (context: readonly ReviewContextDocument[]): WorkflowReviewTask => ({
+const task = (
+  context: readonly ReviewContextDocument[],
+  instructions: WorkflowReviewTask['instructions'] = []
+): WorkflowReviewTask => ({
   id: 'task_app1',
   round: 1,
   kind: 'file',
@@ -97,14 +100,26 @@ const task = (context: readonly ReviewContextDocument[]): WorkflowReviewTask => 
   evidenceIds: ['ev_diff1'],
   candidateIds: ['cand_bug1'],
   contextEntryIds: context.map((entry) => entry.ledgerEntryId),
+  instructions: [...instructions],
   reviewContext: [...context],
   priority: 0
 })
 
+// Instruction documents as context assembly resolves them for one task. Declared
+// here so a test can hand the same set to the task fixture that the assertions
+// name.
+const instructionDocuments = (
+  ...contents: readonly string[]
+): WorkflowReviewTask['instructions'] =>
+  contents.map((content, index) => ({
+    path: `AGENTS-${index}.md`,
+    content,
+    allowed: true
+  }))
+
 const workflowInput = (
   input: {
     readonly maxTaskInputBytes?: number
-    readonly instructions?: readonly { readonly content: string }[]
   } = {}
 ): ReviewWorkflowInput =>
   ReviewWorkflowInputSchema.parse({
@@ -123,11 +138,6 @@ const workflowInput = (
       supportCandidate,
       unrelatedSamePathSupportCandidate
     ],
-    instructions: (input.instructions ?? []).map((instruction, index) => ({
-      path: `AGENTS-${index}.md`,
-      content: instruction.content,
-      allowed: true
-    })),
     skills: [],
     ...(input.maxTaskInputBytes === undefined
       ? {}
@@ -187,6 +197,35 @@ describe('finding refutation packet', () => {
     expect(packet.reviewContext).toEqual([context])
   })
 
+  // Spec 04: refutation adjudicates a candidate against the same rules its
+  // discovery call was given, so the packet takes the originating task's own
+  // resolved instruction set. Taking a run-wide list instead would show the
+  // adjudicator guidance that was scoped away from the task that raised the
+  // candidate — and in this stage the mistake is silent, because a candidate
+  // refuted against a rule that should not have applied produces no output.
+  test('carries the originating task’s own instruction set', () => {
+    const scoped = instructionDocuments('Backend-only guidance.')
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput(),
+      task: task([reviewContext()], scoped),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate],
+      sharedDigest: '(no admitted shared context yet)'
+    })
+
+    expect(packet.instructions).toEqual(scoped)
+
+    const unscopedPacket = findingRefutationBatchInput({
+      workflowInput: workflowInput(),
+      task: task([reviewContext()]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate],
+      sharedDigest: '(no admitted shared context yet)'
+    })
+
+    expect(unscopedPacket.instructions).toEqual([])
+  })
+
   test('drops unrelated same-file support signals from the refutation packet', () => {
     const packet = findingRefutationBatchInput({
       workflowInput: workflowInput(),
@@ -210,13 +249,14 @@ describe('finding refutation packet', () => {
   // per-task field moved or inserted above `reviewContext` breaks nothing a
   // functional test would notice, it just silently deletes the shared prefix.
   test('serializes every run-invariant field ahead of the first per-task field', () => {
-    const input = workflowInput({
-      instructions: [{ content: 'Repository review instructions.' }]
-    })
+    const input = workflowInput()
+    // The unscoped case: both tasks resolved the same repository-wide
+    // instruction, so it is still run-invariant and still belongs in the prefix.
+    const instructions = instructionDocuments('Repository review instructions.')
     const firstBatch = JSON.stringify(
       findingRefutationBatchInput({
         workflowInput: input,
-        task: task([reviewContext('first task context')]),
+        task: task([reviewContext('first task context')], instructions),
         candidates: [modelCandidate],
         allCandidates: [modelCandidate],
         sharedDigest: '(no admitted shared context yet)'
@@ -225,7 +265,7 @@ describe('finding refutation packet', () => {
     const secondBatch = JSON.stringify(
       findingRefutationBatchInput({
         workflowInput: input,
-        task: task([reviewContext('second task context')]),
+        task: task([reviewContext('second task context')], instructions),
         candidates: [secondModelCandidate],
         allCandidates: [secondModelCandidate],
         sharedDigest: '(no admitted shared context yet)'
@@ -257,11 +297,11 @@ describe('finding refutation packet', () => {
 
     try {
       findingRefutationBatchInput({
-        workflowInput: workflowInput({
-          maxTaskInputBytes: 10000,
-          instructions: [{ content: 'irreducible instruction '.repeat(800) }]
-        }),
-        task: task([]),
+        workflowInput: workflowInput({ maxTaskInputBytes: 10000 }),
+        task: task(
+          [],
+          instructionDocuments('irreducible instruction '.repeat(800))
+        ),
         candidates: [modelCandidate],
         allCandidates: [modelCandidate],
         sharedDigest: '(no admitted shared context yet)'

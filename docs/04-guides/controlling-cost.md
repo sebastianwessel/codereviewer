@@ -206,7 +206,10 @@ These paths make no provider call at all:
 - `config validate`
 - `drift check` (also run as a preflight step inside `review`)
 - `baseline write`
-- `impact check` — deterministic by construction; it makes no provider call at all
+- `impact check` while `changeImpact.adjudication.enabled` is false (the default,
+  even when the command itself is enabled), or when no provider resolves — it
+  still reports every dependent it can settle deterministically, and counts the
+  rest as unadjudicated
 - `intent check` while `intentFulfilment.enabled` is false, or when no provider
   resolves — it reports the reason as a warning and still exits `0`
 - `eval compare`, `eval recall-report`, `eval slice-manifest`

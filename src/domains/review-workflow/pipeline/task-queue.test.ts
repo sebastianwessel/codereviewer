@@ -14,6 +14,7 @@ const task = (id: string, priority: number): WorkflowReviewTask => ({
   evidenceIds: [],
   candidateIds: [],
   contextEntryIds: [],
+  instructions: [],
   reviewContext: [],
   priority
 })

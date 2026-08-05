@@ -43,6 +43,12 @@ export const tasksForWorkflowInput = (
     )
   }
 
+  // A caller that supplied reviewed paths but no tasks gets one task per path,
+  // each with no reviewer instructions. That is the only answer available and it
+  // is not a dropped value: instructions are carried per task (spec 04 scoping
+  // resolves them against a task's own files), so a caller that supplied no task
+  // had no way to express an instruction in the first place. The real pipeline
+  // always supplies tasks, assembled with their resolved instruction sets.
   return input.reviewedPaths.map((path) =>
     WorkflowReviewTaskSchema.parse({
       id: taskIdForPath(path),

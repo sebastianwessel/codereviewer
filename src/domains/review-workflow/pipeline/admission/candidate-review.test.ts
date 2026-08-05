@@ -56,7 +56,6 @@ const workflowInput = (): ReviewWorkflowInput =>
     ],
     evidence: [supportEvidence],
     candidates: [supportSignalCandidate, modelCandidate],
-    instructions: [],
     skills: [],
     promotionPolicy: {
       modelWeakOrRefuted: 'rejected'

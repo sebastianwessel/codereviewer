@@ -85,7 +85,6 @@ describe('review runner provider workflow', () => {
         reviewedPaths: ['src/app.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         provenance: {
           reviewer: 'review-agent',
@@ -165,7 +164,6 @@ describe('review runner provider workflow', () => {
           reviewedPaths: ['src/app.ts'],
           evidence: [],
           candidates: [],
-          instructions: [],
           skills: [],
           provenance: {
             reviewer: 'review-agent',

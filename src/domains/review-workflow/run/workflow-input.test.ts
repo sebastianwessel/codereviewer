@@ -19,6 +19,7 @@ const task = (
     readonly id: string
     readonly paths?: readonly string[]
     readonly content?: string
+    readonly instructions?: WorkflowReviewTask['instructions']
   }
 ): WorkflowReviewTask => ({
   id: input.id,
@@ -30,6 +31,7 @@ const task = (
   candidateIds: [],
   contextEntryIds: [contextId],
   priority: 0,
+  instructions: [...(input.instructions ?? [])],
   reviewContext: [
     {
       kind: 'file',
@@ -146,7 +148,6 @@ describe('review runner workflow input', () => {
       admittedAt: '2026-06-22T10:00:00.000Z',
       baselineConfigured: true,
       baselineFingerprints,
-      instructions: [],
       skills: [],
       tasks: [
         task({ id: 'task_a' }),

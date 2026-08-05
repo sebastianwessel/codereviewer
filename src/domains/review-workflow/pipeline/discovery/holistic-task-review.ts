@@ -102,6 +102,18 @@ export const securityReviewInstruction = [
 // sections, framed by the security-only instruction and the generic OWASP/CWE
 // checklist. Issued as a SECOND discovery call per task only when the dedicated
 // security pass is enabled.
+//
+// The shared context sections carry the task's reviewer instructions (spec 04), so
+// this pass receives them exactly as the general pass does. That is deliberate, and
+// for three reasons. Spec 04 states the rule over PACKETS without exempting any
+// pass: an instruction whose scope matches a packet's files is included in it. An
+// operator instruction is a statement about this repository, and the classes this
+// pass hunts — which callers are trusted here, which boundary is the real one — are
+// among the things a repository's own guidance is most able to correct. And
+// refutation adjudicates this pass's candidates against the SAME instruction set
+// (see the refutation packet), so withholding them here would have the security
+// call search under rules its own adjudicator applies — an instruction visible only
+// after the fact, which is the defect this wiring exists to remove.
 const buildSecurityReviewText = (
   taskInput: TaskReviewInput,
   rawDiff: string

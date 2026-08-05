@@ -108,6 +108,7 @@ const task: WorkflowReviewTask = {
       ledgerEntryId: 'ctx_adadadadadadadadadadadad'
     }
   ],
+  instructions: [],
   priority: 1
 }
 
@@ -142,7 +143,6 @@ const workflowInput = (
     ],
     evidence: [supportEvidence, otherTaskEvidence],
     candidates: [supportSignalCandidate, modelCandidate],
-    instructions: [],
     skills: [],
     ...(input.maxConcurrentTasks === undefined
       ? {}

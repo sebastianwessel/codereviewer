@@ -69,6 +69,7 @@ const task: WorkflowReviewTask = {
   candidateIds: [],
   contextEntryIds: [],
   priority: 0,
+  instructions: [],
   reviewContext: []
 }
 
@@ -78,7 +79,6 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
   reviewedPaths: ['src/a.ts'],
   evidence: [evidence],
   candidates: [],
-  instructions: [],
   skills: [],
   tasks: [task],
   provenance: {

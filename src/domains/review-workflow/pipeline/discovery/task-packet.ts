@@ -71,7 +71,8 @@ export const taskReviewInputFor = (
         ? task.candidateIds.includes(candidate.id)
         : taskCoversPath(task, pathFromCandidate(candidate))
     ),
-    instructions: input.instructions,
+    // No `instructions` key: the task's own, scope-resolved instruction
+    // documents travel inside `task` (see `TaskReviewInputSchema`).
     skills: input.skills,
     sharedDigest,
     provenance: input.provenance

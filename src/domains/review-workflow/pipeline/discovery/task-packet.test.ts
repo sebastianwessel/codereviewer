@@ -32,6 +32,7 @@ const task: WorkflowReviewTask = {
   evidenceIds: ['ev_diff1'],
   candidateIds: [],
   contextEntryIds: ['ctx_aaaaaaaa'],
+  instructions: [],
   reviewContext: [
     {
       kind: 'file',
@@ -57,7 +58,6 @@ const workflowInput = (): ReviewWorkflowInput =>
     ],
     evidence: [evidence],
     candidates: [],
-    instructions: [],
     skills: [],
     tasks: [task],
     maxTaskInputBytes: 10000,
@@ -83,5 +83,28 @@ describe('model task packet', () => {
     expect(packet.sharedDigest).toBe(
       '(shared digest omitted for task packet budget)'
     )
+  })
+
+  // Spec 04: the discovery packet carries THIS task's resolved instruction set
+  // and nothing else. Two tasks in one run legitimately differ once an
+  // instruction declares a `scope`, so a packet built from a run-wide list would
+  // hand a task guidance that was scoped away from it.
+  test('carries the reviewing task’s own instruction set, not a run-wide one', () => {
+    const scoped = {
+      ...task,
+      id: 'task_scoped',
+      instructions: [
+        { path: 'BACKEND.md', content: 'Backend-only guidance.', allowed: true }
+      ]
+    }
+    const input = ReviewWorkflowInputSchema.parse({
+      ...workflowInput(),
+      tasks: [task, scoped]
+    })
+
+    expect(taskReviewInputFor(input, scoped, 'digest').task.instructions).toEqual(
+      scoped.instructions
+    )
+    expect(taskReviewInputFor(input, task, 'digest').task.instructions).toEqual([])
   })
 })

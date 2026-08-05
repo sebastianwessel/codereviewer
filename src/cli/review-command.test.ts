@@ -197,7 +197,7 @@ describe('review CLI', () => {
             contextMaxBytes: 10000
           },
           instructions: {
-            files: ['.codereviewer/instructions/review.md']
+            files: [{ path: '.codereviewer/instructions/review.md' }]
           },
           skills: {
             enabled: true,

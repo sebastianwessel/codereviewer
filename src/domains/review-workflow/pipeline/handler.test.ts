@@ -46,7 +46,6 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
   ],
   evidence: [evidence],
   candidates: [],
-  instructions: [],
   skills: [],
   baselineConfigured: false,
   provenance: {
@@ -240,6 +239,75 @@ describe('workflow handler', () => {
     expect(output.discovery?.tasks).toHaveLength(1)
     // The one admitted finding is unchanged: instrumentation must not move a
     // verdict, a candidate, or a count that already existed.
+    expect(output.admittedFindings).toHaveLength(1)
+  })
+
+  // Spec 04 + spec 27. A partition (or a spec 26 reactive half) runs under a
+  // synthetic sub-task id that matches nothing in the planned task list, and its
+  // candidates carry that id. Refutation looks the originating task up to build
+  // the packet, so the planned list alone left it with no task at all — and with
+  // instructions resolved per task, that would have silently emptied the
+  // operator's guidance out of the adjudication packet for exactly the runs
+  // partitioning is enabled for.
+  test('adjudicates a sub-task’s candidates against the sub-task’s own instructions', async () => {
+    const instruction = {
+      path: 'AGENTS.md',
+      content: 'Repository guidance: never return stale state.',
+      allowed: true
+    }
+    const input = ReviewWorkflowInputSchema.parse({
+      ...workflowInput,
+      tasks: [
+        {
+          id: 'task_handler1',
+          round: 1,
+          kind: 'file',
+          paths: ['src/handler.ts'],
+          factIds: [],
+          evidenceIds: ['ev_handler1'],
+          candidateIds: [],
+          contextEntryIds: [],
+          priority: 0,
+          instructions: [instruction],
+          reviewContext: []
+        }
+      ]
+    })
+    const observedInstructionPaths: string[][] = []
+
+    const output = await runReviewWorkflowHandler({
+      input,
+      signal: undefined,
+      logger: createNoopReviewLogger(),
+      maxConcurrentTasks: 1,
+      runTask: async (_taskInput, task) => {
+        // The shape `partitionTaskForDiscovery`/`splitTaskInHalf` produce: a new
+        // id, the parent's instruction set inherited through the spread.
+        const subTask = { ...task, id: 'task_handler1_partition0' }
+
+        return TaskReviewResultSchema.parse({
+          candidates: [{ ...candidate, taskId: subTask.id }],
+          reviewedTasks: [subTask]
+        })
+      },
+      refuteFinding: async (refutationInput) => {
+        observedInstructionPaths.push(
+          refutationInput.instructions.map((entry) => entry.path)
+        )
+
+        return {
+          verdicts: refutationInput.candidates.map((batched) => ({
+            candidateId: batched.id,
+            verdict: 'proved',
+            rationaleSummary: 'The active admission critic proved the claim.'
+          }))
+        }
+      }
+    })
+
+    expect(observedInstructionPaths).toEqual([['AGENTS.md']])
+    // And the run reports the instruction it actually used, once.
+    expect(output.instructionHashes).toHaveLength(1)
     expect(output.admittedFindings).toHaveLength(1)
   })
 

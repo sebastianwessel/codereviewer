@@ -60,7 +60,6 @@ describe('model-backed harness', () => {
         reviewedPaths: ['src/model-backed.ts'],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         baselineConfigured: false,
         provenance: {
@@ -247,7 +246,6 @@ describe('conversation history at the provider boundary', () => {
         ],
         evidence: [],
         candidates: [],
-        instructions: [],
         skills: [],
         baselineConfigured: false,
         provenance: {

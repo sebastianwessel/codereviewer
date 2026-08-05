@@ -11,7 +11,6 @@ import { CandidateFindingSchema } from '../../admission/index.js'
 import { ContextRetrievalBudgetSchema } from '../../context-retrieval/index.js'
 import {
   BaselineFingerprintRecordSchema,
-  ContextDocumentSchema,
   QualityGateThresholdsSchema,
   ReviewContextDocumentSchema,
   ReviewedDiffRangeSchema,
@@ -44,7 +43,12 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   maxFilesPerDiscoveryCall: z.int().min(1).optional(),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
-  instructions: z.array(ContextDocumentSchema),
+  // No run-wide `instructions` field: reviewer instructions are carried per task
+  // on `tasks[].instructions`, because `instructions.files[].scope` (spec 04)
+  // makes "which instructions apply" a property of a task's reviewed files
+  // rather than of the run. A run-wide list kept alongside the per-task one would
+  // be a second answer to the same question, and the packet builders would have
+  // to pick — so it is gone rather than deprecated.
   skills: z.array(SkillContextDocumentSchema),
   reviewContext: z.array(ReviewContextDocumentSchema).optional(),
   tasks: z.array(WorkflowReviewTaskSchema).optional(),
