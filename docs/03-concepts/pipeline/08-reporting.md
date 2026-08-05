@@ -57,6 +57,7 @@ artifacts are already durable.
 | `## Unresolved - Needs Human Decision (n)` | only when there are any | The artifact-only findings, each with why it stayed unresolved. |
 | `## Rejected Candidates (n)`, `## Refutation Results (n)` | yes | The audit trail: what was proposed and thrown out, and on what verdict. |
 | `## Provider Issues (n)`, `## Skipped Files (n)` | only when there are any | What the run could not do, and what it never read. |
+| `## Changed source files with no test file in this change (n)` | only when there are any | A free, deterministic observation — **not a finding**, no severity, no effect on the gate. It pairs a changed source file with a changed test file by each language's own convention, and says in the same paragraph that a file it lists may already be covered by an existing test the change never touched. Rendered after every findings section, and omitted entirely when there is nothing to say. |
 | `## Cost And Timing` | yes | Duration, tokens, and cost — or an explicit *unavailable*, never a silent omission that would read as free. |
 
 ### SARIF

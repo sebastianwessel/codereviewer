@@ -118,7 +118,7 @@ export const runReview = async (
       observability,
       logger
     })
-    const { analysis, evidence, reviewTasks } =
+    const { analysis, evidence, reviewTasks, deterministicSignals } =
       planningState
     const contextState = await prepareReviewRunnerContextAssemblyState({
       repositoryRoot: options.repositoryRoot,
@@ -169,7 +169,6 @@ export const runReview = async (
       providerId: options.config.provider?.id ?? '',
       modelName: options.config.provider?.model ?? '',
       admittedAt: startedAt.toISOString(),
-      instructions: assembledContext.instructions,
       skills: assembledContext.skills,
       tasks: assembledContext.tasks,
       aiReviewBudget: aiReviewBudgetFor(options.config),
@@ -217,6 +216,7 @@ export const runReview = async (
       sourceFiles,
       skippedFiles: intake.skippedFiles,
       analysis,
+      testMappings: deterministicSignals.testMappings,
       contextLedger: assembledContext.contextLedger,
       evidence,
       ...(changeIntent.usage === undefined

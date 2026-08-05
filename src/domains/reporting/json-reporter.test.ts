@@ -41,6 +41,65 @@ describe('JSON reporter', () => {
     expect(() => ReviewReportSchema.parse(JSON.parse(rendered))).not.toThrow()
   })
 
+  // Spec 29. The JSON report is the machine-readable contract, so the signal has
+  // to arrive there whole rather than only in the rendered Markdown.
+  test('carries the test-adequacy signal through to the JSON contract', () => {
+    const testAdequacy = {
+      consideredFileCount: 2,
+      pairedFileCount: 1,
+      unpairedPaths: ['src/alpha.ts'],
+      changedTestFileCount: 1,
+      unknown: { unsupportedLanguageFileCount: 2, notAnalysedFileCount: 0 }
+    }
+    const rendered = renderJsonReport({
+      ...createReportFixture(),
+      testAdequacy
+    })
+
+    expect(ReviewReportSchema.parse(JSON.parse(rendered)).testAdequacy).toEqual(
+      testAdequacy
+    )
+  })
+
+  // Spec 29. SARIF is a DEFECT interchange format and review comments are inline
+  // annotations on a diff; the signal is neither a defect nor tied to a line, and a
+  // reviewer must never receive it as one. Asserted over the artifacts the writer
+  // actually produces rather than trusted to the renderers.
+  test('the test-adequacy signal reaches neither SARIF nor the review-comment drafts', async () => {
+    const writes = new Map<string, string>()
+    await writeReportingArtifacts({
+      report: {
+        ...createReportFixture(),
+        testAdequacy: {
+          consideredFileCount: 1,
+          pairedFileCount: 0,
+          unpairedPaths: ['src/untested-by-this-change.ts'],
+          changedTestFileCount: 0,
+          unknown: { unsupportedLanguageFileCount: 0, notAnalysedFileCount: 0 }
+        }
+      },
+      formats: ['json', 'sarif'],
+      reviewComments: { platform: 'github' },
+      writer: async (artifactPath, content) => {
+        writes.set(artifactPath, content)
+      }
+    })
+
+    for (const artifactPath of [
+      'report.sarif',
+      'review-comments.json',
+      'review-comments.github.json'
+    ]) {
+      expect(writes.get(artifactPath)).not.toContain(
+        'src/untested-by-this-change.ts'
+      )
+      expect(writes.get(artifactPath)).not.toContain('testAdequacy')
+    }
+
+    // And it is present where it belongs.
+    expect(writes.get('report.json')).toContain('testAdequacy')
+  })
+
   test('creates deterministic artifact records with hashes', () => {
     const artifact = createReportArtifact('json', 'report.json', '{"ok":true}\n')
 

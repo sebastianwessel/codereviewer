@@ -26,6 +26,10 @@ export {
   isTestTreePath
 } from './shared/test-discovery.js'
 export {
+  computeTestAdequacySignal,
+  type TestAdequacySignalInput
+} from './test-adequacy/test-adequacy-signal.js'
+export {
   supportedSignalLanguageForPath,
   routeFilesBySignalLanguage,
   routeSignalSourceFilesByLanguage,

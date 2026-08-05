@@ -173,6 +173,67 @@ export const ReviewDiscoveryReportSchema = z.strictObject({
   tasks: z.array(TaskDiscoveryTelemetrySchema)
 })
 
+// Spec 29. Of the source files this change modified, which have no test file
+// paired with them IN THIS SAME CHANGE. Deterministic, free, and computed from
+// material the engine already produced: no model call, no configuration key.
+//
+// IT IS NOT A FINDING, AND THE SHAPE IS WHAT ENFORCES THAT. There is no id here,
+// no severity, no category, no location, no evidence, no fingerprint — nothing
+// that would let this join `admittedFindings`, cross the quality gate, reach the
+// SARIF interchange or become an inline comment. Spec 23 reports extra scope as "a
+// path and a line count and nothing else" precisely because doing more would
+// assert something it cannot know; this reports a path and nothing at all, for the
+// same reason.
+//
+// WHAT IT CANNOT KNOW, and why every count below says "in this change": the signal
+// sees the changed file set and nothing else. A changed production file may be
+// covered completely by an existing test the change had no reason to touch, and
+// nothing here can tell that apart from a file with no test at all. Every
+// rendering of this signal states that in words; a reader who takes
+// `unpairedPaths` for "these files are untested" has been told the opposite.
+const TestAdequacyUnknownSchema = z.strictObject({
+  // Changed files in a language the deterministic signal registry has no adapter
+  // for. A file the engine cannot parse cannot be paired with anything, so it is
+  // UNKNOWN — never untested. Documentation, configuration and every unsupported
+  // language land here, which is also why a docs-only change reports zero
+  // considered files rather than a list.
+  unsupportedLanguageFileCount: z.int().min(0),
+  // Changed files that never reached the registry at all: too large, binary,
+  // excluded by pattern, over the file cap, or unreadable. The pairing was
+  // computed over the files that WERE analysed, so a file outside that set has no
+  // answer rather than a negative one.
+  //
+  // Deleted paths are deliberately not counted here or anywhere else: a file the
+  // change removes has nothing at head to carry a test.
+  notAnalysedFileCount: z.int().min(0)
+})
+
+export const TestAdequacySignalSchema = z
+  .strictObject({
+    // Changed files the question could be asked of at all: analysed by the
+    // registry, in a language it supports, and not themselves test material.
+    consideredFileCount: z.int().min(0),
+    // Considered files a test file in this same change pairs with, by each
+    // language's own naming and location convention.
+    pairedFileCount: z.int().min(0),
+    // The considered files no test file in this change pairs with, sorted. A path
+    // and nothing else.
+    unpairedPaths: z.array(RepositoryRelativePathSchema),
+    // Test-side files the change touched. Stated so the unpaired list can be read
+    // against it: a change that adds tests in a tree of their own pairs nothing by
+    // name and is not a change that carries no tests.
+    changedTestFileCount: z.int().min(0),
+    unknown: TestAdequacyUnknownSchema
+  })
+  .refine(
+    (value) => value.pairedFileCount + value.unpairedPaths.length === value.consideredFileCount,
+    {
+      message:
+        'consideredFileCount must equal pairedFileCount plus the unpaired paths',
+      path: ['consideredFileCount']
+    }
+  )
+
 export const ReviewReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),
   run: RunSummarySchema,
@@ -199,6 +260,11 @@ export const ReviewReportSchema = z.strictObject({
   // none to state. Absent means "not recorded", which is not the same claim as a
   // recorded zero.
   discovery: ReviewDiscoveryReportSchema.optional(),
+  // Spec 29. Optional for the same reason `discovery` is: absent means THIS RUN
+  // DID NOT COMPUTE IT, which is a different claim from a computed result whose
+  // counts are zero. A completed run always records it, so a reader who finds it
+  // missing is looking at a report some other producer wrote.
+  testAdequacy: TestAdequacySignalSchema.optional(),
   artifacts: z.array(ReportArtifactSchema)
 })
 
@@ -211,4 +277,5 @@ export type CoverageSummary = z.infer<typeof CoverageSummarySchema>
 export type DiscoveryTelemetry = z.infer<typeof DiscoveryTelemetrySchema>
 export type TaskDiscoveryTelemetry = z.infer<typeof TaskDiscoveryTelemetrySchema>
 export type ReviewDiscoveryReport = z.infer<typeof ReviewDiscoveryReportSchema>
+export type TestAdequacySignal = z.infer<typeof TestAdequacySignalSchema>
 export type ReviewReport = z.infer<typeof ReviewReportSchema>

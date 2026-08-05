@@ -301,4 +301,89 @@ describe('Markdown reporter', () => {
       'Refutation check proof-review: unknown - The proof review cited no evidence. evidence: none cited'
     )
   })
+  // Spec 29. The signal is deterministic, free and advisory, and every assertion
+  // here is about it staying that way on the page a human actually reads.
+  test('reports source files with no test in the change, and says what it cannot know', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      testAdequacy: {
+        consideredFileCount: 3,
+        pairedFileCount: 1,
+        unpairedPaths: ['src/alpha.ts', 'src/beta.ts'],
+        changedTestFileCount: 1,
+        unknown: { unsupportedLanguageFileCount: 0, notAnalysedFileCount: 0 }
+      }
+    })
+
+    expect(rendered).toContain(
+      '## Changed source files with no test file in this change (2)'
+    )
+    expect(rendered).toContain('`src/alpha.ts`')
+    expect(rendered).toContain('`src/beta.ts`')
+    // The disclosure is the load-bearing part: a reader must not be able to read
+    // the list as "these files are untested".
+    expect(rendered).toContain(
+      'may already be covered completely by an existing test that this change had no reason to touch'
+    )
+    expect(rendered).toContain('**not a finding**')
+    expect(rendered).toContain('did not affect the quality gate')
+  })
+
+  test('the signal is subordinate to the findings a reviewer came for', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      testAdequacy: {
+        consideredFileCount: 1,
+        pairedFileCount: 0,
+        unpairedPaths: ['src/alpha.ts'],
+        changedTestFileCount: 0,
+        unknown: { unsupportedLanguageFileCount: 0, notAnalysedFileCount: 0 }
+      }
+    })
+
+    expect(rendered.indexOf('## Actionable Findings')).toBeLessThan(
+      rendered.indexOf('## Changed source files with no test file in this change')
+    )
+  })
+
+  test('separates what went unpaired from what could not be asked', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      testAdequacy: {
+        consideredFileCount: 1,
+        pairedFileCount: 0,
+        unpairedPaths: ['src/alpha.ts'],
+        changedTestFileCount: 0,
+        unknown: { unsupportedLanguageFileCount: 4, notAnalysedFileCount: 2 }
+      }
+    })
+
+    expect(rendered).toContain(
+      '6 further changed files were not asked the question at all: 4 in a language this engine does not analyse, 2 never read for this run'
+    )
+    expect(rendered).toContain('unknown, not untested')
+  })
+
+  test('renders no heading when there is nothing to observe or nothing was computed', () => {
+    const report = createReportFixture()
+    const heading = '## Changed source files with no test file in this change'
+    const nothingToObserve = renderMarkdownReport({
+      ...report,
+      testAdequacy: {
+        consideredFileCount: 2,
+        pairedFileCount: 2,
+        unpairedPaths: [],
+        changedTestFileCount: 2,
+        unknown: { unsupportedLanguageFileCount: 0, notAnalysedFileCount: 0 }
+      }
+    })
+
+    // An empty section under a heading reads as a clearance, which is the error
+    // this whole document is arranged against.
+    expect(nothingToObserve).not.toContain(heading)
+    expect(renderMarkdownReport(report)).not.toContain(heading)
+  })
 })

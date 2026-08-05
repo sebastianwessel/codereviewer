@@ -5,7 +5,8 @@ import {
   type CoverageSummary,
   type EvidenceRecord,
   type QualityGateResult,
-  type ReviewReport
+  type ReviewReport,
+  type TestAdequacySignal
 } from '../../../../shared/contracts/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
 import type { CandidateFinding } from '../../../admission/index.js'
@@ -190,6 +191,11 @@ export const createReviewReport = (input: {
   // Required even though the report field is optional: this builds a COMPLETED
   // report, and a completed run has always evaluated its gate.
   readonly qualityGate: QualityGateResult
+  // Spec 29. Required even though the report field is optional, for the reason
+  // `skippedFileCount` above is: this builds a COMPLETED report, the signal is
+  // deterministic and free, and a caller allowed to omit it would turn "this run
+  // did not compute it" into something a completed run could silently say.
+  readonly testAdequacy: TestAdequacySignal
   readonly refutationResults: ReviewReport['refutationResults']
   readonly providerIssues: ReviewReport['providerIssues']
   // Spec 27. Carried onto the report so a run's yield can be read against the
@@ -208,6 +214,7 @@ export const createReviewReport = (input: {
     evidence: input.evidence,
     skippedFiles: input.skippedFiles,
     qualityGate: input.qualityGate,
+    testAdequacy: input.testAdequacy,
     refutationResults: input.refutationResults,
     providerIssues: input.providerIssues,
     ...(input.discovery === undefined ? {} : { discovery: input.discovery }),
@@ -245,6 +252,7 @@ export const prepareReviewRunnerSuccessResult = (
     readonly runCost?: RunCostSummary | undefined
     readonly analysis: DeterministicSignalExtraction
     readonly coverage: CoverageSummary
+    readonly testAdequacy: TestAdequacySignal
     readonly contextLedger: readonly ContextLedgerEntry[]
     readonly skippedFiles: readonly ReviewReport['skippedFiles'][number][]
     readonly admission: ReviewRunnerAdmissionState
@@ -273,6 +281,7 @@ export const prepareReviewRunnerSuccessResult = (
       ...(input.runCost === undefined ? {} : { runCost: input.runCost })
     }),
     coverage: input.coverage,
+    testAdequacy: input.testAdequacy,
     admittedFindings: input.admission.admittedFindings,
     rejectedFindings: input.admission.rejectedFindings,
     evidence: input.admission.evidence,

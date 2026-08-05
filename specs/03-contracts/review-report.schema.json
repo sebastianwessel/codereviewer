@@ -1435,6 +1435,61 @@
       ],
       "additionalProperties": false
     },
+    "testAdequacy": {
+      "type": "object",
+      "properties": {
+        "consideredFileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "pairedFileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unpairedPaths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "changedTestFileCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "unknown": {
+          "type": "object",
+          "properties": {
+            "unsupportedLanguageFileCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "notAnalysedFileCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "unsupportedLanguageFileCount",
+            "notAnalysedFileCount"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "consideredFileCount",
+        "pairedFileCount",
+        "unpairedPaths",
+        "changedTestFileCount",
+        "unknown"
+      ],
+      "additionalProperties": false
+    },
     "artifacts": {
       "type": "array",
       "items": {

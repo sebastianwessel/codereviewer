@@ -2,7 +2,8 @@ import type { Logger } from '@purista/harness'
 import { describe, expect, test } from 'vitest'
 import {
   CodeReviewerConfigSchema,
-  EvidenceRecordSchema
+  EvidenceRecordSchema,
+  type TestAdequacySignal
 } from '../../../../shared/contracts/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
 import { evaluateQualityGate } from '../../../admission/index.js'
@@ -48,6 +49,16 @@ const emptyRunQualityGate = evaluateQualityGate({
   admittedFindings: [],
   thresholds: {}
 })
+
+// Spec 29. A completed run always carries the signal, so the fixtures below state
+// the shape a change with nothing to observe produces rather than omitting it.
+const emptyTestAdequacySignal: TestAdequacySignal = {
+  consideredFileCount: 0,
+  pairedFileCount: 0,
+  unpairedPaths: [],
+  changedTestFileCount: 0,
+  unknown: { unsupportedLanguageFileCount: 0, notAnalysedFileCount: 0 }
+}
 
 describe('review runner results', () => {
   test('creates run summaries with provider and cost metadata', () => {
@@ -273,6 +284,7 @@ describe('review runner results', () => {
       evidence: [],
       skippedFiles: [],
       qualityGate: emptyRunQualityGate,
+      testAdequacy: emptyTestAdequacySignal,
       refutationResults: [],
       providerIssues: []
     })
@@ -310,6 +322,7 @@ describe('review runner results', () => {
       evidence: [],
       skippedFiles: [],
       qualityGate: emptyRunQualityGate,
+      testAdequacy: emptyTestAdequacySignal,
       refutationResults: [],
       providerIssues: [],
       discovery
@@ -398,6 +411,7 @@ describe('review runner results', () => {
       runCost: { warnings: [] },
       analysis,
       coverage,
+      testAdequacy: emptyTestAdequacySignal,
       contextLedger: [sourceEntry],
       skippedFiles: [],
       admission,

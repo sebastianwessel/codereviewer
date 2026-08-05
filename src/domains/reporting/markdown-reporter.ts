@@ -490,6 +490,54 @@ const renderSkippedFiles = (report: ReviewReport): readonly string[] =>
         ''
       ]
 
+// Spec 29. A deterministic, free observation, printed near the bottom because a
+// reviewer's attention belongs on defects first and this is not one.
+//
+// THREE THINGS THIS SECTION MUST NOT BECOME, and each is a rule below rather than
+// a hope. It must not read as a defect: no severity, no id, no gate, no
+// recommendation, and the note says what it is before the list says which files.
+// It must not read as "this change is untested": the signal saw only the changed
+// files, and the disclosure that an unchanged test may already cover any path here
+// is in the same paragraph as the list, not a footnote under it. And it must not
+// render empty — this document's own doctrine is that a section a reader finds
+// empty gets taken as a clearance, so when nothing is unpaired there is no
+// heading at all.
+//
+// The two unknown counts are printed whenever they are non-zero. They are the
+// difference between "no file went unpaired" and "no file could be asked", and a
+// reader who cannot see which of those produced a short list has been given a
+// confident zero.
+const renderTestAdequacy = (report: ReviewReport): readonly string[] => {
+  const signal = report.testAdequacy
+
+  if (signal === undefined || signal.unpairedPaths.length === 0) {
+    return []
+  }
+
+  const unknownCount =
+    signal.unknown.unsupportedLanguageFileCount +
+    signal.unknown.notAnalysedFileCount
+
+  return [
+    `## Changed source files with no test file in this change (${signal.unpairedPaths.length})`,
+    '',
+    'A free, deterministic observation about the change, and **not a finding**. It carries no severity, counts toward no threshold, and did not affect the quality gate above. It pairs a changed source file with a changed test file by each language\'s own naming and location convention, and it looked at nothing outside the files this change touched.',
+    '',
+    '**A file listed here may already be covered completely by an existing test that this change had no reason to touch — this signal cannot see that test, and does not claim the file is untested.** Read the list as "no test moved with these files", never as "these files have no tests".',
+    '',
+    `Of ${pluralize(signal.consideredFileCount, 'changed source file', 'changed source files')} this question could be asked of, ${signal.pairedFileCount} paired with a test file in this change. The change also touched ${pluralize(signal.changedTestFileCount, 'test-side file', 'test-side files')}; a test file pairs by name only when it sits beside the code it exercises, so a change that keeps its tests in a tree of their own pairs nothing here.`,
+    ...(unknownCount === 0
+      ? []
+      : [
+          '',
+          `${unknownCount} further changed ${unknownCount === 1 ? 'file was' : 'files were'} not asked the question at all: ${signal.unknown.unsupportedLanguageFileCount} in a language this engine does not analyse, ${signal.unknown.notAnalysedFileCount} never read for this run. They are unknown, not untested, and are not listed below.`
+        ]),
+    '',
+    ...signal.unpairedPaths.map((unpairedPath) => `- ${inlineCode(unpairedPath)}`),
+    ''
+  ]
+}
+
 // Spend and tokens, stated on every report rather than left to a JSON field. This
 // engine bills a provider per run and the reader is the person paying, so the
 // amount belongs beside the findings — the same place the pull-request comment
@@ -615,6 +663,7 @@ export const renderMarkdownReport = (input: unknown): string => {
     ...renderRefutations(report.refutationResults),
     ...renderProviderIssues(report),
     ...renderSkippedFiles(report),
+    ...renderTestAdequacy(report),
     ...renderCost(report)
   )
 

@@ -8,9 +8,11 @@ import type {
   ReviewedDiffRange,
   ReviewedLineRange
 } from '../../../admission/index.js'
-import type {
-  DeterministicSignalExtraction,
-  SupportSignalSourceFile
+import {
+  computeTestAdequacySignal,
+  type DeterministicSignalExtraction,
+  type SupportSignalSourceFile,
+  type SupportSignalTestMapping
 } from '../../../deterministic-signals/index.js'
 import type { DriftFinding } from '../../../drift/index.js'
 import type { NoContentEventRecorder } from '../../../observability/index.js'
@@ -50,6 +52,9 @@ export const prepareReviewRunnerCompletionState = (
     readonly sourceFiles: readonly SupportSignalSourceFile[]
     readonly skippedFiles: readonly ReviewReport['skippedFiles'][number][]
     readonly analysis: DeterministicSignalExtraction
+    // Spec 29. The pairing the deterministic registry already discovered, carried
+    // here so the test-adequacy signal can be read off it without a second pass.
+    readonly testMappings: readonly SupportSignalTestMapping[]
     readonly contextLedger: readonly ContextLedgerEntry[]
     readonly evidence: readonly EvidenceRecord[]
       readonly providerWorkflow: ReviewRunnerProviderState['providerWorkflow']
@@ -183,6 +188,14 @@ export const prepareReviewRunnerCompletionState = (
     runCost,
     analysis: input.analysis,
     coverage,
+    // Computed over exactly the files the registry analysed and exactly the files
+    // it did not, so a source file whose test could never have been discovered is
+    // never reported as one that has none.
+    testAdequacy: computeTestAdequacySignal({
+      analyzedFiles: input.sourceFiles,
+      skippedFiles: input.skippedFiles,
+      testMappings: input.testMappings
+    }),
     contextLedger: effectiveContextLedger,
     skippedFiles: input.skippedFiles,
     admission,

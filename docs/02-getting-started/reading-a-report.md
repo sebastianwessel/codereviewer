@@ -24,6 +24,7 @@ into the JSON.
 | Refutation Results | yes | The verdict and rationale behind every candidate. |
 | Provider Issues | only when non-empty | Model/provider trouble during the run. |
 | Skipped Files | only when non-empty | What was never reviewed, and why. |
+| Changed source files with no test file in this change | only when non-empty | Which changed source files no changed test file pairs with. |
 | Cost And Timing | yes | Duration, and cost when the provider reported it. |
 
 Sections after *Actionable Findings* are the audit trail. They are rendered so a
@@ -327,6 +328,43 @@ source maps, and snapshots are excluded by default).
 
 Nothing above says anything about these files. Check this whenever a review looks
 thinner than the change was.
+
+---
+
+## Changed source files with no test file in this change
+
+```text
+## Changed source files with no test file in this change (2)
+
+- `src/session/rotate.ts`
+- `src/session/store.ts`
+```
+
+A free, deterministic observation — **not a finding**. It carries no severity,
+counts toward no threshold, and did not affect the quality gate. No model was
+asked anything to produce it.
+
+It pairs a changed source file with a changed test file using each language's own
+naming and location convention — `foo.test.ts` beside `foo.ts`, `foo_test.go`
+beside `foo.go`, `test_foo.py` beside `foo.py` — and it looked at nothing outside
+the files the change touched.
+
+**A file listed here may already be covered completely by an existing test that
+the change had no reason to touch. This signal cannot see that test.** Read the
+list as "no test moved with these files", never as "these files have no tests".
+
+The paragraph above the list also states how many changed files could not be asked
+the question at all — files in a language the engine does not analyse, and files
+that were never read for this run. Those are *unknown*, not untested, and are
+never in the list.
+
+The section is absent whenever there is nothing to say: a documentation-only
+change, a test-only change, or a change where every source file paired with a
+test. In `report.json` the same signal is the `testAdequacy` object, which is
+present on every completed run even when its counts are zero.
+
+There is no configuration key for this. It is free, it cannot block anything, and
+it renders nothing when it has nothing to report.
 
 ---
 
