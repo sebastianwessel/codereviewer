@@ -18,6 +18,55 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-08-06 — change-impact adjudication measured for the first time (after a void run)
+
+The first attempt on this corpus was **void**: in every case the scorer called
+"fully adjudicated" the model was called **zero times**, and a contract-delta bug
+(comment lines matched as real code, so a deprecation shim's commented-out `raise`
+cancelled the real one) returned an empty delta that routed every dependent down
+the deterministic `no-impact` branch. Fixed in `96991a1`; the instrument that made
+a silent sweep look like a judgement was fixed in `a9896b0`. Nothing from the void
+run is pooled here.
+
+Engine `a9896b0`, `openai/gpt-5.3-codex`, 10 cases / 11 proven dependents, 61 model
+calls, $0.08. Verdicts **10 `relies` / 37 `does-not-rely` / 14 `undetermined`** — a
+healthy distribution, which is itself the check that the judge ran.
+
+| | reference list | after adjudication |
+| --- | ---: | ---: |
+| destination files predicted | 67 | **9** |
+| of those, proven dependents | 5 | **2** |
+| precision (lower bound; upper not measurable here) | **7.5%** | **22.2%** |
+| directly reachable recall | 50.0% (3/6) | 0.0% (0/5) [+1 n/m] |
+| whole-repo-search recall | 40.0% (2/5) | 50.0% (2/4) [+1 n/m] |
+
+**Decision-rule denominator — of the proven dependents the reference list itself
+contains, how many survive adjudication: 50.0% (2/4).** Adjudication cannot report
+what discovery never found, so this is the denominator spec 22 pre-registered.
+
+**Verdict: ships disabled, not removed, not promoted.**
+- Not removable: the removal clause fires if the model tier does not beat the
+  deterministic tier. It does, visibly. The model-involved group kept 4 of 33
+  reference files and retained both proven dependents of the repaired case; the
+  deterministic-only group kept **0 of 9** and lost one proven dependent.
+- Not promotable: the promote bar needs precision ≥50%, and only a **lower bound**
+  of 22.2% exists. The upper bound is unmeasurable on this corpus by construction,
+  so ≥50% cannot be established here at all — not now, and not by re-running.
+- Precision rose roughly threefold against the deterministic baseline and lands in
+  the band the published prior art reports (~28%). Recall fell, which spec 22
+  pre-registered as the intended trade.
+
+**The binding constraint has moved, and that is the most useful finding.** Five of
+ten cases spent **zero** model calls, and three of those enumerate **no reference
+files at all** — the deterministic tier seeded no changed symbol. Adjudication is no
+longer what limits this capability; seeding and contract-delta detection are. The
+next work here is deterministic, not model work.
+
+**Limits.** 11 dependents, 3 cases with any model involvement, and the largest cell
+is 5 expectations — a single expectation moves a rate by 20 points. 8 of 10 cases
+are contaminated (the model has likely seen both the change and its repair), and
+the split is reported rather than pooled. Nothing here decides anything on its own.
+
 ## 2026-08-06 — refutation retrieval measured and REMOVED; control arm is the current baseline
 
 Two arms, three runs each, **interleaved C,T,C,T,C,T** rather than run in blocks, so
