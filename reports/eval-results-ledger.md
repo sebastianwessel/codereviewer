@@ -18,6 +18,57 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-08-06 — widening the prohibition verdict: it fires more, and the bar still fails
+
+The `not-contradicted` verdict was measured at a 1.1–1.9% firing rate against a
+population the diagnosis put at 39.8% of intent-check false positives. The blocker
+was diagnosed offline from the stored rounds and was **not** strictness: for a kept
+prohibition, `not-evidenced`'s own sentence is literally true at the same moment as
+`not-contradicted`'s, and the prompt offered both with no tie-break. Three
+statements drew a different verdict in each round from identical inputs. A second
+pull came from the people-and-process rule, which opened on "asking for something
+no line of a code change could carry" — the exact description of an obligation
+honoured by absence — and named `not-evidenced` in the same breath.
+
+Two hypotheses were ruled out before touching anything: the downgrade-to-
+`undetermined` rule never fired once in either round, and extraction is fine —
+19.4% of reported obligations carry an explicit negative imperative.
+
+Three prompt lines state the tie-break, extend the whole-not-part rule to the
+fourth verdict as the guard against over-widening, and re-scope the process rule to
+test the obligation's subject rather than its phrasing. No new call, no schema
+change. Engine `fca6d04`, clean tree, 21 of 21 pre-written cases scored in both
+rounds, `openai/gpt-5.3-codex`.
+
+| | before (A / B) | after (C2 / D2) | prior baseline |
+| --- | ---: | ---: | ---: |
+| **`not-contradicted` fired** | 5 (1.1%) / 8 (1.9%) | **7 (1.6%) / 13 (2.8%)** | n/a |
+| — of those, wrong | 0 / 1 | **0 / 0** | n/a |
+| LIST precision | 51.6% / 50.4% | **53.5% / 53.0%** | 51.5% |
+| outstanding recall | 87.8% / 84.7% | 85.6% / 87.9% | — |
+| false-satisfied | 4.3% / 5.3% | 6.1% / 4.9% | 6.0% |
+| spend | $5.06 / $4.65 | $4.80 / $4.20 | ~$4.87 |
+
+**Against the four pre-registered points: the primary one still FAILS.** Precision
+had to reach 60%; it moved 51.5% → ~53%. Recall held, spend is flat, and
+false-satisfied stayed at or below its baseline. **Not one of the 20
+`not-contradicted` verdicts across both rounds was wrong** — 0 landed on an
+obligation the answer key calls outstanding, where the earlier pair had 1.
+
+**The interesting result is the gap that did not close.** Two designs and four
+rounds in, the verdict reaches **1.6–2.8%** of obligations while the classification
+that motivated it put prohibition-shaped false positives at **39.8%**. Firing rate
+roughly +50% relative, and still an order of magnitude short. Either the boundary
+is still far too narrow, or **that 39.8% counted obligations a prohibition verdict
+could never honestly claim** — an obligation satisfied by absence is not the same
+as one this stage can prove nothing violates, and the diagnosis did not separate
+them. The second reading is now the more likely one, and it is a question about the
+diagnosis rather than about the implementation.
+
+The change stays: it is free, it is right every time it fires, and it does not
+regress its guardrails. **Do not attempt a third widening without first re-deriving
+what fraction of that 39.8% a change-scoped verdict could ever settle.**
+
 ## 2026-08-06 — the prohibition verdict measured: correct, and far too rare to matter
 
 Spec 23 gained a fourth verdict, `not-contradicted`, for prohibition-shaped
