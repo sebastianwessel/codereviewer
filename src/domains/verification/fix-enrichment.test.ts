@@ -186,9 +186,56 @@ describe('enrichFindingsWithFixes', () => {
     expect(result.fixOutcomes).toHaveLength(0)
   })
 
-  test('a fix targeting another path is not applied to the finding', async () => {
+  // The refusal is deliberate: the apply-check is defined against the finding's own
+  // file, the enriched proposal may cite only that finding's evidence, and the
+  // inline comment it flows into is anchored there. What was wrong is that it was
+  // SILENT — recorded as `not-attempted`, the same record a finding with no proposed
+  // fix produces.
+  test('a fix touching another file is declined, and the record says why', async () => {
     const target = finding({})
     const result = await enrichFindingsWithFixes({
+      findings: [target],
+      verdicts: [
+        verdict({
+          findingId: 'find_fix1',
+          findingJudgment: 'real',
+          fixEdits: [
+            // One edit in the finding's own file and one outside it: the set is
+            // refused whole, never half-applied.
+            { path: 'src/app.ts', startLine: 2, endLine: 2, replacement: 'for (i < n)' },
+            { path: 'src/other.ts', startLine: 1, endLine: 1, replacement: 'x' }
+          ]
+        })
+      ],
+      observations: [observation('find_fix1', 'real')],
+      readFile: reader
+    })
+
+    expect(result.findings[0]).toEqual(target)
+    expect(result.fixOutcomes[0]).toEqual({
+      findingId: 'find_fix1',
+      findingJudgment: 'real',
+      fixProduced: false,
+      applyCheck: 'not-attempted',
+      fixDeclinedReason: 'edits-outside-finding-file'
+    })
+    expect(result.observations[0]).toMatchObject({
+      fixProduced: false,
+      applyCheck: 'not-attempted',
+      fixDeclinedReason: 'edits-outside-finding-file'
+    })
+  })
+
+  test('a declined multi-file fix is distinguishable from no fix at all', async () => {
+    const target = finding({})
+    const noFix = await enrichFindingsWithFixes({
+      findings: [target],
+      // Judged real, and the agent proposed nothing.
+      verdicts: [verdict({ findingId: 'find_fix1', findingJudgment: 'real' })],
+      observations: [observation('find_fix1', 'real')],
+      readFile: reader
+    })
+    const declined = await enrichFindingsWithFixes({
       findings: [target],
       verdicts: [
         verdict({
@@ -203,9 +250,13 @@ describe('enrichFindingsWithFixes', () => {
       readFile: reader
     })
 
-    expect(result.findings[0]).toEqual(target)
-    expect(result.fixOutcomes[0]?.fixProduced).toBe(false)
-    expect(result.fixOutcomes[0]?.applyCheck).toBe('not-attempted')
+    // Both report the same apply-check — the check ran in neither case — and only
+    // the declined one carries a reason. That field is the whole distinction.
+    expect(noFix.fixOutcomes[0]?.applyCheck).toBe('not-attempted')
+    expect(noFix.fixOutcomes[0]?.fixDeclinedReason).toBeUndefined()
+    expect(declined.fixOutcomes[0]?.fixDeclinedReason).toBe(
+      'edits-outside-finding-file'
+    )
   })
 
   test('an outcome for one finding never changes an unrelated finding', async () => {

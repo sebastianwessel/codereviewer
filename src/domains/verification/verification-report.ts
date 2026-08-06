@@ -57,6 +57,22 @@ export const ApplyCheckOutcomeSchema = z.enum(['passed', 'failed', 'not-attempte
 
 export type ApplyCheckOutcome = z.infer<typeof ApplyCheckOutcomeSchema>
 
+// Why a fix the agent DID propose was refused before the apply-check ran.
+//
+// Present only in that case, so its absence means the check ran or there was
+// nothing to check — never "declined for a reason we did not record". Without it,
+// a refusal was reported as `applyCheck: 'not-attempted'`, which is exactly what a
+// finding with no proposed fix reports, so "the agent proposed nothing" and "the
+// agent proposed something this lane will not carry" were the same record. They are
+// opposite situations for whoever reads it: the second is a fix that exists and was
+// withheld.
+//
+// It is a reason for the REFUSAL rather than a fourth apply-check outcome because
+// the apply-check genuinely did not run; overloading its result would say it did.
+export const FixDeclinedReasonSchema = z.enum(['edits-outside-finding-file'])
+
+export type FixDeclinedReason = z.infer<typeof FixDeclinedReasonSchema>
+
 // No-content per-claim observation (spec 12 "Observability And Errors"): claim
 // kind, source label, tool-call count, bytes read, verdict status, the finding
 // judgment (or absent), whether a fix was produced, the apply-check outcome, and
@@ -69,6 +85,7 @@ export const ClaimObservationSchema = z.strictObject({
   findingJudgment: FindingJudgmentSchema.optional(),
   fixProduced: z.boolean().optional(),
   applyCheck: ApplyCheckOutcomeSchema.optional(),
+  fixDeclinedReason: FixDeclinedReasonSchema.optional(),
   toolCalls: z.int().min(0),
   bytesRead: z.int().min(0),
   durationMs: z.int().min(0),
@@ -104,7 +121,10 @@ export const FixOutcomeSchema = z.strictObject({
   findingId: z.string().min(1),
   findingJudgment: FindingJudgmentSchema.optional(),
   fixProduced: z.boolean(),
-  applyCheck: ApplyCheckOutcomeSchema
+  applyCheck: ApplyCheckOutcomeSchema,
+  // Set only when a proposed fix was refused before the apply-check; see
+  // `FixDeclinedReasonSchema`.
+  fixDeclinedReason: FixDeclinedReasonSchema.optional()
 })
 
 export type FixOutcome = z.infer<typeof FixOutcomeSchema>

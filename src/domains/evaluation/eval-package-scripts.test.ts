@@ -78,6 +78,15 @@ describe('evaluation package scripts', () => {
       'hydrate-real-repo-corpus'
     )
 
+    // The change-impact corpus (spec 22) hydrates only. There is deliberately no
+    // combined run script: nothing scores it yet, and a script that hydrated and
+    // then ran the diff reviewer over it would answer a different question while
+    // looking like a result.
+    expect(packageJson.scripts['eval:impact-corpus:hydrate']).toContain(
+      'hydrate-change-impact-corpus'
+    )
+    expect(packageJson.scripts['eval:impact-corpus']).toBeUndefined()
+
     // removed scripts must not exist
     const removed = [
       'eval',

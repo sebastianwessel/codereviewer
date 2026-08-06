@@ -30,6 +30,7 @@ import { prepareReviewRunnerSourceState } from './intake/source-state.js'
 import { prepareReviewRunnerPlanningState } from './planning/planning-state.js'
 import { prepareReviewRunnerContextAssemblyState } from './context/assembly-state.js'
 import { prepareReviewRunnerChangeIntentContext } from './context/change-intent-context.js'
+import { prepareReviewRunnerAnalyzerSignalContext } from './context/analyzer-signal-context.js'
 import { prepareReviewRunnerCompletionState } from './results/completion-state.js'
 
 export {
@@ -146,7 +147,25 @@ export const runReview = async (
         : { providerImport: options.providerImport }),
       ...(runSignal.signal === undefined ? {} : { signal: runSignal.signal })
     })
-    const assembledContext = changeIntent.assembledContext
+    // Spec 15, Mechanism 2: ingest already-produced analyzer artifacts and attach
+    // each task's changed-side-attributed results to it as untrusted evidence.
+    // Disabled (the default) this returns the assembled context unchanged. The
+    // changed diff ranges are the attribution authority: an alert with no changed
+    // line on its location or its traced path is pre-existing repository debt and
+    // is not reported.
+    const analyzerSignals = await prepareReviewRunnerAnalyzerSignalContext({
+      repositoryRoot: options.repositoryRoot,
+      config: options.config,
+      assembledContext: changeIntent.assembledContext,
+      changedRanges: effectiveDiffRanges,
+      observability,
+      logger
+    })
+    const assembledContext = analyzerSignals.assembledContext
+    // Analyzer evidence joins the run's evidence set so the report records what the
+    // review was shown. It seeds no candidate: nothing reaches a finding except
+    // through discovery, refutation, and the admission gate.
+    const reviewEvidence = [...evidence, ...analyzerSignals.evidence]
     const baseline = await prepareReviewRunnerBaseline({
       repositoryRoot: options.repositoryRoot,
       config: options.config,
@@ -162,7 +181,7 @@ export const runReview = async (
       reviewedLineRanges: reviewedLineRangesForSourceFiles(sourceFiles),
       reviewedDiffRanges: effectiveDiffRanges,
       reviewedDiffText: effectiveRawDiff,
-      evidence,
+      evidence: reviewEvidence,
       candidates: [],
       config: options.config,
       configHash,
@@ -189,7 +208,7 @@ export const runReview = async (
         configHash,
         analysis,
         contextLedger: assembledContext.contextLedger,
-        evidence,
+        evidence: reviewEvidence,
         workflowInput,
         environment: options.environment ?? {},
         ...(options.providerImport === undefined
@@ -218,11 +237,14 @@ export const runReview = async (
       analysis,
       testMappings: deterministicSignals.testMappings,
       contextLedger: assembledContext.contextLedger,
-      evidence,
+      evidence: reviewEvidence,
       ...(changeIntent.usage === undefined
         ? {}
         : { contextIngestionUsage: changeIntent.usage }),
-      contextIngestionWarnings: changeIntent.warnings,
+      contextIngestionWarnings: [
+        ...changeIntent.warnings,
+        ...analyzerSignals.warnings
+      ],
       providerWorkflow,
       providerTaskEventsObservedLive,
       reviewedPaths: intake.changedFiles.map((file) => file.path),

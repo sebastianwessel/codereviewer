@@ -419,10 +419,10 @@ describe('context retrieval', () => {
     }
   })
 
-  // The four conditions a caller is EXPECTED to hit carry a type, so the lane that
+  // The conditions a caller is EXPECTED to hit carry a type, so the lane that
   // exposes these tools to a model can disclose them without having to read an
   // error message to decide whether it may.
-  test('raises the four expected conditions as typed conditions', async () => {
+  test('raises every expected condition as a typed condition', async () => {
     const root = await createEligibilityFixtureRepo()
 
     try {
@@ -466,6 +466,12 @@ describe('context retrieval', () => {
       expect(
         await conditionOf(() => retriever.grepRepository({ query: 'needle' }))
       ).toBe('search-budget-exhausted')
+      // A blank query is the model's own correctable mistake, and the tool schema's
+      // `min(1)` admits a query of spaces — so this is reachable from a model and
+      // must not arrive as an untyped fault it is told nothing about.
+      expect(
+        await conditionOf(() => retriever.grepRepository({ query: '   ' }))
+      ).toBe('query-blank')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

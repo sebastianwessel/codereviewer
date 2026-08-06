@@ -1,0 +1,786 @@
+{
+  "schemaVersion": "1.0",
+  "datasetId": "change-impact-dependents",
+  "modelTrainingCutoff": "2026-01-01",
+  "description": "Real upstream changes hydrated as FULL working trees at the commit that INTRODUCED a breakage, reviewed forward (base = introducingCommit^, head = introducingCommit) so that change-impact review is measurable. Every expectation lies OUTSIDE the reviewed diff by construction, which is the exact negation of the spec 17 corpus's invariant, and the two must never be pooled. Every case's breakage is proven by upstream history - a later commit repairing the dependent and naming the introducing commit's full object name - and never by a curator's inference. modelTrainingCutoff is an operator setting: re-set it to the evaluated model's cutoff each model generation, which by design invalidates held-out cases captured before it.",
+  "screening": {
+    "commitBodiesScreened": 101542,
+    "repositoriesScreened": 27,
+    "candidatesAdjudicated": 166,
+    "note": "Two passes. Pass one (2026-07-28) screened 66,685 commit bodies across 27 repositories in two sweeps - 46,073 for a resolvable full object name and 20,612 for a locally resolvable pull-request number - and produced 98 raw candidates. Pass two (2026-08-06) screened all 34,857 commit bodies of the django repository, which pass one had covered only partially, and produced 68 candidates whose production file sets are disjoint. The repository totals therefore overlap and the 101,542 figure is bodies screened, not distinct commits.",
+    "rejections": [
+      {
+        "candidate": "django 7f66c3b41f0f 'Refs #36439 -- Added sync_to_async() to dummy password hasher path' <- 748ca0a146",
+        "reason": "The follow-up establishes parity, it does not repair damage. The dependent's behaviour is byte-identical before and after the introducing change; the change simply moved one branch off the event loop and not its sibling. Nothing silently broke, so calling it change-impact would be an inference dressed as evidence."
+      },
+      {
+        "candidate": "django c880530ddd4f <- 39e2297210d9",
+        "reason": "Framed as a follow-up extending the same hardening to another entry point, not a caller broken by the earlier commit. It also carries advisory wording, which the answer-key rule treats as poison."
+      },
+      {
+        "candidate": "django 426be74022ec 'Used asgiref.sync.iscoroutinefunction()' <- bd3b1dfa2422",
+        "reason": "The referenced object name and the described cause disagree; the deprecation warning it fixes is attributed to a third commit. A deprecation warning is not a caller breaking."
+      },
+      {
+        "candidate": "nats-server d3479985adbd and four sibling reverts",
+        "reason": "In every case the object name paired by the miner was the merge base named by 'reversing changes made to ...', not the reverted commit. Once resolved correctly the revert touches the same files as the commit it reverts, so there is no dependent outside the reviewed paths."
+      },
+      {
+        "candidate": "grpc-go b0bc6dc1ce38 'xdsclient: revert #8369'",
+        "reason": "Apparent file-set disjointness is a directory rename (xds/internal/clients/... -> internal/xds/clients/...). Same code, so not cross-file."
+      },
+      {
+        "candidate": "grpc-go dc355bc08a9a, 7136e99ee323",
+        "reason": "The referenced object name came from a permalink inside the body, and the second is 'addresses a few comments from #8910' - review nits, not breakage."
+      },
+      {
+        "candidate": "netty 992966647329 (revapi/pom.xml) and 11354264c688 (flaky test)",
+        "reason": "Build-configuration and test-determinism follow-ups. No runtime contract changed and the impacted file is a build descriptor or a test."
+      },
+      {
+        "candidate": "netty 'harden the sibling parser too' follow-ups",
+        "reason": "Extending the same hardening to a neighbouring parser is not damage caused by the earlier change."
+      },
+      {
+        "candidate": "aspnetcore: 14 hits, all from '[automated] Merge branch release/10.0 => main' commits",
+        "reason": "Automated integration merges quote every squashed pull-request body, so the marker and the reference come from unrelated changes that happen to share a merge commit. Structurally unusable."
+      },
+      {
+        "candidate": "grpc-go: 31 hits from dependabot dependency-bump commits",
+        "reason": "Same artefact: the release-note aggregation in the body quotes unrelated pull-request numbers."
+      },
+      {
+        "candidate": "django admin CSS/SVG regressions (6 candidates)",
+        "reason": "Real regressions with real evidence, but the damage is a visual layout rule in a stylesheet. There is no code contract for a reviewer to reason about and no reachability path worth labelling."
+      },
+      {
+        "candidate": "laravel/framework 'Test Improvements (#54475)' <- #54425",
+        "reason": "Fixes a test failure, and the impacted file is a type-coverage stub."
+      },
+      {
+        "candidate": "django 4187da258fe2 <- 8d251b512baf, django 782d85b6dfa1 <- 4b6db766ba4b",
+        "reason": "The evidence commit's only production-file change is AUTHORS or setup.py. There is no dependent to name."
+      },
+      {
+        "candidate": "django 65ad4ade74dc <- 704192e47888 'Removed unneeded hyphens in counterintuitive'",
+        "reason": "A spelling commit that happens to quote an object name. The marker regex matched prose, not causation."
+      },
+      {
+        "candidate": "django f333e3513e8b 'Added GeneratedField' <- 8b1acc044041",
+        "reason": "Genuine regression with a genuine reference, but the introducing change spans fifteen production files and a new module. A reviewed diff that large measures diff size rather than impact reasoning."
+      },
+      {
+        "candidate": "django def09bf4126d <- d6e9ec40145b, django 456466d93283 <- cb383753c0e0",
+        "reason": "The dependent is test-harness plumbing repaired for a test-only symptom; the contract that moved is not one a production caller can observe."
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "grpc-go-safe-regex-anchoring-moved-from-match-to-compile",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/grpc/grpc-go.git",
+      "upstreamOwner": "grpc",
+      "upstreamRepo": "grpc-go",
+      "license": "Apache-2.0",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-07-28",
+      "introducingCommit": "39f16539d2463c05d52b4c44137831fd5f73f7d9",
+      "introducingCommittedAt": "2026-05-20T11:18:17+05:30",
+      "parentCommit": "1c8e0950eda84e87c020a7fd7099ecccd3b21218",
+      "reviewedPaths": [
+        "internal/grpcutil/regex.go",
+        "internal/xds/matcher/matcher_header.go",
+        "internal/xds/matcher/string_matcher.go",
+        "internal/xds/xdsclient/xdsresource/matcher_path.go",
+        "internal/xds/xdsclient/xdsresource/unmarshal_rds.go"
+      ],
+      "excludedPaths": [
+        "internal/grpcutil/regex_test.go",
+        "internal/xds/matcher/string_matcher_test.go",
+        "internal/xds/xdsclient/xdsresource/unmarshal_cds_test.go",
+        "internal/xds/xdsclient/xdsresource/unmarshal_rds_test.go",
+        "test/xds/xds_client_integration_test.go"
+      ],
+      "excludedPathsReason": "Tests only. The updated unit tests spell out the new anchoring convention the change introduces, which states the moved contract in assertions.",
+      "reviewIntent": "Remove a shared regexp helper that mutated global matcher state, and anchor the pattern where it is compiled instead.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "57c9ff14e05b535ee6995ba49bc882b287a175de",
+          "committedAt": "2026-06-01",
+          "subject": "xds: ensure full-string matching for RBAC Filter rules (#9148)",
+          "repairedPaths": [
+            "internal/xds/rbac/matchers.go",
+            "internal/xds/httpfilter/extconfig.go"
+          ],
+          "quotes": [
+            "This PR fixes a regression introduced in #9134 where xDS SafeRegexMatch configurations were performing partial matches instead of the full-string matches as earlier in RBAC.",
+            "PullRequest #9134 removed grpcutil.FullMatchWithRegex in favor of regexp.MatchString. In Go, MatchString performs a partial match unless the regex is explicitly anchored with ^ and $.",
+            "The regression was caught by psm-interop tests where an RBAC DENY rule was bypassed due to a partial match in an preceding ALLOW rule."
+          ],
+          "linkVerification": "The introducing commit's own subject ends with '(#9134)', so the pull-request number quoted in the evidence body resolves to 39f16539 exactly."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "internal/xds/rbac/matchers.go",
+          "lineRange": [
+            273,
+            278
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "high",
+          "severityRationale": "Impact: control defeated - the RBAC engine is the thing that grants and denies, and a caller-supplied header value is accepted as matching a principal rule it does not match. Reachability: conditional - the deployment's xDS policy has to use a SafeRegexMatch header rule. Matrix: control defeated x conditional = high.",
+          "semanticSummary": "newHeaderMatcher compiles the xDS SafeRegexMatch pattern with plain regexp.Compile and hands the result to NewHeaderRegexMatcher, whose Match now asks the pattern itself whether it matches and no longer requires the match to cover the whole header value. An unanchored pattern therefore matches on any substring, so an RBAC rule for principal \"admin\" also matches \"never-admin\": a DENY rule can be evaded and an ALLOW rule can authorise a peer it was not written for.",
+          "notes": "internal/xds/httpfilter/extconfig.go, the second file the evidence commit repairs, did not exist at 39f16539 and is therefore not an expected dependent here."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "Read alone the diff is a clean refactor: it deletes a helper that mutated shared regexp state via re.Longest() - a real data race - and preserves full-string semantics by anchoring at every compile site the commit knows about. Nothing inside the diff is wrong. The defect is only that the set of compile sites in the repository is larger than the set the diff touches."
+      },
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-06",
+        "verdict": "non-disclosing",
+        "rationale": "Eight of the nine flagged lines are the Apache licence header of the deleted file, which carries no information about the change at all. The ninth is the deleted helper's own one-line doc comment, which restates what its body plainly does and names no caller, no file outside the diff, and no failure.",
+        "acknowledgedComments": [
+          "* Licensed under the Apache License, Version 2.0 (the \"License\");",
+          "* you may not use this file except in compliance with the License.",
+          "* You may obtain a copy of the License at",
+          "*     http://www.apache.org/licenses/LICENSE-2.0",
+          "* Unless required by applicable law or agreed to in writing, software",
+          "* distributed under the License is distributed on an \"AS IS\" BASIS,",
+          "* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.",
+          "* See the License for the specific language governing permissions and",
+          "// FullMatchWithRegex returns whether the full text matches the regex provided."
+        ]
+      },
+      "tags": [
+        "security",
+        "regex",
+        "authorization"
+      ],
+      "notes": "The change ADDS a doc comment on the new CompileSafeRegex helper stating that anchoring is now a compile-time responsibility. In this forward orientation an added comment is part of the change a reviewer sees, not answer-key leakage from a later fix; it names no caller, no file outside the diff and no failure, so it is a hint the reviewer is entitled to and not the answer. internal/xds/xdsclient/xdsresource/unmarshal_rds.go still uses plain regexp.Compile at head, but that pattern feeds a regex rewrite rather than a matcher, and the file is inside P in any case."
+    },
+    {
+      "id": "django-union-default-ordering-not-cleared-for-combined-queries",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/django/django.git",
+      "upstreamOwner": "django",
+      "upstreamRepo": "django",
+      "license": "BSD-3-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-07-28",
+      "introducingCommit": "087bb9e8f3478d53f12b1737af865992af17c5f2",
+      "introducingCommittedAt": "2026-02-06T15:45:45-05:00",
+      "parentCommit": "6c2436fa8671cd41c6a5841493142308cd9541c8",
+      "reviewedPaths": [
+        "django/db/models/query.py"
+      ],
+      "excludedPaths": [
+        "tests/queries/test_qs_combinators.py"
+      ],
+      "excludedPathsReason": "Test only.",
+      "reviewIntent": "Reapply the model's default ordering to a queryset produced by union().",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "0e1d950fbb44878f6972a0e5730f69f98caf468e",
+          "committedAt": "2026-05-18",
+          "subject": "Fixed #37097 -- Made Query.clear_ordering() clear ordering on combined queries also.",
+          "repairedPaths": [
+            "django/db/models/sql/query.py"
+          ],
+          "quotes": [
+            "Regression in 087bb9e8f3478d53f12b1737af865992af17c5f2.",
+            "(That commit drove more traffic into an error that would have been reachable only with an explicit order_by() after each union().)"
+          ],
+          "linkVerification": "The full 40-character object name of the introducing commit is quoted verbatim in the evidence commit body, under Django's mandated 'Regression in <sha>.' convention."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "django/db/models/sql/query.py",
+          "lineRange": [
+            2379,
+            2393
+          ],
+          "reachability": "attribute-owner",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "low",
+          "severityRationale": "Impact: signalled or bounded - the query fails loudly at the database rather than returning a wrong row set. Reachability: remote - a nested union, used as the right-hand side of an __in lookup, restricted to a column other than the ordering column. Matrix: signalled x remote = low.",
+          "semanticSummary": "clear_ordering resets order_by, extra_order_by and default_ordering on the receiver only, never descending into self.combined_queries, though as_sql in the same class does that loop. A caller stripping ordering before embedding a query as a subquery - In.get_prep_lookup - thus leaves nested union arms ordering by Meta.ordering. The compiler appends that arm's ordering column to its select list, so the outer union's arms no longer have matching column counts and the database rejects the query."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff is one added line that restores the model's default ordering to a queryset built by union(), immediately after surrounding code that deliberately cleared ordering 'so they can be reapplied'. There is nothing inside the diff to object to, and the comment that explains the clearing is pre-existing context rather than anything the change wrote."
+      },
+      "tags": [
+        "orm",
+        "ordering"
+      ],
+      "notes": "Best of the corpus on local plausibility - a one-line addition with no visible hint - and worst on the old severity axis, since the failure is a loud database error."
+    },
+    {
+      "id": "django-aggregate-empty-filter-survives-as-falsey-source-expression",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/django/django.git",
+      "upstreamOwner": "django",
+      "upstreamRepo": "django",
+      "license": "BSD-3-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-07-28",
+      "introducingCommit": "b8e5a8a9a2a767f584cbe89a878a42363706f939",
+      "introducingCommittedAt": "2025-05-23T15:17:20+02:00",
+      "parentCommit": "d2732c30af28381f5a2ff1b08f754eeb7a6dfeca",
+      "reviewedPaths": [
+        "django/db/models/aggregates.py"
+      ],
+      "excludedPaths": [
+        "docs/releases/5.2.2.txt",
+        "tests/aggregation/test_filter_argument.py"
+      ],
+      "excludedPathsReason": "Release notes and tests. A release note describing a behaviour change is an answer-key risk in its own right.",
+      "reviewIntent": "Stop discriminating an aggregate's filter on truthiness so that a filter built from an outer reference survives resolution.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "2a6e0bd72d4a69725b957d6748a4b834f21b12b5",
+          "committedAt": "2025-11-24",
+          "subject": "Fixed #36751 -- Fixed empty filtered aggregation crash over annotated queryset.",
+          "repairedPaths": [
+            "django/db/models/expressions.py"
+          ],
+          "quotes": [
+            "Regression in b8e5a8a9a2a767f584cbe89a878a42363706f939.",
+            "The replace_expressions method was innapropriately dealing with falsey but not None source expressions causing them to also be potentially evaluated when __bool__ was invoked (e.g. QuerySet.__bool__ evaluates the queryset).",
+            "The changes introduced in b8e5a8a9a2, which were to deal with a similar issue, surfaced the problem as aggregation over an annotated queryset requires an inlining (or pushdown) of aggregate references which is achieved through replace_expressions."
+          ],
+          "linkVerification": "The full 40-character object name of the introducing commit is quoted verbatim in the evidence commit body under the 'Regression in <sha>.' convention."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "django/db/models/expressions.py",
+          "lineRange": [
+            425,
+            431
+          ],
+          "reachability": "whole-repo-search",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "medium",
+          "severityRationale": "Impact: silently wrong - a child expression that is present but falsey is replaced by None while rebuilding the tree, and the truthiness test itself can execute a queryset during what is supposed to be a pure rewrite. Reachability: conditional - needs an aggregate pushed down over an annotated queryset. Matrix: silently wrong x conditional = medium.",
+          "semanticSummary": "replace_expressions rebuilds children as 'expr.replace_expressions(replacements) if expr else None', discriminating on truthiness where only None means absent. A child that is present but falsey is silently replaced by None, and testing it runs the child's __bool__, which for a queryset child executes a query. An aggregate whose filter is an empty Q now arrives as a real, empty, falsey filter node: the pushdown drops it to None and compiling the filter then dereferences it."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff replaces a truthiness test on the filter with an explicit None test and drops a now-redundant re-resolution. Read alone it is a strict improvement, because it removes a truthiness bug rather than adding one. The contract it changes is invisible from the diff: an empty filter used to collapse to None on the way out and now does not."
+      },
+      "tags": [
+        "orm",
+        "aggregation"
+      ],
+      "notes": "The introducing commit is itself a bugfix, which is the ideal texture for this fixture type: the reviewer cannot fall back on 'this change looks sloppy'."
+    },
+    {
+      "id": "django-constraint-validate-stops-absorbing-fielderror",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/django/django.git",
+      "upstreamOwner": "django",
+      "upstreamRepo": "django",
+      "license": "BSD-3-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-07-28",
+      "introducingCommit": "e44e8327d3d88d86895735c0e427102063ff5b55",
+      "introducingCommittedAt": "2025-03-10T13:19:38+01:00",
+      "parentCommit": "f480d5d3ed8234aea876f7eaf8a9154e5bf09d16",
+      "reviewedPaths": [
+        "django/db/models/constraints.py"
+      ],
+      "excludedPaths": [],
+      "reviewIntent": "Replace an exception handler around constraint condition checking with an explicit precheck for excluded field references.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "830e69a868fa7713b6b690fa2e71e8a98f4639d8",
+          "committedAt": "2025-06-13",
+          "subject": "Fixed #36433 -- Fixed constraint validation crash when condition uses a ForeignKey attname.",
+          "repairedPaths": [
+            "django/db/models/base.py"
+          ],
+          "quotes": [
+            "Regression in e44e8327d3d88d86895735c0e427102063ff5b55."
+          ],
+          "linkVerification": "The full object name is quoted verbatim under the 'Regression in <sha>.' convention; the fix adds field_map[field.attname] = value in django/db/models/base.py and touches no other production file."
+        },
+        {
+          "kind": "upstream-fix",
+          "commit": "8c621e96422e037c3997c8c9515bc050620852f6",
+          "committedAt": "2025-09-16",
+          "subject": "Fixed #36580 -- Fixed constraint validation crash when condition uses a ForeignObject.",
+          "repairedPaths": [
+            "django/db/models/base.py"
+          ],
+          "quotes": [
+            "Follow-up to e44e8327d3d88d86895735c0e427102063ff5b55. Refs #36222."
+          ],
+          "linkVerification": "The full object name is quoted verbatim; the fix widens the same loop in django/db/models/base.py from local_concrete_fields to local_fields, repairing the same dependent six months later."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "django/db/models/base.py",
+          "lineRange": [
+            1285,
+            1299
+          ],
+          "reachability": "callee-of-changed-code",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "low",
+          "severityRationale": "Impact: signalled or bounded - full_clean raises an unexpected exception type instead of validating, which the caller sees. Reachability: conditional - a constraint whose condition names a foreign key's attname, or a relation spanning several columns. Matrix: signalled x conditional = low.",
+          "semanticSummary": "_get_field_expression_map builds its map by iterating meta.local_concrete_fields and keying by field.name, so a foreign key contributes 'author' and never 'author_id', and a relation spanning several columns contributes nothing at all. Constraint validation resolves the condition against exactly this map and now lets a FieldError from an unresolvable name escape instead of treating it as 'cannot check here', so a model carrying such a constraint raises FieldError out of full_clean rather than validating or skipping.",
+          "notes": "Two independent upstream fixes six months apart repair this one file: the first adds the attname key, the second widens the loop to local_fields. They are two reasons the same dependent broke, and the scoring unit is the destination file, so they are one expectation with two evidence entries."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible-with-caveat",
+        "rationale": "The diff removes a try/except FieldError: pass around the condition check and replaces it with an explicit _expression_refs_exclude precheck, which is a legitimate cleanup, and the diff does not say what the swallowed FieldError was for. A reviewer can nonetheless see an exception handler disappear and ask whether the precheck covers every case it covered, without leaving the diff. The answer still requires reading the callee, so the expectation remains outside the diff, but this case is less purely local than the rest."
+      },
+      "tags": [
+        "orm",
+        "constraints"
+      ]
+    },
+    {
+      "id": "django-iterator-chunk-size-deprecation-completed-breaks-in-tree-callers",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/django/django.git",
+      "upstreamOwner": "django",
+      "upstreamRepo": "django",
+      "license": "BSD-3-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-07-28",
+      "introducingCommit": "139135627650ed6aaaf4c755b82c3bd43f2b8f51",
+      "introducingCommittedAt": "2023-01-17T11:49:15+01:00",
+      "parentCommit": "b119f4329c2a4878f1c72f4d25d193d080792f62",
+      "reviewedPaths": [
+        "django/db/models/query.py"
+      ],
+      "excludedPaths": [
+        "docs/ref/models/querysets.txt",
+        "docs/releases/5.0.txt"
+      ],
+      "excludedPathsReason": "Documentation and release notes. The release note states the new hard failure in prose.",
+      "reviewIntent": "Complete a scheduled deprecation by turning a warning about a missing chunk size into the error it announced.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "38eaf2f21a2398a8dd8444f6df3723898cb5fe2a",
+          "committedAt": "2024-01-31",
+          "subject": "Fixed #35159 -- Fixed dumpdata crash when base querysets use prefetch_related().",
+          "repairedPaths": [
+            "django/core/management/commands/dumpdata.py"
+          ],
+          "quotes": [
+            "Regression in 139135627650ed6aaaf4c755b82c3bd43f2b8f51 following deprecation in edbf930287cb72e9afab1f7208c24b1146b0c4ec."
+          ],
+          "linkVerification": "The full object name is quoted verbatim; the fix passes a chunk_size at the impacted call site and touches no other production file."
+        },
+        {
+          "kind": "upstream-fix",
+          "commit": "a084c5d35a6d00abd261338a374a4424764b4aee",
+          "committedAt": "2024-02-20",
+          "subject": "Fixed #35238 -- Fixed database serialization crash when base managers use prefetch_related().",
+          "repairedPaths": [
+            "django/db/backends/base/creation.py"
+          ],
+          "quotes": [
+            "Regression in 139135627650ed6aaaf4c755b82c3bd43f2b8f51 following deprecation in eedbf930287cb72e9afab1f7208c24b1146b0c4ec."
+          ],
+          "linkVerification": "The full object name is quoted verbatim; the fix passes a chunk_size at the impacted call site and touches no other production file."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "django/core/management/commands/dumpdata.py",
+          "lineRange": [
+            219,
+            222
+          ],
+          "reachability": "whole-repo-search",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "low",
+          "severityRationale": "Impact: signalled or bounded - the management command aborts with a visible exception. Reachability: conditional - a model whose default or base manager attaches prefetch_related lookups. Matrix: signalled x conditional = low.",
+          "semanticSummary": "get_objects streams each model's rows with queryset.iterator() and passes no chunk_size, which was previously merely discouraged for a queryset carrying prefetch lookups and is now refused outright. A model whose manager applies prefetch_related - which dumpdata neither controls nor strips, since it uses the model's own manager - therefore makes the whole dump abort with ValueError before writing anything, rather than dumping that model's rows."
+        },
+        {
+          "path": "django/db/backends/base/creation.py",
+          "lineRange": [
+            134,
+            137
+          ],
+          "reachability": "whole-repo-search",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "low",
+          "severityRationale": "Impact: signalled or bounded - a visible exception. Reachability: conditional - one further condition, a base manager that prefetches. Matrix: signalled x conditional = low.",
+          "semanticSummary": "serialize_db_to_string walks every model through model._base_manager.using(...).order_by(pk) and drains it with queryset.iterator() and no chunk_size, a call that is now refused whenever the queryset carries prefetch lookups. A project whose base manager prefetches makes database serialization raise ValueError, so the serialized_rollback path that depends on it cannot capture the database state at all."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The change completes a documented deprecation on schedule: a warning that had already announced its own replacement becomes the ValueError it announced. There is no defect inside the diff under any reading, which is exactly what makes the case about dependents rather than about the change."
+      },
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-06",
+        "verdict": "non-disclosing",
+        "rationale": "The flagged lines are a commented-out draft of the very change being made, deleted as the change lands. They describe the diff itself - the error it now raises - and name no caller, no file outside the diff, and no failure anywhere else in the repository.",
+        "acknowledgedComments": [
+          "# When the deprecation ends, replace with:",
+          "#     'chunk_size must be provided when using '",
+          "#     'QuerySet.iterator() after prefetch_related().'"
+        ]
+      },
+      "tags": [
+        "orm",
+        "deprecation"
+      ],
+      "notes": "Age is the weakness here: a 2023 Django commit is almost certainly in training data, so this case measures reachability more honestly on a newer model than on the current one. It is also the corpus's only case with two dependents in two different files, which is what makes per-file scoring observable at all."
+    },
+    {
+      "id": "django-messages-package-import-pulls-in-level-tag-initialisation",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/django/django.git",
+      "upstreamOwner": "django",
+      "upstreamRepo": "django",
+      "license": "BSD-3-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-06",
+      "introducingCommit": "b7fe36ad37fb18c4bc7932c0aec6ae4f299b9622",
+      "introducingCommittedAt": "2023-08-25T06:55:12+02:00",
+      "parentCommit": "1081d24f9981bf621968d0cf1f2726f4a826c589",
+      "reviewedPaths": [
+        "django/contrib/messages/__init__.py"
+      ],
+      "excludedPaths": [
+        "docs/ref/contrib/messages.txt",
+        "docs/releases/1.7.txt",
+        "tests/messages_tests/base.py",
+        "tests/messages_tests/test_cookie.py",
+        "tests/messages_tests/test_session.py",
+        "tests/messages_tests/tests.py"
+      ],
+      "excludedPathsReason": "Documentation and tests only.",
+      "reviewIntent": "Re-export a storage class from the package root so callers can import it from the package instead of a submodule.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "311718feb5f1fb9ff794bbac0cda48cfc3410de8",
+          "committedAt": "2023-10-24",
+          "subject": "Fixed #34923 -- Avoided initializing LEVEL_TAGS when importing django.contrib.messages.",
+          "repairedPaths": [
+            "django/contrib/messages/storage/base.py",
+            "django/contrib/messages/apps.py"
+          ],
+          "quotes": [
+            "Fixed #34923 -- Avoided initializing LEVEL_TAGS when importing django.contrib.messages.",
+            "Regression in b7fe36ad37fb18c4bc7932c0aec6ae4f299b9622."
+          ],
+          "linkVerification": "The full object name is quoted verbatim under the 'Regression in <sha>.' convention. The fix wraps the module-level initialisation in a SimpleLazyObject and adds two regression tests asserting that a MESSAGE_TAGS value set after import is honoured."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "django/contrib/messages/storage/base.py",
+          "lineRange": [
+            1,
+            4
+          ],
+          "reachability": "callee-of-changed-code",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "medium",
+          "severityRationale": "Impact: silently wrong - LEVEL_TAGS is a plain dict computed once, and the upstream regression tests assert a stale VALUE rather than an exception, so a project that assigns MESSAGE_TAGS after the package is imported renders every message with the wrong tag and nothing signals it. Reachability: conditional - the setting has to be established or changed after the import. Matrix: silently wrong x conditional = medium.",
+          "semanticSummary": "storage/base.py evaluates LEVEL_TAGS = utils.get_level_tags() at module scope, so the value of settings.MESSAGE_TAGS is captured the first time this module is imported and never re-read. The module also imports the messages package itself for constants and utils, so it was previously reached only when a storage backend was actually used; importing it from the package root moves that settings read to the moment anything imports django.contrib.messages, which for an installed app is app loading."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff is a single added re-export line in a package __init__, the most ordinary change in a Python codebase, and the module it names is the module that defines the class being re-exported. Nothing in the diff says when that module is evaluated or what it does at import time; that is only visible by opening the imported file, which is outside the diff."
+      },
+      "tags": [
+        "import-time",
+        "settings"
+      ],
+      "notes": "The second file the fix repairs, django/contrib/messages/apps.py, reassigns the same module-level name eagerly in a setting_changed handler. It is the same mechanism in a second place rather than a second dependent, and the scoring unit is the destination file, so only the file that owns the initialisation is listed."
+    },
+    {
+      "id": "django-aggregate-source-expressions-always-carry-the-filter-slot",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/django/django.git",
+      "upstreamOwner": "django",
+      "upstreamRepo": "django",
+      "license": "BSD-3-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-06",
+      "introducingCommit": "42b567ab4c5bfb1bbd3e629b1079271c5ae44ea0",
+      "introducingCommittedAt": "2024-04-25T17:40:03-03:00",
+      "parentCommit": "ec8552417df51df8482df61b8ad78a7002634011",
+      "reviewedPaths": [
+        "django/contrib/postgres/aggregates/mixins.py",
+        "django/db/models/aggregates.py"
+      ],
+      "excludedPaths": [
+        "tests/aggregation/tests.py"
+      ],
+      "excludedPathsReason": "Test only.",
+      "reviewIntent": "Make an aggregate's source-expression list a fixed shape by always carrying the filter slot instead of omitting it when unset.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "8c257cecffc314179a5375ab8a16ca0ff3b6fb16",
+          "committedAt": "2024-04-26",
+          "subject": "Refs #35339 -- Fixed source expressions in GeoAggregate on Oracle.",
+          "repairedPaths": [
+            "django/contrib/gis/db/models/aggregates.py"
+          ],
+          "quotes": [
+            "Regression in 42b567ab4c5bfb1bbd3e629b1079271c5ae44ea0."
+          ],
+          "linkVerification": "The full object name is quoted verbatim under the 'Regression in <sha>.' convention, one day after the change. The fix removes exactly the two 'if self.filter' conditionals that the new fixed-shape contract invalidated, and touches no other production file."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "django/contrib/gis/db/models/aggregates.py",
+          "lineRange": [
+            36,
+            47
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "low",
+          "severityRationale": "Impact: signalled or bounded - compiling the aggregate fails visibly on the query rather than returning a wrong result. Reachability: conditional - an Oracle backend, a non-extent geospatial aggregate, and no filter argument. Matrix: signalled x conditional = low.",
+          "semanticSummary": "GeoAggregate.as_oracle reads self.get_source_expressions() and pops the trailing element only when self.filter is truthy, then re-appends self.filter only under the same condition. The inherited list now always ends with the filter slot, so for an unfiltered aggregate the trailing None is never popped and is wrapped inside the SDOAGGRTYPE call, while set_source_expressions unpacks a list that is one element short of the shape it now requires."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff makes get_source_expressions and set_source_expressions symmetric and unconditional, which is the direction such code should move: a variable-length source-expression list is exactly what makes callers write positional conditionals. Every conditional it removes is one it also removes the need for, inside the two files it touches, and default_alias is updated in the same diff to tolerate the None it introduces."
+      },
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-06",
+        "verdict": "non-disclosing",
+        "rationale": "The single flagged line is not a comment at all. It is the Python statement '*exprs, self.order_by = exprs', which the fuzzy rule flags because it begins with an asterisk, the block-comment continuation marker. It carries no prose and discloses nothing.",
+        "acknowledgedComments": [
+          "*exprs, self.order_by = exprs"
+        ]
+      },
+      "tags": [
+        "orm",
+        "aggregation",
+        "contract-shape"
+      ]
+    },
+    {
+      "id": "django-relation-transform-guards-removed-from-lookup-resolution",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/django/django.git",
+      "upstreamOwner": "django",
+      "upstreamRepo": "django",
+      "license": "BSD-3-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-06",
+      "introducingCommit": "ce6230aa976e8d963226a3956b45a8919215dbd8",
+      "introducingCommittedAt": "2022-09-22T00:17:04+02:00",
+      "parentCommit": "cfe3008123ed7c9e3f3a4d51d4a22f9d96634e33",
+      "reviewedPaths": [
+        "django/db/models/sql/query.py"
+      ],
+      "excludedPaths": [
+        "tests/lookup/tests.py",
+        "tests/queries/models.py",
+        "tests/queries/tests.py"
+      ],
+      "excludedPathsReason": "Tests only.",
+      "reviewIntent": "Allow a lookup name on a relation field to be interpreted as a transform instead of rejecting it outright.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "996c802229b93fe83c39842e56c6b8668464deaf",
+          "committedAt": "2023-03-28",
+          "subject": "Fixed #34443 -- Fixed filtering by transforms on reverse relations.",
+          "repairedPaths": [
+            "django/db/models/fields/reverse_related.py"
+          ],
+          "quotes": [
+            "Regression in ce6230aa976e8d963226a3956b45a8919215dbd8."
+          ],
+          "linkVerification": "The full object name is quoted verbatim under the 'Regression in <sha>.' convention. The fix adds get_lookups() and get_transform() delegations to ForeignObjectRel and touches no other production file, which is precisely the interface the removed guards had made unreachable."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "django/db/models/fields/reverse_related.py",
+          "lineRange": [
+            114,
+            118
+          ],
+          "reachability": "whole-repo-search",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "low",
+          "severityRationale": "Impact: signalled or bounded - an AttributeError escapes the query builder instead of the FieldError the caller could catch. Reachability: conditional - filtering across a reverse relation with a name that is not a lookup. Matrix: signalled x conditional = low.",
+          "semanticSummary": "ForeignObjectRel delegates get_lookup to the field it mirrors but defines neither get_lookups nor get_transform, because until now a relation could never reach the transform path: the query builder rejected an unknown lookup on a relation before trying to interpret it as one. A reverse relation used as the left-hand side now reaches try_transform, which calls get_transform on this object, and the resolution fails with AttributeError rather than a FieldError naming the bad lookup."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff removes two explicit rejections in order to allow a capability, which is what a change with this intent has to look like, and it removes nothing else. What it cannot show is that the interface the newly reachable path calls is only partly implemented on one of the objects that can now arrive there, because that object is not named anywhere in the diff."
+      },
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-06",
+        "verdict": "non-disclosing",
+        "rationale": "The flagged line is the deleted guard's own comment, '# No support for transforms for relational fields', which restates what the two lines beneath it plainly did and is removed together with them. It names no file, no symbol outside the diff and no failure, and it describes the restriction being lifted rather than anything that breaks as a result.",
+        "acknowledgedComments": [
+          "# No support for transforms for relational fields"
+        ]
+      },
+      "tags": [
+        "orm",
+        "lookups",
+        "partial-interface"
+      ]
+    },
+    {
+      "id": "django-sqlite-clone-source-database-opened-read-only",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/django/django.git",
+      "upstreamOwner": "django",
+      "upstreamRepo": "django",
+      "license": "BSD-3-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-06",
+      "introducingCommit": "2128a73713735fb794ca6565fd5d7792293f5cfa",
+      "introducingCommittedAt": "2023-09-25T10:15:53+02:00",
+      "parentCommit": "a5905b164dbf52e59fa646af9c3d523c0804d86a",
+      "reviewedPaths": [
+        "django/db/backends/sqlite3/creation.py"
+      ],
+      "excludedPaths": [],
+      "reviewIntent": "Open the source database read-only when cloning it into a worker's in-memory database.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "68d0159b6dfce07f144045d56639c52066e8b90e",
+          "committedAt": "2023-10-23",
+          "subject": "Fixed #34903, Refs #34825 -- Made workers initialization respect empty set of used connections.",
+          "repairedPaths": [
+            "django/test/runner.py"
+          ],
+          "quotes": [
+            "Regression in 2128a73713735fb794ca6565fd5d7792293f5cfa.",
+            "Thanks to David Smith for the investigation & patch."
+          ],
+          "linkVerification": "The full object name is quoted verbatim under the 'Regression in <sha>.' convention. The fix changes exactly one line in django/test/runner.py, the truthiness fallback that decides which connections a worker sets up, and touches no other file."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "django/test/runner.py",
+          "lineRange": [
+            434,
+            442
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "low",
+          "severityRationale": "Impact: signalled or bounded - worker start-up aborts with a visible database error instead of running the suite. Reachability: conditional - the spawn start method together with a run that declares no databases, so the used-alias set is empty rather than absent. Matrix: signalled x conditional = low.",
+          "semanticSummary": "_init_worker chooses which aliases to prepare with 'db_aliases = used_aliases or connections', so an EMPTY set of used aliases falls through to every configured connection and each one is handed to setup_worker_connection. That call previously opened the per-alias clone file in read-write mode, where sqlite silently creates a missing file; opening it read-only means an alias whose test database was never created now raises instead, turning a fallback that used to be merely wasteful into an abort."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff adds a read-only mode flag to a connection that is opened solely to be backed up and then closed, which is textbook least privilege and is correct on its own terms. The change it makes to the contract - that a missing database file is now an error instead of an empty database - is not stated anywhere in the diff, because it is a property of the sqlite URI parameter rather than of the surrounding code."
+      },
+      "tags": [
+        "test-runner",
+        "sqlite",
+        "least-privilege"
+      ],
+      "notes": "The changed function setup_worker_connection is called by name in the dependent, so a text reference lookup from the changed symbol reaches it in one hop even though there is no import edge between the two files: the object is obtained through connection.creation."
+    },
+    {
+      "id": "django-mark-safe-keeps-lazy-strings-lazy",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/django/django.git",
+      "upstreamOwner": "django",
+      "upstreamRepo": "django",
+      "license": "BSD-3-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-06",
+      "introducingCommit": "659d2421c7adbbcd205604002d521d82d6b0b465",
+      "introducingCommittedAt": "2022-02-21T10:11:26+01:00",
+      "parentCommit": "b626c5a9798b045b655d085d59efdd60b5d7a0e3",
+      "reviewedPaths": [
+        "django/utils/safestring.py"
+      ],
+      "excludedPaths": [
+        "docs/releases/4.1.txt",
+        "tests/utils_tests/test_safestring.py"
+      ],
+      "excludedPathsReason": "Release notes and tests. The release note states the new behaviour in prose.",
+      "reviewIntent": "Stop a safety marker from forcing a lazily evaluated string, so the value stays lazy until it is used.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "292f372768836e2aebc713064c5139e8067eebcb",
+          "committedAt": "2022-05-31",
+          "subject": "Fixed #33748 -- Fixed date template filter crash with lazy format.",
+          "repairedPaths": [
+            "django/utils/formats.py"
+          ],
+          "quotes": [
+            "Regression in 659d2421c7adbbcd205604002d521d82d6b0b465."
+          ],
+          "linkVerification": "The full object name is quoted verbatim under the 'Regression in <sha>.' convention. The fix inserts a single coercion, 'format_type = str(format_type)  # format_type may be lazy.', in django/utils/formats.py and touches no other production file."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "django/utils/formats.py",
+          "lineRange": [
+            119,
+            137
+          ],
+          "reachability": "whole-repo-search",
+          "compatibilityClass": "breaks-at-runtime",
+          "severity": "low",
+          "severityRationale": "Impact: signalled or bounded - rendering raises a visible TypeError rather than producing a wrong page. Reachability: conditional - a template filter argument written as a lazily translated string. Matrix: signalled x conditional = low.",
+          "semanticSummary": "get_format assumes format_type is a real str: it uses it as half of a cache key, passes it to getattr as an attribute name, and tests it for membership in the known-format sets. A lazily evaluated string satisfies none of those - getattr rejects a non-string name, the membership tests never match, and each proxy is a distinct cache key - so a caller that now receives a lazy value instead of an evaluated one fails inside the lookup rather than formatting.",
+          "notes": "The conduit is django/template/base.py, which applies the changed function to every unquoted filter argument; it was never repaired, so it is not the evidenced dependent. django/utils/formats.py is the file upstream actually fixed."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff adds a decorator that makes the safety marker preserve laziness, which is the documented way to write such a helper and is the point of the change. What it cannot show is that a value which used to be evaluated on the way through this function is now handed on unevaluated to code that has always assumed a real string, because none of that code is named in the diff."
+      },
+      "tags": [
+        "lazy-evaluation",
+        "templates"
+      ],
+      "notes": "The hardest reachability class in the corpus: the dependent shares no import edge, no call and no identifier with the change. It is retained precisely so that recall on this class is reported rather than pooled with the reachable ones."
+    }
+  ]
+}

@@ -1,8 +1,8 @@
 # `security`, `verification`, `fix`
 
-The sandbox literals, the additive security review pass, and the two agentic
-post-review lanes. All three optional features are **off by default**; with them
-off the general review is byte-for-byte unchanged.
+The sandbox literals, the additive security review pass, analyzer-artifact
+ingestion, and the two agentic post-review lanes. Every optional feature here is
+**off by default**; with them off the general review is byte-for-byte unchanged.
 
 Note the nesting: the cross-file retrieval settings live under `review`, **not**
 here. See [review.md](./review.md).
@@ -16,16 +16,76 @@ here. See [review.md](./review.md).
 | `security.allowFilesystemWrite` | literal `false` | `false` | Writes happen only through the artifact-writer boundary. `true` is rejected. |
 | `security.captureContentTelemetry` | literal `false` | `false` | Source, prompts, and model output are never sent to telemetry. `true` is rejected. |
 | `security.dedicatedPass.enabled` | boolean | `false` | Adds a second, security-only discovery call per task applying a generic OWASP/CWE checklist. |
-
-There is no `security.signals` key. The deterministic security-signal evidence
-layer (spec 15, Mechanism 2) has no implementation yet; its config key ships
-alongside the layer, not before it.
+| `security.signals.enabled` | boolean | `false` | Ingests already-produced analyzer artifacts as untrusted review evidence. |
+| `security.signals.artifacts` | array of `{ path, format }` | `[]` | The artifacts to read. `path` is repository-relative; `format` is `"sarif"`. |
+| `security.signals.maxArtifactBytes` | integer 1–50000000 | `4000000` | Size ceiling per artifact, checked before the file is read. Exceeding it fails the run. |
+| `security.signals.maxAlerts` | integer 1–500 | `40` | Cap on analyzer results shown to the review after attribution. When it binds, the count held back is reported. |
 
 `security.dedicatedPass` candidates are *additive*: they merge with the general
 pass's candidates and never displace them, so the pass can raise security recall
 but cannot reduce the general reviewer's. They flow through the same refutation
 and admission as any other candidate and never bypass scope, severity, baseline,
 or the gate. Cost: a second discovery call per task.
+
+### `security.signals` — analyzer artifact ingestion
+
+**This is unmeasured.** No evaluation has been run for it, and no claim is made
+here about its effect on what the review finds. What it does is described below;
+what it is worth is not yet known.
+
+This engine **never runs an analyzer** and depends on no analyzer package. Your
+own pipeline produces a SARIF 2.1.0 file; this reads it, normalizes it, and shows
+the results the change is implicated in to the reviewer as evidence.
+
+```json config
+{
+  "security": {
+    "signals": {
+      "enabled": true,
+      "artifacts": [{ "path": "reports/analyzer.sarif.json" }]
+    }
+  }
+}
+```
+
+What it does with an artifact:
+
+- **Validates it at the boundary.** The path is resolved through the repository
+  path service, so an artifact outside the repository — including one reached by
+  a symlink — is rejected. The file must be SARIF 2.1.0 and within
+  `maxArtifactBytes`.
+- **Normalizes it.** Analyzer name and version, rule id, level, CWE list,
+  security severity, help URI, primary location, related locations, and ordered
+  data-flow steps become evidence records. Nothing tool-specific reaches a
+  finding.
+- **Attributes it to the change.** A result is shown only when its own reported
+  location, or a step of the path it traces, falls on a line this change touched.
+  Results with no changed-side cause are **not reported** — a review must not
+  blame a change for the repository's pre-existing debt — and the count held back
+  is stated in the run warnings.
+- **Shows it as evidence, not as findings.** An ingested result never becomes a
+  finding on its own and seeds no candidate. It is presented to the reviewer as
+  an untrusted third-party claim to judge against the code. Anything reported
+  afterwards is a reviewer finding that passed refutation, scope, severity,
+  baseline, and the admission gate like any other.
+- **Redacts it.** Analyzer messages quote the code they matched; they are
+  redacted before they reach a model or an artifact.
+
+Failure is loud, never quiet. A missing, oversized, unreadable, or non-SARIF
+artifact fails the run with exit `2` (`analyzer_artifact_unreadable`,
+`analyzer_artifact_too_large`, `analyzer_artifact_invalid`). An artifact that
+parses but contains nothing, results that could not be used, and results held
+back as pre-existing are each reported as a run warning — because a short list of
+analyzer results is otherwise indistinguishable from a clean scan.
+
+Two limits worth knowing before you turn it on:
+
+- **It applies to diff-based reviews.** With no changed line ranges, no result
+  can be tied to a change and none is reported; the run says so.
+- **It cannot catch a change that exposes an existing path without appearing on
+  it.** Removing an authorization wrapper elsewhere, widening a route, or
+  relaxing a setting can make a pre-existing result newly reachable while every
+  location the analyzer names sits in untouched code. Those are not reported.
 
 ## `verification`
 

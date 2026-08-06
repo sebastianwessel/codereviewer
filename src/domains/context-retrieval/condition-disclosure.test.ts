@@ -6,6 +6,7 @@ import {
   contextRetrievalConditions,
   pathNotEligibleCondition,
   pathNotFoundCondition,
+  queryBlankCondition,
   readBudgetExhaustedCondition,
   searchBudgetExhaustedCondition,
   type ContextRetrievalCondition
@@ -18,7 +19,8 @@ const conditionErrors: Record<ContextRetrievalCondition, Error> = {
   ),
   'path-not-found': pathNotFoundCondition('src/missing.ts'),
   'read-budget-exhausted': readBudgetExhaustedCondition(),
-  'search-budget-exhausted': searchBudgetExhaustedCondition()
+  'search-budget-exhausted': searchBudgetExhaustedCondition(),
+  'query-blank': queryBlankCondition()
 }
 
 // The words a model must be able to find in the content to know WHICH refusal it
@@ -29,7 +31,8 @@ const reasonMarkers: Record<ContextRetrievalCondition, string> = {
   'path-not-eligible': 'PATH NOT ELIGIBLE',
   'path-not-found': 'PATH NOT FOUND',
   'read-budget-exhausted': 'READ BUDGET EXHAUSTED',
-  'search-budget-exhausted': 'SEARCH BUDGET EXHAUSTED'
+  'search-budget-exhausted': 'SEARCH BUDGET EXHAUSTED',
+  'query-blank': 'EMPTY SEARCH QUERY'
 }
 
 const disclose = (error: unknown) =>

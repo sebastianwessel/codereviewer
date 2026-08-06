@@ -139,14 +139,7 @@ checklist_walk:
         - specs/26-reactive-task-splitting.md
         - specs/27-discovery-partitioning.md
         - specs/28-targeted-reads.md
-      gaps:
-        - >-
-          specs/28-targeted-reads.md is Draft, not Approved, while the behaviour
-          it describes is implemented. Its requirement that an oversized-context
-          failure reduce the cross-file read budget and retry BEFORE the task is
-          split has no implementation; discovery splits the task instead, which
-          the spec itself notes cannot help when the overflow came from a tool
-          result.
+      gaps: []
     operations_release:
       applicability: relevant
       checklist: checklist-operations-release.md
@@ -165,13 +158,20 @@ checklist_walk:
 
 ## Known Draft Gaps
 
-One gap is recorded under `ai_automation` above and is repeated here so it is not
-read only in the machine block: `28-targeted-reads.md` is Draft while the
-behaviour it describes ships, and its read-budget-reduction-then-retry
-requirement is unimplemented.
+None recorded. The one gap this audit carried — `28-targeted-reads.md` being Draft
+while its behaviour shipped, with its read-budget-reduction-then-retry requirement
+unimplemented — no longer holds on either count, checked 2026-08-06:
 
-It is not a blocking finding for this self-audit's own scope, and this audit is
-not approval. Readiness review can still find further issues.
+- The spec is **Approved** (human, 2026-07-31); the gap text was stale.
+- Reduce-then-retry **is** implemented and now has a test that pins the ORDERING
+  the requirement is about: `runDiscoveryCall` narrows the read budget and retries
+  the whole task on a normalised `context_length_exceeded`, and splits the task
+  only once the reads cannot be narrowed further
+  (`src/domains/review-workflow/pipeline/discovery/discovery-call.test.ts`). The
+  verification lane does the same per claim, ending `uncertain` with bound reason
+  `context-length-exceeded` rather than truncating anything to force it through.
+
+This audit is still not approval. Readiness review can find further issues.
 
 ## Authoring Assumptions
 

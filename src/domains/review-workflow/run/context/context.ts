@@ -176,14 +176,16 @@ export const assembleContext = async (
       const contentBytes = utf8ByteLength(inputContext.content)
       const ledgerEntry = createContextLedgerEntry({
         // The context ledger has no dedicated kinds for 'test-mapping',
-        // 'referenced-definition', or 'change-intent'; all are recorded as
-        // support-signal-output (derived context, not a reviewed changed file).
-        // 'change-intent' is injected by a separate stage and never reaches this
-        // assembly loop, but the mapping keeps the kind union exhaustive.
+        // 'referenced-definition', 'change-intent', or 'analyzer-signal'; all are
+        // recorded as support-signal-output (derived context, not a reviewed
+        // changed file). 'change-intent' and 'analyzer-signal' are injected by
+        // separate stages and never reach this assembly loop, but the mapping keeps
+        // the kind union exhaustive.
         kind:
           inputContext.kind === 'test-mapping' ||
           inputContext.kind === 'referenced-definition' ||
-          inputContext.kind === 'change-intent'
+          inputContext.kind === 'change-intent' ||
+          inputContext.kind === 'analyzer-signal'
             ? 'support-signal-output'
             : inputContext.kind,
         ...(inputContext.path === undefined ? {} : { path: inputContext.path }),

@@ -104,6 +104,20 @@ const conditionDisclosure: Record<
       situation: 'You have no searches left in this call.',
       meaning: engineLimitMeaning,
       remedy: decideFromWhatYouHave
+    }),
+  // The one condition here caused by the CALL rather than by the repository or a
+  // budget, and the most correctable of the set: the caller asks again with
+  // something to search for. It says nothing about whether the term exists.
+  'query-blank': ({ toolId }) =>
+    refusalOutput({
+      toolId,
+      marker: 'EMPTY SEARCH QUERY',
+      summaryReason: 'the search query was empty.',
+      situation:
+        'The query contained no characters other than spaces, so there was nothing to search for and no search was performed.',
+      meaning: engineLimitMeaning,
+      remedy:
+        'Call this tool again with the exact text you are looking for, and say that a check you could not complete is unresolved.'
     })
 }
 

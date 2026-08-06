@@ -92,8 +92,11 @@ export type VerificationFlowResult = {
 const BOUND_RATIONALES: Record<VerificationBoundReason, string> = {
   'tool-call-budget-exceeded':
     'Verification ended without a conclusive verdict: the per-claim tool-call budget was exhausted before the claim could be resolved.',
+  // "Cancelled by its caller", not "timed out": the engine arms no whole-run
+  // deadline (spec 12), and naming one would send a reader looking for a timeout
+  // setting that does not exist.
   aborted:
-    'Verification ended without a conclusive verdict: the run was cancelled or timed out before the claim could be resolved.',
+    'Verification ended without a conclusive verdict: the run was cancelled by its caller before the claim could be resolved.',
   'invalid-verdict':
     'Verification ended without a conclusive verdict: the agent returned a verdict that did not satisfy the verdict contract.',
   'context-length-exceeded':

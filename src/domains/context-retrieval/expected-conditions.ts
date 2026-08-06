@@ -13,16 +13,26 @@
 // so a reword in another module would have silently reclassified a containment
 // breach as an ordinary miss. A type cannot be reworded by accident.
 //
-// Membership is deliberately CLOSED and small: exactly the four conditions the
-// retriever raises as part of normal operation. Anything else — a containment
-// breach, an unreadable path, a tool called outside its scope, a bug — is a fault,
-// because a fault disguised as an answer is worse than a fault.
+// Membership is deliberately CLOSED and small: exactly the conditions the
+// retriever raises as part of normal operation, each one something the CALLER can
+// correct. Anything else — a containment breach, an unreadable path, a tool called
+// outside its scope, a bug — is a fault, because a fault disguised as an answer is
+// worse than a fault.
 
 export const contextRetrievalConditions = [
   'path-not-eligible',
   'path-not-found',
   'read-budget-exhausted',
-  'search-budget-exhausted'
+  'search-budget-exhausted',
+  // A search whose query is blank. It belongs here for the same reason
+  // `path-not-found` does: it is a mistake the model made and can correct on the
+  // next call. The tool schema's `min(1)` rejects the empty string but admits a
+  // query of spaces, so the state is reachable from a model, and it used to arrive
+  // as a bare `TypeError` — which the harness converts to "Tool execution failed."
+  // and hands over with no reason at all. Trimming the query in the schema instead
+  // was rejected: leading and trailing spaces are part of a literal substring
+  // search, and silently altering the query would answer a question nobody asked.
+  'query-blank'
 ] as const
 
 export type ContextRetrievalCondition =
@@ -88,3 +98,12 @@ export const searchBudgetExhaustedCondition =
       condition: 'search-budget-exhausted',
       message: 'Context retrieval search budget exceeded.'
     })
+
+// Raised for a search query that is empty or contains only whitespace. The query
+// itself is never quoted back: it is caller-supplied text, and a condition message
+// is not a channel for it.
+export const queryBlankCondition = (): ContextRetrievalConditionError =>
+  new ContextRetrievalConditionError({
+    condition: 'query-blank',
+    message: 'Context retrieval query must not be blank.'
+  })

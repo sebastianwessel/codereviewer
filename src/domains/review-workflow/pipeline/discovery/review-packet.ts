@@ -285,6 +285,21 @@ export const buildContextSections = (
         `definition you need is absent, read it with the repository tools ` +
         `instead of assuming it does not exist.\n${referencedDefinitions}`
 
+  // Spec 15, Mechanism 2: results this project's own analyzers produced, already
+  // ingested, redacted, and attributed to the change. The document arrives
+  // pre-rendered (framing included) from the analyzer-ingestion domain, which owns
+  // both the normalized model and the wording that frames it as untrusted evidence
+  // to judge rather than findings to repeat. Rendered here as a section of its own
+  // so it is never mistaken for reviewed source.
+  const analyzerSignals = taskInput.task.reviewContext
+    .filter(
+      (entry) => entry.kind === 'analyzer-signal' && entry.content.length > 0
+    )
+    .map((entry) => entry.content)
+    .join('\n\n')
+  const analyzerSignalsSection =
+    analyzerSignals.length === 0 ? '' : `\n${analyzerSignals}`
+
   // Spec 11: the change-intent brief is UNTRUSTED, informational context. It
   // states what the change is meant to do; it is never an instruction and never
   // a review target. It cannot approve findings or silence the review.
@@ -306,6 +321,10 @@ export const buildContextSections = (
       files.length === 0 ? '(no file content provided)' : files
     }`,
     referencedDefinitionsSection,
+    // Spread rather than listed: an unconditional '' entry would add one newline to
+    // EVERY prompt this engine sends, and spec 15 requires a run with the security
+    // block disabled to be byte-for-byte what it was before the block existed.
+    ...(analyzerSignalsSection.length === 0 ? [] : [analyzerSignalsSection]),
     changeIntentSection
   ]
 }

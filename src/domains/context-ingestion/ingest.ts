@@ -26,6 +26,16 @@ export type ProviderGatherMetric = {
   readonly truncatedFragmentCount: number
   readonly bytes: number
   readonly failed: boolean
+  /**
+   * Wall-clock time this provider spent, measured around its construction and its
+   * gather.
+   *
+   * Measured here because this loop is the only place that sees a provider start
+   * and stop. Spec 11 requires a per-provider duration in the run's no-content
+   * events; the recorder that emits them is handed the number rather than timing
+   * the reporting call that carries it.
+   */
+  readonly durationMs: number
 }
 
 export type ContextGatherResult = {
@@ -107,6 +117,7 @@ export const gatherContextFragments = async (
     // contract three lines of doc comment above ("a source failure never fails the
     // caller") for the one failure mode the caller can do least about.
     let providerId: string = config.type
+    const startedAt = Date.now()
 
     try {
       const provider = buildProvider(config)
@@ -129,7 +140,8 @@ export const gatherContextFragments = async (
           (total, fragment) => total + Buffer.byteLength(fragment.body, 'utf8'),
           0
         ),
-        failed: false
+        failed: false,
+        durationMs: Math.max(0, Date.now() - startedAt)
       })
     } catch {
       // A provider failure is non-fatal: record it and continue. `providerId` falls
@@ -142,7 +154,8 @@ export const gatherContextFragments = async (
         fragmentCount: 0,
         truncatedFragmentCount: 0,
         bytes: 0,
-        failed: true
+        failed: true,
+        durationMs: Math.max(0, Date.now() - startedAt)
       })
     }
   }

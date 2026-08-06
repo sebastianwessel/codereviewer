@@ -1,0 +1,152 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "example-analyzer",
+          "semanticVersion": "3.4.5",
+          "informationUri": "https://example.invalid/analyzer",
+          "rules": [
+            {
+              "id": "security/query-injection",
+              "name": "QueryInjection",
+              "helpUri": "https://example.invalid/rules/query-injection",
+              "shortDescription": { "text": "Untrusted input reaches a query." },
+              "defaultConfiguration": { "level": "error" },
+              "properties": {
+                "tags": ["security", "external/cwe/cwe-89"],
+                "security-severity": "8.8"
+              }
+            },
+            {
+              "id": "security/command-injection",
+              "name": "CommandInjection",
+              "defaultConfiguration": { "level": "warning" },
+              "properties": {
+                "tags": ["security", "external/cwe/cwe-78"],
+                "security-severity": "7.2"
+              }
+            },
+            {
+              "id": "security/weak-hash",
+              "name": "WeakHash",
+              "defaultConfiguration": { "level": "note" },
+              "properties": { "tags": ["security", "external/cwe/cwe-327"] }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "security/query-injection",
+          "ruleIndex": 0,
+          "level": "error",
+          "message": {
+            "text": "Untrusted request value is concatenated into a query.\nToken sk-abcdefghijklmnopqrstuvwx was seen nearby."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/service/orders.ts" },
+                "region": { "startLine": 42, "startColumn": 7, "endLine": 42 }
+              }
+            }
+          ],
+          "relatedLocations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/service/orders.ts" },
+                "region": { "startLine": 40 }
+              },
+              "message": { "text": "Value enters here." }
+            }
+          ]
+        },
+        {
+          "ruleId": "security/command-injection",
+          "ruleIndex": 1,
+          "message": { "text": "Untrusted value reaches a command execution." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/service/legacy.ts" },
+                "region": { "startLine": 120 }
+              }
+            }
+          ],
+          "codeFlows": [
+            {
+              "message": { "text": "request value to command" },
+              "threadFlows": [
+                {
+                  "locations": [
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": { "uri": "src/service/orders.ts" },
+                          "region": { "startLine": 44 }
+                        },
+                        "message": { "text": "Source: request parameter." }
+                      }
+                    },
+                    {
+                      "location": {
+                        "physicalLocation": {
+                          "artifactLocation": { "uri": "src/service/legacy.ts" },
+                          "region": { "startLine": 120 }
+                        },
+                        "message": { "text": "Sink: command execution." }
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "security/weak-hash",
+          "ruleIndex": 2,
+          "message": { "text": "A weak hash primitive is used." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/service/legacy.ts" },
+                "region": { "startLine": 200 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "security/query-injection",
+          "message": { "text": "Reported outside the repository." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "../outside/secrets.txt" },
+                "region": { "startLine": 3 }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "security/weak-hash",
+          "message": { "text": "Reported with no location at all." }
+        },
+        {
+          "message": { "text": "Reported with no rule identifier." },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": { "uri": "src/service/legacy.ts" },
+                "region": { "startLine": 300 }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

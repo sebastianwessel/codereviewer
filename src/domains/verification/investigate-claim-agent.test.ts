@@ -304,6 +304,47 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
     }
   })
 
+  // Spec 12 "Cross-Model Robustness": integration tests run against more than one
+  // provider ADAPTER SHAPE. Real provider packages ship both a class instance and a
+  // plain object, and the two differ in a way this codebase has already been bitten
+  // by: a class method passed around detached from its receiver throws, while an
+  // object property does not. That defect made the change-intent model summarizer
+  // throw on every real class-based adapter, and every run silently used the digest.
+  test('reaches the same verdict through a plain-object provider adapter', async () => {
+    const scripted = new ScriptedVerifierProvider()
+    const objectShaped: ModelProvider = {
+      id: 'scripted-verifier-object',
+      genAiSystem: 'scripted',
+      object: async (request) => scripted.object(request)
+    }
+    verifier = makeVerifier(objectShaped, flowBounds.maxToolCallsPerClaim)
+
+    const { report } = await runVerificationFlow({
+      ...flowBounds,
+      repositoryRoot,
+      providers: [
+        {
+          id: 'prior-findings',
+          gather: async () => ({
+            claims: [
+              priorFindingClaim({ id: 'claim_still2', filePath: 'holds.ts' }),
+              priorFindingClaim({ id: 'claim_fixed2', filePath: 'fixed.ts' })
+            ],
+            withheldByCap: 0
+          })
+        }
+      ],
+      investigateClaim: verifier.investigate
+    })
+
+    const byClaim = new Map(report.verdicts.map((v) => [v.claimId, v.status]))
+    expect(byClaim.get('claim_still2')).toBe('confirmed')
+    expect(byClaim.get('claim_fixed2')).toBe('refuted')
+    for (const observation of report.observations) {
+      expect(observation.boundReason).toBeUndefined()
+    }
+  })
+
   test('drives the list and grep tool handlers before concluding', async () => {
     const provider = new ScriptedVerifierProvider()
     verifier = makeVerifier(provider, 6)

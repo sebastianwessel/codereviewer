@@ -52,6 +52,38 @@ export {
   type RemovedCommentDisclosureReview
 } from './real-repo-corpus.schema.js'
 export {
+  countExpectedImpactByReachability,
+  directlyReachableImpactClasses,
+  evidenceDateOf,
+  isDirectlyReachable,
+  parseChangeImpactCorpusManifest,
+  parseChangeImpactCorpusManifestJson,
+  ChangeImpactCorpusCaseSchema,
+  ChangeImpactCorpusManifestSchema,
+  EvidenceOfBreakageSchema,
+  ExpectedCompatibilityClassSchema,
+  ExpectedImpactSchema,
+  ImpactReachabilitySchema,
+  LocalPlausibilitySchema,
+  type ChangeImpactCorpusCase,
+  type ChangeImpactCorpusManifest,
+  type EvidenceOfBreakage,
+  type ExpectedImpact,
+  type ImpactReachability,
+  type ImpactReachabilityCounts
+} from './change-impact-corpus.schema.js'
+export {
+  buildChangeImpactCase,
+  changeImpactHydrationSource,
+  defaultChangeImpactManifestPath,
+  defaultChangeImpactOutputRoot,
+  diffHeaderPaths,
+  hydrateChangeImpactCorpus,
+  type ChangeImpactCaseResult,
+  type HydrateChangeImpactCorpusOptions,
+  type HydrateChangeImpactCorpusResult
+} from './change-impact-corpus-hydration.js'
+export {
   minimumDisclosureWordCount,
   removedProseCommentsIn,
   resolveRemovedCommentDisclosures,

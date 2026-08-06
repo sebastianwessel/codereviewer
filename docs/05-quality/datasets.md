@@ -1,6 +1,6 @@
 # Datasets
 
-Four corpora exist, and they measure genuinely different things. Quoting a number
+Six corpora exist, and they measure genuinely different things. Quoting a number
 without naming its corpus is meaningless — recall on a curated-subset answer key
 and recall on an exhaustive one are not the same quantity.
 
@@ -10,7 +10,15 @@ and recall on an exhaustive one are not the same quantity.
 | Code Review Bench-style | `eval/benchmarks/code-review-bench-style/` | 59 | 133 | **required** | Recall/precision on real PRs, changed files only |
 | Proof-quality slices | `eval/fixtures/proof-quality-slices/` | 15 | 14 | none | Trustworthy recall on an exhaustive key |
 | Real-repository cross-file | `eval/corpora/real-repo-cross-file/manifest.json` | 37 | 87 | **required** | Cross-file recall on full checkouts, and review of multi-file diffs |
+| Change-impact dependents | `eval/corpora/change-impact-dependents/manifest.json` | 10 | 11 | **required** | Whether `impact check` names a dependent a change provably broke |
 | Fix-lane fixture | `eval/fixtures/typescript/fix-lane/repo/` | 1 (test-only) | — | none | Fix-lane judgment, via a hermetic test |
+
+> **The last two must never be pooled.** They are structural opposites: the
+> real-repository corpus reads a fix backwards and requires every expectation
+> **inside** the reviewed diff, while the change-impact corpus reads a change
+> forwards and requires every expectation **outside** it. Blending them is the
+> measurement error that made this project's headline recall uninterpretable for
+> months.
 
 ---
 
@@ -347,6 +355,81 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
 
 ---
 
+## Change-impact dependents corpus
+
+**What it is.** `eval/corpora/change-impact-dependents/manifest.json` — 10 real
+upstream changes, checked out **in full** at the commit that introduced a
+breakage. Defined by `specs/22`. It exists to measure `impact check`, which the
+corpora above structurally cannot: they all score defects the reviewer was pointed
+at, and this one scores whether a dependent **outside** the change was named.
+
+**Nothing has been measured on it.** It is committed data. There is no number.
+
+### Shape — the inverse of the real-repository corpus
+
+- Orientation is **forward**: `base = introducingCommit^`,
+  `head = introducingCommit`. A real change reviewed as it was made, not a fix read
+  backwards.
+- Reviewed paths **P** are the files the change touches. Expectations live in **Q**
+  where `Q ⊄ P` — outside the diff, by construction.
+- Every change is **locally plausible**: if the diff alone revealed the problem the
+  case would belong in the real-repository corpus instead.
+- Manifest committed, checkouts not. `npm run eval:impact-corpus:hydrate` performs
+  git fetches only — no model call, no spend.
+
+### The evidence bar
+
+A case is admissible only when upstream history **proves** the dependent broke: a
+later commit that repairs it and quotes the introducing commit's full object name,
+a revert, or an issue naming the caller-side symptom. **A curator's inference that
+something might break is not admissible**, and the manifest schema enforces this
+by refusing an evidence entry that repairs no expected dependent. No expectation
+is sourced from this project's own engine output, which would convert recall into
+similarity-to-our-own-engine.
+
+### Composition
+
+- 10 cases, 11 expected dependents, from django (9, BSD-3-Clause) and grpc-go
+  (1, Apache-2.0). Languages: Python 9, Go 1.
+- Reachability: 3 `caller-of-changed-symbol`, 2 `callee-of-changed-code`,
+  1 `attribute-owner`, **5 `whole-repo-search`**. The first three are the directly
+  reachable population; the last shares no import edge, call or identifier with its
+  change and is retained so that recall on it is reported rather than dropped.
+- Contamination: **2 held-out, 8 dev**. Held-out needs the change itself to
+  postdate the cutoff (`2026-01-01`) and the repair lands 3–12 months later still,
+  so the window is narrow by construction. **Report split, never pooled.**
+- Compatibility class: all 11 are `breaks-at-runtime`. Severity is carried as
+  descriptive metadata only — impact findings pass their own admission gate, which
+  applies no severity threshold, so nothing here is gated on it.
+
+### What it can and cannot measure
+
+**Can:** whether a predicted destination file is a dependent upstream actually had
+to repair, split by reachability class and by contamination risk; and whether the
+deterministic reference list already contains that file, which is the baseline arm
+`specs/22`'s remove-criterion is scored against.
+
+**Cannot:**
+
+- **Precision, trustworthily.** 11 dependents across 10 changes is not an
+  enumeration of everything each change broke, so an unlisted prediction is not
+  thereby wrong.
+- **`breaks-on-build`.** Every case is a behavioural break. A change that deletes a
+  declaration outright is rarely merged without its callers, and the commit-message
+  convention that makes the evidence link resolvable does not surface the ones that
+  are.
+- **Anything on its own.** A single run decides nothing here, and 11 dependents
+  make that stricter rather than looser.
+
+**Why it is small.** 101,542 commit bodies screened across 27 repositories, 166
+candidates through the mechanical filters, 10 accepted. The binding constraint is
+commit-message convention, not defect rarity: the link is mechanically resolvable
+only where a project writes the causing commit's full object name, and django's
+mandated `Regression in <sha>.` line produced 9 of the 10. The rejection reasons
+are recorded in the manifest under `screening.rejections`.
+
+---
+
 ## Fix-lane fixture
 
 **What it is.** `eval/fixtures/typescript/fix-lane/repo/` — two files:
@@ -381,6 +464,7 @@ this is a wiring test with one positive and one negative, not an evaluation.
 | Is recall *trustworthy*, with an exhaustive key? | Proof-quality slices |
 | Is line placement correct? | Proof-quality slices (**only** corpus with `path-line` keys) |
 | Does cross-file reasoning work? | Real-repository cross-file |
+| Does `impact check` name a dependent a change broke? | Change-impact dependents |
 | Are security mechanisms covered? | Real-repository cross-file, then Code Review Bench-style |
 
 ---
@@ -391,4 +475,5 @@ this is a wiring test with one positive and one negative, not an evaluation.
 - [Metrics](metrics.md) — what each corpus's shape does to each metric.
 - [Comparing runs](comparing-runs.md#eval-slice-manifest) — proving two local packs are identical.
 - Specs: `specs/06-evaluation-and-quality-gates.md` §Eval Dataset Contract,
-  `specs/17-real-repository-eval-corpus.md`.
+  `specs/17-real-repository-eval-corpus.md`,
+  `specs/22-change-impact-review.md` §Evaluation.

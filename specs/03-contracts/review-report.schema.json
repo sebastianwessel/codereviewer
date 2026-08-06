@@ -870,6 +870,11 @@
               "pattern": "^CWE-[0-9]+$"
             }
           },
+          "securitySeverity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
           "relatedLocations": {
             "type": "array",
             "items": {

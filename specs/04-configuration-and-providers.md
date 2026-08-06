@@ -100,7 +100,7 @@ This is why the generated JSON Schema carries no `default` object on `review`.
 | `paths` | no | object | default includes/excludes |
 | `baseline` | no | object | baseline matching enabled at the default path |
 | `qualityGate` | no | object | no critical or high admitted findings |
-| `security` | no | object | secure defaults; dedicated security pass disabled |
+| `security` | no | object | secure defaults; dedicated security pass and analyzer-signal ingestion disabled |
 | `reporting` | no | object | JSON, Markdown, and SARIF local reports |
 | `evaluation` | no | object | `minJudgeAgreement` 0.9 and the `stable` regression-gate profile; case selection is driven by `eval run` CLI flags, not config |
 | `drift` | no | object | drift checks enabled as warnings |
@@ -703,9 +703,9 @@ as a withdrawn spec so the measurement that removed it stays on record.
 
 ## Security
 
-Controls the dedicated additive security review pass (`15-security-focused-review.md`,
-Mechanism 1). Disabled by default. Generic OWASP/CWE-derived detection only; never
-tuned to eval findings.
+`security.dedicatedPass` controls the dedicated additive security review pass
+(`15-security-focused-review.md`, Mechanism 1). Disabled by default. Generic
+OWASP/CWE-derived detection only; never tuned to eval findings.
 
 | Key | Type | Default |
 | --- | --- | --- |
@@ -719,11 +719,34 @@ Rules:
   any other candidate and are additive (they never displace a general candidate);
   the pass never bypasses scope, severity, baseline, or the gate.
 
-The deterministic security-signal evidence layer (spec 15, Mechanism 2) has no
-implementation yet. There is deliberately no `security.signals.enabled` key today —
-it was removed rather than shipped as a toggle with no behavior behind it. A
-`signals` config key will be introduced in the same change that implements the
-layer, not before.
+`security.signals` controls the deterministic security-signal evidence layer
+(`15-security-focused-review.md`, Mechanism 2): ingestion of analyzer artifacts a
+project's own pipeline already produced. Disabled by default and **unmeasured**.
+This engine runs no analyzer and depends on no analyzer package.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `security.signals.enabled` | boolean | `false` |
+| `security.signals.artifacts` | array of `{ path, format: "sarif" }` | `[]` |
+| `security.signals.maxArtifactBytes` | integer 1–50000000 | `4000000` |
+| `security.signals.maxAlerts` | integer 1–500 | `40` |
+
+Rules:
+
+- with it disabled, no artifact is read and the review packet is byte-for-byte
+  what it was before the layer existed;
+- `enabled: true` with an empty `artifacts` list fails validation: a switch that is
+  on and reads nothing would report no security signals and look like a clean scan;
+- an artifact path is resolved through the repository path service; one outside the
+  repository — including via a symlink — is rejected;
+- an artifact that is missing, oversized, not JSON, or not SARIF 2.1.0 fails the run
+  with exit `2`; every category of result held back is reported as a run warning;
+- an ingested result is shown only with a changed-side cause (its own location, or a
+  step of the path it traces, on a changed line); results without one are not
+  reported;
+- an ingested result is EVIDENCE: it seeds no candidate and is never admitted. Any
+  finding derived from it passes the same discovery, refutation, scope, severity,
+  baseline, and admission path as any other.
 
 ## Reporting
 

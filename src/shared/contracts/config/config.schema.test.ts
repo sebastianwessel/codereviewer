@@ -571,3 +571,66 @@ describe('InstructionsConfigSchema path scoping', () => {
     expect(parsed.instructions.inline).toBe('Repo-wide guidance')
   })
 })
+
+// Spec 15, Mechanism 2. The block ships WITH its behaviour, off by default, and
+// refuses the one shape that would be a switch that lies: on, with nothing to read.
+describe('security.signals', () => {
+  test('is off by default and configures no artifact', () => {
+    const parsed = CodeReviewerConfigSchema.parse({})
+
+    expect(parsed.security.signals.enabled).toBe(false)
+    expect(parsed.security.signals.artifacts).toEqual([])
+    expect(parsed.security.signals.maxArtifactBytes).toBe(4_000_000)
+    expect(parsed.security.signals.maxAlerts).toBe(40)
+  })
+
+  test('accepts an enabled block with a repository-relative artifact', () => {
+    const parsed = CodeReviewerConfigSchema.parse({
+      security: {
+        signals: {
+          enabled: true,
+          artifacts: [{ path: 'reports/analyzer.sarif.json' }]
+        }
+      }
+    })
+
+    expect(parsed.security.signals.artifacts[0]).toEqual({
+      path: 'reports/analyzer.sarif.json',
+      format: 'sarif'
+    })
+  })
+
+  test('rejects enabling the block with no artifact to read', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: { signals: { enabled: true } }
+      })
+    ).toThrow(/no artifacts are configured/u)
+  })
+
+  test('rejects an artifact path that traverses above the repository', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: {
+          signals: {
+            enabled: true,
+            artifacts: [{ path: '../outside/analyzer.sarif.json' }]
+          }
+        }
+      })
+    ).toThrow(/traverse above root/u)
+  })
+
+  test('rejects an unknown artifact format', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        security: {
+          signals: {
+            enabled: true,
+            artifacts: [{ path: 'reports/a.json', format: 'json' }]
+          }
+        }
+      })
+    ).toThrow()
+  })
+})

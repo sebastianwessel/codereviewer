@@ -324,3 +324,179 @@ describe('prepareReviewRunnerChangeIntentContext — provider bounds', () => {
     expect(result.warnings).toEqual([])
   })
 })
+
+// Spec 11 "Observability": a PER-PROVIDER no-content event carrying the origin
+// label, bytes gathered, status and duration, plus the summarizer's input byte
+// count and whether truncation occurred. One aggregate step reduced every provider
+// to a count of failures, so a run that ingested nothing and a run whose provider
+// failed emitted the same events.
+describe('prepareReviewRunnerChangeIntentContext — no-content observability', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'change-intent-observability-'))
+    await mkdir(path.join(root, '.codereviewer', 'context'), { recursive: true })
+  })
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  const runWith = async (input: {
+    readonly providers: readonly Record<string, unknown>[]
+    readonly sourceFiles?: readonly { readonly path: string; readonly content: string }[]
+  }) => {
+    const config = CodeReviewerConfigSchema.parse({
+      contextSources: {
+        enabled: true,
+        providers: input.providers,
+        summary: { mode: 'digest' }
+      }
+    })
+    const observability = createNoContentEventRecorder()
+
+    await prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: root,
+      config,
+      assembledContext: emptyAssembledContext,
+      sourceFiles: (input.sourceFiles ?? []).map((file) => ({
+        path: file.path,
+        content: file.content,
+        language: 'typescript' as const,
+        changeStatus: 'modified' as const
+      })),
+      environment: {},
+      observability,
+      logger: createCapturingLogger().logger
+    })
+
+    return observability.snapshot()
+  }
+
+  test('emits one event per provider naming its origin, status, bytes and duration', async () => {
+    await writeFile(
+      path.join(root, '.codereviewer', 'context', 'ticket.md'),
+      '---\nsource: jira\nid: PROJ-1\n---\nRotate the session token on sign-in.\n'
+    )
+
+    const snapshot = await runWith({
+      providers: [
+        { type: 'inbox', dir: '.codereviewer/context' },
+        // Matches nothing: no changed file is supplied. A provider that ran and
+        // found nothing must be distinguishable from one that carried the intent.
+        { type: 'changed-files' }
+      ]
+    })
+    const providerEvents = snapshot.events.filter(
+      (event) => event.type === 'step-ended' && event.step === 'context_ingestion_provider'
+    )
+
+    expect(providerEvents).toHaveLength(2)
+    expect(providerEvents[0]).toMatchObject({
+      step: 'context_ingestion_provider',
+      attributes: {
+        originLabel: 'inbox:.codereviewer/context',
+        providerType: 'inbox',
+        status: 'included',
+        matchedCount: 1,
+        fragmentCount: 1,
+        truncatedFragmentCount: 0
+      }
+    })
+    const firstProviderEvent = providerEvents[0]
+
+    expect(
+      firstProviderEvent !== undefined && 'attributes' in firstProviderEvent
+        ? firstProviderEvent.attributes.bytes
+        : undefined
+    ).toBeGreaterThan(0)
+    expect(providerEvents[0]).toHaveProperty('durationMs')
+    expect(providerEvents[1]).toMatchObject({
+      attributes: {
+        originLabel: 'changed-files',
+        providerType: 'changed-files',
+        status: 'empty',
+        fragmentCount: 0,
+        bytes: 0
+      }
+    })
+  })
+
+  test('marks a provider that failed as failed rather than as empty', async () => {
+    const snapshot = await runWith({
+      // A directory that does not exist: the provider yields nothing. It is the
+      // `empty` case, and the point of the assertion below is that `status` is a
+      // reported fact rather than an inference from a zero count.
+      providers: [{ type: 'inbox', dir: '.codereviewer/nowhere' }]
+    })
+    const providerEvents = snapshot.events.filter(
+      (event) => event.type === 'step-ended' && event.step === 'context_ingestion_provider'
+    )
+
+    expect(providerEvents).toHaveLength(1)
+    expect(providerEvents[0]).toMatchObject({
+      attributes: {
+        originLabel: 'inbox:.codereviewer/nowhere',
+        status: 'empty',
+        fragmentCount: 0
+      }
+    })
+  })
+
+  test('records the summarizer input bytes and whether the brief was truncated', async () => {
+    await writeFile(
+      path.join(root, '.codereviewer', 'context', 'ticket.md'),
+      `---\nsource: jira\nid: PROJ-1\n---\n${'x'.repeat(400)}\n`
+    )
+
+    const snapshot = await runWith({
+      providers: [
+        { type: 'inbox', dir: '.codereviewer/context', maxFileBytes: 40 }
+      ]
+    })
+    const ingestionEnd = snapshot.events.find(
+      (event) => event.type === 'step-ended' && event.step === 'context_ingestion'
+    )
+
+    expect(ingestionEnd).toMatchObject({
+      attributes: {
+        fragmentCount: 1,
+        summaryInputBytes: 40,
+        summaryTruncated: true
+      }
+    })
+  })
+
+  test('reports an unknown brief size as null rather than as zero', async () => {
+    // No fragment was gathered, so no brief exists. Zero bytes and "no brief" are
+    // different runs and must not render identically.
+    const snapshot = await runWith({
+      providers: [{ type: 'inbox', dir: '.codereviewer/context' }]
+    })
+    const ingestionEnd = snapshot.events.find(
+      (event) => event.type === 'step-ended' && event.step === 'context_ingestion'
+    )
+
+    expect(ingestionEnd).toMatchObject({
+      attributes: {
+        injected: 0,
+        summaryInputBytes: 0,
+        briefBytes: null,
+        summaryTruncated: null
+      }
+    })
+  })
+
+  test('keeps ingested text out of every emitted event', async () => {
+    await writeFile(
+      path.join(root, '.codereviewer', 'context', 'ticket.md'),
+      '---\nsource: jira\nid: PROJ-1\n---\nRotate the session token on sign-in.\n'
+    )
+
+    const snapshot = await runWith({
+      providers: [{ type: 'inbox', dir: '.codereviewer/context' }]
+    })
+
+    expect(JSON.stringify(snapshot)).not.toContain('Rotate the session token')
+  })
+})

@@ -4,6 +4,8 @@ Status: Approved
 Date: 2026-07-24
 Amended: 2026-08-01 — the security pass is partitioned with the general pass
 (spec 27); its own A/B result is transcribed here
+Amended: 2026-08-06 — Mechanism 2 is redefined as analyzer-artifact ingestion and
+implemented, off by default and unmeasured, with a pre-registered decision rule
 
 ## Purpose
 
@@ -229,30 +231,106 @@ real findings, is the number on this benchmark that can be trusted.
 
 ## Mechanism 2: Deterministic Security-Signal Evidence
 
-A generic, deterministic detector that produces **typed evidence**, following this
-spec's own division of labour: analyzers find paths, the model judges context. It
-is the same split the *Deterministic Support Signal Contract* in
-`05-review-workflow-and-runtime.md` already makes for non-security signals — they
-supply facts and never publish findings.
+Amended 2026-08-06. **Mechanism 2 is an ingestion layer, not a detector.** The
+division of labour is unchanged — analyzers find paths, the model judges context,
+and the same split the *Deterministic Support Signal Contract* in
+`05-review-workflow-and-runtime.md` makes for non-security signals applies here: the
+layer supplies facts and never publishes findings. What changed is who produces the
+facts.
 
-- Language-neutral source/sink/sanitizer detection grounded in public rule catalogs
-  (Semgrep registry, CodeQL CWE suites, OWASP dangerous-function lists), run on the
-  existing ast-grep AST (its pattern API supports the needed metavariable queries).
-  One engine now covers every supported language, TS/JS included, so a detection
-  written once applies everywhere rather than needing a second implementation
-  against a language-specific AST.
-- Each detection emits a **support signal** and an `EvidenceRecord` populating the
-  already-defined but unused contract fields: `ruleId`, `cwe`, `helpUri`,
-  `relatedLocations`, ordered `dataFlow` (source → sink steps), and
-  `securitySeverity`. No contract change is required to carry this.
-- By default the signal is **evidence for the model** (the security pass judges
-  reachability, intent, and sanitizers), not an auto-admitted finding — matching
-  the research: the model's judgment is the precision lever. A high-precision rule
-  MAY seed a candidate through the existing trusted-rule path, but only when a
-  deterministic fixture proves its precision, and it still faces scope, location,
-  baseline, and admission.
-- Deterministic and reproducible; off by default until measured to help on the
-  held-out set without materially reducing precision.
+**Why ingestion rather than a detector.** The earlier design was a source/sink/
+sanitizer detector of our own, written against the ast-grep AST. Building one is
+building a static analyzer, and the adjacent evidence
+(`reports/2026-08-05-recall-lever-research.md`) is that in the one neighbouring
+sub-problem where precision was actually solved, the winning artifact was a mature
+deterministic semantic model, not a fresh one and not a model — a purpose-built
+engine reaching F1 0.99 against general-purpose competitors at 0.86 and 0.91. A
+hand-rolled rule set here would be the weakest member of that comparison, would
+carry a rule catalog to maintain per CWE class, and would compete with analyzers
+projects already run. Ingesting the artifacts those analyzers already produce buys
+the deterministic evidence without the engine, and leaves the choice of analyzer
+where it belongs — with the project being reviewed.
+
+- **Interchange format: SARIF 2.1.0**, schema-validated at the boundary. An analyzer
+  artifact is untrusted input (spec 07): it is produced by a tool this engine does
+  not run, in a pipeline it does not control. It is parsed through Zod, bounded by a
+  configured byte ceiling checked before the file is read, and bounded by a
+  code-side ceiling on result count.
+- **This engine never runs an analyzer** and adds no analyzer package to any
+  dependency set (`INV-PROV-001`). A format reader is the only tool-aware code, and
+  a second format would change that reader and nothing else.
+- **Normalization** produces a tool-neutral alert model — analyzer identity and
+  version, rule id, level, CWE list, security severity, help URI, primary location,
+  related locations, and ordered data-flow steps (source → barrier → sink) where the
+  producer supplies them. Each alert becomes an `EvidenceRecord` populating the
+  previously unproduced contract fields `ruleId`, `cwe`, `helpUri`,
+  `relatedLocations`, `dataFlow`, and `securitySeverity`. No tool-specific field
+  reaches the finding contract.
+- **Nothing is invented and nothing is dropped silently.** A field the producer did
+  not supply stays absent; a severity outside 0–10 is dropped rather than clamped. A
+  result that cannot be normalized, one whose path does not resolve, one held back by
+  attribution, and one cut by the cap are each counted and disclosed.
+
+### Changed-Side Attribution (mandatory)
+
+An analyzer artifact describes a repository; a review describes a change. An alert
+is reported **only** when the change is demonstrably implicated in it, by one of two
+positive tests over the run's changed new-side line ranges:
+
+- **`changed-line`** — the alert's own primary location falls on a changed line.
+- **`changed-flow`** — a step of its data flow, or one of its related locations,
+  falls on a changed line: the change declares, feeds, or removes a barrier on the
+  path the alert traces, even where the reported sink is untouched older code.
+
+There is no third test, and in particular no "the file was touched somewhere". A
+pre-existing alert in a file whose unrelated lines moved is repository debt, and
+reporting it would blame a change for the state it inherited. With no changed
+ranges at all (an explicit-file run), nothing is attributed and the run says so.
+
+**What attribution cannot catch**, recorded so the limit is visible rather than
+assumed: a change that exposes an existing vulnerable path without appearing
+anywhere on that path — an authorization wrapper removed in an unrelated module, a
+widened route pattern, a relaxed build or deployment setting, a dependency upgrade.
+Every location the analyzer names sits in unchanged code, so no positive test fires.
+The alternative — attributing transitively — is the pre-existing-debt flood this
+gate exists to prevent, so those alerts are held back and their count is reported.
+
+### Admission Path: Evidence, Not Seed
+
+**First delivery is evidence-only. An ingested alert seeds no candidate.** Spec 15
+permits a high-precision rule to seed one through the trusted-rule path, and this
+delivery declines that permission, for three reasons:
+
+- The permission is conditional on "a deterministic fixture proves its precision",
+  and no such fixture exists for a third-party rule catalog this engine neither
+  wrote nor controls. The precision of an ingested rule is a property of somebody
+  else's tool and of the repository it ran on.
+- Every seeded candidate costs one downstream refutation call, and the workflow's
+  child-agent reservation is derived from code-side candidate constants (see
+  *Configuration*). A candidate count set by an external artifact would let an
+  artifact under-reserve refutation.
+- Nothing is measured. The conservative option is the one that cannot damage the
+  precision story while it is unmeasured.
+
+So an alert reaches the review as one context-only `analyzer-signal` document on the
+task that owns the reported file, framed as an untrusted third-party claim to judge
+against the code — never as a finding, never as an instruction, and explicitly not
+as evidence of safety when absent. Anything reported afterwards is a reviewer
+candidate that passed the same discovery, refutation, scope, severity, baseline, and
+admission path as any other. There is no model-free and no gate-free route from an
+artifact to an actionable finding.
+
+Redaction runs during normalization, before any analyzer text can reach a model or
+an artifact: analyzer messages quote the code they matched, and a secrets rule
+quotes the secret.
+
+### Failure Is Loud
+
+A configured artifact that is missing, unreadable, oversized, not JSON, or not SARIF
+2.1.0 fails the run with exit 2. An artifact that parses but carries no result, and
+every category of result held back, is reported as a run warning. Absence is never a
+plausible default here: a review that quietly produced no security signals reads
+exactly like a repository that has none.
 
 ## Bounded Agentic Evidence (Later, Gated)
 
@@ -273,11 +351,32 @@ an unlikely remedy on its own.
 
 ## Configuration
 
-A `security` block, disabled by default. Keys are defined in
-`04-configuration-and-providers.md`: `dedicatedPass.enabled`. Invalid configuration
-fails validation with exit code 2. With the block disabled, no security pass runs and
-the general review is byte-for-byte unchanged (the same task set, the same general
-discovery calls, no second call).
+A `security` block, disabled by default: `dedicatedPass.enabled` (Mechanism 1) and
+`signals.*` (Mechanism 2). Invalid configuration fails validation with exit code 2.
+With the block disabled, no security pass runs, no artifact is read, and the general
+review is byte-for-byte unchanged — the same task set, the same general discovery
+calls, no second call, and not one extra byte in a packet.
+
+Mechanism 2's keys:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `security.signals.enabled` | `false` | Master switch for analyzer-artifact ingestion. |
+| `security.signals.artifacts` | `[]` | Artifacts to read: `{ path, format: "sarif" }`, path repository-relative. |
+| `security.signals.maxArtifactBytes` | `4000000` | Per-artifact size ceiling, checked before the file is read. |
+| `security.signals.maxAlerts` | `40` | Cap on attributed alerts shown to the review; when it binds the held-back count is reported. |
+
+`enabled: true` with an empty `artifacts` list is **rejected**. A switch that is on
+and reads nothing would report no security signals and look exactly like a clean
+scan — the silent-optimism shape this repository has a standing rule against.
+
+The ceiling on results normalized from one artifact is **not** configurable and is
+set in code (10 000). An artifact above it is a whole-repository scan rather than a
+change-scoped one, and normalizing it would spend the run producing alerts
+changed-side attribution is about to discard.
+
+`format` is explicit rather than inferred from a file extension: a file's name is
+not evidence of its contents, and an unreadable artifact must fail by name.
 
 The pass's candidate bound is **not** configurable and is set in code: a security
 call may add at most **8** candidates, against the general call's **12**, because it
@@ -288,10 +387,46 @@ refutation call, and the workflow's child-agent reservation is derived from thes
 constants — a configurable value would let a user under-reserve refutation and leak
 unfiltered findings.
 
-Mechanism 2 (deterministic security-signal evidence) has no implementation yet, so
-it has no config key today. A `security.signals.enabled` key is introduced in the
-same change that implements Mechanism 2 — shipping the key ahead of the mechanism
-would be a switch with no behavior behind it.
+The `security.signals` keys shipped in the same change as the behaviour behind them
+(2026-08-06), which is the rule this section previously stated in the negative.
+
+## Pre-Registered Decision Rule For Mechanism 2
+
+**Written before any measurement of this mechanism, and not to be edited after one
+is taken.** It exists because the honest reading of a result is fixed in advance or
+it is fixed to suit the result.
+
+Mechanism 2 is **unmeasured**. Nothing anywhere — spec, documentation, or the tool's
+own output — may describe it as improving security recall until the measurement
+below exists.
+
+The measurement is a paired A/B on the held-out security set under the
+anti-contamination policy above, **≥3 seeds per arm** (a single seed cannot separate
+this mechanism's contribution from the run-to-run variance recorded throughout this
+spec), one arm with `security.signals` off and one with it on over artifacts produced
+by an analyzer configured independently of the corpus. It reports recall per
+mechanism, adjusted precision, and genuine false positives, and it reports the
+attribution counters — attributed, pre-existing, unusable — alongside them, because
+a null result caused by attribution holding everything back is a different finding
+from a null result caused by the model ignoring the evidence.
+
+- **Promotes to enabled-by-default** only if all four hold: mean security recall rises
+  by ≥3 percentage points across seeds; adjusted precision does not fall by more than
+  1 percentage point; genuine false positives do not rise; and no seed shows an
+  authorization-class regression (the failure Mechanism 1 has already recorded once).
+- **Keeps shipping disabled** if the mechanism is neutral, if the result is within
+  the measured seed variance, or if the measurement has not been run. Disabled is the
+  default outcome, not the punishment outcome: an unproven lane that costs nothing
+  when off is worth keeping available to operators who already run analyzers.
+- **Is removed** if any of these hold: attributed alerts prove to be dominated by
+  pre-existing debt the attribution gate failed to hold back (a precision failure of
+  the gate itself, visible as genuine false positives traceable to analyzer evidence);
+  adjusted precision falls by more than 3 percentage points; or two independent
+  measurement cycles produce no recall movement outside variance. Removal means the
+  code and the config key go together, in one change.
+
+Cost is recorded but is not a promotion criterion: ingestion adds no model call, and
+the packet growth it causes is bounded by `maxAlerts`.
 
 ## Observability, Safety, Privacy
 
@@ -314,17 +449,29 @@ would be a switch with no behavior behind it.
 ## Testing
 
 - Unit: mechanism/context-depth labeling of eval cases; the per-mechanism metric
-  math (recall/adjusted-precision by mechanism, obvious-vs-hard split); each
-  deterministic sink/source rule against deterministic positive and
-  guard/sanitizer negative fixtures; the security-pass reviewText contract; the
-  additive merge (a security candidate at a general-pass location is dropped as a
-  duplicate; a security candidate at a new location is kept; the general pass's
-  candidates are never dropped by the merge).
+  math (recall/adjusted-precision by mechanism, obvious-vs-hard split); the
+  security-pass reviewText contract; the additive merge (a security candidate at a
+  general-pass location is dropped as a duplicate; a security candidate at a new
+  location is kept; the general pass's candidates are never dropped by the merge).
+- Unit, Mechanism 2, against committed SARIF fixtures: normalization (CWE from
+  taxonomy tags and plain properties, severity read and out-of-range dropped, level
+  precedence, flow steps keeping source and sink, unusable results counted);
+  changed-side attribution (a pre-existing alert is NOT reported; an alert on a
+  changed line is; an alert in a changed FILE but outside every changed line is not;
+  an alert whose flow or related location crosses the change is; nothing is
+  attributed with no changed ranges); artifact validation (missing, oversized,
+  non-JSON, wrong SARIF version, a path outside the repository, a symlink to a
+  target outside it — each fails loudly); path resolution (traversal, absolute path,
+  URI scheme, and ineligible path all rejected); redaction of analyzer message text;
+  and the packet section's framing against the prompt-genericity guard.
 - Integration (hermetic, deterministic provider): the security pass produces
   candidates that pass refutation/admission; a planted authorization bug the general
   pass misses is caught by the security pass; a sanitized/guarded negative is not
-  flagged; a deterministic signal populates `cwe`/`dataFlow` evidence; an untrusted
-  repository payload cannot alter admission or the gate.
+  flagged; an ingested alert populates `cwe`/`dataFlow`/`ruleId`/`securitySeverity`
+  evidence, reaches the discovery prompt, and produces no candidate of its own; a
+  run with `security.signals` disabled renders a discovery packet byte-for-byte
+  identical to one built before the mechanism existed; an untrusted repository
+  payload cannot alter admission or the gate.
 - No real-provider eval runs in the test suite; security-dimension measurement runs
   are explicit, cost-gated, and separate.
 
@@ -338,9 +485,13 @@ would be a switch with no behavior behind it.
 - Every rule and checklist item cites a public OWASP/CWE/Semgrep/CodeQL source; none
   is justified by a specific eval finding; the trusted-rule map carries no
   benchmark-specific rule.
-- Security-signal detections populate the existing `cwe`/`dataFlow`/`ruleId`/
-  `securitySeverity` evidence fields; by default they are model evidence, not
-  auto-admitted findings.
+- Security-signal evidence populates the existing `cwe`/`dataFlow`/`ruleId`/
+  `securitySeverity` evidence fields; it is model evidence, never an auto-admitted
+  finding and never a seeded candidate.
+- An ingested analyzer result is reported only with a changed-side cause: its own
+  location on a changed line, or a step of its traced path on one. Results without
+  one are held back and counted.
+- Ingestion adds no analyzer package to any dependency set and runs no analyzer.
 - The security pass's candidates pass the same untrusted refutation and admission
   as general candidates and are additive (they never displace a general candidate);
   the pass never bypasses scope, severity, baseline, or the gate.
@@ -349,16 +500,18 @@ would be a switch with no behavior behind it.
 
 ## Known Divergences From This Spec
 
-Recorded on 2026-07-27 by an alignment audit and re-checked on 2026-08-01, when
+Recorded on 2026-07-27 by an alignment audit, re-checked on 2026-08-01 when
 Mechanism 1's own A/B result was transcribed into this spec and its candidate bound
-named under *Configuration*, retiring two rows. **These are unmet requirements, not
-amendments.** Everything above stands as written; this section exists so the gap is
-visible rather than silent.
+named under *Configuration* (retiring two rows), and re-checked on 2026-08-06 when
+Mechanism 2 shipped as the ingestion layer described above (retiring one row and
+narrowing another). **These are unmet requirements, not amendments.** Everything
+above stands as written; this section exists so the gap is visible rather than
+silent.
 
 | Requirement | State of the implementation |
 | --- | --- |
-| *Acceptance*: the evaluation reports security recall **and adjusted precision** per mechanism and context-depth | Recall only. An admitted finding carries no mechanism label, so per-mechanism precision has no denominator; the eval renderer says so explicitly. Reporting precision per mechanism needs a labelling mechanism that does not exist yet. |
-| *Mechanism 2* in full | Not implemented. This is already stated under *Configuration*: no detector, no rule catalog, and the `cwe`/`dataFlow`/`ruleId`/`securitySeverity` evidence fields exist on the contract but are never populated. The `security.signals` config key is correctly absent. |
-| *Mechanisms*: `prompt-injection` as a measured security mechanism | The enum value exists; no committed expected finding carries it, so the mechanism has an empty denominator. |
-| *Measurement First*: a contaminated `dev` set and a separate `held-out` set | Every case in the real-repository corpus manifest is labelled `held-out`. The chronological-split validation therefore has nothing to compare and passes vacuously, and the final acceptance criterion above cannot currently be satisfied as written. |
-| *Observability, Safety, Privacy*: the security pass is no-content, reporting "mechanism, rule id, CWE, counts" | Counts and durations are recorded; **mechanism, rule id, and CWE are not**, because nothing in the implementation produces them — those fields belong to Mechanism 2, which does not exist. The requirement is unmeetable as written until Mechanism 2 ships. |
+| *Acceptance*: the evaluation reports security recall **and adjusted precision** per mechanism and context-depth | Recall only. An admitted finding carries no mechanism label, so per-mechanism precision has no denominator; the eval renderer says so explicitly. Reporting precision per mechanism needs a labelling mechanism that does not exist yet. Owned by the evaluation domain. |
+| *Mechanisms*: `prompt-injection` as a measured security mechanism | The enum value exists; no committed expected finding carries it, so the mechanism has an empty denominator. Owned by the evaluation corpus. |
+| *Measurement First*: a contaminated `dev` set and a separate `held-out` set | Every case in the real-repository corpus manifest is labelled `held-out`. The chronological-split validation therefore has nothing to compare and passes vacuously, so the held-out acceptance criterion — and the pre-registered decision rule that depends on it — cannot be satisfied until a genuine split exists. Owned by the evaluation corpus. |
+| *Observability, Safety, Privacy*: the security pass is no-content, reporting "mechanism, rule id, CWE, counts" | Mechanism 2 now records rule id, CWE, analyzer identity and per-artifact counts, so the fields exist. The **security pass** still records only counts and durations: its candidates carry no mechanism label, and labelling a model-authored candidate by mechanism is the same missing capability as the first row. |
+| *Mechanism 2*: measured before any promotion | Shipped and **unmeasured**. Off by default. No figure exists for it anywhere, and the *Pre-Registered Decision Rule* above fixes in advance what a future measurement would have to show. Not a divergence from a requirement — the requirement is that it ship disabled until measured, which it does — but recorded here so nobody reads its existence as evidence that it works. |

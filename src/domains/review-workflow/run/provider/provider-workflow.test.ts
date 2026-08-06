@@ -134,7 +134,21 @@ describe('review runner provider workflow', () => {
     ).toEqual([
       {
         step: 'provider_workflow',
-        attributes: {}
+        // Both token counts are REFUSED by the recorder's no-content key guard —
+        // `inputTokens` matches "token" and `outputTokens` matches "output", names
+        // the key guard exists to catch on secrets and raw model output. So these
+        // counts were dropped from every run this recorder ever wrote, and the
+        // step reported nothing at all — while the counts themselves were correct
+        // and reached the run summary.
+        //
+        // They now survive, because a count is not the thing counted: the recorder
+        // exempts an exact set of count keys, and only when the value really is a
+        // number. A string parked under `inputTokens` is still refused, so the
+        // exemption cannot be turned into a channel by changing the value's type.
+        attributes: {
+          inputTokens: 11 * provider.requests.length,
+          outputTokens: 7 * provider.requests.length
+        }
       }
     ])
     expect(records).toContainEqual({

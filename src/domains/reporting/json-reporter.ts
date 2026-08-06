@@ -71,6 +71,14 @@ export const writeReportingArtifacts = async (
     // Presence enables review-comment rendering; `platform` is already resolved
     // (never `auto`) by the caller's detection.
     readonly reviewComments?: { readonly platform: PlatformTarget }
+    // Spec 13 "Observability And Errors": the drafting step reports how many drafts
+    // and how many suggestions it produced. The counts exist only here, where the
+    // drafts are built, and building them twice to count them elsewhere would let
+    // the reported number drift from the written artifact.
+    readonly onReviewComments?: (metrics: {
+      readonly draftCount: number
+      readonly suggestionCount: number
+    }) => void
   }
 ): Promise<readonly WrittenReportArtifact[]> => {
   const report = validateReviewReport(input.report)
@@ -100,6 +108,11 @@ export const writeReportingArtifacts = async (
 
   if (input.reviewComments !== undefined) {
     const drafts = buildReviewCommentDrafts(report)
+    input.onReviewComments?.({
+      draftCount: drafts.length,
+      suggestionCount: drafts.filter((draft) => draft.suggestion !== undefined)
+        .length
+    })
     const neutral = stableStringify(drafts)
     // Neutral drafts are the source of truth; the JSON artifact `format` field is
     // the closed `ReportFormat` enum, so review-comment files record as `json`.

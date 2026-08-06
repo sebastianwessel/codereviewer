@@ -249,6 +249,20 @@ const warningForSummarizerFallback = (
         `External change-intent model summarizer failed during the run (${reason}) The run used the deterministic digest instead.`
       ]
 
+// The per-provider status spec 11 asks for. `empty` is deliberately its own value
+// rather than being folded into `included`: a provider that ran cleanly and found
+// nothing is the case a misconfigured directory produces, and reporting it as
+// included would make the run's most common misconfiguration look like a success.
+const providerStatus = (
+  metric: ContextIngestionResult['providerMetrics'][number]
+): 'included' | 'empty' | 'failed' => {
+  if (metric.failed) {
+    return 'failed'
+  }
+
+  return metric.fragmentCount === 0 ? 'empty' : 'included'
+}
+
 const ledgerDecisionFor = (
   mode: 'model' | 'digest',
   truncated: boolean
@@ -344,10 +358,27 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
 
   // Spec 11 requires per-provider observability. A single aggregate step reduced
   // every provider to one failure COUNT, so "which provider went quiet" and "which
-  // one carried the change intent" were both unanswerable after the fact. Only ids,
-  // counts and byte totals are recorded — never gathered content, which is untrusted
-  // external text.
+  // one carried the change intent" were both unanswerable after the fact — and a
+  // debug LINE is not an event: it is off at the default log level and reaches
+  // neither `observability.json` nor a trace. Only ids, counts, byte totals and a
+  // duration are recorded — never gathered content, which is untrusted external
+  // text.
   for (const metric of result.providerMetrics) {
+    input.observability.recordCompletedStep({
+      name: 'context_ingestion_provider',
+      durationMs: metric.durationMs,
+      attributes: {
+        // The provider's own stable origin label (e.g. `inbox:.codereviewer/context`),
+        // which is what every warning about it names too.
+        originLabel: metric.id,
+        providerType: metric.type,
+        status: providerStatus(metric),
+        matchedCount: metric.matchedCount,
+        fragmentCount: metric.fragmentCount,
+        truncatedFragmentCount: metric.truncatedFragmentCount,
+        bytes: metric.bytes
+      }
+    })
     input.logger.debug('Context ingestion provider completed.', {
       provider_id: metric.id,
       provider_type: metric.type,
@@ -369,11 +400,26 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     ...warningsForBoundedProviders(result.providerMetrics)
   ]
 
+  // What the summarizer was handed, measured before it ran. Spec 11 requires it
+  // alongside the output size: without the input, a four-line brief cannot be told
+  // apart from a four-line ticket, and the compression the summarizer performed is
+  // exactly what the pair reports.
+  const gatheredBytes = result.providerMetrics.reduce(
+    (total, metric) => total + metric.bytes,
+    0
+  )
+
   if (result.brief === undefined) {
     step.end({
       fragmentCount: result.fragmentCount,
       failedProviders,
-      injected: 0
+      injected: 0,
+      summaryInputBytes: gatheredBytes,
+      // NULL, not 0 or false. No brief exists, so neither its size nor whether it
+      // was truncated is known — and a brief of zero bytes that was not truncated
+      // is a different run from one that produced none at all.
+      briefBytes: null,
+      summaryTruncated: null
     })
     input.logger.debug('Context ingestion produced no brief.', {
       fragment_count: result.fragmentCount,
@@ -383,10 +429,6 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
   }
 
   const brief = result.brief
-  const gatheredBytes = result.providerMetrics.reduce(
-    (total, metric) => total + metric.bytes,
-    0
-  )
   const briefBytes = Buffer.byteLength(brief.text, 'utf8')
   const ledgerEntry: ContextLedgerEntry = createContextLedgerEntry({
     kind: 'support-signal-output',
@@ -416,7 +458,11 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     fragmentCount: result.fragmentCount,
     failedProviders,
     injected: tasks.length,
-    briefBytes
+    summaryInputBytes: gatheredBytes,
+    briefBytes,
+    // Whether anything between the sources and the injected brief was cut. A brief
+    // that summarizes part of a ticket must never report itself complete.
+    summaryTruncated: brief.truncated
   })
   input.logger.debug('Context ingestion completed.', {
     fragment_count: result.fragmentCount,

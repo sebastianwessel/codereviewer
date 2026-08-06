@@ -23,6 +23,10 @@ import {
   runReview as runReviewPipeline,
   type PartialReviewRunState
 } from '../domains/review-workflow/index.js'
+import {
+  createNoContentStepEvent,
+  type NoContentRunEvent
+} from '../domains/observability/index.js'
 import type { CodeReviewerConfig } from '../shared/contracts/index.js'
 
 /** Pretty-print a value as a trailing-newline JSON document for CLI output. */
@@ -118,20 +122,45 @@ export const writeReviewArtifacts = async (
   const reviewCommentsConfig = input.config.reporting.reviewComments
   // Platform detection reads env + the git origin remote only (no network). A
   // missing remote resolves to `generic`, which is normal, not an error.
-  const reviewComments = reviewCommentsConfig.enabled
-    ? {
-        platform: detectPlatformTarget({
-          configured: reviewCommentsConfig.platform,
-          env: process.env,
-          originRemoteUrl: await readOriginRemoteUrl(input.repositoryRoot)
-        }).platform
-      }
+  const resolvedPlatform = reviewCommentsConfig.enabled
+    ? detectPlatformTarget({
+        configured: reviewCommentsConfig.platform,
+        env: process.env,
+        originRemoteUrl: await readOriginRemoteUrl(input.repositoryRoot)
+      })
     : undefined
+  // Spec 13 "Observability And Errors": the drafting step is a no-content record of
+  // how many drafts and suggestions were produced, which platform was resolved, and
+  // what resolved it. Nothing recorded it before, so a run that resolved `generic`
+  // and produced zero drafts was indistinguishable from one where the feature never
+  // ran — and `source` was read and discarded. It is timed and emitted here because
+  // drafting happens in the artifact stage, after the run's recorder has closed.
+  let reviewCommentEvents: readonly NoContentRunEvent[] = []
+  const draftingStartedAt = Date.now()
   await writeReportingArtifacts({
     report: input.report,
     formats: input.config.reporting.formats,
     sarif: input.config.reporting.sarif,
-    ...(reviewComments === undefined ? {} : { reviewComments }),
+    ...(resolvedPlatform === undefined
+      ? {}
+      : { reviewComments: { platform: resolvedPlatform.platform } }),
+    onReviewComments: (metrics) => {
+      reviewCommentEvents = [
+        createNoContentStepEvent({
+          name: 'review_comments',
+          durationMs: Date.now() - draftingStartedAt,
+          attributes: {
+            draftCount: metrics.draftCount,
+            suggestionCount: metrics.suggestionCount,
+            platform: resolvedPlatform?.platform ?? null,
+            // Not `detectionSource`: the no-content recorder drops any attribute
+            // whose name looks like it could carry content, and `source` is one of
+            // those names.
+            platformDetectedFrom: resolvedPlatform?.source ?? null
+          }
+        })
+      ]
+    },
     writer: (artifactPath, content) =>
       writeRunArtifact(
         input.repositoryRoot,
@@ -162,7 +191,10 @@ export const writeReviewArtifacts = async (
     input.repositoryRoot,
     input.artifactRoot,
     'observability.json',
-    jsonResult(input.observability)
+    jsonResult({
+      ...input.observability,
+      events: [...input.observability.events, ...reviewCommentEvents]
+    })
   )
 }
 

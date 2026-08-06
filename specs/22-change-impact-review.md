@@ -194,6 +194,111 @@ Decision rule, fixed before the first measurement:
 That last bar is deliberately concrete. A deterministic caller list is cheap; this
 capability must earn its cost against that, not against nothing.
 
+### The Corpus, As Built
+
+Built 2026-08-06 at `eval/corpora/change-impact-dependents/manifest.json`,
+hydrated by `npm run eval:impact-corpus:hydrate`. **It is data, not a
+measurement**: nothing has been scored against it, and no number below is a
+result.
+
+Ten cases carrying **eleven proven-broken dependents**, from two upstream
+projects: django (9 cases, BSD-3-Clause) and grpc-go (1, Apache-2.0). Every case
+was accepted only after the introducing change, the upstream repair and the
+dependent's own code were read at the introducing commit.
+
+| Reachability class | Dependents |
+| --- | ---: |
+| `caller-of-changed-symbol` | 3 |
+| `callee-of-changed-code` | 2 |
+| `attribute-owner` | 1 |
+| `whole-repo-search` | **5** |
+
+The first three are the **directly reachable** population — a reference lookup
+seeded from a symbol the diff names lands on them, so they are the population the
+promote-to-default bar is scored on. The five `whole-repo-search` dependents share
+no import edge, no call and no identifier with their change; they are retained
+because this section requires the class to be REPORTED rather than dropped, and an
+engine that scores zero on them is behaving as designed.
+
+**Contamination split: 2 held-out, 8 dev.** Held-out requires the introducing
+commit to postdate the declared cutoff (`2026-01-01`), and the evidence lands
+3–12 months later still, so the window is as narrow as this spec predicted. Both
+populations are non-empty by design — a split nobody can report is a field, not a
+control — and results MUST be reported split rather than pooled. **Eight of ten
+cases are old enough that the model has very likely seen both the change and its
+upstream fix.**
+
+**Enforced, not trusted.** The manifest has its own schema
+(`change-impact-corpus.schema.ts`), a sibling of spec 17's rather than a mode flag
+on it, because spec 17's central invariant is the exact negation of this one and a
+schema whose central rule is conditional enforces nothing. It refuses: an
+expectation inside the reviewed paths; a case with no `evidenceOfBreakage`; an
+evidence entry that repairs no expected dependent (this is how "a curator's
+inference is not admissible" becomes enforceable rather than a rule someone is
+trusted to have followed); evidence dated before the change it claims to prove
+broke something; a missing reachability label; a non-permissive license; a
+held-out case predating the cutoff; and two expectations on one destination file,
+because the destination file is the scoring unit. Hydration additionally verifies
+against the real checkout that the declared parent is the upstream parent, that
+the diff touches nothing undeclared, and that **every expected dependent exists
+and has the lines the answer key points at** — a range that fell off the end of a
+file would score a correct prediction as wrong forever, silently.
+
+**What this corpus can measure:** whether a predicted destination file is a
+dependent upstream had to repair, per reachability class and per contamination
+split; whether the deterministic reference list alone already contains that file,
+which is the remove-criterion's baseline arm; and what adjudication removes
+relative to that list.
+
+**What it cannot measure:** precision in any trustworthy sense. Eleven dependents
+across ten changes is not an enumeration of everything each change broke, so an
+unlisted prediction is not thereby wrong, and raw precision on this corpus is a
+lower bound in the same way spec 17's is. It also cannot see `breaks-on-build`:
+every accepted case is `breaks-at-runtime`, because a change that deletes a
+declaration outright is rarely merged without its callers, and the mining
+convention that makes the evidence link resolvable does not surface the ones that
+are. Nor can it settle anything on its own — this spec already binds that a single
+run decides nothing, and eleven dependents make that bind harder, not softer.
+
+**Yield, and why the corpus is this small.** 101,542 commit bodies were screened
+across 27 repositories over two passes, 166 candidates cleared the mechanical
+filters, and 10 survived adjudication. The binding constraint is exactly the one
+this spec records: the link is resolvable only where a project writes the causing
+commit's full object name, and django's mandated `Regression in <sha>.` line
+produced 9 of the 10. The rejection reasons are recorded in the manifest's
+`screening.rejections` so nobody re-derives them. **A larger corpus is not
+available at this cost, and padding it with inferred breakage would destroy the
+only property it has.**
+
+### The severity tension is dissolved, not merely resolved
+
+*What Mining The First Fixtures Established* records four of seven mined
+expectations rated `low` against a `medium` actionable threshold, and requires
+that to be settled before the first measurement. **The compatibility class settles
+it, and the mechanism is worth stating precisely, because "we changed the label"
+would not settle anything.**
+
+The tension was never about severity values. It existed because a `low`
+expectation could only be matched by a candidate that had cleared
+`aiReview.actionableSeverityThreshold`, and **impact findings do not pass that
+gate at all.** They pass the gate in `change-impact`, which imports nothing from
+the diff reviewer's `admission` domain and applies no severity threshold; they
+carry a compatibility class and no severity; and the class ranks a reader's
+attention rather than deciding admission. There is therefore no filter for a `low`
+expectation to fall through, and the corpus's severity skew costs nothing.
+
+Two consequences bind the corpus:
+
+- **Severity is descriptive metadata here and is not a scoring input.** The
+  manifest records it and its rationale so a reader can compare this corpus with
+  spec 17's, and nothing may be relabelled to move a number. Relabelling fixtures
+  to fit a gate remains forbidden, and it is now also pointless.
+- **The corpus asserts a compatibility class per dependent**, restricted to the
+  three a finding can carry. `no-impact` is inexpressible by construction: this
+  corpus holds only damage that actually happened. A test pins the corpus's
+  vocabulary to the reportable subset of the implemented one, so the answer key
+  and the lane cannot drift apart while nobody is looking.
+
 ## What Mining The First Fixtures Established
 
 A first pass screened **66,685 commit bodies across 27 repositories** and yielded

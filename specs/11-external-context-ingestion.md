@@ -286,8 +286,23 @@ standard schema validation.
 - The summarizer records mode, input byte count, output byte count, and whether
   truncation occurred.
 
-The implementation currently emits one aggregate `context_ingestion` step rather than
-these per-provider records; see *Known Divergences From This Spec*.
+Concretely: one `context_ingestion_provider` step per configured provider, carrying
+`originLabel` (the provider's own id, which is what its warnings name too),
+`providerType`, `status`, `matchedCount`, `fragmentCount`,
+`truncatedFragmentCount`, `bytes`, and the duration the ingestion loop measured
+around that provider. `status` distinguishes `included`, `empty` and `failed`:
+a provider that ran cleanly and found nothing is the shape a misconfigured
+directory produces, and folding it into `included` would make the most common
+misconfiguration read as a success.
+
+The aggregate `context_ingestion` step carries the summarizer's record —
+`summaryMode` when it starts, and `summaryInputBytes`, `briefBytes` and
+`summaryTruncated` when it ends. A run that produced no brief reports `briefBytes`
+and `summaryTruncated` as **null**, never as `0` and `false`: a brief of zero bytes
+that was not truncated is a different run from one where no brief exists.
+
+A debug log line does not satisfy any of this. It is off at the default level and
+reaches neither the run's observability artifact nor a trace.
 
 ## Reuse By Other Commands
 
@@ -371,11 +386,9 @@ checks (host allowlist, no literal secret) that warrant a dedicated
 
 ## Known Divergences From This Spec
 
-Recorded 2026-08-01 by an alignment audit. **These are unmet requirements, not
-amendments.** Everything above stands as written; this section exists so the gap is
-visible rather than silent.
-
-| Requirement | State of the implementation |
-| --- | --- |
-| *Observability*: a per-provider no-content event carrying origin label, bytes gathered, status, and duration | One aggregate `context_ingestion` step is emitted: `providerCount`/`summaryMode` at start, `fragmentCount`/`failedProviders`/`injected`/`briefBytes` at end. Per-provider metrics (id, type, fragment count, bytes) are computed and then reduced to a *count of failures*. Origin label, per-provider bytes, and per-provider duration reach nothing. |
-| *Observability*: the summarizer records input byte count and whether truncation occurred | Neither is emitted. Output bytes (`briefBytes`) and the mode are. |
+None. The two recorded on 2026-08-01 — no per-provider no-content event, and a
+summarizer that reported neither its input byte count nor whether truncation
+occurred — were closed on 2026-08-06 by implementing what *Observability* above
+requires. Until then, per-provider metrics were computed and then reduced to a
+count of failures, so a run that ingested nothing and a run whose provider failed
+emitted identical events.

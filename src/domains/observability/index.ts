@@ -1,8 +1,11 @@
 export { configureOpenTelemetry } from './open-telemetry.js'
 export {
   createNoContentEventRecorder,
+  createNoContentStepEvent,
+  type NoContentAttributes,
   type NoContentEventRecorder,
-  type NoContentObservabilitySnapshot
+  type NoContentObservabilitySnapshot,
+  type NoContentRunEvent
 } from './no-content-recorder.js'
 export {
   createNoopReviewLogger,

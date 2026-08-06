@@ -87,10 +87,11 @@ export const gitDisableAutoCrlfArgs = (): readonly string[] => [
   'false'
 ]
 
-// Depth 2 is exactly what a case needs: the fix commit and its parent. Fetching
-// one commit by object name avoids downloading the repository's history.
+// Depth 2 is exactly what a case needs: the pinned commit and its parent, which
+// is the pair every corpus here reviews whichever way round it reads them.
+// Fetching one commit by object name avoids downloading the repository's history.
 export const gitFetchArgs = (input: {
-  readonly fixCommit: string
+  readonly commit: string
 }): readonly string[] => [
   'fetch',
   '--quiet',
@@ -98,7 +99,7 @@ export const gitFetchArgs = (input: {
   '--depth',
   '2',
   'origin',
-  input.fixCommit
+  input.commit
 ]
 
 export const gitParentOfArgs = (fixCommit: string): readonly string[] => [
@@ -149,11 +150,12 @@ export const gitReviewedDiffArgs = (input: {
 export type CaseHydrationState = 'hydrated' | 'absent' | 'stale'
 
 // Idempotence and integrity in one decision: a case counts as hydrated only when
-// its checkout sits on the expected parent commit AND its slice carries a
-// reviewed diff. Anything else is rebuilt rather than trusted.
+// its checkout sits on the commit the case says it reviews AND its slice carries
+// a reviewed diff. Anything else is rebuilt rather than trusted. Which commit
+// that is depends on the corpus's orientation, so the caller names it.
 export const resolveCaseHydrationState = (input: {
   readonly headCommit: string | undefined
-  readonly expectedParentCommit: string
+  readonly expectedCheckoutCommit: string
   readonly sliceDiff: string | undefined
   readonly sliceMatchesCaseDefinition: boolean
 }): CaseHydrationState => {
@@ -161,7 +163,7 @@ export const resolveCaseHydrationState = (input: {
     return 'absent'
   }
 
-  return input.headCommit === input.expectedParentCommit &&
+  return input.headCommit === input.expectedCheckoutCommit &&
     input.sliceDiff !== undefined &&
     input.sliceDiff.length > 0 &&
     input.sliceMatchesCaseDefinition
@@ -445,7 +447,7 @@ const checkoutCase = async (
     cwd: workTreeDirectory
   })
   await input.runGit({
-    args: gitFetchArgs({ fixCommit: input.corpusCase.fixCommit }),
+    args: gitFetchArgs({ commit: input.corpusCase.fixCommit }),
     cwd: workTreeDirectory
   })
 
@@ -649,7 +651,7 @@ export const hydrateRealRepoCorpus = async (
         datasetId: manifest.datasetId
       }),
       headCommit,
-      expectedParentCommit: corpusCase.parentCommit,
+      expectedCheckoutCommit: corpusCase.parentCommit,
       sliceDiff
     })
 

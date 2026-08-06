@@ -25,6 +25,7 @@ import { applyFixEdits } from './apply-check.js'
 import type {
   ApplyCheckOutcome,
   ClaimObservation,
+  FixDeclinedReason,
   FixOutcome
 } from './verification-report.js'
 
@@ -88,17 +89,36 @@ const outcomeForFinding = async (input: {
 
   const isReal = verdict.findingJudgment === 'real'
   const edits = verdict.fixEdits ?? []
-  const editsTargetFinding =
-    edits.length > 0 &&
-    edits.every((edit) => edit.path === finding.location.path)
 
-  const notProduced = (applyCheck: ApplyCheckOutcome): PerClaimOutcome => ({
-    fixOutcome: { ...base, fixProduced: false, applyCheck }
+  const notProduced = (
+    applyCheck: ApplyCheckOutcome,
+    declinedReason?: FixDeclinedReason
+  ): PerClaimOutcome => ({
+    fixOutcome: {
+      ...base,
+      fixProduced: false,
+      applyCheck,
+      ...(declinedReason === undefined
+        ? {}
+        : { fixDeclinedReason: declinedReason })
+    }
   })
 
-  if (!isReal || !editsTargetFinding) {
-    // Not a real finding, or no scoped single-file fix to check.
+  if (!isReal || edits.length === 0) {
+    // Not a real finding, or the agent proposed no fix at all.
     return notProduced('not-attempted')
+  }
+
+  // A fix is attached to ONE finding, and this lane carries it no further than that
+  // finding's own file: the apply-check re-applies the edits to that file's current
+  // bytes, `fixProposal.evidenceIds` may cite only the finding's own evidence (there
+  // is none for another file), and the inline comment the proposal flows into is
+  // anchored to that file's lines. A cross-file edit set is therefore refused rather
+  // than half-carried — but the refusal is REPORTED, because it used to be recorded
+  // as `not-attempted`, which is what a finding with no proposed fix records, and
+  // the two are the opposite situation for anyone deciding what to do next.
+  if (!edits.every((edit) => edit.path === finding.location.path)) {
+    return notProduced('not-attempted', 'edits-outside-finding-file')
   }
 
   const content = await input.readFile(finding.location.path)
@@ -181,7 +201,13 @@ export const enrichFindingsWithFixes = async (input: {
     return {
       ...observation,
       fixProduced: outcome.fixProduced,
-      applyCheck: outcome.applyCheck
+      applyCheck: outcome.applyCheck,
+      // Carried onto the observation too: the per-claim step is where a reader
+      // looks for what the lane did with one finding, and `not-attempted` alone
+      // reads there as "nothing was proposed".
+      ...(outcome.fixDeclinedReason === undefined
+        ? {}
+        : { fixDeclinedReason: outcome.fixDeclinedReason })
     }
   })
 

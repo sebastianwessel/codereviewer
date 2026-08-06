@@ -34,15 +34,19 @@ export const SkillContextDocumentSchema = z.strictObject({
 export const ReviewContextDocumentSchema = z.strictObject({
   // 'referenced-definition' carries a bounded digest of an UNCHANGED file that a
   // changed file imports (R4). 'change-intent' carries the redacted, summarized
-  // brief of external change-intent context (spec 11). Both are context only:
-  // findings remain restricted to task.paths and these entries are not review
-  // targets.
+  // brief of external change-intent context (spec 11). 'analyzer-signal' carries
+  // the ingested, changed-side-attributed results of analyzers this project's own
+  // pipeline produced (spec 15, Mechanism 2). All three are context only: findings
+  // remain restricted to task.paths, these entries are not review targets, and an
+  // analyzer result in particular is evidence for the model to judge, never a
+  // finding and never a route around refutation or admission.
   kind: z.enum([
     'file',
     'support-signal-output',
     'test-mapping',
     'referenced-definition',
-    'change-intent'
+    'change-intent',
+    'analyzer-signal'
   ]),
   path: RepositoryRelativePathSchema.optional(),
   // Absolute line span this document occupies in its source file. Set for 'file'

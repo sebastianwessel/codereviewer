@@ -244,12 +244,22 @@ Invalid configuration fails validation with exit code `2`.
 - A run that resolves to `generic` (no platform detected) is normal, not an
   error.
 
-**This step does not exist yet.** No draft count, suggestion count, platform, or
-detection source is emitted anywhere, and the artifact writer discards the resolved
-`source` after reading `platform`. The consequence is precisely what the requirement
-exists to prevent: a run that resolved `generic` and emitted zero drafts is
-indistinguishable from one where the feature never ran. Recorded here rather than
-removed — it is an unmet requirement, not a withdrawn one.
+Concretely: a `review_comments` step carrying `draftCount`, `suggestionCount`,
+`platform`, and `platformDetectedFrom` (`config | ci-env | remote | default`,
+naming which rule in *Platform Detection* decided it). It is emitted **only when
+the feature is enabled** — the step means "drafting ran", and reporting zero drafts
+for a feature that is off would say it ran and found nothing.
+
+Drafting happens in the artifact stage, after the run's event recorder has closed,
+so the step is timed there and joins the run's `observability.json` through the
+same no-content sanitizer as every other event. The counts come from the drafts
+that were actually written; they are not recomputed, so the reported number cannot
+drift from the artifact.
+
+This requirement was unmet until 2026-08-06: nothing was emitted, and the artifact
+writer read the resolved detection `source` only to discard it, so a run that
+resolved `generic` and produced zero drafts was indistinguishable from one where
+the feature never ran.
 
 ## Testing
 

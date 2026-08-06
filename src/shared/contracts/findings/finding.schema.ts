@@ -125,6 +125,15 @@ export const EvidenceRecordSchema = z.strictObject({
   ruleId: z.string().optional(),
   helpUri: z.url().optional(),
   cwe: z.array(z.string().regex(/^CWE-[0-9]+$/)).optional(),
+  // Normalized 0-10 security severity as the PRODUCER of this evidence stated it
+  // (spec 15, Mechanism 2). It lives on the evidence record, not only on the
+  // admitted finding, because it is a property of the observation rather than of
+  // the engine's verdict: an ingested analyzer alert carries a severity its tool
+  // assigned, and that number must survive into the report without being mistaken
+  // for this engine's own severity decision. Nothing propagates it to
+  // `AdmittedFinding.securitySeverity` — that would let a third-party artifact set
+  // a finding's severity without passing the model or the admission gate.
+  securitySeverity: z.number().min(0).max(10).optional(),
   relatedLocations: z.array(RelatedLocationSchema).optional(),
   dataFlow: z.array(DataFlowPathSchema).optional()
 })

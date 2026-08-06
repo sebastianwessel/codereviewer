@@ -223,7 +223,7 @@ describe('real repository git plumbing arguments', () => {
   })
 
   test('fetches only the fix commit and its parent', () => {
-    expect(gitFetchArgs({ fixCommit })).toEqual([
+    expect(gitFetchArgs({ commit: fixCommit })).toEqual([
       'fetch',
       '--quiet',
       '--no-tags',
@@ -264,7 +264,7 @@ describe('case hydration state', () => {
     expect(
       resolveCaseHydrationState({
         headCommit: undefined,
-        expectedParentCommit: parentCommit,
+        expectedCheckoutCommit: parentCommit,
         sliceDiff: undefined,
         sliceMatchesCaseDefinition: false
       })
@@ -275,7 +275,7 @@ describe('case hydration state', () => {
     expect(
       resolveCaseHydrationState({
         headCommit: parentCommit,
-        expectedParentCommit: parentCommit,
+        expectedCheckoutCommit: parentCommit,
         sliceDiff: reviewedDiff,
         sliceMatchesCaseDefinition: true
       })
@@ -286,7 +286,7 @@ describe('case hydration state', () => {
     expect(
       resolveCaseHydrationState({
         headCommit: 'c'.repeat(40),
-        expectedParentCommit: parentCommit,
+        expectedCheckoutCommit: parentCommit,
         sliceDiff: reviewedDiff,
         sliceMatchesCaseDefinition: true
       })
@@ -294,7 +294,7 @@ describe('case hydration state', () => {
     expect(
       resolveCaseHydrationState({
         headCommit: parentCommit,
-        expectedParentCommit: parentCommit,
+        expectedCheckoutCommit: parentCommit,
         sliceDiff: '',
         sliceMatchesCaseDefinition: true
       })
@@ -305,7 +305,7 @@ describe('case hydration state', () => {
     expect(
       resolveCaseHydrationState({
         headCommit: parentCommit,
-        expectedParentCommit: parentCommit,
+        expectedCheckoutCommit: parentCommit,
         sliceDiff: reviewedDiff,
         sliceMatchesCaseDefinition: false
       })

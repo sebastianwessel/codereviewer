@@ -120,6 +120,15 @@ warnings, matching spec 11.
   tool-call count per claim and the context-retrieval byte/match budgets. Exceeding a
   bound ends the claim with an `uncertain` status (and no
   `findingJudgment`/`fixEdits`), recording the reason. There is no open-ended loop.
+- **No whole-run deadline, deliberately.** The bounds above are the ones that make
+  a runaway loop impossible; a wall-clock timer over the run is a limit this
+  project would impose on itself, and firing it destroys work that was
+  progressing. A single network call is bounded by `provider.timeoutMs`. The flow
+  additionally honours a caller-supplied `AbortSignal` and ends the claim
+  `uncertain` with bound reason `aborted` — that reason means *the caller
+  cancelled*, and no production caller supplies a signal today, so it is the
+  library-embedding path rather than a deadline the CLI arms. This matches
+  `docs/01-overview/status-and-limitations.md`, which states the same absence.
 - **Code, not the model, is authoritative on a bound.** A claim whose tool-call
   budget was exhausted ends `uncertain` even when the agent, having received the
   recoverable budget error, still returned a conclusive verdict. The same `uncertain`
@@ -171,6 +180,30 @@ applies it to the current file bytes. An edit that does not apply cleanly is
 dropped, and the fix is recorded as not produced. This rejects hallucinated line
 numbers and stale-location edits without a model call. Fixes are always
 `safety: manual-review`; the flow never applies an edit to the working tree.
+
+### A Fix Stays In The Finding's Own File, And Says When It Did Not
+
+A fix set whose edits touch any file other than the finding's own `location.path`
+is refused **whole**, before the apply-check runs, and never half-applied.
+
+The restriction is deliberate. The apply-check is defined against one file's
+current bytes; the enriched `fixProposal` may cite only the finding's own evidence
+records, and there are none for another file; the inline comment the proposal
+flows into (spec 13) is anchored to the finding's lines, so an edit elsewhere
+could never be represented there. Widening this would mean carrying a
+model-authored edit for a path this run never reviewed, never gathered evidence
+about, and never eligibility-checked.
+
+What was wrong was the **silence**. The refusal was recorded as `not-attempted`,
+which is what a finding with no proposed fix records — so "the agent proposed
+nothing" and "the agent proposed something this lane will not carry" were the same
+record, and they are opposite situations for whoever reads it.
+
+The fix outcome and the per-claim observation therefore carry
+`fixDeclinedReason: 'edits-outside-finding-file'`, present ONLY when a proposed fix
+was refused. `applyCheck` stays `not-attempted`, because the check genuinely did
+not run and a fourth outcome value would say it did; the reason field is what
+separates the two cases, and its absence means there was nothing to refuse.
 
 ## Effect On Findings, Severity, And The Gate
 
@@ -259,8 +292,9 @@ Keys are defined in `04-configuration-and-providers.md`:
 
 - Each claim records a no-content step: claim kind, source label, tool-call count,
   bytes read, status, `findingJudgment` (or absent), whether a fix was produced,
-  apply-check outcome, and duration. No source, claim/finding text, fix text, or
-  tool output appears in logs, traces, or events.
+  apply-check outcome, `fixDeclinedReason` when a proposed fix was refused, and
+  duration. No source, claim/finding text, fix text, or tool output appears in
+  logs, traces, or events.
 - A claim provider that fails at run time is non-fatal and surfaces as a run
   warning; the flow proceeds without that provider's claims.
 - A claim provider bounded by the per-provider claim cap is non-fatal and surfaces
@@ -316,11 +350,20 @@ Keys are defined in `04-configuration-and-providers.md`:
 
 ## Known Divergences From This Spec
 
-Recorded 2026-08-01 by an alignment audit. **These are unmet requirements, not
-amendments.** Everything above stands as written; this section exists so the gap is
-visible rather than silent.
+None. Both entries recorded on 2026-08-01 were resolved on 2026-08-06, in opposite
+directions:
 
-| Requirement | State of the implementation |
-| --- | --- |
-| *The Investigation Agent*: "the run timeout" is a code-enforced bound | There is no run timeout anywhere in the engine any more, by design. The flow still honours a CALLER-supplied `AbortSignal` and reports `aborted`; no production caller supplies one today. |
-| *Deterministic Apply-Check*: an edit that does not apply cleanly is dropped | Also dropped: any fix whose edits touch a file other than the finding's own path, before the apply-check runs. The outcome is indistinguishable from "no fix proposed". The restriction is real and deliberate in code; this spec does not state it. |
+- *The run timeout* was a claim in this spec with no code behind it. The **spec was
+  wrong**: the engine has no whole-run deadline by design, and
+  `docs/01-overview/status-and-limitations.md` said so while this spec implied
+  otherwise. *The Investigation Agent* now states the absence and what stands in
+  its place, so the two documents agree.
+- *A fix touching another file was dropped silently.* The **implementation was
+  wrong** — not in refusing the fix, which is right for the reasons now recorded
+  under *Deterministic Apply-Check*, but in leaving the refusal indistinguishable
+  from "no fix was proposed". It carries `fixDeclinedReason` now.
+
+  Note for the evaluation lane, which mirrors `FixOutcome` in its own contract
+  rather than importing it: that mirror carries `applyCheck` and not the new
+  reason, so an eval artifact still cannot tell a refused fix from an unproposed
+  one. The mirror is owned there, and widening it is that lane's call.

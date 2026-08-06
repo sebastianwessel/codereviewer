@@ -62,7 +62,7 @@ so artifacts are never fed back into a review.
 | `run-summary.json` | always | The `run` block on its own (see fields below). |
 | `context-ledger.json` | always | Every context admission decision. |
 | `shared-context.json` | always | Cross-task shared-context snapshot. |
-| `observability.json` | always | No-content run events (`{ "events": [...] }`): step/task/error records with no source, prompt, or model output. |
+| `observability.json` | always | No-content run events (`{ "events": [...] }`): step/task/error records with no source, prompt, or model output. Includes one `context_ingestion_provider` step per configured change-intent provider, and a `review_comments` step when review-comment drafting ran. An attribute the no-content guard refuses keeps its name and reports `[dropped: …]` in place of its value, so a filtered field is never mistaken for one the step had nothing to say about. |
 | `fix-report.json` | `fix.enabled` **and** the lane produced a report | Advisory fix-lane outcomes. |
 | `verification-report.json` | `verification.enabled` | Claim verdicts, observations, corroborations. |
 | `error.json` | only on a failed run | `code`, `message`, `category`, `recoverable`. |
@@ -174,7 +174,7 @@ Both use the same schema; each lane fills the parts it owns.
 | `warnings` | string[] | both — redacted, no content (e.g. a claim provider that failed) |
 | `claimCount` | integer | both |
 | `corroborations` | array | verification — `findingId`, `confidence: "corroborated"`, `matchKinds` (`fingerprint`\|`fuzzy`), `witnessClaimIds`. Confidence signal only; never a severity change. |
-| `fixOutcomes` | array | fix — `findingId`, optional `findingJudgment`, `fixProduced`, `applyCheck` |
+| `fixOutcomes` | array | fix — `findingId`, optional `findingJudgment`, `fixProduced`, `applyCheck`, and `fixDeclinedReason` when a proposed fix was refused before the apply-check. The only reason today is `edits-outside-finding-file`: a fix stays in the finding's own file, and its absence means there was nothing to refuse. |
 | `usage` | object, optional | both — `inputTokens`, `outputTokens`, optional `cachedInputTokens`, `reasoningTokens`, `costUsd`. Accounted in its own lane, not folded into the review's run cost. |
 
 ### `error.json` (failed runs)

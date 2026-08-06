@@ -723,6 +723,51 @@
             }
           },
           "additionalProperties": false
+        },
+        "signals": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            },
+            "artifacts": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "format": {
+                    "default": "sarif",
+                    "type": "string",
+                    "const": "sarif"
+                  }
+                },
+                "required": [
+                  "path"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "maxArtifactBytes": {
+              "default": 4000000,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50000000
+            },
+            "maxAlerts": {
+              "default": 40,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

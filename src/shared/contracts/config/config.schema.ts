@@ -323,16 +323,62 @@ export const SecurityDedicatedPassConfigSchema = z.strictObject({
   enabled: z.boolean().default(false)
 })
 
-// The deterministic security-signal evidence layer (spec 15, Mechanism 2) has no
-// implementation yet, so this config surface was removed rather than shipping a
-// toggle that silently does nothing (see specs/15-security-focused-review.md).
-// Re-add a `signals` key here in the same change that implements the layer.
+// One already-produced analyzer artifact to ingest (spec 15, Mechanism 2). The
+// path is repository-relative and read through the repository path service, so an
+// artifact outside the repository is rejected rather than read.
+//
+// This engine NEVER RUNS AN ANALYZER and depends on no analyzer package
+// (INV-PROV-001). The operator's own pipeline produces the artifact; this reads it.
+// `format` is explicit rather than sniffed from the extension: a file's name is not
+// evidence of its contents, and an unreadable artifact must fail by name.
+export const SecurityAnalyzerArtifactConfigSchema = z.strictObject({
+  path: RepositoryRelativePathSchema,
+  format: z.literal('sarif').default('sarif')
+})
+
+// The deterministic security-signal evidence layer (spec 15, Mechanism 2).
+//
+// Off by default and UNMEASURED. When enabled, the configured analyzer artifacts
+// are parsed, normalized, attributed to the change under review, and presented to
+// the review as untrusted evidence. Nothing here can admit a finding: an ingested
+// alert never becomes a candidate on its own, and never bypasses discovery,
+// refutation, scope, baseline, severity, or the admission gate.
+//
+// `enabled: true` with an empty `artifacts` list is REJECTED, not treated as
+// "ingest nothing". A switch that is on and does nothing is the silent-optimism
+// shape this project has a standing rule against: the run would report no security
+// signals and look exactly like a clean scan.
+export const SecuritySignalsConfigSchema = z
+  .strictObject({
+    enabled: z.boolean().default(false),
+    artifacts: z.array(SecurityAnalyzerArtifactConfigSchema).default([]),
+    // Runaway guard on a single artifact, enforced before the file is parsed. An
+    // artifact is untrusted input; a repository-wide scan result can be hundreds of
+    // megabytes, and parsing one would be the denial of service.
+    maxArtifactBytes: z.int().min(1).max(50_000_000).default(4_000_000),
+    // Upper bound on alerts presented to the review AFTER changed-side attribution.
+    // Exceeding it is reported as a warning with the dropped count, never silently
+    // applied.
+    maxAlerts: z.int().min(1).max(500).default(40)
+  })
+  .superRefine((value, context) => {
+    if (value.enabled && value.artifacts.length === 0) {
+      context.addIssue({
+        code: 'custom',
+        path: ['artifacts'],
+        message:
+          'security.signals.enabled is true but no artifacts are configured; list at least one analyzer artifact or disable the block.'
+      })
+    }
+  })
+
 export const SecurityConfigSchema = z.strictObject({
   allowShell: z.literal(false).default(false),
   allowNetwork: z.literal(false).default(false),
   allowFilesystemWrite: z.literal(false).default(false),
   captureContentTelemetry: z.literal(false).default(false),
-  dedicatedPass: SecurityDedicatedPassConfigSchema.prefault({})
+  dedicatedPass: SecurityDedicatedPassConfigSchema.prefault({}),
+  signals: SecuritySignalsConfigSchema.prefault({})
 })
 
 export const QualityGateConfigSchema = z.strictObject({
@@ -825,6 +871,10 @@ export type FixConfig = z.infer<typeof FixConfigSchema>
 export type SecurityConfig = z.infer<typeof SecurityConfigSchema>
 export type SecurityDedicatedPassConfig = z.infer<
   typeof SecurityDedicatedPassConfigSchema
+>
+export type SecuritySignalsConfig = z.infer<typeof SecuritySignalsConfigSchema>
+export type SecurityAnalyzerArtifactConfig = z.infer<
+  typeof SecurityAnalyzerArtifactConfigSchema
 >
 export type DriftCategory = z.infer<typeof DriftCategorySchema>
 export type DriftConfig = z.infer<typeof DriftConfigSchema>

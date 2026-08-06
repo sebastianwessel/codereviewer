@@ -42,6 +42,15 @@ callee body, an interface, or a constructor in an unchanged file is reachable.
 - Hydrated cases are consumed through the existing evaluation fixture contract, so
   the matcher, judges, and metrics apply unchanged.
 
+**This corpus MUST NOT be pooled with the change-impact corpus**
+(`eval/corpora/change-impact-dependents/`, spec 22 §Evaluation), which inverts
+every one of the properties above: it reads a change **forwards** from the commit
+that introduced a breakage, and every one of its expectations lies **outside** the
+reviewed paths, where this corpus requires them to lie inside. The two answer
+different questions and their manifests are validated by separate schemas for that
+reason. Their hydrated outputs are also written to unrelated roots, so a
+`--slice-root` pointed at one cannot pick up the other.
+
 ## Diff Shape
 
 A real pull request is rarely one file. A corpus of single-file cases therefore

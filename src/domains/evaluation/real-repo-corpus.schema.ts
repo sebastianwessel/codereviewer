@@ -315,10 +315,12 @@ export const tokenNormalizedDiffFingerprint = (diff: string): string => {
   return createHash('sha256').update(normalized).digest('hex')
 }
 
-export const selectCorpusCases = (
-  cases: readonly RealRepoCorpusCase[],
+// Shared by every corpus whose cases are identified by a slug, so a second
+// corpus cannot grow a second, subtly different notion of "unknown filter".
+export const selectCorpusCases = <TCase extends { readonly id: string }>(
+  cases: readonly TCase[],
   caseFilters: readonly string[]
-): readonly RealRepoCorpusCase[] => {
+): readonly TCase[] => {
   if (caseFilters.length === 0) {
     return cases
   }
