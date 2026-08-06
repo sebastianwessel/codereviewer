@@ -15,8 +15,14 @@ import {
   formatInteger,
   formatListValue,
   formatPercent,
+  formatPrecisionBound,
+  formatPrecisionBracket,
   formatRateOverCount
 } from './eval-report-markdown-formatting.js'
+import {
+  precisionBracket,
+  type PrecisionBracket
+} from './eval-precision-bracket.js'
 import { expectedLocationLabel } from './eval-report-expected-finding-labels.js'
 import {
   agenticStageLabel,
@@ -34,6 +40,18 @@ import { type EvalMetrics } from './metrics.js'
 export const EVAL_REPORT_ARTIFACT_NAME = 'eval-report.json'
 export const EVAL_SUMMARY_ARTIFACT_NAME = 'eval-summary.md'
 export const EVAL_RECALL_REPORT_ARTIFACT_NAME = 'eval-recall-report.md'
+
+// Precision is published as a BRACKET everywhere, never as a point. See
+// `eval-precision-bracket.ts`: under an incomplete answer key precision is not
+// identifiable, raw precision is its lower bound and adjusted precision its
+// upper, and the upper end is the less trustworthy one.
+const evalReportPrecisionBracket = (report: EvalReport): PrecisionBracket =>
+  precisionBracket({
+    precision: report.metrics.precision,
+    adjustedPrecision: report.metrics.adjustedPrecision,
+    plausibilityJudged: report.scoring.plausibilityJudged,
+    adjustedPrecisionTrustworthy: report.scoring.adjustedPrecisionTrustworthy
+  })
 
 // Cached input tokens are a subset of input tokens. Render the absolute count
 // alongside the share of input it represents so a benchmark shows prompt-cache
@@ -173,7 +191,14 @@ const appendEvalSummaryHeadline = (
       `| Findings | Recall (in-diff) | ${formatDiffScopeRecall(metrics, 'in-diff')} |`,
       `| Findings | Recall (out-of-diff) | ${formatDiffScopeRecall(metrics, 'out-of-diff')} |`,
       `| Findings | Unmatched but plausible | ${formatInteger(metrics.unlistedRealFindingCount)} |`,
-      `| False positives | Adjusted precision | ${formatPercent(metrics.adjustedPrecision)} |`,
+      // Precision is published as its BRACKET and never as a point. Raw
+      // precision is the lower bound (every unjudged finding charged as wrong)
+      // and adjusted precision the upper (every unjudged finding credited);
+      // under an incomplete answer key the true value is not identifiable
+      // between them, and the upper end is the less trustworthy one.
+      `| False positives | Precision (raw to adjusted bracket) | ${formatPrecisionBracket(
+        evalReportPrecisionBracket(report)
+      )} |`,
       `| False positives | Genuine false positives | ${formatInteger(metrics.genuineFalsePositiveCount)} |`,
       `| False positives | Duplicate findings | ${formatInteger(metrics.duplicateFindingCount)} |`,
       `| Priority | Severity accuracy | ${formatRateOverCount(metrics.severityAccuracy, metrics.severityCheckCount)} |`,
@@ -204,8 +229,18 @@ const appendEvalSummaryMetrics = (
       `| Out-of-diff recall | ${formatDiffScopeRecall(report.metrics, 'out-of-diff')} |`,
       `| Security obvious recall | ${formatPercent(report.metrics.securityObviousRecall)} (${report.metrics.securityObviousCount} expected) |`,
       `| Security hard recall | ${formatPercent(report.metrics.securityHardRecall)} (${report.metrics.securityHardCount} expected) |`,
-      `| Precision | ${formatPercent(report.metrics.precision)} |`,
-      `| Adjusted precision | ${formatPercent(report.metrics.adjustedPrecision)} |`,
+      `| Precision (raw to adjusted bracket) | ${formatPrecisionBracket(
+        evalReportPrecisionBracket(report)
+      )} |`,
+      `| Precision (lower bound, raw) | ${formatPrecisionBound(
+        evalReportPrecisionBracket(report).lower
+      )} |`,
+      // Rendered through the bracket, not from `adjustedPrecision` directly: a
+      // run with no plausibility judge sets that field equal to raw precision,
+      // and printing it here would republish the lower bound as an upper one.
+      `| Precision (upper bound, adjusted) | ${formatPrecisionBound(
+        evalReportPrecisionBracket(report).upper
+      )} |`,
       `| F1 | ${formatPercent(report.metrics.f1)} |`,
       `| Severity weighted F1 | ${formatPercent(report.metrics.severityWeightedF1)} |`,
       `| Line accuracy | ${formatRateOverCount(report.metrics.lineAccuracy, report.metrics.lineCheckCount)} |`,
@@ -383,10 +418,27 @@ const appendEvalSummarySecurityByContextDepth = (
 
 type EvalSummaryMetricGroup = EvalReport['metricGroups'][number]
 
+// A metric group carries no scoring block of its own -- one run produced every
+// group -- so the run-level plausibility facts behind the precision bracket come
+// from the report the group belongs to.
+const metricGroupPrecisionBracket = (
+  group: EvalSummaryMetricGroup,
+  report: EvalReport
+): PrecisionBracket =>
+  precisionBracket({
+    precision: group.metrics.precision,
+    adjustedPrecision: group.metrics.adjustedPrecision,
+    plausibilityJudged: report.scoring.plausibilityJudged,
+    adjustedPrecisionTrustworthy: report.scoring.adjustedPrecisionTrustworthy
+  })
+
 const formatEvalSummaryMetricGroupRow = (
-  group: EvalSummaryMetricGroup
+  group: EvalSummaryMetricGroup,
+  report: EvalReport
 ): string =>
-  `| ${group.groupBy} | ${escapeMarkdownCell(group.key)} | ${group.fixtureCount} | ${formatPercent(group.metrics.recall)} | ${formatPercent(group.metrics.precision)} | ${formatPercent(group.metrics.f1)} | ${formatRateOverCount(group.metrics.lineAccuracy, group.metrics.lineCheckCount)} | ${group.metrics.falsePositiveCount} |`
+  `| ${group.groupBy} | ${escapeMarkdownCell(group.key)} | ${group.fixtureCount} | ${formatPercent(group.metrics.recall)} | ${formatPrecisionBracket(
+    metricGroupPrecisionBracket(group, report)
+  )} | ${formatPercent(group.metrics.f1)} | ${formatRateOverCount(group.metrics.lineAccuracy, group.metrics.lineCheckCount)} | ${group.metrics.falsePositiveCount} |`
 
 const appendEvalSummaryMetricGroups = (
   lines: string[],
@@ -399,9 +451,11 @@ const appendEvalSummaryMetricGroups = (
   appendMarkdownTable(lines, {
     heading: '## Metric Groups',
     header:
-      '| Group | Key | Fixtures | Recall | Precision | F1 | Line accuracy | False positives |',
+      '| Group | Key | Fixtures | Recall | Precision (raw to adjusted) | F1 | Line accuracy | False positives |',
     alignment: '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |',
-    rows: summaryMetricGroups.map(formatEvalSummaryMetricGroupRow)
+    rows: summaryMetricGroups.map((group) =>
+      formatEvalSummaryMetricGroupRow(group, report)
+    )
   })
 }
 

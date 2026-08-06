@@ -35,8 +35,9 @@ figure was reached, not as an alternative to quote instead.
 | Recall, in-diff | **68.3%** (sd 2.89pp) | 66.7 / 66.7 / 71.7 |
 | Recall, blended | **47.1%** | 46.0 / 46.0 / 49.4 |
 | Recall, out-of-diff | **0 of 27** — unchanged | 0 / 0 / 0 |
-| Raw precision | **77.8%** | 78.4 / 76.9 / 78.2 |
-| Adjusted precision | **96.2%** | 95.2 / 100 / 93.5 |
+| Precision (raw to adjusted bracket) | **77.8% to 96.2%** | 78.4–96.2 / 76.9–100 / 78.2–93.5 |
+| — lower bound, raw precision | **77.8%** | 78.4 / 76.9 / 78.2 |
+| — upper bound, adjusted precision | **96.2%** | 95.2 / 100 / 93.5 |
 | Line placement | **94.3%** | 92.5 / 95.0 / 95.3 |
 | Severity accuracy | **61.0%** | 60.0 / 65.0 / 58.1 |
 
@@ -62,7 +63,12 @@ the refutation withholding notice reaching the model) and a refutation-context
 fix for partitioned sub-tasks. Read this as "measured higher," never as
 "improved by" any one change.
 
-**Adjusted precision — 96.2% — is not comparable to the earlier 99.1%, and it
+**Precision is a bracket, and only its lower bound is comparable across this
+measurement.** The pair above — 77.8% to 96.2% — is the reported result; under an
+incomplete answer key the true value is not identifiable between the two bounds,
+and the upper end is the less trustworthy one.
+
+**The upper bound — 96.2% — is not comparable to the earlier 99.1%, and it
 must not be read as a fall or a regression.** `EVAL_METRICS_VERSION` moved
 from `2026-08-01.discovery-telemetry` to `2026-08-03.plausibility-source-window`
 between the two measurements, and that bump's own note states it changes which
@@ -162,7 +168,7 @@ digest across all three runs.
 | --- | ---: |
 | in-diff recall | 61.7 / 60.0 / 61.7 — mean 61.1%, **sd 0.96pp** |
 | blended recall | 42.5 / 41.4 / 42.5 — mean 42.1%, **sd 0.66pp** |
-| adjusted precision | 100 / 97.3 / 100 — mean 99.1% |
+| precision (raw to adjusted bracket) | mean **74.9% to 99.1%** — lower bound 74.9%, upper bound 100 / 97.3 / 100 (mean 99.1%) |
 | out-of-diff recall | 0 / 0 / 0 — **0 of 27**, a measured zero over a full denominator |
 | reported findings landing in-diff | 94.2% (49 of 52); the 3 strays were all judged real |
 
@@ -214,7 +220,7 @@ longer exists** — see [datasets](datasets.md#real-repository-cross-file-corpus
 | Metric | Value | Notes |
 | --- | ---: | --- |
 | Recall | **46.7%** | 46.3 / 45.0 / 48.8 |
-| Adjusted precision | **97.3–100%** | |
+| Precision, UPPER bound only (adjusted) | **97.3–100%** | The matching lower bound (raw precision) was not recorded for this superseded corpus, so the bracket cannot be completed and the upper bound must not be read as "the" precision |
 | **False alarms on defect-free zones** | **0** | across every run, on ten curated zones |
 | Severity accuracy | ~44% | ~49% when the actionable floor is lowered to `low` |
 | Line placement (`linePlacementRate`) | ~97% | share of matched findings whose reported line falls inside the expected range |

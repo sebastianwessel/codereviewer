@@ -1,18 +1,38 @@
-import { type DiffScope } from './eval-diff-scope.js'
 import {
   appendMarkdownTable,
   formatCostMetric,
   formatDuration,
   formatInteger,
   formatPercent,
+  formatPrecisionBracket,
   formatRateOverCount
 } from './eval-report-markdown-formatting.js'
-import { type EvalReport } from './eval-report-contracts.js'
-import { type EvalMetrics } from './metrics.js'
+import {
+  type EvalComparabilityKey,
+  type MetricComparability
+} from './eval-metrics-versions.js'
+import {
+  precisionBracket,
+  type PrecisionBracket
+} from './eval-precision-bracket.js'
+import {
+  type EvalComparisonMetrics,
+  type EvalComparisonReport
+} from './eval-comparison-view.js'
 
-type EvalReportPair = {
-  readonly base: EvalReport
-  readonly head: EvalReport
+// A value the report never recorded. Rendered, never defaulted: a counter added
+// by a later engine build is absent from an older report, and printing 0 there
+// would claim a measurement nobody made.
+const UNKNOWN_VALUE = 'unknown (not recorded)'
+// A value both reports recorded, whose difference means nothing because the
+// scoring rules changed between them. The values still print -- they are facts
+// about each run -- but the delta does not.
+const NOT_COMPARABLE = 'not comparable'
+
+export type EvalComparisonInput = {
+  readonly base: EvalComparisonReport
+  readonly head: EvalComparisonReport
+  readonly comparability: MetricComparability
 }
 
 const formatPercentagePointDelta = (base: number, head: number): string => {
@@ -29,281 +49,310 @@ const formatNumberDelta = (base: number, head: number): string => {
   return `${sign}${delta}`
 }
 
-const formatEvalComparisonMetricDeltaRow = (
+const formatRow = (
   input: {
     readonly metric: string
-    readonly base: string | number
-    readonly head: string | number
-    readonly delta: string | number
+    readonly base: string
+    readonly head: string
+    readonly delta: string
   }
 ): string =>
   `| ${input.metric} | ${input.base} | ${input.head} | ${input.delta} |`
 
-const formatEvalComparisonPercentMetricDeltaRow = (
-  input: {
-    readonly metric: string
-    readonly base: number
-    readonly head: number
-  }
-): string =>
-  formatEvalComparisonMetricDeltaRow({
-    metric: input.metric,
-    base: formatPercent(input.base),
-    head: formatPercent(input.head),
-    delta: formatPercentagePointDelta(input.base, input.head)
-  })
+// Metrics of the view that are a plain number, so one row renderer can serve
+// them all. Derived from the view rather than listed, so a metric added there
+// with the wrong shape cannot be routed through a numeric row by mistake.
+type ScalarMetricKey = {
+  [Key in keyof EvalComparisonMetrics]-?: NonNullable<
+    EvalComparisonMetrics[Key]
+  > extends number
+    ? Key
+    : never
+}[keyof EvalComparisonMetrics]
 
-// Diff-scope recall (spec 17) is nullable per side: a run whose fixture set
-// carries no expectation in a population measured nothing there. Such a side is
-// rendered `n/a` and the delta is suppressed, because differencing a missing
-// population against a measured one produces a number that looks like a
-// regression and is not one.
-const formatEvalComparisonDiffScopeRecallRow = (
-  input: {
-    readonly metric: string
-    readonly base: EvalMetrics
-    readonly head: EvalMetrics
-    readonly scope: DiffScope
-  }
+type ScalarMetricRowInput = {
+  readonly metric: string
+  readonly key: ScalarMetricKey
+  readonly base: number | undefined
+  readonly head: number | undefined
+}
+
+type ScalarMetricRowRenderer = (
+  input: ScalarMetricRowInput,
+  comparability: MetricComparability
+) => string
+
+type ScalarMetricRow = ScalarMetricRowInput & {
+  readonly formatValue: (value: number) => string
+  readonly formatDelta: (base: number, head: number) => string
+}
+
+// One rule for every scalar metric row, applied in one place so no metric can
+// acquire a delta the data does not support: refused by the scoring-rule
+// history, or missing on either side, and there is no number to print.
+const formatScalarMetricRow = (
+  row: ScalarMetricRow,
+  comparability: MetricComparability
 ): string => {
-  const baseRate = input.base.recallByDiffScope[input.scope] ?? null
-  const headRate = input.head.recallByDiffScope[input.scope] ?? null
-  const baseCount = input.base.diffScopeCounts[input.scope]?.expected ?? 0
-  const headCount = input.head.diffScopeCounts[input.scope]?.expected ?? 0
+  const refusal = comparability.refusalReason(row.key)
 
-  return formatEvalComparisonMetricDeltaRow({
-    metric: input.metric,
-    base: formatRateOverCount(baseRate, baseCount),
-    head: formatRateOverCount(headRate, headCount),
+  return formatRow({
+    metric: row.metric,
+    base: row.base === undefined ? UNKNOWN_VALUE : row.formatValue(row.base),
+    head: row.head === undefined ? UNKNOWN_VALUE : row.formatValue(row.head),
     delta:
-      baseRate === null || headRate === null || baseCount === 0 || headCount === 0
-        ? 'n/a'
-        : formatPercentagePointDelta(baseRate, headRate)
+      refusal !== undefined
+        ? NOT_COMPARABLE
+        : row.base === undefined || row.head === undefined
+          ? UNKNOWN_VALUE
+          : row.formatDelta(row.base, row.head)
   })
 }
 
-const formatEvalComparisonCountMetricDeltaRow = (
+const percentRow: ScalarMetricRowRenderer = (input, comparability) =>
+  formatScalarMetricRow(
+    {
+      ...input,
+      formatValue: formatPercent,
+      formatDelta: formatPercentagePointDelta
+    },
+    comparability
+  )
+
+const countRow: ScalarMetricRowRenderer = (input, comparability) =>
+  formatScalarMetricRow(
+    {
+      ...input,
+      formatValue: (value) => `${value}`,
+      formatDelta: formatNumberDelta
+    },
+    comparability
+  )
+
+const integerRow: ScalarMetricRowRenderer = (input, comparability) =>
+  formatScalarMetricRow(
+    { ...input, formatValue: formatInteger, formatDelta: formatNumberDelta },
+    comparability
+  )
+
+const durationRow: ScalarMetricRowRenderer = (input, comparability) =>
+  formatScalarMetricRow(
+    {
+      ...input,
+      formatValue: formatDuration,
+      formatDelta: (base, head) => `${formatNumberDelta(base, head)}ms`
+    },
+    comparability
+  )
+
+// Diff-scope recall (spec 17) is nullable per side: a run whose fixture set
+// carries no expectation in a population measured nothing there. `null` (nothing
+// to measure) and `undefined` (never recorded) are different statements and are
+// rendered differently, and neither produces a delta.
+const diffScopeRecallRow = (
   input: {
     readonly metric: string
-    readonly base: number
-    readonly head: number
-  }
-): string =>
-  formatEvalComparisonMetricDeltaRow({
-    metric: input.metric,
-    base: input.base,
-    head: input.head,
-    delta: formatNumberDelta(input.base, input.head)
-  })
-
-const formatEvalComparisonIntegerMetricDeltaRow = (
-  input: {
-    readonly metric: string
-    readonly base: number
-    readonly head: number
-  }
-): string =>
-  formatEvalComparisonMetricDeltaRow({
-    metric: input.metric,
-    base: formatInteger(input.base),
-    head: formatInteger(input.head),
-    delta: formatNumberDelta(input.base, input.head)
-  })
-
-const formatEvalComparisonDurationMetricDeltaRow = (
-  input: {
-    readonly metric: string
-    readonly baseMs: number
-    readonly headMs: number
-  }
-): string =>
-  formatEvalComparisonMetricDeltaRow({
-    metric: input.metric,
-    base: formatDuration(input.baseMs),
-    head: formatDuration(input.headMs),
-    delta: `${formatNumberDelta(input.baseMs, input.headMs)}ms`
-  })
-
-const formatCostMetricDeltaCells = (
-  base: EvalMetrics,
-  head: EvalMetrics
-): {
-  readonly base: string
-  readonly head: string
-  readonly delta: string
-} => ({
-  base: formatCostMetric(base),
-  head: formatCostMetric(head),
-  delta: formatNumberDelta(base.costUsd, head.costUsd)
-})
-
-const formatEvalComparisonCostMetricDeltaRow = (
-  input: {
-    readonly metric: string
-    readonly base: EvalMetrics
-    readonly head: EvalMetrics
-  }
+    readonly base: EvalComparisonMetrics | undefined
+    readonly head: EvalComparisonMetrics | undefined
+    readonly scope: string
+  },
+  comparability: MetricComparability
 ): string => {
-  const cells = formatCostMetricDeltaCells(input.base, input.head)
-  return formatEvalComparisonMetricDeltaRow({
+  const readRate = (
+    metrics: EvalComparisonMetrics | undefined
+  ): number | null | undefined => metrics?.recallByDiffScope?.[input.scope]
+  const readCount = (
+    metrics: EvalComparisonMetrics | undefined
+  ): number | undefined => metrics?.diffScopeCounts?.[input.scope]?.expected
+  const baseRate = readRate(input.base)
+  const headRate = readRate(input.head)
+  const baseCount = readCount(input.base)
+  const headCount = readCount(input.head)
+  const refusal = comparability.refusalReason('recallByDiffScope')
+  const formatSide = (
+    rate: number | null | undefined,
+    count: number | undefined
+  ): string =>
+    rate === undefined || count === undefined
+      ? UNKNOWN_VALUE
+      : formatRateOverCount(rate, count)
+
+  return formatRow({
     metric: input.metric,
-    base: cells.base,
-    head: cells.head,
-    delta: cells.delta
+    base: formatSide(baseRate, baseCount),
+    head: formatSide(headRate, headCount),
+    delta:
+      refusal !== undefined
+        ? NOT_COMPARABLE
+        : baseRate === undefined ||
+            headRate === undefined ||
+            baseCount === undefined ||
+            headCount === undefined
+          ? UNKNOWN_VALUE
+          : baseRate === null ||
+              headRate === null ||
+              baseCount === 0 ||
+              headCount === 0
+            ? 'n/a'
+            : formatPercentagePointDelta(baseRate, headRate)
+  })
+}
+
+const costRow = (
+  input: EvalComparisonInput
+): string => {
+  const format = (
+    metrics: EvalComparisonMetrics | undefined
+  ): string =>
+    metrics?.costUsd === undefined || metrics.costUnavailableCount === undefined
+      ? UNKNOWN_VALUE
+      : formatCostMetric({
+          costUsd: metrics.costUsd,
+          costUnavailableCount: metrics.costUnavailableCount
+        })
+  const baseCost = input.base.metrics?.costUsd
+  const headCost = input.head.metrics?.costUsd
+
+  return formatRow({
+    metric: 'Cost',
+    base: format(input.base.metrics),
+    head: format(input.head.metrics),
+    delta:
+      input.comparability.refusalReason('costUsd') !== undefined
+        ? NOT_COMPARABLE
+        : baseCost === undefined || headCost === undefined
+          ? UNKNOWN_VALUE
+          : formatNumberDelta(baseCost, headCost)
+  })
+}
+
+const comparisonPrecisionBracket = (
+  report: EvalComparisonReport
+): PrecisionBracket =>
+  precisionBracket({
+    precision: report.metrics?.precision,
+    adjustedPrecision: report.metrics?.adjustedPrecision,
+    plausibilityJudged: report.scoring?.plausibilityJudged,
+    adjustedPrecisionTrustworthy: report.scoring?.adjustedPrecisionTrustworthy
+  })
+
+// Precision is published as its bracket and never as a point (see
+// `eval-precision-bracket.ts`). The two bounds move for different reasons, so
+// the delta cell reports them separately -- and the upper bound is exactly the
+// quantity a plausibility-scoring change makes incomparable, which is why it can
+// read `not comparable` while the lower bound still reports a delta.
+const precisionBracketRow = (input: EvalComparisonInput): string => {
+  const base = comparisonPrecisionBracket(input.base)
+  const head = comparisonPrecisionBracket(input.head)
+  const boundDelta = (
+    key: EvalComparabilityKey,
+    baseBound: PrecisionBracket['lower'],
+    headBound: PrecisionBracket['upper']
+  ): string =>
+    input.comparability.refusalReason(key) !== undefined
+      ? NOT_COMPARABLE
+      : baseBound.status === 'known' && headBound.status === 'known'
+        ? formatPercentagePointDelta(baseBound.value, headBound.value)
+        : UNKNOWN_VALUE
+
+  return formatRow({
+    metric: 'Precision (raw to adjusted bracket)',
+    base: formatPrecisionBracket(base),
+    head: formatPrecisionBracket(head),
+    delta: `lower ${boundDelta('precision', base.lower, head.lower)}; upper ${boundDelta(
+      'adjustedPrecision',
+      base.upper,
+      head.upper
+    )}`
   })
 }
 
 export const appendEvalComparisonMetricDeltas = (
   lines: string[],
-  input: EvalReportPair
+  input: EvalComparisonInput
 ): void => {
+  const base = input.base.metrics
+  const head = input.head.metrics
+  const comparability = input.comparability
+  const scalar = (
+    metric: string,
+    key: ScalarMetricKey,
+    render: ScalarMetricRowRenderer
+  ): string =>
+    render({ metric, key, base: base?.[key], head: head?.[key] }, comparability)
+
   appendMarkdownTable(lines, {
     heading: '## Metric Deltas',
     header: '| Metric | Base | Head | Delta |',
     alignment: '| --- | ---: | ---: | ---: |',
     rows: [
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Recall',
-        base: input.base.metrics.recall,
-        head: input.head.metrics.recall
-      }),
-      formatEvalComparisonDiffScopeRecallRow({
-        metric: 'Recall (in-diff)',
-        base: input.base.metrics,
-        head: input.head.metrics,
-        scope: 'in-diff'
-      }),
-      formatEvalComparisonDiffScopeRecallRow({
-        metric: 'Recall (out-of-diff)',
-        base: input.base.metrics,
-        head: input.head.metrics,
-        scope: 'out-of-diff'
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Precision',
-        base: input.base.metrics.precision,
-        head: input.head.metrics.precision
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Adjusted precision',
-        base: input.base.metrics.adjustedPrecision,
-        head: input.head.metrics.adjustedPrecision
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'F1',
-        base: input.base.metrics.f1,
-        head: input.head.metrics.f1
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Severity weighted F1',
-        base: input.base.metrics.severityWeightedF1,
-        head: input.head.metrics.severityWeightedF1
-      }),
-      formatEvalComparisonCountMetricDeltaRow({
-        metric: 'False positives',
-        base: input.base.metrics.falsePositiveCount,
-        head: input.head.metrics.falsePositiveCount
-      }),
-      formatEvalComparisonCountMetricDeltaRow({
-        metric: 'Genuine false positives',
-        base: input.base.metrics.genuineFalsePositiveCount,
-        head: input.head.metrics.genuineFalsePositiveCount
-      }),
-      formatEvalComparisonCountMetricDeltaRow({
-        metric: 'Unmatched but plausible',
-        base: input.base.metrics.unlistedRealFindingCount,
-        head: input.head.metrics.unlistedRealFindingCount
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Plausibility judge agreement',
-        base: input.base.metrics.plausibilityJudgeAgreement ?? 0,
-        head: input.head.metrics.plausibilityJudgeAgreement ?? 0
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Security obvious recall',
-        base: input.base.metrics.securityObviousRecall,
-        head: input.head.metrics.securityObviousRecall
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Security hard recall',
-        base: input.base.metrics.securityHardRecall,
-        head: input.head.metrics.securityHardRecall
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Provider error rate',
-        base: input.base.metrics.providerErrorRate,
-        head: input.head.metrics.providerErrorRate
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Provider issue rate',
-        base: input.base.metrics.providerIssueRate,
-        head: input.head.metrics.providerIssueRate
-      }),
-      formatEvalComparisonCountMetricDeltaRow({
-        metric: 'Provider issue cases',
-        base: input.base.metrics.providerIssueCount,
-        head: input.head.metrics.providerIssueCount
-      }),
-      formatEvalComparisonCountMetricDeltaRow({
-        metric: 'Refutation false negatives',
-        base: input.base.metrics.refutationFalseNegativeCount,
-        head: input.head.metrics.refutationFalseNegativeCount
-      }),
-      formatEvalComparisonCountMetricDeltaRow({
-        metric: 'Refutation false positives',
-        base: input.base.metrics.refutationFalsePositiveCount,
-        head: input.head.metrics.refutationFalsePositiveCount
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Fix judgment accuracy',
-        base: input.base.metrics.fixJudgmentAccuracy,
-        head: input.head.metrics.fixJudgmentAccuracy
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Fix false-positive detection rate',
-        base: input.base.metrics.fixFalsePositiveDetectionRate,
-        head: input.head.metrics.fixFalsePositiveDetectionRate
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Fix produce rate',
-        base: input.base.metrics.fixProduceRate,
-        head: input.head.metrics.fixProduceRate
-      }),
-      formatEvalComparisonPercentMetricDeltaRow({
-        metric: 'Fix apply failure rate',
-        base: input.base.metrics.fixApplyFailureRate,
-        head: input.head.metrics.fixApplyFailureRate
-      }),
-      formatEvalComparisonDurationMetricDeltaRow({
-        metric: 'Duration',
-        baseMs: input.base.metrics.durationMs,
-        headMs: input.head.metrics.durationMs
-      }),
-      formatEvalComparisonIntegerMetricDeltaRow({
-        metric: 'Input tokens',
-        base: input.base.metrics.inputTokens,
-        head: input.head.metrics.inputTokens
-      }),
-      formatEvalComparisonIntegerMetricDeltaRow({
-        metric: 'Input tokens (cached)',
-        base: input.base.metrics.cachedInputTokens,
-        head: input.head.metrics.cachedInputTokens
-      }),
-      formatEvalComparisonIntegerMetricDeltaRow({
-        metric: 'Output tokens',
-        base: input.base.metrics.outputTokens,
-        head: input.head.metrics.outputTokens
-      }),
-      formatEvalComparisonCostMetricDeltaRow({
-        metric: 'Cost',
-        base: input.base.metrics,
-        head: input.head.metrics
-      }),
-      formatEvalComparisonCountMetricDeltaRow({
-        metric: 'Cost unavailable cases',
-        base: input.base.metrics.costUnavailableCount,
-        head: input.head.metrics.costUnavailableCount
-      })
+      scalar('Recall', 'recall', percentRow),
+      diffScopeRecallRow(
+        {
+          metric: 'Recall (in-diff)',
+          base,
+          head,
+          scope: 'in-diff'
+        },
+        comparability
+      ),
+      diffScopeRecallRow(
+        {
+          metric: 'Recall (out-of-diff)',
+          base,
+          head,
+          scope: 'out-of-diff'
+        },
+        comparability
+      ),
+      precisionBracketRow(input),
+      scalar('F1', 'f1', percentRow),
+      scalar('Severity weighted F1', 'severityWeightedF1', percentRow),
+      scalar('False positives', 'falsePositiveCount', countRow),
+      scalar(
+        'Genuine false positives',
+        'genuineFalsePositiveCount',
+        countRow
+      ),
+      scalar(
+        'Unmatched but plausible',
+        'unlistedRealFindingCount',
+        countRow
+      ),
+      scalar(
+        'Plausibility judge agreement',
+        'plausibilityJudgeAgreement',
+        percentRow
+      ),
+      scalar('Security obvious recall', 'securityObviousRecall', percentRow),
+      scalar('Security hard recall', 'securityHardRecall', percentRow),
+      scalar('Provider error rate', 'providerErrorRate', percentRow),
+      scalar('Provider issue rate', 'providerIssueRate', percentRow),
+      scalar('Provider issue cases', 'providerIssueCount', countRow),
+      scalar(
+        'Refutation false negatives',
+        'refutationFalseNegativeCount',
+        countRow
+      ),
+      scalar(
+        'Refutation false positives',
+        'refutationFalsePositiveCount',
+        countRow
+      ),
+      scalar('Fix judgment accuracy', 'fixJudgmentAccuracy', percentRow),
+      scalar(
+        'Fix false-positive detection rate',
+        'fixFalsePositiveDetectionRate',
+        percentRow
+      ),
+      scalar('Fix produce rate', 'fixProduceRate', percentRow),
+      scalar('Fix apply failure rate', 'fixApplyFailureRate', percentRow),
+      scalar('Duration', 'durationMs', durationRow),
+      scalar('Input tokens', 'inputTokens', integerRow),
+      scalar('Input tokens (cached)', 'cachedInputTokens', integerRow),
+      scalar('Output tokens', 'outputTokens', integerRow),
+      costRow(input),
+      scalar('Cost unavailable cases', 'costUnavailableCount', countRow)
     ]
   })
 }

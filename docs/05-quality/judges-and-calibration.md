@@ -177,8 +177,16 @@ unmatched output for precision accounting:
 
 ```
 falsePositiveCount = genuineFalsePositiveCount + unlistedRealFindingCount
-adjustedPrecision  = matched / (matched + genuineFalsePositiveCount)
+precision          = matched / (matched + falsePositiveCount)          # lower bound
+adjustedPrecision  = matched / (matched + genuineFalsePositiveCount)   # upper bound
 ```
+
+The two are the bounds of one bracket and are always published together — see
+[Metrics, trap 1](metrics.md#read-this-first-three-traps). Without a plausibility
+judge the engine sets `adjustedPrecision = precision`, which is the lower bound
+printed twice rather than a measured upper bound; `scoring.plausibilityJudged`
+records which case a run was in, and every surface renders the upper bound as
+*not measured* when it is `false`.
 
 **Fail-closed, everywhere.** Precision is only ever credited by an affirmative
 `plausible = true`. Every other outcome leaves the finding a genuine false
@@ -261,8 +269,9 @@ signal that calibration was partial.
 | No judge at all (offline) | `judgeTrustworthy: true` | No semantic authority to distrust — such a run scores only cases with no expected findings, fully deterministically |
 
 The plausibility judge has the parallel field
-`scoring.adjustedPrecisionTrustworthy`, gating `adjustedPrecision` specifically:
-adjusted precision is only as trustworthy as the judge that produced it.
+`scoring.adjustedPrecisionTrustworthy`, gating the precision bracket's UPPER bound
+specifically: that bound is only as trustworthy as the judge that produced it. The
+lower bound is unaffected — it needs no judge.
 
 **The minimum is 0.9**, from `evaluation.minJudgeAgreement` (default `0.9`). Both
 judges share this one config key. The bar is deliberately high: one disagreement

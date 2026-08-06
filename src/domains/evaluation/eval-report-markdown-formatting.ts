@@ -1,3 +1,8 @@
+import {
+  type PrecisionBracket,
+  type PrecisionBracketBound
+} from './eval-precision-bracket.js'
+
 export type EvalCostMetricInput = {
   readonly costUnavailableCount: number
   readonly costUsd: number
@@ -31,6 +36,28 @@ export const formatCostMetric = (metrics: EvalCostMetricInput): string =>
   metrics.costUnavailableCount === 0
     ? formatCurrency(metrics.costUsd)
     : `${formatCurrency(metrics.costUsd)} known; unavailable for ${metrics.costUnavailableCount} case(s)`
+
+// The precision bracket is rendered as one cell so the two bounds cannot be
+// separated in transit. See `eval-precision-bracket.ts` for why the upper bound
+// is "not measured" rather than equal to the lower bound when no plausibility
+// judge ran.
+export const formatPrecisionBound = (bound: PrecisionBracketBound): string => {
+  switch (bound.status) {
+    case 'known':
+      return formatPercent(bound.value)
+    case 'not-measured':
+      return 'not measured (no plausibility judge)'
+    default:
+      return 'unknown (not recorded)'
+  }
+}
+
+export const formatPrecisionBracket = (bracket: PrecisionBracket): string =>
+  `${formatPrecisionBound(bracket.lower)} to ${formatPrecisionBound(bracket.upper)}${
+    bracket.upper.status === 'known' && !bracket.upperTrustworthy
+      ? ' (upper bound untrustworthy)'
+      : ''
+  }`
 
 export const escapeMarkdownCell = (value: string): string =>
   value.replace(/\|/gu, '\\|').replace(/\r?\n/gu, ' ')

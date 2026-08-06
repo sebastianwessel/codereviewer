@@ -1381,6 +1381,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "adjustedPrecisionTrustworthy": true,
     "judgeAgreement": 1,
     "judgeTrustworthy": true,
+    "plausibilityJudged": false,
   },
   "selection": {
     "caseFilters": [],
@@ -1409,7 +1410,7 @@ Fixtures: 2
 | Findings | Recall (in-diff) | n/a (0 checked) |
 | Findings | Recall (out-of-diff) | n/a (0 checked) |
 | Findings | Unmatched but plausible | 0 |
-| False positives | Adjusted precision | 50.0% |
+| False positives | Precision (raw to adjusted bracket) | 50.0% to not measured (no plausibility judge) |
 | False positives | Genuine false positives | 1 |
 | False positives | Duplicate findings | 0 |
 | Priority | Severity accuracy | 100.0% (1 checked) |
@@ -1441,8 +1442,9 @@ Fixtures: 2
 | Out-of-diff recall | n/a (0 checked) |
 | Security obvious recall | 0.0% (0 expected) |
 | Security hard recall | 0.0% (0 expected) |
-| Precision | 50.0% |
-| Adjusted precision | 50.0% |
+| Precision (raw to adjusted bracket) | 50.0% to not measured (no plausibility judge) |
+| Precision (lower bound, raw) | 50.0% |
+| Precision (upper bound, adjusted) | not measured (no plausibility judge) |
 | F1 | 66.7% |
 | Severity weighted F1 | 66.7% |
 | Line accuracy | 100.0% (1 checked) |
@@ -1501,10 +1503,10 @@ Fixtures: 2
 
 ## Metric Groups
 
-| Group | Key | Fixtures | Recall | Precision | F1 | Line accuracy | False positives |
+| Group | Key | Fixtures | Recall | Precision (raw to adjusted) | F1 | Line accuracy | False positives |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| sourceProfile | project | 2 | 100.0% | 50.0% | 66.7% | 100.0% (1 checked) | 1 |
-| language | typescript | 2 | 100.0% | 50.0% | 66.7% | 100.0% (1 checked) | 1 |
+| sourceProfile | project | 2 | 100.0% | 50.0% to not measured (no plausibility judge) | 66.7% | 100.0% (1 checked) | 1 |
+| language | typescript | 2 | 100.0% | 50.0% to not measured (no plausibility judge) | 66.7% | 100.0% (1 checked) | 1 |
 
 ## Cases
 

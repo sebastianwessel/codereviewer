@@ -1579,7 +1579,13 @@ export const runEvaluation = async (
       // With no plausibility judge, no unmatched finding is ever credited as
       // real, so adjustedPrecision equals precision and is as trustworthy as it.
       adjustedPrecisionTrustworthy:
-        plausibilityCalibration?.plausibilityJudgeTrustworthy ?? true
+        plausibilityCalibration?.plausibilityJudgeTrustworthy ?? true,
+      // Recorded so the precision BRACKET can be honest. Without this, a run
+      // with no plausibility judge is indistinguishable from one whose judge
+      // examined every unmatched finding and rejected all of them -- both report
+      // `adjustedPrecision === precision`, and only one of them measured an
+      // upper bound.
+      plausibilityJudged: input.plausibilityJudge !== undefined
     },
     judgeReliability: {
       ...(calibration?.judgeAgreement === undefined

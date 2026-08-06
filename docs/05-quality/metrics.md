@@ -17,30 +17,50 @@ rate is a property of the model that produced it.
 
 ## Read this first: three traps
 
-### 1. Raw precision understates quality; adjusted precision is the real number
+### 1. Precision is a bracket, not a point
 
 A fixture's expected-finding list is a curated subset of the defects present in a
 change. A precision-first reviewer routinely reports genuine defects the list
-never mentioned. Raw `precision` counts every one of those as a false positive,
-so it measures **fixture incompleteness**, not reviewer noise.
+never mentioned. Under such a key, **precision is not identifiable**: a reported
+finding that matches nothing is either a false positive or a real defect the
+fixture omitted, and the key alone cannot tell those apart.
 
-An independent plausibility judge reads the actual file and decides whether each
-unmatched finding is a genuine defect. That splits the raw false positives:
+So there are two bounds, not one number and a correction to it. An independent
+plausibility judge reads the actual file and decides whether each unmatched
+finding is a genuine defect, splitting the raw false positives:
 
 ```
 falsePositiveCount = genuineFalsePositiveCount + unlistedRealFindingCount
 ```
 
-- `precision` = `matched / (matched + falsePositiveCount)` — pessimistic.
-- `adjustedPrecision` = `matched / (matched + genuineFalsePositiveCount)` —
-  the trustworthy figure.
+- `precision` = `matched / (matched + falsePositiveCount)` — the **lower** bound.
+  Every unjudged finding is charged as wrong.
+- `adjustedPrecision` = `matched / (matched + genuineFalsePositiveCount)` — the
+  **upper** bound. Every finding the judge credited is treated as right.
 
-The gap is large and not a rounding effect. On the first judge-matched benchmark,
-40 of 48 unmatched findings were judged genuine defects: raw precision 44%
-understated an adjusted precision of roughly 83%.
+**Report the pair. Every surface here does, and none of them prints one bound
+alone.** The run summary, the metric-group tables and every `eval compare` table
+render precision as `lower to upper`. The gap is large and not a rounding effect:
+on the first judge-matched benchmark, 40 of 48 unmatched findings were judged
+genuine defects — raw precision 44%, adjusted roughly 83%.
 
-`adjustedPrecision` is only as good as the judge that produced it. If
-`scoring.adjustedPrecisionTrustworthy` is `false`, do not quote it.
+The upper end is the less trustworthy one. The literature on incomplete judgments
+(bpref/infAP) finds that condensed-list metrics overestimate a new system more
+than traditional metrics underestimate it, so a claim that leans on the top of the
+bracket needs more support than one that leans on the bottom.
+
+Two ways the upper bound is not a number at all, and both are rendered as such:
+
+- **`not measured (no plausibility judge)`** — with no judge the stage is a no-op
+  and the engine sets `adjustedPrecision = precision`. That value is the lower
+  bound printed twice, not an upper bound; `scoring.plausibilityJudged` records
+  which case a run was in.
+- **`unknown (not recorded)`** — a report saved before `scoring.plausibilityJudged`
+  existed cannot answer the question.
+
+`adjustedPrecision` is also only as good as the judge that produced it. If
+`scoring.adjustedPrecisionTrustworthy` is `false`, the bound is rendered as
+untrustworthy and must not be quoted.
 
 **Restatements do not inflate `unlistedRealFindingCount`.** A reviewer that finds
 one real defect and reports it again at a neighbouring line used to have each
@@ -130,15 +150,15 @@ refutation and admission to be admitted at all.
 
 | Metric | What it counts | Denominator | How to read it |
 | --- | --- | --- | --- |
-| `precision` | Matched findings | `matched + falsePositiveCount` | **Understated.** See trap 1. Useful only as a floor. |
-| `adjustedPrecision` | Matched findings | `matched + genuineFalsePositiveCount` | **The trustworthy precision.** Valid only when `scoring.adjustedPrecisionTrustworthy` is `true`. |
+| `precision` | Matched findings | `matched + falsePositiveCount` | **Lower bound of the precision bracket.** Never quoted without its upper bound — see trap 1. |
+| `adjustedPrecision` | Matched findings | `matched + genuineFalsePositiveCount` | **Upper bound of the precision bracket**, and the less trustworthy end. Never "the" precision. A measured bound only when `scoring.plausibilityJudged` is `true`; valid only when `scoring.adjustedPrecisionTrustworthy` is also `true`. |
 | `falsePositiveCount` | Unmatched actionable findings that are not duplicates of a matched finding | — (a count) | *Raw* noise. Includes real-but-unlisted defects. |
 | `genuineFalsePositiveCount` | `falsePositiveCount − unlistedRealFindingCount` | — | Unmatched findings the plausibility judge called spurious, **plus** every finding whose judgment could not be completed (fail-closed), **plus** every finding the judge recognised as restating a defect already counted in the same file. The trustworthy noise count. |
 | `unlistedRealFindingCount` | Unmatched findings the plausibility judge affirmatively called genuine defects **and not a restatement of one already counted** | — | Real, DISTINCT defects the fixture omitted. Never credited to recall. A finding that restates a match (or an earlier unlisted-real credit in the same run) at a different line is excluded here even when the judge finds it plausible on its own, because it is not a further defect — see the restatement note above. |
 | `noFindingZoneFalsePositiveCount` | Unmatched, non-duplicate findings landing inside a declared `expectedNoFindingZone` | — | The sharpest noise signal: the fixture explicitly asserts there is nothing to report here. |
 | `duplicateFindingCount` | Unmatched findings at the same path with a line range overlapping a matched finding (tolerance 0) | — | Review noise, **not** counted as false positives. Deliberately a raw, line-based check with zero tolerance — it stays narrow on purpose (see the restatement note above); a restatement the plausibility judge recognises semantically at a NON-overlapping line is not added here, it is excluded from `unlistedRealFindingCount` instead. |
 | `severityWeightedPrecision` | Severity weight of matched expected findings | matched weight + false-positive weight | Uses raw false positives, so it inherits trap 1. |
-| `f1` | Harmonic mean of `precision` and `recall` | — | Built on **raw** precision. Prefer reading recall and `adjustedPrecision` separately. |
+| `f1` | Harmonic mean of `precision` and `recall` | — | Built on the **lower** precision bound. Prefer reading recall and the precision bracket separately. |
 | `severityWeightedF1` | Harmonic mean of the two severity-weighted rates | — | Same caveat. |
 | `artifactOnlyFindingCount` | Admitted findings marked `reporterEligibility = "artifact-only"` | — | |
 | `artifactOnlyMatchedFindingCount` / `artifactOnlyFalsePositiveCount` | Artifact-only findings that matched / did not | — | |

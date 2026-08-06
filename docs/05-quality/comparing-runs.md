@@ -90,9 +90,18 @@ being filtered, and the change would have failed regardless of what recall did.
 
 ### Compare paired expectations, not run means
 
-A difference of arm means throws away the information that matters. Score each
-**individual expected finding**, keyed by `caseId` + `expectedIndex`, across
-every seed of both arms, then ask how many expectations changed side.
+**This is now the primary verdict `eval compare` prints**, not a manual follow-up
+step — see [the paired recall verdict](#the-paired-recall-verdict-is-the-headline).
+Reach for `eval-significance.ts` directly only when pooling several seeds per arm,
+which `eval compare` (two reports) does not do.
+
+A difference of arm means throws away the information that matters, and the
+run-level standard deviation is a weak instrument on top of that: estimated from
+three seeds, the two most recent figures on this corpus (0.96pp and 2.89pp) carry
+95% intervals of roughly [0.50, 6.04] and [1.50, 18.17] — they overlap almost
+entirely, so the spread itself is barely measured. Score each **individual
+expected finding**, keyed by `caseId` + `expectedIndex`, across every seed of both
+arms, then ask how many expectations changed side.
 `src/domains/evaluation/eval-significance.ts` does this and reports:
 
 - the per-expectation hit-rate difference and a confidence interval on the mean;
@@ -133,39 +142,87 @@ Both flags are required; omitting either is a usage error (exit `2`). Output is
 Markdown on stdout. **The command exits `0` even when it renders warnings**, so
 you can inspect partial overlap and new/removed cases.
 
-### Hard refusals (the command throws, exit `2` — not a warning)
+### It reads reports older than the current build
 
-Before rendering anything, the command refuses outright when either check below
-fails, because a delta across either boundary reports a change in the RULER or
-in the ANSWER KEY, not in the engine, and it is indistinguishable from a real
-regression or win:
+`eval compare` exists to compare runs across engine changes, and an engine change
+is exactly what adds a field to the report. The command therefore reads both
+reports through a **tolerant comparison view** rather than the producer contract:
+an archived report missing a counter a later build introduced compares fine.
 
-- **`metricsVersion` differs between the two reports** — they computed metrics
-  under different rules.
-- **`provenance.answerKeyDigest` differs between the two reports** — they were
-  scored against different expected-finding content, even if `metricsVersion`
-  matches. This is unconditional: it fires whenever the digests differ,
-  including when the two reports also select different cases (a differing
-  selection almost always changes the digest too). This is the exact failure
-  this repository already hit once — an archived run reported 78.8% recall
-  after its answer key had since changed underneath it, with nothing in the
-  saved report revealing that.
+**What it never does is fill the gap in.** Any value a report did not record
+renders `unknown (not recorded)`, and so does every delta that would have needed
+it. A missing counter is never read as `0`, and a case whose report did not record
+the inputs its status derives from renders `unknown`, never `PASS`.
 
-Re-run both sides with the current build, against the same fixture selection,
-before comparing. Neither check can be bypassed with a flag.
+### The one hard refusal (the command throws, exit `2`)
 
-Rendered, in order (once both checks above pass):
+- **A case BOTH runs scored was scored against different expectations** — the
+  error names those cases. This is the exact failure this repository already hit
+  once: an archived run reported 78.8% recall after its answer key had since
+  changed underneath it, with nothing in the saved report revealing that. When the
+  key moves underneath a comparison, no metric on either side means what it says.
+
+It cannot be bypassed with a flag. A differing case *selection* is not this — see
+the warning below.
+
+### A `metricsVersion` difference refuses metrics, not the report
+
+A scoring-rule change alters what a metric reports for identical review output, so
+a delta across one measures the ruler. But a bump almost never touches every
+metric, and refusing all of them meant the comparison got done by hand or not at
+all.
+
+The command renders a **`Scoring Rules`** section naming both versions before any
+number, then suppresses exactly the affected deltas as `not comparable` and
+compares the rest. Which metrics are affected is derived from an ordered
+scoring-rule history in `src/domains/evaluation/eval-metrics-versions.ts`, where
+every version declares what it changed — it is not a hand-maintained list in the
+renderer.
+
+Worked example: across `2026-08-01.discovery-telemetry` →
+`2026-08-03.plausibility-source-window`, the plausibility judge's source window
+changed, so `adjustedPrecision`, `unlistedRealFindingCount` and
+`genuineFalsePositiveCount` are refused — and `recall`, raw `precision`,
+`linePlacementRate` and `severityAccuracy`, none of which read a plausibility
+verdict, are compared normally.
+
+Two cases refuse **everything**: a version whose entry declares an unbounded
+change, and a version id absent from the declared history (a future build, or the
+`pre-2026-07-26` sentinel). Nothing is known about what those changed, and
+guessing narrow is the failure the mechanism exists to prevent.
+
+Rendered, in order:
 
 | Section | Contents |
 | --- | --- |
+| Scoring rules | Both `metricsVersion` values, and which metrics the difference makes incomparable |
 | Gate | Base/head gate status |
 | Selection | Whether `selection.selectedCaseIds` are identical and whether fixture source / slice root match |
-| Metric deltas | Aggregate quality, token, cost, duration, provider-health and refutation deltas |
+| **Paired recall verdict** | **The primary verdict for a recall difference** — see below |
+| Metric deltas | Aggregate quality, token, cost, duration, provider-health and refutation deltas — **context, not the decision rule** |
 | Context ledger | Base/head/delta entry counts by ledger kind |
 | Agentic stages | Refutation / fix / provider-recovery stage counts |
 | Metric-group coverage | Fixture-count deltas across the union of `sourceProfile` and `language` groups, including groups present in only one report; unchanged counts omitted |
 | Metric-group deltas | Quality, resource and proof-loop deltas — **only for groups present in both reports** |
 | Case transitions | Per-case status change |
+
+### The paired recall verdict is the headline
+
+`eval compare` runs the paired finding-level test itself and prints it **before**
+the run-level deltas. Both reports scored the same expectations, so the unit is
+one expectation (`caseId#expectedIndex`) and the statistic is McNemar over the
+discordant pairs, with the paired-bootstrap 95% interval. It reports paired
+expectations, base and head paired recall, the delta, gained / lost / discordant
+counts, found-by-both and missed-by-both, and the two-sided p.
+
+This replaces "difference of run means ± sd" as the decision rule for recall. It
+costs nothing extra: the per-expectation outcome is already in every report.
+
+The verdict is **withheld**, with the reason printed, when recall is not
+comparable across the two scoring-rule versions, when either report did not record
+its per-expectation outcomes, or when the two reports share no expectation. It is
+never approximated — an arm whose expectations were not recorded is not an arm
+that matched nothing.
 
 ### Warnings that invalidate the deltas
 
@@ -173,6 +230,9 @@ Rendered **before** the metric deltas, because the aggregates below them are not
 same-dataset comparable:
 
 - **Selected case sets differ**, or fixture source / slice root differ.
+- **A report did not record its selected case set** — whether the aggregates are
+  same-dataset comparable cannot be established, which is not the same as
+  establishing that they are.
 - **Either report has `scoring.judgeTrustworthy = false`.**
 - **The two reports' `judgeAgreement` values differ materially** — the deltas may
   reflect judge variance rather than review quality.
@@ -326,8 +386,9 @@ tell, before spending anything, whether a pack can support `lineAccuracy` at all
    "unmeasured", not "improved".
 6. **`eval recall-report` across all seeds of both arms.** Movement from *never
    detected* → *flaky* → *always detected* is the real signal.
-7. **`eval compare` the representative reports** for token, cost, duration and
-   segment deltas.
+7. **`eval compare` the representative reports.** Read its paired recall verdict
+   first; the run-level deltas below it are context for token, cost, duration and
+   segment movement.
 8. **Intersect before comparing** `severityAccuracy` or `lineAccuracy`.
 
 ---

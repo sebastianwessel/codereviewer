@@ -23,12 +23,59 @@ import {
   appendContextLedgerKindDeltas,
   contextLedgerKindCounts
 } from './eval-comparison-context-stage-rendering.js'
-import { type EvalReport } from './eval-report-contracts.js'
+import { appendEvalComparisonPairedRecall } from './eval-comparison-paired-recall-rendering.js'
+import { metricComparability } from './eval-metrics-versions.js'
+import { pairedRecallVerdict } from './eval-paired-recall-verdict.js'
+import { type EvalComparisonReport } from './eval-comparison-view.js'
+
+// Stated before any number, because it decides which of the numbers below may be
+// read as a difference at all.
+const appendEvalComparisonScoringRules = (
+  lines: string[],
+  input: {
+    readonly base: EvalComparisonReport
+    readonly head: EvalComparisonReport
+    readonly baseLabel: string
+    readonly headLabel: string
+    readonly comparability: ReturnType<typeof metricComparability>
+  }
+): void => {
+  lines.push('## Scoring Rules')
+  lines.push('')
+  lines.push('| Report | Metrics version |')
+  lines.push('| --- | --- |')
+  lines.push(`| Base | ${input.base.metricsVersion} |`)
+  lines.push(`| Head | ${input.head.metricsVersion} |`)
+  lines.push('')
+
+  const { divergence } = input.comparability
+
+  if (divergence.kind === 'same') {
+    return
+  }
+
+  if (divergence.kind === 'all') {
+    lines.push(
+      `Warning: NO metric may be compared across these reports -- ${divergence.reason}. Every delta below reads "not comparable".`
+    )
+    lines.push('')
+    return
+  }
+
+  lines.push(
+    `Warning: ${divergence.reason}. These metrics are not comparable and their deltas are suppressed: ${[
+      ...divergence.affected
+    ]
+      .sort((left, right) => left.localeCompare(right))
+      .join(', ')}. Every other metric is unaffected by the change and is compared normally.`
+  )
+  lines.push('')
+}
 
 export const renderEvalComparison = (
   input: {
-    readonly base: EvalReport
-    readonly head: EvalReport
+    readonly base: EvalComparisonReport
+    readonly head: EvalComparisonReport
     readonly baseLabel?: string
     readonly headLabel?: string
   }
@@ -36,44 +83,39 @@ export const renderEvalComparison = (
   const baseLabel = input.baseLabel ?? 'base'
   const headLabel = input.headLabel ?? 'head'
 
-  // Refuse to diff runs scored by different rules. A metrics-version change
-  // means identical review output would produce different numbers, so a delta
-  // across the boundary measures the scoring change rather than the engine --
-  // and it looks exactly like a real regression or win. Failing loudly is the
-  // only safe behaviour: this repository has already published a result that was
-  // scored against a stale answer key, and nothing in the artifact revealed it.
-  if (input.base.metricsVersion !== input.head.metricsVersion) {
-    throw new Error(
-      `Refusing to compare evaluation runs scored by different rules: ${baseLabel} used metrics version "${input.base.metricsVersion}" and ${headLabel} used "${input.head.metricsVersion}". Re-run both sides with the current build before comparing.`
-    )
-  }
-
-  // Refuse the same way across a differing answer-key digest. A metrics-version
-  // match only proves the two runs computed metrics the same WAY; it says
-  // nothing about whether they were scored against the same WHAT. Diffing two
-  // reports whose expected-finding content differs looks exactly like a real
-  // regression or win, and this project has already published a recall figure
-  // (78.8%) that was silently scored against an answer key that had since
-  // changed underneath it -- the exact class of failure this guards against,
-  // reusing the metricsVersion guard above rather than inventing a second
-  // comparability check.
-  // Refuse only when the cases BOTH runs scored were scored against different
-  // expectations. A different case selection also changes the aggregate digest,
-  // but comparing a filtered run against a full one is ordinary work that this
-  // report already warns about further down -- refusing it too would make the
-  // guard blunt enough that someone would reasonably delete it. What must never
-  // pass silently is the shared cases having moved underneath the comparison,
-  // which is what produced an archived run still advertising 78.8% recall
-  // against an answer key that had since changed.
+  // Refuse to diff runs whose SHARED cases were scored against different
+  // expectations. This one is fatal and stays fatal: when the answer key moved
+  // underneath the comparison, no metric on either side means what it says, so
+  // there is nothing honest left to render. It is the incident that produced an
+  // archived run still advertising 78.8% recall against a key that had since
+  // changed. A different case SELECTION is not this -- comparing a filtered run
+  // against a full one is ordinary work, warned about further down.
   const divergedCases = casesWithDivergedAnswerKeys(
-    input.base.provenance.answerKeyDigestByCase,
-    input.head.provenance.answerKeyDigestByCase
+    input.base.provenance?.answerKeyDigestByCase ?? {},
+    input.head.provenance?.answerKeyDigestByCase ?? {}
   )
 
   if (divergedCases.length > 0) {
     throw new Error(
       `Refusing to compare evaluation runs whose shared cases were scored against different expectations: ${divergedCases.join(', ')}. Re-run both sides against the current answer key before comparing.`
     )
+  }
+
+  // A metrics-version difference is NOT fatal, and used to be. Refusing the
+  // whole report made the honest partial comparison impossible: the 2026-08-03
+  // bump changes which findings are credited unlisted-real and therefore moves
+  // exactly three metrics, while recall, raw precision, line placement and
+  // severity accuracy are untouched. Comparability is per metric, derived from
+  // the declared scoring-rule history, and every refused metric says so where it
+  // would otherwise have printed a number.
+  const comparability = metricComparability(
+    input.base.metricsVersion,
+    input.head.metricsVersion
+  )
+  const comparisonInput = {
+    base: input.base,
+    head: input.head,
+    comparability
   }
   const baseStatus = caseStatusById(input.base)
   const headStatus = caseStatusById(input.head)
@@ -91,9 +133,24 @@ export const renderEvalComparison = (
   lines.push(`Base: ${baseLabel}`)
   lines.push(`Head: ${headLabel}`)
   lines.push('')
-  appendEvalComparisonGate(lines, input)
+  appendEvalComparisonScoringRules(lines, {
+    baseLabel,
+    headLabel,
+    ...comparisonInput
+  })
+  appendEvalComparisonGate(lines, comparisonInput)
   appendEvalComparisonSelection(lines, selection)
-  appendEvalComparisonMetricDeltas(lines, input)
+  appendEvalComparisonPairedRecall(
+    lines,
+    pairedRecallVerdict({
+      base: input.base,
+      head: input.head,
+      baseLabel,
+      headLabel,
+      comparability
+    })
+  )
+  appendEvalComparisonMetricDeltas(lines, comparisonInput)
 
   const baseContextKindCounts = contextLedgerKindCounts(input.base)
   const headContextKindCounts = contextLedgerKindCounts(input.head)
@@ -121,9 +178,14 @@ export const renderEvalComparison = (
   appendMetricGroupCoverageDeltas(lines, metricGroupCoverage)
 
   if (metricGroupPairs.length > 0) {
-    appendMetricGroupQualityDeltas(lines, metricGroupPairs)
-    appendMetricGroupResourceDeltas(lines, metricGroupPairs)
-    appendMetricGroupProofLoopDeltas(lines, metricGroupPairs)
+    const groupInput = {
+      pairs: metricGroupPairs,
+      reports: { base: input.base, head: input.head },
+      comparability
+    }
+    appendMetricGroupQualityDeltas(lines, groupInput)
+    appendMetricGroupResourceDeltas(lines, groupInput)
+    appendMetricGroupProofLoopDeltas(lines, groupInput)
   }
 
   appendEvalComparisonCaseTransitions(lines, {

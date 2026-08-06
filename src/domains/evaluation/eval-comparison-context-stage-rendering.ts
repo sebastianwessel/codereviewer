@@ -1,13 +1,13 @@
 import { appendComparisonCountDeltaTable } from './eval-comparison-count-delta-rendering.js'
-import { type EvalReport } from './eval-report-contracts.js'
+import { type EvalComparisonReport } from './eval-comparison-view.js'
 
 export const contextLedgerKindCounts = (
-  report: EvalReport
+  report: EvalComparisonReport
 ): ReadonlyMap<string, number> => {
   const counts = new Map<string, number>()
 
-  for (const caseResult of report.caseResults) {
-    for (const entry of caseResult.contextLedger) {
+  for (const caseResult of report.caseResults ?? []) {
+    for (const entry of caseResult.contextLedger ?? []) {
       counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1)
     }
   }
@@ -16,12 +16,19 @@ export const contextLedgerKindCounts = (
 }
 
 export const agenticStageCounts = (
-  report: EvalReport
+  report: EvalComparisonReport
 ): ReadonlyMap<string, number> => {
   const counts = new Map<string, number>()
 
-  for (const caseResult of report.caseResults) {
-    for (const entry of caseResult.agenticStages) {
+  for (const caseResult of report.caseResults ?? []) {
+    for (const entry of caseResult.agenticStages ?? []) {
+      // A stage entry without a count is not a zero-count stage. Skipping it
+      // keeps the tally free of invented numbers; the stage still appears in
+      // the report it came from.
+      if (entry.count === undefined) {
+        continue
+      }
+
       counts.set(entry.stage, (counts.get(entry.stage) ?? 0) + entry.count)
     }
   }

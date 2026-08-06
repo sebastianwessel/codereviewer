@@ -1,10 +1,15 @@
 import { formatListValue } from './eval-report-markdown-formatting.js'
-import { type EvalReport } from './eval-report-contracts.js'
+import { type EvalComparisonReport } from './eval-comparison-view.js'
 
 type EvalReportPair = {
-  readonly base: EvalReport
-  readonly head: EvalReport
+  readonly base: EvalComparisonReport
+  readonly head: EvalComparisonReport
 }
+
+// Nothing here defaults an absent value. A report that never recorded its
+// selection or its judge reliability says so; it does not report an empty
+// selection or a trustworthy judge.
+const UNKNOWN_VALUE = 'unknown (not recorded)'
 
 const arraysEqual = (
   left: readonly string[],
@@ -18,13 +23,23 @@ const scalarSelectionStatus = (
   right: string | undefined
 ): 'same' | 'different' => (left ?? '') === (right ?? '') ? 'same' : 'different'
 
+const listSelectionStatus = (
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined
+): 'same' | 'different' | 'unknown' =>
+  left === undefined || right === undefined
+    ? 'unknown'
+    : arraysEqual(left, right)
+      ? 'same'
+      : 'different'
+
 // Judge agreement difference above which the two runs' quality deltas may
 // reflect judge variance rather than review quality.
 const MATERIAL_JUDGE_AGREEMENT_DELTA = 0.05
 
 export type EvalJudgeReliabilityStatus = {
-  readonly baseTrustworthy: boolean
-  readonly headTrustworthy: boolean
+  readonly baseTrustworthy: boolean | undefined
+  readonly headTrustworthy: boolean | undefined
   readonly baseAgreement?: number
   readonly headAgreement?: number
   readonly warnings: readonly string[]
@@ -33,13 +48,16 @@ export type EvalJudgeReliabilityStatus = {
 const formatAgreement = (agreement: number | undefined): string =>
   agreement === undefined ? 'not scored' : `${(agreement * 100).toFixed(1)}%`
 
+const formatTrustworthy = (trustworthy: boolean | undefined): string =>
+  trustworthy === undefined ? UNKNOWN_VALUE : trustworthy ? 'yes' : 'no'
+
 // The judge is the sole semantic authority, so an untrustworthy or differently
 // calibrated judge makes metric deltas unreadable as review-quality signal.
 const judgeReliabilityStatus = (
   input: EvalReportPair
 ): EvalJudgeReliabilityStatus => {
-  const baseAgreement = input.base.scoring.judgeAgreement
-  const headAgreement = input.head.scoring.judgeAgreement
+  const baseAgreement = input.base.scoring?.judgeAgreement
+  const headAgreement = input.head.scoring?.judgeAgreement
   const agreementDiffersMaterially =
     baseAgreement !== undefined &&
     headAgreement !== undefined &&
@@ -47,8 +65,8 @@ const judgeReliabilityStatus = (
   const warnings: string[] = []
 
   if (
-    !input.base.scoring.judgeTrustworthy ||
-    !input.head.scoring.judgeTrustworthy
+    input.base.scoring?.judgeTrustworthy === false ||
+    input.head.scoring?.judgeTrustworthy === false
   ) {
     warnings.push(
       'Warning: a compared report marks its semantic judge as untrustworthy; metric deltas may reflect judge error rather than review quality.'
@@ -62,8 +80,8 @@ const judgeReliabilityStatus = (
   }
 
   return {
-    baseTrustworthy: input.base.scoring.judgeTrustworthy,
-    headTrustworthy: input.head.scoring.judgeTrustworthy,
+    baseTrustworthy: input.base.scoring?.judgeTrustworthy,
+    headTrustworthy: input.head.scoring?.judgeTrustworthy,
     ...(baseAgreement === undefined ? {} : { baseAgreement }),
     ...(headAgreement === undefined ? {} : { headAgreement }),
     warnings
@@ -75,33 +93,34 @@ export const selectionStatus = (
 ): {
   readonly fixtureSource: 'same' | 'different'
   readonly sliceRoot: 'same' | 'different'
-  readonly caseFilters: 'same' | 'different'
-  readonly caseSet: 'same' | 'different'
+  readonly caseFilters: 'same' | 'different' | 'unknown'
+  readonly caseSet: 'same' | 'different' | 'unknown'
   readonly judgeReliability: EvalJudgeReliabilityStatus
   readonly baseOnlyCaseIds: readonly string[]
   readonly headOnlyCaseIds: readonly string[]
 } => {
-  const baseCaseIds = input.base.selection.selectedCaseIds
-  const headCaseIds = input.head.selection.selectedCaseIds
+  const baseCaseIds = input.base.selection?.selectedCaseIds ?? []
+  const headCaseIds = input.head.selection?.selectedCaseIds ?? []
   const headCaseIdSet = new Set(headCaseIds)
   const baseCaseIdSet = new Set(baseCaseIds)
 
   return {
     fixtureSource: scalarSelectionStatus(
-      input.base.selection.fixtureSource,
-      input.head.selection.fixtureSource
+      input.base.selection?.fixtureSource,
+      input.head.selection?.fixtureSource
     ),
     sliceRoot: scalarSelectionStatus(
-      input.base.selection.sliceRoot,
-      input.head.selection.sliceRoot
+      input.base.selection?.sliceRoot,
+      input.head.selection?.sliceRoot
     ),
-    caseFilters: arraysEqual(
-      input.base.selection.caseFilters,
-      input.head.selection.caseFilters
-    )
-      ? 'same'
-      : 'different',
-    caseSet: arraysEqual(baseCaseIds, headCaseIds) ? 'same' : 'different',
+    caseFilters: listSelectionStatus(
+      input.base.selection?.caseFilters,
+      input.head.selection?.caseFilters
+    ),
+    caseSet: listSelectionStatus(
+      input.base.selection?.selectedCaseIds,
+      input.head.selection?.selectedCaseIds
+    ),
     judgeReliability: judgeReliabilityStatus(input),
     baseOnlyCaseIds: baseCaseIds.filter((caseId) => !headCaseIdSet.has(caseId)),
     headOnlyCaseIds: headCaseIds.filter((caseId) => !baseCaseIdSet.has(caseId))
@@ -110,11 +129,14 @@ export const selectionStatus = (
 
 type EvalComparisonSelectionStatus = ReturnType<typeof selectionStatus>
 
+const formatGateResult = (passed: boolean | undefined): string =>
+  passed === undefined ? UNKNOWN_VALUE : passed ? 'PASS' : 'FAIL'
+
 const formatEvalComparisonGateRow = (
   label: string,
-  report: EvalReport
+  report: EvalComparisonReport
 ): string =>
-  `| ${label} | ${report.regressionGate.passed ? 'PASS' : 'FAIL'} | ${report.fixtureCount} | ${report.generatedAt} |`
+  `| ${label} | ${formatGateResult(report.regressionGate?.passed)} | ${report.fixtureCount ?? UNKNOWN_VALUE} | ${report.generatedAt ?? UNKNOWN_VALUE} |`
 
 export const appendEvalComparisonGate = (
   lines: string[],
@@ -146,6 +168,17 @@ export const appendEvalComparisonSelection = (
     )
     lines.push('')
   }
+
+  // Not knowing whether the two runs scored the same cases is not the same as
+  // knowing they did. An unrecorded selection cannot establish that the
+  // aggregates below are same-dataset comparable, so it warns rather than
+  // passing silently.
+  if (selection.caseSet === 'unknown') {
+    lines.push(
+      'Warning: a compared report did not record its selected case set; whether the aggregate metric deltas are same-dataset comparable cannot be established.'
+    )
+    lines.push('')
+  }
   for (const warning of selection.judgeReliability.warnings) {
     lines.push(warning)
     lines.push('')
@@ -169,7 +202,7 @@ export const appendEvalComparisonSelection = (
   lines.push(
     formatEvalComparisonSelectionRow(
       'Judge trustworthy',
-      `${selection.judgeReliability.baseTrustworthy ? 'yes' : 'no'} -> ${selection.judgeReliability.headTrustworthy ? 'yes' : 'no'}`
+      `${formatTrustworthy(selection.judgeReliability.baseTrustworthy)} -> ${formatTrustworthy(selection.judgeReliability.headTrustworthy)}`
     )
   )
   lines.push(

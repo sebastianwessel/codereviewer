@@ -348,12 +348,71 @@ written in. It is bumped whenever a change alters what a metric would report for
 identical review output — expectation assignment and the model category taxonomy
 have each done so.
 
-Comparison and significance testing refuse to run across differing versions rather
-than producing a delta. A delta measured across a scoring change reports the
-change in the ruler, not in the engine, and it is indistinguishable from a real
-regression or win. Failing loudly is the only safe behaviour here: this project has
-already published a recall figure that was scored against a stale answer key, and
-nothing in the artifact revealed it.
+A version is not a bare string. `eval-metrics-versions.ts` holds an ORDERED
+history in which every entry declares its id, a note, and the metrics that entry
+changed for identical review output. `EVAL_METRICS_VERSION` is derived as the
+newest entry, so a bump cannot land as a string edit without recording its blast
+radius. Comparability between any two versions is then derived: the affected set
+is the union of the `affects` declarations of every entry strictly after the older
+version up to and including the newer one.
+
+**Comparability is per metric, not per report.** A delta measured across a scoring
+change reports the change in the ruler rather than in the engine, and it is
+indistinguishable from a real regression or win — but a bump almost never touches
+every metric. The 2026-08-03 plausibility-window bump changes which unmatched
+findings are credited unlisted-real, so it moves `adjustedPrecision`,
+`unlistedRealFindingCount`, and `genuineFalsePositiveCount`, and it cannot move
+`recall`, raw `precision`, `linePlacementRate`, or `severityAccuracy`, none of
+which read a plausibility verdict. `eval compare` therefore refuses exactly the
+affected metrics — their deltas render `not comparable`, with the reason stated
+before any number — and compares the rest normally. Refusing all of them made the
+honest partial comparison impossible, which in practice meant the comparison was
+done by hand or not at all.
+
+Two fallbacks keep the derivation safe, and both point the same way:
+
+- an entry whose blast radius is not known declares `all`, and every metric is
+  refused across it;
+- a version id absent from the declared history (a future build read by an older
+  engine, or the `pre-2026-07-26` sentinel that stands for the era before
+  versioning) also refuses every metric, because nothing is known about what it
+  changed.
+
+The significance module is unchanged and still refuses OUTRIGHT across differing
+versions, because it POOLS runs into one arm rather than comparing two. Pooling
+runs scored by different rules computes a rate over a population that never
+existed; comparing them, metric by metric, does not.
+
+Failing loudly where the data does not support a number is the only safe
+behaviour here: this project has already published a recall figure that was scored
+against a stale answer key, and nothing in the artifact revealed it.
+
+### Reading A Report The Current Contract Did Not Write
+
+`EvalReportSchema` is the PRODUCER contract and stays strict: the report this
+build writes must satisfy it exactly. It is the wrong contract for READING an
+archived report. `eval compare` exists to compare runs across engine changes, and
+an engine change is exactly what adds a field to the report — comparing the
+2026-08-02 baseline against the 2026-08-05 re-baseline failed outright on
+`caseResults[].discovery.totals.cappedByLimitCount`, a counter the older run
+predates.
+
+Comparison therefore reads through a separate, tolerant COMPARISON VIEW
+(`eval-comparison-view.ts`) with three properties:
+
+- every leaf is optional and carries no default, so an absent field survives
+  parsing as absent;
+- unknown keys are ignored, so a field a later build adds is not fatal;
+- only what comparison renders is modelled. It is a read model, not a second copy
+  of the report contract.
+
+**Absence is unknown, never zero.** Loosening the producer contract to default a
+missing counter to `0` would report "no discovery calls" where the truth is "not
+recorded" — the recurring defect class this repository has already had to fix
+seven times. Every value the view could not read renders `unknown (not recorded)`,
+and every delta involving one renders the same. This applies beyond metrics: a
+case whose report did not record the inputs its status derives from renders
+`unknown`, never `PASS`.
 
 ## Provenance
 
@@ -421,9 +480,10 @@ it.** `EvalReportProvenance` carries `answerKeyDigest`, `answerKeyDigestByCase`,
 the engine build that produced the review output. The two guards that do exist
 are:
 
-- `metricsVersion`, which both the comparison renderer and the significance
-  module refuse to cross, because a metrics-version change alters what a metric
-  reports for identical review output; and
+- `metricsVersion`, which the significance module refuses to cross outright and
+  the comparison renderer refuses PER METRIC (see "Metrics Version"), because a
+  metrics-version change alters what a metric reports for identical review
+  output; and
 - `answerKeyDigest`, which the comparison renderer refuses to cross per shared
   case and the significance module refuses to cross in aggregate, because
   pooling runs scored against different expectations computes a rate over a
@@ -439,9 +499,35 @@ corpus, because a large share of its expectations lie in unchanged code and the
 blended number then depends on that ratio rather than on reviewer quality. Read
 the in-diff and out-of-diff figures alongside it.
 
-Adjusted precision is an estimate, permanently. Under an incomplete answer key
-precision is not identifiable: raw `precision` is the lower bound and
-`adjustedPrecision` the upper. Report the pair.
+### Precision Is A Bracket, Not A Point
+
+Under an incomplete answer key precision is **not identifiable**. A reported
+finding that matches nothing is either a false positive or a genuine defect the
+fixture never listed, and the answer key alone cannot tell those apart. Raw
+`precision` charges every unmatched finding as wrong and is therefore the LOWER
+bound; `adjustedPrecision` credits the ones the plausibility judge deemed genuine
+and is the UPPER bound. The literature on incomplete judgments (bpref/infAP, and
+the finding that condensed-list metrics overestimate a new system more than
+traditional metrics underestimate it) puts the less trustworthy end at the top.
+
+**The pair is the reported result.** Every surface that publishes precision
+publishes the bracket — the run summary headline, the summary metric table, the
+metric-group tables, and every comparison table — and `adjustedPrecision` is never
+presented alone as "the" precision. This is a reporting and contract requirement,
+not a new measurement: both numbers already existed, and quoting whichever one
+suited a claim is what made them misleading.
+
+The upper bound is **not measured** rather than equal to the lower bound whenever
+no plausibility judge ran. With no judge the stage is a no-op and the engine sets
+`adjustedPrecision = precision`; republishing that as an upper bound would assert
+that every unmatched finding was examined and found spurious when none was
+examined at all. `scoring.plausibilityJudged` records which case a run was in, so
+this distinction is a recorded fact rather than an inference. A report saved
+before that field existed cannot answer the question and its upper bound renders
+`unknown`.
+
+A bound is also rendered as untrustworthy when the plausibility judge scored below
+`evaluation.minJudgeAgreement` (`scoring.adjustedPrecisionTrustworthy = false`).
 
 Rates computed over MATCHED findings — `severityAccuracy`, `lineAccuracy`, and the
 severity-weighted scores — are not comparable between two runs whose recall differs.
@@ -464,7 +550,7 @@ use `null`, because a rate over no checks is undefined rather than zero.
 | --- | --- |
 | `parseValidity` | Fraction of outputs validating against schemas. |
 | `recall` | Expected findings matched by actionable admitted findings divided by expected findings. Model-origin actionable findings require a `proved` refutation verdict; trusted deterministic-rule findings are refutation-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. |
-| `precision` | Actionable admitted findings matched to expected findings divided by actionable admitted findings. Model-origin actionable findings require a `proved` refutation verdict; trusted deterministic-rule findings are refutation-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. |
+| `precision` | Actionable admitted findings matched to expected findings divided by actionable admitted findings. Model-origin actionable findings require a `proved` refutation verdict; trusted deterministic-rule findings are refutation-exempt. Findings with `reporterEligibility = "artifact-only"` are excluded. **This is the LOWER bound of the precision bracket** and is never published without its upper bound — see "Precision Is A Bracket, Not A Point". |
 | `f1` | Harmonic mean of precision and recall. |
 | `severityWeightedPrecision` | Precision weighted by expected severity impact. |
 | `severityWeightedRecall` | Recall weighted by expected severity impact. |
@@ -483,7 +569,7 @@ use `null`, because a rate over no checks is undefined rather than zero.
 | `duplicateFindingCount` | Admitted findings at the same path and overlapping line range as an already-matched finding. Review noise, not separate false positives. |
 | `genuineFalsePositiveCount` | Unmatched admitted findings the plausibility judge deemed spurious, plus any whose plausibility judgment could not be completed (fail-closed). The trustworthy false-positive count. |
 | `unlistedRealFindingCount` | Unmatched admitted findings the plausibility judge deemed genuine defects absent from the fixture's expected list. It REWARDS fragmentation — a reviewer that splits one defect across two findings scores two — so it must not be differenced across arms as if it were a defect count. |
-| `adjustedPrecision` | Matched findings divided by matched plus `genuineFalsePositiveCount`. Precision that does not penalise real defects the fixture omitted. The trustworthy precision figure. |
+| `adjustedPrecision` | Matched findings divided by matched plus `genuineFalsePositiveCount`. Precision that does not penalise real defects the fixture omitted. **This is the UPPER bound of the precision bracket**, never "the" precision, and it is the less trustworthy end of it. It is published only alongside raw `precision`, and only as a measured bound when `scoring.plausibilityJudged` is `true`. |
 | `plausibilityJudgeAgreement` | Fraction of plausibility-calibration findings whose judge decision matched the label. A run below the configured minimum marks `adjustedPrecision` untrustworthy. |
 | `plausibilityJudgeAgreementPairCount` | Denominator of `plausibilityJudgeAgreement`. |
 | `artifactOnlyRecall` | Expected findings matched by artifact-only findings divided by expected findings. This is diagnostic and does not satisfy the main recall gate. |
@@ -634,17 +720,52 @@ understandable without opening JSON. The JSON report remains the source of truth
 for automation.
 
 `codereviewer eval compare --base <report.json> --head <report.json>` compares
-two eval reports and prints gate status, selection status, metric deltas, and
-case transitions. Before any of that, the command refuses outright (throws
-rather than rendering) when the two reports' `metricsVersion` differ, or when
-their `provenance.answerKeyDigest` differ — see "Provenance" above. Both
-refusals fire unconditionally; the answer-key refusal is not limited to cases
-where `selection.selectedCaseIds` also differ, and in practice a differing case
-selection almost always produces a differing digest too. Selection status must
+two eval reports and prints the scoring-rule status, gate status, selection
+status, the paired recall verdict, metric deltas, and case transitions.
+
+Both reports are read through the tolerant COMPARISON VIEW, not the producer
+contract — see "Reading A Report The Current Contract Did Not Write". A report
+saved before a field existed compares successfully, and every value it lacks
+renders `unknown (not recorded)` rather than a number.
+
+The command refuses outright (throws rather than rendering) in exactly one case:
+when a case BOTH runs scored was scored against different expectations, named
+individually in the error — see "Provenance" above. When the answer key moved
+underneath the comparison, no metric on either side means what it says, so there
+is nothing honest left to render.
+
+A `metricsVersion` difference is NOT such a case. The command renders a
+`## Scoring Rules` section naming both versions before any number, warns which
+metrics the change makes incomparable, and suppresses exactly those deltas as
+`not comparable` while comparing the rest. See "Metrics Version".
+
+The **primary verdict for a recall difference is the paired, finding-level test**,
+rendered as `## Paired Recall Verdict (primary)` BEFORE the run-level metric
+deltas. Both reports scored the same expectations, so the unit is one expectation
+(`caseId#expectedIndex`) and the statistic is McNemar over the discordant pairs,
+reported with the paired-bootstrap 95% interval from `eval-significance.ts`. This
+replaces run-level mean ± standard deviation as the decision rule: an sd estimated
+from three seeds is barely an estimate — the two most recent figures on the
+primary corpus, 0.96pp and 2.89pp, carry 95% intervals of roughly [0.50, 6.04] and
+[1.50, 18.17] that overlap almost entirely — so deciding a few-point recall
+difference by it is deciding it with noise. Pairing removes the between-run
+variance both arms share and costs no additional provider spend, because the
+per-expectation outcome is already recorded in every report. Run-level metric
+deltas remain in the report as CONTEXT, explicitly labelled as such.
+
+The paired verdict is withheld, with the reason stated, when recall is not
+comparable under the scoring-rule history, when either report did not record its
+per-expectation outcomes, or when the two reports share no expectation. It is
+never approximated: an arm whose expectations were not recorded is not an arm that
+matched nothing.
+
+Selection status must
 identify whether `selection.selectedCaseIds` are identical and whether fixture
 source/slice root metadata match. When selected case sets differ, the comparison
 must render a warning before metric deltas because aggregate numbers are not
-same-dataset comparable. When either report has `scoring.judgeTrustworthy = false`, or the two
+same-dataset comparable. When either report did not record its selected case set,
+the status is `unknown` and the comparison must warn separately: not knowing
+whether two runs scored the same cases is not the same as knowing they did. When either report has `scoring.judgeTrustworthy = false`, or the two
 reports' `scoring.judgeAgreement` values differ materially, the comparison must
 render a warning before metric deltas because the deltas may reflect judge
 variance rather than review quality. The command may still exit `0` after
@@ -664,8 +785,9 @@ refutation false negative count and refutation false positive count so
 refutation quality regressions are visible during benchmark comparison. When
 both reports include
 matching `sourceProfile` or `language` metric groups, the comparison must render
-group-level fixture counts plus recall, precision, F1, and false-positive deltas
-so aggregate benchmark results cannot hide a segment-specific regression. The
+group-level fixture counts plus recall, the precision BRACKET with its two bound
+deltas, F1, and false-positive deltas so aggregate benchmark results cannot hide a
+segment-specific regression. The
 same matching groups must also render refutation deltas for refutation false
 negatives and false positives so refutation quality regressions are visible by
 segment. They must also render resource deltas for input tokens, output tokens,
@@ -728,6 +850,7 @@ matching strategy produced the run:
 | `scoring.judgeTrustworthy` | boolean | `false` when `judgeAgreement` is below `evaluation.minJudgeAgreement` or no calibration pair was scored, marking the run's quality metrics untrustworthy. |
 | `scoring.plausibilityJudgeAgreement` | number or omitted | Measured plausibility-judge agreement against its own calibration set. Omitted when no pair was judged. |
 | `scoring.adjustedPrecisionTrustworthy` | boolean | `false` when `plausibilityJudgeAgreement` is below the same configured minimum or no plausibility-calibration pair was scored, marking `adjustedPrecision` untrustworthy. Defaults to `true` when no plausibility judge ran. |
+| `scoring.plausibilityJudged` | boolean or omitted | Whether a plausibility judge ran at all. Required for the precision bracket to be honest: with no judge, `adjustedPrecision` equals raw `precision` and is not an upper bound at all. Omitted only in reports saved before the field existed, where the answer is genuinely unknown; it is deliberately not defaulted, because either default fabricates the answer. |
 
 `eval-report.json` must also include a `provenance` object proving WHAT was
 scored and under WHAT configuration, distinct from `scoring` above (which
@@ -1269,6 +1392,17 @@ rows share one owner.
 Eval comparison context-ledger delta rendering must live in a
 focused helper module so count collection, zero-row policy, and section headings
 share one owner.
+Eval comparison paired-recall verdict rendering must live in a focused helper
+module so the primary verdict, its unavailable reasons, and its detail table have
+one tested owner separate from the run-level delta renderers.
+The tolerant comparison read model, the scoring-rule history that per-metric
+comparability derives from, the paired-verdict adapter, and the precision bracket
+must each live in their own focused module (`eval-comparison-view.ts`,
+`eval-metrics-versions.ts`, `eval-paired-recall-verdict.ts`,
+`eval-precision-bracket.ts`), so none of them is owned by a renderer. The bracket
+in particular must be a domain value with explicit `known`/`not-measured`/
+`unknown` bounds rather than a formatting rule, so no surface can render one bound
+without the other.
 
 ## R1 Performance Budgets
 

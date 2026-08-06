@@ -26,13 +26,16 @@ alternative produces a number that looks fine and means nothing.
    (`scoring.judgeTrustworthy = false`).
    → [Judges and calibration](judges-and-calibration.md)
 
-2. **An unmatched finding is not assumed to be wrong.**
+2. **An unmatched finding is not assumed to be wrong, and precision is reported
+   as a bracket.**
    A fixture's expected-finding list is a *curated subset* of the defects in a
-   change. Counting every unmatched finding as a false positive measures fixture
-   incompleteness, not reviewer precision. A second, independent **plausibility
-   judge** reads the actual file and decides whether an unmatched finding is a
-   genuine defect the fixture simply did not list. `adjustedPrecision` is the
-   trustworthy precision figure; raw `precision` is not.
+   change, so precision is **not identifiable**: an unmatched finding is either
+   noise or a real defect the list omitted. A second, independent **plausibility
+   judge** reads the actual file and decides which. Raw `precision` (every
+   unmatched finding charged as wrong) is the **lower** bound and
+   `adjustedPrecision` (every judged-genuine finding credited) the **upper** one,
+   and the upper end is the less trustworthy of the two. The pair is the result;
+   neither bound is ever published alone.
    → [Metrics](metrics.md#precision-and-noise)
 
 3. **Failures fail closed, and undecidable pairs leave the denominator.**
@@ -156,7 +159,9 @@ before the report is assembled.
 
 - **Recall denominator** — declared expected findings, *minus* pairs the judge
   could not decide.
-- **Trustworthy precision** — `adjustedPrecision`, not `precision`.
+- **Precision** — a bracket, `precision` (lower) to `adjustedPrecision` (upper).
+  Never one bound alone. The upper bound reads *not measured* when no
+  plausibility judge ran.
 - **Headline recall** — `productRecall` (`runtime-critical` + `security` +
   `logic`; `nit` excluded).
 - **Empty-denominator convention** — recall/precision-family rates report `1`;

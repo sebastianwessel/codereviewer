@@ -6,6 +6,7 @@ import type {
   ReviewReport
 } from '../../shared/contracts/index.js'
 import { parseEvalCases } from './eval-fixture.schema.js'
+import { type EvalReport } from './eval-report-contracts.js'
 import { evalJudgeCalibrationSet } from './eval-judge-calibration.js'
 import { evalPlausibilityCalibrationSet } from './eval-plausibility-calibration.js'
 import type {
@@ -232,6 +233,13 @@ const reviewReport = (
   ...reportOverrides
 })
 
+// Widens a report literal to the producer contract before handing it to the
+// comparison, which reads through the tolerant comparison view. Without this the
+// literal is checked against the VIEW, which models only what comparison
+// renders, and a real report field it does not model reads as an excess
+// property.
+const evalReportForComparison = (report: EvalReport): EvalReport => report
+
 describe('eval runner', () => {
   test('validates fixture samples and returns a deterministic eval report', async () => {
     const cases = parseEvalCases(inlineEvalCases)
@@ -300,7 +308,10 @@ describe('eval runner', () => {
     expect(result.report.scoring).toEqual({
       judgeAgreement: 1,
       judgeTrustworthy: true,
-      adjustedPrecisionTrustworthy: true
+      adjustedPrecisionTrustworthy: true,
+      // Recorded so the precision bracket can say "upper bound not measured"
+      // instead of republishing the lower bound as if a judge had confirmed it.
+      plausibilityJudged: false
     })
     expect(result.report.caseResults[0]?.contextLedger).toEqual([
       {
@@ -1023,8 +1034,14 @@ describe('eval runner', () => {
     expect(summary).toContain('| Fixture source | slice-root |')
     expect(summary).toContain('| Slice root | eval/benchmarks/crb |')
     expect(summary).toContain('## Metric Groups')
-    expect(summary).toContain('| sourceProfile | benchmark-semantic | 1 | 100.0% | 100.0% | 100.0% | n/a (0 checked) | 0 |')
-    expect(summary).toContain('| language | typescript | 2 | 100.0% | 100.0% | 100.0% | 100.0% (1 checked) | 0 |')
+    // Precision is published as its bracket, and with no plausibility judge the
+    // upper bound is NOT MEASURED rather than equal to the lower bound.
+    expect(summary).toContain(
+      '| sourceProfile | benchmark-semantic | 1 | 100.0% | 100.0% to not measured (no plausibility judge) | 100.0% | n/a (0 checked) | 0 |'
+    )
+    expect(summary).toContain(
+      '| language | typescript | 2 | 100.0% | 100.0% to not measured (no plausibility judge) | 100.0% | 100.0% (1 checked) | 0 |'
+    )
   })
 
   test('scores semantic-only paraphrases through the judge and records its reason', async () => {
@@ -1103,7 +1120,8 @@ describe('eval runner', () => {
     expect(judged.report.scoring).toEqual({
       judgeAgreement: 1,
       judgeTrustworthy: true,
-      adjustedPrecisionTrustworthy: true
+      adjustedPrecisionTrustworthy: true,
+      plausibilityJudged: false
     })
     expect(judged.report.metrics.judgeAgreementPairCount).toBe(
       evalJudgeCalibrationSet.length
@@ -1356,7 +1374,8 @@ describe('eval runner', () => {
     expect(result.report.regressionGate.passed).toBe(true)
     expect(result.report.scoring).toEqual({
       judgeTrustworthy: true,
-      adjustedPrecisionTrustworthy: true
+      adjustedPrecisionTrustworthy: true,
+      plausibilityJudged: false
     })
     expect(result.report.metrics.judgeAgreementPairCount).toBe(0)
     expect(result.report.metrics.plausibilityJudgeAgreementPairCount).toBe(0)
@@ -1739,7 +1758,7 @@ describe('eval runner', () => {
     })
 
     const comparison = renderEvalComparison({
-      base: {
+      base: evalReportForComparison({
         ...base.report,
         metrics: {
           ...base.report.metrics,
@@ -1792,8 +1811,8 @@ describe('eval runner', () => {
               }
             : caseResult
         )
-      },
-      head: {
+      }),
+      head: evalReportForComparison({
         ...head.report,
         // This test's subject is selection-status and metric-group rendering
         // when the two runs cover DIFFERENT case sets -- a scenario spec 06
@@ -1867,7 +1886,7 @@ describe('eval runner', () => {
             }
           ]
         }))
-      },
+      }),
       baseLabel: 'base',
       headLabel: 'head'
     })
@@ -1901,10 +1920,10 @@ describe('eval runner', () => {
     expect(comparison).not.toContain('| provider-recovery | 0 | 0 | 0 |')
     expect(comparison).toContain('## Metric Group Deltas')
     expect(comparison).toContain(
-      '| sourceProfile | project | 2 | 1 | 50.0% | 100.0% | +50.0pp | 100.0% | 50.0% | -50.0pp | 66.7% | 66.7% | 0.0pp | 0 | 1 | +1 |'
+      '| sourceProfile | project | 2 | 1 | 50.0% | 100.0% | +50.0pp | 100.0% to not measured (no plausibility judge) | 50.0% to not measured (no plausibility judge) | -50.0pp | unknown (not recorded) | 66.7% | 66.7% | 0.0pp | 0 | 1 | +1 |'
     )
     expect(comparison).toContain(
-      '| language | typescript | 2 | 1 | 50.0% | 100.0% | +50.0pp | 100.0% | 50.0% | -50.0pp | 66.7% | 66.7% | 0.0pp | 0 | 1 | +1 |'
+      '| language | typescript | 2 | 1 | 50.0% | 100.0% | +50.0pp | 100.0% to not measured (no plausibility judge) | 50.0% to not measured (no plausibility judge) | -50.0pp | unknown (not recorded) | 66.7% | 66.7% | 0.0pp | 0 | 1 | +1 |'
     )
     expect(comparison).toContain('## Metric Group Proof-Loop Deltas')
     expect(comparison).toContain(
@@ -2256,7 +2275,10 @@ describe('eval runner', () => {
     expect(result.report.metrics.plausibilityJudgeAgreement).toBe(1)
 
     const summary = renderEvalSummary({ cases, report: result.report })
-    expect(summary).toContain('| Adjusted precision | 100.0% |')
+    expect(summary).toContain(
+      '| Precision (raw to adjusted bracket) | 50.0% to 100.0% |'
+    )
+    expect(summary).toContain('| Precision (upper bound, adjusted) | 100.0% |')
     expect(summary).toContain('| Genuine false positives | 0 |')
     expect(summary).toContain('| Unmatched but plausible | 1 |')
     expect(summary).toContain(

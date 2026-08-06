@@ -36,8 +36,9 @@ all, and none of these rates would carry over.
 Three things are consistently true across every corpus and every seed measured
 so far. The first two are strengths, and the third is the whole problem.
 
-**It is precise, and it does not invent problems.** Adjusted precision measures
-97.3–100% on the real-repository corpus, and across every run of that corpus the
+**It is precise, and it does not invent problems.** The precision bracket's
+UPPER bound measures 97.3–100% on the real-repository corpus (the matching lower
+bound was not recorded for that measurement, so the bracket is one-sided there), and across every run of that corpus the
 engine has raised **zero** false alarms on the ten curated zones that contain no
 planted defect (2026-07-26, [Current results](current-results.md#headline)).
 Precision is bought at refutation and admission, so discovery can afford to lead

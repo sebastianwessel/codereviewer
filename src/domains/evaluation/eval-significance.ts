@@ -15,6 +15,20 @@ import { EvalReportSchema, type EvalReport } from './eval-report-contracts.js'
 
 export type ExpectationKey = string
 
+// The minimum a run must record to take part in a paired test. Declared
+// structurally rather than as `EvalReport` so the same test serves both the
+// producer contract and the tolerant comparison view -- and so a caller that
+// only has some of a report cannot be tempted to fill the rest in with zeroes.
+export type PairedScoredRun = {
+  readonly metricsVersion: string
+  readonly provenance: { readonly answerKeyDigest: string }
+  readonly caseResults: readonly {
+    readonly caseId: string
+    readonly expectedFindings: readonly { readonly expectedIndex: number }[]
+    readonly matchedFindings: readonly { readonly expectedIndex: number }[]
+  }[]
+}
+
 export type ArmOutcomes = {
   readonly runCount: number
   // Fraction of this arm's runs in which the expectation was matched. Binary when
@@ -30,7 +44,9 @@ export const expectationKey = (
 // An expectation counts as found in a run when the matcher bound an admitted
 // finding to it. Artifact-only and inconclusive outcomes are NOT matches, which
 // keeps this consistent with how `recall` is defined.
-const matchedKeysIn = (report: EvalReport): ReadonlySet<ExpectationKey> =>
+const matchedKeysIn = (
+  report: PairedScoredRun
+): ReadonlySet<ExpectationKey> =>
   new Set(
     report.caseResults.flatMap((caseResult) =>
       caseResult.matchedFindings.map((match) =>
@@ -39,7 +55,9 @@ const matchedKeysIn = (report: EvalReport): ReadonlySet<ExpectationKey> =>
     )
   )
 
-const expectedKeysIn = (report: EvalReport): readonly ExpectationKey[] =>
+const expectedKeysIn = (
+  report: PairedScoredRun
+): readonly ExpectationKey[] =>
   report.caseResults.flatMap((caseResult) =>
     caseResult.expectedFindings.map((expected) =>
       expectationKey(caseResult.caseId, expected.expectedIndex)
@@ -47,7 +65,7 @@ const expectedKeysIn = (report: EvalReport): readonly ExpectationKey[] =>
   )
 
 export const collectArmOutcomes = (
-  reports: readonly EvalReport[]
+  reports: readonly PairedScoredRun[]
 ): ArmOutcomes => {
   // Every run in an arm must have been scored by the same rules, for the same
   // reason the comparison refuses to mix them: a metrics-version change alters

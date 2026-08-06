@@ -186,8 +186,8 @@ recall below threshold: 0.55 < 1
 falsePositiveCount above threshold: 8 > 0
 ```
 
-— on a run whose adjusted precision was 100% and whose genuine false positives
-were zero. That is the failure mode the default now avoids.
+— on a run whose precision bracket topped out at 100% and whose genuine false
+positives were zero. That is the failure mode the default now avoids.
 
 **Individual thresholds are configuration, not flags.** The
 `EvalRegressionThresholds` contract carries more keys than either profile sets
@@ -251,11 +251,13 @@ The `## Selection` table is the provenance block — check it first:
 | Judge agreement | Semantic-judge agreement and pairs scored |
 | Judge trustworthy | `no` ⇒ the quality metrics are not evidence |
 | Plausibility judge agreement | Plausibility agreement and pairs scored |
-| Adjusted precision trustworthy | `no` ⇒ do not quote `adjustedPrecision` |
+| Adjusted precision trustworthy | `no` ⇒ the precision bracket's upper bound is not reliable |
+| Plausibility judged | `no` ⇒ the bracket's upper bound reads *not measured*, not a number |
 
-Then `## Headline`: product recall, all-tier recall, unlisted real findings,
-adjusted precision, genuine false positives, duplicates, severity accuracy,
-provider error rate, cost.
+Then `## Headline`: product recall, all-tier recall, unlisted real findings, the
+**precision bracket** (raw lower bound to adjusted upper bound — never one bound
+alone), genuine false positives, duplicates, severity accuracy, provider error
+rate, cost.
 
 ---
 
@@ -341,7 +343,8 @@ codereviewer eval run --slice-root eval/fixtures/proof-quality-slices
 ## Before you quote a number
 
 - [ ] `scoring.judgeTrustworthy` is `true`
-- [ ] `scoring.adjustedPrecisionTrustworthy` is `true` (if quoting adjusted precision)
+- [ ] Precision is quoted as its **bracket**, never as one bound alone — and
+      `scoring.adjustedPrecisionTrustworthy` is `true` if the upper bound is used
 - [ ] `providerErrorRate` is `0` and `providerIssueRate` is low
 - [ ] `inconclusiveMatchCount` is `0` — otherwise fewer pairs were scored than the corpus declares
 - [ ] The corpus can actually support the metric (see [Datasets](datasets.md))

@@ -225,7 +225,19 @@ export const EvalReportScoringSchema = z.strictObject({
   // `adjustedPrecisionTrustworthy` is `false` when the plausibility agreement is
   // below the configured minimum, marking `adjustedPrecision` untrustworthy.
   plausibilityJudgeAgreement: z.number().min(0).max(1).optional(),
-  adjustedPrecisionTrustworthy: z.boolean().default(true)
+  adjustedPrecisionTrustworthy: z.boolean().default(true),
+  // Whether a plausibility judge ran at all. This is what makes the reported
+  // precision BRACKET honest. With no plausibility judge the stage is a no-op
+  // and `adjustedPrecision` is set equal to raw `precision` -- so publishing it
+  // as the upper bound would assert that every unmatched finding was examined
+  // and found spurious, when in fact none was examined. The upper bound is then
+  // not measured, which is a different statement from "equal to the lower
+  // bound".
+  //
+  // Deliberately optional rather than defaulted: a report written before this
+  // field existed genuinely does not record whether a judge ran, and defaulting
+  // it either way would fabricate that answer. Absent means unknown.
+  plausibilityJudged: z.boolean().optional()
 })
 
 // Provenance proves WHAT was scored and under WHAT configuration, which
@@ -274,47 +286,17 @@ export const EvalMetricGroupSchema = z.strictObject({
 })
 
 // How the numbers in a report were COMPUTED, as opposed to `schemaVersion`,
-// which describes the shape they are written in. A report is only comparable to
-// another report produced by the same scoring rules, and three changes have
-// already broken that: expectation-to-finding assignment became
-// maximum-cardinality rather than first-acceptable; the model category taxonomy
-// was unified, which moves race and concurrency findings and so shifts tier
-// resolution; and the plausibility judge now recognises when an unmatched
-// finding merely restates a defect already counted in the same file (a match, or
-// an earlier unlisted-real credit in this same run) instead of crediting every
-// restatement as its own additional unlisted-real defect. That last change
-// alters `unlistedRealFindingCount`, `genuineFalsePositiveCount`, and
-// `adjustedPrecision` for identical review output whenever a run contains a
-// restated finding, so a report scored before it is not comparable to one scored
-// after it.
+// which describes the shape they are written in. Bump it whenever a change
+// alters what a metric would report for identical review output, INCLUDING a
+// metric that is merely added whose value cannot be recovered for a report saved
+// earlier.
 //
-// Bump this whenever a change alters what a metric would report for identical
-// review output. Comparing across a bump silently mixes incomparable runs, which
-// is the same class of failure as scoring a run against a stale answer key -- and
-// that one has already happened here.
-//
-// A metric that is merely ADDED bumps it too, whenever its value cannot be
-// recovered for a report saved earlier. `recallByDiffScope` is such a metric: an
-// older report carries no per-expectation diff-scope classification, so it reads
-// back as entirely `undetermined` and would pool into an in-diff or out-of-diff
-// figure as a silent hole rather than as data. Refusing to compare across the
-// bump is the same protection the earlier entries buy.
-//
-// `discovery` (spec 27) is the same case as `recallByDiffScope`: the per-case
-// discovery counters cannot be recovered for a report saved before they were
-// recorded, because the run that would have produced them is over and its debug
-// log was off. A comparison that pooled such a report would read "no discovery
-// calls" where the truth is "not recorded".
-//
-// `plausibility-source-window`: the plausibility judge used to receive a blind
-// PREFIX of an oversized file, unmarked, so a real finding whose supporting code
-// sat past the cut came back plausible=false with a confident reason. The window
-// is now centred on the finding's line and its completeness is always stated, and
-// a file whose window cannot hold that line fails closed instead of being judged.
-// For identical review output that changes which findings are credited
-// unlisted-real, hence `adjustedPrecision`, `unlistedRealFindingCount`, and
-// `genuineFalsePositiveCount`, on any case with a file above the cap.
-export const EVAL_METRICS_VERSION = '2026-08-03.plausibility-source-window'
+// The version id, the ordered history behind it, and -- critically -- what each
+// bump actually changed all live in `eval-metrics-versions.ts`. A bump is not a
+// string edit: it is a new history entry declaring its blast radius, because
+// comparison derives per-metric comparability from that declaration rather than
+// refusing every metric at once.
+export { EVAL_METRICS_VERSION } from './eval-metrics-versions.js'
 
 export const EvalReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),

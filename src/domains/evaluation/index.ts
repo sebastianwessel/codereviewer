@@ -132,8 +132,35 @@ export {
   renderEvalSummary
 } from './eval-summary-report-rendering.js'
 export { renderEvalComparison } from './eval-comparison-report-rendering.js'
+export {
+  EvalComparisonReportSchema,
+  parseEvalComparisonReport,
+  type EvalComparisonCase,
+  type EvalComparisonMetricGroup,
+  type EvalComparisonMetrics,
+  type EvalComparisonReport
+} from './eval-comparison-view.js'
+export {
+  EVAL_METRICS_VERSION_HISTORY,
+  metricComparability,
+  metricsAffectedBetween,
+  type EvalComparabilityKey,
+  type MetricComparability,
+  type MetricsVersionDivergence
+} from './eval-metrics-versions.js'
+export {
+  PAIRED_SIGNIFICANCE_ALPHA,
+  pairedRecallVerdict,
+  type PairedRecallVerdict
+} from './eval-paired-recall-verdict.js'
+export {
+  precisionBracket,
+  type PrecisionBracket,
+  type PrecisionBracketBound
+} from './eval-precision-bracket.js'
 export { renderEvalRecallReport } from './eval-recall-report-rendering.js'
 export {
+  EVAL_METRICS_VERSION,
   EvalRegressionThresholdsSchema,
   EvalReportSchema,
   type EvalCaseOutput,

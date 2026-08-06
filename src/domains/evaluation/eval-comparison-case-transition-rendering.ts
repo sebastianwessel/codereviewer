@@ -1,21 +1,50 @@
 import { escapeMarkdownCell } from './eval-report-markdown-formatting.js'
 import { caseStatus } from './eval-report-case-labels.js'
-import { type EvalReport } from './eval-report-contracts.js'
+import {
+  type EvalComparisonCase,
+  type EvalComparisonReport
+} from './eval-comparison-view.js'
+
+// A case whose report did not record the inputs the status is derived from is
+// `UNKNOWN`, never PASS. Deriving a pass from absent failure lists is exactly
+// how a missing field turns into a reassuring result.
+export type EvalComparisonCaseStatus = ReturnType<typeof caseStatus> | 'UNKNOWN'
+
+const comparisonCaseStatus = (
+  caseResult: EvalComparisonCase
+): EvalComparisonCaseStatus =>
+  caseResult.providerErrored === undefined ||
+  caseResult.parseValid === undefined ||
+  caseResult.unmatchedExpectedIndexes === undefined ||
+  caseResult.falsePositiveFindingIds === undefined ||
+  caseResult.noFindingZoneFalsePositiveIds === undefined
+    ? 'UNKNOWN'
+    : caseStatus({
+        providerErrored: caseResult.providerErrored,
+        parseValid: caseResult.parseValid,
+        unmatchedExpectedIndexes: caseResult.unmatchedExpectedIndexes,
+        falsePositiveFindingIds: caseResult.falsePositiveFindingIds,
+        noFindingZoneFalsePositiveIds: caseResult.noFindingZoneFalsePositiveIds
+      })
 
 export const caseStatusById = (
-  report: EvalReport
-): ReadonlyMap<string, ReturnType<typeof caseStatus>> =>
+  report: EvalComparisonReport
+): ReadonlyMap<string, EvalComparisonCaseStatus> =>
   new Map(
-    report.caseResults.map((caseResult) => [
+    (report.caseResults ?? []).map((caseResult) => [
       caseResult.caseId,
-      caseStatus(caseResult)
+      comparisonCaseStatus(caseResult)
     ])
   )
 
 const transitionLabel = (
-  baseStatus: ReturnType<typeof caseStatus> | undefined,
-  headStatus: ReturnType<typeof caseStatus> | undefined
+  baseStatus: EvalComparisonCaseStatus | undefined,
+  headStatus: EvalComparisonCaseStatus | undefined
 ): string => {
+  if (baseStatus === 'UNKNOWN' || headStatus === 'UNKNOWN') {
+    return 'unknown (not recorded)'
+  }
+
   if (baseStatus === undefined) {
     return 'new'
   }
@@ -38,8 +67,8 @@ const transitionLabel = (
 const formatCaseTransitionRow = (
   input: {
     readonly caseId: string
-    readonly baseStatus: ReturnType<typeof caseStatus> | undefined
-    readonly headStatus: ReturnType<typeof caseStatus> | undefined
+    readonly baseStatus: EvalComparisonCaseStatus | undefined
+    readonly headStatus: EvalComparisonCaseStatus | undefined
   }
 ): string =>
   `| ${escapeMarkdownCell(input.caseId)} | ${input.baseStatus ?? '-'} | ${input.headStatus ?? '-'} | ${transitionLabel(
@@ -51,8 +80,8 @@ export const appendEvalComparisonCaseTransitions = (
   lines: string[],
   input: {
     readonly caseIds: readonly string[]
-    readonly baseStatus: ReadonlyMap<string, ReturnType<typeof caseStatus>>
-    readonly headStatus: ReadonlyMap<string, ReturnType<typeof caseStatus>>
+    readonly baseStatus: ReadonlyMap<string, EvalComparisonCaseStatus>
+    readonly headStatus: ReadonlyMap<string, EvalComparisonCaseStatus>
   }
 ): void => {
   lines.push('## Case Transitions')
