@@ -41,10 +41,17 @@ export {
   type RunIndexEntry
 } from './run-index.js'
 export {
+  adjustedPrecisionInTwenty,
+  inDiffMissesInTen,
+  inDiffRecallInTen,
+  measuredReliability,
+  numberWord,
+  MEASURED_ON_MODEL,
+  MEASURED_ON_PROVIDER
+} from './measured-reliability.js'
+export {
   createReportArtifact,
   inlineCode,
-  MEASURED_ON_MODEL,
-  MEASURED_ON_PROVIDER,
   pluralize,
   renderMeasuredOn,
   safeRedactedText,

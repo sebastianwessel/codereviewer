@@ -3,14 +3,17 @@ export {
   DriftCheckResultSchema,
   DriftFindingSchema,
   DriftGateSchema,
+  GeneratedArtifactStatusSchema,
   type DriftCheckResult,
   type DriftFinding,
-  type DriftGate
+  type DriftGate,
+  type GeneratedArtifactStatus
 } from './drift-checker.js'
 export {
+  checkConfigDocumentFile,
   checkConfigExamples,
   checkConfigExamplesInFile,
-  configExampleScanRoots,
+  configScanRoots,
   extractJsonBlocks,
   renderConfigExampleIssues,
   ConfigExampleCheckResultSchema,

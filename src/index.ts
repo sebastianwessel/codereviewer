@@ -23,7 +23,3 @@ export * from './domains/review-workflow/index.js'
 export * from './domains/reporting/index.js'
 export * from './domains/evaluation/index.js'
 export * from './domains/drift/index.js'
-
-export const runtimeBaseline = {
-  harnessVersion: '1.5.1'
-} as const

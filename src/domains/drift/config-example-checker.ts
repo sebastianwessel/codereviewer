@@ -2,8 +2,9 @@ import { z } from 'zod'
 import { CodeReviewerConfigSchema } from '../../shared/contracts/index.js'
 import { collectTextFiles, type TextFile } from './markdown-sources.js'
 
-// Validates the JSON configuration examples printed in `docs/` and `skills/`
-// against the REAL configuration schema.
+// Validates every configuration document this repository ships — the JSON examples
+// printed in its Markdown, and the checked-in `*.json` configuration files
+// themselves — against the REAL configuration schema.
 //
 // It exists because nothing did. `skills/codereviewer-setup` shipped an
 // `instructions.files` example in the pre-scoping shape for three days after the
@@ -20,9 +21,10 @@ import { collectTextFiles, type TextFile } from './markdown-sources.js'
 // Every classification decision this module can reach, so a caller never has to
 // infer one from an empty issue list.
 export const ConfigExampleIssueKindSchema = z.enum([
-  // The block was classified as a configuration example and the schema rejected it.
+  // The block or file was classified as configuration and the schema rejected it.
   'schema-rejected',
-  // The block was explicitly marked a configuration example and is not valid JSON.
+  // The block was explicitly marked a configuration example and is not valid JSON,
+  // or a checked-in `*.json` file is not valid JSON at all.
   'unparseable',
   // A scanned root holds Markdown but yielded no configuration example at all.
   // See "Why zero is a failure" below.
@@ -45,6 +47,11 @@ export const ConfigExampleCheckResultSchema = z.strictObject({
   jsonBlockCount: z.int().min(0),
   // Of those, the ones classified as configuration examples and validated.
   configExampleCount: z.int().min(0),
+  // Whole checked-in `*.json` FILES classified as configuration documents and
+  // validated. Counted apart from the examples because they are a different kind
+  // of thing: an example is prose a reader copies, a document is a file this
+  // repository actually runs with.
+  configDocumentCount: z.int().min(0),
   issues: z.array(ConfigExampleIssueSchema)
 })
 
@@ -54,11 +61,30 @@ export type ConfigExampleCheckResult = z.infer<
   typeof ConfigExampleCheckResultSchema
 >
 
-// The Markdown roots that carry configuration examples a reader is expected to
-// copy. `specs/` is deliberately absent: a spec quotes a schema fragment to argue
-// about it, and several of those are illustrative shapes that were never meant to
-// be pasted into a config file.
-export const configExampleScanRoots = ['docs', 'skills'] as const
+// The roots that carry configuration a reader copies or this repository runs.
+//
+// `README.md` is FIRST because it is first for a reader too: the config example in
+// it is the one a new user pastes, and it ships inside the npm tarball. It was
+// outside the scan while every other page was inside it — the single most-copied
+// example in the repository was the one example nothing checked.
+//
+// `scripts` holds no Markdown at all. It is here for its `*.json`: this
+// repository's own GitHub-integration configuration lives there, is consumed by
+// `scripts/github/main.ts` and by the workflow, and was validated by nothing.
+// Five configuration keys were deleted against a strict schema with no shims in
+// the days before this was written — exactly the change that breaks that file,
+// and the workflow exiting `2` on a pull request was the only thing that would
+// have said so.
+//
+// `specs/` is deliberately absent: a spec quotes a schema fragment to argue about
+// it, and several of those are illustrative shapes that were never meant to be
+// pasted into a config file.
+export const configScanRoots = [
+  'README.md',
+  'docs',
+  'skills',
+  'scripts'
+] as const
 
 export type JsonBlock = {
   readonly path: string
@@ -253,15 +279,80 @@ export const checkConfigExamplesInFile = (
 }
 
 /**
- * Validates every configuration example under the scanned roots.
+ * Validates a checked-in `*.json` FILE that is a configuration document.
+ *
+ * The classification rule is the one the fenced blocks use, unchanged: a file
+ * carrying at least one top-level key of `CodeReviewerConfigSchema` is a
+ * configuration document. It generalises without a registry, so a configuration
+ * file added tomorrow is covered the day it lands and no list has to be kept in
+ * step with the filesystem.
+ *
+ * A FILE THAT DOES NOT PARSE IS REPORTED, and this is where it differs from a
+ * fenced block. An unmarked block that does not parse is an illustration with an
+ * elision in it; a checked-in `.json` file that does not parse is broken whatever
+ * it was meant to be, and skipping it would let a corrupted configuration document
+ * drop out of the checked set with nothing saying so.
+ */
+export const checkConfigDocumentFile = (
+  file: TextFile
+): {
+  readonly isConfigDocument: boolean
+  readonly issues: readonly ConfigExampleIssue[]
+} => {
+  const parsed = parseJson(file.content)
+
+  if ('error' in parsed) {
+    return {
+      isConfigDocument: false,
+      issues: [
+        {
+          kind: 'unparseable',
+          path: file.path,
+          line: 1,
+          message: `Checked-in JSON file is not valid JSON: ${parsed.error}`
+        }
+      ]
+    }
+  }
+
+  if (!isConfigExample(parsed.value)) {
+    return { isConfigDocument: false, issues: [] }
+  }
+
+  const result = CodeReviewerConfigSchema.safeParse(parsed.value)
+
+  return {
+    isConfigDocument: true,
+    issues: result.success
+      ? []
+      : [
+          {
+            kind: 'schema-rejected',
+            path: file.path,
+            line: 1,
+            message: `Configuration document is rejected by CodeReviewerConfigSchema — ${describeSchemaFailure(result.error)}`
+          }
+        ]
+  }
+}
+
+/**
+ * Validates every configuration example and configuration document under the
+ * scanned roots.
  *
  * WHY ZERO IS A FAILURE. This repository has a documented, recurring defect class
  * in which absence produces a confident optimistic answer. A checker that extracts
  * nothing reports a clean result, which reads exactly like a repository with no
  * broken examples — so "found nothing" is an outcome this function refuses to
  * return quietly. A root that holds Markdown and yields no configuration example
- * produces a `no-examples-found` issue, because on these two roots that can only
- * mean the extractor stopped working.
+ * produces a `no-examples-found` issue, because on a root that documents
+ * configuration that can only mean the extractor stopped working.
+ *
+ * The same guard is NOT applied per-root to configuration documents, and the
+ * asymmetry is deliberate: most roots legitimately hold no configuration file, so
+ * a per-root floor would fire on the normal case. `configDocumentCount` is
+ * returned instead, and `config-example-checker.test.ts` holds the floor plus a
+ * test naming this repository's own configuration file directly.
  */
 export const checkConfigExamples = async (
   input: {
@@ -269,15 +360,15 @@ export const checkConfigExamples = async (
     readonly roots?: readonly string[]
   }
 ): Promise<ConfigExampleCheckResult> => {
-  const roots = input.roots ?? configExampleScanRoots
+  const roots = input.roots ?? configScanRoots
   const issues: ConfigExampleIssue[] = []
   let jsonBlockCount = 0
   let configExampleCount = 0
+  let configDocumentCount = 0
 
   for (const root of roots) {
-    const markdownFiles = (
-      await collectTextFiles(input.repositoryRoot, root)
-    ).filter((file) => file.path.endsWith('.md'))
+    const files = await collectTextFiles(input.repositoryRoot, root)
+    const markdownFiles = files.filter((file) => file.path.endsWith('.md'))
     let configExamplesInRoot = 0
 
     for (const file of markdownFiles) {
@@ -298,11 +389,21 @@ export const checkConfigExamples = async (
     }
 
     configExampleCount += configExamplesInRoot
+
+    for (const file of files.filter((candidate) =>
+      candidate.path.endsWith('.json')
+    )) {
+      const fileResult = checkConfigDocumentFile(file)
+
+      configDocumentCount += fileResult.isConfigDocument ? 1 : 0
+      issues.push(...fileResult.issues)
+    }
   }
 
   return ConfigExampleCheckResultSchema.parse({
     jsonBlockCount,
     configExampleCount,
+    configDocumentCount,
     issues
   })
 }

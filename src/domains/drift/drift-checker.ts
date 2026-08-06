@@ -25,15 +25,49 @@ export const DriftFindingSchema = z.strictObject({
   recommendation: z.string().min(1)
 })
 
+/**
+ * What the generated-artifact comparison was actually able to do.
+ *
+ * IT IS A SEPARATE FIELD BECAUSE `passed` CANNOT CARRY IT. This is the check that
+ * compares the two committed copies of the generated config schema, and
+ * `generated-artifact-drift` is one of only two categories that fail a build by
+ * default — so it is the one check whose silence is expensive. It used to fold
+ * every non-comparison into `passed: true`: a deleted, renamed or unreadable copy
+ * produced zero findings and a green result, and in a consumer's repository, where
+ * neither copy exists at all, the check was permanently inert and permanently
+ * green with nothing saying so.
+ *
+ * Absence is now reported instead of assumed. `absent` is not a failure — a
+ * consumer repository legitimately has neither copy — but it is a different fact
+ * from `compared`, and a caller that wants to know whether anything was checked
+ * can now find out without inferring it from an empty findings list.
+ */
+export const GeneratedArtifactStatusSchema = z.enum([
+  /** Drift checking, or generated-artifact checking, is switched off. */
+  'not-checked',
+  /** Neither copy exists. Nothing to compare, and nothing is claimed. */
+  'absent',
+  /** Exactly one copy exists. Reported as a finding. */
+  'incomplete',
+  /** A copy exists but could not be read. Reported as a finding. */
+  'unreadable',
+  /** Both copies were read and compared. Any difference is a finding. */
+  'compared'
+])
+
 export const DriftCheckResultSchema = z.strictObject({
   passed: z.boolean(),
   warningCount: z.int().min(0),
   errorCount: z.int().min(0),
+  generatedArtifactStatus: GeneratedArtifactStatusSchema,
   findings: z.array(DriftFindingSchema)
 })
 
 export type DriftGate = z.infer<typeof DriftGateSchema>
 export type DriftFinding = z.infer<typeof DriftFindingSchema>
+export type GeneratedArtifactStatus = z.infer<
+  typeof GeneratedArtifactStatusSchema
+>
 export type DriftCheckResult = z.infer<typeof DriftCheckResultSchema>
 
 const scanRoots = ['README.md', 'docs', 'specs'] as const
@@ -265,36 +299,142 @@ const checkImplementationDrift = (
       return findings
     })
 
+// One committed copy of the generated config schema, as it was found on disk.
+//
+// The three states are kept apart because they mean different things and only one
+// of them is benign. Collapsing them — which is what a `.catch(() => undefined)`
+// does — makes "the file is not there", "the file is there but I could not read
+// it" and "I read it" indistinguishable to the caller.
+type SchemaCopy =
+  | { readonly state: 'present'; readonly content: string }
+  | { readonly state: 'missing' }
+  | { readonly state: 'unreadable'; readonly reason: string }
+
+// A path that does not exist is reported by `realpath` and by `readFile` alike as
+// ENOENT. EVERY OTHER FAILURE IS SOMETHING ELSE — a permission error, a directory
+// where a file was expected, a path escaping the repository root — and must not be
+// read as "the file is legitimately absent".
+const isFileNotFound = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  (error as { readonly code?: unknown }).code === 'ENOENT'
+
+const readSchemaCopy = async (
+  repositoryRoot: string,
+  relativePath: string
+): Promise<SchemaCopy> => {
+  try {
+    const resolvedPath = await resolveExistingPathInsideRoot(
+      repositoryRoot,
+      relativePath
+    )
+
+    return { state: 'present', content: await readFile(resolvedPath, 'utf8') }
+  } catch (error) {
+    if (isFileNotFound(error)) {
+      return { state: 'missing' }
+    }
+
+    return {
+      state: 'unreadable',
+      reason: error instanceof Error ? error.message : String(error)
+    }
+  }
+}
+
 const checkGeneratedSchemaDrift = async (
   repositoryRoot: string,
   config: CodeReviewerConfig
-): Promise<readonly DriftFinding[]> => {
+): Promise<{
+  readonly status: GeneratedArtifactStatus
+  readonly findings: readonly DriftFinding[]
+}> => {
   if (!config.drift.includeGenerated) {
-    return []
+    return { status: 'not-checked', findings: [] }
   }
 
   const [generated, specsSchema] = await Promise.all([
-    resolveExistingPathInsideRoot(repositoryRoot, generatedSchemaPath)
-      .then((resolvedPath) => readFile(resolvedPath, 'utf8'))
-      .catch(() => undefined),
-    resolveExistingPathInsideRoot(repositoryRoot, specsConfigSchemaPath)
-      .then((resolvedPath) => readFile(resolvedPath, 'utf8'))
-      .catch(() => undefined)
+    readSchemaCopy(repositoryRoot, generatedSchemaPath),
+    readSchemaCopy(repositoryRoot, specsConfigSchemaPath)
   ])
 
-  if (generated === undefined || specsSchema === undefined || generated === specsSchema) {
-    return []
-  }
-
-  return [
+  const unreadableFinding = (
+    relativePath: string,
+    reason: string
+  ): DriftFinding =>
     createFinding(config, {
       category: 'generated-artifact-drift',
-      path: specsConfigSchemaPath,
-      message: 'Generated config schema copies differ.',
-      evidence: `${generatedSchemaPath} != ${specsConfigSchemaPath}`,
-      recommendation: 'Run npm run generate:schemas and commit both outputs.'
+      path: relativePath,
+      message: 'Generated config schema copy could not be read.',
+      evidence: `${relativePath}: ${reason}`,
+      recommendation:
+        'Restore read access to the generated schema copy, then run npm run generate:schemas.'
     })
-  ]
+
+  // A copy that exists and cannot be read is the worst case for this check: the
+  // comparison is impossible and the reason is NOT "nothing is there". Reported
+  // first, and reported as a finding, because a silent pass here is exactly how a
+  // stale generated artifact reaches a release.
+  if (generated.state === 'unreadable' || specsSchema.state === 'unreadable') {
+    return {
+      status: 'unreadable',
+      findings: [
+        ...(generated.state === 'unreadable'
+          ? [unreadableFinding(generatedSchemaPath, generated.reason)]
+          : []),
+        ...(specsSchema.state === 'unreadable'
+          ? [unreadableFinding(specsConfigSchemaPath, specsSchema.reason)]
+          : [])
+      ]
+    }
+  }
+
+  // Neither copy exists. That is the normal shape of a repository that consumes
+  // this tool rather than generating the schema, so it is NOT a finding — but it
+  // is reported as its own status rather than folded into `passed`, because
+  // "nothing was compared" and "the copies agree" are not the same statement.
+  if (generated.state === 'missing' && specsSchema.state === 'missing') {
+    return { status: 'absent', findings: [] }
+  }
+
+  // Exactly one copy. The repository does generate this artifact and half of it
+  // has gone — a deletion, a rename, or a generator that wrote one output.
+  if (generated.state === 'missing' || specsSchema.state === 'missing') {
+    const missingPath =
+      generated.state === 'missing' ? generatedSchemaPath : specsConfigSchemaPath
+
+    return {
+      status: 'incomplete',
+      findings: [
+        createFinding(config, {
+          category: 'generated-artifact-drift',
+          path: missingPath,
+          message: 'Generated config schema copy is missing.',
+          evidence: `${missingPath} is absent while its counterpart is present`,
+          recommendation:
+            'Run npm run generate:schemas and commit both outputs, or remove both copies.'
+        })
+      ]
+    }
+  }
+
+  return {
+    status: 'compared',
+    findings:
+      generated.content === specsSchema.content
+        ? []
+        : [
+            createFinding(config, {
+              category: 'generated-artifact-drift',
+              path: specsConfigSchemaPath,
+              message: 'Generated config schema copies differ.',
+              evidence: `${generatedSchemaPath} != ${specsConfigSchemaPath}`,
+              recommendation:
+                'Run npm run generate:schemas and commit both outputs.'
+            })
+          ]
+  }
 }
 
 export const runDriftCheck = async (
@@ -308,11 +448,16 @@ export const runDriftCheck = async (
       passed: true,
       warningCount: 0,
       errorCount: 0,
+      generatedArtifactStatus: 'not-checked',
       findings: []
     })
   }
 
   const files = await collectScanFiles(input.repositoryRoot)
+  const generatedArtifact = await checkGeneratedSchemaDrift(
+    input.repositoryRoot,
+    input.config
+  )
   const findings = [
     ...(input.config.drift.includeDocs
       ? await checkMarkdownLinks(input.repositoryRoot, input.config, files)
@@ -324,7 +469,7 @@ export const runDriftCheck = async (
       ? checkImplementationDrift(input.config, files)
       : []),
     ...checkAmbiguity(input.config, files),
-    ...(await checkGeneratedSchemaDrift(input.repositoryRoot, input.config))
+    ...generatedArtifact.findings
   ]
   const errorCount = findings.filter((finding) => finding.gate === 'error').length
   const warningCount = findings.length - errorCount
@@ -337,6 +482,7 @@ export const runDriftCheck = async (
     passed: errorCount === 0,
     warningCount,
     errorCount,
+    generatedArtifactStatus: generatedArtifact.status,
     findings: sortedFindings
   })
 }

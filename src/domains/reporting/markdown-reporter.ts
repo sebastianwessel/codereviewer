@@ -24,6 +24,13 @@ import type {
   ReviewReport
 } from '../../shared/contracts/index.js'
 import {
+  adjustedPrecisionInTwenty,
+  inDiffMissesInTen,
+  inDiffRecallInTen,
+  measuredReliability,
+  numberWord
+} from './measured-reliability.js'
+import {
   inlineCode,
   NO_REFUTATION_VERDICT,
   pluralize,
@@ -46,15 +53,12 @@ const WHAT_THIS_IS =
 // for the same reason: rounding a rate to "usually" lets a reader supply their own
 // optimistic figure, and the optimistic figure is the expensive one here.
 //
-// Sources: `reports/eval-results-ledger.md`, 2026-08-05, three runs at pinned
-// engine `db78900` on the 37-case real-repository corpus. That entry exists so
-// this prose cannot drift from the measurement it cites — it has caught drift
-// twice now, once when the ranges quoted here matched no run in the set, and
-// once when this text kept citing the superseded 2026-08-02 sweep.
-//
-// Measured: in-diff recall 66.7/66.7/71.7 (mean 68.3%, sd 2.89pp), adjusted
-// precision 95.2/100/93.5 (mean 96.2%), out-of-diff recall 0 of 27 — a hard zero
-// over a full denominator, not missing data.
+// Every figure in the sentence comes from `measured-reliability.ts`, which is the
+// only place in this repository where these numbers are written down and which
+// records the ledger entry it transcribes. It is a module rather than a comment
+// because THIS FILE IS NOT THE ONLY RENDERER: the pull-request comment prints the
+// same rates, and while these numbers lived as prose in each, a re-baseline
+// updated this one and left that one quoting a superseded 61.1%.
 //
 // Two figures the previous version of this text carried are deliberately gone
 // rather than updated. The share of reported findings landing inside the diff is
@@ -74,14 +78,12 @@ const WHAT_THIS_IS =
 // boundary, and `impact check` is the stage that covers it (20 of 27, 74.1%,
 // measured 2026-08-02 on that command's deterministic core), so it is named here
 // rather than left as an unexplained hole.
-const MEASURED_RELIABILITY =
-  'Measured reliability, so these findings can be weighed rather than trusted. On a 37-case real-repository corpus with the engine pinned: about **7 in 10** defects sitting INSIDE the diff were found (in-diff recall mean 68.3% over three runs, standard deviation 2.89pp), and **0 of 27** defects sitting outside the diff in the very same changed files were found — a measured zero over a full denominator, and by design, since this stage is diff-scoped and `impact check` is the stage that covers that population. Of what it does report, roughly **19 in 20** stand up under review (adjusted precision mean 96.2%). Two runs over the same commit do not produce the same report.'
+const MEASURED_RELIABILITY = `Measured reliability, so these findings can be weighed rather than trusted. On a ${measuredReliability.corpusCaseCount}-case real-repository corpus with the engine pinned: about **${inDiffRecallInTen} in 10** defects sitting INSIDE the diff were found (in-diff recall mean ${measuredReliability.inDiffRecallPercent}% over ${numberWord(measuredReliability.runCount)} runs, standard deviation ${measuredReliability.inDiffRecallStandardDeviationPp}pp), and **${measuredReliability.outOfDiffRecallFound} of ${measuredReliability.outOfDiffRecallTotal}** defects sitting outside the diff in the very same changed files were found — a measured zero over a full denominator, and by design, since this stage is diff-scoped and \`impact check\` is the stage that covers that population. Of what it does report, roughly **${adjustedPrecisionInTwenty} in 20** stand up under review (adjusted precision mean ${measuredReliability.adjustedPrecisionPercent}%). Two runs over the same commit do not produce the same report.`
 
 // The sentence that has to be right when the list is short, and the one most
 // easily replaced by a congratulation. Reused wherever an empty findings list is
 // rendered so the two cannot drift apart.
-const NOTHING_PROVED =
-  'This run proved no defect it could act on. That is a statement about this search and not about the change: roughly three in ten defects inside the diff are missed on the measured corpus, and defects outside the diff are not looked for at all. Read it as "this search found nothing", never as "there is nothing to find".'
+const NOTHING_PROVED = `This run proved no defect it could act on. That is a statement about this search and not about the change: roughly ${numberWord(inDiffMissesInTen)} in ten defects inside the diff are missed on the measured corpus, and defects outside the diff are not looked for at all. Read it as "this search found nothing", never as "there is nothing to find".`
 
 const countBy = <T extends string>(
   values: readonly T[]
@@ -280,14 +282,14 @@ const renderUnresolvedFinding = (
 }
 
 // What the gate is, said in the words of what it did. `passed` is a comparison
-// against configured thresholds over the findings THIS RUN produced; with recall
-// measured at roughly seven in ten in-diff defects, a run that crosses no
-// threshold has established that and nothing more.
+// against configured thresholds over the findings THIS RUN produced; recall being
+// well short of complete, a run that crosses no threshold has established that and
+// nothing more.
 //
-// Keep this rate in step with MEASURED_RELIABILITY above and with the ledger
-// entry both cite. This comment said "three in five" while the paragraph it
-// describes said "seven in ten" — one file quoting two recall rates, which is
-// how a reader loses confidence in both.
+// The rate itself is deliberately NOT restated here. This comment once said "three
+// in five" while the paragraph it describes said "seven in ten" — one file quoting
+// two recall rates, which is how a reader loses confidence in both. Every figure
+// now has exactly one home, `measured-reliability.ts`.
 const renderGate = (report: ReviewReport): readonly string[] => {
   const gate = report.qualityGate
 

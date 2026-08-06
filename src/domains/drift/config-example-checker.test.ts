@@ -2,10 +2,12 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
+import { CodeReviewerConfigSchema } from '../../shared/contracts/index.js'
 import {
+  checkConfigDocumentFile,
   checkConfigExamples,
   checkConfigExamplesInFile,
-  configExampleScanRoots,
+  configScanRoots,
   extractJsonBlocks,
   renderConfigExampleIssues
 } from './config-example-checker.js'
@@ -30,10 +32,28 @@ describe('documented configuration examples', () => {
   // `skills/codereviewer-setup/references/tuning-decisions.md` documented
   // `instructions.files` as an array of path strings, three days after the schema
   // moved to `{ path, scope }`.
-  test('every configuration example in docs/ and skills/ validates against the real schema', async () => {
+  test('every configuration example and document in the scanned roots validates against the real schema', async () => {
     const result = await checkConfigExamples({ repositoryRoot })
 
     expect(renderConfigExampleIssues(result.issues)).toBe('')
+    expect(result.issues).toEqual([])
+  })
+
+  // README.md IS THE FIRST CONFIGURATION A NEW USER PASTES, and it ships in the
+  // npm tarball. It sat outside the scanned roots while every other page was
+  // inside them.
+  test('the README example is scanned, not just the pages further in', async () => {
+    // The default roots, not a root this test supplies: the defect was that the
+    // README was outside the scan, and a test that passes its own root would
+    // reproduce that defect rather than catch it.
+    expect(configScanRoots).toContain('README.md')
+
+    const result = await checkConfigExamples({
+      repositoryRoot,
+      roots: ['README.md']
+    })
+
+    expect(result.configExampleCount).toBeGreaterThanOrEqual(1)
     expect(result.issues).toEqual([])
   })
 
@@ -46,7 +66,7 @@ describe('documented configuration examples', () => {
   test('the extractor sees exactly as many json blocks as a plain line scan finds', async () => {
     const files = (
       await Promise.all(
-        configExampleScanRoots.map((root) => collectTextFiles(repositoryRoot, root))
+        configScanRoots.map((root) => collectTextFiles(repositoryRoot, root))
       )
     )
       .flat()
@@ -109,8 +129,92 @@ describe('documented configuration examples', () => {
     expect(result).toEqual({
       jsonBlockCount: 0,
       configExampleCount: 0,
+      configDocumentCount: 0,
       issues: []
     })
+  })
+})
+
+// THIS REPOSITORY'S OWN CONFIGURATION FILE.
+//
+// `scripts/github/codereviewer.github.json` is a full configuration document: the
+// workflow points `CODEREVIEWER_GITHUB_CONFIG` at it and `scripts/github/main.ts`
+// loads it. Nothing parsed it in any test — the only grep hit passed the path
+// around as an option string. Five configuration keys were deleted against a
+// strict schema with no shims in the two days before this test was written, which
+// is exactly the change that breaks this file, and the first report of it would
+// have been a pull request whose review stage exited 2.
+describe('checked-in configuration documents', () => {
+  const githubConfigPath = path.join(
+    repositoryRoot,
+    'scripts',
+    'github',
+    'codereviewer.github.json'
+  )
+
+  test('the GitHub integration config this repository runs is accepted by the real schema', async () => {
+    const raw = await readFile(githubConfigPath, 'utf8')
+    const result = CodeReviewerConfigSchema.safeParse(JSON.parse(raw) as unknown)
+
+    expect(
+      result.success
+        ? ''
+        : result.error.issues
+            .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+            .join('; ')
+    ).toBe('')
+  })
+
+  // ANTI-VACUITY. The assertion above names one file; the generalised scan is what
+  // covers the next one. It is pinned to the root that holds it so a walk that
+  // stops seeing `*.json` files fails here rather than reporting a clean sweep of
+  // nothing.
+  test('the generalised scan classifies that file, and finds it by walking rather than by name', async () => {
+    const scripts = await checkConfigExamples({
+      repositoryRoot,
+      roots: ['scripts']
+    })
+    const everywhere = await checkConfigExamples({ repositoryRoot })
+
+    expect(scripts.configDocumentCount).toBe(1)
+    expect(scripts.issues).toEqual([])
+    expect(everywhere.configDocumentCount).toBeGreaterThanOrEqual(1)
+  })
+
+  test('a checked-in configuration file the schema rejects is reported at the file', () => {
+    const result = checkConfigDocumentFile({
+      path: 'scripts/github/codereviewer.github.json',
+      content: JSON.stringify({ review: { depth: 'exhaustive' } })
+    })
+
+    expect(result.isConfigDocument).toBe(true)
+    expect(result.issues).toHaveLength(1)
+    expect(result.issues[0]?.kind).toBe('schema-rejected')
+    expect(result.issues[0]?.message).toContain('review.depth')
+  })
+
+  // A whole file is not an illustration. An unmarked fenced block that does not
+  // parse is left alone because prose elides; a checked-in `.json` that does not
+  // parse is broken whatever it was meant to be, and staying silent would let a
+  // corrupted configuration file drop out of the checked set unnoticed.
+  test('a checked-in json file that does not parse is reported, not skipped', () => {
+    const result = checkConfigDocumentFile({
+      path: 'scripts/github/codereviewer.github.json',
+      content: '{ "review": { "depth": "balanced", }'
+    })
+
+    expect(result.isConfigDocument).toBe(false)
+    expect(result.issues[0]?.kind).toBe('unparseable')
+  })
+
+  test('a json file carrying no configuration key is not a configuration document', () => {
+    const result = checkConfigDocumentFile({
+      path: 'scripts/github/tsconfig.json',
+      content: JSON.stringify({ compilerOptions: { strict: true } })
+    })
+
+    expect(result.isConfigDocument).toBe(false)
+    expect(result.issues).toEqual([])
   })
 })
 

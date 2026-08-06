@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  adjustedPrecisionInTwenty,
+  inDiffRecallInTen,
+  measuredReliability,
+  MEASURED_ON_MODEL,
+  MEASURED_ON_PROVIDER
+} from '../../src/domains/reporting/measured-reliability.js'
+import {
   renderSummaryComment,
   selectSummaryComment,
   summaryCommentMarker,
@@ -107,12 +114,23 @@ describe('renderSummaryComment', () => {
     expect(body).toContain('rather than "there is nothing to find"')
   })
 
+  // The figures themselves are checked against the ledger, for this renderer AND
+  // for `report.md`, by `src/domains/reporting/measured-reliability.test.ts`. This
+  // assertion pinned literal rates and is why the drift survived a re-baseline:
+  // the comment said "3 in 5" long after the measurement said 68.3%, and CI
+  // defended it. What it checks now is that the rates REACH this surface, derived
+  // from the one module that holds them.
   it('states the measured error rates where the reader is', () => {
     const body = renderSummaryComment(baseInput())
 
-    expect(body).toContain('**3 in 5**')
-    expect(body).toContain('**none** of those outside it')
-    expect(body).toContain('**19 in 20**')
+    expect(body).toContain(`**${inDiffRecallInTen} in 10**`)
+    expect(body).toContain(
+      `**${measuredReliability.outOfDiffRecallFound} of ${measuredReliability.outOfDiffRecallTotal}** of those outside it`
+    )
+    expect(body).toContain(`**${adjustedPrecisionInTwenty} in 20**`)
+    // A rate published without the model it was measured on invites the reader to
+    // assume it holds for theirs.
+    expect(body).toContain(`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}`)
   })
 
   it('shows what refutation could not do, so a finding can be checked', () => {

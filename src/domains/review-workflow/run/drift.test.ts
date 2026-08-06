@@ -9,6 +9,7 @@ const driftResult = {
   passed: false,
   warningCount: 1,
   errorCount: 1,
+  generatedArtifactStatus: 'compared',
   findings: [
     {
       id: 'warning-drift',

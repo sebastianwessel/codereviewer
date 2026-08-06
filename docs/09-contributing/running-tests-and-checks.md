@@ -118,13 +118,22 @@ npm run clean
 
 ---
 
-## Configuration examples in documentation
+## Configuration examples and configuration files
 
-Every JSON configuration example in `docs/` and `skills/` is validated against
-`CodeReviewerConfigSchema` itself by
-`src/domains/drift/config-example-checker.ts`, under `npm test`. An example the
-schema rejects fails the suite naming the file, the line of the opening fence
-and the configuration path the schema objected to.
+Every JSON configuration in `README.md`, `docs/`, `skills/` and `scripts/` is
+validated against `CodeReviewerConfigSchema` itself by
+`src/domains/drift/config-example-checker.ts`, under `npm test`. That covers two
+kinds of thing:
+
+- **examples** — fenced ` ```json ` blocks inside Markdown, the shapes a reader
+  copies. One the schema rejects fails the suite naming the file, the line of the
+  opening fence and the configuration path the schema objected to;
+- **documents** — whole checked-in `*.json` files that are configuration, such as
+  `scripts/github/codereviewer.github.json`, which the code-review workflow runs
+  this repository with. A file is recognised the same way a block is, by carrying
+  a top-level key of the schema, so a configuration file added tomorrow is covered
+  the day it lands with no list to maintain. Unlike a fenced block, a checked-in
+  `.json` file that is not valid JSON is reported rather than passed over.
 
 It runs as a test rather than as a `drift check` category for two reasons. A new
 drift category would be gated by `drift.failOn`, whose default set is
@@ -168,7 +177,11 @@ example, because it is a broken setup handed to somebody who trusted the page.
 The check cannot pass by finding nothing: a scanned root that holds Markdown and
 yields no configuration example is itself reported, its block count is
 cross-checked against an independent line scan, and each root carries a floor on
-how many examples it must still contain.
+how many examples it must still contain. Configuration documents are held the
+same way from the test side — `scripts/` must still yield exactly the one
+configuration file this repository runs with, and that file is additionally
+parsed by name, so a walk that stops seeing `*.json` fails instead of reporting a
+clean sweep of nothing.
 
 ---
 

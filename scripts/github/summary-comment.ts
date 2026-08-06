@@ -12,6 +12,15 @@
 // untrusted text later in the body cannot forge a marker because `sanitizeText`
 // escapes every `<`.
 import {
+  adjustedPrecisionInTwenty,
+  inDiffMissesInTen,
+  inDiffRecallInTen,
+  measuredReliability,
+  numberWord,
+  MEASURED_ON_MODEL,
+  MEASURED_ON_PROVIDER
+} from '../../src/domains/reporting/measured-reliability.js'
+import {
   MAX_ISSUE_COMMENT_BODY,
   sanitizeLine,
   sanitizeText
@@ -95,11 +104,17 @@ const unresolvedFindings = (review: ReviewDigest): readonly FindingDigest[] =>
 // a short list and no caveat supplies their own, and the one they supply is
 // optimistic.
 //
-// Same measurement as `report.md`: 37-case real-repository corpus, engine pinned,
-// in-diff recall 61-68% over three runs, adjusted precision 95-99%, out-of-diff
-// recall 0 of 27 by design.
-const MEASURED_RELIABILITY =
-  '_Diff-scoped search. On a measured corpus it finds about **3 in 5** defects inside the diff and **none** of those outside it, and about **19 in 20** of what it does report holds up. An empty list means this search found nothing, not that there is nothing to find._'
+// THE SAME MEASUREMENT `report.md` PRINTS, from the same place: every figure below
+// is derived from `src/domains/reporting/measured-reliability.ts`, which names the
+// ledger entry it transcribes. No rate is written down here.
+//
+// That is the whole point. This comment used to restate the rates in prose and
+// carry a summary of them in a comment above; a re-baseline updated `report.md`
+// and left both copies here quoting a superseded sweep, and the summary above was
+// a blend of two sweeps matching neither. Two surfaces, one set of numbers.
+//
+// The model is named because a rate is a property of the model that produced it.
+const MEASURED_RELIABILITY = `_Diff-scoped search, measured on \`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}\`. On a ${measuredReliability.corpusCaseCount}-case real-repository corpus it finds about **${inDiffRecallInTen} in 10** defects inside the diff and **${measuredReliability.outOfDiffRecallFound} of ${measuredReliability.outOfDiffRecallTotal}** of those outside it, and about **${adjustedPrecisionInTwenty} in 20** of what it does report holds up. An empty list means this search found nothing, not that there is nothing to find._`
 
 const statusLabels: Readonly<Record<string, string>> = {
   passed: 'ok',
@@ -168,7 +183,10 @@ const findingsSection = (review: ReviewDigest): string => {
     return [
       '### Findings (0)',
       '',
-      'This run proved no defect it could act on. Roughly two in five defects inside the diff are missed on the measured corpus, and defects outside the diff are not searched for at all, so read this as "the search found nothing" rather than "there is nothing to find".'
+      // Derived from the same measurement as everything else on this comment.
+      // Written as prose here it said "two in five missed", the complement of the
+      // superseded 61% recall, and survived the re-baseline unnoticed.
+      `This run proved no defect it could act on. Roughly ${numberWord(inDiffMissesInTen)} in ten defects inside the diff are missed on the measured corpus, and defects outside the diff are not searched for at all, so read this as "the search found nothing" rather than "there is nothing to find".`
     ].join('\n')
   }
 

@@ -9,6 +9,10 @@ import {
   type ReviewReport
 } from '../../shared/contracts/index.js'
 import { redactText } from '../../shared/redaction/redactor.js'
+import {
+  MEASURED_ON_MODEL,
+  MEASURED_ON_PROVIDER
+} from './measured-reliability.js'
 
 export const validateReviewReport = (report: unknown): ReviewReport =>
   ReviewReportSchema.parse(report)
@@ -98,19 +102,6 @@ export const pluralize = (
 // Two copies is two places for one of them to drift into "unverified".
 export const NO_REFUTATION_VERDICT =
   'no verdict was recorded against this finding, so what it survived cannot be shown here.'
-
-// The provider and model every published accuracy rate in this repository was
-// measured on. Recorded from the eval artifacts themselves (`provenance.
-// providerId` / `provenance.modelName` on the saved eval report), not from an
-// environment file, so it is a property of the measurement rather than of
-// whatever happens to be configured now.
-//
-// It is a single constant because it is a claim about evidence: a rate quoted
-// without it invites the reader to assume it holds for their model, and it does
-// not. Changing it means new measurements were taken, and every rate quoted
-// beside it must be re-derived from those runs in the same commit.
-export const MEASURED_ON_PROVIDER = 'openai'
-export const MEASURED_ON_MODEL = 'gpt-5.3-codex'
 
 /**
  * The sentence that ties a published rate to the model it was measured on, and

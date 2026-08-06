@@ -11,6 +11,7 @@ const passedDrift = {
   passed: true,
   warningCount: 1,
   errorCount: 0,
+  generatedArtifactStatus: 'compared',
   findings: [
     {
       id: 'docs-warning',
@@ -28,6 +29,7 @@ const failedDrift = {
   passed: false,
   warningCount: 0,
   errorCount: 1,
+  generatedArtifactStatus: 'compared',
   findings: [
     {
       id: 'security-error',
