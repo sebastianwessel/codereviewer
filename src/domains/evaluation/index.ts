@@ -73,6 +73,61 @@ export {
   type ImpactReachabilityCounts
 } from './change-impact-corpus.schema.js'
 export {
+  createMetricsVersionHistory,
+  type MetricComparabilityOf,
+  type MetricsVersionDivergenceOf,
+  type MetricsVersionEntry,
+  type MetricsVersionHistory
+} from './metrics-version-history.js'
+export {
+  CHANGE_IMPACT_METRICS_VERSION,
+  CHANGE_IMPACT_METRICS_VERSION_HISTORY,
+  changeImpactMetricComparability,
+  changeImpactMetricsAffectedBetween,
+  type ChangeImpactComparabilityKey,
+  type ChangeImpactMetricComparability,
+  type ChangeImpactMetricsVersionDivergence
+} from './change-impact-metrics-versions.js'
+export {
+  adjudicatedDestinationFiles,
+  changeImpactArms,
+  changeImpactUnmeasuredReasons,
+  corpusSplits,
+  impactReachabilityClasses,
+  isAdjudicationMeasured,
+  referenceDestinationFiles,
+  scoreChangeImpactCases,
+  type ChangeImpactAdjudicationDelta,
+  type ChangeImpactArm,
+  type ChangeImpactArmMetrics,
+  type ChangeImpactCaseInput,
+  type ChangeImpactCaseOutcome,
+  type ChangeImpactCaseScore,
+  type ChangeImpactCoverage,
+  type ChangeImpactRate,
+  type ChangeImpactRecall,
+  type ChangeImpactScore,
+  type ChangeImpactUnmeasuredReason,
+  type ScoredExpectation
+} from './change-impact-scoring.js'
+export {
+  buildChangeImpactEvalReport,
+  parseChangeImpactEvalReport,
+  ChangeImpactEvalReportSchema,
+  CHANGE_IMPACT_EVAL_ARTIFACT_ROOT,
+  CHANGE_IMPACT_EVAL_REPORT_ARTIFACT_NAME,
+  CHANGE_IMPACT_EVAL_SUMMARY_ARTIFACT_NAME,
+  type ChangeImpactEvalReport
+} from './change-impact-eval-report.js'
+export { renderChangeImpactEvalSummary } from './change-impact-eval-rendering.js'
+export {
+  readEngineIdentity,
+  ENGINE_COMMIT_UNKNOWN,
+  engineCommitArgs,
+  engineWorkingTreeArgs,
+  type EngineIdentity
+} from './engine-identity.js'
+export {
   buildChangeImpactCase,
   changeImpactHydrationSource,
   defaultChangeImpactManifestPath,
@@ -208,6 +263,8 @@ export {
 } from './eval-report-contracts.js'
 export {
   computeAnswerKeyDigest,
+  computeChangeImpactAnswerKeyDigest,
+  computeChangeImpactAnswerKeyDigestByCase,
   stableJsonDigest
 } from './eval-report-provenance.js'
 export {

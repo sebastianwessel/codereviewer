@@ -78,9 +78,11 @@ describe('evaluation package scripts', () => {
       'hydrate-real-repo-corpus'
     )
 
-    // The change-impact corpus (spec 22) hydrates only. There is deliberately no
-    // combined run script: nothing scores it yet, and a script that hydrated and
-    // then ran the diff reviewer over it would answer a different question while
+    // The change-impact corpus (spec 22) hydrates only. Its scorer exists — the
+    // separate `eval impact` command — but there is still deliberately no combined
+    // run script here: a script under a name one character from `eval:corpus`
+    // would be the shortest path to running the diff reviewer over this corpus, or
+    // this scorer over that one, and either answers a different question while
     // looking like a result.
     expect(packageJson.scripts['eval:impact-corpus:hydrate']).toContain(
       'hydrate-change-impact-corpus'

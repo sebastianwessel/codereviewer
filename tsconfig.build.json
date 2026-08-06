@@ -38,6 +38,7 @@
   "exclude": [
     "src/**/*.test.ts",
     "src/shared/testing/**",
-    "src/domains/reporting/reporting-fixture.ts"
+    "src/domains/reporting/reporting-fixture.ts",
+    "src/domains/evaluation/change-impact-fixture.ts"
   ]
 }

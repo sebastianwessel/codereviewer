@@ -250,6 +250,63 @@ split; whether the deterministic reference list alone already contains that file
 which is the remove-criterion's baseline arm; and what adjudication removes
 relative to that list.
 
+### The Scorer, As Built
+
+Built 2026-08-06 as `eval impact`, in `src/domains/evaluation/`. **It is an
+instrument, not a result**: no number has been produced by it, and nothing in this
+repository or in `docs/` quotes one.
+
+The unit is the destination FILE, per the pre-registered decision rule and the
+file-granularity result recorded under Prior Art. It scores THREE ARMS, and emits
+them together because the comparison between them is what the removal criterion is
+stated against:
+
+1. the deterministic reference list — `impactedFiles` ∪ `impactedTestFiles`;
+2. the adjudicated list — `impactFindings`;
+3. the difference: what adjudication removed, of which the removals that dropped a
+   proven dependent are counted as **provably wrong**. There is deliberately NO
+   "correct removals" count, because a removed file absent from the answer key
+   might have been noise or a dependent nobody listed, and this corpus cannot tell
+   those apart. Crediting them would convert the answer key's incompleteness into
+   evidence for the layer under test.
+
+Five bindings, each of which is a way this measurement could otherwise lie:
+
+- **Recall is split, never pooled.** Per reachability class, per contamination
+  split, and per the directly-reachable / whole-repo-search halves. The scorer
+  publishes no blended recall figure at all, so there is none to quote.
+- **Precision is a bracket whose upper bound is permanently absent.** The lower
+  bound is raw precision; the upper bound reports *not measurable on this corpus*
+  and no judge can change that, because the answer key is not an enumeration.
+  Unlike the diff reviewer's bracket this is a property of the corpus, not of
+  whether a judge ran.
+- **The decision rule's denominator is the reference list**, not the whole answer
+  key: adjudication cannot report a file discovery never found, and scoring it
+  against files discovery missed would charge it for discovery's misses.
+- **Absence is never zero.** A case that did not hydrate, a checkout whose commits
+  or answer key disagree with the manifest, an engine error, a `disabled` run, an
+  arm no run answered, and a dimension with no expectations all render as
+  not-measured. A `0.0%` cell means the engine looked and missed.
+- **A completed adjudication is not an exhaustive one.** Two of the four
+  situations the known-not-reported list names — a failed call, and the `maxCalls`
+  cap — occur inside a run that completed. Where any pair is left unadjudicated a
+  reported dependent still counts as found (a hit is unambiguous) but an
+  unreported one is UNDETERMINED rather than a miss, and the case contributes
+  nothing to arm 3, because "removed" cannot be told from "never checked". The
+  unadjudicated pair count and the truncated-case count are reported so a low
+  arm-2 figure produced by the cap is visible as such.
+- **It cannot be pooled with the spec 17 corpus.** A separate metrics-version
+  history, a `reportKind` literal the two report contracts reject each other on,
+  separate artefact names under `.codereviewer/eval/change-impact/`, and no
+  `--slice-root` option — the flag that selects spec 17's corpus is unknown to this
+  command and a typo exits 2. There is still no combined hydrate-and-run npm
+  script.
+
+Provenance carries the engine commit, whether its working tree was clean, the
+provider and model, the config hash and an answer-key digest per case. A rate is a
+property of a build and a model; this repository has already had to void figures
+that could name neither.
+
 **What it cannot measure:** precision in any trustworthy sense. Eleven dependents
 across ten changes is not an enumeration of everything each change broke, so an
 unlisted prediction is not thereby wrong, and raw precision on this corpus is a

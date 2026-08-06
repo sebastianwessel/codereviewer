@@ -363,7 +363,10 @@ breakage. Defined by `specs/22`. It exists to measure `impact check`, which the
 corpora above structurally cannot: they all score defects the reviewer was pointed
 at, and this one scores whether a dependent **outside** the change was named.
 
-**Nothing has been measured on it.** It is committed data. There is no number.
+**There is still no number.** A scorer now exists — `eval impact`, see
+[Running an evaluation](running-an-evaluation.md#eval-impact) — but nothing in this
+repository quotes a result from it. Until a run is published, treat any figure you
+see for this corpus as unmeasured.
 
 ### Shape — the inverse of the real-repository corpus
 
@@ -405,15 +408,29 @@ similarity-to-our-own-engine.
 ### What it can and cannot measure
 
 **Can:** whether a predicted destination file is a dependent upstream actually had
-to repair, split by reachability class and by contamination risk; and whether the
+to repair, split by reachability class and by contamination risk; whether the
 deterministic reference list already contains that file, which is the baseline arm
-`specs/22`'s remove-criterion is scored against.
+`specs/22`'s remove-criterion is scored against; and what adjudication removed
+relative to that list.
+
+The scoring unit is the **destination file**, not the site — `specs/22` records the
+measured reason (identical predictions scored at file rather than method
+granularity moved precision 28.2% → 60.9%). Three arms are always reported
+together, because the comparison between them is the only thing that answers the
+remove-criterion.
 
 **Cannot:**
 
 - **Precision, trustworthily.** 11 dependents across 10 changes is not an
   enumeration of everything each change broke, so an unlisted prediction is not
-  thereby wrong.
+  thereby wrong. `eval impact` reports precision as a **bracket** whose lower bound
+  is raw precision and whose upper bound is permanently `not measurable on this
+  corpus` — no judge can fix an answer key that is not an enumeration, so unlike
+  the diff reviewer's bracket there is nothing to measure the upper end with.
+- **Whether a removal was right.** The scorer counts removals that dropped a proven
+  dependent, because those are provably wrong. It does **not** count "correct
+  removals": a dropped file absent from the answer key might have been noise or a
+  dependent nobody listed, and this corpus cannot tell.
 - **`breaks-on-build`.** Every case is a behavioural break. A change that deletes a
   declaration outright is rarely merged without its callers, and the commit-message
   convention that makes the evidence link resolvable does not surface the ones that

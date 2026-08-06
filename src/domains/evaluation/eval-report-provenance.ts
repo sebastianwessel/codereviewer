@@ -116,6 +116,64 @@ export const computeAnswerKeyDigestByCase = (
     ])
   )
 
+// The same discipline for the change-impact corpus, over ITS answer key.
+//
+// Deliberately a separate pair of functions rather than a generalisation of the
+// two above: the two corpora's expectations have different fields, and a digest
+// that tried to span both would either drop a field one of them scores on or
+// change value for one corpus whenever the other gained a field. The scope is the
+// same in spirit — exactly the content that decides what counts as correct, which
+// here is the destination path, the reachability class and the compatibility class
+// the corpus asserts. `severity` is deliberately outside it: spec 22 makes it
+// descriptive metadata and not a scoring input, so relabelling one must not
+// invalidate a comparison.
+const changeImpactAnswerKeyContent = (corpusCase: {
+  readonly expectedImpact: readonly {
+    readonly path: string
+    readonly lineRange: readonly [number, number]
+    readonly reachability: string
+    readonly compatibilityClass: string
+  }[]
+}): unknown =>
+  corpusCase.expectedImpact.map((expected) => ({
+    path: expected.path,
+    lineRange: [...expected.lineRange],
+    reachability: expected.reachability,
+    compatibilityClass: expected.compatibilityClass
+  }))
+
+type ChangeImpactDigestableCase = {
+  readonly id: string
+  readonly expectedImpact: readonly {
+    readonly path: string
+    readonly lineRange: readonly [number, number]
+    readonly reachability: string
+    readonly compatibilityClass: string
+  }[]
+}
+
+export const computeChangeImpactAnswerKeyDigest = (
+  cases: readonly ChangeImpactDigestableCase[]
+): string =>
+  stableJsonDigest(
+    [...cases]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map((corpusCase) => ({
+        id: corpusCase.id,
+        expectedImpact: changeImpactAnswerKeyContent(corpusCase)
+      }))
+  )
+
+export const computeChangeImpactAnswerKeyDigestByCase = (
+  cases: readonly ChangeImpactDigestableCase[]
+): Readonly<Record<string, string>> =>
+  Object.fromEntries(
+    cases.map((corpusCase) => [
+      corpusCase.id,
+      stableJsonDigest(changeImpactAnswerKeyContent(corpusCase))
+    ])
+  )
+
 // Cases both runs scored, whose expectations differ between them. An empty list
 // means every shared case was scored against the same answer key, whatever else
 // differs about the two runs.

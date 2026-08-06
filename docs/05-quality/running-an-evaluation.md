@@ -76,6 +76,121 @@ Hydration fails a case rather than proceeding when the manifest violates the
 temporal cutoff, the license allowlist, or answer-key exclusion (including
 answer-key wording found in the **generated diff**).
 
+### Change-impact dependents corpus
+
+```bash
+npm run eval:impact-corpus:hydrate
+```
+
+Git fetches only — no model call, no spend. It checks out each case at the commit
+that **introduced** the breakage and verifies, against the real checkout, that the
+declared parent is the upstream parent, that the diff touches nothing undeclared,
+and that every expected dependent exists with the lines the answer key points at.
+
+There is deliberately **no combined hydrate-and-run npm script** for this corpus.
+Its scorer is a separate command with a separate option set, because the diff
+reviewer's corpus and this one answer different questions and must never be
+pooled.
+
+---
+
+## `eval impact`
+
+Scores the change-impact dependents corpus (`specs/22` §Evaluation). It is a
+**different command from `eval run` on purpose**: it does not accept
+`--slice-root`, its cases are `case.json` under a `--case-root`, and its artefact
+carries a `reportKind` no eval report can parse as. A `--slice-root` typo exits `2`
+rather than silently pooling two corpora.
+
+```bash
+codereviewer eval impact [flags]
+```
+
+| Flag | Default | Effect |
+| --- | --- | --- |
+| `--config <path>` | discovery | Load this config file instead of discovery |
+| `--manifest <path>` | `eval/corpora/change-impact-dependents/manifest.json` | Answer key to score against |
+| `--case-root <path>` | `.codereviewer/eval/change-impact-cases/change-impact-dependents` | Hydrated checkouts to run over |
+| `--case <case-id>` | all | Filter cases. **Repeatable.** An unknown id fails the run |
+| `--adjudication <on\|off>` | `on` | `off` scores the deterministic reference arm alone: no provider call, no spend |
+| `--max-adjudication-calls <n>` | `changeImpact.adjudication.maxCalls` (40) | Model-call cap **per case**. See below — when it binds, arm 2 becomes partly unreadable |
+| `--log-level`, `--debug`, `--log-file` | — | As `eval run` |
+
+Both change-impact switches are forced on for the run. The capability is disabled
+by default until measured, and a run with either off would score an engine that
+analysed nothing — which the scorer would then have to render as unmeasured, so the
+run would cost time and tell you nothing.
+
+### What it reports
+
+Three arms, always together:
+
+1. **Reference** — every destination file dependent discovery enumerates. This is
+   the baseline `specs/22`'s removal criterion is stated against ("Remove if it
+   cannot beat naming the changed symbols and letting the human grep").
+2. **Adjudicated** — the files adjudication actually reports. `specs/22` expects
+   this arm to *lose* recall against arm 1; a run that loses none has almost
+   certainly adjudicated nothing.
+3. **The difference** — what adjudication removed, how many of those removals
+   dropped a proven dependent (provably wrong), and how many are of unknown
+   correctness. There is no "correct removals" count and there cannot be one.
+
+Recall is reported **per reachability class and per contamination split, never
+pooled**, and there is deliberately no blended recall figure to quote. Precision is
+a bracket whose upper bound is permanently *not measurable on this corpus*.
+
+### Absence is never zero
+
+Five situations render as *not measured* rather than as a score:
+
+| Situation | Reported as |
+| --- | --- |
+| No hydrated checkout under `--case-root` | `not-hydrated` |
+| The checkout's commits or answer key disagree with the manifest | `stale-checkout` |
+| The engine threw on a case | `engine-error` |
+| The engine reported `status: "disabled"` | `capability-disabled` |
+| Adjudication was requested but no model lane resolved | arm 2 not measured; arm 1 still measured |
+
+A `0.0%` cell in this report means the engine looked and missed, and only that.
+
+### The adjudication call cap, and why it can make arm 2 unreadable
+
+`changeImpact.adjudication.maxCalls` bounds **model** calls **per case** (default
+40). When it binds — or when a call fails, or the model cannot decide — the run
+leaves pairs unadjudicated, and `specs/22` is explicit that *absence from
+`impactFindings` is not a statement that a dependent is unaffected*.
+
+So the scorer treats a partially adjudicated case asymmetrically:
+
+- a dependent that **is** reported counts as found — a hit is never ambiguous;
+- a dependent that is **not** reported is **undetermined**, not a miss;
+- the case contributes nothing to arm 3, because "removed" cannot be told from
+  "never checked".
+
+`coverage.unadjudicatedPairCount` and `adjudicationCallsTruncatedCaseCount` are
+reported for exactly this reason. If they are non-zero, raise
+`--max-adjudication-calls` and re-run rather than reading arm 2 as a low number.
+
+### Artefacts and exit codes
+
+Written under `.codereviewer/eval/change-impact/`, and again under
+`.codereviewer/eval/change-impact/runs/<run-id>/`:
+
+| Artefact | Contents |
+| --- | --- |
+| `change-impact-eval-report.json` | Structured source of truth: coverage, the three arms, the decision-rule denominator, per-case results, provenance |
+| `change-impact-eval-summary.md` | The rendered document; also printed to stdout |
+
+Provenance names the **engine commit, whether its working tree was clean, and the
+provider and model** — a rate is a property of a build and a model, not of a
+corpus.
+
+| Code | When |
+| --- | --- |
+| `0` | At least one case scored |
+| `1` | Nothing could be scored — an un-hydrated corpus must never look like a completed measurement |
+| `2` | Usage/config error, including `--slice-root` and an unknown `--case` id |
+
 ---
 
 ## `eval run`
