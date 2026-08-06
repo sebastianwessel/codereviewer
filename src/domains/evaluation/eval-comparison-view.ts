@@ -81,7 +81,14 @@ const ComparisonMetricsSchema = z.object({
 export type EvalComparisonMetrics = z.infer<typeof ComparisonMetricsSchema>
 
 const ComparisonExpectationSchema = z.object({
-  expectedIndex: optionalInteger
+  expectedIndex: optionalInteger,
+  // Read as a free string, not as the `DiffScope` enum. Recall is adjudicated
+  // per diff-scope population, and a label a later build introduces must
+  // partition into its own population rather than fail the whole report's parse
+  // -- the same tolerance every other leaf here has. Absent (a report written
+  // before the field existed) stays absent: "scope not recorded" is its own
+  // population and is never folded into in-diff or out-of-diff.
+  diffScope: z.string().min(1).optional()
 })
 
 const ComparisonCaseSchema = z.object({
@@ -163,3 +170,12 @@ export type EvalComparisonReport = z.infer<typeof EvalComparisonReportSchema>
 export const parseEvalComparisonReport = (
   value: unknown
 ): EvalComparisonReport => EvalComparisonReportSchema.parse(value)
+
+// One scored run inside an arm, carrying the label the reader identifies it by
+// (its report path). An arm is a SET of these: this project's own decision rule
+// requires several runs per arm, and adjudicating one report against one report
+// discards most of the evidence that was paid for.
+export type EvalComparisonRun = {
+  readonly label: string
+  readonly report: EvalComparisonReport
+}

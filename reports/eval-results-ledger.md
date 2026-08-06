@@ -39,11 +39,25 @@ errors in all three. Artefacts under `.codereviewer/eval/rebaseline-2026-08-05/`
 | genuine false positives | 0 / 1 / 0 | 2 / 0 / 3 | **NO** |
 | unlisted-real findings | 10 / 13 / 13 | 9 / 12 / 9 | **NO** |
 
-**In-diff recall rose 7.2pp.** The three new runs do not overlap the three old ones
-at all (60.0–61.7 against 66.7–71.7). An exact permutation test over the 20 ways to
-split six runs into two arms of three puts one-sided **p = 0.050** — which is the
-smallest p attainable at three runs per arm, so this is as strong as this design can
-report and no stronger.
+**In-diff recall rose 7.2pp, and it survives the sharper test.** The three new runs
+do not overlap the three old ones at all (60.0–61.7 against 66.7–71.7). An exact
+permutation test over the 20 ways to split six runs into two arms of three puts
+one-sided **p = 0.050** — the smallest p attainable at three runs per arm.
+
+Re-adjudicated 2026-08-05 with the paired per-expectation instrument, which is
+sharper because both arms score the same expectations: pooling all three runs per
+arm into **one observation per expectation** and restricting to the population that
+can move gives **12 gained, 3 lost, 45 unchanged over 60 in-diff expectations,
+exact two-sided sign test p = 0.0352**. Out-of-diff is a hard zero in all six runs
+and is reported as such rather than tested.
+
+**The blended paired verdict does NOT clear p < 0.05, and that is the instrument's
+fault, not the result's.** Adjudicated one run pair at a time over all 87
+expectations it gives 5 gained/2 lost (p = 0.2568), 5/1 (p = 0.1025) and 9/3
+(p = 0.0833). The 27 out-of-diff expectations are ties in every pairing, so they add
+nothing to a test that reads only discordant pairs while diluting the reported rate
+and the prose. Both defects — blending populations, and discarding four of six runs
+— are fixed; see spec 06.
 
 **Out-of-diff stayed at a hard 0 of 27, in every run.** Nothing in this bundle
 targeted it, and nothing moved it. The wall is where it was.

@@ -52,6 +52,20 @@ ways to split six runs into two arms of three puts one-sided **p = 0.050** —
 the smallest p attainable at three runs per arm, so this is as strong as this
 design can report and no stronger.
 
+The **paired** verdict on the same six reports is a sharper instrument on the
+same evidence, and agrees. Adjudicated per expectation over the in-diff
+population, pooling all three runs of each arm into one observation per
+expectation, `eval compare` reports **12 expectations gained, 3 lost, 45
+unchanged, exact two-sided sign test p = 0.0352** (reproduce it with
+`eval compare` passing all three `--base` and all three `--head` reports). This
+is a different test from the run-level permutation above, not a second reading
+of it: it discards the 27 out-of-diff expectations, which are a hard zero in
+every run of both arms and carry no information. Blended over all 87
+expectations the same data reads 12 gained against 3 lost as well — the pairs
+are the same — but over a denominator that includes a population that cannot
+move, which is why the blended recall figures in the table above are not the
+ones to quote.
+
 **Which change moved it is not established, and this document does not claim
 one did.** The eval configures no reviewer instructions, so the 2026-08-05
 instruction work — reviewer instructions reaching the discovery call, see

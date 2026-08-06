@@ -240,6 +240,12 @@ const reviewReport = (
 // property.
 const evalReportForComparison = (report: EvalReport): EvalReport => report
 
+// One report as a single-run comparison arm. `eval compare` takes a SET of runs
+// per arm, and a single-run arm is just the smallest one.
+const comparisonArm = (report: EvalReport, label: string) => [
+  { label, report }
+]
+
 describe('eval runner', () => {
   test('validates fixture samples and returns a deterministic eval report', async () => {
     const cases = parseEvalCases(inlineEvalCases)
@@ -1638,8 +1644,8 @@ describe('eval runner', () => {
       generatedAt: '2026-06-20T00:00:03.000Z'
     })
     const comparison = renderEvalComparison({
-      base: miss.report,
-      head: result.report
+      base: comparisonArm(miss.report, 'base'),
+      head: comparisonArm(result.report, 'head')
     })
 
     expect(comparison).toContain(
@@ -1670,7 +1676,10 @@ describe('eval runner', () => {
     })
 
     expect(
-      renderEvalComparison({ base: negativeOnly.report, head: result.report })
+      renderEvalComparison({
+        base: comparisonArm(negativeOnly.report, 'base'),
+        head: comparisonArm(result.report, 'head')
+      })
     ).toContain(
       '| Recall (in-diff) | n/a (0 checked) | 100.0% (1 checked) | n/a |'
     )
@@ -1758,7 +1767,7 @@ describe('eval runner', () => {
     })
 
     const comparison = renderEvalComparison({
-      base: evalReportForComparison({
+      base: comparisonArm(evalReportForComparison({
         ...base.report,
         metrics: {
           ...base.report.metrics,
@@ -1811,8 +1820,8 @@ describe('eval runner', () => {
               }
             : caseResult
         )
-      }),
-      head: evalReportForComparison({
+      }), 'base'),
+      head: comparisonArm(evalReportForComparison({
         ...head.report,
         // This test's subject is selection-status and metric-group rendering
         // when the two runs cover DIFFERENT case sets -- a scenario spec 06
@@ -1886,9 +1895,7 @@ describe('eval runner', () => {
             }
           ]
         }))
-      }),
-      baseLabel: 'base',
-      headLabel: 'head'
+      }), 'head')
     })
 
     expect(comparison).toContain('## Selection')

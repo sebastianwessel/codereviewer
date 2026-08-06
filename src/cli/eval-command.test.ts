@@ -1725,6 +1725,123 @@ describe('eval CLI', () => {
     }
   })
 
+  // An arm is a SET of runs: this project's decision rule requires several runs
+  // per arm, and one report against one report discards most of the evidence
+  // that was paid for.
+  test('compares multi-run arms from repeatable --base and --head flags', async () => {
+    const root = await createTempDir()
+    const caseResults = (
+      matched: readonly number[]
+    ): readonly Record<string, unknown>[] => [
+      {
+        caseId: 'case-a',
+        parseValid: true,
+        providerErrored: false,
+        expectedFindings: [
+          {
+            expectedIndex: 0,
+            category: 'bug',
+            severity: 'high',
+            path: 'src/app.ts',
+            lineRange: [4, 4],
+            matchMode: 'path-line',
+            diffScope: 'in-diff',
+            semanticSummary: 'incorrect return value from changed branch'
+          }
+        ],
+        matchedFindings: matched.map((expectedIndex) => ({
+          expectedIndex,
+          findingId: 'find-1',
+          severityMatches: true,
+          lineOverlaps: true
+        })),
+        unmatchedExpectedIndexes: matched.length === 0 ? [0] : [],
+        falsePositiveFindingIds: [],
+        falsePositiveFindings: [],
+        noFindingZoneFalsePositiveIds: [],
+        warnings: [],
+        durationMs: 100,
+        costUsd: 0
+      }
+    ]
+
+    try {
+      for (const index of [1, 2, 3]) {
+        await writeFile(
+          join(root, `base-${index}.json`),
+          JSON.stringify(evalReport({ caseResults: caseResults([]) }))
+        )
+        await writeFile(
+          join(root, `head-${index}.json`),
+          JSON.stringify(evalReport({ caseResults: caseResults([0]) }))
+        )
+      }
+
+      const result = await runCli(
+        [
+          'eval',
+          'compare',
+          '--base',
+          'base-1.json',
+          '--base',
+          'base-2.json',
+          '--base',
+          'base-3.json',
+          '--head',
+          'head-1.json',
+          '--head',
+          'head-2.json',
+          '--head',
+          'head-3.json'
+        ],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain(
+        'Base arm: 3 runs — base-1.json, base-2.json, base-3.json'
+      )
+      expect(result.stdout).toContain('### in-diff (headline)')
+      // One expectation moved in all three run pairs. That is ONE gained
+      // observation, not three.
+      expect(result.stdout).toContain('| Gained (head only) | 1 |')
+      expect(result.stdout).toContain('| Discordant pairs | 1 |')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('refuses arms of different sizes rather than comparing what lines up', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeFile(join(root, 'base-1.json'), JSON.stringify(evalReport()))
+      await writeFile(join(root, 'base-2.json'), JSON.stringify(evalReport()))
+      await writeFile(join(root, 'head-1.json'), JSON.stringify(evalReport()))
+
+      const result = await runCli(
+        [
+          'eval',
+          'compare',
+          '--base',
+          'base-1.json',
+          '--base',
+          'base-2.json',
+          '--head',
+          'head-1.json'
+        ],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain(
+        'eval compare requires the same number of --base and --head reports; got 2 base and 1 head'
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('warns when comparing eval reports with different selected case sets', async () => {
     const root = await createTempDir()
 

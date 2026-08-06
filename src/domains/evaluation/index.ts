@@ -138,7 +138,8 @@ export {
   type EvalComparisonCase,
   type EvalComparisonMetricGroup,
   type EvalComparisonMetrics,
-  type EvalComparisonReport
+  type EvalComparisonReport,
+  type EvalComparisonRun
 } from './eval-comparison-view.js'
 export {
   EVAL_METRICS_VERSION_HISTORY,
@@ -151,6 +152,10 @@ export {
 export {
   PAIRED_SIGNIFICANCE_ALPHA,
   pairedRecallVerdict,
+  type PairedArmSummary,
+  type PairedPopulationFinding,
+  type PairedPopulationKind,
+  type PairedPopulationVerdict,
   type PairedRecallVerdict
 } from './eval-paired-recall-verdict.js'
 export {

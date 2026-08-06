@@ -497,7 +497,10 @@ has to establish engine identity out of band.
 The blended recall figure is not interpretable on its own on the real-repository
 corpus, because a large share of its expectations lie in unchanged code and the
 blended number then depends on that ratio rather than on reviewer quality. Read
-the in-diff and out-of-diff figures alongside it.
+the in-diff and out-of-diff figures alongside it. `eval compare` enforces this
+for the decision rule it prints: the paired recall verdict is adjudicated per
+diff-scope population and the blended figure is never its headline — see
+"Adjudicated Per Diff-Scope Population, Never Blended".
 
 ### Precision Is A Bracket, Not A Point
 
@@ -719,20 +722,50 @@ The CLI stdout defaults to the same human-readable summary so a local run is
 understandable without opening JSON. The JSON report remains the source of truth
 for automation.
 
-`codereviewer eval compare --base <report.json> --head <report.json>` compares
-two eval reports and prints the scoring-rule status, gate status, selection
-status, the paired recall verdict, metric deltas, and case transitions.
+`codereviewer eval compare --base <report.json> [--base ...] --head <report.json>
+[--head ...]` compares two evaluation ARMS and prints the scoring-rule status, the paired recall
+verdict, and — when each arm holds exactly one report — gate status, selection
+status, metric deltas, and case transitions.
+
+**Both flags are repeatable, and an arm is a SET of reports.** Several runs per
+arm is the design this specification's own decision rule requires, and comparing
+one report against one report discards most of the evidence that was paid for.
+The two arms must hold the SAME number of reports; unequal arms are a usage
+error, because per-expectation outcomes measured over different run counts are
+not paired observations and a 2/3 against a 1/1 would read as movement that is an
+artifact of the run counts.
+
+Within one arm every report must carry the same `metricsVersion` and the same
+`provenance.answerKeyDigest`, and every report must have scored the same
+expectations; each is a refusal, for the reason pooling refuses in general — the
+runs share a per-expectation denominator, so a heterogeneous arm computes a rate
+over a population that never existed, and an expectation one run never scored is
+not an expectation that run missed. ACROSS arms both a differing `metricsVersion`
+and a differing selection remain legitimate and are handled as they always were.
+
+The per-report sections — gate status, selection status, metric deltas, context
+ledger and agentic stage counts, metric-group deltas, and case transitions — are
+rendered only when each arm holds exactly one report. With several runs per arm
+they are replaced by a `## Run-Level Context` section stating the run counts and
+why they are omitted: averaging reports would publish numbers no run produced,
+and reading one run per arm would present an arbitrary pick as a result. The
+paired verdict needs neither, because it adjudicates per expectation across every
+run.
 
 Both reports are read through the tolerant COMPARISON VIEW, not the producer
 contract — see "Reading A Report The Current Contract Did Not Write". A report
 saved before a field existed compares successfully, and every value it lacks
 renders `unknown (not recorded)` rather than a number.
 
-The command refuses outright (throws rather than rendering) in exactly one case:
-when a case BOTH runs scored was scored against different expectations, named
-individually in the error — see "Provenance" above. When the answer key moved
-underneath the comparison, no metric on either side means what it says, so there
-is nothing honest left to render.
+The command refuses outright (throws rather than rendering) when a case BOTH arms
+scored was scored against different expectations, named individually in the error
+— see "Provenance" above. When the answer key moved underneath the comparison, no
+metric on either side means what it says, so there is nothing honest left to
+render. Every base report is checked against every head report, so a divergence
+present in only one run of a multi-run arm is found rather than missed by
+checking a single representative. The command also refuses the three
+arm-homogeneity violations listed above, and the CLI rejects unequal arm sizes as
+a usage error.
 
 A `metricsVersion` difference is NOT such a case. The command renders a
 `## Scoring Rules` section naming both versions before any number, warns which
@@ -740,22 +773,92 @@ metrics the change makes incomparable, and suppresses exactly those deltas as
 `not comparable` while comparing the rest. See "Metrics Version".
 
 The **primary verdict for a recall difference is the paired, finding-level test**,
-rendered as `## Paired Recall Verdict (primary)` BEFORE the run-level metric
-deltas. Both reports scored the same expectations, so the unit is one expectation
-(`caseId#expectedIndex`) and the statistic is McNemar over the discordant pairs,
-reported with the paired-bootstrap 95% interval from `eval-significance.ts`. This
-replaces run-level mean ± standard deviation as the decision rule: an sd estimated
-from three seeds is barely an estimate — the two most recent figures on the
-primary corpus, 0.96pp and 2.89pp, carry 95% intervals of roughly [0.50, 6.04] and
-[1.50, 18.17] that overlap almost entirely — so deciding a few-point recall
-difference by it is deciding it with noise. Pairing removes the between-run
-variance both arms share and costs no additional provider spend, because the
-per-expectation outcome is already recorded in every report. Run-level metric
-deltas remain in the report as CONTEXT, explicitly labelled as such.
+rendered as `## Paired Recall Verdict (primary)` BEFORE every other number. Both
+arms scored the same expectations, so the unit is one expectation
+(`caseId#expectedIndex`). This replaces run-level mean ± standard deviation as
+the decision rule: an sd estimated from three seeds is barely an estimate — the
+two most recent figures on the primary corpus, 0.96pp and 2.89pp, carry 95%
+intervals of roughly [0.50, 6.04] and [1.50, 18.17] that overlap almost entirely —
+so deciding a few-point recall difference by it is deciding it with noise.
+Pairing removes the between-run variance both arms share and costs no additional
+provider spend, because the per-expectation outcome is already recorded in every
+report. Run-level metric deltas remain in the report as CONTEXT, explicitly
+labelled as such.
+
+### One Observation Per Expectation Per Arm
+
+An arm contributes exactly ONE observation per expectation, whatever its run
+count: the fraction of the arm's runs that matched it. Pooling the per-pair
+discordant counts of several run pairs is forbidden — it counts the same
+expectation once per pair, which is not more evidence, only the same evidence
+repeated, and it breaks the independence the test assumes. An expectation absent
+from one run of an arm is refused, never read as a miss.
+
+### Adjudicated Per Diff-Scope Population, Never Blended
+
+The corpus holds populations with structurally different behaviour: **in-diff**
+expectations, which move, and **out-of-diff** expectations, which are a measured
+hard zero in every arm of every run because the reviewer is diff-scoped. The
+out-of-diff expectations are ties in every pairing, so they contribute nothing to
+the test — but blended they inflate the denominator, make the reported base and
+head recall the blended figure this specification already says is not
+interpretable on its own, and make the verdict's prose describe a population that
+cannot move.
+
+Measured: on the three matched run pairs of the 2026-08-02 (`6781a26`) and
+2026-08-05 (`db78900`) sweeps the blended verdict reported "does NOT clear
+p < 0.05" for all three (5 gained against 2 lost, 5 against 1, 9 against 3). The
+same data, adjudicated on the in-diff population and pooled correctly across the
+runs, is **12 gained, 3 lost, 45 unchanged, exact two-sided sign test
+p = 0.0352**. The blended framing hid a real effect.
+
+The verdict therefore renders a section per population, each with its own
+discordant counts, its own test and its own interpretation:
+
+- `in-diff` and `out-of-diff` are ALWAYS rendered, even when empty. Saying a
+  population holds no expectation is information; omitting it lets a reader
+  assume it was covered.
+- `in-diff` carries the **headline**. It is the only population on this corpus
+  that can move.
+- expectations whose recorded diff scope is neither of those (including
+  `undetermined`, and any label a later build introduces) form their own
+  population, rendered when non-empty.
+- expectations for which NO arm recorded a diff scope form a
+  `scope-not-recorded` population, and expectations the two arms scoped
+  DIFFERENTLY form a `scope-divergent` population. Neither is folded into a
+  measured population: diff scope is a property of the expectation, and
+  attributing an unplaceable expectation to in-diff or out-of-diff would move it
+  into a population nobody measured it in.
+- a blended figure over every population is still rendered, LAST, explicitly
+  labelled as depending on the fixture set's population mix rather than on
+  reviewer quality, and never as the verdict.
+
+A population with no expectations, and a population with no discordant pair,
+report that fact instead of a p-value over nothing. A population every run in
+both arms missed reports the stronger statement — a hard zero on both sides —
+rather than the weaker "nothing moved", because a tie between two working arms
+and a population neither arm can reach are not the same result.
+
+### The Test Is Named And Its Assumptions Are Stated
+
+The statistic is the **exact two-sided sign test** (McNemar's exact test) over
+the discordant expectations, reported with the seeded paired-bootstrap 95%
+interval from `eval-significance.ts`. It is exact rather than a normal
+approximation because the discordant counts this corpus produces are small enough
+for the two to disagree across the decision threshold: on 12 gained against 3
+lost the normal approximation reports p = 0.0201 where the exact test reports
+p = 0.0352. A verdict that clears its own threshold only under an approximation
+is a verdict about the approximation.
+
+The rendered output must NAME the test and STATE its assumptions — the unit of
+observation, the Binomial(n, 0.5) null over discordant pairs, the exclusion of
+concordant pairs by construction, the per-population adjudication, and what the
+bootstrap interval describes — so a reader can check the verdict rather than
+trust it.
 
 The paired verdict is withheld, with the reason stated, when recall is not
-comparable under the scoring-rule history, when either report did not record its
-per-expectation outcomes, or when the two reports share no expectation. It is
+comparable under the scoring-rule history, when a report did not record its
+per-expectation outcomes, or when the two arms share no expectation. It is
 never approximated: an arm whose expectations were not recorded is not an arm that
 matched nothing.
 
@@ -1393,8 +1496,14 @@ Eval comparison context-ledger delta rendering must live in a
 focused helper module so count collection, zero-row policy, and section headings
 share one owner.
 Eval comparison paired-recall verdict rendering must live in a focused helper
-module so the primary verdict, its unavailable reasons, and its detail table have
-one tested owner separate from the run-level delta renderers.
+module so the per-population verdicts, the stated test and its assumptions, the
+unavailable reasons, and the detail tables have one tested owner separate from
+the run-level delta renderers.
+The paired statistic itself — arm pooling, the population restriction, and the
+exact two-sided sign test — must live in `eval-significance.ts`, separate from
+both the verdict adapter that partitions populations and the renderer that
+prints them, so the statistic can be tested without a report and cannot be
+restated differently by a surface.
 The tolerant comparison read model, the scoring-rule history that per-metric
 comparability derives from, the paired-verdict adapter, and the precision bracket
 must each live in their own focused module (`eval-comparison-view.ts`,

@@ -19,7 +19,7 @@ below are parsed.
 | `review` | Run a review, write run artifacts, evaluate the quality gate. | `0`, `1`, `2`, `3`, `4`, `5` |
 | `baseline write` | Build `baseline.json` from a completed review report. | `0`, `2`, `3` |
 | `eval run` | Run the evaluation harness over eval cases and apply the regression gate. | `0`, `1`, `2`, `3`, `5` |
-| `eval compare` | Diff two eval reports. | `0`, `2` |
+| `eval compare` | Diff two eval arms (repeatable `--base` / `--head`). | `0`, `2` |
 | `eval recall-report` | Render the recall report from one or more eval reports. | `0`, `2` |
 | `eval slice-manifest` | Emit a manifest (with digest) for a benchmark slice directory. | `0`, `2`, `3` |
 | `drift check` | Run the drift gate. | `0`, `1`, `2`, `3` |
@@ -193,16 +193,22 @@ Stdout is the rendered `eval-summary.md`. Artifacts are written to
 ## `codereviewer eval compare`
 
 ```
-codereviewer eval compare --base <path> --head <path>
+codereviewer eval compare [--base <path>]... [--head <path>]...
 ```
 
-| Flag | Value | Required |
-| --- | --- | --- |
-| `--base` | path to an eval report JSON | yes |
-| `--head` | path to an eval report JSON | yes |
+| Flag | Value | Repeatable | Required |
+| --- | --- | --- | --- |
+| `--base` | path to an eval report JSON | yes | yes |
+| `--head` | path to an eval report JSON | yes | yes |
+
+Each flag defines one ARM, and an arm may hold several runs. The paired recall
+verdict pools every run of an arm into one observation per expectation.
 
 Missing either flag → exit `2`, `eval compare requires --base and --head report
-paths`. Stdout is the rendered comparison; nothing is written to disk.
+paths`. Unequal arm sizes → exit `2`, `eval compare requires the same number of
+--base and --head reports`. Stdout is the rendered comparison; nothing is written
+to disk. See [Comparing runs](../05-quality/comparing-runs.md) for the decision
+procedure.
 
 ## `codereviewer eval recall-report`
 

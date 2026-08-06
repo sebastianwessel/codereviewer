@@ -211,7 +211,7 @@ A configuration error exits `2` with a JSON error on stderr.
 | `baseline write` | Write `baseline.path` from a completed report. | — |
 | `drift check` | Run the deterministic documentation/spec/implementation drift check on its own. | Yes (exit `1`) |
 | `eval run` | Run the evaluation harness over fixtures or a slice pack. | Yes (exit `1`) |
-| `eval compare` | Diff two eval reports (`--base`, `--head`). | — |
+| `eval compare` | Diff two eval arms (repeatable `--base`, `--head`). | — |
 | `eval recall-report` | Per-expected-finding recall report from saved eval reports (`--report`, repeatable). | — |
 | `eval slice-manifest` | Deterministic manifest of a local slice pack (`--slice-root`). | — |
 

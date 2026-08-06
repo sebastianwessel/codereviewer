@@ -90,10 +90,10 @@ being filtered, and the change would have failed regardless of what recall did.
 
 ### Compare paired expectations, not run means
 
-**This is now the primary verdict `eval compare` prints**, not a manual follow-up
+**This is the primary verdict `eval compare` prints**, not a manual follow-up
 step — see [the paired recall verdict](#the-paired-recall-verdict-is-the-headline).
-Reach for `eval-significance.ts` directly only when pooling several seeds per arm,
-which `eval compare` (two reports) does not do.
+It pools every run of each arm, so there is no longer a separate multi-seed path
+to reach for.
 
 A difference of arm means throws away the information that matters, and the
 run-level standard deviation is a weak instrument on top of that: estimated from
@@ -102,15 +102,6 @@ three seeds, the two most recent figures on this corpus (0.96pp and 2.89pp) carr
 entirely, so the spread itself is barely measured. Score each **individual
 expected finding**, keyed by `caseId` + `expectedIndex`, across every seed of both
 arms, then ask how many expectations changed side.
-`src/domains/evaluation/eval-significance.ts` does this and reports:
-
-- the per-expectation hit-rate difference and a confidence interval on the mean;
-- **gained**, **lost**, and **discordant** counts;
-- a normal approximation to McNemar's statistic over the discordant
-  expectations, so an effect built from a handful of coin flips is reported as
-  such;
-- **unpaired expectations** — anything scored in only one arm — held out of the
-  comparison entirely.
 
 The difference this makes is not cosmetic. The un-anchored discovery pass
 measured **+0.83pp** of mean recall, which reads like a small win. Paired, the
@@ -138,9 +129,34 @@ codereviewer eval compare \
   --head .codereviewer/eval/runs/<head-id>/eval-report.json
 ```
 
-Both flags are required; omitting either is a usage error (exit `2`). Output is
-Markdown on stdout. **The command exits `0` even when it renders warnings**, so
-you can inspect partial overlap and new/removed cases.
+**Both flags are repeatable — an arm is a set of runs.** Pass every seed of each
+arm and the paired verdict pools them:
+
+```bash
+codereviewer eval compare \
+  --base base/run-1.json --base base/run-2.json --base base/run-3.json \
+  --head head/run-1.json --head head/run-2.json --head head/run-3.json
+```
+
+Both flags are required; omitting either is a usage error (exit `2`). **So is a
+mismatched arm size** — three base reports against one head report is refused,
+not zipped, because per-expectation outcomes measured over different run counts
+are not paired observations. Output is Markdown on stdout. **The command exits
+`0` even when it renders warnings**, so you can inspect partial overlap and
+new/removed cases.
+
+Within one arm the runs must agree: same `metricsVersion`, same
+`provenance.answerKeyDigest`, and the same expectations scored by every run. Each
+is a refusal — the runs share a per-expectation denominator, so a mixed arm
+computes a rate over a population that never existed. Differences *between* the
+arms are fine and are exactly what the command is for.
+
+**With more than one run per arm, the per-report sections are omitted** — gate,
+selection, metric deltas, ledger/stage counts, metric-group deltas and case
+transitions all read one report per side. A `Run-Level Context` section says so.
+Averaging reports would publish numbers no run produced, and picking one run per
+arm would present an arbitrary choice as a result. Compare a single run per arm
+when you need those; the paired verdict uses every run either way.
 
 ### It reads reports older than the current build
 
@@ -154,16 +170,20 @@ renders `unknown (not recorded)`, and so does every delta that would have needed
 it. A missing counter is never read as `0`, and a case whose report did not record
 the inputs its status derives from renders `unknown`, never `PASS`.
 
-### The one hard refusal (the command throws, exit `2`)
+### The hard refusals (the command throws, exit `2`)
 
-- **A case BOTH runs scored was scored against different expectations** — the
+- **A case BOTH arms scored was scored against different expectations** — the
   error names those cases. This is the exact failure this repository already hit
   once: an archived run reported 78.8% recall after its answer key had since
   changed underneath it, with nothing in the saved report revealing that. When the
   key moves underneath a comparison, no metric on either side means what it says.
+  Every base report is checked against every head report, so a divergence in the
+  third run of an arm cannot hide behind a clean first run.
+- **An arm mixes scoring rules, answer keys, or scored expectations across its
+  own runs** — see above. Pooling a heterogeneous arm is never right.
 
-It cannot be bypassed with a flag. A differing case *selection* is not this — see
-the warning below.
+None can be bypassed with a flag. A differing case *selection* between the arms
+is not this — see the warning below.
 
 ### A `metricsVersion` difference refuses metrics, not the report
 
@@ -195,34 +215,79 @@ Rendered, in order:
 
 | Section | Contents |
 | --- | --- |
-| Scoring rules | Both `metricsVersion` values, and which metrics the difference makes incomparable |
-| Gate | Base/head gate status |
-| Selection | Whether `selection.selectedCaseIds` are identical and whether fixture source / slice root match |
-| **Paired recall verdict** | **The primary verdict for a recall difference** — see below |
-| Metric deltas | Aggregate quality, token, cost, duration, provider-health and refutation deltas — **context, not the decision rule** |
-| Context ledger | Base/head/delta entry counts by ledger kind |
-| Agentic stages | Refutation / fix / provider-recovery stage counts |
-| Metric-group coverage | Fixture-count deltas across the union of `sourceProfile` and `language` groups, including groups present in only one report; unchanged counts omitted |
-| Metric-group deltas | Quality, resource and proof-loop deltas — **only for groups present in both reports** |
-| Case transitions | Per-case status change |
+| Scoring rules | Every report's `metricsVersion` by arm, and which metrics the difference makes incomparable |
+| **Paired recall verdict** | **The primary verdict for a recall difference**, per diff-scope population — see below |
+| Gate | Base/head gate status — single-run arms only |
+| Selection | Whether `selection.selectedCaseIds` are identical and whether fixture source / slice root match — single-run arms only |
+| Metric deltas | Aggregate quality, token, cost, duration, provider-health and refutation deltas — **context, not the decision rule**; single-run arms only |
+| Context ledger | Base/head/delta entry counts by ledger kind — single-run arms only |
+| Agentic stages | Refutation / fix / provider-recovery stage counts — single-run arms only |
+| Metric-group coverage | Fixture-count deltas across the union of `sourceProfile` and `language` groups, including groups present in only one report; unchanged counts omitted — single-run arms only |
+| Metric-group deltas | Quality, resource and proof-loop deltas — **only for groups present in both reports**; single-run arms only |
+| Case transitions | Per-case status change — single-run arms only |
+| Run-Level Context | Replaces every "single-run arms only" section above when an arm holds several runs, and says why |
 
 ### The paired recall verdict is the headline
 
 `eval compare` runs the paired finding-level test itself and prints it **before**
-the run-level deltas. Both reports scored the same expectations, so the unit is
-one expectation (`caseId#expectedIndex`) and the statistic is McNemar over the
-discordant pairs, with the paired-bootstrap 95% interval. It reports paired
-expectations, base and head paired recall, the delta, gained / lost / discordant
-counts, found-by-both and missed-by-both, and the two-sided p.
+every other number. Both arms scored the same expectations, so the unit is one
+expectation (`caseId#expectedIndex`).
+
+**One observation per expectation per arm.** An arm's value for an expectation is
+the fraction of that arm's runs which matched it — `2/3` for a flaky one. Three
+run pairs that each moved the *same* expectation are **one** gained expectation,
+not three. Summing per-pair discordant counts across pairs would count the same
+evidence repeatedly, and the tool refuses to do it.
+
+**Populations are adjudicated separately, and blended is never the headline.**
+The corpus holds two populations that behave differently by construction:
+
+| Population | Behaviour |
+| --- | --- |
+| **`in-diff`** | The expectations that move. **This carries the headline verdict.** |
+| **`out-of-diff`** | A measured hard zero in every arm of every run — the reviewer is diff-scoped. Ties in every pairing. |
+
+Blending them was a real defect, not a stylistic one. On the three matched run
+pairs of the 2026-08-02 (`6781a26`) and 2026-08-05 (`db78900`) sweeps, the
+blended verdict read *"does NOT clear p < 0.05"* three times over — 5 gained
+against 2 lost, 5 against 1, 9 against 3. The same data, adjudicated on the
+in-diff population and pooled across the three runs, is **12 gained, 3 lost, 45
+unchanged, p = 0.0352**. The 27 out-of-diff ties carried no information, but they
+inflated the denominator and made the verdict describe a population that cannot
+move.
+
+So the verdict renders one section per population:
+
+- `in-diff` and `out-of-diff` **always**, even when empty — an omitted population
+  reads as a covered one;
+- any other recorded scope (including `undetermined`) when non-empty;
+- `scope-not-recorded` for expectations no arm labelled, and `scope-divergent`
+  for expectations the two arms labelled differently. Neither is folded into a
+  measured population;
+- a **blended** figure last, labelled as depending on the fixture set's
+  population mix rather than on reviewer quality. Do not quote it as a result.
+
+A population with no expectations, and one with no discordant pair, say so
+instead of printing a p over nothing. A population every run in both arms missed
+says the stronger thing — *hard zero on both sides* — because that is not the
+same result as two working arms tying.
+
+**The test is named in the output, with its assumptions**, so you can check the
+verdict instead of trusting it: the **exact two-sided sign test** (McNemar's
+exact test) over the discordant expectations, plus a seeded paired-bootstrap 95%
+interval. It is exact rather than a normal approximation because at these
+discordant counts the two disagree across the threshold — 12 gained against 3
+lost is p = 0.0201 approximated and **p = 0.0352** exactly. A verdict that clears
+its threshold only under an approximation is a verdict about the approximation.
 
 This replaces "difference of run means ± sd" as the decision rule for recall. It
 costs nothing extra: the per-expectation outcome is already in every report.
 
 The verdict is **withheld**, with the reason printed, when recall is not
-comparable across the two scoring-rule versions, when either report did not record
-its per-expectation outcomes, or when the two reports share no expectation. It is
-never approximated — an arm whose expectations were not recorded is not an arm
-that matched nothing.
+comparable across the two scoring-rule versions, when a report did not record its
+per-expectation outcomes, or when the two arms share no expectation. It is never
+approximated — an arm whose expectations were not recorded is not an arm that
+matched nothing.
 
 ### Warnings that invalidate the deltas
 
@@ -386,9 +451,11 @@ tell, before spending anything, whether a pack can support `lineAccuracy` at all
    "unmeasured", not "improved".
 6. **`eval recall-report` across all seeds of both arms.** Movement from *never
    detected* → *flaky* → *always detected* is the real signal.
-7. **`eval compare` the representative reports.** Read its paired recall verdict
-   first; the run-level deltas below it are context for token, cost, duration and
-   segment movement.
+7. **`eval compare` with every seed of both arms** (`--base` / `--head` are
+   repeatable, and the arms must be the same size). Read the **in-diff** paired
+   verdict — that is the decision. The blended figure below it is not a result,
+   and the run-level deltas are context for token, cost, duration and segment
+   movement, available when you compare a single run per arm.
 8. **Intersect before comparing** `severityAccuracy` or `lineAccuracy`.
 
 ---

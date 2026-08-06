@@ -68,7 +68,9 @@ export const formatListValue = (values: readonly string[]): string =>
 export const appendMarkdownTable = (
   lines: string[],
   input: {
-    readonly heading: string
+    // Omitted when the caller already emitted its own heading, so a table can be
+    // nested under a section the caller owns without inventing a second one.
+    readonly heading?: string | undefined
     readonly header: string
     readonly alignment: string
     readonly rows: readonly string[]
@@ -78,8 +80,11 @@ export const appendMarkdownTable = (
     return
   }
 
-  lines.push(input.heading)
-  lines.push('')
+  if (input.heading !== undefined) {
+    lines.push(input.heading)
+    lines.push('')
+  }
+
   lines.push(input.header)
   lines.push(input.alignment)
   lines.push(...input.rows)

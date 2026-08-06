@@ -11,7 +11,11 @@ import { EvalReportSchema, type EvalReport } from './eval-report-contracts.js'
 // arms share, and it needs no extra provider spend — the per-expectation outcome
 // is already recorded in every report.
 //
-// The unit is one expectation (`caseId#expectedIndex`), not one run.
+// The unit is one expectation (`caseId#expectedIndex`), not one run. An arm may
+// hold SEVERAL runs, and it still contributes exactly ONE observation per
+// expectation: the fraction of the arm's runs that matched it. Pooling the
+// per-pair discordant counts of several run pairs instead would count the same
+// expectation once per pair and manufacture independence that is not there.
 
 export type ExpectationKey = string
 
@@ -24,16 +28,32 @@ export type PairedScoredRun = {
   readonly provenance: { readonly answerKeyDigest: string }
   readonly caseResults: readonly {
     readonly caseId: string
-    readonly expectedFindings: readonly { readonly expectedIndex: number }[]
+    readonly expectedFindings: readonly {
+      readonly expectedIndex: number
+      // The diff-scope label the run recorded for this expectation, or absent
+      // when the report predates the field. Kept as a plain string rather than
+      // the `DiffScope` enum so a label a later build introduces partitions into
+      // its own population instead of failing to parse.
+      readonly diffScope?: string | undefined
+    }[]
     readonly matchedFindings: readonly { readonly expectedIndex: number }[]
   }[]
 }
 
-export type ArmOutcomes = {
-  readonly runCount: number
+export type ExpectationOutcome = {
   // Fraction of this arm's runs in which the expectation was matched. Binary when
   // the arm has one run.
-  readonly hitRateByExpectation: ReadonlyMap<ExpectationKey, number>
+  readonly hitRate: number
+  // Every distinct diff-scope label the arm's runs recorded for this expectation.
+  // Empty when no run recorded one; more than one entry means the runs disagree,
+  // which the verdict adjudicates as its own population rather than picking a
+  // side.
+  readonly scopes: ReadonlySet<string>
+}
+
+export type ArmOutcomes = {
+  readonly runCount: number
+  readonly outcomeByExpectation: ReadonlyMap<ExpectationKey, ExpectationOutcome>
 }
 
 export const expectationKey = (
@@ -55,14 +75,39 @@ const matchedKeysIn = (
     )
   )
 
-const expectedKeysIn = (
+const expectationsIn = (
   report: PairedScoredRun
-): readonly ExpectationKey[] =>
+): readonly {
+  readonly key: ExpectationKey
+  readonly diffScope: string | undefined
+}[] =>
   report.caseResults.flatMap((caseResult) =>
-    caseResult.expectedFindings.map((expected) =>
-      expectationKey(caseResult.caseId, expected.expectedIndex)
-    )
+    caseResult.expectedFindings.map((expected) => ({
+      key: expectationKey(caseResult.caseId, expected.expectedIndex),
+      diffScope: expected.diffScope
+    }))
   )
+
+// How many of an arm's runs are allowed to be missing an expectation: none. A
+// run that did not score an expectation the rest of the arm scored has no
+// outcome for it, and dividing its hits by the arm's run count would read that
+// absence as a miss -- the recurring defect class where absence produces a
+// plausible pessimistic number instead of an error.
+const refuseIncompleteScoring = (
+  scoredRunCount: ReadonlyMap<ExpectationKey, number>,
+  runCount: number
+): void => {
+  const partial = [...scoredRunCount]
+    .filter(([, count]) => count !== runCount)
+    .map(([key, count]) => `${key} (scored by ${count} of ${runCount})`)
+    .sort()
+
+  if (partial.length > 0) {
+    throw new Error(
+      `Refusing to pool evaluation runs that did not all score the same expectations: ${partial.join(', ')}. An expectation a run never scored is not an expectation that run missed.`
+    )
+  }
+}
 
 export const collectArmOutcomes = (
   reports: readonly PairedScoredRun[]
@@ -96,24 +141,47 @@ export const collectArmOutcomes = (
   }
 
   const hits = new Map<ExpectationKey, number>()
+  const scoredRunCount = new Map<ExpectationKey, number>()
+  const scopes = new Map<ExpectationKey, Set<string>>()
 
   for (const report of reports) {
     const matched = matchedKeysIn(report)
 
-    for (const key of expectedKeysIn(report)) {
+    for (const { key, diffScope } of expectationsIn(report)) {
       hits.set(key, (hits.get(key) ?? 0) + (matched.has(key) ? 1 : 0))
+      scoredRunCount.set(key, (scoredRunCount.get(key) ?? 0) + 1)
+
+      const recorded = scopes.get(key) ?? new Set<string>()
+
+      if (diffScope !== undefined) {
+        recorded.add(diffScope)
+      }
+
+      scopes.set(key, recorded)
     }
   }
 
   const runCount = reports.length
-  const hitRateByExpectation = new Map<ExpectationKey, number>()
+
+  refuseIncompleteScoring(scoredRunCount, runCount)
+
+  const outcomeByExpectation = new Map<ExpectationKey, ExpectationOutcome>()
 
   for (const [key, hitCount] of hits) {
-    hitRateByExpectation.set(key, runCount === 0 ? 0 : hitCount / runCount)
+    outcomeByExpectation.set(key, {
+      hitRate: runCount === 0 ? 0 : hitCount / runCount,
+      scopes: scopes.get(key) ?? new Set<string>()
+    })
   }
 
-  return { runCount, hitRateByExpectation }
+  return { runCount, outcomeByExpectation }
 }
+
+// The one statistic this module reports, named in the type so the rendered
+// output cannot describe a test other than the one that was run.
+export const PAIRED_SIGNIFICANCE_TEST = 'exact-two-sided-sign-test' as const
+
+export type PairedSignificanceTest = typeof PAIRED_SIGNIFICANCE_TEST
 
 export type PairedComparison = {
   readonly expectationCount: number
@@ -126,12 +194,13 @@ export type PairedComparison = {
   readonly lost: readonly ExpectationKey[]
   readonly alwaysFound: number
   readonly neverFound: number
+  readonly concordant: number
   readonly discordantCount: number
-  // Normal approximation to McNemar's statistic over the discordant expectations.
-  // Undefined when nothing is discordant, because the test is then undefined
-  // rather than significant.
-  readonly z: number | undefined
+  // Exact two-sided sign test over the discordant expectations (McNemar's exact
+  // test). Undefined when nothing is discordant, because the test is then
+  // undefined rather than significant.
   readonly pValue: number | undefined
+  readonly pValueMethod: PairedSignificanceTest | undefined
   readonly ci95: readonly [number, number]
   // Expectations only one arm scored. A non-empty list means the arms were run
   // against different answer keys and the comparison is not valid.
@@ -143,24 +212,45 @@ const mean = (values: readonly number[]): number =>
     ? 0
     : values.reduce((total, value) => total + value, 0) / values.length
 
-// Abramowitz-Stegun 7.1.26 error function; enough precision for a reported p.
-const erf = (value: number): number => {
-  const sign = value < 0 ? -1 : 1
-  const absolute = Math.abs(value)
-  const t = 1 / (1 + 0.3275911 * absolute)
-  const y =
-    1 -
-    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) *
-      t +
-      0.254829592) *
-      t *
-      Math.exp(-absolute * absolute)
+// P(X <= upTo) for X ~ Binomial(trials, 0.5), summed term by term from the
+// probability mass at zero so no binomial coefficient is ever materialised.
+const binomialLowerTailAtHalf = (trials: number, upTo: number): number => {
+  let term = Math.pow(0.5, trials)
+  let total = term
 
-  return sign * y
+  for (let successes = 1; successes <= upTo; successes += 1) {
+    term = (term * (trials - successes + 1)) / successes
+    total += term
+  }
+
+  return total
 }
 
-const twoSidedPValue = (z: number): number =>
-  Math.min(1, 2 * (1 - 0.5 * (1 + erf(Math.abs(z) / Math.SQRT2))))
+// EXACT, not a normal approximation. The discordant counts this corpus produces
+// are small -- the 2026-08-02 vs 2026-08-05 sweeps discriminate on 15 pairs --
+// and at that size the normal approximation is not a rounding difference: it
+// reports p = 0.0201 where the exact test reports p = 0.0352, on the same 12
+// gained against 3 lost. A verdict that clears its own threshold only under an
+// approximation is a verdict about the approximation.
+//
+// Under the null a discordant expectation is equally likely to have been gained
+// as lost, so the gained count is Binomial(discordant, 0.5) and the two-sided p
+// is twice the smaller tail.
+const exactTwoSidedSignTestPValue = (
+  gained: number,
+  lost: number
+): number | undefined => {
+  const discordant = gained + lost
+
+  if (discordant === 0) {
+    return undefined
+  }
+
+  return Math.min(
+    1,
+    2 * binomialLowerTailAtHalf(discordant, Math.min(gained, lost))
+  )
+}
 
 // Deterministic PRNG. A bootstrap that used Math.random would make the reported
 // interval move between invocations on identical inputs, which is exactly the
@@ -213,24 +303,35 @@ const bootstrapInterval = (
   return [deltas[lowerIndex] ?? 0, deltas[upperIndex] ?? 0]
 }
 
+// `restrictTo` selects the population being adjudicated. Populations are
+// adjudicated SEPARATELY rather than blended, so each one carries its own
+// discordant counts, its own test and its own interpretation -- see
+// `eval-paired-recall-verdict.ts`.
 export const compareArms = (
   base: ArmOutcomes,
-  head: ArmOutcomes
+  head: ArmOutcomes,
+  restrictTo?: ReadonlySet<ExpectationKey>
 ): PairedComparison => {
   const keys = [
     ...new Set([
-      ...base.hitRateByExpectation.keys(),
-      ...head.hitRateByExpectation.keys()
+      ...base.outcomeByExpectation.keys(),
+      ...head.outcomeByExpectation.keys()
     ])
-  ].sort()
+  ]
+    .filter((key) => restrictTo === undefined || restrictTo.has(key))
+    .sort()
   const unpairedExpectations = keys.filter(
     (key) =>
-      !base.hitRateByExpectation.has(key) || !head.hitRateByExpectation.has(key)
+      !base.outcomeByExpectation.has(key) || !head.outcomeByExpectation.has(key)
   )
   const paired = keys.filter((key) => !unpairedExpectations.includes(key))
 
-  const baseRates = paired.map((key) => base.hitRateByExpectation.get(key) ?? 0)
-  const headRates = paired.map((key) => head.hitRateByExpectation.get(key) ?? 0)
+  const baseRates = paired.map(
+    (key) => base.outcomeByExpectation.get(key)?.hitRate ?? 0
+  )
+  const headRates = paired.map(
+    (key) => head.outcomeByExpectation.get(key)?.hitRate ?? 0
+  )
   const differences = paired.map(
     (_, index) => (headRates[index] ?? 0) - (baseRates[index] ?? 0)
   )
@@ -249,10 +350,7 @@ export const compareArms = (
   ).length
 
   const discordantCount = gained.length + lost.length
-  const z =
-    discordantCount === 0
-      ? undefined
-      : (gained.length - lost.length) / Math.sqrt(discordantCount)
+  const pValue = exactTwoSidedSignTestPValue(gained.length, lost.length)
 
   return {
     expectationCount: paired.length,
@@ -263,9 +361,10 @@ export const compareArms = (
     lost,
     alwaysFound,
     neverFound,
+    concordant: paired.length - discordantCount,
     discordantCount,
-    z,
-    pValue: z === undefined ? undefined : twoSidedPValue(z),
+    pValue,
+    pValueMethod: pValue === undefined ? undefined : PAIRED_SIGNIFICANCE_TEST,
     ci95: bootstrapInterval(differences),
     unpairedExpectations
   }

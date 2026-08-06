@@ -1248,23 +1248,42 @@ const runEvalCompare = async (
   }
 
   try {
-    const basePath = parseOptionValue(args, '--base')
-    const headPath = parseOptionValue(args, '--head')
+    // Both flags are REPEATABLE: an arm is a set of runs, because this project's
+    // own decision rule requires several runs per arm and adjudicating one
+    // report against one report throws away most of the evidence that was paid
+    // for.
+    const basePaths = parseOptionValues(args, '--base')
+    const headPaths = parseOptionValues(args, '--head')
 
-    if (basePath === undefined || headPath === undefined) {
+    if (basePaths.length === 0 || headPaths.length === 0) {
       return usageError('eval compare requires --base and --head report paths')
     }
 
-    const baseReport = await readEvalComparisonReport(options.cwd, basePath)
-    const headReport = await readEvalComparisonReport(options.cwd, headPath)
+    // Unequal arms are refused rather than truncated or zipped: per-expectation
+    // outcomes measured over different run counts are not paired observations,
+    // and a 2/3 against a 1/1 would read as movement that is an artifact of the
+    // run counts.
+    if (basePaths.length !== headPaths.length) {
+      return usageError(
+        `eval compare requires the same number of --base and --head reports; got ${basePaths.length} base and ${headPaths.length} head`
+      )
+    }
+
+    const readArm = async (
+      paths: readonly string[]
+    ): Promise<{ readonly label: string; readonly report: EvalComparisonReport }[]> =>
+      Promise.all(
+        paths.map(async (reportPath) => ({
+          label: reportPath,
+          report: await readEvalComparisonReport(options.cwd, reportPath)
+        }))
+      )
 
     return {
       exitCode: 0,
       stdout: `${renderEvalComparison({
-        base: baseReport,
-        head: headReport,
-        baseLabel: basePath,
-        headLabel: headPath
+        base: await readArm(basePaths),
+        head: await readArm(headPaths)
       })}\n`,
       stderr: ''
     }

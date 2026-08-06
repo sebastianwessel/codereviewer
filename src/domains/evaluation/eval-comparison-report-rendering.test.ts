@@ -1,11 +1,35 @@
 import { describe, expect, test } from 'vitest'
 import { renderEvalComparison } from './eval-comparison-report-rendering.js'
-import { parseEvalComparisonReport } from './eval-comparison-view.js'
+import {
+  parseEvalComparisonReport,
+  type EvalComparisonRun
+} from './eval-comparison-view.js'
 
 // Reports are built as raw JSON and read through the comparison view, exactly
 // as `eval compare` reads a file from disk. That is the point: the view is what
 // makes an archived report readable at all, so a fixture that bypassed it would
 // test nothing about the defect these cases cover.
+// One expectation in each diff-scope population, because recall is adjudicated
+// per population: a fixture with only one population could not show the
+// separation at all.
+const caseResult = (
+  input: { readonly matched: readonly number[] } = { matched: [0] }
+): Record<string, unknown> => ({
+  caseId: 'case-a',
+  parseValid: true,
+  providerErrored: false,
+  unmatchedExpectedIndexes: [],
+  falsePositiveFindingIds: [],
+  noFindingZoneFalsePositiveIds: [],
+  expectedFindings: [
+    { expectedIndex: 0, diffScope: 'in-diff' },
+    { expectedIndex: 1, diffScope: 'out-of-diff' }
+  ],
+  matchedFindings: input.matched.map((expectedIndex) => ({ expectedIndex })),
+  contextLedger: [],
+  agenticStages: []
+})
+
 const reportJson = (
   overrides: Readonly<Record<string, unknown>> = {}
 ): Record<string, unknown> => ({
@@ -30,20 +54,7 @@ const reportJson = (
     plausibilityJudged: true
   },
   regressionGate: { passed: true },
-  caseResults: [
-    {
-      caseId: 'case-a',
-      parseValid: true,
-      providerErrored: false,
-      unmatchedExpectedIndexes: [],
-      falsePositiveFindingIds: [],
-      noFindingZoneFalsePositiveIds: [],
-      expectedFindings: [{ expectedIndex: 0 }, { expectedIndex: 1 }],
-      matchedFindings: [{ expectedIndex: 0 }],
-      contextLedger: [],
-      agenticStages: []
-    }
-  ],
+  caseResults: [caseResult()],
   metrics: {
     recall: 0.5,
     precision: 0.5,
@@ -60,13 +71,27 @@ const reportJson = (
   ...overrides
 })
 
+const arm = (
+  reports: readonly Record<string, unknown>[],
+  labelPrefix: string
+): readonly EvalComparisonRun[] =>
+  reports.map((report, index) => ({
+    label: `${labelPrefix}-${index + 1}.json`,
+    report: parseEvalComparisonReport(report)
+  }))
+
 const compare = (
   base: Record<string, unknown>,
   head: Record<string, unknown>
+): string => compareArms([base], [head])
+
+const compareArms = (
+  base: readonly Record<string, unknown>[],
+  head: readonly Record<string, unknown>[]
 ): string =>
   renderEvalComparison({
-    base: parseEvalComparisonReport(base),
-    head: parseEvalComparisonReport(head)
+    base: arm(base, 'base'),
+    head: arm(head, 'head')
   })
 
 describe('eval comparison report rendering module', () => {
@@ -89,7 +114,10 @@ describe('eval comparison report rendering module', () => {
           unmatchedExpectedIndexes: [],
           falsePositiveFindingIds: [],
           noFindingZoneFalsePositiveIds: [],
-          expectedFindings: [{ expectedIndex: 0 }, { expectedIndex: 1 }],
+          expectedFindings: [
+            { expectedIndex: 0, diffScope: 'in-diff' },
+            { expectedIndex: 1, diffScope: 'out-of-diff' }
+          ],
           matchedFindings: [{ expectedIndex: 0 }],
           contextLedger: [],
           agenticStages: [],
@@ -221,34 +249,109 @@ describe('eval comparison report rendering module', () => {
   // DEFECT 3. The paired finding-level test is the verdict for a recall
   // difference; run-level spread is context.
   test('reports a paired finding-level verdict as the primary recall result', () => {
-    const head = reportJson({
-      caseResults: [
-        {
-          caseId: 'case-a',
-          parseValid: true,
-          providerErrored: false,
-          unmatchedExpectedIndexes: [],
-          falsePositiveFindingIds: [],
-          noFindingZoneFalsePositiveIds: [],
-          expectedFindings: [{ expectedIndex: 0 }, { expectedIndex: 1 }],
-          matchedFindings: [{ expectedIndex: 0 }, { expectedIndex: 1 }],
-          contextLedger: [],
-          agenticStages: []
-        }
-      ]
-    })
-    const comparison = compare(reportJson(), head)
+    const comparison = compare(
+      reportJson({ caseResults: [caseResult({ matched: [] })] }),
+      reportJson()
+    )
 
     expect(comparison).toContain('## Paired Recall Verdict (primary)')
-    expect(comparison).toContain('| Paired expectations | 2 |')
+    expect(comparison).toContain('### in-diff (headline)')
+    expect(comparison).toContain('| Paired expectations | 1 |')
     expect(comparison).toContain('| Gained (head only) | 1 |')
     expect(comparison).toContain('| Lost (base only) | 0 |')
-    expect(comparison).toContain('| McNemar p (two-sided) |')
-    expect(comparison).toContain('Verdict: recall improved')
+    // One discordant expectation is one coin flip: the exact test reports p = 1,
+    // and the verdict says the difference is not readable rather than dressing a
+    // single moved expectation up as a result.
+    expect(comparison).toContain(
+      'Verdict: recall improved but the paired test does NOT clear p < 0.05 (1 gained against 0 lost, p = 1.0000)'
+    )
     // The paired section precedes the run-level deltas, which are context.
     expect(comparison.indexOf('## Paired Recall Verdict (primary)')).toBeLessThan(
       comparison.indexOf('## Metric Deltas')
     )
+  })
+
+  // THE DILUTION DEFECT, at the rendering boundary. The out-of-diff population
+  // is a measured hard zero in every arm; blended it inflates the denominator
+  // and makes the headline describe a population that cannot move.
+  test('adjudicates each diff-scope population separately and says so', () => {
+    const comparison = compare(
+      reportJson({ caseResults: [caseResult({ matched: [] })] }),
+      reportJson()
+    )
+
+    expect(comparison).toContain('### in-diff (headline)')
+    expect(comparison).toContain('### out-of-diff')
+    expect(comparison).toContain(
+      'No verdict: all 1 paired expectations were missed by every run in BOTH arms.'
+    )
+    // The blended figure is present but demoted, and it is rendered last.
+    expect(comparison).toContain('### Blended (every population at once)')
+    expect(comparison).toContain('NOT the verdict.')
+    expect(comparison.indexOf('### in-diff (headline)')).toBeLessThan(
+      comparison.indexOf('### Blended (every population at once)')
+    )
+  })
+
+  // A verdict a reader cannot check is a verdict they have to trust.
+  test('names the exact test and its assumptions in the rendered output', () => {
+    const comparison = compare(reportJson(), reportJson())
+
+    expect(comparison).toContain('Test: exact-two-sided-sign-test')
+    expect(comparison).toContain('Binomial(n, 0.5)')
+    expect(comparison).toContain(
+      'The unit is ONE expectation (`caseId#expectedIndex`), counted once per arm'
+    )
+  })
+
+  // Several runs per arm is the design this project's own decision rule
+  // requires, and one report against one report throws away most of the
+  // evidence that was paid for.
+  test('adjudicates a multi-run arm as one observation per expectation', () => {
+    const missed = { caseResults: [caseResult({ matched: [] })] }
+    const comparison = compareArms(
+      [reportJson(missed), reportJson(missed), reportJson(missed)],
+      [reportJson(), reportJson(), reportJson()]
+    )
+
+    expect(comparison).toContain('Base arm: 3 runs — base-1.json, base-2.json, base-3.json')
+    expect(comparison).toContain('Head arm: 3 runs — head-1.json, head-2.json, head-3.json')
+    // Three run pairs each moved the same expectation. That is ONE gained
+    // expectation, not three.
+    expect(comparison).toContain('| Gained (head only) | 1 |')
+    expect(comparison).toContain('| Discordant pairs | 1 |')
+  })
+
+  // Run-level sections read one report per side. Averaging several would publish
+  // numbers no run produced; reading one would present an arbitrary pick as a
+  // result.
+  test('omits the per-report context sections for multi-run arms and says why', () => {
+    const comparison = compareArms(
+      [reportJson(), reportJson()],
+      [reportJson(), reportJson()]
+    )
+
+    expect(comparison).toContain('## Run-Level Context')
+    expect(comparison).toContain(
+      'Omitted: the base arm holds 2 run(s) and the head arm 2.'
+    )
+    expect(comparison).not.toContain('## Metric Deltas')
+    expect(comparison).toContain('## Paired Recall Verdict (primary)')
+  })
+
+  test('refuses arms of different sizes rather than comparing what lines up', () => {
+    expect(() =>
+      compareArms([reportJson(), reportJson()], [reportJson()])
+    ).toThrow(/arms of different sizes/u)
+  })
+
+  test('refuses an arm whose runs mix scoring rules', () => {
+    expect(() =>
+      compareArms(
+        [reportJson(), reportJson({ metricsVersion: 'pre-2026-07-26' })],
+        [reportJson(), reportJson()]
+      )
+    ).toThrow(/mixes scoring rules/u)
   })
 
   // A run that never recorded its per-expectation outcomes cannot be paired,
@@ -271,7 +374,7 @@ describe('eval comparison report rendering module', () => {
     const comparison = compare(base, reportJson())
 
     expect(comparison).toContain(
-      'No paired verdict: base case case-a does not record its expected or matched findings.'
+      'No paired verdict: base report base-1.json case case-a does not record its expected or matched findings.'
     )
     expect(comparison).not.toContain('| Paired expectations |')
   })

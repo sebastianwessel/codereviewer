@@ -54,8 +54,8 @@ describe('expectation outcome collection', () => {
     ])
 
     expect(outcomes.runCount).toBe(2)
-    expect(outcomes.hitRateByExpectation.get(expectationKey('a', 0))).toBe(1)
-    expect(outcomes.hitRateByExpectation.get(expectationKey('a', 1))).toBe(0.5)
+    expect(outcomes.outcomeByExpectation.get(expectationKey('a', 0))?.hitRate).toBe(1)
+    expect(outcomes.outcomeByExpectation.get(expectationKey('a', 1))?.hitRate).toBe(0.5)
   })
 })
 
@@ -156,8 +156,8 @@ describe('paired arm comparison', () => {
     // reporting a difference because the matched set changed identity.
     expect(result.discordantCount).toBe(2)
     expect(result.delta).toBe(0)
-    expect(result.z).toBe(0)
     expect(result.pValue).toBeCloseTo(1)
+    expect(result.pValueMethod).toBe('exact-two-sided-sign-test')
   })
 
   test('leaves the statistic undefined when nothing moved', () => {
@@ -168,8 +168,8 @@ describe('paired arm comparison', () => {
 
     // Zero discordant pairs makes McNemar undefined, not significant.
     expect(result.discordantCount).toBe(0)
-    expect(result.z).toBeUndefined()
     expect(result.pValue).toBeUndefined()
+    expect(result.pValueMethod).toBeUndefined()
   })
 
   test('detects a consistent one-sided improvement', () => {
@@ -206,6 +206,66 @@ describe('paired arm comparison', () => {
 
     expect(result.unpairedExpectations).toEqual([expectationKey('a', 1)])
     expect(result.expectationCount).toBe(1)
+  })
+
+  // The p is EXACT, not a normal approximation, and at the discordant counts
+  // this corpus produces the two disagree across the decision threshold: 12
+  // gained against 3 lost is p = 0.0201 under the normal approximation and
+  // p = 0.0352 exactly. A verdict that clears its threshold only under an
+  // approximation is a verdict about the approximation.
+  test('reports the exact two-sided sign test, not a normal approximation', () => {
+    const expectedIndexes = Array.from({ length: 15 }, (_, index) => index)
+    const base = arm([
+      [{ caseId: 'a', expectedIndexes, matchedIndexes: [0, 1, 2] }]
+    ])
+    const head = arm([
+      [
+        {
+          caseId: 'a',
+          expectedIndexes,
+          matchedIndexes: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+        }
+      ]
+    ])
+    const result = compareArms(base, head)
+
+    expect(result.gained).toHaveLength(12)
+    expect(result.lost).toHaveLength(3)
+    expect(result.pValue?.toFixed(4)).toBe('0.0352')
+    expect(result.pValueMethod).toBe('exact-two-sided-sign-test')
+  })
+
+  // Only the population being adjudicated may enter its own denominator. A
+  // population blended in inflates the denominator and moves the reported
+  // recall without carrying any information about the difference.
+  test('restricts a comparison to the population it is adjudicating', () => {
+    const base = arm([
+      [{ caseId: 'a', expectedIndexes: [0, 1, 2, 3], matchedIndexes: [] }]
+    ])
+    const head = arm([
+      [{ caseId: 'a', expectedIndexes: [0, 1, 2, 3], matchedIndexes: [0, 1] }]
+    ])
+    const restricted = compareArms(
+      base,
+      head,
+      new Set([expectationKey('a', 0), expectationKey('a', 1)])
+    )
+
+    expect(restricted.expectationCount).toBe(2)
+    expect(restricted.headRecall).toBe(1)
+    expect(compareArms(base, head).headRecall).toBe(0.5)
+  })
+
+  // ABSENCE IS NOT A MISS. A run that never scored an expectation the rest of
+  // its arm scored has no outcome for it, and dividing its hits by the arm's run
+  // count would read that absence as a failure to find it.
+  test('refuses to pool an arm whose runs did not all score the same expectations', () => {
+    expect(() =>
+      collectArmOutcomes([
+        reportWith([{ caseId: 'a', expectedIndexes: [0, 1], matchedIndexes: [0] }]),
+        reportWith([{ caseId: 'a', expectedIndexes: [0], matchedIndexes: [0] }])
+      ])
+    ).toThrow(/a#1 \(scored by 1 of 2\)/u)
   })
 
   test('produces a byte-identical interval on repeated invocations', () => {
