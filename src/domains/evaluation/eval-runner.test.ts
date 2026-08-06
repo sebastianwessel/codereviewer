@@ -328,7 +328,7 @@ describe('eval runner', () => {
     ])
     expect(result.report).toMatchSnapshot()
     expect(result.report.regressionGate).toMatchObject({
-      passed: false,
+      outcome: 'failed',
       reasons: ['falsePositiveCount above threshold: 1 > 0'],
       failingCaseIds: ['typescript-negative']
     })
@@ -682,6 +682,359 @@ describe('eval runner', () => {
     )
   })
 
+  // The same defect as the cost one above, one field over: a case that surfaced
+  // no usage record contributed 0 input/cached/output tokens, so a run's token
+  // totals silently understated themselves in exactly the arm that errored more.
+  test('reports an errored case token usage as unavailable rather than as confident zeros', async () => {
+    const cases = parseEvalCases(inlineEvalCases)
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding()], [], 'complete', {
+              inputTokens: 120,
+              cachedInputTokens: 40,
+              outputTokens: 30
+            })
+          }
+        },
+        {
+          caseId: 'typescript-negative',
+          changedLineCount: 10,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'provider-error',
+            code: 'provider_unavailable',
+            message: 'The provider refused the request.'
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    const erroredCase = result.report.caseResults.find(
+      (caseResult) => caseResult.caseId === 'typescript-negative'
+    )
+    // Omitted, never written as 0: no usage record was ever surfaced for this
+    // case, so every token count is a measurement nobody took.
+    expect(erroredCase?.usageUnavailable).toBe(true)
+    expect(erroredCase).not.toHaveProperty('inputTokens')
+    expect(erroredCase).not.toHaveProperty('cachedInputTokens')
+    expect(erroredCase).not.toHaveProperty('outputTokens')
+
+    // The totals carry only the case that actually reported usage...
+    expect(result.report.metrics.inputTokens).toBe(120)
+    expect(result.report.metrics.cachedInputTokens).toBe(40)
+    expect(result.report.metrics.outputTokens).toBe(30)
+    // ...and one count covers all three, because they are surfaced together.
+    expect(result.report.metrics.usageUnavailableCount).toBe(1)
+
+    const summary = renderEvalSummary({ cases, report: result.report })
+    expect(summary).toContain(
+      '| Input tokens | 120 known; unavailable for 1 case(s) |'
+    )
+    expect(summary).toContain(
+      '| Output tokens | 30 known; unavailable for 1 case(s) |'
+    )
+  })
+
+  // Cost availability and usage availability are two questions. A provider run
+  // that surfaced usage but had no price for its model knows every token count
+  // and no cost, and collapsing the two would mark real measurements unknown.
+  test('keeps known token usage known when only the cost could not be priced', async () => {
+    const cases = parseEvalCases([inlineEvalCases[0]])
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport(
+              [admittedFinding()],
+              ['cost-unavailable'],
+              'complete',
+              { inputTokens: 12, outputTokens: 8, costUsd: undefined }
+            )
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.caseResults[0]).toMatchObject({
+      costUnavailable: true,
+      usageUnavailable: false,
+      inputTokens: 12,
+      outputTokens: 8
+    })
+    expect(result.report.metrics.costUnavailableCount).toBe(1)
+    expect(result.report.metrics.usageUnavailableCount).toBe(0)
+  })
+
+  // THE GATE CANNOT PASS ON A FLOOR.
+  //
+  // `costUsd` sums only the cases whose cost was measured, so with an unmeasured
+  // case it is a floor. A floor at or below the threshold does not establish
+  // that the run was under budget, and reporting that as a pass puts this
+  // repository's recurring defect class inside the one place meant to catch it.
+  // Note there is no provider error here at all: the refusal is about a missing
+  // measurement, not about a case that failed.
+  test('refuses a cost threshold it cannot evaluate instead of reporting a pass', async () => {
+    const cases = parseEvalCases(inlineEvalCases)
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding()])
+          }
+        },
+        {
+          caseId: 'typescript-negative',
+          changedLineCount: 10,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([], ['cost-unavailable'], 'complete', {
+              costUsd: undefined
+            })
+          }
+        }
+      ],
+      thresholds: { maxCostUsd: 5, failOnProviderError: true },
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    // The premise: a partial total that sits under the threshold.
+    expect(result.report.metrics.costUsd).toBe(0.1)
+    expect(result.report.metrics.costUnavailableCount).toBe(1)
+
+    expect(result.report.regressionGate.outcome).toBe('not-evaluable')
+    // Not a failure either: no threshold was breached and no case is to blame.
+    expect(result.report.regressionGate.reasons).toEqual([])
+    expect(result.report.regressionGate.failingCaseIds).toEqual([])
+    expect(result.report.regressionGate.notEvaluableReasons).toEqual([
+      'costUsd not evaluable against threshold 5: 0.1 is a known-only total, unmeasured for 1 case(s), so the run\'s true total may be on either side of the threshold'
+    ])
+  })
+
+  // The artifact a human reads must not require inference. "Under budget" and
+  // "budget not evaluable" are different claims and must LOOK different.
+  test('renders a refused gate distinguishably from a genuine pass', async () => {
+    const cases = parseEvalCases(inlineEvalCases)
+    const runWithSecondCase = async (
+      secondCaseReport: ReviewReport
+    ): Promise<EvalReport> =>
+      (
+        await runEvaluation({
+          cases,
+          judge: acceptingJudge,
+          outputs: [
+            {
+              caseId: 'typescript-positive',
+              changedLineCount: 50,
+              diffHunkCount: 2,
+              contextLedger: [],
+              result: {
+                status: 'ok',
+                reviewReport: reviewReport([admittedFinding()])
+              }
+            },
+            {
+              caseId: 'typescript-negative',
+              changedLineCount: 10,
+              diffHunkCount: 1,
+              contextLedger: [],
+              result: { status: 'ok', reviewReport: secondCaseReport }
+            }
+          ],
+          thresholds: { maxCostUsd: 5, failOnProviderError: true },
+          generatedAt: '2026-06-20T00:00:02.000Z'
+        })
+      ).report
+
+    const refused = await runWithSecondCase(
+      reviewReport([], ['cost-unavailable'], 'complete', { costUsd: undefined })
+    )
+    const passed = await runWithSecondCase(reviewReport([]))
+
+    expect(refused.regressionGate.outcome).toBe('not-evaluable')
+    expect(passed.regressionGate.outcome).toBe('passed')
+    expect(passed.regressionGate.notEvaluableReasons).toEqual([])
+
+    const refusedSummary = renderEvalSummary({ cases, report: refused })
+    const passedSummary = renderEvalSummary({ cases, report: passed })
+
+    expect(refusedSummary).toContain('Gate: NOT EVALUABLE')
+    expect(passedSummary).toContain('Gate: PASS')
+    expect(refusedSummary).toContain('## Gate Thresholds Not Evaluable')
+    expect(refusedSummary).toContain(
+      '- costUsd not evaluable against threshold 5'
+    )
+    // A genuine pass says nothing about unevaluable thresholds, because it has
+    // none — the section is absent rather than empty.
+    expect(passedSummary).not.toContain('## Gate Thresholds Not Evaluable')
+  })
+
+  // The refusal must not have made the gate permissive. Unknown spend can only
+  // ADD to a total, so a floor already above the threshold is a decided breach
+  // whatever the unknowns hold, and it still fails.
+  test('fails a cost threshold the known-only total already exceeds', async () => {
+    const cases = parseEvalCases(inlineEvalCases)
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding()])
+          }
+        },
+        {
+          caseId: 'typescript-negative',
+          changedLineCount: 10,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([], ['cost-unavailable'], 'complete', {
+              costUsd: undefined
+            })
+          }
+        }
+      ],
+      thresholds: { maxCostUsd: 0.05, failOnProviderError: true },
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.metrics.costUnavailableCount).toBe(1)
+    expect(result.report.regressionGate.outcome).toBe('failed')
+    expect(result.report.regressionGate.reasons).toEqual([
+      'costUsd above threshold: 0.1 > 0.05'
+    ])
+    expect(result.report.regressionGate.notEvaluableReasons).toEqual([])
+  })
+
+  // A decided failure outranks a refusal. The unevaluable threshold is still
+  // RECORDED — it is a fact about the run — but it does not soften the verdict.
+  test('reports a decided failure as failed even when another threshold is not evaluable', async () => {
+    const cases = parseEvalCases(inlineEvalCases)
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding()])
+          }
+        },
+        {
+          caseId: 'typescript-negative',
+          changedLineCount: 10,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport(
+              [admittedFinding({ id: 'find_noise1' })],
+              ['cost-unavailable'],
+              'complete',
+              { costUsd: undefined }
+            )
+          }
+        }
+      ],
+      thresholds: {
+        maxCostUsd: 5,
+        maxFalsePositiveCount: 0,
+        failOnProviderError: true
+      },
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.regressionGate.outcome).toBe('failed')
+    expect(result.report.regressionGate.reasons).toContain(
+      'falsePositiveCount above threshold: 1 > 0'
+    )
+    expect(result.report.regressionGate.notEvaluableReasons).toHaveLength(1)
+  })
+
+  // Duration is unknown only when there is no review report at all, so this
+  // needs the provider error the cost tests deliberately avoided.
+  // `failOnProviderError` is off so the refusal is not masked by the error
+  // itself — which is exactly the reading this outcome exists to preserve: an
+  // infrastructure problem must not be reported as a quality verdict.
+  test('refuses a duration threshold it cannot evaluate', async () => {
+    const cases = parseEvalCases(inlineEvalCases)
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding()])
+          }
+        },
+        {
+          caseId: 'typescript-negative',
+          changedLineCount: 10,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'provider-error',
+            code: 'provider_unavailable',
+            message: 'The provider refused the request.'
+          }
+        }
+      ],
+      thresholds: { maxDurationMs: 60_000, failOnProviderError: false },
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.metrics.durationMs).toBe(1000)
+    expect(result.report.metrics.durationUnavailableCount).toBe(1)
+    expect(result.report.regressionGate.outcome).toBe('not-evaluable')
+    expect(result.report.regressionGate.reasons).toEqual([])
+    expect(result.report.regressionGate.notEvaluableReasons).toEqual([
+      'durationMs not evaluable against threshold 60000: 1000 is a known-only total, unmeasured for 1 case(s), so the run\'s true total may be on either side of the threshold'
+    ])
+  })
+
   test('derives refutation metrics and surfaces refutation results in case reports', async () => {
     const cases = parseEvalCases([inlineEvalCases[0]])
     const result = await runEvaluation({
@@ -879,7 +1232,7 @@ describe('eval runner', () => {
       artifactOnlyFalsePositiveCount: 1
     })
     expect(result.report.regressionGate).toMatchObject({
-      passed: true,
+      outcome: 'passed',
       failingCaseIds: []
     })
     expect(result.report.caseResults[0]).toMatchObject({
@@ -956,7 +1309,7 @@ describe('eval runner', () => {
       incompleteCoverageRate: 0.5,
       contextMutationRate: 1
     })
-    expect(result.report.regressionGate.passed).toBe(false)
+    expect(result.report.regressionGate.outcome).toBe('failed')
     expect(result.report.regressionGate.reasons).toEqual([
       'provider error present',
       'incompleteCoverageRate above threshold: 0.5 > 0',
@@ -1438,7 +1791,7 @@ describe('eval runner', () => {
       generatedAt: '2026-06-20T00:00:02.000Z'
     })
 
-    expect(result.report.regressionGate.passed).toBe(true)
+    expect(result.report.regressionGate.outcome).toBe('passed')
     expect(result.report.scoring).toEqual({
       judgeTrustworthy: true,
       adjustedPrecisionTrustworthy: true,
@@ -2002,10 +2355,10 @@ describe('eval runner', () => {
     )
     expect(comparison).toContain('## Metric Group Resource Deltas')
     expect(comparison).toContain(
-      '| sourceProfile | project | 2 | 1 | 50 | 15 | -35 | 10 | 5 | -5 | $0.2000 | $0.00 known; unavailable for 1 case(s) | -0.2 | 0 | 1 | +1 |'
+      '| sourceProfile | project | 2 | 1 | 50 | 15 | -35 | 10 | 5 | -5 | 0 | 0 | 0 | $0.2000 | $0.00 known; unavailable for 1 case(s) | -0.2 | 0 | 1 | +1 |'
     )
     expect(comparison).toContain(
-      '| language | typescript | 2 | 1 | 50 | 15 | -35 | 10 | 5 | -5 | $0.2000 | $0.00 known; unavailable for 1 case(s) | -0.2 | 0 | 1 | +1 |'
+      '| language | typescript | 2 | 1 | 50 | 15 | -35 | 10 | 5 | -5 | 0 | 0 | 0 | $0.2000 | $0.00 known; unavailable for 1 case(s) | -0.2 | 0 | 1 | +1 |'
     )
     expect(comparison).toContain('## Metric Group Coverage Deltas')
     expect(comparison).toContain('| language | python | 0 | 1 | +1 | new |')
@@ -2291,7 +2644,7 @@ describe('eval runner', () => {
     })
 
     expect(result.report.metrics.productRecall).toBe(0)
-    expect(result.report.regressionGate.passed).toBe(false)
+    expect(result.report.regressionGate.outcome).toBe('failed')
     expect(result.report.regressionGate.reasons).toContain(
       'productRecall below threshold: 0 < 0.8'
     )

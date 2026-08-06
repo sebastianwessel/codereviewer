@@ -67,6 +67,7 @@ const ComparisonMetricsSchema = z.object({
   fixApplyFailureRate: optionalNumber,
   durationMs: optionalInteger,
   durationUnavailableCount: optionalInteger,
+  usageUnavailableCount: optionalInteger,
   inputTokens: optionalInteger,
   cachedInputTokens: optionalInteger,
   outputTokens: optionalInteger,
@@ -158,8 +159,17 @@ export const EvalComparisonReportSchema = z.object({
       plausibilityJudged: z.boolean().optional()
     })
     .optional(),
+  // Both spellings of the gate verdict, because this is the READ model over
+  // archived reports (see the module header): every report written before the
+  // gate gained a third outcome recorded a boolean `passed`, and that is a
+  // verdict the run genuinely reached, not an absent value to be defaulted.
+  // Reading it is the tolerance this view exists for; the PRODUCER contract
+  // carries `outcome` alone.
   regressionGate: z
-    .object({ passed: z.boolean().optional() })
+    .object({
+      outcome: z.enum(['passed', 'failed', 'not-evaluable']).optional(),
+      passed: z.boolean().optional()
+    })
     .optional(),
   caseResults: z.array(ComparisonCaseSchema).optional(),
   metrics: ComparisonMetricsSchema.optional(),

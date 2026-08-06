@@ -1,4 +1,7 @@
-import { formatListValue } from './eval-report-markdown-formatting.js'
+import {
+  formatEvalGateOutcome,
+  formatListValue
+} from './eval-report-markdown-formatting.js'
 import { type EvalComparisonReport } from './eval-comparison-view.js'
 
 type EvalReportPair = {
@@ -129,14 +132,29 @@ export const selectionStatus = (
 
 type EvalComparisonSelectionStatus = ReturnType<typeof selectionStatus>
 
-const formatGateResult = (passed: boolean | undefined): string =>
-  passed === undefined ? UNKNOWN_VALUE : passed ? 'PASS' : 'FAIL'
+// The gate verdict as the report recorded it. A report written before the gate
+// gained a third outcome recorded only a boolean, and that boolean IS its
+// verdict -- reading it is not a default, it is the value that is there. A
+// report that recorded neither renders unknown, like every other unread field.
+const formatGateResult = (
+  gate: EvalComparisonReport['regressionGate']
+): string => {
+  if (gate?.outcome !== undefined) {
+    return formatEvalGateOutcome(gate.outcome)
+  }
+
+  if (gate?.passed !== undefined) {
+    return gate.passed ? 'PASS' : 'FAIL'
+  }
+
+  return UNKNOWN_VALUE
+}
 
 const formatEvalComparisonGateRow = (
   label: string,
   report: EvalComparisonReport
 ): string =>
-  `| ${label} | ${formatGateResult(report.regressionGate?.passed)} | ${report.fixtureCount ?? UNKNOWN_VALUE} | ${report.generatedAt ?? UNKNOWN_VALUE} |`
+  `| ${label} | ${formatGateResult(report.regressionGate)} | ${report.fixtureCount ?? UNKNOWN_VALUE} | ${report.generatedAt ?? UNKNOWN_VALUE} |`
 
 export const appendEvalComparisonGate = (
   lines: string[],

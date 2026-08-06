@@ -414,6 +414,16 @@ and every delta involving one renders the same. This applies beyond metrics: a
 case whose report did not record the inputs its status derives from renders
 `unknown`, never `PASS`.
 
+Reading a value under a name the producer no longer writes is the OPPOSITE of
+defaulting, and the view does it where a field was respelled rather than added.
+The gate verdict is the one such field: reports archived before `regressionGate`
+became three-valued recorded a boolean `passed`, and that boolean IS the verdict
+those runs reached. The view models both `outcome` and `passed`, preferring
+`outcome`, and falls back to `unknown (not recorded)` only when a report carries
+neither. Dropping `passed` would render every report ever archived as unknown
+while the data was sitting in the file. The PRODUCER contract carries `outcome`
+alone.
+
 ## Provenance
 
 `metricsVersion` proves the numbers in a report were computed under known rules.
@@ -614,6 +624,7 @@ use `null`, because a rate over no checks is undefined rather than zero.
 | `securityObviousCount` | Denominator of `securityObviousRecall`. |
 | `securityHardCount` | Denominator of `securityHardRecall`. |
 | `costUnavailableCount` | Cases whose cost is unknown: cost/token metadata was incomplete, or the case errored before any usage was surfaced. `costUsd` sums only the cases whose cost IS known, so a non-zero count here is what marks that total as partial rather than exact. |
+| `usageUnavailableCount` | Cases whose token usage is unknown: a provider-errored case (no report, so no usage record), or a provider run whose usage never arrived. `inputTokens`, `cachedInputTokens` and `outputTokens` sum only the cases whose usage IS known, and this count is what marks those totals as partial. There is deliberately **one** count for all three totals rather than three: they come from a single usage record and are surfaced together or not at all, so three counters would be three names for one fact and could disagree. This is **not** the same population as `costUnavailableCount` — a run that surfaced usage but had no price for its model has known tokens and an unknown cost, and collapsing the two would mark real measurements unknown. |
 | `costUsd` | Provider-reported or estimated cost, summed across each case's REVIEW report only. Does not include judge or plausibility-judge provider spend — see `scoringCostUsd`. |
 | `durationMs` | Summed per-case review duration, over the cases that reported one (each case's own `run.durationMs`, added together); see `durationUnavailableCount` for the cases that did not. This is **not** a wall-clock measurement: it excludes judge/plausibility-judge calls, calibration, orchestration, and any idle time between cases, so it cannot be compared to how long the run actually took. See `elapsedMs` for that. |
 | `durationUnavailableCount` | Cases with no review duration at all (they errored before one was measured). Mirrors `costUnavailableCount` for the duration sum, so a partial total is never rendered as an exact one. |
@@ -1054,23 +1065,33 @@ availability from the review report:
 | `contextLedger` | object[] | Report-safe context ledger summaries for the case. Each entry includes `kind` (one of the eight context-ledger kinds), `consideredForModelContext`, and `truncated`. |
 | `providerIssues` | object[] | Provider instability observed for the case, including unrecovered provider errors, recovered eval retries, refutation provider issues, and budget/timeouts. Each entry includes `code`, `stage`, and `recovered`. |
 | `refutationResults` | object[] | Sanitized refutation summaries with ID, refuted candidate ID, verdict, and reason code. |
-| `inputTokens` | integer >= 0 | Total input tokens surfaced by the review report for this case, or `0` when unavailable. |
-| `cachedInputTokens` | integer >= 0 | Cached (prompt-cache read) input tokens surfaced by the review report for this case (a subset of `inputTokens`), or `0` when unavailable. |
-| `outputTokens` | integer >= 0 | Total output tokens surfaced by the review report for this case, or `0` when unavailable. |
+| `inputTokens` | integer >= 0, optional | Total input tokens surfaced by the review report for this case. **Absent when no usage record was surfaced**, never written as `0`. A deterministic run with no provider configured made no model call and records a real `0`. |
+| `cachedInputTokens` | integer >= 0, optional | Cached (prompt-cache read) input tokens surfaced by the review report for this case (a subset of `inputTokens`). Present exactly when `inputTokens` is. |
+| `outputTokens` | integer >= 0, optional | Total output tokens surfaced by the review report for this case. Present exactly when `inputTokens` is. |
+| `usageUnavailable` | boolean | `true` exactly when the three token counts are absent — a provider-errored case with no report, or a provider run whose usage never arrived. One flag rather than three, because the three counts come from one usage record and are surfaced together or not at all. Derived from the same value that decides whether the counts are present, so the flag and the figures cannot disagree. |
 | `costUsd` | number >= 0, optional | Known cost for this case. **Absent when the cost is unavailable**, which is either a report carrying the `cost-unavailable` warning or a provider-errored case that produced no report at all. Absence is never written as `0`: a case whose cost was never measured must not contribute a confident zero to the run total. |
 | `costUnavailable` | boolean | `true` exactly when `costUsd` is absent — a report carrying the `cost-unavailable` warning, or a provider-errored case with no report. Derived from the same value that decides whether `costUsd` is present, so the flag and the figure cannot disagree. |
+
+`costUnavailable` and `usageUnavailable` are separate questions and a case may
+carry either without the other. A provider run that surfaced usage but had no
+price for its model reports every token count and no cost; a provider-errored
+case reports neither.
 
 `metrics` and every `metricGroups[].metrics` entry must aggregate
 `duplicateFindingCount`, artifact-only diagnostic metrics,
 `trustedDeterministicFindingCount`, `inputTokens`, `cachedInputTokens`,
-`outputTokens`, and `costUnavailableCount`. They must also aggregate
+`outputTokens`, `usageUnavailableCount`, and `costUnavailableCount`. They must
+also aggregate
 `providerIssueCount` and `providerIssueRate` separately from
 `providerErrorRate`, because recovered provider retries must remain visible
 without being treated as unrecovered case errors. Markdown summaries must render
 token totals and must not present missing cost as a free run. When any case has
 unavailable cost, the cost row must show known cost plus the number of cases
-with unavailable cost, and the summed-duration row must do the same for cases
-with no measured duration.
+with unavailable cost; the summed-duration row must do the same for cases with
+no measured duration; and each token row must do the same for cases with no
+measured usage. All three use the same `<known> known; unavailable for N case(s)`
+wording, so a reader learns one convention for "this figure is a floor" rather
+than three.
 
 `scoringInputTokens`, `scoringCachedInputTokens`, `scoringOutputTokens`,
 `scoringCostUsd`, `scoringCostUnavailable`, and `elapsedMs` are **run-level
@@ -1203,7 +1224,7 @@ Gate result:
 
 ## Eval Regression Gate
 
-`codereviewer eval run`'s pass/fail exit code is a SEPARATE gate from the
+`codereviewer eval run`'s exit code is a SEPARATE gate from the
 review command's Quality Gate above: it is computed from
 `EvalRegressionThresholds` (`src/domains/evaluation/eval-report-contracts.ts`)
 against the run's own `metrics`, and is recorded on the saved report as
@@ -1235,6 +1256,70 @@ The gate reads RAW metrics only. `adjustedPrecision`,
 excluded so an undefined rate can never fail a gate. This is deliberate: the
 gate's inputs must be reproducible from the run itself, and every excluded value
 depends on a second model judgement.
+
+### The Gate Has Three Outcomes
+
+`regressionGate.outcome` is `passed`, `failed`, or `not-evaluable`. There is no
+boolean `passed` field: a three-valued verdict does not fit in one, and carrying
+both would let the two disagree about the case that motivated the third value.
+
+| Field | Meaning |
+| --- | --- |
+| `outcome` | `passed`, `failed`, or `not-evaluable`. |
+| `reasons` | Thresholds the run BREACHED. Non-empty exactly when `outcome` is `failed`. |
+| `notEvaluableReasons` | Thresholds the gate COULD NOT EVALUATE, each naming the metric, the known-only total, the threshold, and how many cases are unmeasured. Kept apart from `reasons` so "over budget" and "budget not evaluable" are distinguishable by a machine and not only by reading prose. |
+| `failingCaseIds` | Cases that caused a FAILURE. A refusal names none, for the same reason `qualityGate.failOnProviderError` fails with an empty `failingFindingIds`: there is nothing to blame, the problem is that a measurement is missing. Which cases are unmeasured is already recorded per case as `costUnavailable` / `usageUnavailable` / an absent `durationMs`. |
+
+**Why a third outcome rather than a failure.** `maxCostUsd` and `maxDurationMs`
+are compared against `costUsd` and `durationMs`, which are explicitly
+known-only totals — they sum the measured cases and count the rest. With any
+unmeasured case that total is a FLOOR, and a floor at or below the threshold
+does not establish that the run was under budget. Reporting that as `passed` is
+this repository's recurring absence-is-a-plausible-default defect sitting inside
+the one place meant to catch it. Reporting it as `failed` is also wrong: a case
+is unmeasured because its provider call failed, and this project's standing rule
+is that a provider outage must not read as a quality result. The honest answer is
+neither, so the gate reports neither. The engine already refuses rather than
+judging partially elsewhere — `intent check` exits `4` instead of judging part of
+an input, and the change-impact scorer reports `not-measured` instead of a rate.
+
+**A decided failure outranks a refusal.** Unknown spend can only ADD to a total,
+so the comparison stays decisive in one direction: a floor ALREADY above the
+threshold is a breach whatever the unknowns hold, and fails. Any other failing
+threshold likewise reports the failure it is. `outcome` is `failed` whenever
+`reasons` is non-empty, `not-evaluable` only when `reasons` is empty and
+`notEvaluableReasons` is not, and `passed` only when both are empty. An
+unevaluable threshold is still RECORDED alongside a failure — it is a fact about
+the run — but it never softens the verdict.
+
+Exit codes follow the outcome: `0` for `passed`, `1` for `failed`, `4` for
+`not-evaluable`, matching the CLI's existing meaning for `4` as a refusal to
+judge an input it could not see whole.
+
+**Exactly which runs change behaviour.** A run changes only if it satisfies ALL
+of these:
+
+1. it sets `maxCostUsd` or `maxDurationMs` (neither is in the `stable` or
+   `strict` profile, so this requires an explicit
+   `evaluation.regressionGate.overrides` entry);
+2. it has at least one case with an unmeasured cost (for `maxCostUsd`) or an
+   unmeasured duration (for `maxDurationMs`);
+3. the known-only total is at or below that threshold; and
+4. no other threshold failed.
+
+Such a run reported `passed` and exited `0` before, and now reports
+`not-evaluable` and exits `4`. That is correct: its known-only total never
+established that the budget held, and the previous `0` was an assertion the data
+did not support. **No other run changes.** A run over budget on its floor still
+fails; a run with no unmeasured case still passes or fails exactly as before; a
+run that sets neither threshold cannot reach the new outcome at all — which is
+every run under both built-in profiles.
+
+The human summary renders `Gate: PASS`, `Gate: FAIL`, or `Gate: NOT EVALUABLE`,
+and renders a `## Gate Thresholds Not Evaluable` section listing
+`notEvaluableReasons`. That section is ABSENT rather than empty on a genuine
+pass, so "under budget" and "budget not evaluable" cannot be confused by a reader
+skimming the artifact.
 
 Threshold values are resolved from `evaluation.regressionGate` config in this
 order, each layer overriding the previous field-by-field:

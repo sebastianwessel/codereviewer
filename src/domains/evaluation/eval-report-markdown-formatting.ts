@@ -1,3 +1,4 @@
+import { type EvalRegressionGateOutcome } from './eval-report-contracts.js'
 import {
   type PrecisionBracket,
   type PrecisionBracketBound
@@ -11,6 +12,10 @@ export type EvalCostMetricInput = {
 export type EvalDurationMetricInput = {
   readonly durationUnavailableCount: number
   readonly durationMs: number
+}
+
+export type EvalTokenMetricInput = {
+  readonly usageUnavailableCount: number
 }
 
 export const formatPercent = (value: number): string =>
@@ -53,6 +58,33 @@ export const formatDurationMetric = (
   metrics.durationUnavailableCount === 0
     ? formatDuration(metrics.durationMs)
     : `${formatDuration(metrics.durationMs)} known; unavailable for ${metrics.durationUnavailableCount} case(s)`
+
+// The gate's three outcomes, spelled out. `NOT EVALUABLE` is deliberately not a
+// synonym for either of the other two: it says the gate could not decide, which
+// is the honest answer when a threshold is compared against a known-only total.
+export const formatEvalGateOutcome = (
+  outcome: EvalRegressionGateOutcome
+): string => {
+  switch (outcome) {
+    case 'passed':
+      return 'PASS'
+    case 'failed':
+      return 'FAIL'
+    default:
+      return 'NOT EVALUABLE'
+  }
+}
+
+// A token total summed over only the cases that surfaced a usage record,
+// disclosed on the same terms as cost and duration above. Same suffix wording on
+// purpose: a reader learns one convention for "this figure is a floor".
+export const formatTokenMetric = (
+  tokens: number,
+  metrics: EvalTokenMetricInput
+): string =>
+  metrics.usageUnavailableCount === 0
+    ? formatInteger(tokens)
+    : `${formatInteger(tokens)} known; unavailable for ${metrics.usageUnavailableCount} case(s)`
 
 // The precision bracket is rendered as one cell so the two bounds cannot be
 // separated in transit. See `eval-precision-bracket.ts` for why the upper bound

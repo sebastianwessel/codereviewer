@@ -144,6 +144,7 @@ describe('eval report rendering', () => {
             cachedInputTokens: 0,
             outputTokens: 0,
             costUnavailable: false,
+            usageUnavailable: false,
             costUsd: 0
           }
         ],
@@ -233,6 +234,7 @@ describe('eval report rendering', () => {
           inputTokens: 0,
           cachedInputTokens: 0,
           outputTokens: 0,
+          usageUnavailableCount: 0,
           costUnavailableCount: 0,
           costUsd: 0,
           durationMs: 1,
@@ -246,8 +248,9 @@ describe('eval report rendering', () => {
         },
         metricGroups: [],
         regressionGate: {
-          passed: true,
+          outcome: 'passed',
           reasons: [],
+          notEvaluableReasons: [],
           thresholds: {
             failOnProviderError: true
           },

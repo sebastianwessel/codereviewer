@@ -71,6 +71,7 @@ import {
   EvalReportSchema,
   EvalReportSelectionSchema,
   type EvalCaseOutput,
+  type EvalRegressionGateOutcome,
   type EvalRegressionThresholds,
   type EvalReport,
   type EvalReportProvenance,
@@ -88,6 +89,7 @@ export {
   EvalReportSchema,
   type EvalCaseOutput,
   type EvalContextLedgerEntry,
+  type EvalRegressionGateOutcome,
   type EvalRegressionThresholds,
   type EvalReport,
   type EvalReportProvenance,
@@ -606,25 +608,51 @@ type EvalCaseSpend = {
   // `EvalMetricCaseResult` for why absence is never flattened to 0 here.
   readonly costUsd: number | null
   readonly durationMs: number | null
+  readonly inputTokens: number | null
+  readonly cachedInputTokens: number | null
+  readonly outputTokens: number | null
 }
 
+// Whether the review report surfaced any token usage at all.
+//
+// `summarizeRunCost` produces all three counts or none: they come from ONE usage
+// record, so they are known or unknown as a unit and need one predicate rather
+// than three. The absent-and-warned combination is what distinguishes a provider
+// run whose usage never arrived (unknown) from a deterministic run that made no
+// model call (a real zero) -- exactly the distinction the cost derivation below
+// already draws, and for the same reason.
+//
+// Keyed on the token fields themselves, not on the warning alone: a run that
+// surfaced usage but had no price for its model carries `cost-unavailable` while
+// reporting every token count, and those counts are measurements.
+const usageUnavailable = (reviewReport: ReviewReport): boolean =>
+  reviewReport.run.inputTokens === undefined &&
+  reviewReport.run.outputTokens === undefined &&
+  reviewReport.run.warnings.includes(COST_UNAVAILABLE_WARNING)
+
 /**
- * The model cost and review duration of one case, with unknown represented as
- * `null` rather than 0.
+ * The model cost, token usage and review duration of one case, with unknown
+ * represented as `null` rather than 0. ONE derivation, so the report fields, the
+ * aggregate totals and the unavailability counts cannot drift apart.
  *
  * A provider-errored case has NO review report: the call failed before any usage
- * or timing was surfaced, so both quantities are genuinely unknown. Publishing
+ * or timing was surfaced, so every quantity here is genuinely unknown. Publishing
  * them as 0 made the run's headline cost silently understate itself while
  * `costUnavailableCount` stayed at zero — an incomplete total presented as an
  * exact one. Cost is a decision input in capability-withdrawal rules, and the
  * arm that errors more is usually the more expensive one, so the understatement
- * lands on whichever side the rule is about to judge.
+ * lands on whichever side the rule is about to judge. Token counts carry the
+ * same lie at lower stakes: a run whose token totals silently omit its failed
+ * cases reads as cheaper in exactly the comparison that is measuring cost.
  *
  * Cost is also unknown for a COMPLETED case whose report carries
  * `COST_UNAVAILABLE_WARNING` (no surfaced token usage, or no provider cost and no
  * configured prices). `costs/token-cost.ts` already models that as
  * `costUsd: number | null`; this is the single place the eval lane reads it, so
  * it cannot be re-flattened.
+ *
+ * Cost and tokens are two questions, deliberately answered separately: a run
+ * with usage but no price for its model has KNOWN tokens and an UNKNOWN cost.
  *
  * A completed report always carries a duration, so `durationMs` is `null`
  * exactly when there is no report at all.
@@ -633,8 +661,16 @@ const caseSpend = (
   reviewReport: ReviewReport | undefined
 ): EvalCaseSpend => {
   if (reviewReport === undefined) {
-    return { costUsd: null, durationMs: null }
+    return {
+      costUsd: null,
+      durationMs: null,
+      inputTokens: null,
+      cachedInputTokens: null,
+      outputTokens: null
+    }
   }
+
+  const tokensUnknown = usageUnavailable(reviewReport)
 
   return {
     costUsd: reviewReport.run.warnings.includes(COST_UNAVAILABLE_WARNING)
@@ -642,24 +678,41 @@ const caseSpend = (
       : // Absent WITHOUT the warning means a deterministic run with no provider
         // configured, which genuinely cost nothing (see `summarizeRunCost`).
         (reviewReport.run.costUsd ?? 0),
-    durationMs: reviewReport.run.durationMs
+    durationMs: reviewReport.run.durationMs,
+    // Absent without the warning is the same deterministic-run case: no model
+    // call was made, so zero tokens is a measurement rather than a default.
+    inputTokens: tokensUnknown ? null : (reviewReport.run.inputTokens ?? 0),
+    cachedInputTokens: tokensUnknown
+      ? null
+      : (reviewReport.run.cachedInputTokens ?? 0),
+    outputTokens: tokensUnknown ? null : (reviewReport.run.outputTokens ?? 0)
   }
 }
 
-// The saved report's rendering of the same value. An unmeasured quantity is
-// OMITTED rather than written as 0, and `costUnavailable` is derived from the
-// very value that decides whether `costUsd` is present, so the flag the
+// The saved report's rendering of the same values. An unmeasured quantity is
+// OMITTED rather than written as 0, and each `*Unavailable` flag is derived from
+// the very value that decides whether its figure is present, so a flag the
 // aggregate counts cannot disagree with the figure it qualifies.
 const spendReportFields = (
   spend: EvalCaseSpend
 ): {
   readonly costUnavailable: boolean
+  readonly usageUnavailable: boolean
   readonly costUsd?: number
   readonly durationMs?: number
+  readonly inputTokens?: number
+  readonly cachedInputTokens?: number
+  readonly outputTokens?: number
 } => ({
   costUnavailable: spend.costUsd === null,
+  usageUnavailable: spend.inputTokens === null,
   ...(spend.costUsd === null ? {} : { costUsd: spend.costUsd }),
-  ...(spend.durationMs === null ? {} : { durationMs: spend.durationMs })
+  ...(spend.durationMs === null ? {} : { durationMs: spend.durationMs }),
+  ...(spend.inputTokens === null ? {} : { inputTokens: spend.inputTokens }),
+  ...(spend.cachedInputTokens === null
+    ? {}
+    : { cachedInputTokens: spend.cachedInputTokens }),
+  ...(spend.outputTokens === null ? {} : { outputTokens: spend.outputTokens })
 })
 
 const buildMetricCase = (
@@ -845,9 +898,6 @@ const buildMetricCase = (
       (entry) => entry.truncated
     ).length,
     ...caseSpend(input.reviewReport),
-    inputTokens: input.reviewReport?.run.inputTokens ?? 0,
-    cachedInputTokens: input.reviewReport?.run.cachedInputTokens ?? 0,
-    outputTokens: input.reviewReport?.run.outputTokens ?? 0,
     warnings,
     failingFindingIds: input.matchResult.falsePositiveFindingIds
   }
@@ -949,9 +999,6 @@ const buildReportCase = (
     ),
     ...plausibilityFailClosedWarnings(input.plausibility.failClosedFindingIds.length)
   ],
-  inputTokens: input.reviewReport.run.inputTokens ?? 0,
-  cachedInputTokens: input.reviewReport.run.cachedInputTokens ?? 0,
-  outputTokens: input.reviewReport.run.outputTokens ?? 0,
   ...spendReportFields(caseSpend(input.reviewReport))
 })
 
@@ -1027,12 +1074,9 @@ const computeCaseResult = async (
         refutationResults: [],
         inlineFindingCount: 0,
         warnings: [],
-        inputTokens: 0,
-        cachedInputTokens: 0,
-        outputTokens: 0,
-        // No review report exists, so cost and duration were never measured.
-        // They are omitted, not zeroed, and the case is counted as
-        // cost-unavailable in the run's totals.
+        // No review report exists, so cost, token usage and duration were never
+        // measured. They are omitted, not zeroed, and the case is counted as
+        // cost- and usage-unavailable in the run's totals.
         ...spendReportFields(caseSpend(undefined))
       },
       metricCase: buildMetricCase({
@@ -1255,17 +1299,22 @@ const buildMetricGroups = (
   ]
 }
 
-const thresholdReasons = (
+// Evaluate the eval regression gate. See `EvalRegressionGateSchema` for why the
+// outcome is three-valued and why a refusal names no failing case.
+const evaluateRegressionGate = (
   input: {
     readonly thresholds: EvalRegressionThresholds
     readonly metrics: z.infer<typeof EvalMetricsSchema>
     readonly caseResults: readonly EvalMetricCaseResult[]
   }
 ): {
+  readonly outcome: EvalRegressionGateOutcome
   readonly reasons: readonly string[]
+  readonly notEvaluableReasons: readonly string[]
   readonly failingCaseIds: readonly string[]
 } => {
   const reasons: string[] = []
+  const notEvaluableReasons: string[] = []
   const failingCaseIds: string[] = []
   const addBelowReason = (
     metricName: NumericMetricKey,
@@ -1298,6 +1347,37 @@ const thresholdReasons = (
         `${metricName} above threshold: ${formatMetricValue(value)} > ${formatMetricValue(threshold)}`
       )
       failingCaseIds.push(...casesForMetric.map((result) => result.caseId))
+    }
+  }
+  // A ceiling threshold on a total that sums only the MEASURED cases. Unknown
+  // spend can only add, so the comparison is still decisive in one direction:
+  // a floor already above the threshold fails, whatever the unknowns hold. It is
+  // the other direction that is not established, and that is where the gate
+  // refuses instead of reporting a pass it cannot support.
+  const addAboveReasonOverKnownOnlyTotal = (
+    metricName: NumericMetricKey,
+    threshold: number | undefined,
+    unavailableCaseCount: number,
+    casesForMetric: readonly EvalMetricCaseResult[]
+  ): void => {
+    if (threshold === undefined) {
+      return
+    }
+
+    const value = input.metrics[metricName]
+    if (value > threshold) {
+      reasons.push(
+        `${metricName} above threshold: ${formatMetricValue(value)} > ${formatMetricValue(threshold)}`
+      )
+      failingCaseIds.push(...casesForMetric.map((result) => result.caseId))
+
+      return
+    }
+
+    if (unavailableCaseCount > 0) {
+      notEvaluableReasons.push(
+        `${metricName} not evaluable against threshold ${formatMetricValue(threshold)}: ${formatMetricValue(value)} is a known-only total, unmeasured for ${unavailableCaseCount} case(s), so the run's true total may be on either side of the threshold`
+      )
     }
   }
 
@@ -1348,11 +1428,30 @@ const thresholdReasons = (
       (result) => result.mutatedContextLedgerEntryCount > 0
     )
   )
-  addAboveReason('costUsd', input.thresholds.maxCostUsd, input.caseResults)
-  addAboveReason('durationMs', input.thresholds.maxDurationMs, input.caseResults)
+  addAboveReasonOverKnownOnlyTotal(
+    'costUsd',
+    input.thresholds.maxCostUsd,
+    input.metrics.costUnavailableCount,
+    input.caseResults
+  )
+  addAboveReasonOverKnownOnlyTotal(
+    'durationMs',
+    input.thresholds.maxDurationMs,
+    input.metrics.durationUnavailableCount,
+    input.caseResults
+  )
 
   return {
+    // A definite failure outranks a refusal: an unknown elsewhere never rescues
+    // a threshold the run demonstrably breached.
+    outcome:
+      reasons.length > 0
+        ? 'failed'
+        : notEvaluableReasons.length > 0
+          ? 'not-evaluable'
+          : 'passed',
     reasons,
+    notEvaluableReasons,
     failingCaseIds: uniqueSorted(failingCaseIds)
   }
 }
@@ -1470,7 +1569,7 @@ const buildEvaluationResult = (
     input.judgeReliability,
     input.runTotals
   )
-  const gate = thresholdReasons({
+  const gate = evaluateRegressionGate({
     thresholds: input.thresholds,
     metrics,
     caseResults: metricCases
@@ -1487,8 +1586,9 @@ const buildEvaluationResult = (
     metrics,
     metricGroups,
     regressionGate: {
-      passed: gate.reasons.length === 0,
+      outcome: gate.outcome,
       reasons: gate.reasons,
+      notEvaluableReasons: gate.notEvaluableReasons,
       thresholds: input.thresholds,
       failingCaseIds: gate.failingCaseIds
     }

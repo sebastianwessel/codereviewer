@@ -208,8 +208,9 @@ const evalReport = (
   overrides: {
     readonly metrics?: Record<string, unknown>
     readonly caseResults?: readonly Record<string, unknown>[]
-    readonly passed?: boolean
+    readonly outcome?: 'passed' | 'failed' | 'not-evaluable'
     readonly reasons?: readonly string[]
+    readonly notEvaluableReasons?: readonly string[]
     readonly failingCaseIds?: readonly string[]
     readonly selection?: Record<string, unknown>
     readonly scoring?: Record<string, unknown>
@@ -257,8 +258,9 @@ const evalReport = (
   metrics: metricSet(overrides.metrics),
   metricGroups: [],
   regressionGate: {
-    passed: overrides.passed ?? true,
+    outcome: overrides.outcome ?? 'passed',
     reasons: overrides.reasons ?? [],
+    notEvaluableReasons: overrides.notEvaluableReasons ?? [],
     thresholds: {
       failOnProviderError: true
     },
@@ -609,7 +611,7 @@ describe('eval CLI', () => {
         await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
       )
       expect(report.schemaVersion).toBe('1.0')
-      expect(report.regressionGate.passed).toBe(true)
+      expect(report.regressionGate.outcome).toBe('passed')
       expect(report.metrics.recall).toBe(1)
       expect(report.metrics.falsePositiveCount).toBe(0)
 
@@ -776,7 +778,7 @@ describe('eval CLI', () => {
         await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
       )
 
-      expect(report.regressionGate.passed).toBe(true)
+      expect(report.regressionGate.outcome).toBe('passed')
       expect(
         report.caseResults.every((caseResult: { providerErrored: boolean }) =>
           caseResult.providerErrored === false
@@ -1086,13 +1088,79 @@ describe('eval CLI', () => {
       expect(report.metrics.falsePositiveCount).toBeGreaterThan(0)
       expect(report.metrics.genuineFalsePositiveCount).toBeGreaterThan(0)
 
-      expect(report.regressionGate.passed).toBe(true)
+      expect(report.regressionGate.outcome).toBe('passed')
       expect(report.regressionGate.reasons).toEqual([])
       expect(report.regressionGate.thresholds).toEqual({
         minParseValidity: 1,
         failOnProviderError: true
       })
       expect(result.exitCode).toBe(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // A gate that cannot evaluate its own condition exits neither 0 nor 1.
+  // Exiting 0 would report a pass nothing established; exiting 1 would report a
+  // missing measurement as a quality failure. `4` is this CLI's refusal code.
+  test('exits 4 when a cost threshold cannot be evaluated', async () => {
+    const root = await createTempDir()
+    const provider = new ConfigurableSemanticJudgeProvider()
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'judge-model',
+            maxRetries: 0
+          },
+          review: {
+            depth: 'fast'
+          },
+          drift: {
+            enabled: false
+          },
+          evaluation: {
+            regressionGate: {
+              overrides: { maxCostUsd: 100 }
+            }
+          }
+        })
+      )
+      await writeSemanticJudgeSliceEvalCase(root)
+
+      const result = await runCli(
+        ['eval', 'run', '--slice-root', 'eval/benchmarks/semantic'],
+        {
+          cwd: root,
+          environment: {
+            OPENAI_API_KEY: 'sk-test'
+          },
+          providerImport: async () => ({
+            openai: () => provider
+          })
+        }
+      )
+
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+
+      // The premise: this run has no price for its model, so its cost total is
+      // a floor sitting far below a deliberately generous threshold.
+      expect(report.metrics.costUnavailableCount).toBeGreaterThan(0)
+      expect(report.metrics.costUsd).toBeLessThan(100)
+
+      expect(report.regressionGate.outcome).toBe('not-evaluable')
+      expect(report.regressionGate.reasons).toEqual([])
+      expect(report.regressionGate.notEvaluableReasons).toEqual([
+        expect.stringContaining('costUsd not evaluable against threshold 100')
+      ])
+      expect(result.stdout).toContain('Gate: NOT EVALUABLE')
+      expect(result.exitCode).toBe(4)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -1153,7 +1221,7 @@ describe('eval CLI', () => {
       )
 
       expect(report.metrics.recall).toBeLessThan(1)
-      expect(report.regressionGate.passed).toBe(false)
+      expect(report.regressionGate.outcome).toBe('failed')
       expect(report.regressionGate.reasons).toEqual(
         expect.arrayContaining([expect.stringContaining('recall below threshold')])
       )
@@ -1222,7 +1290,7 @@ describe('eval CLI', () => {
         await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
       )
 
-      expect(report.regressionGate.passed).toBe(false)
+      expect(report.regressionGate.outcome).toBe('failed')
       // The override adds `minRecall` but the profile is still `stable`, so
       // `maxFalsePositiveCount` (never set) must NOT appear in the resolved
       // thresholds.
@@ -1663,7 +1731,7 @@ describe('eval CLI', () => {
               durationMs: 200,
               costUsd: 0.2
             },
-            passed: false,
+            outcome: 'failed',
             reasons: ['recall below threshold: 0.5 < 1'],
             failingCaseIds: ['case-a'],
             caseResults: [

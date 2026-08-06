@@ -199,17 +199,65 @@ export const EvalCaseReportSchema = z.strictObject({
   // machine-readable flag the aggregate counts, and is set from the same value
   // that decides whether `costUsd` is present, so the two cannot disagree.
   durationMs: z.int().min(0).optional(),
-  inputTokens: z.int().min(0).default(0),
-  cachedInputTokens: z.int().min(0).default(0),
-  outputTokens: z.int().min(0).default(0),
+  // The same rule for token usage, which is surfaced by ONE usage record and is
+  // therefore unknown as a unit: `summarizeRunCost` returns all three counts or
+  // none, so there is one `usageUnavailable` flag rather than three. A
+  // provider-errored case, and a provider run whose usage was never surfaced,
+  // both leave these absent; a deterministic run with no provider configured
+  // genuinely made no model call and records a real `0`.
+  //
+  // Token availability is NOT the same question as cost availability: a run that
+  // surfaced usage but had no price for its model reports every token count and
+  // no cost, and carries `cost-unavailable` for the cost alone.
+  inputTokens: z.int().min(0).optional(),
+  cachedInputTokens: z.int().min(0).optional(),
+  outputTokens: z.int().min(0).optional(),
+  usageUnavailable: z.boolean().default(false),
   costUnavailable: z.boolean().default(false),
   costUsd: z.number().min(0).optional()
 })
 
+// A GATE HAS THREE OUTCOMES, NOT TWO.
+//
+// `maxCostUsd` and `maxDurationMs` are compared against totals that sum only the
+// cases whose cost/duration was actually measured (see `costUnavailableCount`).
+// When some case's value is unknown, that total is a FLOOR, and a floor at or
+// below the threshold does not establish that the run was under budget -- the
+// true total could be on either side. Reporting that as `passed` is the same
+// defect class as the confident zeros the totals were fixed to stop publishing,
+// sitting inside the one place that is supposed to catch it.
+//
+// The gate therefore refuses instead of guessing, which is what this engine
+// already does elsewhere for an input it will not judge partially (`intent
+// check` exits 4 rather than judging part of an input; the change-impact scorer
+// reports `not-measured` rather than a rate). Refusing rather than FAILING is
+// deliberate: an unrecovered provider error is an infrastructure problem, and
+// this project's standing rule is that it must not read as a quality verdict.
+//
+// A definite failure always wins over a refusal. Unknown spend can only add to a
+// total, so a threshold a known-only floor ALREADY exceeds is failed outright,
+// and any other failing threshold is reported as the failure it is rather than
+// being masked by an unrelated unknown.
+export const EvalRegressionGateOutcomeSchema = z.enum([
+  'passed',
+  'failed',
+  'not-evaluable'
+])
+
 export const EvalRegressionGateSchema = z.strictObject({
-  passed: z.boolean(),
+  outcome: EvalRegressionGateOutcomeSchema,
   reasons: z.array(z.string()),
+  // Thresholds the gate could not evaluate, each naming the metric, the
+  // known-only total, the threshold, and how many cases are unmeasured. Kept
+  // apart from `reasons` so "over budget" and "budget not evaluable" are
+  // distinguishable by a machine and not only by reading prose.
+  notEvaluableReasons: z.array(z.string()),
   thresholds: EvalRegressionThresholdsSchema,
+  // Cases that caused a FAILURE. A refusal names no case here, for the same
+  // reason `qualityGate.failOnProviderError` fails with an empty
+  // `failingFindingIds`: there is nothing to blame, the problem is that a
+  // measurement is missing. Which cases are unmeasured is already recorded per
+  // case as `costUnavailable` / absent `durationMs`.
   failingCaseIds: z.array(z.string().min(1))
 })
 
@@ -337,6 +385,9 @@ export type EvalContextLedgerEntry = z.infer<typeof EvalContextLedgerEntrySchema
 export type EvalCaseOutput = z.infer<typeof EvalCaseOutputSchema>
 export type EvalRegressionThresholds = z.infer<
   typeof EvalRegressionThresholdsSchema
+>
+export type EvalRegressionGateOutcome = z.infer<
+  typeof EvalRegressionGateOutcomeSchema
 >
 export type EvalReportSelection = z.infer<typeof EvalReportSelectionSchema>
 export type EvalReportScoring = z.infer<typeof EvalReportScoringSchema>

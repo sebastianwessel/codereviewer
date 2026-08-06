@@ -2,9 +2,9 @@ import {
   appendMarkdownTable,
   escapeMarkdownCell,
   formatCostMetric,
-  formatInteger,
   formatPercent,
-  formatPrecisionBracket
+  formatPrecisionBracket,
+  formatTokenMetric
 } from './eval-report-markdown-formatting.js'
 import {
   type EvalComparabilityKey,
@@ -227,22 +227,25 @@ const formatCountMetricDeltaCells = (
     formatNumberDelta
   )}`
 
-const formatIntegerMetricDeltaCells = (
-  key: EvalComparabilityKey,
-  base: number | undefined,
-  head: number | undefined,
-  comparability: MetricComparability
-): string =>
-  `${base === undefined ? UNKNOWN_VALUE : formatInteger(base)} | ${
-    head === undefined ? UNKNOWN_VALUE : formatInteger(head)
-  } | ${formatDelta(key, base, head, comparability, formatNumberDelta)}`
-
 const formatGroupCost = (metrics: EvalComparisonMetrics): string =>
   metrics.costUsd === undefined || metrics.costUnavailableCount === undefined
     ? UNKNOWN_VALUE
     : formatCostMetric({
         costUsd: metrics.costUsd,
         costUnavailableCount: metrics.costUnavailableCount
+      })
+
+// Token totals disclose an unmeasured case exactly as cost does above, per
+// group. A segment whose token total quietly omits its errored case reads as
+// the cheap segment.
+const formatGroupTokens = (
+  metrics: EvalComparisonMetrics,
+  key: 'inputTokens' | 'outputTokens'
+): string =>
+  metrics[key] === undefined || metrics.usageUnavailableCount === undefined
+    ? UNKNOWN_VALUE
+    : formatTokenMetric(metrics[key], {
+        usageUnavailableCount: metrics.usageUnavailableCount
       })
 
 // A metric group publishes precision like any other surface, so it publishes
@@ -320,15 +323,28 @@ const formatMetricGroupQualityDeltaRow = (
 const formatMetricGroupResourceDeltaRow = (
   input: MetricGroupRowInput
 ): string =>
-  `${formatMetricGroupComparisonPrefix(input.pair)} | ${formatIntegerMetricDeltaCells(
+  `${formatMetricGroupComparisonPrefix(input.pair)} | ${formatGroupTokens(
+    input.pair.base.metrics,
+    'inputTokens'
+  )} | ${formatGroupTokens(input.pair.head.metrics, 'inputTokens')} | ${formatDelta(
     'inputTokens',
     input.pair.base.metrics.inputTokens,
     input.pair.head.metrics.inputTokens,
-    input.comparability
-  )} | ${formatIntegerMetricDeltaCells(
+    input.comparability,
+    formatNumberDelta
+  )} | ${formatGroupTokens(
+    input.pair.base.metrics,
+    'outputTokens'
+  )} | ${formatGroupTokens(input.pair.head.metrics, 'outputTokens')} | ${formatDelta(
     'outputTokens',
     input.pair.base.metrics.outputTokens,
     input.pair.head.metrics.outputTokens,
+    input.comparability,
+    formatNumberDelta
+  )} | ${formatCountMetricDeltaCells(
+    'usageUnavailableCount',
+    input.pair.base.metrics.usageUnavailableCount,
+    input.pair.head.metrics.usageUnavailableCount,
     input.comparability
   )} | ${formatGroupCost(input.pair.base.metrics)} | ${formatGroupCost(
     input.pair.head.metrics
@@ -411,9 +427,9 @@ export const appendMetricGroupResourceDeltas = (
   appendMarkdownTable(lines, {
     heading: '## Metric Group Resource Deltas',
     header:
-      '| Group | Key | Base fixtures | Head fixtures | Base input tokens | Head input tokens | Input token delta | Base output tokens | Head output tokens | Output token delta | Base cost | Head cost | Cost delta | Base unavailable cost cases | Head unavailable cost cases | Unavailable cost delta |',
+      '| Group | Key | Base fixtures | Head fixtures | Base input tokens | Head input tokens | Input token delta | Base output tokens | Head output tokens | Output token delta | Base unavailable usage cases | Head unavailable usage cases | Unavailable usage delta | Base cost | Head cost | Cost delta | Base unavailable cost cases | Head unavailable cost cases | Unavailable cost delta |',
     alignment:
-      '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
+      '| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |',
     rows: groupRows(input, formatMetricGroupResourceDeltaRow)
   })
 }

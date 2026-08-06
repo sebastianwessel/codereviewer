@@ -356,6 +356,40 @@ resolved profile key by key:
 > `eval-report.json`, and compare runs with
 > [`eval compare`](comparing-runs.md).
 
+### When the gate cannot decide
+
+`regressionGate.outcome` is `passed`, `failed`, or `not-evaluable` — not a
+boolean. The third value exists for one situation, and only `maxCostUsd` and
+`maxDurationMs` can produce it.
+
+Both thresholds are compared against totals that sum **only the cases whose
+cost/duration was actually measured**. A case whose provider call failed
+contributes nothing, so with any such case the total is a *floor*. A floor at or
+below the threshold does not show the run stayed under budget — the true total
+could be on either side. The gate says so instead of guessing:
+
+```
+Gate: NOT EVALUABLE
+
+## Gate Thresholds Not Evaluable
+
+- costUsd not evaluable against threshold 5: 0.1 is a known-only total,
+  unmeasured for 1 case(s), so the run's true total may be on either side
+  of the threshold
+```
+
+Exit code `4` — the same code the CLI uses elsewhere for refusing to judge an
+input it could not see whole. Not `1`, because a provider outage is an
+infrastructure problem and must not be reported as a quality failure.
+
+A floor that is **already over** the threshold still fails normally: unknown
+spend can only add to a total, so that breach is decided. And any other failing
+threshold still reports `failed`; an unevaluable threshold is recorded beside it
+but never softens the verdict.
+
+You will not see this unless you set `maxCostUsd` or `maxDurationMs` through
+`evaluation.regressionGate.overrides` — neither is part of `stable` or `strict`.
+
 ---
 
 ## Artifacts
@@ -410,6 +444,7 @@ rate, cost.
 | --- | --- |
 | `0` | Gate passed. Under `stable` this is the ordinary outcome: it means every case parsed and no provider call errored |
 | `1` | Gate failed. Under `stable` that is a parse failure or a provider error; under `strict`, **expected** on any corpus with expected findings |
+| `4` | Gate **not evaluable** — see below. Unreachable under both built-in profiles |
 | `2` | Usage/config error: unknown flag, unknown flag value, a `--config` path that does not exist, `eval run selected no cases` |
 | `3` | Repository/filesystem error |
 | `5` | Internal failure, including un-hydrated slices |

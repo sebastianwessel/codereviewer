@@ -2,10 +2,10 @@ import {
   appendMarkdownTable,
   formatCostMetric,
   formatDurationMetric,
-  formatInteger,
   formatPercent,
   formatPrecisionBracket,
-  formatRateOverCount
+  formatRateOverCount,
+  formatTokenMetric
 } from './eval-report-markdown-formatting.js'
 import {
   type EvalComparabilityKey,
@@ -129,12 +129,6 @@ const countRow: ScalarMetricRowRenderer = (input, comparability) =>
     comparability
   )
 
-const integerRow: ScalarMetricRowRenderer = (input, comparability) =>
-  formatScalarMetricRow(
-    { ...input, formatValue: formatInteger, formatDelta: formatNumberDelta },
-    comparability
-  )
-
 // Diff-scope recall (spec 17) is nullable per side: a run whose fixture set
 // carries no expectation in a population measured nothing there. `null` (nothing
 // to measure) and `undefined` (never recorded) are different statements and are
@@ -243,6 +237,40 @@ const durationRow = (input: EvalComparisonInput): string => {
         : baseDuration === undefined || headDuration === undefined
           ? UNKNOWN_VALUE
           : `${formatNumberDelta(baseDuration, headDuration)}ms`
+  })
+}
+
+// Token totals, rendered on the same terms as cost and duration: a run with a
+// case that surfaced no usage record publishes a floor, and a token delta
+// between two floors is not a token delta until both sides say so.
+const tokenRow = (
+  input: EvalComparisonInput,
+  row: {
+    readonly metric: string
+    readonly key: 'inputTokens' | 'cachedInputTokens' | 'outputTokens'
+  }
+): string => {
+  const format = (metrics: EvalComparisonMetrics | undefined): string => {
+    const tokens = metrics?.[row.key]
+    const unavailableCount = metrics?.usageUnavailableCount
+
+    return tokens === undefined || unavailableCount === undefined
+      ? UNKNOWN_VALUE
+      : formatTokenMetric(tokens, { usageUnavailableCount: unavailableCount })
+  }
+  const baseTokens = input.base.metrics?.[row.key]
+  const headTokens = input.head.metrics?.[row.key]
+
+  return formatRow({
+    metric: row.metric,
+    base: format(input.base.metrics),
+    head: format(input.head.metrics),
+    delta:
+      input.comparability.refusalReason(row.key) !== undefined
+        ? NOT_COMPARABLE
+        : baseTokens === undefined || headTokens === undefined
+          ? UNKNOWN_VALUE
+          : formatNumberDelta(baseTokens, headTokens)
   })
 }
 
@@ -373,9 +401,13 @@ export const appendEvalComparisonMetricDeltas = (
         'durationUnavailableCount',
         countRow
       ),
-      scalar('Input tokens', 'inputTokens', integerRow),
-      scalar('Input tokens (cached)', 'cachedInputTokens', integerRow),
-      scalar('Output tokens', 'outputTokens', integerRow),
+      tokenRow(input, { metric: 'Input tokens', key: 'inputTokens' }),
+      tokenRow(input, {
+        metric: 'Input tokens (cached)',
+        key: 'cachedInputTokens'
+      }),
+      tokenRow(input, { metric: 'Output tokens', key: 'outputTokens' }),
+      scalar('Usage unavailable cases', 'usageUnavailableCount', countRow),
       costRow(input),
       scalar('Cost unavailable cases', 'costUnavailableCount', countRow)
     ]

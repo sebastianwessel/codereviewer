@@ -111,6 +111,7 @@ describe('eval metrics', () => {
       inputTokens: 100,
       cachedInputTokens: 40,
       outputTokens: 50,
+      usageUnavailableCount: 0,
       costUnavailableCount: 0,
       costUsd: 0.25,
       durationMs: 1200,
@@ -131,6 +132,24 @@ describe('eval metrics', () => {
     expect(metrics.costUnavailableCount).toBe(1)
     expect(metrics.durationMs).toBe(1200)
     expect(metrics.durationUnavailableCount).toBe(1)
+  })
+
+  // The same rule for token usage. One count covers all three totals because a
+  // review report surfaces them together or not at all.
+  test('excludes an unmeasured case from the token totals and counts it', () => {
+    const metrics = calculateEvalMetrics([
+      caseResult({ inputTokens: 100, cachedInputTokens: 40, outputTokens: 50 }),
+      caseResult({
+        inputTokens: null,
+        cachedInputTokens: null,
+        outputTokens: null
+      })
+    ])
+
+    expect(metrics.inputTokens).toBe(100)
+    expect(metrics.cachedInputTokens).toBe(40)
+    expect(metrics.outputTokens).toBe(50)
+    expect(metrics.usageUnavailableCount).toBe(1)
   })
 
   test('reports per-tier recall and the headline product recall', () => {

@@ -102,6 +102,11 @@ export const EVAL_METRICS_VERSION_HISTORY: readonly MetricsVersionEntry<EvalComp
       id: '2026-08-06.unmeasured-case-cost-and-duration',
       affects: ['costUnavailableCount', 'durationUnavailableCount'],
       note: 'A provider-errored case stopped being scored as costing exactly $0.00 for 0ms. Its cost and duration were never measured -- the call failed before any usage or timing was surfaced -- so it is now counted as unavailable instead of contributing a confident zero. `costUnavailableCount` therefore counts a strictly larger population than before and is not comparable across this boundary; `durationUnavailableCount` did not exist earlier and reads as absent rather than 0. `costUsd` and `durationMs` are unaffected: the cases now excluded from those sums contributed 0 to them before.'
+    },
+    {
+      id: '2026-08-06.unmeasured-case-token-usage',
+      affects: ['usageUnavailableCount'],
+      note: 'The same fix applied to token usage: a case that surfaced no usage record (a provider-errored case, or a provider run whose usage never arrived) no longer contributes 0 input/cached/output tokens. `usageUnavailableCount` is new and reads as absent rather than 0 in any earlier report, so nothing is known about that population before this boundary. `inputTokens`, `cachedInputTokens` and `outputTokens` are declared unaffected for a reason a reader should not have to infer: their VALUES are identical for identical engine output, because every case now excluded from the sums contributed exactly 0 to it before. The gate change that landed with this entry -- `regressionGate` gaining a third `not-evaluable` outcome when `maxCostUsd`/`maxDurationMs` is compared against a known-only total -- affects no metric at all: it changes what the run REPORTS about itself, not what any metric computes, so it is deliberately absent from `affects` rather than declared `all`.'
     }
   ]
 

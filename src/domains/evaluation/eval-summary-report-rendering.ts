@@ -13,12 +13,14 @@ import {
   formatCostMetric,
   formatDuration,
   formatDurationMetric,
+  formatEvalGateOutcome,
   formatInteger,
   formatListValue,
   formatPercent,
   formatPrecisionBound,
   formatPrecisionBracket,
-  formatRateOverCount
+  formatRateOverCount,
+  formatTokenMetric
 } from './eval-report-markdown-formatting.js'
 import {
   precisionBracket,
@@ -58,7 +60,7 @@ const evalReportPrecisionBracket = (report: EvalReport): PrecisionBracket =>
 // alongside the share of input it represents so a benchmark shows prompt-cache
 // effectiveness.
 const formatCachedInputTokens = (metrics: EvalMetrics): string => {
-  const cached = formatInteger(metrics.cachedInputTokens)
+  const cached = formatTokenMetric(metrics.cachedInputTokens, metrics)
   if (metrics.inputTokens === 0) {
     return cached
   }
@@ -140,7 +142,7 @@ const appendEvalSummaryHeader = (
 ): void => {
   lines.push('# Evaluation Summary')
   lines.push('')
-  lines.push(`Gate: ${report.regressionGate.passed ? 'PASS' : 'FAIL'}`)
+  lines.push(`Gate: ${formatEvalGateOutcome(report.regressionGate.outcome)}`)
   lines.push(`Generated: ${report.generatedAt}`)
   lines.push(`Fixtures: ${report.fixtureCount}`)
   lines.push('')
@@ -286,9 +288,9 @@ const appendEvalSummaryMetrics = (
       // review time and cannot be compared to how long the run actually took.
       `| Elapsed (wall clock) | ${formatDuration(report.metrics.elapsedMs)} |`,
       `| Duration (summed review time) | ${formatDurationMetric(report.metrics)} |`,
-      `| Input tokens | ${formatInteger(report.metrics.inputTokens)} |`,
+      `| Input tokens | ${formatTokenMetric(report.metrics.inputTokens, report.metrics)} |`,
       `| Input tokens (cached) | ${formatCachedInputTokens(report.metrics)} |`,
-      `| Output tokens | ${formatInteger(report.metrics.outputTokens)} |`,
+      `| Output tokens | ${formatTokenMetric(report.metrics.outputTokens, report.metrics)} |`,
       `| Review cost | ${formatCostMetric(report.metrics)} |`,
       `| Scoring input tokens (judge + plausibility judge) | ${formatInteger(report.metrics.scoringInputTokens)} |`,
       `| Scoring output tokens (judge + plausibility judge) | ${formatInteger(report.metrics.scoringOutputTokens)} |`,
@@ -619,6 +621,15 @@ const appendEvalSummaryGateReasons = (
   appendMarkdownBulletSection(lines, {
     heading: '## Gate Reasons',
     rows: report.regressionGate.reasons.map((reason) => `- ${reason}`)
+  })
+  // Its own section, never merged into "Gate Reasons": a threshold the gate
+  // could not evaluate is not a threshold the run breached, and a reader must be
+  // able to tell "under budget" from "budget not evaluable" at a glance.
+  appendMarkdownBulletSection(lines, {
+    heading: '## Gate Thresholds Not Evaluable',
+    rows: report.regressionGate.notEvaluableReasons.map(
+      (reason) => `- ${reason}`
+    )
   })
 }
 

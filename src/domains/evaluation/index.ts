@@ -257,6 +257,7 @@ export {
   EvalReportSchema,
   type EvalCaseOutput,
   type EvalContextLedgerEntry,
+  type EvalRegressionGateOutcome,
   type EvalRegressionThresholds,
   type EvalReport,
   type EvalReportProvenance

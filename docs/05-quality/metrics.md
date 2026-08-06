@@ -338,6 +338,7 @@ These decide whether the quality numbers should be read at all.
 | `contextMutationRate` | Context-ledger entries truncated by budget | Ledger entries considered for model context | Release target `0`. Above `0` means the model saw less than intended. |
 | `costUnavailableCount` | Cases whose cost is unknown — no provider pricing data, or the case errored before any usage was surfaced | — | Non-zero means `costUsd` is a partial total, and the report renders it as "known; unavailable for N case(s)" rather than a bare figure. |
 | `durationUnavailableCount` | Cases with no measured review duration (they errored before one was recorded) | — | Non-zero means `durationMs` is a partial total, rendered the same way. |
+| `usageUnavailableCount` | Cases that surfaced no token usage record at all | — | Non-zero means `inputTokens`, `cachedInputTokens` and `outputTokens` are all partial totals, rendered the same way. One count covers all three because a review report surfaces them together or not at all. **Not** the same as `costUnavailableCount`: a run with usage but no price for its model has known tokens and an unknown cost. |
 
 Fail-closed events also surface as per-case warnings:
 `eval-inconclusive-match:<n>` and `eval-plausibility-fail-closed:<n>`.

@@ -424,10 +424,23 @@ export const EvalMetricsSchema = z.strictObject({
   // per-mechanism precision, however many rates it prints.
   securityMechanismAttributionCounts:
     SecurityMechanismAttributionCountsSchema,
+  // Token totals summed over the cases whose usage WAS surfaced, with
+  // `usageUnavailableCount` beside them for the rest, exactly as cost and
+  // duration below. A provider-errored case surfaced no usage record at all, and
+  // a confident zero there understates the totals in whichever arm errored more.
   inputTokens: z.int().min(0).default(0),
   // Cached input tokens are a SUBSET of inputTokens (already counted there).
   cachedInputTokens: z.int().min(0).default(0),
   outputTokens: z.int().min(0).default(0),
+  // Cases whose token usage is UNKNOWN. ONE count for all three totals, not
+  // three: the counts come from a single usage record, so they are surfaced
+  // together or not at all (see `caseSpend` in eval-runner.ts). Three counters
+  // would be three names for the same fact and could disagree.
+  //
+  // Deliberately NOT the same population as `costUnavailableCount` below: a run
+  // that surfaced usage but had no price for its model has known tokens and an
+  // unknown cost.
+  usageUnavailableCount: z.int().min(0).default(0),
   // Cases whose model cost is UNKNOWN: a provider-errored case (no report, so
   // no usage was ever surfaced), or a completed case whose report carried
   // `cost-unavailable`. `costUsd` below sums only the cases whose cost IS known,
@@ -575,9 +588,12 @@ export type EvalMetricCaseResult = {
   // flag: it was a second encoding of `costUsd === null` and could disagree
   // with it.
   readonly costUsd: number | null
-  readonly inputTokens: number
-  readonly cachedInputTokens: number
-  readonly outputTokens: number
+  // `null` for the same reason and from the same derivation as `costUsd`: no
+  // usage record was surfaced, so the counts were never measured. All three move
+  // together, which is why the aggregate carries one `usageUnavailableCount`.
+  readonly inputTokens: number | null
+  readonly cachedInputTokens: number | null
+  readonly outputTokens: number | null
   readonly durationMs: number | null
   readonly warnings: readonly string[]
   readonly failingFindingIds: readonly string[]
@@ -1139,9 +1155,14 @@ export const calculateEvalMetrics = (
     securityAdjustedPrecisionByMechanism,
     securityFindingMechanismCounts,
     securityMechanismAttributionCounts,
-    inputTokens: sum(caseResults.map((result) => result.inputTokens)),
-    cachedInputTokens: sum(caseResults.map((result) => result.cachedInputTokens)),
-    outputTokens: sum(caseResults.map((result) => result.outputTokens)),
+    inputTokens: sum(measured(caseResults.map((result) => result.inputTokens))),
+    cachedInputTokens: sum(
+      measured(caseResults.map((result) => result.cachedInputTokens))
+    ),
+    outputTokens: sum(measured(caseResults.map((result) => result.outputTokens))),
+    usageUnavailableCount: caseResults.filter(
+      (result) => result.inputTokens === null
+    ).length,
     costUnavailableCount: caseResults.filter((result) => result.costUsd === null)
       .length,
     costUsd: roundMetric(

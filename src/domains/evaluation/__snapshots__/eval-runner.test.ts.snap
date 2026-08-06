@@ -83,6 +83,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "unlistedRealFindingIds": [],
       "unlistedRealFindings": [],
       "unmatchedExpectedIndexes": [],
+      "usageUnavailable": false,
       "warnings": [],
     },
     {
@@ -150,6 +151,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "unlistedRealFindingIds": [],
       "unlistedRealFindings": [],
       "unmatchedExpectedIndexes": [],
+      "usageUnavailable": false,
       "warnings": [],
     },
   ],
@@ -414,6 +416,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
         "unlistedRealFindingCount": 0,
+        "usageUnavailableCount": 0,
       },
     },
     {
@@ -674,6 +677,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
         "unlistedRealFindingCount": 0,
+        "usageUnavailableCount": 0,
       },
     },
     {
@@ -933,6 +937,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedPrecision": 0,
         "severityWeightedRecall": 1,
         "unlistedRealFindingCount": 0,
+        "usageUnavailableCount": 0,
       },
     },
     {
@@ -1192,6 +1197,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedPrecision": 1,
         "severityWeightedRecall": 1,
         "unlistedRealFindingCount": 0,
+        "usageUnavailableCount": 0,
       },
     },
     {
@@ -1452,6 +1458,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "severityWeightedPrecision": 0.5,
         "severityWeightedRecall": 1,
         "unlistedRealFindingCount": 0,
+        "usageUnavailableCount": 0,
       },
     },
   ],
@@ -1705,8 +1712,9 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "severityWeightedPrecision": 0.5,
     "severityWeightedRecall": 1,
     "unlistedRealFindingCount": 0,
+    "usageUnavailableCount": 0,
   },
-  "metricsVersion": "2026-08-06.unmeasured-case-cost-and-duration",
+  "metricsVersion": "2026-08-06.unmeasured-case-token-usage",
   "provenance": {
     "answerKeyDigest": "8a0f6c4247b62cb5ae0d182f93ca56547fb831d783599d2c4d19626a6452d8e2",
     "answerKeyDigestByCase": {
@@ -1719,7 +1727,8 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "failingCaseIds": [
       "typescript-negative",
     ],
-    "passed": false,
+    "notEvaluableReasons": [],
+    "outcome": "failed",
     "reasons": [
       "falsePositiveCount above threshold: 1 > 0",
     ],

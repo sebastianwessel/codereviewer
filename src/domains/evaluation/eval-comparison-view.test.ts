@@ -70,4 +70,28 @@ describe('eval comparison view', () => {
   test('defaults a missing metrics version to the pre-versioning sentinel', () => {
     expect(parseEvalComparisonReport({}).metricsVersion).toBe('pre-2026-07-26')
   })
+
+  // The gate verdict as an archived report spelled it, before the outcome
+  // became three-valued. That boolean IS the verdict the run reached, so
+  // reading it is not a default -- it is the value that is there. Dropping it
+  // from the view would render every report ever archived as `unknown`.
+  test('reads the gate verdict an archived report recorded as a boolean', () => {
+    const archived = parseEvalComparisonReport({
+      metricsVersion: 'x',
+      regressionGate: { passed: false, reasons: ['recall below threshold'] }
+    })
+
+    expect(archived.regressionGate?.passed).toBe(false)
+    expect(archived.regressionGate?.outcome).toBeUndefined()
+  })
+
+  test('reads the three-valued gate outcome a current report records', () => {
+    const current = parseEvalComparisonReport({
+      metricsVersion: 'x',
+      regressionGate: { outcome: 'not-evaluable' }
+    })
+
+    expect(current.regressionGate?.outcome).toBe('not-evaluable')
+    expect(current.regressionGate?.passed).toBeUndefined()
+  })
 })

@@ -41,6 +41,7 @@ import {
   stableJsonDigest,
   type ChangeImpactCaseInput,
   type EvalCaseFileReader,
+  type EvalRegressionGateOutcome,
   type EvalRegressionThresholds,
   type EvalComparisonReport,
   type EvalReport,
@@ -284,6 +285,25 @@ const resolveEvalRegressionGateThresholds = (
     failOnProviderError:
       config.evaluation.regressionGate.overrides.failOnProviderError ??
       profileThresholds.failOnProviderError
+  }
+}
+
+// The eval regression gate's three outcomes as exit codes.
+//
+// `not-evaluable` is neither `0` nor `1` on purpose. Exiting `0` would report a
+// pass the gate could not establish; exiting `1` would report an infrastructure
+// problem — a case whose cost or duration was never measured because its
+// provider call failed — as a quality failure, which this project's standing
+// rule forbids. `4` is the CLI's existing refusal code for an input a command
+// declines to judge because it could not see it whole.
+const evalGateExitCode = (outcome: EvalRegressionGateOutcome): number => {
+  switch (outcome) {
+    case 'passed':
+      return 0
+    case 'failed':
+      return 1
+    default:
+      return 4
   }
 }
 
@@ -1171,11 +1191,16 @@ const runEval = async (
       precision: result.report.metrics.precision,
       provider_error_rate: result.report.metrics.providerErrorRate,
       eval_run_archive_root: evalRunArchiveRoot,
-      gate_passed: result.report.regressionGate.passed
+      gate_outcome: result.report.regressionGate.outcome
     })
 
     return {
-      exitCode: result.report.regressionGate.passed ? 0 : 1,
+      // A gate that could not evaluate its own condition exits neither 0 nor 1.
+      // `4` is this CLI's established refusal code -- the command declined to
+      // judge an input it could not see whole (`intent check` uses it for the
+      // same reason) -- and it keeps a provider outage from being reported as
+      // a quality failure. See `EvalRegressionGateSchema`.
+      exitCode: evalGateExitCode(result.report.regressionGate.outcome),
       stdout: `${summary}\n`,
       stderr: ''
     }

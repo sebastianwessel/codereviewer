@@ -40,6 +40,19 @@ describe('eval comparison gate selection rendering', () => {
     )
   })
 
+  // A refused gate must read as refused in a comparison too, and an archived
+  // report's boolean verdict must still render as the verdict it recorded
+  // rather than degrading to unknown.
+  test('renders the three gate outcomes and an archived boolean verdict', () => {
+    const rendered = render(
+      { metricsVersion: 'x', regressionGate: { passed: true } },
+      { metricsVersion: 'x', regressionGate: { outcome: 'not-evaluable' } }
+    )
+
+    expect(rendered).toContain('| Base | PASS |')
+    expect(rendered).toContain('| Head | NOT EVALUABLE |')
+  })
+
   // Not knowing whether the two runs scored the same cases is not the same as
   // knowing they did.
   test('warns when a report did not record its selected case set', () => {
