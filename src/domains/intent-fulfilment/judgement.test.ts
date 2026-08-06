@@ -13,7 +13,16 @@
 
 import { describe, expect, test } from 'vitest'
 import { collectChangeSurface } from './change-surface.js'
-import { normalizeFulfilmentJudgement, verifyJudgement } from './judgement.js'
+import {
+  normalizeFulfilmentJudgement,
+  verifyJudgement,
+  type ChangeVisibility
+} from './judgement.js'
+
+// Every changed file reached the surface. Passed explicitly rather than defaulted,
+// because it is a statement about the change: a default would be one made by
+// whoever forgot to pass it.
+const WHOLE_CHANGE: ChangeVisibility = { wholeChangeVisible: true }
 
 const surface = collectChangeSurface({
   files: [
@@ -92,7 +101,8 @@ describe('verifyJudgement', () => {
           // line the change does not contain.
           evidence: [{ path: 'src/token.ts', line: 2 }]
         },
-        surface
+        surface,
+        WHOLE_CHANGE
       )
     ).toEqual({
       status: 'evidenced',
@@ -113,7 +123,11 @@ describe('verifyJudgement', () => {
     'downgrades an evidenced verdict citing %s to undetermined',
     (_name, path, line) => {
       expect(
-        verifyJudgement({ status: 'evidenced', evidence: [{ path, line }] }, surface)
+        verifyJudgement(
+          { status: 'evidenced', evidence: [{ path, line }] },
+          surface,
+          WHOLE_CHANGE
+        )
       ).toEqual({ status: 'undetermined' })
     }
   )
@@ -128,7 +142,8 @@ describe('verifyJudgement', () => {
           { path: 'src/nowhere.ts', line: 1 }
         ]
       },
-      surface
+      surface,
+      WHOLE_CHANGE
     )
 
     expect(verified).toEqual({
@@ -140,12 +155,81 @@ describe('verifyJudgement', () => {
   })
 
   test('leaves not-evidenced and undetermined verdicts alone', () => {
-    expect(verifyJudgement({ status: 'not-evidenced' }, surface)).toEqual({
+    expect(verifyJudgement({ status: 'not-evidenced' }, surface, WHOLE_CHANGE)).toEqual({
       status: 'not-evidenced'
     })
-    expect(verifyJudgement({ status: 'undetermined' }, surface)).toEqual({
+    expect(verifyJudgement({ status: 'undetermined' }, surface, WHOLE_CHANGE)).toEqual({
       status: 'undetermined'
     })
+  })
+})
+
+// The obligation shape that has no line to cite however completely it is honoured,
+// and the largest measured source of this lane's false positives: 33 of 83 (39.8%)
+// classified on the 2026-08-01 corpus were obligations satisfied by ABSENCE, for
+// which `not-evidenced` was the only answer the vocabulary offered.
+describe('a prohibition satisfied by absence', () => {
+  test('is a verdict of its own rather than a paraphrase of not-evidenced', () => {
+    expect(normalizeFulfilmentJudgement({ status: 'not-contradicted' })).toEqual({
+      status: 'not-contradicted'
+    })
+    expect(normalizeFulfilmentJudgement({ status: 'NOT-CONTRADICTED.' })).toEqual({
+      status: 'not-contradicted'
+    })
+    // `answerKey` strips the hyphen from both answers, so only the stem separates
+    // them. They make different claims and must never collapse into one.
+    expect(normalizeFulfilmentJudgement({ status: 'not-evidenced' })).toEqual({
+      status: 'not-evidenced'
+    })
+  })
+
+  test('carries no evidence, and an offered citation cannot attach to it', () => {
+    // There is nothing to cite: the compliance IS the absence. A citation arriving
+    // beside this answer is discarded rather than reported, because a line quoted
+    // under a prohibition would read as the change having established it.
+    expect(
+      normalizeFulfilmentJudgement({
+        status: 'not-contradicted',
+        evidence: [{ path: 'src/token.ts', line: 2 }]
+      })
+    ).toEqual({ status: 'not-contradicted' })
+  })
+
+  test('survives verification when the whole change was visible', () => {
+    expect(
+      verifyJudgement({ status: 'not-contradicted' }, surface, WHOLE_CHANGE)
+    ).toEqual({ status: 'not-contradicted' })
+  })
+
+  test('becomes undetermined when part of the change was never read', () => {
+    // The claim is "nothing among the changed lines does the forbidden thing", and
+    // it is worth exactly what the searched surface was worth. Over a change a file
+    // dropped out of, it is a reassurance drawn from material nobody looked at —
+    // this repository's recurring defect shape. `undetermined`, never
+    // `not-evidenced`: failing to see the whole change is not evidence that the
+    // change goes against the obligation either.
+    expect(
+      verifyJudgement({ status: 'not-contradicted' }, surface, {
+        wholeChangeVisible: false
+      })
+    ).toEqual({ status: 'undetermined' })
+  })
+
+  test('the other verdicts are unaffected by an incomplete surface', () => {
+    // Only an answer drawn from an absence depends on the surface being whole. A
+    // citation still lands on a line the change touched, or it does not.
+    expect(
+      verifyJudgement(
+        { status: 'evidenced', evidence: [{ path: 'src/token.ts', line: 2 }] },
+        surface,
+        { wholeChangeVisible: false }
+      ).status
+    ).toBe('evidenced')
+    expect(
+      verifyJudgement({ status: 'not-evidenced' }, surface, {
+        wholeChangeVisible: false
+      })
+    ).toEqual({ status: 'not-evidenced' })
   })
 })
 
@@ -237,7 +321,8 @@ describe('removed lines as evidence (spec 23, 2026-07-30 amendment)', () => {
     expect(
       verifyJudgement(
         { status: 'evidenced', evidence: [{ path: 'src/cache.ts', line: 2 }] },
-        removalSurface
+        removalSurface,
+        WHOLE_CHANGE
       )
     ).toEqual({
       status: 'evidenced',
@@ -261,7 +346,8 @@ describe('removed lines as evidence (spec 23, 2026-07-30 amendment)', () => {
         status: 'evidenced',
         evidence: [{ path: 'src/cache.ts', line: 2, side: 'added' }]
       },
-      removalSurface
+      removalSurface,
+      WHOLE_CHANGE
     )
 
     expect(verified.status === 'evidenced' && verified.evidence[0]?.side).toBe(
@@ -275,7 +361,8 @@ describe('removed lines as evidence (spec 23, 2026-07-30 amendment)', () => {
     expect(
       verifyJudgement(
         { status: 'evidenced', evidence: [{ path: 'src/cache.ts', line: 99 }] },
-        removalSurface
+        removalSurface,
+        WHOLE_CHANGE
       )
     ).toEqual({ status: 'undetermined' })
   })

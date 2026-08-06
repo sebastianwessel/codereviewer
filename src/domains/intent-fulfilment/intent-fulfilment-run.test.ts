@@ -555,6 +555,54 @@ describe('intent fulfilment run', () => {
     }
   })
 
+  // The companion of the unverified-citation guard, for the other answer that makes
+  // a claim about the change. "Nothing here goes against it" over a change a file
+  // dropped out of is a reassurance drawn from lines nobody read — this repository's
+  // recurring defect shape, where absence produces a plausible optimistic answer.
+  test('a prohibition judged over a change that was not seen whole is recorded as undecidable', async () => {
+    const root = await createRepository()
+
+    try {
+      await writeFile(join(root, 'src', 'unmapped.ts'), 'export const x = 1\n')
+      const report = await run(root, {
+        agents: scriptedAgents({
+          obligations: [
+            {
+              origin: 'inbox:tracker/A-1',
+              line: 1,
+              statement: 'Do not log token values.'
+            }
+          ],
+          judgements: [{ status: 'not-contradicted' }]
+        }),
+        runGit: scriptedGit({
+          ...gitOutputs,
+          [`diff --name-status ${mergeBaseSha} HEAD`]:
+            'M\tsrc/token.ts\nM\tsrc/unrelated.ts\nM\tsrc/unmapped.ts\n',
+          [`diff --unified=0 ${mergeBaseSha} HEAD -- src/token.ts src/unrelated.ts src/unmapped.ts`]:
+            gitOutputs[
+              `diff --unified=0 ${mergeBaseSha} HEAD -- src/token.ts src/unrelated.ts`
+            ] as string
+        })
+      })
+
+      // Undetermined, never not-evidenced: failing to see the whole change is not
+      // evidence that the change goes against the obligation either.
+      expect(report.obligations[0]?.status).toBe('undetermined')
+      expect(report.summary.notContradictedCount).toBe(0)
+      expect(report.summary.notEvidencedCount).toBe(1)
+      expect(
+        report.warnings.some(
+          (warning) =>
+            warning.includes('answered as not contradicted') &&
+            warning.includes('part of the change was left out')
+        )
+      ).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('the report schema carries no finding, severity, or gate field', () => {
     // The distinction the whole capability rests on: a mapping is NOT a finding.
     // Spec 23 forbids this command from failing a pipeline on fulfilment grounds,
@@ -616,6 +664,48 @@ describe('notEvidenced is the headline, and completion is never certified', () =
       } finally {
         await rm(root, { recursive: true, force: true })
       }
+    }
+  })
+
+  // The largest measured false-positive mode, fixed at the contract rather than in
+  // the prompt: 33 of 83 classified false positives (39.8%) were obligations
+  // satisfied by ABSENCE. They can produce no citation however completely they are
+  // honoured, so while `not-evidenced` was their only available answer the report
+  // raised the same false alarm on every run, forever.
+  test('a prohibition the change does not go against is not on the headline list', async () => {
+    const root = await createRepository()
+
+    try {
+      const agents = scriptedAgents({
+        obligations: [
+          {
+            origin: 'inbox:tracker/A-1',
+            line: 1,
+            statement: 'Do not log token values.'
+          },
+          { origin: 'inbox:tracker/A-1', line: 2, statement: 'Log every refusal.' }
+        ],
+        judgements: [{ status: 'not-contradicted' }, { status: 'not-evidenced' }]
+      })
+      const report = await run(root, { agents })
+
+      expect(report.obligations[0]?.status).toBe('not-contradicted')
+      // No `evidence` key at all: there is nothing to cite, and a slot would invite
+      // a line to be invented for it.
+      expect(Object.keys(report.obligations[0] ?? {})).toEqual([
+        'id',
+        'source',
+        'statement',
+        'status'
+      ])
+      expect(report.summary.notContradictedCount).toBe(1)
+      // Off the headline, and not counted as evidenced either: the change was not
+      // shown to do anything, and it was not shown to fail to.
+      expect(report.summary.notEvidencedCount).toBe(1)
+      expect(report.summary.evidencedCount).toBe(0)
+      expect(report.summary.notEvidencedStatusCount).toBe(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
     }
   })
 

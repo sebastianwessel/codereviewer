@@ -282,6 +282,7 @@ const IntentReportSchema = z.object({
       obligationCount: z.number().int().nullish(),
       evidencedCount: z.number().int().nullish(),
       notEvidencedCount: z.number().int().nullish(),
+      notContradictedCount: z.number().int().nullish(),
       undeterminedCount: z.number().int().nullish(),
       extraScopeFileCount: z.number().int().nullish()
     })
@@ -309,6 +310,7 @@ export type IntentDigest = {
   readonly obligationCount: number
   readonly evidencedCount: number
   readonly notEvidencedCount: number
+  readonly notContradictedCount: number
   readonly undeterminedCount: number
   readonly extraScopeFileCount: number
   readonly unevidenced: readonly IntentObligationDigest[]
@@ -331,10 +333,22 @@ export const digestIntentReport = (raw: string): IntentDigest | undefined => {
     obligationCount: report.summary?.obligationCount ?? obligations.length,
     evidencedCount: report.summary?.evidencedCount ?? 0,
     notEvidencedCount: report.summary?.notEvidencedCount ?? 0,
+    notContradictedCount: report.summary?.notContradictedCount ?? 0,
     undeterminedCount: report.summary?.undeterminedCount ?? 0,
     extraScopeFileCount: report.summary?.extraScopeFileCount ?? 0,
+    // `not-contradicted` is excluded as deliberately as `evidenced` is. It is the
+    // engine's answer for an obligation asking that something NOT be done, which
+    // this change does not do — it produces no citation by its nature, so listing it
+    // under "nothing evidences these" would put an obligation nobody can act on in
+    // front of a reviewer on every run. That was 39.8% of the lane's classified
+    // false positives before the status existed; recreating it here would move the
+    // defect from the report to the comment.
     unevidenced: obligations
-      .filter((obligation) => obligation.status !== 'evidenced')
+      .filter(
+        (obligation) =>
+          obligation.status !== 'evidenced' &&
+          obligation.status !== 'not-contradicted'
+      )
       .map((obligation) => ({
         statement: obligation.statement,
         status: obligation.status

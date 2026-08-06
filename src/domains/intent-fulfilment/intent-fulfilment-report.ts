@@ -79,6 +79,31 @@ export const ObligationStatusSchema = z.enum([
   // request need not fully implement a ticket, partial work is normal, and an
   // obligation already satisfied elsewhere leaves no evidence in THIS change.
   'not-evidenced',
+  // The obligation asks that something NOT be done — that something never happen,
+  // or that something be left as it is — and nothing among the changed lines does
+  // that thing. There is no line to cite, because what compliance with a
+  // prohibition looks like in a diff is an absence.
+  //
+  // A FOURTH STATUS RATHER THAN A NOTE ON `not-evidenced`, and the reason is
+  // measured. Of the 83 false positives classified on the 2026-08-01 realistic
+  // corpus, 33 — 39.8%, the largest single mode — were obligations of exactly this
+  // shape. Under a three-status vocabulary the only answer available for them was
+  // `not-evidenced`, so a prohibition the change never went near landed on the
+  // headline outstanding list on every run, forever: a false alarm by
+  // construction rather than a judgement that got something wrong.
+  //
+  // WHAT IT DOES NOT CLAIM, which is why it is named for what was searched for
+  // rather than for a state of the world:
+  //   - it does NOT say the obligation holds at head. Code this run never saw can
+  //     break a prohibition, and this verdict is drawn only from the changed lines;
+  //   - it does NOT say the change UPHELD the obligation. A change that puts the
+  //     restriction in place is `evidenced` and cites the line that does it. A
+  //     change that merely never went near the subject is this. The two are
+  //     different claims and the vocabulary must not blur them;
+  //   - it is not available to an obligation asking for work to be carried out.
+  //     Absence of a change is compliance only where the obligation asked for
+  //     absence.
+  'not-contradicted',
   // The material did not permit a decision. A real answer, and the value every
   // unusable judgement resolves to.
   'undetermined'
@@ -112,6 +137,10 @@ export const ObligationSchema = z.discriminatedUnion('status', [
     evidence: z.array(ChangeCitationSchema).min(1)
   }),
   z.strictObject({ ...obligationBase, status: z.literal('not-evidenced') }),
+  // No `evidence` field, and its absence is the point rather than an omission:
+  // there is no line to cite when what satisfies the obligation is that nothing
+  // was done. A slot here would invite one to be invented.
+  z.strictObject({ ...obligationBase, status: z.literal('not-contradicted') }),
   z.strictObject({ ...obligationBase, status: z.literal('undetermined') })
 ])
 
@@ -138,6 +167,15 @@ const IntentFulfilmentSummarySchema = z.strictObject({
   // status; that one is everything the run could not evidence.
   evidencedCount: z.int().min(0),
   notEvidencedStatusCount: z.int().min(0),
+  // Prohibition-shaped obligations the changed lines contain nothing against.
+  //
+  // Deliberately NOT part of `notEvidencedCount` below, and that is the whole
+  // behavioural effect of the status existing: an obligation satisfied by changing
+  // nothing has no line to cite by its nature, so counting it as something the run
+  // failed to evidence reports a false alarm every single run. It is counted here
+  // instead, where it can be read as what it is — obligations the change was
+  // searched against and found not to go near.
+  notContradictedCount: z.int().min(0),
   undeterminedCount: z.int().min(0),
   // ALWAYS FALSE, and retained in the contract for that reason rather than for
   // any state it can report: `intentFulfilment.maxObligations` now refuses the run
@@ -166,7 +204,14 @@ const IntentFulfilmentSummarySchema = z.strictObject({
   // obligations with doubted evidence on this list too. That stage was measured
   // and removed — 15 of this lane's 83 false positives (18.1%) were it flagging a
   // verdict that was already correct — so the number is now exactly the two
-  // non-evidenced statuses, and an `evidenced` obligation is never on it.
+  // statuses named above, and neither an `evidenced` nor a `not-contradicted`
+  // obligation is ever on it.
+  //
+  // IT ALSO ONCE COUNTED PROHIBITIONS, which is the 2026-08-06 change. An
+  // obligation satisfied by changing nothing cannot produce a citation however
+  // completely it is honoured, so while `not-contradicted` did not exist, 39.8% of
+  // this lane's classified false positives were this number counting obligations
+  // for which no other answer was reachable.
   //
   // Reading the report this way removes the one error spec 23 calls expensive. A
   // false "this is done" makes a reviewer stop looking; a false "this change does

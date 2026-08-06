@@ -8,13 +8,19 @@ Second Amendment: 2026-07-31 — two demoting designs rejected; **annotates, nev
 stage is REMOVED. `intent check` has no citation-aptness call.**
 Vocabulary: 2026-08-01 — the report says `evidenced` / `not-evidenced`, never
 `addressed` / `unaddressed` (see *Output Vocabulary* below)
+Fourth status: 2026-08-06 — an obligation satisfied by ABSENCE gets `not-contradicted`,
+its own verdict, and leaves the headline count (see *Obligations Kept By Changing
+Nothing*). **UNMEASURED: no accuracy figure in this spec postdates it.**
 Provider-cut intent: 2026-08-03 — a source the ingestion provider had already cut is
 **disclosed, never refused** (see *Limits Refuse; They Never Truncate*)
 
 ## Output Vocabulary (2026-08-01): `evidenced`, not `addressed`
 
-The report emits **`evidenced`**, **`not-evidenced`** and **`undetermined`**. It no
-longer emits `addressed` or `unaddressed`, and there is no alias for either.
+The report emits **`evidenced`**, **`not-evidenced`**, **`not-contradicted`** and
+**`undetermined`**. It no longer emits `addressed` or `unaddressed`, and there is no
+alias for either. (`not-contradicted` joined the set on 2026-08-06; the section
+*Obligations Kept By Changing Nothing* below is its record, and the rest of this
+section is as written on 2026-08-01.)
 
 **Why the words changed, and it is not a matter of taste.** The judgement is shown
 ONLY the changed lines, so the question it can answer is *"do these lines evidence
@@ -38,11 +44,12 @@ answering correctly and the words on the answer were what misled.
 
 ### What this requires
 
-- The report MUST emit `evidenced`, `not-evidenced` and `undetermined` and nothing
-  else. No alias, no back-compatible spelling, no dual-accepting schema on the engine
-  side.
+- The report MUST emit `evidenced`, `not-evidenced`, `not-contradicted` and
+  `undetermined` and nothing else. No alias, no back-compatible spelling, no
+  dual-accepting schema on the engine side.
 - The headline count is **`notEvidencedCount`**. It counts `not-evidenced` plus
-  `undetermined`, and an `evidenced` obligation is never on it.
+  `undetermined`, and neither an `evidenced` nor a `not-contradicted` obligation is
+  ever on it.
 - **The eval answer keys keep `addressed` / `unaddressed`.** They label TRUTH — whether
   the state holds at head — and those are the right words for that question. The
   scorers are where the two vocabularies meet, and they are the only place entitled to
@@ -59,6 +66,165 @@ quote the labels the engine emitted when they were taken, and stored `report.jso
 artefacts genuinely carry the old values. The scorers read both spellings for exactly
 that reason — rescoring history under new labels would be silently wrong — while a new
 run can only ever produce the new ones.
+
+## Obligations Kept By Changing Nothing (2026-08-06)
+
+`not-contradicted` is a fourth verdict, for the obligation shape that produced the
+**largest single share of this lane's false positives and could never have produced
+anything else**.
+
+### The defect, and why no wording could fix it
+
+The 2026-08-01 classification of 83 false positives attributes **33 of them (39.8%)**
+to obligations satisfied by ABSENCE — a prohibition, a "leave this alone", a "do not
+log that". The diagnosis is explicit that the judgement answered correctly: *nothing
+among the changed lines did what the obligation asked*. The engine's only available
+answer for that was `not-evidenced`, which is on the headline outstanding list.
+
+So an obligation honoured by touching nothing appeared as outstanding **on every run,
+forever, however completely it was kept**. That is a false alarm by construction, not
+a judgement error, and it is unreachable by prompt wording: there is no line to cite,
+so no instruction can produce one. The 2026-08-01 rename could not touch it either —
+it changed the words on the answer, and this is a missing answer.
+
+### The verdict, and what makes each word honest
+
+**`not-contradicted`: the obligation asks that something not be done, and nothing
+among the changed lines does it.** Every part of that is a property of material the
+judgement was actually shown, which is what makes it sayable at this scope:
+
+- it is **not** a claim that the obligation holds at head. Unchanged code this run
+  never saw can break a prohibition, and the verdict is named for the search rather
+  than for a state of the world so that it cannot be read as one;
+- it is **not** a claim that the change UPHELD the obligation. A change that puts the
+  restriction in place is `evidenced` and cites the line that does it. A change that
+  merely never went near the subject is this. **The two are different claims and the
+  vocabulary must not blur them** — that is the whole reason for a separate word
+  rather than an `evidenced` with no citation;
+- it carries **no evidence field at all**, at the schema level. There is nothing to
+  cite, and a slot would invite a line to be invented for it.
+
+### What this requires
+
+- The verdict MUST be decided by the **existing judgement call**, as a fourth
+  permitted answer. No classification stage, no second call, no per-obligation
+  agentic loop: the whole cost of this capability remains one extraction, one
+  judgement per obligation, and one explanation.
+- The judgement prompt MUST state three boundaries, because the 2026-08-02
+  repeatability probe measured that what this prompt leaves open the model re-decides
+  per call (two runs agreed on 87.0% of shared verdicts, and the flips concentrated
+  on the cases the prompt did not settle):
+  1. an obligation asking for work to be **carried out** is never
+     `not-contradicted`, however far the change stays from it;
+  2. a changed line that **puts the restriction in place** is `evidenced`, with that
+     line cited;
+  3. a changed line that **does the very thing the obligation rules out** is
+     `not-evidenced` — it reaches the list a human reads.
+- `not-contradicted` MUST be counted separately (`notContradictedCount`) and MUST NOT
+  be part of `notEvidencedCount`. Removing it from the headline is the entire
+  behavioural effect of the status; everything else is vocabulary.
+- **A `not-contradicted` verdict MUST be downgraded to `undetermined` when any
+  changed file was left out of the lines the judgement saw**, and the downgrade MUST
+  be disclosed. The claim is a search that came back empty, so it is worth exactly
+  what the searched surface was worth; over a change part of which was never read it
+  is a reassurance drawn from lines nobody looked at, which is this project's
+  recorded silent-optimism defect shape. It downgrades to `undetermined` and never to
+  `not-evidenced`: failing to see the whole change is not evidence that the change
+  goes against the obligation either.
+- The rendered report MUST state, beside the section, that the verdict is a search
+  over the changed lines and neither a check that the obligation holds elsewhere nor
+  a claim that this change established it.
+
+### Satisfied outside the diff (25.3%): the scope stays where it is
+
+The second bucket — **21 of 83 false positives** — is obligations that genuinely hold
+at head because an earlier commit or pre-existing code made them hold. Two routes
+were available: widen what the judgement may consult, or keep the scope and make the
+report say precisely *"this change does not evidence it"*.
+
+**The scope stays where it is, and the work went into the reporting.** The reasons,
+in the order they bind:
+
+1. **This spec's Purpose is the change-scoped question** — *"report what a change has
+   not been shown to cover"*. Widening the judgement to head would make the
+   capability answer *"does this hold at head?"*, which is precisely the conflation
+   that produced 65.1% of the false positives in the first place. The fix for a
+   question mismatch is not to start answering the other question badly.
+2. **The judgement call is the one call that must not argue with itself.** Consulting
+   more of the repository means tools and more than one step on exactly the call
+   whose freedom from a free-text field is this spec's binding constraint, with
+   measured over-rejection of 26–36% rising to 73–88% behind it.
+3. **A citation must remain checkable.** Evidence is verified against the changed
+   lines; an obligation satisfied by unchanged code has no citation this report is
+   allowed to make. Widening what may be consulted without widening what may be cited
+   moves those obligations from `not-evidenced` to `undetermined` — both on the
+   headline — and buys nothing.
+4. It costs nothing to keep the scope. This route adds **no model call and no token**.
+
+What was built instead is at the surface where the distinction is still throwable
+away: the **explanation call**, which writes free prose over the frozen mapping and is
+the part of the report a skimming reader takes as the whole account. It is now
+required to write only about what the change SHOWS, and forbidden to describe an
+obligation as missing, undone, unimplemented, incomplete, forgotten or still needed —
+because the mapping cannot tell an obligation nobody has done from one an earlier
+commit finished, and a summary that picks one is making a claim the mapping refused
+to make.
+
+This route is a reporting fix and is **not claimed to raise recall or to recover the
+21**. Scored against an answer key that asks whether the state holds at head, an
+obligation satisfied by an earlier commit will still count against this lane. That is
+a property of the question the two artefacts ask, and the honest response is to keep
+the words exact rather than to change the answer.
+
+### What was deliberately NOT built
+
+- **No `contradicted` verdict.** A changed line that does the very thing an
+  obligation rules out is reported `not-evidenced`, which is literally true — nothing
+  among the changed lines does what the obligation asks — and puts it on the list a
+  human reads. A verdict of its own would be a new claim class in a lane whose only
+  measurement predates this change, aimed at a bucket the diagnosis does not report
+  as a problem. The safe destination already exists; a new label would need its own
+  evidence.
+- **No prohibition classification in the extraction call.** Shape is a property of the
+  obligation text, so extraction could label it — but the verdict still needs the
+  judgement to confirm no changed line violates it, and splitting one decision across
+  two calls creates a way for them to disagree with nothing to arbitrate.
+- **No fourth aptness attempt**, in any form. See the rejected-design record below,
+  which is unchanged.
+- **No widening of the judgement's scope**, per the route decision above.
+
+### Pre-registered success statement (written 2026-08-06, before any measurement)
+
+This change is **unmeasured**. The statement below is registered before the first run
+so the result cannot be read into it afterwards. It is scored on a corpus fixed
+before the result is read, against one pinned engine, n ≥ 2 per case, with the
+existing hand labels untouched.
+
+**It worked if all four hold:**
+
+1. **Outstanding precision rises to ≥ 60%** from the 51.5% (88/171) base. The
+   prediction under the classification's own arithmetic is ~64% — 88/(171 − 33) if
+   every absence-satisfied false positive leaves the list and no true positive leaves
+   with it. That arithmetic is a prediction, not a measurement, and the threshold is
+   set below it deliberately.
+2. **Unaddressed detection does not fall by more than the noise band** (sd ≈ 4.8pp on
+   this corpus). Obligations genuinely outstanding at head must keep reaching the
+   list. A precision rise bought by emptying the list is a failure, not a result.
+3. **The false-satisfied rate does not rise** — and for this purpose, **a wrong
+   `not-contradicted` counts as a false-satisfied claim**, on the same footing as a
+   wrong `evidenced`. It is the new risk this change creates: an obligation the change
+   really violates, or one genuinely outstanding at head, reported as not contradicted.
+4. **Spend does not rise beyond token noise.** No new call was added, so a material
+   rise means something other than this change happened.
+
+**It failed if** precision rises while (2) or (3) fails. Under this spec's own
+ordering that is the worse outcome, not a mixed one: a capability that misses
+outstanding obligations is incomplete, while one that wrongly clears them is harmful.
+
+A re-measurement of this lane is **owed** before any figure recorded in this spec or
+in the results ledger is compared across 2026-08-06. Every accuracy number in this
+document predates the fourth status, and none of them may be quoted as if it
+described the current engine.
 
 ## Aptness check — REJECTED DESIGN, REMOVED 2026-08-01
 
@@ -197,11 +363,24 @@ rate falling 33.3% → 0.0%. The check cannot improve a citation, only reject it
 
 ### Consequence for the capability
 
-The false-satisfied route documented below is **open and unmitigated**, and no design
-tried so far mitigates it at a price worth paying. `intent check` remains **off by
-default** with a measured, named failure mode — which is a better state than a
-mitigation that costs five good verdicts per bad one caught, or one that spends a
-call per obligation to add 18.1% of the lane's false positives.
+The false-satisfied route documented below is **open and unmitigated for `evidenced`
+verdicts**, and no design tried so far mitigates it at a price worth paying. `intent
+check` remains **off by default** with a measured, named failure mode — which is a
+better state than a mitigation that costs five good verdicts per bad one caught, or
+one that spends a call per obligation to add 18.1% of the lane's false positives.
+
+**What changed on 2026-08-06, and what did not.** The largest bucket of false
+positives — 33 of 83, obligations satisfied by absence — is addressed at the
+vocabulary rather than by a check: `not-contradicted` gives that shape a verdict it
+can honestly hold, and takes it off the headline count. That is not a mitigation of
+the false-satisfied route; it **widens the surface that route applies to**, because a
+prohibition the change really violates, or one genuinely outstanding at head,
+reported as not contradicted is a satisfaction-shaped claim of the same family. Two
+things stand against it, and neither is a model call: the three prompt boundaries
+that keep the verdict to prohibitions, and the requirement that an incomplete change
+surface downgrades it to `undetermined`. The pre-registration above scores a wrong
+`not-contradicted` as a false-satisfied claim for exactly this reason. **No
+measurement exists on either side of that yet.**
 
 ---
 
@@ -391,7 +570,8 @@ not already going to do — and which this spec's Evaluation section already ran
 the cheap direction.
 
 `notEvidencedCount` is therefore the headline number. It counts **`not-evidenced`
-plus `undetermined`**, and an `evidenced` obligation is never on it.
+plus `undetermined`**, and neither an `evidenced` nor a `not-contradicted` obligation
+is ever on it.
 
 That framing inverts the economics of every uncertain signal in the pipeline: an
 obligation the run could not settle belongs **on** the list rather than suppressed
@@ -466,6 +646,12 @@ document. **That ingestion MUST be reused, not reimplemented.**
   one: it names an exact address a reader can confirm in the diff. The report MUST
   state which side a citation is on, so *"done — this deleted line 42"* can never
   be misread as *"done — this added line 42"*.
+- **An obligation asking that something NOT be done MUST have a verdict of its own.**
+  It is kept by changing nothing, so it can never produce a citation, and reporting it
+  as unevidenced raises the same false alarm on every run. The verdict is
+  `not-contradicted`, it is decided by the same judgement call, it carries no
+  evidence, it is off the headline count, and it downgrades to `undetermined` when
+  part of the change was not visible. See *Obligations Kept By Changing Nothing*.
 - **Extra scope is reported neutrally.** A change doing more than the ticket asked
   is a normal and often desirable event, not a defect.
 - The command MUST handle **absent or unusable intent** by reporting that plainly
@@ -523,9 +709,12 @@ Metrics, reported separately and never blended:
 - **Unaddressed detection** — of obligations genuinely not addressed at head, how
   many does the run report as `not-evidenced`? The metric keeps the answer key's
   word because its denominator is a truth, not a reported status.
-- **False-satisfied rate** — of obligations reported as `evidenced`, how many are
-  not addressed? Per the failure mode above, this is the metric that decides whether
-  the capability is safe to show anyone.
+- **False-satisfied rate** — of obligations reported as `evidenced` **or
+  `not-contradicted`**, how many are not addressed at head? Per the failure mode
+  above, this is the metric that decides whether the capability is safe to show
+  anyone. Both statuses belong in its numerator from 2026-08-06: they make different
+  claims, but a wrong one of either kind is a reason a reviewer stops looking, which
+  is what this metric exists to count.
 
 Decision rule, fixed before the first measurement: **ship only if the
 false-satisfied rate is low.** A capability that misses unaddressed obligations is
@@ -544,7 +733,12 @@ recall compensates.
 | Judgement and explanation do not share a model call, and the judgement schema carries no free text | harness test asserting distinct agents and distinct output schemas, plus a schema-shape assertion that the mapping output has no string field other than identifiers and enums |
 | Extra scope is reported without a defect severity | unit test |
 | No citation-aptness call: one judgement per obligation and nothing more | end-to-end provider-request count in the CLI test |
-| The report emits `evidenced` / `not-evidenced` / `undetermined` and no retired label | prompt test asserting the judgement instruction names the accepted answers and no retired one, plus normalizer unit tests |
-| `notEvidencedCount` counts `not-evidenced` and `undetermined` only, never an `evidenced` obligation | unit test |
+| The report emits `evidenced` / `not-evidenced` / `not-contradicted` / `undetermined` and no retired label | prompt test asserting the judgement instruction names the accepted answers and no retired one, plus normalizer unit tests |
+| `notEvidencedCount` counts `not-evidenced` and `undetermined` only, never an `evidenced` or `not-contradicted` obligation | unit test |
+| A prohibition kept by changing nothing gets `not-contradicted`, carries no evidence, and leaves the headline count | run integration test |
+| The three boundaries that keep `not-contradicted` to prohibitions are stated to the judgement | prompt test, one per boundary |
+| A `not-contradicted` verdict over a change not seen whole becomes `undetermined`, and says so | unit test on the verifier plus a run integration test asserting the warning |
+| The rendered prohibition section claims neither completion nor that the obligation holds at head | markdown test |
+| The explanation call may not write an absence of evidence as work left undone | prompt test |
 | Disabled by default | config schema test |
 | Instructions stay generic and language-neutral | prompt genericity guard |

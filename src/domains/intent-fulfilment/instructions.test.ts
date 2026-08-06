@@ -85,7 +85,7 @@ describe('fulfilment judgement instructions', () => {
       )
     }
     expect(modelFulfilmentJudgementInstructions).toContain(
-      'Return one of the three answers, and the cited lines when your answer is "evidenced". Return nothing else.'
+      'Return one of the four answers, and the cited lines when your answer is "evidenced". Return nothing else.'
     )
   })
 
@@ -101,7 +101,12 @@ describe('fulfilment judgement instructions', () => {
     expect(modelFulfilmentJudgementInstructions).toContain(
       'This is an ordinary and expected answer'
     )
-    for (const status of ['evidenced', 'not-evidenced', 'undetermined']) {
+    for (const status of [
+      'evidenced',
+      'not-evidenced',
+      'not-contradicted',
+      'undetermined'
+    ]) {
       expect(modelFulfilmentJudgementInstructions).toContain(`"${status}"`)
     }
   })
@@ -113,19 +118,62 @@ describe('fulfilment judgement instructions', () => {
     expect(modelFulfilmentJudgementInstructions).toContain(
       'Answer "evidenced" only when the changed lines do the WHOLE of what the obligation asks.'
     )
-    // Spec 23's 2026-08-01 finding: 33 of 83 classified false positives were
-    // obligations satisfied by ABSENCE, where the judgement "reported correctly
-    // that nothing among the changed lines did what the obligation asked". Both
-    // runs of the 2026-08-02 repeatability probe flipped verdicts on exactly this
-    // shape ("never emit detected secret values"), because the prompt left it open.
+    // The other one: an obligation honoured by changing nothing. It now has an
+    // answer of its own rather than being routed to `not-evidenced`.
     expect(modelFulfilmentJudgementInstructions).toContain(
-      'An obligation can ask that something never happen'
+      'Answer "not-contradicted" when the obligation asks that something NOT be done'
     )
     // The answer must stay readable as "this change does not show it" rather than
     // "this was not done" — spec 23's Output Vocabulary requirement.
     expect(modelFulfilmentJudgementInstructions).toContain(
       'It does not say the obligation is broken, and it does not say the work was undone.'
     )
+  })
+
+  // Spec 23's 2026-08-01 finding: 33 of 83 classified false positives (39.8%, the
+  // largest mode) were obligations satisfied by ABSENCE, where the judgement
+  // "reported correctly that nothing among the changed lines did what the obligation
+  // asked" and only the available vocabulary was wrong. The fourth answer exists for
+  // exactly that class, and these are the three boundaries that keep it there.
+  describe('the prohibition answer, and the three rules that bound it', () => {
+    test('is refused to an obligation asking for work to be carried out', () => {
+      // Without this, "not-contradicted" becomes the answer for any obligation the
+      // change stays away from, which would empty the outstanding list.
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        '"Not-contradicted" is only ever the answer for an obligation that asks for something NOT to be done.'
+      )
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        'An obligation asking for work to be carried out is never "not-contradicted"'
+      )
+    })
+
+    test('is kept apart from a change that PUT the restriction in place', () => {
+      // The blur spec 23 forbids: a prohibition the change upholds is a different
+      // claim from one the change never went near, and only the first has a line.
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        'When a changed line itself puts such a restriction in place, that is "evidenced" and you must cite the line that does it.'
+      )
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        'It does not say the change established it, and it says nothing at all about code you were not given.'
+      )
+    })
+
+    test('is refused to a change that does the very thing the obligation rules out', () => {
+      // The safe direction: a violation reaches the list a human reads rather than
+      // being absorbed by the answer that removes obligations from it.
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        'When a changed line does the very thing the obligation rules out, do NOT answer "not-contradicted".'
+      )
+    })
+
+    test('leaves obligations no code change could carry on the outstanding list', () => {
+      // The other half of the old absence rule, which is NOT a prohibition: an
+      // obligation about people, process or events outside the code is still
+      // reported, because nothing among the changed lines does what it asks.
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        'An obligation asking for something no line of a code change could carry'
+      )
+    })
   })
 
   test('says what makes a line evidence, not only which lines may be cited', () => {
@@ -159,7 +207,12 @@ describe('fulfilment judgement instructions', () => {
     for (const retired of ['"addressed"', '"unaddressed"']) {
       expect(modelFulfilmentJudgementInstructions).not.toContain(retired)
     }
-    for (const answer of ['evidenced', 'not-evidenced', 'undetermined']) {
+    for (const answer of [
+      'evidenced',
+      'not-evidenced',
+      'not-contradicted',
+      'undetermined'
+    ]) {
       expect(normalizeFulfilmentJudgement({ status: answer, evidence: [] }).status)
         .toBe(answer === 'evidenced' ? 'undetermined' : answer)
     }
@@ -199,6 +252,35 @@ describe('fulfilment explanation instructions', () => {
     // ticket asked is a normal and often desirable event, not a defect."
     expect(modelFulfilmentExplanationInstructions).toContain(
       'That is normal and frequently deliberate; it is not a defect, not a problem, and not something to warn about.'
+    )
+  })
+
+  // The prose is the one surface that can throw the vocabulary away in a sentence,
+  // and it is what a skimming reader takes from the report. 21 of this lane's 83
+  // classified false positives were obligations that genuinely hold at head, done by
+  // an earlier commit or by code that already existed; the judgement is shown only
+  // the changed lines and cannot see any of that. A summary that writes "missing"
+  // makes the claim the mapping refused to make.
+  test('never lets an absence of evidence be written as work left undone', () => {
+    expect(modelFulfilmentExplanationInstructions).toContain(
+      'Write only about what this change SHOWS.'
+    )
+    expect(modelFulfilmentExplanationInstructions).toContain(
+      'never write that anything is missing, undone, unimplemented, incomplete, forgotten, or still needed'
+    )
+    expect(modelFulfilmentExplanationInstructions).toContain(
+      'may already be finished by earlier work'
+    )
+  })
+
+  test('describes a prohibition as neither done nor outstanding', () => {
+    expect(modelFulfilmentExplanationInstructions).toContain(
+      'Do not report it as done, met or satisfied, and do not report it as outstanding.'
+    )
+    // And the four classes are all named, so none of them is silently dropped from
+    // the prose a reader treats as the whole account.
+    expect(modelFulfilmentExplanationInstructions).toContain(
+      'what it does not, what it contains nothing against, and what could not be determined'
     )
   })
 

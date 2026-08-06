@@ -32,7 +32,7 @@ import type { ChangeCitation } from './intent-fulfilment-report.js'
 
 // The model-bound OUTPUT schema, loose on purpose.
 //
-// `status` is a plain string rather than the three-value enum, and the enum lives
+// `status` is a plain string rather than the four-value enum, and the enum lives
 // in the normalizer below: with an enum here a model answering "Evidenced." fails
 // provider-side validation, the call throws, and the judgement is lost. A schema
 // stricter than the normalizer converts a recoverable answer into silence. Loose
@@ -98,6 +98,9 @@ export type FulfilmentJudgement =
       }[]
     }
   | { readonly status: 'not-evidenced' }
+  // The obligation asked that something not be done, and nothing among the changed
+  // lines does it. Carries no evidence, and cannot: the compliance is the absence.
+  | { readonly status: 'not-contradicted' }
   | { readonly status: 'undetermined' }
 
 export type FulfilmentJudgementRunner = (
@@ -108,7 +111,7 @@ export type FulfilmentJudgementRunner = (
 const UNDETERMINED: FulfilmentJudgement = { status: 'undetermined' }
 
 /**
- * Resolves whatever the judgement returned into one of the three statuses.
+ * Resolves whatever the judgement returned into one of the four statuses.
  *
  * Everything unusable resolves to `undetermined`, INCLUDING an `evidenced` answer
  * with no evidence. The error direction is deliberate and is spec 23's: "The
@@ -134,6 +137,13 @@ export const normalizeFulfilmentJudgement = (
 
   if (key === 'notevidenced') {
     return { status: 'not-evidenced' }
+  }
+
+  // Deliberately keyed apart from `notevidenced` rather than folded into it: the
+  // two answers make different claims, and `answerKey` strips the hyphen from
+  // both, so only the stem tells them apart.
+  if (key === 'notcontradicted') {
+    return { status: 'not-contradicted' }
   }
 
   if (key !== 'evidenced') {
@@ -180,10 +190,40 @@ export const fulfilmentJudgementInputFor = (
 export type VerifiedJudgement =
   | { readonly status: 'evidenced'; readonly evidence: readonly ChangeCitation[] }
   | { readonly status: 'not-evidenced' }
+  | { readonly status: 'not-contradicted' }
   | { readonly status: 'undetermined' }
 
 /**
- * Verifies an `evidenced` judgement against the change it claims to have found.
+ * How much of the change the judgement was actually shown.
+ *
+ * `wholeChangeVisible` is false when a changed file was left out of the surface —
+ * unreadable, or mapped to no diff hunk. Both are already warned about, but they
+ * mean something specific for an answer drawn from an ABSENCE.
+ */
+export type ChangeVisibility = {
+  readonly wholeChangeVisible: boolean
+}
+
+/**
+ * Verifies a judgement against the change it was drawn from.
+ *
+ * TWO ANSWERS ARE CHECKED HERE, because two answers claim something about the
+ * change rather than merely declining to.
+ *
+ * `not-contradicted` says nothing among the changed lines does what the
+ * obligation rules out. That is a search over the whole citable surface, and it is
+ * only worth what the surface was worth: if a changed file never reached the
+ * surface, the answer is an optimistic claim about lines nobody looked at, which is
+ * this repository's recurring defect shape — absence producing a plausible
+ * reassuring answer instead of an admission. So an incomplete surface downgrades it
+ * to `undetermined`, never to `not-evidenced`: failing to see the whole change is
+ * not evidence that the change goes against the obligation either.
+ *
+ * The surface's other bound cannot reach here at all — `maxChangeLines` refuses the
+ * run rather than trimming it — so completeness is exactly the question of whether
+ * a file was dropped.
+ *
+ * The `evidenced` half:
  *
  * Every cited `path:line` must be a line the change actually touched — that is
  * what the change surface holds. Citations that are not are dropped, and an
@@ -199,8 +239,15 @@ export type VerifiedJudgement =
  */
 export const verifyJudgement = (
   judgement: FulfilmentJudgement,
-  surface: ChangeSurface
+  surface: ChangeSurface,
+  // Required rather than defaulted. A default would be a claim about the change
+  // made by whoever forgot to pass it.
+  visibility: ChangeVisibility
 ): VerifiedJudgement => {
+  if (judgement.status === 'not-contradicted') {
+    return visibility.wholeChangeVisible ? judgement : { status: 'undetermined' }
+  }
+
   if (judgement.status !== 'evidenced') {
     return judgement
   }

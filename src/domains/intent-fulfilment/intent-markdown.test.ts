@@ -60,6 +60,7 @@ const report = (
       obligationCount: obligations.length,
       evidencedCount: count('evidenced'),
       notEvidencedStatusCount: count('not-evidenced'),
+      notContradictedCount: count('not-contradicted'),
       undeterminedCount: count('undetermined'),
       obligationsTruncated: false,
       uncitedObligationCount: 0,
@@ -120,6 +121,50 @@ describe('the question the document answers', () => {
     expect(markdown).not.toMatch(
       /you (did not|failed|forgot)|(was|were|is|are) not (done|implemented|addressed)|left undone/iu
     )
+  })
+
+  // The largest measured false-positive mode, and the one a renderer is most tempted
+  // to turn into a congratulation: an obligation asking that something NOT be done,
+  // which this change does not do. It has no line to cite by its nature.
+  test('a prohibition is rendered as a search that found nothing against it', () => {
+    const markdown = renderIntentFulfilmentMarkdown(
+      report([
+        obligation({
+          id: 'obl_1',
+          status: 'not-contradicted',
+          statement: 'Do not log token values.'
+        })
+      ])
+    )
+
+    // The empty-outstanding banner still fires here, and it must stay true when the
+    // only obligations are ones kept by changing nothing: they were matched to no
+    // line at all, so a banner saying every obligation was matched to lines in this
+    // change would be a certificate printed where a reader is readiest to take one.
+    expect(markdown).toContain('## Not evidenced by this change (0)')
+    expect(markdown).not.toContain(
+      'was matched to lines in this change. That is a statement'
+    )
+    expect(markdown).toContain(
+      'an obligation kept by changing nothing has no line behind it to check'
+    )
+    expect(markdown).toContain('## Not contradicted by this change (1)')
+    expect(markdown).toContain('- Not contradicted by this change: 1')
+    // What it is NOT: a claim about head, and not a claim that the change put the
+    // restriction in place.
+    expect(markdown).toContain(
+      'not as a check that the obligation holds in the rest of the repository'
+    )
+    expect(markdown).toContain('not as a claim that this change put it in place')
+    // And it is not on the headline outstanding number, which is the whole
+    // behavioural effect of the status existing.
+    expect(markdown).toContain('- **Not evidenced by this change: 0**')
+    // The absence of a citation is explained rather than left as a gap a reader
+    // fills with "the tool could not find one".
+    expect(markdown).toContain('There is no line to cite')
+    // It must not be dressed up as satisfaction: no certificate, and no evidence
+    // bullet under an obligation that has none.
+    expect(markdown).not.toMatch(/^\s+- Read from[^\n]*\n\s+- `/mu)
   })
 
   test('carries no severity, no verdict and no score', () => {

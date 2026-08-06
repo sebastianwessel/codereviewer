@@ -302,10 +302,18 @@ const intentSection = (intent: IntentDigest): string | undefined => {
   return [
     '### Intent',
     '',
-    `${intent.obligationCount} obligation${intent.obligationCount === 1 ? '' : 's'} read from the description: ${intent.evidencedCount} evidenced by the change, ${intent.notEvidencedCount} not.`,
+    `${intent.obligationCount} obligation${intent.obligationCount === 1 ? '' : 's'} read from the description: ${intent.evidencedCount} evidenced by the change, ${intent.notEvidencedCount} not${
+      intent.notContradictedCount === 0
+        ? ''
+        : `, ${intent.notContradictedCount} asking that something not be done, which this change does not do`
+    }.`,
     '',
+    // NOT "every obligation is evidenced". An obligation asking that something not
+    // be done is kept by changing nothing and produces no citation, so it is absent
+    // from this list without a line behind it. The sentence says what the empty list
+    // means and nothing more.
     ...(list.length === 0
-      ? ['Every stated obligation is evidenced by a changed line.']
+      ? ['No obligation read from the description is left unevidenced by this change.']
       : [
           'Nothing in this change evidences these. That is a statement about the diff, not a claim that the work is undone — partial work is normal, and an obligation satisfied elsewhere leaves no trace here.',
           '',

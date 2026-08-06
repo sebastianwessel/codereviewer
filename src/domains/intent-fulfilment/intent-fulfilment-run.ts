@@ -257,6 +257,7 @@ const emptyReport = (input: EmptyReportInput): IntentFulfilmentReport =>
       obligationsTruncated: false,
       uncitedObligationCount: input.uncitedObligationCount ?? 0,
       unverifiedEvidenceClaimCount: 0,
+      notContradictedCount: 0,
       extraScopeFileCount: 0
     },
     obligations: [],
@@ -501,7 +502,14 @@ export const runIntentFulfilment = async (
   }
   const obligations: Obligation[] = []
   let unverifiedEvidenceClaimCount = 0
+  let unsupportedAbsenceClaimCount = 0
   let failedJudgementCount = 0
+  // A `not-contradicted` verdict is a search for a violation that came back empty,
+  // so it is worth exactly what the searched surface was worth. Both counts above
+  // are files that never reached it. `maxChangeLines` cannot contribute — it
+  // refuses the run — so a complete file list is a complete change.
+  const wholeChangeVisible =
+    unreadableFileCount === 0 && unmappedFileCount === 0
 
   // Sequential, one call per obligation. Each call is its own session, so no
   // judgement opens holding the answer of the one before it: a verdict must follow
@@ -522,7 +530,7 @@ export const runIntentFulfilment = async (
       judged = { status: 'undetermined' }
     }
 
-    const verified = verifyJudgement(judged, surface)
+    const verified = verifyJudgement(judged, surface, { wholeChangeVisible })
 
     // The false-satisfied guard firing: the model said `evidenced` and not one of
     // its citations was a line the change touched. Spec 23 makes the rate of
@@ -531,6 +539,16 @@ export const runIntentFulfilment = async (
     // absorbed into the undetermined total without trace.
     if (judged.status === 'evidenced' && verified.status !== 'evidenced') {
       unverifiedEvidenceClaimCount += 1
+    }
+
+    // The same guard for the other answer that claims something about the change:
+    // "nothing here goes against it" over a change part of which was never read is
+    // a reassurance drawn from material nobody saw.
+    if (
+      judged.status === 'not-contradicted' &&
+      verified.status !== 'not-contradicted'
+    ) {
+      unsupportedAbsenceClaimCount += 1
     }
 
     // ONE CALL PER OBLIGATION, and no second one. A citation-aptness stage used to
@@ -553,6 +571,12 @@ export const runIntentFulfilment = async (
   if (failedJudgementCount > 0) {
     warnings.push(
       `${failedJudgementCount} judgement call(s) did not complete; those obligations are reported as undetermined.`
+    )
+  }
+
+  if (unsupportedAbsenceClaimCount > 0) {
+    warnings.push(
+      `${unsupportedAbsenceClaimCount} obligation(s) answered as not contradicted by this change are reported as undetermined instead, because part of the change was left out of the lines the judgement saw. Nothing can conclude that a change contains no violation of an obligation while part of it was never read.`
     )
   }
 
@@ -608,6 +632,11 @@ export const runIntentFulfilment = async (
       obligationCount: obligations.length,
       evidencedCount: countOf('evidenced'),
       notEvidencedStatusCount: countOf('not-evidenced'),
+      // Counted apart and kept OFF the headline below. An obligation honoured by
+      // changing nothing has no line to cite however completely it is honoured, so
+      // while it was counted as unevidenced the report raised the same false alarm
+      // on every run — 39.8% of this lane's classified false positives.
+      notContradictedCount: countOf('not-contradicted'),
       undeterminedCount: countOf('undetermined'),
       // ALWAYS FALSE: a run the cap would have bound throws above rather than
       // reporting a short checklist. The flag previously fired on a condition that
@@ -618,10 +647,11 @@ export const runIntentFulfilment = async (
       uncitedObligationCount,
       unverifiedEvidenceClaimCount,
       // Everything the run found no evidence for: `not-evidenced` plus
-      // `undetermined`. An `evidenced` obligation is never on this list — the third
-      // term that once put doubted-evidence verdicts here went with the aptness
-      // stage, and 18.1% of this lane's false positives were that term firing on
-      // verdicts that were already correct.
+      // `undetermined`, and nothing else. Neither an `evidenced` nor a
+      // `not-contradicted` obligation is ever on this list — the third term that
+      // once put doubted-evidence verdicts here went with the aptness stage, and
+      // 18.1% of this lane's false positives were that term firing on verdicts that
+      // were already correct.
       notEvidencedCount: countOf('not-evidenced') + countOf('undetermined'),
       extraScopeFileCount: extraScope.length
     },

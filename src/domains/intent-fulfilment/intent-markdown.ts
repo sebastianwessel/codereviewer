@@ -67,8 +67,13 @@ const MEASURED_RELIABILITY =
 // The sentence a reader most needs when the outstanding list is empty, and the one
 // most easily replaced by a congratulation. Spec 23 forbids certifying completion,
 // so an empty list is reported as a fact about the search.
+// It must stay true when some obligations were kept by changing nothing, which is
+// why it does not say "matched to lines": a prohibition this change does not go
+// against reaches this state with no line behind it at all, and a banner claiming
+// otherwise would be the certificate spec 23 forbids, printed in the one place a
+// reader is most inclined to accept one.
 const NOTHING_UNEVIDENCED =
-  'Every obligation read out of the stated intent was matched to lines in this change. That is a statement about this search, not a certificate: obligations the extraction never proposed are not on this list, and an obligation can be evidenced by lines that do less than it asks.'
+  'Every obligation read out of the stated intent was either matched to lines in this change, or asks for something not to be done which this change does not do. That is a statement about this search, not a certificate: obligations the extraction never proposed are not on this list, an obligation can be evidenced by lines that do less than it asks, and an obligation kept by changing nothing has no line behind it to check.'
 
 // `inlineCode` and `pluralize` are shared with the other two Markdown surfaces
 // from `../reporting/`: a cited line is source, and the code-span rule that keeps
@@ -184,6 +189,12 @@ const renderSummary = (report: IntentFulfilmentReport): readonly string[] => {
     `- Obligations read out of the stated intent: ${summary.obligationCount}`,
     `- **Not evidenced by this change: ${summary.notEvidencedCount}** (${summary.notEvidencedStatusCount} with nothing found, ${summary.undeterminedCount} undecidable)`,
     `- Evidenced by this change: ${summary.evidencedCount}`,
+    // Its own line, and deliberately not folded into either number above. An
+    // obligation asking that something not be done leaves no line to cite when it
+    // is honoured, so counting it as unevidenced reported a false alarm on every
+    // run — 39.8% of this lane's classified false positives. Counting it as
+    // evidenced would be the opposite error: nothing here was shown to be done.
+    `- Not contradicted by this change: ${summary.notContradictedCount}`,
     `- Changed files no obligation cites: ${summary.extraScopeFileCount}`,
     ...(summary.uncitedObligationCount === 0
       ? []
@@ -345,6 +356,16 @@ export const renderIntentFulfilmentMarkdown = (
       heading: 'Evidenced by this change',
       note: 'Changed lines were found that do what these obligations ask, and every one of them is cited below by path, line and side. "Evidenced" means those lines were found — not that the obligation is fully or correctly met. The citations are there so you can check that yourself.',
       obligations: byStatus('evidenced')
+    }),
+    // Last, and with no citations, because there are none to give: these obligations
+    // ask for something NOT to be done, and what honouring them looks like in a diff
+    // is an absence. The note says what the absence does and does not support,
+    // because a heading alone would be read as a clearance — and the one thing this
+    // section must never become is a certificate that the prohibition holds.
+    ...renderObligationSection({
+      heading: 'Not contradicted by this change',
+      note: 'These obligations ask that something NOT be done, and nothing among the changed lines does it. There is no line to cite: what keeping such an obligation looks like in a diff is the absence of a line. Read this as a search that found no violation among the lines this change touched — not as a check that the obligation holds in the rest of the repository, and not as a claim that this change put it in place. Where a changed line did establish it, the obligation is above, with the line quoted.',
+      obligations: byStatus('not-contradicted')
     }),
     ...renderExtraScope(report),
     ...renderExplanation(report),

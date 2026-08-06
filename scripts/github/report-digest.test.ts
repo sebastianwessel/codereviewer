@@ -159,6 +159,38 @@ describe('digestIntentReport', () => {
     ])
   })
 
+  it('does not list a prohibition the change never went against as unevidenced', () => {
+    // `not-contradicted` is the engine's answer for an obligation asking that
+    // something NOT be done, which the change does not do. It produces no citation
+    // by its nature, so listing it under "nothing evidences these" would put an
+    // obligation nobody can act on in front of a reviewer on every run — 39.8% of
+    // this lane's classified false positives before the status existed.
+    const digest = digestIntentReport(
+      json({
+        ...intentReportFixture,
+        summary: { ...intentReportFixture.summary, notContradictedCount: 1 },
+        obligations: [
+          ...intentReportFixture.obligations,
+          {
+            id: 'o4',
+            source: {
+              origin: 'inbox:pull-request/42',
+              line: 7,
+              text: 'Do not log session tokens'
+            },
+            statement: 'Do not log session tokens',
+            status: 'not-contradicted'
+          }
+        ]
+      })
+    )
+
+    expect(digest?.notContradictedCount).toBe(1)
+    expect(digest?.unevidenced).toEqual([
+      { statement: 'Cover the guard with a test', status: 'not-evidenced' }
+    ])
+  })
+
   it('keeps a "no intent was stated" status rather than reporting zero obligations', () => {
     const digest = digestIntentReport(
       json({ ...intentReportFixture, status: 'no-intent', obligations: [] })
