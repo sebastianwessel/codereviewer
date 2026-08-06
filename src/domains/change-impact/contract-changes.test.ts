@@ -181,6 +181,44 @@ describe('contract changes for a changed symbol', () => {
     expect(changes.get('parseId')).toEqual([])
   })
 
+  test('a commented-out construct on the removed side does not cancel the real one the change adds', () => {
+    // REGRESSION, and the shape is the common one: a deprecation shim carries the
+    // eventual replacement in a comment, and completing the deprecation deletes
+    // the comment and writes the construct for real. Matching the dimension
+    // markers against raw diff text saw `throw` on BOTH sides, called the
+    // dimension symmetric, and reported that this symbol changed nothing a caller
+    // can observe — after which adjudication settles every dependent as
+    // `no-impact` in code, spends no model call, and reports nothing at all. The
+    // failure is silent by construction: an empty delta is the ordinary case, so
+    // there is nothing on the page to say the one true change was suppressed by a
+    // comment.
+    const head = [
+      'export const parseId = (raw: string) => {',
+      '  if (!raw) {',
+      "    throw new Error('id required')",
+      '  }',
+      '  return Number(raw)',
+      '}',
+      ''
+    ].join('\n')
+    const changes = contractChangesFor(
+      head,
+      [
+        diffHeader,
+        '@@ -3,3 +3,1 @@',
+        '-    // When the deprecation ends, replace with:',
+        "-    //   throw new Error('id required')",
+        "-    warn('id will be required soon')",
+        "+    throw new Error('id required')",
+        ''
+      ].join('\n')
+    )
+
+    expect(changes.get('parseId')).toContain(
+      'may now fail where it previously did not'
+    )
+  })
+
   test('a change confined to one symbol is not attributed to its neighbour', () => {
     // Attribution is the whole risk in this wiring. A contract claim printed
     // against the wrong symbol sends a reviewer to the wrong dependents, and it is

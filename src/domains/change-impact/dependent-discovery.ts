@@ -43,6 +43,7 @@ import type {
   SymbolReferenceSite
 } from '../context-retrieval/index.js'
 import type { ChangedSymbol } from './changed-symbols.js'
+import { isCommentLine } from './comment-lines.js'
 import { MAX_REFERENCE_TEXT_LENGTH } from './impact-report.js'
 import { classifyReferenceDestination } from './reference-destination.js'
 
@@ -89,34 +90,6 @@ type BucketedReferences = {
   readonly references: readonly DiscoveredReferenceSite[]
   readonly testReferences: readonly DiscoveredReferenceSite[]
   readonly nonSourceCount: number
-}
-
-// Comment leaders across the seven supported languages. `#` is unambiguous here:
-// none of them uses it for a preprocessor directive, so a line starting with it is
-// a comment in Python and Ruby and nothing else anywhere.
-const COMMENT_LEADERS = ['//', '/*', '*', '#', '--', ';', '"""', "'''", '<!--'] as const
-
-/**
- * Whether a matched line is a comment rather than code.
- *
- * References are found by text search, not by resolving bindings, so a symbol
- * mentioned in prose matches exactly as strongly as one that is called. Rack's
- * `scheme` returned 53 references, and among them was
- * `## The URL scheme, which must be one of <tt>http</tt>…` — documentation, listed
- * beside real call sites with nothing to distinguish them. A reviewer handed an
- * unranked list cannot tell which is which without opening every one, and a list
- * that looks like signal while carrying prose is worse than a shorter honest one.
- *
- * Only WHOLE-LINE comments are dropped. A trailing `// …` after real code still
- * contains that code, and stripping on a trailing marker would need to know
- * whether the marker is inside a string literal — which text search cannot know.
- * Under-filtering is the right direction: a kept comment is noise, a dropped call
- * site is a missed dependent.
- */
-const isCommentLine = (text: string): boolean => {
-  const trimmed = text.trim()
-
-  return COMMENT_LEADERS.some((leader) => trimmed.startsWith(leader))
 }
 
 /**

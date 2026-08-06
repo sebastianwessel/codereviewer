@@ -15,6 +15,16 @@
 // The cost of that choice is honest and worth stating: this reads TEXT, so it sees
 // what the change wrote rather than what the type system concluded. It is a
 // signal-strength claim ("a caller can observe this"), never a proof.
+//
+// It reads the CODE text, not every text. A commented-out construct is not
+// something a caller can observe, so it can neither create a contract change nor
+// cancel one — and cancelling one is the direction that bites, because the
+// asymmetry rule below is silenced by any appearance of a marker on the other
+// side. The comment predicate is the domain's one definition, shared with
+// dependent discovery, which drops whole-line comments for the same reason: text
+// matching cannot tell a construct from a mention of one.
+
+import { withoutCommentLines } from './comment-lines.js'
 
 // The dimensions, named. They are an ENUM rather than free-form strings because
 // adjudication (spec 22 design step 3) branches on them: a compatibility class and
@@ -179,6 +189,11 @@ export type ContractDeltaInput = {
  * would be the kind of confident noise that makes a report ignorable. Reformatting,
  * renaming a local, or reordering statements produces no entries at all.
  *
+ * Comments are not part of either side. A marker inside a comment describes code
+ * rather than being it, so counting one either invents a change out of an edited
+ * note or — the damaging direction — makes a real change look symmetric and
+ * reports nothing.
+ *
  * Returns an empty list far more often than not, and that is the intended
  * behaviour: it means "changed, but not in a way this engine can show reaches a
  * caller" — never "safe".
@@ -186,8 +201,8 @@ export type ContractDeltaInput = {
 export const describeContractDelta = (
   input: ContractDeltaInput
 ): readonly ContractChange[] => {
-  const added = input.addedLines.join('\n')
-  const removed = input.removedLines.join('\n')
+  const added = withoutCommentLines(input.addedLines).join('\n')
+  const removed = withoutCommentLines(input.removedLines).join('\n')
   const changes: ContractChange[] = []
 
   for (const dimension of CONTRACT_DIMENSIONS) {

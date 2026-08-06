@@ -759,6 +759,93 @@ Two rules that bind regardless of the numbers:
   predicate must be justified from public knowledge about breaking changes, never
   from a case it failed.
 
+## First Adjudication Measurement, 2026-08-06 — DIAGNOSED AND VOID
+
+Adjudication was scored for the first time against the corpus above, on engine
+`fd5fc18`, `openai/gpt-5.3-codex`, `--max-adjudication-calls 60`, $0.075.
+**The run is VOID. It measured a defect in the contract delta, not the layer under
+test, and it must be re-run before any figure from it is quoted.** The removal
+criterion is NOT satisfied by it and MUST NOT be acted on from it.
+
+What it reported: 67 destination files from the reference list containing 5 proven
+dependents (directly-reachable recall 50%, 3/6); 3 files after adjudication
+containing 0; and, over the six cases adjudication completed exhaustively, 15
+reference files in and **0** out, of which **3 removals dropped a dependent
+upstream actually had to repair**.
+
+**Retaining zero of fifteen is a defect signature, and it was one.** This spec
+records the precedent: spec 16's cross-file retrieval was carried as "measured net
+negative" for months, and the verdict turned out to be measuring a silent read
+truncation rather than the feature. The same reading error was available here and
+is written down so nobody makes it: *adjudication removed everything* was not what
+happened.
+
+### What the diagnosis found
+
+**The model was never called on any of it.** In all six exhaustively adjudicated
+cases the model tier ran **zero** times. Every one of the 15 removals came from
+the deterministic tier's `no-impact` branch, which is reached when a modified
+symbol carries an EMPTY contract delta — the row this spec's own adjudication
+table already specifies. The 55 calls the run did make were spent on the four
+cases that were NOT exhaustive, so arm 3 — the arm that reads "adjudication
+removed everything" — contains no model verdict at all.
+
+**And two of the three provably wrong removals were caused by a defect in the
+contract delta**, fixed 2026-08-06: `describeContractDelta` matched its dimension
+markers against raw diff text, **including comment lines**. The failing shape is
+the ordinary one — a deprecation shim carrying its eventual replacement in a
+comment, completed by deleting the comment and writing the construct for real:
+
+```
+-                # raise ValueError(                     <- a comment
+-                warnings.warn(...)
++                raise ValueError(...)                   <- the real change
+```
+
+The `failure` dimension saw `raise` on both sides, called itself symmetric, and
+reported that the symbol changed nothing observable. From there the deterministic
+tier settles every dependent as `no-impact` in code, spends no call, and reports
+nothing — silently, because an empty delta is the ordinary outcome and there is
+nothing on the page to say a real one was cancelled by a comment. This is the
+repository's recorded silent-optimism class: a missing input producing a plausible
+answer instead of an error.
+
+The fix is the smallest one and is justified from the mechanism rather than from
+the case it failed: **a commented-out construct is not something a caller can
+observe, so it can neither create a contract change nor cancel one.** Discovery
+already dropped whole-line comments for the same reason; the predicate is now one
+definition (`comment-lines.ts`) shared by both, so the two cannot disagree about
+what code is.
+
+The third wrong removal is NOT a defect. It is a URI query parameter added inside
+a connection string, which carries no marker on either side — the documented limit
+of reading six text-visible dimensions, entry 14 of the known-not-reported list.
+
+### Each hypothesis, and what ruled it out
+
+| Hypothesis | Verdict |
+| --- | --- |
+| The model answers `does-not-rely` to ~everything | **Ruled out.** 12 recorded packets replayed live returned 10 `does-not-rely`, 2 `undetermined`, 0 `relies` — but every one of those packets was genuine noise (a search for `__init__` matches every constructor in the repository), so `does-not-rely` was the correct answer. The run's own `django-aggregate-source-expressions` case admitted 3 findings, which only the model tier can produce for a `modified` symbol. |
+| The packet shows the model too little | **Ruled out as a defect.** The packet carries the changed symbol's name, the contract-change statements, the dependent's path and every located site with its text — exactly what this spec specifies, and only behavioural changes reach it by design. |
+| The verdict is mapped wrongly, or the `no-impact` exclusion is inverted | **Ruled out.** `relies` → `breaks-at-runtime` finding, `does-not-rely` → `no-impact` → never reported, anything else → unadjudicated → never reported. Verified end to end: a replay of the repaired iterator case produced 4 `relies` answers that became findings. |
+| The cited-line rule discards real answers | **Ruled out.** It never fired in 18 live calls. Every `relies` answer cited a line from the list it was given (222, 74, 150, 137). |
+| The `changedSymbolKey` identity bug is back | **Ruled out end to end on real cases.** Packets were built with non-empty `contractChanges` on four cases, which is only possible if the lookup `runAdjudication` performs finds what `collectContractChanges` stored. The delta was empty where the delta was genuinely empty, not where the key missed. |
+
+### What the re-run is owed, and one instrument gap it must close
+
+The measurement must be re-run on a pinned engine that contains the comment fix,
+and nothing from the voided run may be pooled with it. Diagnosis established that
+the repaired path reaches the model on the iterator case and that the model cites
+both proven dependents; **that is a diagnostic observation on one case and is not
+a result** — this spec already binds that a single run decides nothing.
+
+**The report cannot currently distinguish a deterministic `no-impact` from a model
+`no-impact`.** `noImpactPairCount` pools both, and that pooling is what let a run
+in which the model never fired read as a run in which the model rejected
+everything. A reader of arm 3 needs to know how many calls the run actually spent;
+until the summary carries it, any arm-3 figure must be read beside the packet
+count. Closing that gap is owed before the next measurement is quoted.
+
 ## What Is Built, And What This Spec Still Asks For
 
 Recorded 2026-08-01 by an alignment audit. **These are unmet requirements, not
@@ -781,7 +868,7 @@ section described: deterministic, free and reproducible.
 | Requirement | State of the implementation |
 | --- | --- |
 | *Design* step 1 — contract delta | **Partly implemented, 2026-08-01.** Deterministic and text-derived, over six language-neutral dimensions: absence, failure, return shape, guard, mutation, concurrency. Derived from the diff lines inside a symbol's span rather than from a second parse of the base revision — intake already carries the unified diff, so re-parsing every changed file would buy nothing the diff does not already hold. A dimension is reported only when ASYMMETRIC between the added and removed sides, so a body that already threw and still throws says nothing. It reads TEXT: a signal-strength claim ("a caller can observe this"), never a proof, and never a type-system conclusion. Empty means "changed, but not in a way this engine can show reaches a caller" — never "safe". |
-| *Design* step 3 — impact adjudication | **Implemented, 2026-08-05, and UNMEASURED.** Deterministic wherever the category admits it; one model call for the residue only. See "Impact Adjudication" above for the split, the compatibility-class mapping and the pre-registered decision rule. Disabled by default, and separately from the command. |
+| *Design* step 3 — impact adjudication | **Implemented, 2026-08-05. Measured once on 2026-08-06 and that measurement is VOID** — see "First Adjudication Measurement" above; it scored a contract-delta defect, not this layer, and a re-run is owed. Deterministic wherever the category admits it; one model call for the residue only. See "Impact Adjudication" above for the split, the compatibility-class mapping and the pre-registered decision rule. Disabled by default, and separately from the command. |
 | *Requirements*: findings carry the dependent's path and line, the contract element relied upon, and the consequence; a finding without a named dependent is rejected | **Implemented, 2026-08-05.** `impactFindings` carries one entry per dependent FILE, each reliance naming the changed symbol, the line in the dependent, the contract element and the consequence. Findings carry a compatibility class and no severity. The gate lives in `change-impact` and imports nothing from the diff reviewer's `admission` domain. |
 | *Report at file granularity, not per site* | **Implemented, 2026-08-05.** `impactedFiles` and `impactedTestFiles` are the report's primary lists, one entry per destination file, with the changed symbols reaching it named on it and their sites nested beneath. `changedSymbols` remains as the symbol-side table — what changed, and how far the search could see — and carries no sites. Schema `2.0`; breaking, with no compatibility layer. |
 | *Removals must be paired with additions before reporting* | **Implemented, 2026-08-05.** See "Removal pairing" below. |
@@ -867,10 +954,13 @@ produce silence, which is exactly why they are written down.
     when `changeImpact.adjudication.enabled` is set. A file in `impactedFiles` is
     a file that USES a changed symbol; published rates for this task put such a
     list near 90% irrelevant. With adjudication off, nothing at all is triaged.
-14. The contract delta reads six text-visible dimensions. Verified silent: an arity
-    or parameter-list change, a type change, a default-value change, a visibility
-    change. Ordering, resource ownership and serialised values are not covered
-    either.
+14. The contract delta reads six text-visible dimensions, over the CODE lines of a
+    hunk — whole-line comments are excluded from both sides since 2026-08-06, so a
+    commented-out construct neither creates a change nor cancels one. Verified
+    silent: an arity or parameter-list change, a type change, a default-value
+    change, a visibility change, and a value carried inside a string such as a URI
+    query parameter. Ordering, resource ownership and serialised values are not
+    covered either.
 15. A rename in place is reported as a removal plus an addition; the pairing
     predicate is the name.
 16. A symbol moved into a file in a language the registry does not cover is reported
@@ -879,9 +969,10 @@ produce silence, which is exactly why they are written down.
     read" rather than "anywhere".
 17. No severity, no verdict, no gate. A finding rates COMPATIBILITY and nothing
     can fail a build.
-18. **Adjudication is unmeasured.** No accuracy number exists for it, here or
-    anywhere. The published prior art for this task reaches 28.2% precision, which
-    is what a first measurement should be read against.
+18. **Adjudication has no valid accuracy number.** The one measurement that exists
+    is void — see "First Adjudication Measurement" above — so no rate for it may be
+    quoted here, in `docs/`, or in the report. The published prior art for this
+    task reaches 28.2% precision, which is what the re-run should be read against.
 19. **Absence from `impactFindings` is not a statement that a dependent is
     unaffected.** Four different situations produce it: adjudication off, no model
     available, a call that failed or could not decide, and the call cap. The
@@ -929,6 +1020,7 @@ it describes is built.
 | A finding carries the dependent's path and line, the contract element and the consequence | `impact-admission.test.ts`, `adjudication.test.ts`, `impact-run.test.ts`, and a Markdown test asserting all four render on one line |
 | Deterministic adjudication needs no model | `adjudication.test.ts` (every deterministic case is driven with a judge that throws on any call), plus `impact-run.test.ts` running with no agents at all and a CLI test asserting exactly one call for two changed symbols |
 | The model is spent on the residue only, and never writes prose | `reliance-judgement.test.ts` (the output schema's field set), `adjudication.test.ts` (the packet and the composed consequence) |
+| A commented-out construct neither creates a contract change nor cancels the real one beside it | `comment-lines.test.ts` (the shared predicate), `contract-changes.test.ts` (end to end over a deprecation shim whose comment carried the construct the change then wrote for real) |
 | Findings carry a compatibility class, not a severity | `impact-run.test.ts` schema-shape test; `impact-report.ts` excludes `no-impact` from a finding by construction |
 | A dependent judged `no-impact` is not reported | `adjudication.test.ts` (deterministic and model paths), `impact-run.test.ts` |
 | Reports no impact rather than manufacturing findings | `impact-run.test.ts` (`adjudicationStatus: "completed"` with an empty finding list and a non-zero `noImpactPairCount`), Markdown test asserting the three kinds of empty are worded apart |
