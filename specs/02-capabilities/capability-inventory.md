@@ -456,7 +456,9 @@ the same spec.
 - Trigger: `codereviewer impact check` CLI command. Never reached by `review`.
 - Contracts: `22-change-impact-review.md`. Deterministic reference traversal only;
   no provider call. Bounded by `changeImpact.maxChangedSymbols`,
-  `maxReferencesPerSymbol`, and `maxSearchDepth`.
+  `maxReferenceCandidatesPerSymbol` (what the search collects),
+  `maxReferencesPerSymbol` (what the report lists, selected from those), and
+  `maxSearchDepth`.
 - Preconditions: `changeImpact.enabled`, off by default. When disabled the
   command still exits `0` and reports itself disabled rather than erroring.
 - Side effects: repository reads only, all through the mediated retriever so

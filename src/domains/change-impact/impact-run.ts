@@ -451,6 +451,8 @@ export const runChangeImpact = async (
     repositoryRoot: input.repositoryRoot,
     changedSymbols: changed.symbols,
     maxReferencesPerSymbol: input.config.changeImpact.maxReferencesPerSymbol,
+    maxReferenceCandidatesPerSymbol:
+      input.config.changeImpact.maxReferenceCandidatesPerSymbol,
     maxSearchDepth: input.config.changeImpact.maxSearchDepth,
     paths: {
       include: input.config.paths.include,

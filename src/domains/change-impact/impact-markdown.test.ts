@@ -25,6 +25,7 @@ const changedSymbol = (
   referencesInDefinitionFile: 0,
   referencesInNonSourceFiles: 0,
   referencesTruncated: false,
+  referenceSearchTruncated: false,
   ...overrides
 })
 
@@ -250,7 +251,8 @@ describe('change-impact Markdown', () => {
       name: 'scheme',
       referencesInDefinitionFile: 5,
       referencesInNonSourceFiles: 12,
-      referencesTruncated: true
+      referencesTruncated: true,
+      referenceSearchTruncated: false
     })
     const rendered = renderChangeImpactMarkdown(
       report({
@@ -263,12 +265,46 @@ describe('change-impact Markdown', () => {
     )
 
     // The report must never look cleaner than the search actually was.
-    expect(rendered).toContain('per-symbol reference cap was reached')
+    expect(rendered).toContain('more dependent sites were found than the per-symbol cap lists')
     expect(rendered).toContain('5 references inside the defining file')
     expect(rendered).toContain(
       '12 matches in files no language adapter recognises as source'
     )
     expect(rendered).toContain('the seed cap was reached')
+  })
+
+  // Two cuts, two claims. A ranked list shortened by the cap was fully examined;
+  // a search stopped at its match bound was not, and the withheld counts beside
+  // it describe only the part that was. Rendering both as "truncated" would let a
+  // reader discount the second as the first.
+  test('words a shortened list and an unfinished search apart', () => {
+    const shortened = renderChangeImpactMarkdown(
+      report({
+        changedSymbols: [
+          changedSymbol({
+            name: 'scheme',
+            referencesTruncated: true,
+            referenceSearchTruncated: false
+          })
+        ]
+      })
+    )
+    const unfinished = renderChangeImpactMarkdown(
+      report({
+        changedSymbols: [
+          changedSymbol({
+            name: 'scheme',
+            referencesTruncated: false,
+            referenceSearchTruncated: true
+          })
+        ]
+      })
+    )
+
+    expect(shortened).toContain('the ranked head of them')
+    expect(shortened).not.toContain('never examined')
+    expect(unfinished).toContain('never examined')
+    expect(unfinished).not.toContain('the ranked head of them')
   })
 
   test('carries the report warnings', () => {

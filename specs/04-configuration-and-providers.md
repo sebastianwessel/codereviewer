@@ -539,6 +539,7 @@ and reached only by `codereviewer impact check` — never by `review`.
 | `changeImpact.enabled` | boolean | `false` |
 | `changeImpact.maxChangedSymbols` | integer 1..500 | `50` |
 | `changeImpact.maxReferencesPerSymbol` | integer 1..500 | `25` |
+| `changeImpact.maxReferenceCandidatesPerSymbol` | integer 1..5000 | `500` |
 | `changeImpact.maxSearchDepth` | integer 0..32 | `12` |
 
 Rules:
@@ -551,9 +552,16 @@ Rules:
 - the bounds are per-run and per-symbol rather than one global pool, so a change
   touching many symbols cannot let the first symbol consume the entire reference
   budget;
-- a symbol referenced more than `maxReferencesPerSymbol` times is reported
-  truncated rather than dropped, so the report never silently understates how
-  widely a symbol is used;
+- `maxReferenceCandidatesPerSymbol` bounds what the SEARCH collects and
+  `maxReferencesPerSymbol` bounds what the REPORT lists, selected from those
+  candidates. They are separate keys because they bound different things, and
+  they were one number until 2026-08-06 — which meant the reporting cap was spent
+  in traversal order on matches that were discarded immediately afterwards;
+- a symbol with more dependents than `maxReferencesPerSymbol` lists is reported
+  truncated rather than dropped, and a search stopped by
+  `maxReferenceCandidatesPerSymbol` is reported separately again, so the report
+  never silently understates how widely a symbol is used and never presents an
+  unfinished search as a shortened list;
 - there is deliberately no `blocking` key. The command reports references, not
   findings, and always exits `0`; the key is added in the same change that admits
   the first impact finding.

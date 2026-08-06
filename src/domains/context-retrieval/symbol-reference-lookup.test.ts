@@ -38,7 +38,7 @@ describe('symbol reference lookup', () => {
       const results = await lookupSymbolReferences({
         repositoryRoot: root,
         queries: [{ name: 'get', definitionPath: 'src/store.ts' }],
-        maxReferencesPerSymbol: 25,
+        maxMatchesPerSymbol: 25,
         maxSearchDepth: 12
       })
 
@@ -80,7 +80,7 @@ describe('symbol reference lookup', () => {
       const results = await lookupSymbolReferences({
         repositoryRoot: root,
         queries: [{ name: 'get', definitionPath: 'src/store.ts' }],
-        maxReferencesPerSymbol: 2,
+        maxMatchesPerSymbol: 2,
         maxSearchDepth: 12
       })
 
@@ -105,7 +105,7 @@ describe('symbol reference lookup', () => {
           { name: 'get', definitionPath: 'src/store.ts' },
           { name: 'widget', definitionPath: 'src/caller-b.ts' }
         ],
-        maxReferencesPerSymbol: 25,
+        maxMatchesPerSymbol: 25,
         maxSearchDepth: 12
       })
 
@@ -117,7 +117,7 @@ describe('symbol reference lookup', () => {
         lookupSymbolReferences({
           repositoryRoot: root,
           queries: [],
-          maxReferencesPerSymbol: 25,
+          maxMatchesPerSymbol: 25,
           maxSearchDepth: 12
         })
       ).resolves.toEqual([])
@@ -133,7 +133,7 @@ describe('symbol reference lookup', () => {
       const scoped = await lookupSymbolReferences({
         repositoryRoot: root,
         queries: [{ name: 'get', definitionPath: 'src/store.ts' }],
-        maxReferencesPerSymbol: 25,
+        maxMatchesPerSymbol: 25,
         maxSearchDepth: 12,
         searchPaths: ['src/caller-a.ts']
       })
@@ -145,7 +145,7 @@ describe('symbol reference lookup', () => {
       const shallow = await lookupSymbolReferences({
         repositoryRoot: root,
         queries: [{ name: 'get', definitionPath: 'src/store.ts' }],
-        maxReferencesPerSymbol: 25,
+        maxMatchesPerSymbol: 25,
         // Depth 0 is the requested root directory itself, so `src/` is never
         // descended into.
         maxSearchDepth: 0

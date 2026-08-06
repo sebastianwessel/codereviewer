@@ -248,6 +248,7 @@ describe('CodeReviewerConfigSchema', () => {
       enabled: false,
       maxChangedSymbols: 50,
       maxReferencesPerSymbol: 25,
+      maxReferenceCandidatesPerSymbol: 500,
       maxSearchDepth: 12,
       adjudication: { enabled: false, maxCalls: 40 }
     })
@@ -264,9 +265,37 @@ describe('CodeReviewerConfigSchema', () => {
       enabled: true,
       maxChangedSymbols: 10,
       maxReferencesPerSymbol: 5,
+      maxReferenceCandidatesPerSymbol: 500,
       maxSearchDepth: 3,
       adjudication: { enabled: false, maxCalls: 40 }
     })
+  })
+
+  // The two reference bounds answer different questions and must stay
+  // independently settable: one bounds what the SEARCH collects, the other how
+  // much of the page one symbol may occupy. They were a single number until
+  // 2026-08-06, and the reporting cap was consequently spent, in traversal order,
+  // on matches that were discarded immediately afterwards.
+  test('change impact bounds the search and the report separately', () => {
+    const tuned = CodeReviewerConfigSchema.parse({
+      changeImpact: {
+        maxReferencesPerSymbol: 10,
+        maxReferenceCandidatesPerSymbol: 1000
+      }
+    })
+
+    expect(tuned.changeImpact.maxReferencesPerSymbol).toBe(10)
+    expect(tuned.changeImpact.maxReferenceCandidatesPerSymbol).toBe(1000)
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { maxReferenceCandidatesPerSymbol: 0 }
+      })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        changeImpact: { maxReferenceCandidatesPerSymbol: 5001 }
+      })
+    ).toThrow()
   })
 
   // ADJUDICATION IS SEPARATELY OFF, and that is the point of the second switch.

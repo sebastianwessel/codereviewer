@@ -68,7 +68,9 @@ const toImpactedFileSymbol = (input: {
 // files were first seen. That order is not arbitrary: discovery has already
 // ranked sites so that files this change ALSO touched come first, and re-sorting
 // here — alphabetically, by site count — would silently discard the only
-// relevance signal the engine has.
+// relevance signal the engine has. It is also the order the per-symbol cap
+// selected on, so re-sorting would additionally misrepresent which sites survived
+// and why.
 const groupSites = (
   buckets: readonly {
     readonly symbol: ChangedSymbol
@@ -134,7 +136,8 @@ const toChangedSymbolReport = (
     ),
     referencesInDefinitionFile: dependents.referencesInDefinitionFile,
     referencesInNonSourceFiles: dependents.referencesInNonSourceFiles,
-    referencesTruncated: dependents.referencesTruncated
+    referencesTruncated: dependents.referencesTruncated,
+    referenceSearchTruncated: dependents.referenceSearchTruncated
   }
 }
 

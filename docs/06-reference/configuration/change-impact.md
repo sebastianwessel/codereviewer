@@ -13,7 +13,8 @@ the first three bounds below are what limit it.
 | --- | --- | --- | --- |
 | `changeImpact.enabled` | boolean | `false` | Master switch. With `false`, `impact check` exits `0` and reports `"status": "disabled"` instead of an empty result. |
 | `changeImpact.maxChangedSymbols` | integer 1–500 | `50` | Upper bound on the symbols seeded from the diff. Each seed costs exactly one repository search, so this is what bounds total traversal. Exceeding it sets `summary.changedSymbolsTruncated`. |
-| `changeImpact.maxReferencesPerSymbol` | integer 1–500 | `25` | Cap on reference sites reported per symbol. A symbol with more sets `referencesTruncated` rather than being silently shortened. Per-symbol rather than one shared pool, so a change touching forty symbols cannot let the first one consume everyone's budget. |
+| `changeImpact.maxReferencesPerSymbol` | integer 1–500 | `25` | Cap on reference sites **reported** per symbol. A symbol with more sets `referencesTruncated` rather than being silently shortened. Per-symbol rather than one shared pool, so a change touching forty symbols cannot let the first one consume everyone's budget. |
+| `changeImpact.maxReferenceCandidatesPerSymbol` | integer 1–5000 | `500` | Bound on the raw matches the search **collects** per symbol, from which the cap above selects. Reaching it sets `referenceSearchTruncated`. Raising it does not make the report longer; it widens what the report gets to choose from, at the cost of traversal and memory. |
 | `changeImpact.maxSearchDepth` | integer 0–32 | `12` | Directory levels the reference search descends from the repository root. |
 | `changeImpact.adjudication.enabled` | boolean | `false` | Whether dependents are checked against the part of the contract that changed. This is the **only** part of the command that can call a model. |
 | `changeImpact.adjudication.maxCalls` | integer 1–500 | `40` | Upper bound on model calls per run. Dependents settled without a model are free and are never counted against it. Reaching it sets `summary.adjudicationCallsTruncated`. |
@@ -100,6 +101,25 @@ adding language support widens both at once.
 
 Test files are source, and are listed in `impactedTestFiles` rather than mixed
 into `impactedFiles`. See [the report shape](../cli.md#report-shape) for why.
+
+## Which sites survive the cap
+
+`maxReferencesPerSymbol` decides how much of the page one symbol may occupy, so
+when it binds it also decides which sites you see. That choice is made **after**
+the matches that cannot be dependents — whole-line comments, the symbol's own
+file, non-source destinations — have been removed and counted, so the cap is never
+spent on them.
+
+Among what is left, two ordering rules apply, and nothing else:
+
+1. a **production** site before a **test** site, because the production list is the
+   primary one and a symbol with many tests would otherwise lose it entirely;
+2. a site in a file **this change also touched** before one elsewhere, because both
+   sides moved together — that is where a contract mismatch is most likely to have
+   been introduced and least likely to have been noticed.
+
+Everything beyond that keeps search order. There is no ranking by reference count,
+by directory distance, or by how a matched line looks.
 
 ## What it knowingly does not report
 

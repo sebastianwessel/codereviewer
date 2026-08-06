@@ -200,7 +200,8 @@ export const impactReportFixture = (input: {
         contractChanges: ['may now return nothing for an empty input'],
         referencesInDefinitionFile: 0,
         referencesInNonSourceFiles: 0,
-        referencesTruncated: false
+        referencesTruncated: false,
+        referenceSearchTruncated: false
       }
     ],
     impactedFiles: referenceFiles.map((path) => impactedFile({ path })),

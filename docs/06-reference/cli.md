@@ -452,7 +452,8 @@ altered about each symbol, and how far the search could see.
       "contractChanges": [],
       "referencesInDefinitionFile": 0,
       "referencesInNonSourceFiles": 3,
-      "referencesTruncated": false
+      "referencesTruncated": false,
+      "referenceSearchTruncated": false
     }
   ],
   "impactedFiles": [
@@ -542,11 +543,24 @@ altered about each symbol, and how far the search could see.
   covers — documentation, specification prose, fixture data, snapshots. Those are
   **counted but never listed**: a symbol name inside a JSON fixture or a prose
   paragraph is textual coincidence, not a dependency. The count is reported so the
-  report cannot look cleaner than the search actually was.
-- `referencesTruncated` is `true` when `changeImpact.maxReferencesPerSymbol` cut
-  that symbol's list short, so a bounded list is never mistaken for a complete
-  one. The cap applies to the search, ahead of the source/test/non-source split,
-  so a truncated result can be short in any bucket. The same applies to
+  report cannot look cleaner than the search actually was. It is exact over every
+  match the search collected, which is the whole search unless
+  `referenceSearchTruncated` says otherwise.
+- **Two bounds, and two different truncation flags.** The search collects up to
+  `changeImpact.maxReferenceCandidatesPerSymbol` matches per symbol; the report
+  then lists up to `changeImpact.maxReferencesPerSymbol` sites SELECTED from them,
+  production sites before test sites and a file the change also touched before one
+  it did not.
+  - `referencesTruncated` is `true` when more dependent sites were found than the
+    reporting cap lists. The listed ones are the ranked head of a set this run
+    examined in full.
+  - `referenceSearchTruncated` is `true` when the search stopped at its match
+    bound before running out of matches, so matches exist that were never
+    examined, ranked or counted anywhere. This is the stronger caveat of the two —
+    "there are places I did not look", not "there is more of what you can see" —
+    and it is reported separately so it cannot be discounted as the milder one.
+
+  The same "reported, never hidden" rule applies to
   `summary.changedSymbolsTruncated` and `changeImpact.maxChangedSymbols`.
 - `summary.referenceCount` counts production sites only; `testReferenceCount` and
   `nonSourceReferenceCount` are reported beside it rather than folded into it.
@@ -639,9 +653,12 @@ it produces silence, so it is written down instead.
 10. **Non-source destinations are never listed**, only counted. If your dependency
     genuinely lives in a template, a configuration file or a data fixture, this
     report will not show you where.
-11. **The per-symbol cap is spent before the destination split.** A heavily
-    referenced symbol can spend its budget on prose matches and report few
-    dependents with `referencesTruncated: true`.
+11. **The SEARCH bound is spent in traversal order**, ahead of the destination
+    split. The reporting cap is spent after it, so it now selects among matches
+    that could actually be dependents — but a symbol whose first
+    `maxReferenceCandidatesPerSymbol` matches are all prose still reports few
+    dependents. `referenceSearchTruncated: true` is what says the search stopped
+    early; nothing beyond that bound is counted anywhere.
 12. **Excluded paths are invisible as destinations.** `paths.exclude` applies to
     reference search too, by design.
 

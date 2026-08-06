@@ -30,6 +30,20 @@ const createRepo = async (): Promise<string> => {
   return root
 }
 
+const createRepoWith = async (
+  files: Readonly<Record<string, string>>
+): Promise<string> => {
+  const root = join(tmpdir(), `codereviewer-dependents-${crypto.randomUUID()}`)
+
+  await mkdir(join(root, 'src'), { recursive: true })
+
+  for (const [name, content] of Object.entries(files)) {
+    await writeFile(join(root, name), content)
+  }
+
+  return root
+}
+
 const changedSymbol = (
   name: string,
   line: number
@@ -74,6 +88,7 @@ describe('reference list quality', () => {
         repositoryRoot: root,
         changedSymbols: [changedSymbol('fetchUser', 1)],
         maxReferencesPerSymbol: 20,
+        maxReferenceCandidatesPerSymbol: 500,
         maxSearchDepth: 5
       })
 
@@ -112,10 +127,112 @@ describe('reference list quality', () => {
           { ...changedSymbol('z', 2), path: 'src/zzz-touched.ts' }
         ],
         maxReferencesPerSymbol: 20,
+        maxReferenceCandidatesPerSymbol: 500,
         maxSearchDepth: 5
       })
 
       expect(symbol?.references[0]?.path).toBe('src/zzz-touched.ts')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})
+
+// The report cap decides which sites a reviewer sees. Until 2026-08-06 it was
+// handed to the SEARCH, so it was spent in traversal order on matches this module
+// then discarded, and the ranking above sorted a set whose best candidates had
+// already been thrown away. These tests are about which candidates SURVIVE the
+// cap, which is a different question from how the survivors are ordered.
+describe('the cap selects rather than truncates', () => {
+  test('a call site is listed even when prose ahead of it would have filled the cap', async () => {
+    const root = await createRepoWith({
+      'src/store.ts': 'export const fetchUser = (id: string) => id\n',
+      // Sorts ahead of the real dependent, so the search reaches it first.
+      'src/a-notes.ts': [
+        '// fetchUser is mentioned here',
+        '// fetchUser is mentioned here too',
+        'export const note = 1'
+      ].join('\n'),
+      'src/z-real.ts': [
+        'import { fetchUser } from "./store.js"',
+        'export const a = fetchUser("b")'
+      ].join('\n')
+    })
+
+    try {
+      const [symbol] = await discoverDependents({
+        repositoryRoot: root,
+        // A cap of two, and two comment lines sit ahead of the only dependent.
+        maxReferencesPerSymbol: 2,
+        maxReferenceCandidatesPerSymbol: 50,
+        changedSymbols: [changedSymbol('fetchUser', 1)],
+        maxSearchDepth: 5
+      })
+
+      expect(symbol?.references.map((reference) => reference.path)).toEqual([
+        'src/z-real.ts',
+        'src/z-real.ts'
+      ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a production site outranks a test site when the cap can hold only one', async () => {
+    // Both are real dependents and both break; they break in different places. The
+    // production list is the report's primary one, so it is the one a binding cap
+    // fills first — otherwise a symbol whose tests outnumber its callers loses its
+    // primary list entirely to CI breakage.
+    const root = await createRepoWith({
+      'src/store.ts': 'export const fetchUser = (id: string) => id\n',
+      'src/a-store.test.ts': 'test("x", () => fetchUser("a"))\n',
+      'src/z-caller.ts': 'export const a = fetchUser("b")\n'
+    })
+
+    try {
+      const [symbol] = await discoverDependents({
+        repositoryRoot: root,
+        maxReferencesPerSymbol: 1,
+        maxReferenceCandidatesPerSymbol: 50,
+        changedSymbols: [changedSymbol('fetchUser', 1)],
+        maxSearchDepth: 5
+      })
+
+      expect(symbol?.references.map((reference) => reference.path)).toEqual([
+        'src/z-caller.ts'
+      ])
+      expect(symbol?.testReferences).toEqual([])
+      expect(symbol?.referencesTruncated).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a search that stopped early says so apart from a list the cap shortened', async () => {
+    // Two different claims. "More dependents exist than I list" is a statement
+    // about a set this run examined; "the search stopped collecting" is a
+    // statement that matches were never examined at all, and the counts below it
+    // describe only what was. One boolean for both would hide the worse claim.
+    const root = await createRepoWith({
+      'src/store.ts': 'export const fetchUser = (id: string) => id\n',
+      'src/a.ts': 'export const a = fetchUser("a")\n',
+      'src/b.ts': 'export const b = fetchUser("b")\n',
+      'src/c.ts': 'export const c = fetchUser("c")\n'
+    })
+
+    try {
+      const [symbol] = await discoverDependents({
+        repositoryRoot: root,
+        maxReferencesPerSymbol: 25,
+        maxReferenceCandidatesPerSymbol: 2,
+        changedSymbols: [changedSymbol('fetchUser', 1)],
+        maxSearchDepth: 5
+      })
+
+      expect(symbol?.referenceSearchTruncated).toBe(true)
+      // The cap held everything the search brought back, so it cut nothing.
+      expect(symbol?.referencesTruncated).toBe(false)
+      expect(symbol?.references).toHaveLength(2)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -131,6 +248,7 @@ describe('dependent discovery', () => {
         repositoryRoot: root,
         changedSymbols: [changedSymbol('fetchUser', 1)],
         maxReferencesPerSymbol: 25,
+        maxReferenceCandidatesPerSymbol: 500,
         maxSearchDepth: 12
       })
 
@@ -165,6 +283,7 @@ describe('dependent discovery', () => {
         repositoryRoot: root,
         changedSymbols: [changedSymbol('unusedElsewhere', 3)],
         maxReferencesPerSymbol: 25,
+        maxReferenceCandidatesPerSymbol: 500,
         maxSearchDepth: 12
       })
 
@@ -190,6 +309,7 @@ describe('dependent discovery', () => {
           repositoryRoot: root,
           changedSymbols: [],
           maxReferencesPerSymbol: 25,
+          maxReferenceCandidatesPerSymbol: 500,
           maxSearchDepth: 12
         })
       ).resolves.toEqual([])
@@ -206,6 +326,7 @@ describe('dependent discovery', () => {
         repositoryRoot: root,
         changedSymbols: [changedSymbol('fetchUser', 1)],
         maxReferencesPerSymbol: 1,
+        maxReferenceCandidatesPerSymbol: 500,
         maxSearchDepth: 12
       })
 
@@ -227,6 +348,7 @@ describe('dependent discovery', () => {
         repositoryRoot: root,
         changedSymbols: [changedSymbol('fetchUser', 1)],
         maxReferencesPerSymbol: 25,
+        maxReferenceCandidatesPerSymbol: 500,
         maxSearchDepth: 12
       })
       const generatedReference = symbols[0]?.references.find(
@@ -269,6 +391,7 @@ describe('dependent discovery', () => {
         repositoryRoot: root,
         changedSymbols: [changedSymbol('fetchUser', 1)],
         maxReferencesPerSymbol: 25,
+        maxReferenceCandidatesPerSymbol: 500,
         maxSearchDepth: 12
       })
 
@@ -300,6 +423,7 @@ describe('dependent discovery', () => {
         repositoryRoot: root,
         changedSymbols: [changedSymbol('fetchUser', 1)],
         maxReferencesPerSymbol: 25,
+        maxReferenceCandidatesPerSymbol: 500,
         maxSearchDepth: 12
       })
 
@@ -338,6 +462,7 @@ describe('dependent discovery', () => {
         repositoryRoot: root,
         changedSymbols: [changedSymbol('fetchUser', 1)],
         maxReferencesPerSymbol: 25,
+        maxReferenceCandidatesPerSymbol: 500,
         maxSearchDepth: 12,
         paths: { exclude: ['vendor/**'] }
       })
@@ -367,6 +492,7 @@ describe('dependent discovery', () => {
         repositoryRoot: root,
         changedSymbols: [changedSymbol('fetchUser', 1)],
         maxReferencesPerSymbol: 25,
+        maxReferenceCandidatesPerSymbol: 500,
         maxSearchDepth: 12
       })
 

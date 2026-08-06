@@ -40,16 +40,21 @@ export type SymbolReferenceSite = {
 export type SymbolReferenceResult = {
   readonly query: SymbolReferenceQuery
   readonly references: readonly SymbolReferenceSite[]
-  // True when the symbol had more references than `maxReferencesPerSymbol`
-  // allowed. Reported rather than dropped, so a report can never understate how
-  // widely a symbol is used without saying so.
+  // True when the symbol had more matches than `maxMatchesPerSymbol` allowed.
+  // Reported rather than dropped, so a caller can never understate how widely a
+  // symbol is used without saying so.
   readonly truncated: boolean
 }
 
 export type LookupSymbolReferencesInput = {
   readonly repositoryRoot: string
   readonly queries: readonly SymbolReferenceQuery[]
-  readonly maxReferencesPerSymbol: number
+  // How many matches this lookup COLLECTS per symbol. It bounds the search, and
+  // it is deliberately not named after any caller's reporting cap: what a caller
+  // shows a reader is a selection made from these matches, decided by policy this
+  // module does not own. Conflating the two is what let a caller's report cap be
+  // spent, in traversal order, on matches the caller then discarded.
+  readonly maxMatchesPerSymbol: number
   readonly maxSearchDepth: number
   // Repository-relative roots to search. Defaults to the whole repository.
   readonly searchPaths?: readonly string[]
@@ -105,7 +110,7 @@ export const lookupSymbolReferences = async (
       maxSearches: queries.length,
       // One MORE than the per-symbol cap, so the per-query limit is what stops
       // the search and the extra match is the evidence that it was truncated.
-      maxMatches: input.maxReferencesPerSymbol + 1,
+      maxMatches: input.maxMatchesPerSymbol + 1,
       maxDepth: input.maxSearchDepth
     },
     ...(input.paths === undefined ? {} : { paths: input.paths })
@@ -125,7 +130,7 @@ export const lookupSymbolReferences = async (
       // exported name such as `get` would report every `forget` and `widget` in
       // the repository as a dependent.
       matchMode: 'identifier' as const,
-      maxMatchesPerQuery: input.maxReferencesPerSymbol + 1
+      maxMatchesPerQuery: input.maxMatchesPerSymbol + 1
     })),
     ...(input.searchPaths === undefined ? {} : { paths: input.searchPaths })
   })
@@ -136,9 +141,9 @@ export const lookupSymbolReferences = async (
     return {
       query,
       references: matches
-        .slice(0, input.maxReferencesPerSymbol)
+        .slice(0, input.maxMatchesPerSymbol)
         .map((match) => toReferenceSite(match, query.definitionPath)),
-      truncated: matches.length > input.maxReferencesPerSymbol
+      truncated: matches.length > input.maxMatchesPerSymbol
     }
   })
 }

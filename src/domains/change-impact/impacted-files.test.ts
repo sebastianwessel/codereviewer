@@ -33,6 +33,7 @@ const dependents = (
   referencesInDefinitionFile: 0,
   referencesInNonSourceFiles: 0,
   referencesTruncated: false,
+  referenceSearchTruncated: false,
   ...input
 })
 
@@ -162,7 +163,8 @@ describe('impacted files', () => {
           symbol: alone,
           referencesInDefinitionFile: 2,
           referencesInNonSourceFiles: 3,
-          referencesTruncated: true
+          referencesTruncated: true,
+          referenceSearchTruncated: false
         })
       ],
       // Structured in, STATEMENT out: adjudication branches on the dimension, and
@@ -197,7 +199,8 @@ describe('impacted files', () => {
         contractChanges: ['may now fail where it previously did not'],
         referencesInDefinitionFile: 2,
         referencesInNonSourceFiles: 3,
-        referencesTruncated: true
+        referencesTruncated: true,
+        referenceSearchTruncated: false
       }
     ])
   })

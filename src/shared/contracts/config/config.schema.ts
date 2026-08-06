@@ -550,6 +550,19 @@ export const ChangeImpactConfigSchema = z.strictObject({
   // this many times is reported truncated rather than dropped, so the report
   // never silently understates how widely a symbol is used.
   maxReferencesPerSymbol: z.int().min(1).max(500).default(25),
+  // Per-symbol bound on the raw matches the search COLLECTS, from which
+  // `maxReferencesPerSymbol` sites are then selected. The two are separate
+  // because they bound different things: this one bounds traversal and memory,
+  // the other bounds how much of the page one symbol may occupy. They were one
+  // number until 2026-08-06, and the report cap was consequently spent in
+  // filesystem order on matches — comments, prose, the symbol's own file — that
+  // were discarded immediately afterwards.
+  //
+  // The default is a COST judgement and not a recall one: a few hundred matches
+  // per symbol is cheap to hold and rank for any plausible symbol count, and no
+  // measurement fixes the value. Raising it does not widen what the report shows;
+  // it widens what the report gets to choose from.
+  maxReferenceCandidatesPerSymbol: z.int().min(1).max(5000).default(500),
   // Directory levels the reference search descends from the repository root.
   // Mirrors the context-retrieval traversal bound of the same name.
   maxSearchDepth: z.int().min(0).max(32).default(12),

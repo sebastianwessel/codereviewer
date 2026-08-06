@@ -274,13 +274,23 @@ export const ChangedSymbolReportSchema = z
     // Reference sites in files no language adapter recognises as source —
     // documentation, specification prose, fixture data, snapshots. Counted, never
     // listed: they are textual coincidence, not dependency. The count is here so
-    // the report cannot look cleaner than the search actually was.
+    // the report cannot look cleaner than the search actually was. Exact over
+    // every match the search collected, which is the whole search unless
+    // `referenceSearchTruncated` says otherwise.
     referencesInNonSourceFiles: z.int().min(0),
-    // True when the per-symbol cap cut this symbol's reference list short, so a
-    // reader can never mistake a bounded list for a complete one. The cap applies
-    // to the search, ahead of the destination classification, so a truncated list
-    // can be short in any bucket.
-    referencesTruncated: z.boolean()
+    // True when more candidate dependents were found than
+    // `changeImpact.maxReferencesPerSymbol` lists. The listed sites are the ranked
+    // head of that set — production before test, and a file this change also
+    // touched before one it did not — so a reader can never mistake a bounded list
+    // for a complete one.
+    referencesTruncated: z.boolean(),
+    // True when the SEARCH stopped at `changeImpact.maxReferenceCandidatesPerSymbol`
+    // before running out of matches, so matches exist that were never classified,
+    // ranked or counted. Reported apart from `referencesTruncated` because it is
+    // the worse claim of the two: "there are places I did not look" rather than
+    // "there is more of what you can see". One boolean covering both would hide
+    // the worse behind the milder.
+    referenceSearchTruncated: z.boolean()
   })
   // `changeKind` and `removalPairing` are two views of one decision, so the
   // schema refuses to hold a pair that disagrees. Without this the producer could

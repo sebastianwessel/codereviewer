@@ -484,11 +484,11 @@ Three consequences, each a deliberate choice rather than a side effect:
 - **Withheld sites are counted, not hidden.** Non-source matches are reported per
   symbol and in the summary. A report that silently dropped them would look
   cleaner than the search actually was.
-- **The classification runs after the per-symbol cap**, not inside the search, so
-  the mediated filesystem seam keeps no policy hook and the withheld counts are
-  exact. The cost is that a heavily-referenced symbol can spend its cap on
-  non-source matches; `referencesTruncated` is what tells the reader that
-  happened.
+- **The classification runs after the search**, not inside it, so the mediated
+  filesystem seam keeps no policy hook and the withheld counts are exact. It runs
+  BEFORE the reporting cap, so the cap is never spent on a match the
+  classification discards — see "The Cap Selects, It Does Not Truncate" below for
+  what that ordering was until 2026-08-06 and what it cost.
 
 ### Second Deterministic Run — After The Fix
 
@@ -964,7 +964,8 @@ the type's reference list does contain the dependents; the per-symbol cap is spe
 on whatever the traversal reached first. **The next lever on this corpus is
 reference selection under the cap, not seeding.** The cap is NOT changed here: a
 default moved to make corpus cases score is fixture-fitting, and a 424-file arm 1
-is not a report.
+is not a report. That lever was taken up on 2026-08-06; see "The Cap Selects, It
+Does Not Truncate" below, including what it did and did not move.
 
 ### Measured, on `openai/gpt-5.3-codex`
 
@@ -996,6 +997,83 @@ wrong symbol now attached to the right one.
 No metrics-version entry is owed. No figure changed meaning: recall and precision
 are computed from the same predictions by the same definitions, and what changed is
 the engine that produced them, which provenance already carries as a commit.
+
+## The Cap Selects, It Does Not Truncate — 2026-08-06
+
+The section above names reference selection under the cap as the next lever. This
+is that work. **It is a correctness fix first and a recall lever second**, and the
+measurement below is reported whichever way it came out.
+
+### The defect
+
+`changeImpact.maxReferencesPerSymbol` was handed to the SEARCH. The search
+therefore stopped at the first 25 matches in **traversal order**, and only
+afterwards did discovery remove the matches that cannot be dependents — whole-line
+comments, the symbol's own file, non-source destinations — and rank what survived
+by "did this change also touch that file". So the ranking sorted a set that had
+already thrown its best candidates away, and which sites a reviewer saw was
+decided by directory names.
+
+Measured on this corpus before the fix: **18.1% of the matches the cap admitted
+(65 of 359) were discarded immediately afterwards**, and 11 of 41 seeded symbols
+reported the search cut short. The two worst were not marginal — `__init__` spent
+20 of 25 on comment lines and reported 5 dependents; grpc-go's `match` spent 21 of
+25 on comments and prose and reported 4 — and both were symbols the search said
+had more matches it had not returned. `referencesInDefinitionFile` was **zero on
+every symbol in the corpus**, which is not the good news it looks like: the
+defining file simply sorted after the cap ran out.
+
+### The fix, and why `context-retrieval` did not have to change
+
+**Two bounds, because there were always two questions.**
+`maxReferenceCandidatesPerSymbol` bounds what the search COLLECTS — a cost bound
+on traversal and memory, necessarily spent in traversal order because a search
+cannot classify what it has not read. `maxReferencesPerSymbol` bounds what the
+report LISTS, and it now applies AFTER the destination policy, so it selects among
+matches that could actually be dependents.
+
+The retrieval layer keeps its mechanism unchanged: no comparator, no scoring hook,
+no policy predicate reaches the mediated seam, and the collect-then-select shape
+is exactly what preserves the "the withheld counts are exact" property recorded
+above — the counts now describe the whole candidate set rather than a prefix of it.
+The only edit there is a rename: `lookupSymbolReferences` takes
+`maxMatchesPerSymbol`, which is what the parameter always was. Naming it after a
+caller's reporting cap is how the two got conflated in the first place.
+
+**The cap's purpose is intact and its default is unchanged at 25.** A symbol still
+occupies at most 25 sites of the page. What changed is that those 25 are 25
+candidate dependents instead of 25 raw matches. The corresponding measurement with
+the cap raised to 400 is recorded above and is NOT acted on here: a default moved
+to make corpus cases score is fixture-fitting, and this spec forbids it.
+
+### What the cap ranks on, and what it refuses to rank on
+
+Two keys, in this order, and both are stated as mechanism:
+
+1. **A production site before a test site.** Both are real dependents and both
+   break; they break in different places, and this spec already presents the
+   production list as the primary one and the test list as beside it. A shared cap
+   has to choose, and without a stated precedence a symbol whose test sites
+   outnumber its callers loses its primary list entirely to CI breakage.
+2. **A site in a file this change also touched before one elsewhere.** Unchanged;
+   this is the signal the previous ranking already used, now applied to a set that
+   still contains its best candidates.
+
+Everything else keeps search order. **Deliberately refused**: ranking by reference
+count, by directory distance, and by whether the matched line "looks like a call" —
+the last is a punctuation list masquerading as an analysis, and this spec rejects
+syntax lists for exactly the reason it rejects a decorator marker.
+
+### Truncation is now two claims, reported apart
+
+`referencesTruncated` says more dependent sites were found than are listed, over a
+set this run examined in full. `referenceSearchTruncated` says the search stopped
+collecting before it ran out, so matches exist that were never classified, ranked
+or counted anywhere. The second is the worse claim — "there are places I did not
+look" rather than "there is more of what you can see" — and one boolean covering
+both would let a reader discount it as the milder one. This is the same
+distinction `context-retrieval` already draws between its match cap and its depth
+bound.
 
 ## What Is Built, And What This Spec Still Asks For
 
@@ -1108,9 +1186,17 @@ produce silence, which is exactly why they are written down.
 8. Only direct references. There is no transitive closure and no configurable depth.
 9. Whole-line comments are dropped, so a reference inside a block comment or a
    docstring goes with them.
-10. Non-source destinations are counted, never listed.
-11. The per-symbol cap is spent before the destination split, so a heavily
-    referenced symbol can spend its budget on prose.
+10. Non-source destinations are counted, never listed. The counts are exact over
+    every match the SEARCH collected, which is the whole search unless
+    `referenceSearchTruncated` says otherwise.
+11. The SEARCH bound (`changeImpact.maxReferenceCandidatesPerSymbol`) is spent in
+    traversal order, ahead of the destination split — a search cannot classify
+    what it has not read. So a symbol whose first N matches are all prose still
+    reports few dependents, and `referenceSearchTruncated` is the only signal that
+    the search stopped early; nothing beyond that bound is counted anywhere.
+    Rewritten 2026-08-06: the REPORTING cap is no longer what is spent there, and
+    it no longer lands on prose at all. See "The Cap Selects, It Does Not
+    Truncate" below.
 12. `paths.exclude` applies to reference destinations by design.
 
 **What the report claims**
@@ -1196,6 +1282,10 @@ it describes is built.
 | A symbol's span is read from the parse and nests, so no change is attributed to a symbol that does not own it | `polyglot-signal-extractor.test.ts` (every fact carries `endLine`; a nested declaration's range is contained by its parent's, over three grammars), `changed-symbols.test.ts` (a body line names the member, a class-body line names the type, one hunk covering both names both, a module-level line below a type names nothing) |
 | Reference sites obey the configured include/exclude rules | unit test driving `paths.exclude` through discovery, plus an end-to-end test |
 | Non-source destinations are excluded, and reported rather than dropped | unit test over prose, fixture data and a snapshot; classifier test generated from the language registry |
+| The reporting cap SELECTS among candidate dependents rather than truncating raw matches in traversal order | `dependent-discovery.test.ts` — a call site behind enough prose to have filled the cap is still listed; both assertions fail when the search bound is set equal to the reporting cap, which is the pre-2026-08-06 behaviour |
+| A production site outranks a test site when the cap can hold only one | `dependent-discovery.test.ts` |
+| A shortened list and an unfinished search are two claims, never one | `dependent-discovery.test.ts` (the two booleans move independently), `impact-markdown.test.ts` (the two caveats are worded apart) |
+| The search bound and the reporting cap are separately configurable | `config.schema.test.ts` (defaults, independent override, both range ends) |
 | Test call sites are reported separately rather than mixed in or lost | unit test, plus a CLI test over a real repository |
 | Findings are reported per destination file, with sites nested beneath | `impacted-files.test.ts` (grouping, ordering, two same-named symbols kept distinct), plus `impact-run` and CLI tests over a real repository |
 | A removal is paired against the declarations the change adds before it is reported | `removal-pairing.test.ts` (pairs a move, refuses a rename and a cross-language name, refuses self-pairing), `changed-symbols.test.ts` (pairing runs before the seed cap), `impact-run.test.ts` (a renamed file reports `moved`) |

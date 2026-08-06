@@ -187,7 +187,16 @@ const scopeCaveats = (symbol: ChangedSymbolReport): readonly string[] => {
 
   if (symbol.referencesTruncated) {
     caveats.push(
-      'the per-symbol reference cap was reached, so its list is bounded rather than complete (raise `changeImpact.maxReferencesPerSymbol`)'
+      'more dependent sites were found than the per-symbol cap lists, so this list is the ranked head of them rather than all of them (raise `changeImpact.maxReferencesPerSymbol`)'
+    )
+  }
+
+  // A different and worse statement than the one above, so it is worded as one: a
+  // reader who is told the list was ranked down to a cap may reasonably assume
+  // everything was considered, and here it was not.
+  if (symbol.referenceSearchTruncated) {
+    caveats.push(
+      'the search stopped at its per-symbol match bound, so further matches exist that were never examined and are counted nowhere below (raise `changeImpact.maxReferenceCandidatesPerSymbol`)'
     )
   }
 

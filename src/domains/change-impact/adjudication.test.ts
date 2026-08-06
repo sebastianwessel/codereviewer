@@ -41,6 +41,7 @@ const symbol = (
   referencesInDefinitionFile: 0,
   referencesInNonSourceFiles: 0,
   referencesTruncated: false,
+  referenceSearchTruncated: false,
   ...overrides
 })
 
