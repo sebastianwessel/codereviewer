@@ -1075,7 +1075,66 @@ both would let a reader discount it as the milder one. This is the same
 distinction `context-retrieval` already draws between its match cap and its depth
 bound.
 
-## What Is Built, And What This Spec Still Asks For
+### Measured, on the change-impact corpus
+
+Both runs are `eval impact --adjudication off`, 10 cases, **zero cost and no model
+call**, on a clean working tree at the commit each report pins. With adjudication
+off arm 1 is fully deterministic, so the two columns are an exact comparison rather
+than two samples — there is no run-to-run band to read across. That makes the
+comparison sharp; it does not make one corpus of eleven dependents decisive, and
+this spec's rule that a single run decides nothing still binds.
+
+| | before `bcd2de9` | after `5c91257` |
+| --- | ---: | ---: |
+| arm 1 predicted files | 59 | **77** |
+| arm 1 proven dependents found | 5 | **6** |
+| arm 1 precision lower bound | 8.5% | **7.8%** |
+| `caller-of-changed-symbol` | 100.0% (3/3) | 100.0% (3/3) |
+| `callee-of-changed-code` | 0.0% (0/2) | **50.0% (1/2)** |
+| `attribute-owner` | 0.0% (0/1) | 0.0% (0/1) |
+| `whole-repo-search` | 40.0% (2/5) | 40.0% (2/5) |
+| **directly reachable** | 50.0% (3/6) | **66.7% (4/6)** |
+| dev split | 44.4% (4/9) | **55.6% (5/9)** |
+| held-out split | 50.0% (1/2) | 50.0% (1/2) |
+
+**The dependent that was gained is `django/db/models/base.py`**, in
+`django-constraint-validate-stops-absorbing-fielderror`, class
+`callee-of-changed-code`. Its seeded symbol `validate` had spent 5 of its 25 slots
+on comment lines; the sites that replaced them reach the file upstream repaired.
+Nothing was lost: every dependent found before is still found.
+
+**`attribute-owner` did not move, and selection cannot move it.**
+`django-union-default-ordering-not-cleared-for-combined-queries` enumerates ZERO
+reference files before and after — its seeds are a private helper and its
+neighbours, whose only references sit inside the defining file — so the cap never
+binds on it and there is nothing for the cap to select. Reaching that case needs
+SEEDING, specifically the enclosing-declaration widening measured and rejected in
+the section above, and the earlier 8-of-11 figure required that widening as well as
+the raised cap. This work never had a mechanism to reach it, and it is recorded
+here so nobody re-derives that.
+
+**The precision lower bound fell, and that is stated rather than explained away.**
+18 more predicted files bought one more proven dependent. On a corpus whose answer
+key lists the dependents upstream repaired rather than every affected file, an
+unlisted prediction is not thereby wrong, so a falling lower bound is weak evidence
+in either direction — but it is a real direction and it is the cost side of this
+trade.
+
+**Cost.** The reference search over the whole corpus takes **11% longer** at the
+new default (6.5s versus 5.8s, replicated) while collecting **7.4×** the matches
+(3,217 versus 434). The widening is that small because the batched traversal only
+stops early when EVERY query is satisfied, and most symbols never reach their
+bound, so nearly every eligible file was already being read. The widening is also
+named, bounded and configurable rather than silent.
+
+### The default stays at 25, and the argument for moving it is not made here
+
+`maxReferencesPerSymbol` keeps its default. The cap now buys 25 candidate
+dependents where it used to buy 25 raw matches, which makes a different default
+more defensible on mechanism than it was — but that is a separate argument, it
+would have to be made on its own, and bundling it with this change would make it
+impossible to tell which half moved the number. A default moved to make corpus
+cases score remains forbidden.
 
 Recorded 2026-08-01 by an alignment audit. **These are unmet requirements, not
 amendments.** Everything above stands as written; this section exists so the gap is
