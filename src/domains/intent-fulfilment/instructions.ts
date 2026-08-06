@@ -123,10 +123,73 @@ export const modelFulfilmentJudgementInstructions = [
   // NOTHING HERE ASKS THE MODEL TO PROVE A NEGATIVE ABOUT THE REPOSITORY. It is
   // asked only what the lines in front of it do, which is the same question the
   // other three answers are drawn from.
+  //
+  // THE TIE-BREAK, ADDED 2026-08-06 AFTER THE FIRST TWO ROUNDS OF THE FOURTH
+  // VERDICT. It was measured over 20 comparable cases, twice, and the verdict
+  // reached 5 of 436 obligations (1.1%) and 8 of 428 (1.9%) while being right in 12
+  // of those 13 uses. Right when it fires, and nowhere near the class it was built
+  // for: 39.8% of the classified false positives were absence-satisfied, and 109 of
+  // 562 reported obligations in one round carry an explicit negative imperative.
+  //
+  // The offline diagnosis of the two stored rounds says where they went, and it is
+  // not where any of the three boundaries below sends them:
+  //
+  //   TO `evidenced`, 71 of 109 — and that is CORRECT. 51 of 52 hand-labelled among
+  //   them hold at head: on a spec-derived intent the change under test usually is
+  //   the change that puts the restriction in place, so the second boundary is doing
+  //   its job and is left exactly as it was.
+  //
+  //   TO `not-evidenced`, 32 of 109 — and this is the whole of the shortfall. It is
+  //   caused by the two answers' own definitions rather than by any rule: for an
+  //   obligation that asks something not be done and that no changed line does,
+  //   `not-evidenced`'s sentence ("nothing among the changed lines does what the
+  //   obligation asks") is LITERALLY TRUE at the same time as
+  //   `not-contradicted`'s. Both were offered as alternatives and nothing said which
+  //   wins.
+  //
+  //   THE DOWNGRADE GUARD IS NOT INVOLVED. `wholeChangeVisible` was true on every
+  //   case of both rounds; not one verdict was downgraded to `undetermined`. Nor is
+  //   extraction: it phrases prohibitions plainly.
+  //
+  // That an unsettled boundary is re-decided per call is not inferred here, it is
+  // this prompt's measured behaviour (87.0% agreement, 2026-08-02) — and the two
+  // rounds show it directly: `Do not include source, secret values, or payloads in
+  // logs, traces, or events`, `Logs, traces, and events must not include source
+  // content`, and `The model call must not ask whether code is vulnerable` each drew
+  // `not-evidenced` in one round and `not-contradicted` in the other from identical
+  // inputs. So the fix is to settle it, and settling it changes NOTHING about what
+  // the answer claims. It is still a search over the lines in front of the model that
+  // came back empty; it is still not a statement about the repository.
+  'Whenever an obligation asks that something not be done and no changed line does it, BOTH answers describe what is in front of you: nothing among the changed lines does what the obligation asks, and nothing among them goes against it. "Not-contradicted" is the answer there. The rules that follow are the only cases that take it back.',
   '"Not-contradicted" is only ever the answer for an obligation that asks for something NOT to be done. An obligation asking for work to be carried out is never "not-contradicted", however far the change stays from it: the answer there is "not-evidenced".',
+  // THE WHOLE-NOT-PART RULE, EXTENDED TO THE FOURTH ANSWER — the guard that pays for
+  // the tie-break above. It was already stated for `evidenced`, for spec 23's safety
+  // direction ("the dangerous output is confidently asserting an obligation is
+  // satisfied when it is not"), and `not-contradicted` is off the headline count for
+  // exactly the same reason `evidenced` is, so partial satisfaction must not reach it
+  // either. Left unstated, a sentence with one prohibiting limb and one demanding one
+  // — "never emit the detected value, and emit only its location and kind" — could
+  // leave the list on the strength of its first half.
+  'The same whole-not-part rule binds "not-contradicted". Answer it only when the WHOLE of what the obligation asks is that something not be done. An obligation with a limb that also asks for something to be done, produced, recorded or emitted is not honoured by changing nothing, and the answer is "not-evidenced".',
   'When a changed line itself puts such a restriction in place, that is "evidenced" and you must cite the line that does it. "Not-contradicted" says only that this change contains nothing that goes against the obligation. It does not say the change established it, and it says nothing at all about code you were not given.',
   'When a changed line does the very thing the obligation rules out, do NOT answer "not-contradicted". Answer "not-evidenced", so that the obligation reaches the person reading your answer.',
-  'An obligation asking for something no line of a code change could carry - something about people, process, or events outside the code - is "not-evidenced". Nothing among the changed lines does what it asks. That answer records only that this change does not show it. It does not say the obligation is broken, and it does not say the work was undone.',
+  // RE-SCOPED 2026-08-06, AND IT IS THE SECOND HALF OF WHY THE FOURTH ANSWER WAS
+  // UNREACHABLE. This rule was written for obligations about people and process, but
+  // it opened on "asking for something no line of a code change could carry" — which
+  // is the exact description of an obligation honoured by absence — and named
+  // `not-evidenced` in the same breath. It therefore read as a second, active
+  // instruction to send every kept prohibition to `not-evidenced`, competing with the
+  // answer added for them.
+  //
+  // The re-scoping says what it always meant and widens nothing: the test is the
+  // obligation's SUBJECT — work performed by people, a measurement run, a decision
+  // taken elsewhere — and it binds whichever way such an obligation is phrased. A
+  // change containing no measurement is not evidence that a measurement was not run
+  // wrongly somewhere else, so absence there is not compliance and the obligation
+  // stays on the list a human reads. That costs the tie-break above some of its
+  // reach, deliberately: it is the difference between "this change does not go
+  // against it" and "this change could not have gone against it".
+  'An obligation about people, process, or events outside the code - work to be performed, a measurement to be run or reported, a decision to be taken elsewhere - is "not-evidenced", whether it is phrased as something to do or as something not to do. No line of a code change could carry it either way, so a change saying nothing about it neither shows it nor complies with it. That answer records only that this change does not show it. It does not say the obligation is broken, and it does not say the work was undone.',
   // WHAT MAKES A LINE EVIDENCE. The prompt above says a citation must be a line you
   // were given and must "do what the obligation asks"; it never says what doing it
   // looks like, so subject-matter overlap passed as doing. Measured 2026-08-02

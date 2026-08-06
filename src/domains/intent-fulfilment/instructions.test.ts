@@ -166,12 +166,64 @@ describe('fulfilment judgement instructions', () => {
       )
     })
 
-    test('leaves obligations no code change could carry on the outstanding list', () => {
+    test('leaves obligations about people and process on the outstanding list', () => {
       // The other half of the old absence rule, which is NOT a prohibition: an
       // obligation about people, process or events outside the code is still
       // reported, because nothing among the changed lines does what it asks.
       expect(modelFulfilmentJudgementInstructions).toContain(
+        'An obligation about people, process, or events outside the code'
+      )
+      // AND IT BINDS BOTH PHRASINGS. Re-scoped 2026-08-06: a process obligation
+      // stated as a prohibition — "must not be demonstrated on the set it was built
+      // against" — is still nothing a changed line could carry, so absence is not
+      // compliance with it. This is the carve-out that pays for the tie-break below,
+      // and without it the tie-break would clear process obligations off the list.
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        'whether it is phrased as something to do or as something not to do'
+      )
+      // THE OLD OPENING IS GONE AND MUST STAY GONE. "asking for something no line of
+      // a code change could carry" is the exact description of an obligation
+      // honoured by absence, and it named `not-evidenced` in the same breath — a
+      // second instruction sending every kept prohibition to the answer the fourth
+      // verdict exists to spare them. Measured: the verdict reached 1.1%/1.9% of
+      // obligations over two rounds while 19.4% of them carried a negative
+      // imperative.
+      expect(modelFulfilmentJudgementInstructions).not.toContain(
         'An obligation asking for something no line of a code change could carry'
+      )
+    })
+
+    test('settles which answer wins when both descriptions fit', () => {
+      // THE MEASURED CAUSE OF THE 1.1%/1.9% FIRING RATE. For a kept prohibition the
+      // `not-evidenced` sentence ("nothing among the changed lines does what the
+      // obligation asks") is literally true at the same time as the
+      // `not-contradicted` one, and the prompt offered them as alternatives with no
+      // tie-break. Three statements drew a different verdict in each of the two
+      // stored rounds from identical inputs, which is this prompt's known behaviour
+      // for anything it leaves open (87.0% agreement, 2026-08-02).
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        'Whenever an obligation asks that something not be done and no changed line does it, BOTH answers describe what is in front of you'
+      )
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        '"Not-contradicted" is the answer there.'
+      )
+      // The tie-break must not read as a licence: the boundaries after it are
+      // exceptions to it, and a reader that stops here would take it as absolute.
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        'The rules that follow are the only cases that take it back.'
+      )
+    })
+
+    test('is refused to a compound obligation with a limb asking for work', () => {
+      // The guard that pays for the tie-break. `not-contradicted` leaves the
+      // headline count for the same reason `evidenced` does, so spec 23's safety
+      // direction binds it identically: an obligation only PART of which is honoured
+      // by changing nothing must not leave the list on the strength of that part.
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        'The same whole-not-part rule binds "not-contradicted".'
+      )
+      expect(modelFulfilmentJudgementInstructions).toContain(
+        'An obligation with a limb that also asks for something to be done, produced, recorded or emitted is not honoured by changing nothing'
       )
     })
   })
