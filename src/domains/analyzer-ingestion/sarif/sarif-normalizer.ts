@@ -83,11 +83,19 @@ const absoluteUrlOrUndefined = (value: string | undefined): string | undefined =
   return z.url().safeParse(value).success ? value : undefined
 }
 
-// CWE identifiers as the two shapes producers actually emit: a tag namespaced under
-// a taxonomy path (`external/cwe/cwe-89`) and a plain property. Matching is
-// case-insensitive and anchored, so an unrelated tag containing the letters "cwe"
-// contributes nothing.
-const cwePattern = /(?:^|[/:\s])cwe[-_]?(\d{1,6})$/iu
+// CWE identifiers as the shapes producers actually emit: a tag namespaced under a
+// taxonomy path (`external/cwe/cwe-89`, CodeQL's convention), a plain property,
+// and an id-first tag whose remainder is the weakness NAME
+// (`CWE-1004: Sensitive Cookie Without 'HttpOnly' Flag`, Semgrep's convention).
+//
+// The third shape is why this pattern is bounded on BOTH sides rather than
+// anchored at the end. Requiring end-of-string dropped every CWE from real
+// Semgrep output — an artifact whose rules are meticulously CWE-tagged normalized
+// to an empty `cwe` list, silently, which reads exactly like an analyzer that
+// tags nothing. The leading and trailing boundaries keep the match anchored to a
+// whole token, so an unrelated tag containing the letters "cwe" still contributes
+// nothing.
+const cwePattern = /(?:^|[/:\s])cwe[-_]?(\d{1,6})(?=$|[:,;\s/])/iu
 
 const cweFromToken = (token: string): string | undefined => {
   const trimmed = token.trim()

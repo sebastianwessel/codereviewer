@@ -116,6 +116,7 @@ A ratio with a zero denominator is undefined. The code substitutes a fixed
 | `parseValidity`, `recall`, `recallByTier`, `productRecall`, `nitRecall`, `precision`, `adjustedPrecision`, severity-weighted rates, `lineAccuracy`, `severityAccuracy`, `artifactOnlyRecall`, `artifactOnlyPrecision` | `1` | "Nothing was expected, so nothing was missed." |
 | `securityRecallByMechanism`, `securityRecallByContextDepth`, `securityObviousRecall`, `securityHardRecall`, all `fix*` rates | `0` | A mechanism with no expected findings has **no evidence** of recall; reporting 100% would be a misleading perfect. |
 | `providerErrorRate`, `providerIssueRate`, `incompleteCoverageRate`, `contextMutationRate`, `commentsPerDiffHunk`, `commentsPerKloc` | `0` | Absence of a problem. |
+| `lineAccuracy`, `linePlacementRate`, `recallByDiffScope`, `securityAdjustedPrecisionByMechanism` | `null` | "Nobody measured this." A number here would be indistinguishable from a measured one. |
 
 Neither `1` nor `0` from an empty denominator is an achievement. Every rate that
 can be empty ships with its denominator as a separate count field — read them
@@ -271,9 +272,7 @@ with an explicit denominator count, and the renderer prints
 ## Security dimension (spec 15)
 
 Security expected findings may carry a `securityMechanism` and a `contextDepth`
-label. These produce **recall only** — an admitted finding carries no mechanism
-label, so per-mechanism precision is not derivable and is deliberately absent.
-Every empty value here is `0`, not `1`.
+label. Every empty value in the recall metrics is `0`, not `1`.
 
 | Metric | What it counts | Denominator |
 | --- | --- | --- |
@@ -286,13 +285,41 @@ Every empty value here is `0`, not `1`.
 
 Mechanisms: `authorization`, `injection`, `ssrf`, `xss`, `deserialization`,
 `secret-flow`, `cryptography`, `path-traversal`, `unsafe-config`,
-`concurrency-resource`, `prompt-injection`.
+`concurrency-resource`.
 Context depths: `local`, `cross-function`, `callee`, `caller`, `implementation`,
 `cross-file`, `analyzer-path-dependent`.
 
 Per-mechanism denominators are small. Always read the rate next to its count —
 `0%` over an expected count of 1 is not a blind spot, and `100%` over 1 is not a
-strength.
+strength. A mechanism nothing expects is **omitted** from the summary table
+rather than shown as `0%`, which would read as a measured failure.
+
+> The reviewer's own **prompt-injection resistance** is a security mechanism of
+> the product, but it is deliberately not one of the labels above. Every label
+> above names a defect class the reviewer should *report*; resistance is whether
+> the reviewer *refuses* an instruction planted in repository content, which no
+> expected finding can express. It is verified behaviourally in the test suite
+> instead.
+
+### Adjusted precision per mechanism
+
+| Metric | What it counts |
+| --- | --- |
+| `securityAdjustedPrecisionByMechanism` | `matched / (matched + genuine false positives)` per mechanism, or `null` |
+| `securityFindingMechanismCounts` | Both halves per mechanism, plus an `unknown` bucket |
+| `securityMechanismAttributionCounts` | Where the labels came from: `expectation`, `cwe`, `unknown` |
+
+An admitted finding carries no mechanism of its own, so one is attributed at
+scoring time from the matched expectation, or failing that from the finding's CWE
+tags through a public CWE→mechanism table. Anything else is `unknown` — never
+guessed from a finding's wording.
+
+**Read `null` as "not bounded", not as "zero" or "missing".** A rate is published
+only when no genuine security false positive in the run is unattributed, because
+one unattributed false positive could belong to any mechanism and therefore bounds
+every mechanism at once. Today most findings carry no CWE, so on most runs every
+rate is `null` and the counts are what you read. The summary table says which case
+you are looking at underneath it.
 
 ---
 

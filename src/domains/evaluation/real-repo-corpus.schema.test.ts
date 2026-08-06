@@ -44,10 +44,17 @@ const manifestWith = (
   schemaVersion: '1.0',
   datasetId: 'test-corpus',
   modelTrainingCutoff: '2026-01-01',
+  splitIntegrity: {
+    status: 'single-split',
+    contaminationNote:
+      'Every case here is held-out and there is no dev set, so the chronological rule compares nothing. Read every figure from this corpus as a dev-set figure that does not satisfy the held-out criterion.'
+  },
   description: 'Test corpus.',
   cases,
   ...overrides
 })
+
+const chronologicalSplit = { splitIntegrity: { status: 'chronological-split' } }
 
 describe('real repository corpus manifest schema', () => {
   test('parses a minimal valid manifest and applies defaults', () => {
@@ -197,16 +204,54 @@ describe('real repository corpus manifest schema', () => {
     }
 
     expect(() =>
-      parseRealRepoCorpusManifest(manifestWith([devCase, baseCase]))
+      parseRealRepoCorpusManifest(
+        manifestWith([devCase, baseCase], chronologicalSplit)
+      )
     ).toThrow(/must be chronological/u)
     expect(
       parseRealRepoCorpusManifest(
-        manifestWith([
-          { ...devCase, fixCommittedAt: '2026-02-01T10:00:00+00:00' },
-          baseCase
-        ])
+        manifestWith(
+          [
+            { ...devCase, fixCommittedAt: '2026-02-01T10:00:00+00:00' },
+            baseCase
+          ],
+          chronologicalSplit
+        )
       ).cases
     ).toHaveLength(2)
+  })
+
+  // The chronological rule has exactly one silent failure mode: with one split
+  // empty it compares nothing and passes. These two tests are what stop that
+  // pass from being quoted as a verified split.
+  test('rejects a declared chronological split that has nothing to compare', () => {
+    expect(() =>
+      parseRealRepoCorpusManifest(manifestWith([baseCase], chronologicalSplit))
+    ).toThrow(/nothing to compare/u)
+  })
+
+  test('rejects a stale single-split declaration once a comparison set exists', () => {
+    const devCase = {
+      ...baseCase,
+      id: 'dev-case',
+      split: 'dev',
+      fixCommit: 'c'.repeat(40),
+      fixCommittedAt: '2026-02-01T10:00:00+00:00'
+    }
+
+    expect(() =>
+      parseRealRepoCorpusManifest(manifestWith([devCase, baseCase]))
+    ).toThrow(/declares a single split but has both/u)
+  })
+
+  test('requires a single-split manifest to state what its figures mean', () => {
+    expect(() =>
+      parseRealRepoCorpusManifest(
+        manifestWith([baseCase], {
+          splitIntegrity: { status: 'single-split', contaminationNote: 'none' }
+        })
+      )
+    ).toThrow()
   })
 })
 

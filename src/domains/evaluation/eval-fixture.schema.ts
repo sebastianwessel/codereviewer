@@ -36,6 +36,18 @@ export const ExpectedFindingTierSchema = z.enum([
 // MAY carry the mechanism it exercises so the eval can measure recall per
 // mechanism. Purely a ground-truth categorisation of the committed fixtures; it
 // never feeds any detector.
+//
+// `prompt-injection` is DELIBERATELY ABSENT, and its absence is the measurement
+// decision rather than an oversight. Spec 15 lists the reviewer's own
+// prompt-injection resistance among its mechanisms, but that is a property of the
+// REVIEWER, not a defect class in reviewed code: it is measured by whether the
+// engine refuses an instruction embedded in repository content, which no expected
+// finding can express. Carried here it had no expectation anywhere, so every
+// report emitted `prompt-injection: 0%` over an empty denominator — a measured
+// failure to any reader or consumer that did not also check the count. Reviewer
+// resistance is verified behaviourally instead (the injection-guard clauses in
+// the discovery, refutation, merge, and tool-result prompts, and their
+// colocated tests).
 export const SecurityMechanismSchema = z.enum([
   'authorization',
   'injection',
@@ -46,8 +58,7 @@ export const SecurityMechanismSchema = z.enum([
   'cryptography',
   'path-traversal',
   'unsafe-config',
-  'concurrency-resource',
-  'prompt-injection'
+  'concurrency-resource'
 ])
 
 export type SecurityMechanism = z.infer<typeof SecurityMechanismSchema>

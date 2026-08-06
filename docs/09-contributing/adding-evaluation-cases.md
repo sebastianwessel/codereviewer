@@ -83,9 +83,15 @@ Set it explicitly when the derivation would mislabel your case.
 
 On security findings you may add `securityMechanism` (`authorization`,
 `injection`, `ssrf`, `xss`, `deserialization`, `secret-flow`, `cryptography`,
-`path-traversal`, `unsafe-config`, `concurrency-resource`, `prompt-injection`)
-and `contextDepth` (`local`, `cross-function`, `callee`, `caller`,
-`implementation`, `cross-file`, `analyzer-path-dependent`).
+`path-traversal`, `unsafe-config`, `concurrency-resource`) and `contextDepth`
+(`local`, `cross-function`, `callee`, `caller`, `implementation`, `cross-file`,
+`analyzer-path-dependent`).
+
+There is deliberately no `prompt-injection` mechanism. Every value above names a
+defect class the reviewer should **report**; the reviewer's own prompt-injection
+resistance is whether it **refuses** an instruction planted in reviewed code,
+which an expected finding cannot express. It is verified behaviourally in the
+test suite instead.
 
 These split obvious from hard security recall — `local` is the obvious class,
 everything else is hard — so a case that aces trivial sinks cannot mask the

@@ -2,6 +2,10 @@
   "schemaVersion": "1.0",
   "datasetId": "real-repo-cross-file",
   "modelTrainingCutoff": "2026-01-01",
+  "splitIntegrity": {
+    "status": "single-split",
+    "contaminationNote": "Every case in this dataset is labelled held-out and there is no dev set, so the chronological-split rule has nothing to compare and verifies nothing. The cases are post-cutoff, so this is not training contamination; it is ITERATION contamination. Every baseline, A/B, and prompt change this project has measured was decided on these same 37 cases, which is exactly the role spec 15 reserves for a dev set. Read every figure produced from this corpus as a dev-set figure: it may be tuned to these cases and it does not satisfy the held-out acceptance criterion, including the pre-registered decision rule for Mechanism 2. Adding genuinely newer cases and re-labelling this set as dev is the fix; re-labelling cases without new material is not."
+  },
   "description": "Real upstream repositories hydrated as FULL working trees at the commit before an upstream fix landed, so cross-file review defects are measurable. modelTrainingCutoff is an operator setting: re-set it to the evaluated model's cutoff each model generation, which by design invalidates held-out cases captured before it. Every commit pair below was read from upstream git objects; expected findings describe the pre-fix code that was inspected.",
   "cases": [
     {

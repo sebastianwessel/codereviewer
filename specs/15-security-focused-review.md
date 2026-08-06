@@ -6,6 +6,10 @@ Amended: 2026-08-01 — the security pass is partitioned with the general pass
 (spec 27); its own A/B result is transcribed here
 Amended: 2026-08-06 — Mechanism 2 is redefined as analyzer-artifact ingestion and
 implemented, off by default and unmeasured, with a pre-registered decision rule
+Amended: 2026-08-06 — the three evaluation-side gaps recorded under *Known
+Divergences* are closed (per-mechanism precision, the `prompt-injection`
+denominator, the vacuous split), and the precondition for measuring Mechanism 2 is
+measured and reported under *Why Mechanism 2 Is Still Unmeasured*
 
 ## Purpose
 
@@ -58,6 +62,70 @@ set — its repos are public and likely in model training data) and to a small
 **held-out** set assembled under the anti-contamination policy below. Improvements
 are decided on the held-out set; the dev set is for iteration only.
 
+### Attributing An Admitted Finding To A Mechanism
+
+Added 2026-08-06. Per-mechanism recall needs only the ground truth's label.
+Per-mechanism **adjusted precision** needs the other half of the denominator — the
+genuine false positives belonging to each mechanism — and an admitted finding
+carries no mechanism, which is why that half did not exist.
+
+An admitted finding is attributed from the only two sources that can justify a
+label, and from nothing else:
+
+- the **matched expectation**, when the finding matched a mechanism-labelled
+  security expectation. This is the same pair `securityRecallByMechanism` counts,
+  so precision and recall can never disagree about what matched;
+- the finding's own **CWE** tags, resolved through a public CWE→mechanism table
+  whose every entry is a CWE whose definition *is* the mechanism. A list whose
+  known ids disagree resolves to nothing rather than to the first or the most
+  severe of them.
+
+Anything else is **`unknown`**, and `unknown` is a reported bucket, not a discard.
+Inferring a mechanism from a finding's title or prose would manufacture the very
+denominator the measurement exists to establish.
+
+The population is deliberately asymmetric: a matched finding enters the numerator
+for its expectation's mechanism whatever category the engine gave it, while an
+*unmatched* finding enters a denominator only when it is a genuine false positive
+that the engine itself called security. Unlisted-real findings stay out, exactly
+as they do in the run-level `adjustedPrecision`.
+
+**A per-mechanism precision rate is published only when it is bounded.** One
+genuine security false positive nobody could attribute could belong to any
+mechanism, so it bounds all of them; while such a finding exists in a run, every
+per-mechanism rate is `null` and the counts are what a reader uses. A vacuous
+100% would be the silent-optimism shape this repository has a standing rule
+against. The attribution counters — how many labels came from an expectation, how
+many from a CWE, how many from nothing — are reported alongside, because a run
+whose `unknown` share is large has not measured per-mechanism precision however
+many rates it prints.
+
+### A Corpus With One Split Must Say So
+
+Added 2026-08-06. The chronological-split rule has exactly one silent failure
+mode: with cases in only one split there is nothing to compare, so it passes
+while checking nothing, and a dataset that never had a split reads exactly like
+one whose split was verified.
+
+A corpus manifest therefore **declares** what its split validation can prove, and
+the declaration is cross-checked against its cases. A manifest claiming a
+verified chronological split while carrying only one split is rejected; a
+manifest carrying only one split must state, in the manifest itself, what every
+figure produced from it must be read as. Declaring a stale single-split posture
+after a genuine comparison set is added is rejected too.
+
+The committed real-repository corpus is `single-split`, and its recorded note is
+the honest reading of it: every case is labelled held-out and post-cutoff, so
+this is not training contamination — it is **iteration contamination**. Every
+baseline, A/B, and prompt change this project has measured was decided on these
+same cases, which is precisely the role reserved for a dev set. Every figure from
+that corpus, security figures included, is a dev-set figure. It does not satisfy
+the held-out acceptance criterion, and it does not satisfy the *Pre-Registered
+Decision Rule For Mechanism 2*, which requires a held-out set. The remedy is
+capturing genuinely newer cases and re-labelling the current set as dev;
+re-labelling cases without new material would manufacture a held-out set and is
+forbidden.
+
 ### Anti-Contamination Policy
 
 Held-out security cases follow the practices the research converged on:
@@ -96,8 +164,23 @@ aligned):
 - cryptography (weak primitive, misuse, predictable randomness);
 - filesystem / path traversal;
 - unsafe configuration;
-- concurrency and resource exhaustion;
-- prompt-injection resistance of the reviewer itself.
+- concurrency and resource exhaustion.
+
+**The reviewer's own prompt-injection resistance is a security mechanism of this
+capability, but it is not one of the labels above, and that separation is
+deliberate** (2026-08-06). Every label above names a defect class in reviewed
+code, and its measurement is recall: did the reviewer report the defect. Reviewer
+resistance is the opposite shape — did the reviewer *refuse* an instruction
+embedded in repository content — which no expected finding can express. Carried in
+the same enum it had no expectation anywhere, so every report published
+`prompt-injection: 0%` over an empty denominator, which reads as a measured
+failure to anyone who does not also read the count. It is therefore measured
+behaviourally instead: by the injection-guard clauses required of the general
+reviewer, the refuter, the security pass, the semantic merge, and the cross-file
+tool results under *Observability, Safety, Privacy*, and by their colocated
+tests. A mechanism nothing expects is now absent from the reported table rather
+than reported as zero, and this rule is general — it is not a carve-out for one
+value.
 
 ## Mechanism 1: The Dedicated Additive Security Pass
 
@@ -428,6 +511,79 @@ from a null result caused by the model ignoring the evidence.
 Cost is recorded but is not a promotion criterion: ingestion adds no model call, and
 the packet growth it causes is bounded by `maxAlerts`.
 
+## Why Mechanism 2 Is Still Unmeasured
+
+Recorded 2026-08-06. **The pre-registered rule above has not been run and is not
+edited by this section.** What was run is its precondition, and the precondition
+failed, which is why the rule cannot be.
+
+The rule needs SARIF per corpus case. Producing it is easy: Semgrep OSS 1.172.0
+(LGPL-2.1) installed offline in one step and scanned all 37 hydrated
+real-repository checkouts — twelve languages — in **275 seconds of wall clock at
+no provider cost**, with the public `p/security-audit` ruleset chosen
+independently of the corpus. It produced **924 results**, and the engine's own
+normalizer accepted every one of them (0 unusable).
+
+Then changed-side attribution ran over them, and the result is the whole finding:
+
+| | |
+| --- | --- |
+| normalized alerts | 924 |
+| unusable | 0 |
+| **attributed to the change** | **0** |
+| held back as pre-existing | 924 |
+| alerts even landing in a changed **file** | 1 (outside every changed hunk) |
+
+A control rules out ruleset breadth as the explanation. Re-running with
+`p/default` + `p/security-audit` + `p/secrets` + `p/owasp-top-ten` restricted to
+only the changed files of each case — the most generous configuration available —
+produced **6 alerts across the whole corpus, of which 0 fell on a changed line**.
+
+Two things follow, and they point in opposite directions:
+
+- **The load-bearing property of Mechanism 2 holds on real analyzer output**, the
+  first time it has seen any. Not one alert of 924 leaked through the gate; the
+  pre-existing-debt flood the gate exists to prevent did not occur. That is the
+  strongest available evidence for the design, and it is deterministic evidence:
+  attribution runs before any model call, so it cost nothing to obtain.
+- **The evidence channel is empty on this corpus**, so the paired A/B cannot
+  measure anything. Both arms would build byte-identical packets — the `on` arm
+  injects zero `analyzer-signal` documents — and running ≥3 seeds per arm over 37
+  cases with a real provider would spend real money to confirm a guaranteed zero.
+  The rule anticipated exactly this and names it: a null result caused by
+  attribution holding everything back is a **different finding** from a null
+  result caused by the model ignoring the evidence. This is the first kind, and
+  it is reportable without the A/B.
+
+The mechanism therefore **keeps shipping disabled**, which is the rule's stated
+outcome when the measurement has not been run. It is not removed: removal is
+reserved for a gate that fails, and this gate did not fail — it was never
+supplied with anything to pass.
+
+**What would change this** is a corpus whose changed lines an analyzer actually
+flags. The current corpus is 37 subtle authorization, concurrency, and
+protocol-parsing defects in mature repositories, which is the class a pattern
+analyzer is worst at and the class this engine was built for; the two are close
+to disjoint by construction. Measuring Mechanism 2 needs cases selected *because*
+a public analyzer flags their changed lines — captured under the same
+anti-contamination policy, and never mined from this engine's own output. Until
+such a set exists, no artifact-generation step is committed: infrastructure for a
+measurement that cannot run is infrastructure that rots.
+
+Two operational facts from the same exercise, recorded because they are invisible
+until an artifact is real:
+
+- **Semgrep emits its entire rule catalog in `tool.driver.rules`**, so a SARIF
+  file carrying 2 results was 2.2 MB. The `maxArtifactBytes` default of 4 MB is
+  therefore a ceiling a routine broad scan can approach on rule metadata alone,
+  not on findings.
+- **CWE extraction silently produced nothing for every Semgrep alert** until it
+  was fixed here. Semgrep tags a rule id-first with the weakness name after it
+  (`CWE-1004: Sensitive Cookie Without 'HttpOnly' Flag`); the reader required the
+  digits to end the token, matched CodeQL's `external/cwe/cwe-89` convention only,
+  and normalized meticulously CWE-tagged rules to an empty list — indistinguishable
+  from an analyzer that tags nothing.
+
 ## Observability, Safety, Privacy
 
 - Security signals and the security pass are no-content: mechanism, rule id, CWE,
@@ -510,8 +666,9 @@ silent.
 
 | Requirement | State of the implementation |
 | --- | --- |
-| *Acceptance*: the evaluation reports security recall **and adjusted precision** per mechanism and context-depth | Recall only. An admitted finding carries no mechanism label, so per-mechanism precision has no denominator; the eval renderer says so explicitly. Reporting precision per mechanism needs a labelling mechanism that does not exist yet. Owned by the evaluation domain. |
-| *Mechanisms*: `prompt-injection` as a measured security mechanism | The enum value exists; no committed expected finding carries it, so the mechanism has an empty denominator. Owned by the evaluation corpus. |
-| *Measurement First*: a contaminated `dev` set and a separate `held-out` set | Every case in the real-repository corpus manifest is labelled `held-out`. The chronological-split validation therefore has nothing to compare and passes vacuously, so the held-out acceptance criterion — and the pre-registered decision rule that depends on it — cannot be satisfied until a genuine split exists. Owned by the evaluation corpus. |
-| *Observability, Safety, Privacy*: the security pass is no-content, reporting "mechanism, rule id, CWE, counts" | Mechanism 2 now records rule id, CWE, analyzer identity and per-artifact counts, so the fields exist. The **security pass** still records only counts and durations: its candidates carry no mechanism label, and labelling a model-authored candidate by mechanism is the same missing capability as the first row. |
-| *Mechanism 2*: measured before any promotion | Shipped and **unmeasured**. Off by default. No figure exists for it anywhere, and the *Pre-Registered Decision Rule* above fixes in advance what a future measurement would have to show. Not a divergence from a requirement — the requirement is that it ship disabled until measured, which it does — but recorded here so nobody reads its existence as evidence that it works. |
+| *Acceptance*: the evaluation reports security recall **and adjusted precision** per mechanism and context-depth | **Retired 2026-08-06.** Admitted findings are attributed by *Attributing An Admitted Finding To A Mechanism*, so the denominator exists and `securityAdjustedPrecisionByMechanism` is reported with both its halves and its attribution counters. A rate is published only when bounded; on runs where findings carry no CWE, every genuine security false positive lands in `unknown` and every rate is `null` — measured and disclosed, rather than absent or vacuously perfect. The remaining lever is findings carrying CWE, which is what shrinks `unknown`. |
+| *Mechanisms*: `prompt-injection` as a measured security mechanism | **Retired 2026-08-06.** Reviewer prompt-injection resistance is not a code-defect label and cannot carry an expected finding; it is separated in *Mechanisms* and measured behaviourally. The empty-denominator row is gone rather than reported as 0%. |
+| *Measurement First*: a contaminated `dev` set and a separate `held-out` set | **Narrowed 2026-08-06.** The vacuous pass is fixed: a manifest now declares what its split validation proves, the declaration is cross-checked, and a single-split corpus must state what its figures mean (see *A Corpus With One Split Must Say So*). The corpus still HAS one split, so the held-out acceptance criterion — and the pre-registered decision rule that depends on it — remains unsatisfied; what changed is that this is now declared and validated instead of silently passing. Owned by the evaluation corpus. |
+| *Observability, Safety, Privacy*: the security pass is no-content, reporting "mechanism, rule id, CWE, counts" | Mechanism 2 now records rule id, CWE, analyzer identity and per-artifact counts, so the fields exist. The **security pass** still records only counts and durations: its candidates carry no mechanism label at RUN time. The eval can now attribute a finding after the fact, but that is a scoring-time join against ground truth and a CWE table, not something the pass itself emits. |
+| *Mechanism 2*: measured before any promotion | Shipped and **unmeasured**, off by default. Its recall contribution has no figure anywhere. Its *precondition* was measured on 2026-08-06 (*Why Mechanism 2 Is Still Unmeasured*): changed-side attribution held perfectly on 924 real analyzer alerts and attributed zero of them, so the A/B has nothing to compare and was not run. Nothing here is evidence that the mechanism improves recall; the attribution result is evidence about the gate only. |
+| *Testing*: Mechanism 2 unit tests against committed SARIF fixtures | The committed fixtures are hand-written and cover the normalizer's contract; no fixture captured from a real analyzer is committed. That gap is what hid the Semgrep CWE-tag shape until an artifact from a real tool was ingested. One regression test now pins that shape, but the fixture set is still synthetic. |

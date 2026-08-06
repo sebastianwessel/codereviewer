@@ -11,6 +11,13 @@ import {
   type SecurityContextDepth,
   type SecurityMechanism
 } from './eval-fixture.schema.js'
+import {
+  allSecurityMechanismBuckets,
+  emptySecurityFindingMechanismCounts,
+  UNATTRIBUTED_SECURITY_MECHANISM,
+  type SecurityFindingMechanismCounts,
+  type SecurityMechanismBucket
+} from './security-mechanism-attribution.js'
 import { isProviderIssueWarning } from './eval-warnings.js'
 
 const RATE_MIN = 0
@@ -124,6 +131,43 @@ const SecurityMechanismRateSchema = z
 const SecurityMechanismCountsSchema = z
   .record(SecurityMechanismSchema, SecurityFindingCountsSchema)
   .default(() => emptySecurityMechanismCounts())
+
+const SecurityFindingMechanismCountsSchema = z.strictObject({
+  matched: z.int().min(0),
+  genuineFalsePositive: z.int().min(0)
+})
+
+const SecurityMechanismBucketSchema = z.enum([
+  ...SecurityMechanismSchema.options,
+  UNATTRIBUTED_SECURITY_MECHANISM
+])
+
+const SecurityFindingMechanismCountsRecordSchema = z
+  .record(SecurityMechanismBucketSchema, SecurityFindingMechanismCountsSchema)
+  .default(() => emptySecurityFindingMechanismCounts())
+
+// Per-mechanism adjusted precision is NULLABLE, and null is the normal value
+// rather than an error case. A rate is emitted only when it is BOUNDED: the
+// mechanism has a non-empty denominator AND no genuine security false positive
+// in the run is unattributable. One unattributed genuine false positive could
+// belong to any mechanism, so it bounds all of them, and serialising the
+// unbounded ratio would publish a 100% that no evidence supports — the same
+// vacuous-perfect shape `lineAccuracy` is null for.
+const SecurityMechanismAdjustedPrecisionSchema = z
+  .record(SecurityMechanismSchema, RateSchema.nullable())
+  .default(() =>
+    Object.fromEntries(
+      allSecurityMechanisms.map((mechanism) => [mechanism, null])
+    ) as Record<SecurityMechanism, number | null>
+  )
+
+const SecurityMechanismAttributionCountsSchema = z
+  .strictObject({
+    expectation: z.int().min(0),
+    cwe: z.int().min(0),
+    unknown: z.int().min(0)
+  })
+  .default({ expectation: 0, cwe: 0, unknown: 0 })
 
 const SecurityContextDepthRateSchema = z
   .record(SecurityContextDepthSchema, RateSchema)
@@ -338,11 +382,11 @@ export const EvalMetricsSchema = z.strictObject({
   // the engine did anything.
   recallByDiffScope: DiffScopeRateSchema,
   diffScopeCounts: DiffScopeCountsSchema,
-  // Security-dimension measurement (spec 15). Recall only: an admitted finding
-  // carries no mechanism label, so per-mechanism adjusted precision is NOT
-  // derivable and is deliberately absent. Every denominator is the count of
-  // security-category expected findings carrying the label, aggregated across
-  // cases like recallByTier. Non-security expected findings never touch these.
+  // Security-dimension measurement (spec 15). Every recall denominator is the
+  // count of security-category expected findings carrying the label, aggregated
+  // across cases like recallByTier. Non-security expected findings never touch
+  // these. Per-mechanism adjusted precision is measured separately below, over a
+  // population of ADMITTED findings rather than of expectations.
   //
   // securityRecallByMechanism: matched / expected security findings, per
   // mechanism. Empty value 0 (see SecurityMechanismRateSchema).
@@ -362,6 +406,24 @@ export const EvalMetricsSchema = z.strictObject({
   securityHardRecall: RateSchema.default(0),
   securityObviousCount: z.int().min(0).default(0),
   securityHardCount: z.int().min(0).default(0),
+  // Per-mechanism ADJUSTED PRECISION (spec 15 *Acceptance*). The denominator
+  // that did not exist until admitted findings could be attributed to a
+  // mechanism: matched / (matched + genuine false positives), per mechanism.
+  // See SecurityMechanismAdjustedPrecisionSchema for why a rate is null unless
+  // it is bounded, and securityFindingMechanismCounts for the raw halves.
+  securityAdjustedPrecisionByMechanism:
+    SecurityMechanismAdjustedPrecisionSchema,
+  // Both halves of every rate above, plus the `unknown` bucket that holds the
+  // findings no source could justify a mechanism for. Reported, never hidden:
+  // `unknown.genuineFalsePositive` is exactly the quantity that decides whether
+  // any per-mechanism precision is publishable at all.
+  securityFindingMechanismCounts: SecurityFindingMechanismCountsRecordSchema,
+  // Where the labels came from, over the same population: ground truth the
+  // fixture stated (`expectation`), a public CWE tag on the finding (`cwe`), or
+  // nothing (`unknown`). A run whose `unknown` share is large has not measured
+  // per-mechanism precision, however many rates it prints.
+  securityMechanismAttributionCounts:
+    SecurityMechanismAttributionCountsSchema,
   inputTokens: z.int().min(0).default(0),
   // Cached input tokens are a SUBSET of inputTokens (already counted there).
   cachedInputTokens: z.int().min(0).default(0),
@@ -477,6 +539,13 @@ export type EvalMetricCaseResult = {
   readonly securityContextDepthCounts: Record<
     SecurityContextDepth,
     SecurityFindingCounts
+  >
+  // Per-mechanism precision tallies over the case's ADMITTED findings (spec 15).
+  // Built by `securityFindingMechanismCountsForCase`; see that function for the
+  // population and why `unknown` is a first-class bucket rather than a discard.
+  readonly securityFindingMechanismCounts: Record<
+    SecurityMechanismBucket,
+    SecurityFindingMechanismCounts
   >
   // Diff-scope tallies (spec 17): matched/expected per in-diff, out-of-diff and
   // undetermined, derived from the case's own reviewed diff joined to the match
@@ -720,6 +789,67 @@ export const calculateEvalMetrics = (
     securityHardExpected,
     0
   )
+  // Per-mechanism adjusted precision (spec 15 *Acceptance*). Aggregate the
+  // per-case admitted-finding tallies, then publish a rate ONLY where it is
+  // bounded: see SecurityMechanismAdjustedPrecisionSchema.
+  const securityFindingMechanismCounts = Object.fromEntries(
+    allSecurityMechanismBuckets.map((bucket) => [
+      bucket,
+      {
+        matched: sum(
+          caseResults.map(
+            (result) => result.securityFindingMechanismCounts[bucket].matched
+          )
+        ),
+        genuineFalsePositive: sum(
+          caseResults.map(
+            (result) =>
+              result.securityFindingMechanismCounts[bucket].genuineFalsePositive
+          )
+        )
+      }
+    ])
+  ) as Record<SecurityMechanismBucket, SecurityFindingMechanismCounts>
+  // One genuine security false positive nobody could attribute could belong to
+  // any mechanism, so it bounds every mechanism's precision at once. While that
+  // count is non-zero no per-mechanism rate is publishable, and the counts below
+  // are what a reader uses instead.
+  const unattributedGenuineFalsePositives =
+    securityFindingMechanismCounts[UNATTRIBUTED_SECURITY_MECHANISM]
+      .genuineFalsePositive
+  const securityAdjustedPrecisionByMechanism = Object.fromEntries(
+    allSecurityMechanisms.map((mechanism) => {
+      const counts = securityFindingMechanismCounts[mechanism]
+      const denominator = counts.matched + counts.genuineFalsePositive
+
+      return [
+        mechanism,
+        unattributedGenuineFalsePositives > 0
+          ? null
+          : rateOrNull(counts.matched, denominator)
+      ]
+    })
+  ) as Record<SecurityMechanism, number | null>
+  // Derived rather than tallied a second time, because the tally rules make the
+  // source unambiguous: a `matched` entry can only have come from the expectation
+  // it matched, a mechanism-bucketed genuine false positive can only have come
+  // from the finding's own CWE tags, and the `unknown` bucket is by definition
+  // what neither source could label. A second counter would be a second thing to
+  // keep in step with `securityFindingMechanismCountsForCase`.
+  const securityMechanismAttributionCounts = {
+    expectation: sum(
+      allSecurityMechanisms.map(
+        (mechanism) => securityFindingMechanismCounts[mechanism].matched
+      )
+    ),
+    cwe: sum(
+      allSecurityMechanisms.map(
+        (mechanism) =>
+          securityFindingMechanismCounts[mechanism].genuineFalsePositive
+      )
+    ),
+    unknown: unattributedGenuineFalsePositives
+  }
   // Diff scope (spec 17). Aggregated like the tier counts, but the rate is
   // `rateOrNull`, not `ratio`: an empty denominator here must not render as the
   // 0.0% that a fully-missed out-of-diff population legitimately reports.
@@ -984,6 +1114,9 @@ export const calculateEvalMetrics = (
     securityHardRecall,
     securityObviousCount: securityObviousExpected,
     securityHardCount: securityHardExpected,
+    securityAdjustedPrecisionByMechanism,
+    securityFindingMechanismCounts,
+    securityMechanismAttributionCounts,
     inputTokens: sum(caseResults.map((result) => result.inputTokens)),
     cachedInputTokens: sum(caseResults.map((result) => result.cachedInputTokens)),
     outputTokens: sum(caseResults.map((result) => result.outputTokens)),

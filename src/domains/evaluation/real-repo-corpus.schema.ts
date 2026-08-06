@@ -48,6 +48,36 @@ export const CorpusSplitSchema = z.enum(['dev', 'held-out'])
 
 export type CorpusSplit = z.infer<typeof CorpusSplitSchema>
 
+// What the split validation below is actually able to prove about this dataset.
+//
+// It exists because the chronological check has exactly one silent failure mode:
+// with cases in only ONE split there is nothing to compare, so the check passes
+// while checking nothing, and a corpus that never had a split reads identically
+// to one whose split was verified. That is the shape this repository has a
+// standing rule against — absence producing a plausible optimistic answer — and
+// a validation that can pass vacuously is worse than no validation, because the
+// green result is quoted.
+//
+// A manifest must therefore SAY which case it is in, and the declaration is
+// cross-checked against the cases:
+//
+// `chronological-split` — both splits are populated and the chronological
+//   boundary was verified. Improvements may be decided on the held-out cases.
+// `single-split` — only one split is populated. Nothing was compared, and the
+//   manifest must carry the note that says what every figure from this dataset
+//   must be read as.
+export const CorpusSplitIntegritySchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('chronological-split') }),
+  z.strictObject({
+    status: z.literal('single-split'),
+    // Long enough that "single split" is not a valid answer: it has to state the
+    // consequence for the reader of a number produced from this corpus.
+    contaminationNote: z.string().min(120).max(1200)
+  })
+])
+
+export type CorpusSplitIntegrity = z.infer<typeof CorpusSplitIntegritySchema>
+
 // The reviewed input must never contain the answer key. Advisory identifiers and
 // "this fixes a vulnerability" phrasing name the defect outright, so they are
 // rejected from every field that describes the change under review.
@@ -176,6 +206,9 @@ export const RealRepoCorpusManifestSchema = z.strictObject({
   // re-freshen it each model generation: raising it INVALIDATES held-out cases
   // captured before the new cutoff, which is the intended failure.
   modelTrainingCutoff: z.iso.date(),
+  // Required, and cross-checked against the cases below. Without it a manifest
+  // with no dev set silently satisfied the chronological-split rule.
+  splitIntegrity: CorpusSplitIntegritySchema,
   description: z.string().min(1).max(1000),
   cases: z.array(RealRepoCorpusCaseSchema).min(1)
 })
@@ -265,6 +298,24 @@ export const parseRealRepoCorpusManifest = (
         `Held-out corpus case "${corpusCase.id}" was fixed on ${isoDateOf(corpusCase.fixCommittedAt)}, which is not after the declared training cutoff ${manifest.modelTrainingCutoff}.`
       )
     }
+  }
+
+  // The declared integrity must match the cases. Either half of this being wrong
+  // is the failure the declaration exists to prevent: a manifest claiming a
+  // verified split while carrying only one, or one still carrying the
+  // contamination note after a genuine comparison set was added.
+  const singleSplit = devCases.length === 0 || heldOutCases.length === 0
+
+  if (manifest.splitIntegrity.status === 'chronological-split' && singleSplit) {
+    throw new Error(
+      `Corpus "${manifest.datasetId}" declares a chronological split but has ${devCases.length} dev and ${heldOutCases.length} held-out cases; with one split empty there is nothing to compare and the chronological check would pass without checking anything.`
+    )
+  }
+
+  if (manifest.splitIntegrity.status === 'single-split' && !singleSplit) {
+    throw new Error(
+      `Corpus "${manifest.datasetId}" declares a single split but has both dev and held-out cases; update splitIntegrity to "chronological-split" so the boundary is actually verified.`
+    )
   }
 
   // Chronological split: no held-out case may predate a dev case, or a

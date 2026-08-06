@@ -281,7 +281,8 @@ loading instead of silently inflating a score:
 | Rule | Enforcement |
 | --- | --- |
 | **Temporal cutoff** | The manifest declares `modelTrainingCutoff` (currently `2026-01-01`). A `held-out` case whose fix commit predates it is rejected. Re-setting the cutoff each model generation invalidates older held-out cases — that is the intended effect. |
-| **Chronological split** | Cases are `dev` or `held-out`. Improvements are decided on `held-out`. |
+| **Chronological split** | Cases are `dev` or `held-out`. Improvements are decided on `held-out`. A held-out case may not predate the newest dev case. |
+| **Split integrity is declared, not assumed** | The chronological rule compares nothing when one split is empty, so it used to pass while checking nothing. The manifest now declares `splitIntegrity`, and it is cross-checked: claiming `chronological-split` with one split empty is rejected, and a `single-split` corpus must carry a written note saying what its figures mean. This corpus is `single-split`. |
 | **Answer-key exclusion** | No field reaching the reviewed input may carry a CVE id, advisory text, or the fix commit message. |
 | **Answer-key exclusion in the generated diff** | Hydration scans the **generated diff** for answer-key wording and fails the case, on a freshly generated diff and on one reused from an existing checkout alike. An upstream fix that also added an advisory reference puts the answer inside the model's input when read backwards. Curation found this in five candidate cases — one had already entered the corpus. |
 | **Removed-comment disclosure** | Advisory vocabulary cannot catch a plain engineering comment. A case reviews the fix backwards, so a comment the fix *added* is a **removed** line the reviewer is shown. Hydration flags removed comment lines carrying prose (a comment marker plus five or more words) and **fails the case until a curator resolves each flagged comment** in `removedCommentDisclosureReview`. The rule is fuzzy, so it warns rather than hard-fails; the advisory scan stays a hard failure because it is specific. On the eleven convergence candidates captured on 2026-07-27 it flagged **eight**, five of which were genuinely disclosing and were dropped. |
@@ -343,8 +344,16 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
   rather than less. The 2026-07 growth from 58 to 80 expected findings added no
   cost at all — provider spend follows cases, not expectations, which is exactly
   why expectations per case is the lever the corpus grows on.
-- **Held-out only** — there is currently no `dev` split to iterate on, so
-  repeated tuning against this corpus erodes its held-out status.
+- **Held-out only, and therefore iteration-contaminated.** There is no `dev`
+  split, so every baseline, A/B, and prompt change this project has measured was
+  decided on these same 37 cases — precisely the role a dev set exists to fill.
+  The cases are post-cutoff, so this is not *training* contamination, but the
+  effect on a "held-out" claim is the same: **read every figure from this corpus
+  as a dev-set figure.** It does not satisfy any held-out acceptance criterion,
+  including the pre-registered decision rule for analyzer-signal ingestion. The
+  manifest states this in `splitIntegrity.contaminationNote`. The fix is
+  capturing genuinely newer cases and re-labelling the current set as `dev`;
+  re-labelling cases without new material would manufacture a held-out set.
 - **No fully clean case.** Every case carries a defect. The manifest schema
   requires `expectedFindings` to be non-empty, and the case model is a fix
   commit reviewed backwards from its parent, which has no meaning for a pull

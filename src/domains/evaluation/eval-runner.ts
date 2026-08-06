@@ -56,6 +56,7 @@ import {
   type EvalMetrics,
   type EvalRunTotals
 } from './metrics.js'
+import { securityFindingMechanismCountsForCase } from './security-mechanism-attribution.js'
 import {
   EvalCaseOutputSchema,
   EvalCaseReportSchema,
@@ -757,6 +758,22 @@ const buildMetricCase = (
     tierCounts: tierCountsForCase(input.evalCase, input.matchResult),
     diffScopeCounts: diffScopeCountsForCase(input.evalCase, input.matchResult),
     ...securityCountsForCase(input.evalCase, input.matchResult),
+    // Per-mechanism PRECISION counts (spec 15). Unlike the recall counts above,
+    // this population is the admitted findings, so it needs the review's own
+    // findings and the plausibility verdict that separates a genuine false
+    // positive from a real defect the fixture omitted.
+    securityFindingMechanismCounts: securityFindingMechanismCountsForCase({
+      admittedFindings,
+      expectedFindings: input.evalCase.expectedFindings,
+      matches: input.matchResult.matches,
+      genuineFalsePositiveFindingIds:
+        input.matchResult.falsePositiveFindingIds.filter(
+          (findingId) =>
+            !(input.plausibility?.unlistedRealFindingIds ?? []).includes(
+              findingId
+            )
+        )
+    }),
     noFindingZoneFalsePositiveCount:
       input.matchResult.noFindingZoneFalsePositiveIds.length,
     changedLineCount: input.output.changedLineCount,

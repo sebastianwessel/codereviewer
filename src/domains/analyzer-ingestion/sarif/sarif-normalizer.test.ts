@@ -66,6 +66,42 @@ describe('SARIF normalization', () => {
     expect(result.alerts[0]?.cwe).toEqual(['CWE-79', 'CWE-89'])
   })
 
+  // Regression: measured against real Semgrep OSS 1.172.0 output, whose rule tags
+  // put the id FIRST and the weakness name after it. The previous pattern
+  // required the digits to end the tag, so every one of those tags produced no
+  // CWE at all and the alert normalized with an empty list — indistinguishable
+  // from an analyzer that tags nothing.
+  test('extracts a CWE from an id-first tag whose remainder is the weakness name', () => {
+    const result = normalize(
+      logWith({
+        rules: [
+          {
+            id: 'r1',
+            properties: {
+              tags: [
+                "CWE-1004: Sensitive Cookie Without 'HttpOnly' Flag",
+                'OWASP-A05:2021 - Security Misconfiguration',
+                'MEDIUM CONFIDENCE',
+                'security',
+                'nocwe-42 in the middle of a word'
+              ]
+            }
+          }
+        ],
+        results: [
+          {
+            ruleId: 'r1',
+            ruleIndex: 0,
+            message: { text: 'x' },
+            locations: [locationAt('src/a.ts', 3)]
+          }
+        ]
+      })
+    )
+
+    expect(result.alerts[0]?.cwe).toEqual(['CWE-1004'])
+  })
+
   test('reads security severity from a string and drops an out-of-range value', () => {
     const [inRange, outOfRange] = normalize(
       logWith({
