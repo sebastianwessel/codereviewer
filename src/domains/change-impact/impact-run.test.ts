@@ -201,8 +201,15 @@ describe('change impact run', () => {
         // that, rather than an empty finding list they would have to interpret.
         impactFindingCount: 0,
         reliedUponPairCount: 0,
-        noImpactPairCount: 0,
+        deterministicNoImpactPairCount: 0,
         unadjudicatedPairCount: 0,
+        adjudicationCallCount: 0,
+        failedAdjudicationCallCount: 0,
+        modelVerdictCounts: {
+          relies: 0,
+          'does-not-rely': 0,
+          undetermined: 0
+        },
         adjudicationCallsTruncated: false,
         rejectedFindingCount: 0
       })
@@ -233,6 +240,62 @@ describe('change impact run', () => {
         '-export const fetchUser = () => null\n' +
         '+export const fetchUser = (id: string) => id\n'
     }
+
+    // A modified symbol whose diff carries no marker on either side: the empty
+    // contract delta. Every dependent goes down the deterministic `no-impact`
+    // branch and the model is never asked.
+    const noContractChangeGit: Readonly<Record<string, string>> = {
+      'merge-base main HEAD': `${mergeBaseSha}\n`,
+      [`diff --name-status ${mergeBaseSha} HEAD`]: 'M\tsrc/store.ts\n',
+      [`diff --unified=0 ${mergeBaseSha} HEAD -- src/store.ts`]:
+        'diff --git a/src/store.ts b/src/store.ts\n' +
+        '--- a/src/store.ts\n+++ b/src/store.ts\n@@ -1,1 +1,1 @@\n' +
+        '-export const fetchUser = (id: string) => lookup(id)\n' +
+        '+export const fetchUser = (id: string) => lookup(id.trim())\n'
+    }
+
+    // THE VOIDED RUN'S SHAPE, end to end. Spec 22's first adjudication
+    // measurement was exactly this: a completed status, an empty finding list,
+    // every dependent dropped by the deterministic tier, and ZERO model calls —
+    // reported in a way that read as a judge rejecting everything.
+    test('a run the deterministic tier settles alone reports zero calls, not zero rejections', async () => {
+      const root = await createRepo()
+
+      try {
+        const report = await runChangeImpact({
+          repositoryRoot: root,
+          config: adjudicatingConfig,
+          baseRef: 'main',
+          headRef: 'HEAD',
+          generatedAt,
+          readChangedFile: readChangedFile(root),
+          runGit: scriptedGit(noContractChangeGit),
+          // Equipped with a judge, and it must still never be reached.
+          agents: {
+            judgeReliance: async () => {
+              throw new Error('the deterministic tier must not call a model')
+            }
+          }
+        })
+
+        expect(report.adjudicationStatus).toBe('completed')
+        expect(report.impactFindings).toEqual([])
+        expect(report.summary.adjudicationCallCount).toBe(0)
+        expect(report.summary.failedAdjudicationCallCount).toBe(0)
+        expect(report.summary.modelVerdictCounts).toEqual({
+          relies: 0,
+          'does-not-rely': 0,
+          undetermined: 0
+        })
+        // The removals belong to the tier that made them.
+        expect(report.summary.deterministicNoImpactPairCount).toBeGreaterThan(0)
+        expect(report.impactedFiles.map((file) => file.path)).toEqual([
+          'src/caller.ts'
+        ])
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+    })
 
     test('settles a removed declaration with no provider at all', async () => {
       const root = await createRepo()
@@ -346,7 +409,15 @@ describe('change impact run', () => {
         // stays in the reference list, where a reader can still judge it.
         expect(report.impactFindings).toEqual([])
         expect(report.adjudicationStatus).toBe('completed')
-        expect(report.summary.noImpactPairCount).toBe(1)
+        // The model was called and answered. Counted against the MODEL tier, so
+        // this run can never be confused with one the deterministic tier swept.
+        expect(report.summary.adjudicationCallCount).toBe(1)
+        expect(report.summary.modelVerdictCounts).toEqual({
+          relies: 0,
+          'does-not-rely': 1,
+          undetermined: 0
+        })
+        expect(report.summary.deterministicNoImpactPairCount).toBe(0)
         expect(report.summary.unadjudicatedPairCount).toBe(0)
         expect(report.impactedFiles.map((file) => file.path)).toEqual([
           'src/caller.ts'

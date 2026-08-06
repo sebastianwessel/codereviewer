@@ -131,13 +131,36 @@ Three arms, always together:
 2. **Adjudicated** — the files adjudication actually reports. `specs/22` expects
    this arm to *lose* recall against arm 1; a run that loses none has almost
    certainly adjudicated nothing.
-3. **The difference** — what adjudication removed, how many of those removals
-   dropped a proven dependent (provably wrong), and how many are of unknown
-   correctness. There is no "correct removals" count and there cannot be one.
+3. **The difference, split by tier** — what adjudication removed, how many of
+   those removals dropped a proven dependent (provably wrong), and how many are of
+   unknown correctness. There is no "correct removals" count and there cannot be
+   one.
 
 Recall is reported **per reachability class and per contamination split, never
 pooled**, and there is deliberately no blended recall figure to quote. Precision is
 a bracket whose upper bound is permanently *not measurable on this corpus*.
+
+### Did the judge actually run?
+
+Adjudication is two tiers — a deterministic one that settles structural cases in
+code, and a model called only on the residue — so "adjudication removed this file"
+is ambiguous until you know which tier removed it. The report answers that
+directly:
+
+| Field | What it tells you |
+| --- | --- |
+| `coverage.adjudicationCallCount` | Model calls the whole run spent |
+| `coverage.noAdjudicationCallCaseCount` | Adjudicated cases in which the model was **never called** |
+| `coverage.modelVerdictCounts` | `relies` / `does-not-rely` / `undetermined`, as the model returned them |
+| `coverage.deterministicNoImpactPairCount` | Dependents settled in code, with no call |
+| per case, `adjudicationCallCount` | The same question for one case; the per-case table prints *none — judge never ran* rather than `0` |
+
+**Arm 3 is split on that count and publishes no combined total.** Cases that spent
+no model call are reported as `deterministicTierOnly` and cases that spent at least
+one as `modelInvolved`; when the second group is empty the document says outright
+that nothing in the arm is evidence about the model. A degenerate verdict
+distribution — everything `does-not-rely`, or no verdicts at all — is the cheapest
+bug signature this capability has, which is why it is on the page.
 
 ### Absence is never zero
 
@@ -170,6 +193,11 @@ So the scorer treats a partially adjudicated case asymmetrically:
 `coverage.unadjudicatedPairCount` and `adjudicationCallsTruncatedCaseCount` are
 reported for exactly this reason. If they are non-zero, raise
 `--max-adjudication-calls` and re-run rather than reading arm 2 as a low number.
+
+The opposite reading matters just as much: a case can be *fully* adjudicated and
+still have spent **zero** calls, because the deterministic tier settled every
+dependent on its own. Check `noAdjudicationCallCaseCount` before reading arm 3 as
+anything the model did.
 
 ### Artefacts and exit codes
 

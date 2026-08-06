@@ -263,12 +263,15 @@ stated against:
 
 1. the deterministic reference list — `impactedFiles` ∪ `impactedTestFiles`;
 2. the adjudicated list — `impactFindings`;
-3. the difference: what adjudication removed, of which the removals that dropped a
-   proven dependent are counted as **provably wrong**. There is deliberately NO
-   "correct removals" count, because a removed file absent from the answer key
-   might have been noise or a dependent nobody listed, and this corpus cannot tell
-   those apart. Crediting them would convert the answer key's incompleteness into
-   evidence for the layer under test.
+3. the difference: what adjudication removed **per tier**, of which the removals
+   that dropped a proven dependent are counted as **provably wrong**. There is
+   deliberately NO "correct removals" count, because a removed file absent from
+   the answer key might have been noise or a dependent nobody listed, and this
+   corpus cannot tell those apart. Crediting them would convert the answer key's
+   incompleteness into evidence for the layer under test. And since 2026-08-06
+   there is deliberately no POOLED total either: a case that spent no model call
+   is reported apart from one that did, because adding the two produced the figure
+   the voided first measurement was misread from.
 
 Five bindings, each of which is a way this measurement could otherwise lie:
 
@@ -295,6 +298,12 @@ Five bindings, each of which is a way this measurement could otherwise lie:
   nothing to arm 3, because "removed" cannot be told from "never checked". The
   unadjudicated pair count and the truncated-case count are reported so a low
   arm-2 figure produced by the cap is visible as such.
+- **A completed adjudication is not a model that ran, either.** The scorer reports
+  the model calls each case spent, the number of adjudicated cases that spent
+  none, and the `relies` / `does-not-rely` / `undetermined` distribution the model
+  returned. Arm 3 is split by tier on that count and publishes no combined total.
+  Added 2026-08-06 after the first measurement was voided; see "The instrument
+  gap, closed" below for why the treatment is attribution rather than exclusion.
 - **It cannot be pooled with the spec 17 corpus.** A separate metrics-version
   history, a `reportKind` literal the two report contracts reject each other on,
   separate artefact names under `.codereviewer/eval/change-impact/`, and no
@@ -839,12 +848,54 @@ the repaired path reaches the model on the iterator case and that the model cite
 both proven dependents; **that is a diagnostic observation on one case and is not
 a result** — this spec already binds that a single run decides nothing.
 
-**The report cannot currently distinguish a deterministic `no-impact` from a model
-`no-impact`.** `noImpactPairCount` pools both, and that pooling is what let a run
+**The report could not distinguish a deterministic `no-impact` from a model
+`no-impact`.** `noImpactPairCount` pooled both, and that pooling is what let a run
 in which the model never fired read as a run in which the model rejected
-everything. A reader of arm 3 needs to know how many calls the run actually spent;
-until the summary carries it, any arm-3 figure must be read beside the packet
-count. Closing that gap is owed before the next measurement is quoted.
+everything. A reader of arm 3 needs to know how many calls the run actually spent.
+
+### The instrument gap, closed 2026-08-06
+
+Built before the re-run, and it changes no adjudication behaviour whatsoever — it
+makes the behaviour legible. Four changes:
+
+1. **The pooled `no-impact` counter is gone.** The report carries
+   `deterministicNoImpactPairCount` (settled in code, no call spent) and, in
+   `modelVerdictCounts`, the model's own `does-not-rely` count. **There is no
+   pooled field at all**; the sum is derived where it is shown and labelled as a
+   sum. The pair counters still partition every pair exactly once.
+2. **The calls are counted.** `summary.adjudicationCallCount` and
+   `failedAdjudicationCallCount` are reported per run, and per case and in
+   aggregate by the scorer. Zero is never printed as a bare `0`: it renders as
+   *"none — the model tier was never called"*, because zero is the value that
+   changes what every other adjudication number means.
+3. **The verdict distribution is published.** `modelVerdictCounts` carries
+   `relies` / `does-not-rely` / `undetermined` over the calls that returned. The
+   degenerate distribution this spec had to rule out by replaying 12 recorded
+   packets is now visible on the page.
+4. **Arm 3 is split by TIER and publishes no combined total.** A fully adjudicated
+   case that spent zero calls contributes to `deterministicTierOnly`; one that
+   spent at least one contributes to `modelInvolved`. When the second group is
+   empty the document states outright that no fully adjudicated case spent a
+   model call, and that nothing in the arm is evidence about the judge.
+
+**Why arm 3 labels rather than excludes.** Excluding zero-call cases was the other
+option, and it is the treatment this scorer already applies to non-exhaustive
+cases — but for a different reason. A partially adjudicated case cannot tell
+"removed" from "never checked", so its removals are genuinely unknowable and there
+is nothing to report. A zero-call case hides nothing: the removals happened, they
+are correctly counted, and the corpus can still prove some of them wrong — the
+three provably wrong removals of the voided run were real and were diagnostic.
+Only *who removed them* was missing. Deleting sound data to prevent a misreading
+costs more than attributing it, so the data stays and carries its tier. No
+attribution finer than the case is available: the report is file-granular and a
+file's pairs can be settled by either tier, so a case that spent calls is reported
+as mixed rather than split by a guess.
+
+This bumps the change-impact metrics version to
+`2026-08-06.adjudication-tier-attribution`, affecting `adjudicationDelta` only:
+recall and precision are computed from the same predictions and are unaffected,
+but a pre-bump removal figure is the sum of the two new groups and may not be
+compared against either.
 
 ## What Is Built, And What This Spec Still Asks For
 
@@ -976,13 +1027,22 @@ produce silence, which is exactly why they are written down.
 19. **Absence from `impactFindings` is not a statement that a dependent is
     unaffected.** Four different situations produce it: adjudication off, no model
     available, a call that failed or could not decide, and the call cap. The
-    summary's `unadjudicatedPairCount` and `adjudicationStatus` are what tell them
-    apart, and they are reported for exactly that reason.
+    summary's `unadjudicatedPairCount`, `adjudicationCallCount` and
+    `adjudicationStatus` are what tell them apart, and they are reported for
+    exactly that reason.
 20. The residue question is asked over the LOCATED SITES of one file, not over the
     file's whole text. A dependent whose reliance is visible only in code the
     search did not match is not adjudicated as relying.
 21. `no-impact` from the model tier is one call's answer on one pair. It is a
     statement that nothing was shown, not that nothing is there.
+22. **A `completed` adjudication status does not mean the model ran.** It means
+    both tiers were EQUIPPED to run. A change whose symbols carry no detected
+    contract change produces a completed run in which the deterministic tier
+    settles every dependent and no call is spent;
+    `summary.adjudicationCallCount` is the only field that says so, and a zero
+    there means no count in the report is a model's judgement. This entry exists
+    because that exact shape was misread once, and the misreading nearly deleted
+    the capability.
 
 **Retraction: the JavaScript blind spot.** The audit table previously named "the
 JavaScript extractor produced 6 declarations across 1 046 `.js` files (results
@@ -1023,7 +1083,10 @@ it describes is built.
 | A commented-out construct neither creates a contract change nor cancels the real one beside it | `comment-lines.test.ts` (the shared predicate), `contract-changes.test.ts` (end to end over a deprecation shim whose comment carried the construct the change then wrote for real) |
 | Findings carry a compatibility class, not a severity | `impact-run.test.ts` schema-shape test; `impact-report.ts` excludes `no-impact` from a finding by construction |
 | A dependent judged `no-impact` is not reported | `adjudication.test.ts` (deterministic and model paths), `impact-run.test.ts` |
-| Reports no impact rather than manufacturing findings | `impact-run.test.ts` (`adjudicationStatus: "completed"` with an empty finding list and a non-zero `noImpactPairCount`), Markdown test asserting the three kinds of empty are worded apart |
+| Reports no impact rather than manufacturing findings | `impact-run.test.ts` (`adjudicationStatus: "completed"` with an empty finding list and a non-zero model `does-not-rely` count), Markdown test asserting the three kinds of empty are worded apart |
+| A deterministic `no-impact` is never reported as a model one | `adjudication.test.ts` (a swept run reports zero calls and no verdicts; a `does-not-rely` answer counts against the model tier and not the deterministic one; the pooled counter is gone), `impact-run.test.ts` end to end over an empty contract delta |
+| The report says whether the judge ran, and what it answered | `adjudication.test.ts` (the verdict distribution, including a `relies` answer discarded by verification), Markdown tests (`none — the model tier was never called`, the two tier lines, the disabled wording) |
+| A run in which the judge never fired cannot be read as adjudication removing anything | `change-impact-scoring.test.ts` — the voided run's shape rebuilt: exhaustive cases, everything removed, zero calls; every removal lands in `deterministicTierOnly`, `modelInvolved` stays empty, and there is no pooled removal figure to quote. `change-impact-eval-rendering.test.ts` asserts the rendered arm 3 states it outright |
 | Non-blocking, and not configurable to block | config schema test (asserts the absence of a `blocking` key on the block and on `adjudication`) |
 | Failure leaves the diff review unaffected | import-boundary test (no shared code path with `review-workflow`), `adjudication.test.ts` and `impact-run.test.ts` (a throwing provider costs one pair), CLI test (an unresolvable provider still reports and exits 0) |
 | Instructions stay generic and language-neutral | `instructions.test.ts` — the shared prompt genericity guard, plus a test that the guard can still fail this prompt |

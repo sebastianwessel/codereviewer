@@ -39,9 +39,13 @@ import {
   type AdjudicationStatus,
   type ChangeImpactReferenceReport,
   type ImpactedFile,
-  type ImpactFinding
+  type ImpactFinding,
+  type ModelVerdictCounts
 } from './impact-report.js'
-import type { RelianceJudgementRunner } from './reliance-judgement.js'
+import {
+  NO_RELIANCE_VERDICTS,
+  type RelianceJudgementRunner
+} from './reliance-judgement.js'
 
 export type RunChangeImpactInput = {
   readonly repositoryRoot: string
@@ -204,8 +208,11 @@ const disabledReport = (input: {
       nonSourceReferenceCount: 0,
       impactFindingCount: 0,
       reliedUponPairCount: 0,
-      noImpactPairCount: 0,
+      deterministicNoImpactPairCount: 0,
       unadjudicatedPairCount: 0,
+      adjudicationCallCount: 0,
+      failedAdjudicationCallCount: 0,
+      modelVerdictCounts: NO_RELIANCE_VERDICTS,
       adjudicationCallsTruncated: false,
       rejectedFindingCount: 0
     },
@@ -287,10 +294,12 @@ type AdjudicationResult = {
 const NOTHING_ADJUDICATED: AdjudicationOutcome = {
   candidates: [],
   reliedUponPairCount: 0,
-  noImpactPairCount: 0,
+  deterministicNoImpactPairCount: 0,
   unadjudicatedPairCount: 0,
   callsTruncated: false,
-  failedCallCount: 0
+  failedCallCount: 0,
+  modelCallCount: 0,
+  modelVerdictCounts: NO_RELIANCE_VERDICTS
 }
 
 // Adjudicates, then GATES. The two are deliberately separate calls rather than one
@@ -494,8 +503,16 @@ export const runChangeImpact = async (
       ...summarize(grouped),
       impactFindingCount: adjudicated.findings.length,
       reliedUponPairCount: adjudicated.counts.reliedUponPairCount,
-      noImpactPairCount: adjudicated.counts.noImpactPairCount,
+      deterministicNoImpactPairCount:
+        adjudicated.counts.deterministicNoImpactPairCount,
       unadjudicatedPairCount: adjudicated.counts.unadjudicatedPairCount,
+      adjudicationCallCount: adjudicated.counts.modelCallCount,
+      failedAdjudicationCallCount: adjudicated.counts.failedCallCount,
+      // Typed on the way through, so renaming a verdict in the model seam's
+      // vocabulary breaks the compile here rather than the report's schema at
+      // runtime.
+      modelVerdictCounts: adjudicated.counts
+        .modelVerdictCounts satisfies ModelVerdictCounts,
       adjudicationCallsTruncated: adjudicated.counts.callsTruncated,
       rejectedFindingCount: adjudicated.rejectedFindingCount
     },

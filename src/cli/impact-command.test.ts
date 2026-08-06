@@ -235,8 +235,15 @@ describe('impact CLI', { timeout: 20_000 }, () => {
         nonSourceReferenceCount: 0,
         impactFindingCount: 0,
         reliedUponPairCount: 0,
-        noImpactPairCount: 0,
+        deterministicNoImpactPairCount: 0,
         unadjudicatedPairCount: 0,
+        adjudicationCallCount: 0,
+        failedAdjudicationCallCount: 0,
+        modelVerdictCounts: {
+          relies: 0,
+          'does-not-rely': 0,
+          undetermined: 0
+        },
         adjudicationCallsTruncated: false,
         rejectedFindingCount: 0
       })

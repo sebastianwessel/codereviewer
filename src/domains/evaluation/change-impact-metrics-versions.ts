@@ -48,6 +48,14 @@ export const CHANGE_IMPACT_METRICS_VERSION_HISTORY: readonly MetricsVersionEntry
       id: '2026-08-06.impact-destination-file',
       affects: 'all',
       note: 'First scoring rules for the change-impact corpus. The unit is the destination FILE: a prediction counts when the corpus\'s proven-broken dependent is that file. Three arms are scored — the deterministic reference list, the adjudicated subset, and the difference — and recall is reported per reachability class and per contamination split, never pooled. Nothing precedes this entry, so nothing may be compared across it.'
+    },
+    {
+      id: '2026-08-06.adjudication-tier-attribution',
+      // Recall and precision are untouched: the same predictions produce the same
+      // hits. What changed is arm 3, which no longer publishes one "removed by
+      // adjudication" figure at all.
+      affects: ['adjudicationDelta'],
+      note: 'Arm 3 is split by TIER and carries no pooled total. Previously it reported one set of removal counts over every fully adjudicated case; a case in which the model was never called contributed its deterministic-tier removals to that total indistinguishably, which is how the voided 2026-08-06 measurement was read as a judge rejecting everything. The delta now reports two disjoint groups — cases that spent no model call, and cases that spent at least one — and a pre-bump removal figure may not be compared against either, because it is their sum.'
     }
   ]
 

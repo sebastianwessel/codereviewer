@@ -49,7 +49,8 @@ import {
 } from './change-impact-corpus.schema.js'
 import type {
   AdjudicationStatus,
-  ChangeImpactReferenceReport
+  ChangeImpactReferenceReport,
+  ModelVerdictCounts
 } from '../change-impact/index.js'
 
 export const changeImpactArms = ['reference', 'adjudicated'] as const
@@ -130,6 +131,16 @@ export type ChangeImpactCaseScore =
       readonly adjudicationExhaustive: boolean
       readonly unadjudicatedPairCount: number
       readonly adjudicationCallsTruncated: boolean
+      // MODEL CALLS THIS CASE SPENT. Zero is the value that changes what every
+      // other adjudication figure on this case means: no removal it reports can
+      // be a model's judgement, because the model was never asked. Spec 22's
+      // voided first measurement is exactly this shape, and the report carried
+      // nothing that could show it.
+      readonly adjudicationCallCount: number
+      // Pairs the deterministic tier settled without a call, and what the model
+      // answered on the ones it was given. Kept apart for the same reason.
+      readonly deterministicNoImpactPairCount: number
+      readonly modelVerdictCounts: ModelVerdictCounts
       readonly referenceFileCount: number
       // `undefined` when the adjudicated arm was not measured for this case.
       readonly adjudicatedFileCount: number | undefined
@@ -193,25 +204,55 @@ export type ChangeImpactArmMetrics = {
   readonly matchedPredictedFileCount: number
 }
 
-// Arm 3. What adjudication removed relative to the reference list.
+// Arm 3. What adjudication removed relative to the reference list, PER TIER.
 //
 // There is deliberately NO "correct removals" count. A removed file that the
 // corpus proves was a dependent was removed WRONGLY, and that is provable. A
 // removed file absent from the answer key might have been noise or might have
 // been a dependent nobody listed — the corpus cannot tell, so it is counted as
 // unknown-correctness and never credited.
+//
+// AND THERE IS DELIBERATELY NO POOLED TOTAL EITHER. Spec 22's first adjudication
+// measurement reported "15 reference files in, 0 out, 3 provably wrong removals"
+// as what ADJUDICATION removed. The model had been called zero times: every one of
+// those removals came from the deterministic tier's `no-impact` branch, and the
+// figure was read as a judgement failure by a layer that never ran.
+//
+// The treatment is ATTRIBUTION, not exclusion. Excluding zero-call cases — the
+// other option, and the one the non-exhaustive exclusion below uses — would be
+// wrong here, because those exclusions exist for a different reason: a partially
+// adjudicated case cannot tell "removed" from "never checked", so its removals are
+// genuinely unknowable. A zero-call case hides nothing. Its removals happened, they
+// are correctly reported, and the corpus can still prove some of them wrong; only
+// WHO removed them was missing. Deleting sound data to prevent a misreading costs
+// more than labelling it, so the delta is split into two groups that are never
+// added together for the reader.
+export type ChangeImpactAdjudicationDeltaGroup = {
+  readonly caseCount: number
+  readonly caseIds: readonly string[]
+  readonly modelCallCount: number
+  readonly referenceFileCount: number
+  readonly adjudicatedFileCount: number
+  readonly removedFileCount: number
+  readonly removedProvenDependentCount: number
+  readonly removedUnknownCorrectnessCount: number
+  readonly retainedProvenDependentCount: number
+  readonly addedNotInReferenceListCount: number
+}
+
 export type ChangeImpactAdjudicationDelta =
   | { readonly status: 'not-measured'; readonly reason: string }
   | {
       readonly status: 'measured'
-      readonly caseCount: number
-      readonly referenceFileCount: number
-      readonly adjudicatedFileCount: number
-      readonly removedFileCount: number
-      readonly removedProvenDependentCount: number
-      readonly removedUnknownCorrectnessCount: number
-      readonly retainedProvenDependentCount: number
-      readonly addedNotInReferenceListCount: number
+      // Fully adjudicated cases in which the model was NEVER called. Every removal
+      // here is the deterministic tier's, and `modelCallCount` is 0 by
+      // construction. Nothing in this group is evidence about the judge.
+      readonly deterministicTierOnly: ChangeImpactAdjudicationDeltaGroup
+      // Fully adjudicated cases in which at least one call was spent. Their
+      // removals are a MIXTURE of both tiers: the report is file-granular and a
+      // file's pairs can be settled by either, so no finer attribution than the
+      // case is available and none is invented here.
+      readonly modelInvolved: ChangeImpactAdjudicationDeltaGroup
     }
 
 export type ChangeImpactCoverage = {
@@ -231,6 +272,16 @@ export type ChangeImpactCoverage = {
   // is undetermined rather than a miss.
   readonly unadjudicatedPairCount: number
   readonly adjudicationCallsTruncatedCaseCount: number
+  // DID THE JUDGE RUN, AND ON WHAT. Model calls across every adjudicated case,
+  // the cases that spent none, and the distribution of what came back. A run
+  // whose model never fired is visible here and nowhere else; establishing it for
+  // the voided 2026-08-06 measurement took a bespoke replay probe.
+  readonly adjudicationCallCount: number
+  readonly noAdjudicationCallCaseCount: number
+  readonly modelVerdictCounts: ModelVerdictCounts
+  // Pairs the deterministic tier settled with no call. Reported beside the model
+  // verdicts, never added to them.
+  readonly deterministicNoImpactPairCount: number
   readonly totalExpectedCount: number
   readonly scoredExpectedCount: number
 }
@@ -353,6 +404,10 @@ const scoreCase = (input: ChangeImpactCaseInput): ChangeImpactCaseScore => {
     adjudicationExhaustive,
     unadjudicatedPairCount: report.summary.unadjudicatedPairCount,
     adjudicationCallsTruncated: report.summary.adjudicationCallsTruncated,
+    adjudicationCallCount: report.summary.adjudicationCallCount,
+    deterministicNoImpactPairCount:
+      report.summary.deterministicNoImpactPairCount,
+    modelVerdictCounts: report.summary.modelVerdictCounts,
     referenceFileCount: referenceFiles.length,
     adjudicatedFileCount: adjudicationMeasured
       ? adjudicatedFiles.length
@@ -511,13 +566,14 @@ const dimensionsOf = (
     split: corpusCase.split
   }))
 
+type ScoredCase = Extract<ChangeImpactCaseScore, { status: 'scored' }>
+
 export const scoreChangeImpactCases = (
   inputs: readonly ChangeImpactCaseInput[]
 ): ChangeImpactScore => {
   const caseScores = inputs.map(scoreCase)
   const scoredCases = caseScores.filter(
-    (score): score is Extract<ChangeImpactCaseScore, { status: 'scored' }> =>
-      score.status === 'scored'
+    (score): score is ScoredCase => score.status === 'scored'
   )
   const scoredExpectations = scoredCases.flatMap((score) => score.expectations)
   // Dimensions of every expectation whose CASE produced no answer at all. These
@@ -591,7 +647,52 @@ export const scoreChangeImpactCases = (
   const exhaustiveCases = scoredCases.filter(
     (score) => score.adjudicationExhaustive
   )
-  const exhaustiveCaseIds = new Set(exhaustiveCases.map((score) => score.caseId))
+  const deltaGroup = (
+    cases: readonly ScoredCase[]
+  ): ChangeImpactAdjudicationDeltaGroup => {
+    const caseIds = new Set(cases.map((score) => score.caseId))
+
+    return {
+      caseCount: cases.length,
+      caseIds: cases.map((score) => score.caseId),
+      modelCallCount: cases.reduce(
+        (total, score) => total + score.adjudicationCallCount,
+        0
+      ),
+      referenceFileCount: cases.reduce(
+        (total, score) => total + score.referenceFileCount,
+        0
+      ),
+      adjudicatedFileCount: cases.reduce(
+        (total, score) => total + (score.adjudicatedFileCount ?? 0),
+        0
+      ),
+      removedFileCount: cases.reduce(
+        (total, score) => total + score.removedFiles.length,
+        0
+      ),
+      removedProvenDependentCount: cases.reduce(
+        (total, score) => total + score.removedProvenDependents.length,
+        0
+      ),
+      removedUnknownCorrectnessCount: cases.reduce(
+        (total, score) =>
+          total +
+          (score.removedFiles.length - score.removedProvenDependents.length),
+        0
+      ),
+      retainedProvenDependentCount: scoredExpectations.filter(
+        (expectation) =>
+          caseIds.has(expectation.caseId) &&
+          expectation.inReferenceList &&
+          expectation.inAdjudicatedList === true
+      ).length,
+      addedNotInReferenceListCount: cases.reduce(
+        (total, score) => total + score.addedFiles.length,
+        0
+      )
+    }
+  }
   const adjudicationDelta: ChangeImpactAdjudicationDelta =
     exhaustiveCases.length === 0
       ? {
@@ -603,38 +704,13 @@ export const scoreChangeImpactCases = (
         }
       : {
           status: 'measured',
-          caseCount: exhaustiveCases.length,
-          referenceFileCount: exhaustiveCases.reduce(
-            (total, score) => total + score.referenceFileCount,
-            0
+          deterministicTierOnly: deltaGroup(
+            exhaustiveCases.filter(
+              (score) => score.adjudicationCallCount === 0
+            )
           ),
-          adjudicatedFileCount: exhaustiveCases.reduce(
-            (total, score) => total + (score.adjudicatedFileCount ?? 0),
-            0
-          ),
-          removedFileCount: exhaustiveCases.reduce(
-            (total, score) => total + score.removedFiles.length,
-            0
-          ),
-          removedProvenDependentCount: exhaustiveCases.reduce(
-            (total, score) => total + score.removedProvenDependents.length,
-            0
-          ),
-          removedUnknownCorrectnessCount: exhaustiveCases.reduce(
-            (total, score) =>
-              total +
-              (score.removedFiles.length - score.removedProvenDependents.length),
-            0
-          ),
-          retainedProvenDependentCount: scoredExpectations.filter(
-            (expectation) =>
-              exhaustiveCaseIds.has(expectation.caseId) &&
-              expectation.inReferenceList &&
-              expectation.inAdjudicatedList === true
-          ).length,
-          addedNotInReferenceListCount: exhaustiveCases.reduce(
-            (total, score) => total + score.addedFiles.length,
-            0
+          modelInvolved: deltaGroup(
+            exhaustiveCases.filter((score) => score.adjudicationCallCount > 0)
           )
         }
 
@@ -653,6 +729,28 @@ export const scoreChangeImpactCases = (
       adjudicationCallsTruncatedCaseCount: adjudicationMeasuredCases.filter(
         (score) => score.adjudicationCallsTruncated
       ).length,
+      adjudicationCallCount: adjudicationMeasuredCases.reduce(
+        (total, score) => total + score.adjudicationCallCount,
+        0
+      ),
+      noAdjudicationCallCaseCount: adjudicationMeasuredCases.filter(
+        (score) => score.adjudicationCallCount === 0
+      ).length,
+      modelVerdictCounts: adjudicationMeasuredCases.reduce(
+        (totals, score) => ({
+          relies: totals.relies + score.modelVerdictCounts.relies,
+          'does-not-rely':
+            totals['does-not-rely'] +
+            score.modelVerdictCounts['does-not-rely'],
+          undetermined:
+            totals.undetermined + score.modelVerdictCounts.undetermined
+        }),
+        { relies: 0, 'does-not-rely': 0, undetermined: 0 }
+      ),
+      deterministicNoImpactPairCount: adjudicationMeasuredCases.reduce(
+        (total, score) => total + score.deterministicNoImpactPairCount,
+        0
+      ),
       totalExpectedCount: inputs.reduce(
         (total, input) => total + input.corpusCase.expectedImpact.length,
         0

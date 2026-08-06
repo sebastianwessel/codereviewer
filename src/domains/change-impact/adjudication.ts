@@ -55,7 +55,9 @@ import {
   relianceJudgementInputFor,
   verifyRelianceJudgement,
   type RelianceJudgement,
-  type RelianceJudgementRunner
+  type RelianceJudgementRunner,
+  type RelianceVerdict,
+  type RelianceVerdictCounts
 } from './reliance-judgement.js'
 
 // One dependent's use of one changed symbol: the unit adjudication answers about.
@@ -92,15 +94,37 @@ export type CandidateImpactFinding = {
   readonly reliances: readonly CandidateReliance[]
 }
 
+// WHY NO-IMPACT IS COUNTED BY TIER, AND WHY THE CALLS ARE COUNTED AT ALL.
+//
+// A pooled `no-impact` counter pools two different events: "code settled it" and
+// "the model looked and said no". On 2026-08-06 that pooling let a run in which the
+// model was called ZERO times read as a run in which the model rejected everything
+// — the deterministic tier had swept every dependent through its `no-impact` branch
+// because a defective contract delta was empty, and nothing on the page said so.
+// Spec 22 records the incident and requires the split and the call count.
+//
+// The MODEL tier's no-impact count is `modelVerdictCounts['does-not-rely']`. It is
+// stored once, there, rather than mirrored into a second field that could disagree
+// with it; the pooled total is the sum of the two and is derived where it is shown,
+// never stored.
 export type AdjudicationCounts = {
   readonly reliedUponPairCount: number
-  readonly noImpactPairCount: number
+  // Pairs the DETERMINISTIC tier settled as `no-impact`: a newly added symbol, or
+  // a modified symbol with no caller-observable contract change. No call was spent
+  // on any of them and none of them is a model judgement.
+  readonly deterministicNoImpactPairCount: number
   readonly unadjudicatedPairCount: number
   readonly callsTruncated: boolean
   // Calls that threw. Counted separately from the other unadjudicated causes so a
   // failing provider is visible as a failing provider rather than as a quiet run
   // that found nothing.
   readonly failedCallCount: number
+  // Model calls ATTEMPTED, failures included. Zero is the load-bearing value: it
+  // means the judge never ran, and no count in this record may then be read as
+  // something a model decided.
+  readonly modelCallCount: number
+  // What the model answered, over the calls that returned.
+  readonly modelVerdictCounts: RelianceVerdictCounts
 }
 
 export type AdjudicationOutcome = AdjudicationCounts & {
@@ -324,11 +348,16 @@ export const runAdjudication = async (
     readonly compatibilityClass: ReportableCompatibilityClass
     readonly reliance: CandidateReliance
   }[] = []
-  let noImpactPairCount = 0
+  let deterministicNoImpactPairCount = 0
   let unadjudicatedPairCount = 0
   let failedCallCount = 0
   let callsTruncated = false
   let callsSpent = 0
+  const modelVerdictCounts: Record<RelianceVerdict, number> = {
+    relies: 0,
+    'does-not-rely': 0,
+    undetermined: 0
+  }
 
   for (const pair of input.pairs) {
     const key = impactedSymbolKey({
@@ -346,8 +375,12 @@ export const runAdjudication = async (
     // first site is where a reader starts reading it.
     const anchor = pair.sites[0]
 
+    // Both branches are settled in code without a call, so both belong to the
+    // deterministic tier's count. (The second is unreachable through
+    // `runChangeImpact` — `ImpactedFileSymbolSchema` requires a site — and is kept
+    // as a guard rather than as a claim about a dependent.)
     if (verdict.outcome === 'no-impact' || anchor === undefined) {
-      noImpactPairCount += 1
+      deterministicNoImpactPairCount += 1
       continue
     }
 
@@ -405,8 +438,11 @@ export const runAdjudication = async (
 
     const verified = verifyRelianceJudgement(judged, pair.sites)
 
+    // Counted before it is acted on, so the distribution covers every answer the
+    // model gave — including the ones that end up reported nowhere.
+    modelVerdictCounts[verified.status] += 1
+
     if (verified.status === 'does-not-rely') {
-      noImpactPairCount += 1
       continue
     }
 
@@ -445,9 +481,11 @@ export const runAdjudication = async (
   return {
     candidates: groupByFile(reliances),
     reliedUponPairCount: reliances.length,
-    noImpactPairCount,
+    deterministicNoImpactPairCount,
     unadjudicatedPairCount,
     callsTruncated,
-    failedCallCount
+    failedCallCount,
+    modelCallCount: callsSpent,
+    modelVerdictCounts
   }
 }

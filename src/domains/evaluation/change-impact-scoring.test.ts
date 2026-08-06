@@ -91,8 +91,16 @@ describe('change-impact scoring: the deterministic baseline arm', () => {
       })
     ])
 
-    expect(score.adjudicationDelta).toMatchObject({
-      status: 'measured',
+    expect(score.adjudicationDelta.status).toBe('measured')
+
+    if (score.adjudicationDelta.status !== 'measured') {
+      throw new Error('expected a measured delta')
+    }
+
+    // The model answered on this case, so its removals land in the tier that made
+    // them.
+    expect(score.adjudicationDelta.modelInvolved).toMatchObject({
+      caseCount: 1,
       referenceFileCount: 3,
       adjudicatedFileCount: 1,
       removedFileCount: 2,
@@ -103,7 +111,12 @@ describe('change-impact scoring: the deterministic baseline arm', () => {
       retainedProvenDependentCount: 0,
       addedNotInReferenceListCount: 0
     })
-    expect(score.adjudicationDelta).not.toHaveProperty('removedCorrectCount')
+    expect(score.adjudicationDelta.deterministicTierOnly.caseCount).toBe(0)
+    expect(score.adjudicationDelta.modelInvolved).not.toHaveProperty(
+      'removedCorrectCount'
+    )
+    // No pooled total exists to quote as "what adjudication removed".
+    expect(score.adjudicationDelta).not.toHaveProperty('removedFileCount')
   })
 
   // The decision rule reads recall against the dependents the reference list
@@ -131,6 +144,143 @@ describe('change-impact scoring: the deterministic baseline arm', () => {
       total: 1,
       rate: 1
     })
+  })
+})
+
+// THE VOIDED RUN, REBUILT. Spec 22 §"First Adjudication Measurement — DIAGNOSED
+// AND VOID": six exhaustively adjudicated cases put 15 reference files in and got
+// 0 out, dropping 3 dependents upstream had to repair — and the model was called
+// ZERO times in all six, because an empty contract delta routes every dependent
+// down the deterministic `no-impact` branch. The scorer reported that as what
+// ADJUDICATION removed, and it was one step from deleting the capability.
+describe('change-impact scoring: a judge that never ran cannot read as a judge that rejected everything', () => {
+  const sweptCase = (input: {
+    readonly id: string
+    readonly expected: readonly string[]
+    readonly referenceFiles: readonly string[]
+  }): ChangeImpactCaseInput => ({
+    corpusCase: corpusCaseFixture({
+      id: input.id,
+      expected: input.expected.map((path) => ({
+        path,
+        reachability: 'caller-of-changed-symbol' as const
+      }))
+    }),
+    outcome: {
+      status: 'scored',
+      report: impactReportFixture({
+        referenceFiles: input.referenceFiles,
+        // Nothing reported, nothing left unadjudicated: exhaustive, and empty.
+        findingFiles: [],
+        // The whole point: every pair was settled in code, and no call was spent.
+        deterministicNoImpactPairCount: input.referenceFiles.length,
+        adjudicationCallCount: 0
+      })
+    }
+  })
+
+  const votedRunShape = [
+    sweptCase({
+      id: 'swept-a',
+      expected: ['src/dependent-a.py'],
+      referenceFiles: ['src/dependent-a.py', 'src/noise-a.py']
+    }),
+    sweptCase({
+      id: 'swept-b',
+      expected: ['src/dependent-b.py'],
+      referenceFiles: ['src/dependent-b.py', 'src/noise-b.py', 'src/noise-c.py']
+    })
+  ]
+
+  test('attributes every removal of a zero-call case to the deterministic tier', () => {
+    const score = scoreChangeImpactCases(votedRunShape)
+
+    expect(score.adjudicationDelta.status).toBe('measured')
+
+    if (score.adjudicationDelta.status !== 'measured') {
+      throw new Error('expected a measured delta')
+    }
+
+    // Every removal is the deterministic tier's, and it says so.
+    expect(score.adjudicationDelta.deterministicTierOnly).toMatchObject({
+      caseCount: 2,
+      modelCallCount: 0,
+      referenceFileCount: 5,
+      adjudicatedFileCount: 0,
+      removedFileCount: 5,
+      removedProvenDependentCount: 2,
+      removedUnknownCorrectnessCount: 3
+    })
+    expect(score.adjudicationDelta.deterministicTierOnly.caseIds).toEqual([
+      'swept-a',
+      'swept-b'
+    ])
+    // And the model tier's group is EMPTY rather than a set of zeros standing in
+    // for rejections it never made.
+    expect(score.adjudicationDelta.modelInvolved).toMatchObject({
+      caseCount: 0,
+      modelCallCount: 0,
+      removedFileCount: 0,
+      removedProvenDependentCount: 0
+    })
+  })
+
+  test('coverage says the model was never called, per case and in aggregate', () => {
+    const score = scoreChangeImpactCases(votedRunShape)
+
+    expect(score.coverage.adjudicationMeasuredCaseCount).toBe(2)
+    expect(score.coverage.adjudicationExhaustiveCaseCount).toBe(2)
+    expect(score.coverage.adjudicationCallCount).toBe(0)
+    expect(score.coverage.noAdjudicationCallCaseCount).toBe(2)
+    expect(score.coverage.modelVerdictCounts).toEqual({
+      relies: 0,
+      'does-not-rely': 0,
+      undetermined: 0
+    })
+    expect(score.coverage.deterministicNoImpactPairCount).toBe(5)
+
+    for (const caseScore of score.caseScores) {
+      expect(caseScore.status).toBe('scored')
+
+      if (caseScore.status !== 'scored') {
+        continue
+      }
+
+      expect(caseScore.adjudicationCallCount).toBe(0)
+    }
+  })
+
+  // A case that spent calls and one that spent none must never be summed.
+  test('keeps a swept case and a judged case in separate groups', () => {
+    const score = scoreChangeImpactCases([
+      ...votedRunShape,
+      scoredCase({
+        id: 'judged',
+        expected: [
+          { path: 'src/dependent-c.py', reachability: 'caller-of-changed-symbol' }
+        ],
+        referenceFiles: ['src/dependent-c.py', 'src/noise-d.py'],
+        findingFiles: ['src/dependent-c.py']
+      })
+    ])
+
+    if (score.adjudicationDelta.status !== 'measured') {
+      throw new Error('expected a measured delta')
+    }
+
+    expect(score.adjudicationDelta.deterministicTierOnly.caseCount).toBe(2)
+    expect(score.adjudicationDelta.modelInvolved.caseCount).toBe(1)
+    expect(
+      score.adjudicationDelta.modelInvolved.modelCallCount
+    ).toBeGreaterThan(0)
+    // The proven dependent the judge kept belongs to the judge's group only.
+    expect(
+      score.adjudicationDelta.modelInvolved.retainedProvenDependentCount
+    ).toBe(1)
+    expect(
+      score.adjudicationDelta.deterministicTierOnly.retainedProvenDependentCount
+    ).toBe(0)
+    expect(score.coverage.noAdjudicationCallCaseCount).toBe(2)
   })
 })
 
@@ -566,9 +716,12 @@ describe('change-impact scoring: the destination file is the unit', () => {
       })
     ])
 
-    expect(score.adjudicationDelta).toMatchObject({
-      status: 'measured',
-      addedNotInReferenceListCount: 1
-    })
+    if (score.adjudicationDelta.status !== 'measured') {
+      throw new Error('expected a measured delta')
+    }
+
+    expect(
+      score.adjudicationDelta.modelInvolved.addedNotInReferenceListCount
+    ).toBe(1)
   })
 })

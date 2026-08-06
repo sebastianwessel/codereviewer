@@ -347,12 +347,26 @@ empty `impactFindings`:
 | --- | --- |
 | `disabled` | Nothing was checked. This is the default. |
 | `no-model` | The dependents needing no model were checked; everything else was not. |
-| `completed` | Both tiers ran, and nothing was shown to rely on what changed. This is an answer. |
+| `completed` | Both tiers were equipped to run, and nothing was shown to rely on what changed. This is an answer. |
 
 **Absence from `impactFindings` is never a statement that a dependent is
 unaffected.** `summary.unadjudicatedPairCount` counts every dependent no
 adjudicator settled: no model available, a call that failed, an answer that could
 not decide, or a pair past the call cap.
+
+**`completed` does not mean the model ran.** Adjudication is two tiers, and the
+summary keeps them apart rather than reporting one "not affected" total:
+
+| Field | What it counts |
+| --- | --- |
+| `deterministicNoImpactPairCount` | Dependents settled in code, with no call: a symbol this change adds, or a symbol whose change nothing caller-observable was detected for. |
+| `modelVerdictCounts` | What the model answered on the residue — `relies`, `does-not-rely` (the model tier's own not-affected count), `undetermined`. |
+| `adjudicationCallCount` | Model calls spent, failures included. **Zero means the model was never asked**, and no number in the report is then a model's judgement. |
+| `failedAdjudicationCallCount` | Of those calls, the ones that did not complete. |
+
+A change whose symbols carry no detected contract change produces a `completed`
+run with zero calls, and the report says so in words rather than printing a `0`
+that reads like a verdict.
 
 **This layer is unmeasured.** No accuracy figure for it exists, and none is quoted
 here. It is designed to cut the reference list down to the dependents that are
@@ -395,8 +409,15 @@ altered about each symbol, and how far the search could see.
     "nonSourceReferenceCount": 3,
     "impactFindingCount": 1,
     "reliedUponPairCount": 1,
-    "noImpactPairCount": 2,
+    "deterministicNoImpactPairCount": 1,
     "unadjudicatedPairCount": 0,
+    "adjudicationCallCount": 1,
+    "failedAdjudicationCallCount": 0,
+    "modelVerdictCounts": {
+      "relies": 0,
+      "does-not-rely": 1,
+      "undetermined": 0
+    },
     "adjudicationCallsTruncated": false,
     "rejectedFindingCount": 0
   },
@@ -645,8 +666,9 @@ it produces silence, so it is written down instead.
     against that, not against the diff reviewer.
 19. **Absence from `impactFindings` never means a dependent is unaffected.** Four
     situations produce it — adjudication off, no model available, a call that
-    failed or could not decide, and the call cap — and `adjudicationStatus` plus
-    `summary.unadjudicatedPairCount` are what tell them apart.
+    failed or could not decide, and the call cap — and `adjudicationStatus`,
+    `summary.adjudicationCallCount` and `summary.unadjudicatedPairCount` are what
+    tell them apart.
 20. **The reliance question is asked over the located sites only.** A dependent
     whose reliance is visible only in code the reference search did not match is
     not adjudicated as relying on anything.

@@ -55,7 +55,9 @@ const report = (input: {
   readonly status?: ChangeImpactReferenceReport['status']
   readonly adjudicationStatus?: ChangeImpactReferenceReport['adjudicationStatus']
   readonly impactFindings?: readonly ImpactFinding[]
-  readonly noImpactPairCount?: number
+  readonly deterministicNoImpactPairCount?: number
+  readonly modelNoImpactPairCount?: number
+  readonly adjudicationCallCount?: number
   readonly unadjudicatedPairCount?: number
   readonly warnings?: readonly string[]
   readonly changedSymbolsTruncated?: boolean
@@ -75,6 +77,16 @@ const report = (input: {
     )
 
   const impactFindings = input.impactFindings ?? []
+  const modelNoImpactPairCount = input.modelNoImpactPairCount ?? 0
+  const reliances = impactFindings.flatMap((finding) => finding.reliances)
+  const modelRelianceCount = reliances.filter(
+    (reliance) => reliance.adjudicatedBy === 'model'
+  ).length
+  // Every model-answered pair cost a call, so the default keeps the two
+  // consistent rather than letting a test assert over a report the engine could
+  // not have produced.
+  const adjudicationCallCount =
+    input.adjudicationCallCount ?? modelRelianceCount + modelNoImpactPairCount
 
   return ChangeImpactReferenceReportSchema.parse({
     schemaVersion: '3.0',
@@ -106,12 +118,16 @@ const report = (input: {
         0
       ),
       impactFindingCount: impactFindings.length,
-      reliedUponPairCount: impactFindings.reduce(
-        (total, finding) => total + finding.reliances.length,
-        0
-      ),
-      noImpactPairCount: input.noImpactPairCount ?? 0,
+      reliedUponPairCount: reliances.length,
+      deterministicNoImpactPairCount: input.deterministicNoImpactPairCount ?? 0,
       unadjudicatedPairCount: input.unadjudicatedPairCount ?? 0,
+      adjudicationCallCount,
+      failedAdjudicationCallCount: 0,
+      modelVerdictCounts: {
+        relies: modelRelianceCount,
+        'does-not-rely': modelNoImpactPairCount,
+        undetermined: 0
+      },
       adjudicationCallsTruncated: false,
       rejectedFindingCount: 0
     },
@@ -363,7 +379,7 @@ describe('change-impact Markdown', () => {
           impactedFiles: [
             impactedFile('src/a.ts', scheme, [{ line: 3, text: 'scheme()' }])
           ],
-          noImpactPairCount: 1
+          modelNoImpactPairCount: 1
         })
       )
 
@@ -374,6 +390,66 @@ describe('change-impact Markdown', () => {
       expect(rendered).toContain(
         'none was shown to rely on the part of the contract that changed'
       )
+      // And WHICH tier checked it. One model call was spent and it answered.
+      expect(rendered).toContain('1 adjudication call was made')
+      expect(rendered).toContain('1 "does not rely"')
+    })
+
+    // THE VOIDED RUN'S SHAPE, at the surface a user reads. Spec 22's first
+    // adjudication measurement removed every dependent it was given without ever
+    // calling the model; the document said nothing about that, and the removals
+    // read as the judge's rejections.
+    test('an empty finding list from a run that made no call says the model never ran', () => {
+      const rendered = renderChangeImpactMarkdown(
+        report({
+          changedSymbols: [scheme],
+          impactedFiles: [
+            impactedFile('src/a.ts', scheme, [{ line: 3, text: 'scheme()' }]),
+            impactedFile('src/b.ts', scheme, [{ line: 9, text: 'scheme()' }])
+          ],
+          deterministicNoImpactPairCount: 2,
+          adjudicationCallCount: 0
+        })
+      )
+
+      expect(rendered).toContain('The model tier was never called on this change')
+      expect(rendered).toContain(
+        '- Adjudication model calls: none — the model tier was never called'
+      )
+      expect(rendered).toContain(
+        '- Dependent uses the deterministic tier settled without a model call: 2'
+      )
+      expect(rendered).toContain(
+        '- Dependent uses the model checked and found not to rely: 0'
+      )
+      // Absence is never zero: the sentence must not read as a model that looked
+      // and cleared two dependents.
+      expect(rendered).not.toContain('2 adjudication calls were made')
+    })
+
+    test('separates the tiers in the summary rather than pooling them', () => {
+      const rendered = renderChangeImpactMarkdown(
+        report({
+          changedSymbols: [scheme],
+          impactedFiles: [
+            impactedFile('src/a.ts', scheme, [{ line: 3, text: 'scheme()' }])
+          ],
+          deterministicNoImpactPairCount: 4,
+          modelNoImpactPairCount: 1
+        })
+      )
+
+      expect(rendered).toContain(
+        '- Dependent uses the deterministic tier settled without a model call: 4'
+      )
+      expect(rendered).toContain(
+        '- Dependent uses the model checked and found not to rely: 1'
+      )
+      expect(rendered).toContain(
+        '- Adjudication model calls: 1 (relies 0, does not rely 1, unusable 0, failed 0)'
+      )
+      // The pooled line the two replaced must not come back.
+      expect(rendered).not.toContain('Dependent uses checked and found not to rely')
     })
 
     test('says an off adjudicator checked nothing, rather than found nothing', () => {
@@ -384,6 +460,11 @@ describe('change-impact Markdown', () => {
       expect(rendered).toContain('Adjudication is switched off')
       expect(rendered).toContain(
         'This is not a report that nothing depends on the change.'
+      )
+      // A switched-off adjudicator has no call count to print, and printing `0`
+      // would read as a run that tried.
+      expect(rendered).toContain(
+        '- Adjudication model calls: not run (adjudication is switched off)'
       )
     })
 

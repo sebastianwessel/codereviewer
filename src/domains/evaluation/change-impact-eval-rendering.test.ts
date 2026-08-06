@@ -69,7 +69,58 @@ describe('change-impact eval summary', () => {
 
     expect(markdown).toContain('Arm 1 — deterministic reference list')
     expect(markdown).toContain('Arm 2 — after adjudication')
-    expect(markdown).toContain('Arm 3 — what adjudication removed')
+    expect(markdown).toContain('Arm 3 — what adjudication removed, by tier')
+  })
+
+  // THE VOIDED RUN, AT THE SURFACE A HUMAN READS. Spec 22's first adjudication
+  // measurement was read as a judge that rejected everything; the judge had been
+  // called zero times, and the document said nothing about that.
+  test('refuses to present a zero-call run as what the judge removed', () => {
+    const markdown = render({
+      cases: [
+        {
+          corpusCase: corpusCaseFixture({
+            id: 'swept',
+            expected: [
+              { path: 'src/a.py', reachability: 'caller-of-changed-symbol' }
+            ]
+          }),
+          outcome: {
+            status: 'scored',
+            report: impactReportFixture({
+              referenceFiles: ['src/a.py', 'src/noise.py'],
+              findingFiles: [],
+              deterministicNoImpactPairCount: 2,
+              adjudicationCallCount: 0
+            })
+          }
+        }
+      ]
+    })
+
+    // The arm is split, and the model-tier half says outright that it is empty.
+    expect(markdown).toContain(
+      '### Deterministic tier only — the model was never called'
+    )
+    expect(markdown).toContain(
+      '**No fully adjudicated case spent a single model call.**'
+    )
+    expect(markdown).toContain('nothing here is evidence about the judge')
+    // The call count is on the page, per case and in aggregate.
+    expect(markdown).toContain('| **model calls spent** | 0 |')
+    expect(markdown).toContain(
+      '| — adjudicated cases in which the model was NEVER called | 1 |'
+    )
+    expect(markdown).toContain('**none — judge never ran**')
+  })
+
+  test('shows the verdict distribution the model returned', () => {
+    const markdown = render({ cases: [scoredCase({ id: 'case-a' })] })
+
+    expect(markdown).toContain('| — verdict `relies` | 1 |')
+    expect(markdown).toContain('| — verdict `does-not-rely` | 1 |')
+    expect(markdown).toContain('| — verdict `undetermined` | 0 |')
+    expect(markdown).toContain('| **model calls spent** | 2 |')
   })
 
   test('names the provider and model the numbers belong to', () => {

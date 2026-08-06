@@ -127,10 +127,34 @@ export const impactReportFixture = (input: {
   // call cap. Non-zero makes the run partial rather than exhaustive.
   readonly unadjudicatedPairCount?: number
   readonly adjudicationCallsTruncated?: boolean
+  // THE TIER THAT ANSWERED. By default every pair is model-answered, which is the
+  // ordinary shape of an adjudicated run. Set this to make the deterministic tier
+  // the one that settled the pairs — and with it, `adjudicationCallCount` to 0 —
+  // to reproduce the shape of the run spec 22 voided.
+  readonly deterministicNoImpactPairCount?: number
+  readonly adjudicationCallCount?: number
 }): ChangeImpactReferenceReport => {
   const referenceFiles = input.referenceFiles ?? []
   const referenceTestFiles = input.referenceTestFiles ?? []
   const findingFiles = input.findingFiles ?? []
+  const pairCount = referenceFiles.length + referenceTestFiles.length
+  const deterministicNoImpactPairCount = input.deterministicNoImpactPairCount ?? 0
+  // Whatever the deterministic tier did not settle and did not become a finding
+  // was answered by the model, so the default report is one in which the judge
+  // actually ran on the residue.
+  const modelNoImpactPairCount = Math.max(
+    pairCount - deterministicNoImpactPairCount - findingFiles.length,
+    0
+  )
+  // A run that spent no call has no verdicts, whatever else it reported. Derived
+  // rather than accepted as a parameter, so a fixture cannot state a shape the
+  // engine could not produce.
+  const noCallsWereSpent = input.adjudicationCallCount === 0
+  const modelVerdictCounts = {
+    relies: noCallsWereSpent ? 0 : findingFiles.length,
+    'does-not-rely': noCallsWereSpent ? 0 : modelNoImpactPairCount,
+    undetermined: 0
+  }
 
   return {
     schemaVersion: '3.0',
@@ -154,9 +178,13 @@ export const impactReportFixture = (input: {
       nonSourceReferenceCount: 0,
       impactFindingCount: findingFiles.length,
       reliedUponPairCount: findingFiles.length,
-      noImpactPairCount:
-        referenceFiles.length + referenceTestFiles.length - findingFiles.length,
+      deterministicNoImpactPairCount,
       unadjudicatedPairCount: input.unadjudicatedPairCount ?? 0,
+      adjudicationCallCount:
+        input.adjudicationCallCount ??
+        modelNoImpactPairCount + findingFiles.length,
+      failedAdjudicationCallCount: 0,
+      modelVerdictCounts,
       adjudicationCallsTruncated: input.adjudicationCallsTruncated ?? false,
       rejectedFindingCount: 0
     },

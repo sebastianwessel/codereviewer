@@ -16,7 +16,10 @@
 
 import { z } from 'zod'
 import { LaneUsageSchema } from '../costs/index.js'
-import { AdjudicationStatusSchema } from '../change-impact/index.js'
+import {
+  AdjudicationStatusSchema,
+  ModelVerdictCountsSchema
+} from '../change-impact/index.js'
 import { CHANGE_IMPACT_METRICS_VERSION } from './change-impact-metrics-versions.js'
 import { ImpactReachabilitySchema } from './change-impact-corpus.schema.js'
 import { CorpusSplitSchema } from './real-repo-corpus.schema.js'
@@ -98,6 +101,31 @@ const ArmMetricsSchema = z.strictObject({
   matchedPredictedFileCount: z.int().min(0)
 })
 
+const AdjudicationDeltaGroupSchema = z.strictObject({
+  caseCount: z.int().min(0),
+  caseIds: z.array(z.string().min(1)),
+  // Model calls the cases in this group spent. Zero in `deterministicTierOnly` by
+  // construction, and that is the whole reason the group exists.
+  modelCallCount: z.int().min(0),
+  referenceFileCount: z.int().min(0),
+  adjudicatedFileCount: z.int().min(0),
+  removedFileCount: z.int().min(0),
+  // Removals the corpus PROVES were wrong.
+  removedProvenDependentCount: z.int().min(0),
+  // Removals whose correctness this corpus cannot settle. Never credited as
+  // correct: the answer key lists the dependents upstream had to repair, not
+  // every file that was fine to drop.
+  removedUnknownCorrectnessCount: z.int().min(0),
+  retainedProvenDependentCount: z.int().min(0),
+  // Must be zero: the impact admission gate refuses a finding naming a
+  // dependent the run never located. Reported so a gate that stopped working is
+  // visible rather than silent.
+  addedNotInReferenceListCount: z.int().min(0)
+})
+
+// Two groups and NO pooled total. A delta that adds a deterministic sweep to a
+// model's judgements produces the figure spec 22's voided measurement was read
+// from; there is no field here for anyone to quote it out of.
 const AdjudicationDeltaSchema = z.discriminatedUnion('status', [
   z.strictObject({
     status: z.literal('not-measured'),
@@ -105,21 +133,8 @@ const AdjudicationDeltaSchema = z.discriminatedUnion('status', [
   }),
   z.strictObject({
     status: z.literal('measured'),
-    caseCount: z.int().min(1),
-    referenceFileCount: z.int().min(0),
-    adjudicatedFileCount: z.int().min(0),
-    removedFileCount: z.int().min(0),
-    // Removals the corpus PROVES were wrong.
-    removedProvenDependentCount: z.int().min(0),
-    // Removals whose correctness this corpus cannot settle. Never credited as
-    // correct: the answer key lists the dependents upstream had to repair, not
-    // every file that was fine to drop.
-    removedUnknownCorrectnessCount: z.int().min(0),
-    retainedProvenDependentCount: z.int().min(0),
-    // Must be zero: the impact admission gate refuses a finding naming a
-    // dependent the run never located. Reported so a gate that stopped working is
-    // visible rather than silent.
-    addedNotInReferenceListCount: z.int().min(0)
+    deterministicTierOnly: AdjudicationDeltaGroupSchema,
+    modelInvolved: AdjudicationDeltaGroupSchema
   })
 ])
 
@@ -142,6 +157,11 @@ const CaseResultSchema = z.discriminatedUnion('status', [
     adjudicationExhaustive: z.boolean(),
     unadjudicatedPairCount: z.int().min(0),
     adjudicationCallsTruncated: z.boolean(),
+    // Did the judge run on this case, and what did it answer. Zero calls means
+    // every removal the case reports is the deterministic tier's.
+    adjudicationCallCount: z.int().min(0),
+    deterministicNoImpactPairCount: z.int().min(0),
+    modelVerdictCounts: ModelVerdictCountsSchema,
     referenceFileCount: z.int().min(0),
     adjudicatedFileCount: z.int().min(0).optional(),
     expectations: z.array(
@@ -213,6 +233,12 @@ export const ChangeImpactEvalReportSchema = z.strictObject({
     adjudicationExhaustiveCaseCount: z.int().min(0),
     unadjudicatedPairCount: z.int().min(0),
     adjudicationCallsTruncatedCaseCount: z.int().min(0),
+    // Whether the judge ran at all, and on what. `noAdjudicationCallCaseCount`
+    // equal to `adjudicationMeasuredCaseCount` means no case reached the model.
+    adjudicationCallCount: z.int().min(0),
+    noAdjudicationCallCaseCount: z.int().min(0),
+    modelVerdictCounts: ModelVerdictCountsSchema,
+    deterministicNoImpactPairCount: z.int().min(0),
     totalExpectedCount: z.int().min(0),
     scoredExpectedCount: z.int().min(0)
   }),

@@ -24,6 +24,7 @@ import {
 import type { PrecisionBracketBound } from './eval-precision-bracket.js'
 import type { ChangeImpactEvalReport } from './change-impact-eval-report.js'
 import type {
+  ChangeImpactAdjudicationDeltaGroup,
   ChangeImpactArmMetrics,
   ChangeImpactRecall
 } from './change-impact-scoring.js'
@@ -131,6 +132,61 @@ const appendArm = (
   })
 }
 
+// A case's model-call count, in words when it is zero. `0` in a numeric column is
+// too easy to read past, and it is the value that decides whether the rest of the
+// row is about a model at all.
+const caseCallCell = (
+  result: Extract<
+    ChangeImpactEvalReport['caseResults'][number],
+    { readonly status: 'scored' }
+  >
+): string =>
+  result.adjudicationCallCount === 0
+    ? '**none — judge never ran**'
+    : formatInteger(result.adjudicationCallCount)
+
+// One tier's share of arm 3. A group with no cases prints a sentence, never a
+// table of zeros: "no case did this" and "cases did this and removed nothing" are
+// different facts, and a zero table reads as the second.
+const appendDeltaGroup = (
+  lines: string[],
+  input: {
+    readonly heading: string
+    readonly preamble: string
+    readonly emptyStatement: string
+    readonly group: ChangeImpactAdjudicationDeltaGroup
+  }
+): void => {
+  lines.push(input.heading)
+  lines.push('')
+
+  if (input.group.caseCount === 0) {
+    lines.push(input.emptyStatement)
+    lines.push('')
+
+    return
+  }
+
+  lines.push(input.preamble)
+  lines.push('')
+  appendMarkdownTable(lines, {
+    header: '| field | count |',
+    alignment: '| --- | ---: |',
+    rows: [
+      `| fully adjudicated cases | ${formatInteger(input.group.caseCount)} |`,
+      `| model calls spent on them | ${formatInteger(input.group.modelCallCount)} |`,
+      `| reference destination files | ${formatInteger(input.group.referenceFileCount)} |`,
+      `| adjudicated destination files | ${formatInteger(input.group.adjudicatedFileCount)} |`,
+      `| removed | ${formatInteger(input.group.removedFileCount)} |`,
+      `| — removals PROVEN wrong (a corpus dependent was dropped) | ${formatInteger(input.group.removedProvenDependentCount)} |`,
+      `| — removals of unknown correctness | ${formatInteger(input.group.removedUnknownCorrectnessCount)} |`,
+      `| proven dependents retained | ${formatInteger(input.group.retainedProvenDependentCount)} |`,
+      `| reported but never located (must be 0) | ${formatInteger(input.group.addedNotInReferenceListCount)} |`,
+      `| cases | ${escapeMarkdownCell(input.group.caseIds.join(', '))} |`
+    ]
+  })
+}
+
 export const renderChangeImpactEvalSummary = (
   report: ChangeImpactEvalReport
 ): string => {
@@ -191,6 +247,15 @@ export const renderChangeImpactEvalSummary = (
       `| — of those, fully adjudicated | ${formatInteger(report.coverage.adjudicationExhaustiveCaseCount)} |`,
       `| pairs no adjudicator settled | ${formatInteger(report.coverage.unadjudicatedPairCount)} |`,
       `| cases bound by the adjudication call cap | ${formatInteger(report.coverage.adjudicationCallsTruncatedCaseCount)} |`,
+      // DID THE JUDGE RUN. Every row below answers that, and it is in the
+      // coverage table rather than beside a rate because it decides whether any
+      // adjudication figure in this document is about a model at all.
+      `| **model calls spent** | ${formatInteger(report.coverage.adjudicationCallCount)} |`,
+      `| — adjudicated cases in which the model was NEVER called | ${formatInteger(report.coverage.noAdjudicationCallCaseCount)} |`,
+      `| — verdict \`relies\` | ${formatInteger(report.coverage.modelVerdictCounts.relies)} |`,
+      `| — verdict \`does-not-rely\` | ${formatInteger(report.coverage.modelVerdictCounts['does-not-rely'])} |`,
+      `| — verdict \`undetermined\` | ${formatInteger(report.coverage.modelVerdictCounts.undetermined)} |`,
+      `| pairs the deterministic tier settled with no call | ${formatInteger(report.coverage.deterministicNoImpactPairCount)} |`,
       `| expected dependents (corpus) | ${formatInteger(report.coverage.totalExpectedCount)} |`,
       `| expected dependents scored | ${formatInteger(report.coverage.scoredExpectedCount)} |`
     ]
@@ -208,6 +273,11 @@ export const renderChangeImpactEvalSummary = (
     heading: '## Arm 2 — after adjudication',
     preamble: [
       'The files adjudication actually reports. Spec 22 records that adjudication is EXPECTED to reduce recall relative to the reference list, and that this is the intended trade — "a run that loses no recall has almost certainly adjudicated nothing".',
+      ...(report.coverage.noAdjudicationCallCaseCount === 0
+        ? []
+        : [
+            `**${formatInteger(report.coverage.noAdjudicationCallCaseCount)} of ${formatInteger(report.coverage.adjudicationMeasuredCaseCount)} adjudicated case(s) spent NO model call.** For those cases this arm is the deterministic tier's output alone, and nothing about them may be read as the judge's behaviour.`
+          ]),
       ...(report.coverage.unadjudicatedPairCount === 0
         ? []
         : [
@@ -217,7 +287,7 @@ export const renderChangeImpactEvalSummary = (
     arm: report.arms.adjudicated
   })
 
-  lines.push('## Arm 3 — what adjudication removed')
+  lines.push('## Arm 3 — what adjudication removed, by tier')
   lines.push('')
 
   if (report.adjudicationDelta.status === 'not-measured') {
@@ -227,19 +297,26 @@ export const renderChangeImpactEvalSummary = (
     lines.push('')
   } else {
     const delta = report.adjudicationDelta
-    appendMarkdownTable(lines, {
-      header: '| field | count |',
-      alignment: '| --- | ---: |',
-      rows: [
-        `| fully adjudicated cases (the only ones that can say what was REMOVED) | ${formatInteger(delta.caseCount)} |`,
-        `| reference destination files | ${formatInteger(delta.referenceFileCount)} |`,
-        `| adjudicated destination files | ${formatInteger(delta.adjudicatedFileCount)} |`,
-        `| removed by adjudication | ${formatInteger(delta.removedFileCount)} |`,
-        `| — removals PROVEN wrong (a corpus dependent was dropped) | ${formatInteger(delta.removedProvenDependentCount)} |`,
-        `| — removals of unknown correctness | ${formatInteger(delta.removedUnknownCorrectnessCount)} |`,
-        `| proven dependents retained | ${formatInteger(delta.retainedProvenDependentCount)} |`,
-        `| reported but never located (must be 0) | ${formatInteger(delta.addedNotInReferenceListCount)} |`
-      ]
+
+    lines.push(
+      '**Adjudication is two tiers, and this arm is split between them because pooling them once produced a result that was read backwards.** Spec 22 records it: a run reported as "15 reference files in, 0 out, 3 provably wrong removals" had called the model ZERO times — every removal was the deterministic tier settling an empty contract delta in code. There is no combined total below, on purpose.'
+    )
+    lines.push('')
+    appendDeltaGroup(lines, {
+      heading: '### Deterministic tier only — the model was never called',
+      preamble:
+        'Fully adjudicated cases that spent NO model call. Every removal below was made in code, and **nothing here is evidence about the judge** — not a rejection, not a false rejection, not a precision figure for the model tier. These cases are labelled rather than dropped: their removals are real, and the corpus can still prove some of them wrong.',
+      emptyStatement:
+        'No fully adjudicated case ran without calling the model, so there is no deterministic-only delta to read.',
+      group: delta.deterministicTierOnly
+    })
+    appendDeltaGroup(lines, {
+      heading: '### Model involved — at least one call was spent',
+      preamble:
+        'Fully adjudicated cases in which the model was called at least once. Their removals are a MIXTURE of both tiers: the report is file-granular and a file can be settled by either tier, so no attribution finer than the case is available and none is invented here.',
+      emptyStatement:
+        '**No fully adjudicated case spent a single model call.** The adjudicated arm above therefore says nothing about the model tier, and no figure in this document may be quoted as one.',
+      group: delta.modelInvolved
     })
     lines.push(
       '**There is no "correct removals" count, and there cannot be one.** A removal is provably wrong when it drops a dependent upstream had to repair. A removal of a file absent from the answer key might have been noise or might have been a dependent nobody listed — this corpus cannot tell, so it is never credited.'
@@ -258,11 +335,11 @@ export const renderChangeImpactEvalSummary = (
 
   appendMarkdownTable(lines, {
     heading: '## Per case',
-    header: '| case | split | status | reference files | adjudicated files | expected found (ref / adj) |',
-    alignment: '| --- | --- | --- | ---: | ---: | --- |',
+    header: '| case | split | status | model calls | reference files | adjudicated files | expected found (ref / adj) |',
+    alignment: '| --- | --- | --- | --- | ---: | ---: | --- |',
     rows: report.caseResults.map((result) => {
       if (result.status === 'unmeasured') {
-        return `| ${escapeMarkdownCell(result.caseId)} | ${result.split} | unmeasured: ${escapeMarkdownCell(result.reason)} | - | - | ${formatInteger(result.expectedImpactCount)} expected, none scored |`
+        return `| ${escapeMarkdownCell(result.caseId)} | ${result.split} | unmeasured: ${escapeMarkdownCell(result.reason)} | - | - | - | ${formatInteger(result.expectedImpactCount)} expected, none scored |`
       }
 
       const inReference = result.expectations.filter(
@@ -272,7 +349,7 @@ export const renderChangeImpactEvalSummary = (
         ? `${formatInteger(result.expectations.filter((expectation) => expectation.inAdjudicatedList === true).length)}/${formatInteger(result.expectations.length)}`
         : 'not measured'
 
-      return `| ${escapeMarkdownCell(result.caseId)} | ${result.split} | scored (${escapeMarkdownCell(result.adjudicationStatus)}) | ${formatInteger(result.referenceFileCount)} | ${
+      return `| ${escapeMarkdownCell(result.caseId)} | ${result.split} | scored (${escapeMarkdownCell(result.adjudicationStatus)}) | ${caseCallCell(result)} | ${formatInteger(result.referenceFileCount)} | ${
         result.adjudicatedFileCount === undefined
           ? 'not measured'
           : formatInteger(result.adjudicatedFileCount)

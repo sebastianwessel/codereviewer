@@ -208,7 +208,7 @@ describe('deterministic adjudication', () => {
     // The whole precision lever: the file stays in the reference list, and it
     // produces no finding, because nothing was shown to reach a caller.
     expect(outcome.candidates).toEqual([])
-    expect(outcome.noImpactPairCount).toBe(1)
+    expect(outcome.deterministicNoImpactPairCount).toBe(1)
     expect(outcome.unadjudicatedPairCount).toBe(0)
   })
 
@@ -228,7 +228,42 @@ describe('deterministic adjudication', () => {
     })
 
     expect(outcome.candidates).toEqual([])
-    expect(outcome.noImpactPairCount).toBe(1)
+    expect(outcome.deterministicNoImpactPairCount).toBe(1)
+  })
+
+  // THE VOIDED RUN'S SHAPE, at the level it originated. Spec 22's first
+  // adjudication measurement removed every dependent it was given and was read as
+  // a judge that rejected everything; the judge had been called zero times, and
+  // nothing in the counts said so. A deterministic sweep must be countable AS a
+  // deterministic sweep.
+  test('a run the deterministic tier settles alone reports zero calls and no verdicts', async () => {
+    const unchangedContract = symbol({ name: 'fetchUser' })
+    const outcome = await runAdjudication({
+      pairs: collectAdjudicationPairs({
+        impactedFiles: [
+          fileFor('src/a.ts', unchangedContract),
+          fileFor('src/b.ts', unchangedContract)
+        ],
+        impactedTestFiles: [fileFor('src/a.test.ts', unchangedContract)],
+        changedSymbols: [unchangedContract]
+      }),
+      // The empty delta the voided run produced: every dependent goes down the
+      // deterministic `no-impact` branch and no call is spent.
+      contractChanges: new Map(),
+      judge: forbiddenJudge,
+      maxCalls: 60
+    })
+
+    expect(outcome.deterministicNoImpactPairCount).toBe(3)
+    expect(outcome.modelCallCount).toBe(0)
+    expect(outcome.modelVerdictCounts).toEqual({
+      relies: 0,
+      'does-not-rely': 0,
+      undetermined: 0
+    })
+    // The counter that used to pool the two tiers is gone, so there is nothing
+    // left to read a silent sweep out of.
+    expect(outcome).not.toHaveProperty('noImpactPairCount')
   })
 })
 
@@ -290,7 +325,7 @@ describe('model adjudication of the residue', () => {
     ])
   })
 
-  test('a does-not-rely answer is counted and reported nowhere', async () => {
+  test('a does-not-rely answer is counted against the MODEL tier, not the deterministic one', async () => {
     const outcome = await runAdjudication({
       pairs: collectAdjudicationPairs({
         impactedFiles: [fileFor('src/caller.ts', changed)],
@@ -303,8 +338,51 @@ describe('model adjudication of the residue', () => {
     })
 
     expect(outcome.candidates).toEqual([])
-    expect(outcome.noImpactPairCount).toBe(1)
+    // The rejection the model actually made, told apart from a pair code settled:
+    // one means "the model looked and said no", the other means it never ran.
+    expect(outcome.modelVerdictCounts['does-not-rely']).toBe(1)
+    expect(outcome.deterministicNoImpactPairCount).toBe(0)
+    expect(outcome.modelCallCount).toBe(1)
     expect(outcome.unadjudicatedPairCount).toBe(0)
+  })
+
+  // The distribution is the cheapest bug signature this layer has, and reading it
+  // used to require a bespoke replay probe.
+  test('reports the verdict distribution, including the answers reported nowhere', async () => {
+    const answers: readonly RelianceJudgement[] = [
+      { status: 'relies', line: 7 },
+      { status: 'does-not-rely' },
+      // Cited a line nobody located: downgraded to undetermined by verification.
+      { status: 'relies', line: 4000 }
+    ]
+    let call = 0
+    const outcome = await runAdjudication({
+      pairs: collectAdjudicationPairs({
+        impactedFiles: [
+          fileFor('src/a.ts', changed),
+          fileFor('src/b.ts', changed),
+          fileFor('src/c.ts', changed)
+        ],
+        impactedTestFiles: [],
+        changedSymbols: [changed]
+      }),
+      contractChanges: changesFor(changed, [absenceChange]),
+      judge: async () => {
+        const answer = answers[call]
+        call += 1
+
+        return answer ?? { status: 'undetermined' }
+      },
+      maxCalls: 10
+    })
+
+    expect(outcome.modelCallCount).toBe(3)
+    expect(outcome.modelVerdictCounts).toEqual({
+      relies: 1,
+      'does-not-rely': 1,
+      undetermined: 1
+    })
+    expect(outcome.failedCallCount).toBe(0)
   })
 
   test('a failed call costs one pair and nothing else', async () => {
@@ -333,6 +411,13 @@ describe('model adjudication of the residue', () => {
     // becomes a count rather than a claim in either direction.
     expect(outcome.failedCallCount).toBe(1)
     expect(outcome.unadjudicatedPairCount).toBe(1)
+    // Both calls were spent; only one returned a verdict.
+    expect(outcome.modelCallCount).toBe(2)
+    expect(outcome.modelVerdictCounts).toEqual({
+      relies: 1,
+      'does-not-rely': 0,
+      undetermined: 0
+    })
     expect(outcome.candidates.map((candidate) => candidate.path)).toEqual([
       'src/other.ts'
     ])
@@ -351,7 +436,15 @@ describe('model adjudication of the residue', () => {
 
     expect(outcome.candidates).toEqual([])
     expect(outcome.unadjudicatedPairCount).toBe(1)
-    expect(outcome.noImpactPairCount).toBe(0)
+    expect(outcome.deterministicNoImpactPairCount).toBe(0)
+    // No judge means no call, and the distribution says so rather than reading as
+    // three rejections that never happened.
+    expect(outcome.modelCallCount).toBe(0)
+    expect(outcome.modelVerdictCounts).toEqual({
+      relies: 0,
+      'does-not-rely': 0,
+      undetermined: 0
+    })
   })
 
   test('a cited line the search never located is discarded rather than reported', async () => {

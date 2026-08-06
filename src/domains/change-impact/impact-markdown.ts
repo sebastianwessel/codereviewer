@@ -305,6 +305,46 @@ const renderFinding = (finding: ImpactFinding): readonly string[] => [
   ''
 ]
 
+// Every pair an adjudicator settled, DERIVED here and labelled as the sum wherever
+// it is shown. The report deliberately stores no pooled counter: pooling the
+// deterministic tier's `no-impact` with the model's is what let spec 22's first
+// adjudication measurement read as a judge that rejected everything, when the judge
+// had never been called.
+const settledPairCount = (report: ChangeImpactReferenceReport): number =>
+  report.summary.reliedUponPairCount +
+  report.summary.deterministicNoImpactPairCount +
+  report.summary.modelVerdictCounts['does-not-rely']
+
+// WHICH TIER ANSWERED, in the reader's terms.
+//
+// A run that spent no call is not a run whose judge said no. Saying which tier did
+// the work is the difference between "the model looked at your dependents and
+// cleared them" and "code settled them all before a model was asked", and those are
+// different reports even when every number above them is identical.
+const whoSettledIt = (
+  report: ChangeImpactReferenceReport
+): readonly string[] => {
+  const { summary } = report
+
+  if (report.adjudicationStatus === 'disabled') {
+    return []
+  }
+
+  const deterministic = `${pluralize(summary.deterministicNoImpactPairCount, 'dependent use was', 'dependent uses were')} settled in code by the deterministic tier, with no model call: a symbol this change adds, or a symbol whose change this engine could not show reaching a caller.`
+
+  if (summary.adjudicationCallCount === 0) {
+    return [
+      `**The model tier was never called on this change** — zero adjudication calls were made, so nothing above is a model's judgement about a dependent. ${deterministic}`
+    ]
+  }
+
+  const verdicts = summary.modelVerdictCounts
+
+  return [
+    `${pluralize(summary.adjudicationCallCount, 'adjudication call was', 'adjudication calls were')} made: ${verdicts.relies} answered "relies", ${verdicts['does-not-rely']} "does not rely", ${verdicts.undetermined} could not be used${summary.failedAdjudicationCallCount > 0 ? `, and ${summary.failedAdjudicationCallCount} did not complete` : ''}. ${deterministic}`
+  ]
+}
+
 // WHY AN EMPTY LIST NEEDS A PARAGRAPH. Spec 22 requires the command to be able to
 // report NO IMPACT and forbids it from manufacturing findings to fill a report. An
 // empty list has three different meanings and a reader who cannot tell them apart
@@ -319,7 +359,7 @@ const renderNoFindings = (
   }
 
   const { summary } = report
-  const checked = summary.noImpactPairCount + summary.reliedUponPairCount
+  const checked = settledPairCount(report)
 
   if (checked === 0) {
     return [
@@ -328,7 +368,8 @@ const renderNoFindings = (
   }
 
   return [
-    `${pluralize(checked, 'dependent use was', 'dependent uses were')} checked and none was shown to rely on the part of the contract that changed. That is a real answer, not an empty report — the reference lists below are still there to judge yourself.${summary.unadjudicatedPairCount > 0 ? ` ${pluralize(summary.unadjudicatedPairCount, 'use was', 'uses were')} left unadjudicated and asserted nothing.` : ''}`
+    `${pluralize(checked, 'dependent use was', 'dependent uses were')} checked and none was shown to rely on the part of the contract that changed. That is a real answer, not an empty report — the reference lists below are still there to judge yourself.${summary.unadjudicatedPairCount > 0 ? ` ${pluralize(summary.unadjudicatedPairCount, 'use was', 'uses were')} left unadjudicated and asserted nothing.` : ''}`,
+    ...whoSettledIt(report)
   ]
 }
 
@@ -350,8 +391,27 @@ const renderFindings = (
           ''
         ]
       : []),
+    ...whoSettledIt(report).flatMap((sentence) => [sentence, '']),
     ...report.impactFindings.flatMap((finding) => renderFinding(finding))
   ]
+}
+
+// A call count is never printed as a bare `0`. Zero is the value that changes what
+// every other adjudication number means, so it says what it means in words.
+const adjudicationCallLine = (report: ChangeImpactReferenceReport): string => {
+  const { summary } = report
+
+  if (report.adjudicationStatus === 'disabled') {
+    return 'not run (adjudication is switched off)'
+  }
+
+  if (summary.adjudicationCallCount === 0) {
+    return 'none — the model tier was never called'
+  }
+
+  const verdicts = summary.modelVerdictCounts
+
+  return `${summary.adjudicationCallCount} (relies ${verdicts.relies}, does not rely ${verdicts['does-not-rely']}, unusable ${verdicts.undetermined}, failed ${summary.failedAdjudicationCallCount})`
 }
 
 const renderSummary = (
@@ -366,7 +426,12 @@ const renderSummary = (
     '## Summary',
     '',
     `- Dependents shown to rely on the change: ${summary.impactFindingCount}`,
-    `- Dependent uses checked and found not to rely: ${summary.noImpactPairCount}`,
+    // The two tiers are two lines, never one total. Which of them answered is the
+    // difference between "code settled it" and "the model looked and said no", and
+    // spec 22 records what pooling them cost.
+    `- Dependent uses the deterministic tier settled without a model call: ${summary.deterministicNoImpactPairCount}`,
+    `- Dependent uses the model checked and found not to rely: ${summary.modelVerdictCounts['does-not-rely']}`,
+    `- Adjudication model calls: ${adjudicationCallLine(report)}`,
     `- Dependent uses left unadjudicated: ${summary.unadjudicatedPairCount}${summary.adjudicationCallsTruncated ? ' (the adjudication call cap was reached)' : ''}`,
     `- Files to look at: ${summary.impactedFileCount} (plus ${summary.impactedTestFileCount} test)`,
     `- Changed symbols: ${changedSymbols}`,

@@ -78,6 +78,35 @@ export type RelianceJudgement =
   | { readonly status: 'does-not-rely' }
   | { readonly status: 'undetermined' }
 
+// The three answers as one vocabulary, because the report COUNTS them.
+//
+// A degenerate distribution — every answer `does-not-rely`, or no answer at all —
+// is the cheapest bug signature this layer has, and on 2026-08-06 seeing it cost a
+// bespoke replay probe: the report carried no distribution and no call count, so a
+// run in which the judge never fired was indistinguishable from one in which it
+// fired and rejected everything. Spec 22 records that diagnosis.
+export const relianceVerdicts = [
+  'relies',
+  'does-not-rely',
+  'undetermined'
+] as const
+
+export type RelianceVerdict = (typeof relianceVerdicts)[number]
+
+// Counts over the calls that RETURNED. A call that threw is not a verdict and is
+// counted as a failure instead, so `relies + does-not-rely + undetermined` plus the
+// failures is exactly the number of calls the run spent.
+export type RelianceVerdictCounts = Readonly<Record<RelianceVerdict, number>>
+
+// The distribution of a run that made no call. Named rather than written inline so
+// "no verdicts" is one value everywhere, and so a reader of a zeroed distribution
+// is always looking at the same object.
+export const NO_RELIANCE_VERDICTS: RelianceVerdictCounts = {
+  relies: 0,
+  'does-not-rely': 0,
+  undetermined: 0
+}
+
 export type RelianceJudgementRunner = (
   input: RelianceJudgementInput,
   signal: AbortSignal | undefined

@@ -334,14 +334,30 @@ export const ChangedSymbolReportSchema = z
 //   need no model are present; everything that needed one is counted as
 //   unadjudicated, NOT reported as a maybe. Reporting the residue would restate the
 //   ~90% noise adjudication exists to remove.
-// - `completed` — both tiers ran. An empty list here is a real answer: nothing
-//   among the dependents was shown to rely on the part of the contract that
-//   changed.
+// - `completed` — both tiers were EQUIPPED to run. An empty list here is a real
+//   answer: nothing among the dependents was shown to rely on the part of the
+//   contract that changed. It is not by itself a statement that the model ran —
+//   `summary.adjudicationCallCount` is, and a `completed` run with zero calls is a
+//   run the deterministic tier settled on its own.
 export const AdjudicationStatusSchema = z.enum([
   'disabled',
   'no-model',
   'completed'
 ])
+
+// The model's own three answers, counted. Reported because a degenerate
+// distribution is the cheapest bug signature this layer has: spec 22's voided
+// first measurement needed a bespoke replay probe to establish what the model had
+// answered, because the report carried nothing about it.
+export const ModelVerdictCountsSchema = z.strictObject({
+  relies: z.int().min(0),
+  // The MODEL tier's `no-impact` count. Kept here, once, rather than mirrored into
+  // a second summary field that could disagree with it.
+  'does-not-rely': z.int().min(0),
+  // Includes an answer that did not parse and a `relies` answer citing a line the
+  // search never located. Those pairs are unadjudicated and reported nowhere.
+  undetermined: z.int().min(0)
+})
 
 export const ChangeImpactReferenceReportSchema = z.strictObject({
   // 3.0 adds the adjudicated layer: `impactFindings`, `adjudicationStatus`, the
@@ -389,20 +405,38 @@ export const ChangeImpactReferenceReportSchema = z.strictObject({
     // — one dependent's use of one changed symbol — because that is the question
     // adjudication answers. Findings are grouped per file above it.
     //
-    // The four counters below partition every pair exactly once, so a reader can
-    // check the report against itself: adjudicating nothing and adjudicating
+    // The pair counters partition every pair exactly once —
+    // `reliedUponPairCount + deterministicNoImpactPairCount +
+    // modelVerdictCounts['does-not-rely'] + unadjudicatedPairCount` — so a reader
+    // can check the report against itself: adjudicating nothing and adjudicating
     // everything to `no-impact` both yield zero findings and are told apart here.
+    //
+    // THERE IS NO POOLED `no-impact` FIELD, deliberately. One used to exist, and
+    // pooling the deterministic tier's answer with the model's is what let spec
+    // 22's first adjudication measurement read as a judge that rejected everything
+    // when the judge had not been called at all.
     impactFindingCount: z.int().min(0),
-    // Pairs shown to rely on a changed part of the contract. Not the same as
-    // `impactFindingCount`: one file can rely on several changed symbols.
+    // Pairs shown to rely on a changed part of the contract, by either tier. Not
+    // the same as `impactFindingCount`: one file can rely on several changed
+    // symbols.
     reliedUponPairCount: z.int().min(0),
-    // Pairs adjudicated and found NOT to rely. The precision lever's own output,
-    // and the number that says the reference list was actually triaged.
-    noImpactPairCount: z.int().min(0),
+    // Pairs the DETERMINISTIC tier settled as no-impact, in code, with no call: a
+    // newly added symbol, or a modified symbol carrying no caller-observable
+    // contract change. Nothing here was looked at by a model.
+    deterministicNoImpactPairCount: z.int().min(0),
     // Pairs no adjudicator settled: no model was available, a call failed, the
     // model could not tell, or the call cap bound the run. Counted rather than
     // reported as a weak finding.
     unadjudicatedPairCount: z.int().min(0),
+    // MODEL CALLS ACTUALLY SPENT, failures included. Zero means the judge never
+    // ran on this change, whatever `adjudicationStatus` says, and every removal
+    // from the reference list is then the deterministic tier's.
+    adjudicationCallCount: z.int().min(0),
+    // Of those, the calls that threw. A failing provider must be visible as a
+    // failing provider rather than as a quiet run that found nothing.
+    failedAdjudicationCallCount: z.int().min(0),
+    // What the model answered, over the calls that returned.
+    modelVerdictCounts: ModelVerdictCountsSchema,
     // True when `changeImpact.adjudication.maxCalls` bound the residue, so a short
     // finding list is never mistaken for a fully triaged one.
     adjudicationCallsTruncated: z.boolean(),
@@ -470,6 +504,7 @@ export type CompatibilityClass = z.infer<typeof CompatibilityClassSchema>
 export type ReportableCompatibilityClass =
   z.infer<typeof ImpactFindingSchema>['compatibilityClass']
 export type AdjudicationStatus = z.infer<typeof AdjudicationStatusSchema>
+export type ModelVerdictCounts = z.infer<typeof ModelVerdictCountsSchema>
 export type ImpactReliance = z.infer<typeof ImpactRelianceSchema>
 export type ImpactFinding = z.infer<typeof ImpactFindingSchema>
 export type ChangedSymbolReport = z.infer<typeof ChangedSymbolReportSchema>

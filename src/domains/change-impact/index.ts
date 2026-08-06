@@ -47,12 +47,16 @@ export { modelRelianceJudgementInstructions } from './instructions.js'
 export {
   normalizeRelianceJudgement,
   relianceJudgementInputFor,
+  relianceVerdicts,
   verifyRelianceJudgement,
   ModelRelianceJudgementSchema,
+  NO_RELIANCE_VERDICTS,
   RelianceJudgementInputSchema,
   type RelianceJudgement,
   type RelianceJudgementInput,
-  type RelianceJudgementRunner
+  type RelianceJudgementRunner,
+  type RelianceVerdict,
+  type RelianceVerdictCounts
 } from './reliance-judgement.js'
 export {
   discoverDependents,
@@ -75,6 +79,7 @@ export {
   ImpactedFileSchema,
   ImpactFindingSchema,
   ImpactRelianceSchema,
+  ModelVerdictCountsSchema,
   RemovalPairingSchema,
   type AdjudicationStatus,
   type ChangeImpactReferenceReport,
@@ -84,6 +89,7 @@ export {
   type ImpactedFileSymbol,
   type ImpactFinding,
   type ImpactReliance,
+  type ModelVerdictCounts,
   type ReferenceSite,
   type RemovalPairing,
   type ReportableCompatibilityClass
