@@ -46,6 +46,7 @@ const fact: SupportSignalFact = {
   path: 'src/app.ts',
   name: 'handler',
   line: 1,
+  endLine: 1,
   summary: 'Exports handler.',
   contentHash: 'hash-app'
 }

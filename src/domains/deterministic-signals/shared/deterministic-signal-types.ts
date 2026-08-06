@@ -40,6 +40,21 @@ export type SupportSignalFact = {
   readonly name: string
   readonly moduleSpecifier?: string
   readonly line: number
+  // Last line the construct that produced this fact occupies, read from the AST
+  // node's own range rather than guessed from the next declaration below it.
+  //
+  // It is REQUIRED, not optional. A consumer asking "which changed lines does this
+  // symbol own" has no sound default for an absent end: assuming the declaration
+  // line owns only itself hides every body change, and assuming it owns everything
+  // to the next sibling credits it with lines belonging to a nested declaration or
+  // to no declaration at all. Both are confident wrong answers, which is the defect
+  // class this repository keeps re-finding.
+  //
+  // Always `>= line`. For a nested declaration the enclosing one's range CONTAINS
+  // it, so a line inside a method is owned by the method and by its class — which
+  // is the fact that makes a type reachable as a changed symbol when only a member
+  // moved.
+  readonly endLine: number
   readonly summary: string
   readonly contentHash: string
 }

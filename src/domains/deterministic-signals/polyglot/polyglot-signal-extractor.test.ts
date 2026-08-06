@@ -326,4 +326,64 @@ describe('polyglot deterministic support signal extractor', () => {
 
     expect(result.evidence).toEqual([])
   })
+
+  // Every fact carries the extent of the construct it describes, read from the
+  // grammar. A consumer asking which changed lines a symbol owns has no sound
+  // default for an absent end, so the field is required rather than optional and
+  // this case is stated once per supported language: a nested declaration's range
+  // must be CONTAINED by its enclosing one, which is what lets a change to a
+  // member reach the type that holds it.
+  test.each([
+    [
+      'python',
+      ['class Outer:', '    def inner(self):', '        return 1'],
+      { outer: 'Outer', inner: 'inner', end: 3 }
+    ],
+    [
+      'ruby',
+      ['class Outer', '  def inner', '    1', '  end', 'end'],
+      { outer: 'Outer', inner: 'inner', end: 5 }
+    ],
+    [
+      'java',
+      [
+        'public class Outer {',
+        '  public class Inner {',
+        '  }',
+        '}'
+      ],
+      { outer: 'Outer', inner: 'Inner', end: 4 }
+    ]
+  ] as const)(
+    '%s facts carry a span that nests with the declarations',
+    (language, lines, expected) => {
+      const facts = extractPolyglotSignals(language, [
+        { path: languageSamplePaths[language], content: lines.join('\n') }
+      ]).facts
+      const spanOf = (name: string) => {
+        const fact = facts.find((candidate) => candidate.name === name)
+
+        return fact === undefined
+          ? undefined
+          : ([fact.line, fact.endLine] as const)
+      }
+      const outer = spanOf(expected.outer)
+      const inner = spanOf(expected.inner)
+
+      expect(outer).toEqual([1, expected.end])
+      expect(inner?.[0]).toBeGreaterThan(outer?.[0] ?? 0)
+      expect(inner?.[1]).toBeLessThanOrEqual(outer?.[1] ?? 0)
+    }
+  )
+
+  test('a fact may not end before it starts', () => {
+    expect(
+      extractPolyglotSignals('go', [
+        {
+          path: 'cmd/app.go',
+          content: ['package main', '', 'func Run() {', '}'].join('\n')
+        }
+      ]).facts.every((fact) => fact.endLine >= fact.line)
+    ).toBe(true)
+  })
 })

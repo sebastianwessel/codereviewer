@@ -212,6 +212,7 @@ describe('review runner results', () => {
             path: 'src/a.ts',
             name: 'alpha',
             line: 1,
+            endLine: 1,
             summary: 'alpha declaration',
             contentHash: sha256('alpha')
           }
@@ -386,6 +387,7 @@ describe('review runner results', () => {
           path: 'src/a.ts',
           name: 'alpha',
           line: 1,
+          endLine: 1,
           summary: 'alpha declaration',
           contentHash: sha256(sourceContent)
         }

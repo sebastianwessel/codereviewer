@@ -200,6 +200,119 @@ describe('changed symbols', () => {
     expect(result.symbols.map((symbol) => symbol.name)).toEqual(['alpha'])
   })
 
+  // The three tests below are one defect seen from three sides: the span used to
+  // be GUESSED from the next declaration line rather than read from the parse.
+  // They are written against Python because its blocks close by indentation, so a
+  // wrong end line is not masked by a closing token, but nothing in them is
+  // Python-specific — the span now comes from the AST node for every language.
+  test('a member owns its own body, and the type owns the lines no member covers', () => {
+    // The guessed span ended a type at its FIRST member, so a class-level line
+    // below that member — here the attribute on line 4 — was attributed to the
+    // method above it instead of to the class. Both statements below are about the
+    // same file and the same parse: a body line names the member, a class-body line
+    // names the class.
+    const lines = [
+      'class Shipment:', //         1
+      '    def prepare(self):', //   2
+      '        return 1', //         3
+      '    carrier = "default"', //  4
+      '    def deliver(self):', //   5
+      '        return 2' //          6
+    ]
+    const seededBy = (start: number, count: number) =>
+      collectChangedSymbols({
+        files: [
+          {
+            path: 'src/shipping.py',
+            content: lines.join('\n'),
+            changeKind: 'modified',
+            hunks: [
+              {
+                oldStartLine: start,
+                oldLineCount: count,
+                newStartLine: start,
+                newLineCount: count
+              }
+            ]
+          }
+        ],
+        maxChangedSymbols: 100
+      }).symbols.map((symbol) => [
+        symbol.name,
+        symbol.line,
+        symbol.spanEndLine
+      ])
+
+    expect(seededBy(3, 1)).toEqual([['prepare', 2, 3]])
+    expect(seededBy(4, 1)).toEqual([['Shipment', 1, 6]])
+    // One hunk covering both a class-level line and a member's body names both,
+    // because the member does not account for every line the hunk touched.
+    expect(seededBy(3, 2)).toEqual([
+      ['Shipment', 1, 6],
+      ['prepare', 2, 3]
+    ])
+  })
+
+  test('a line between two members belongs to the type, not to the member above it', () => {
+    // The guessed span ran the earlier member all the way to the next declaration,
+    // so a class-body line between two methods was reported as a contract change to
+    // the method above it. That is a confident FALSE statement about a named
+    // symbol, not a missing one.
+    const lines = [
+      'class Shipment:', //         1
+      '    def prepare(self):', //   2
+      '        return 1', //         3
+      '    carrier = "default"', //  4
+      '    def deliver(self):', //   5
+      '        return 2' //          6
+    ]
+    const result = collectChangedSymbols({
+      files: [
+        {
+          path: 'src/shipping.py',
+          content: lines.join('\n'),
+          changeKind: 'modified',
+          hunks: [
+            { oldStartLine: 4, oldLineCount: 1, newStartLine: 4, newLineCount: 1 }
+          ]
+        }
+      ],
+      maxChangedSymbols: 100
+    })
+
+    expect(new Set(result.symbols.map((symbol) => symbol.name))).toEqual(
+      new Set(['Shipment'])
+    )
+  })
+
+  test('a change below the last member is not attributed to that member', () => {
+    // The mirror of the case above: the guessed span ran the LAST member of a type
+    // past the type's own end, so a module-level edit underneath the class was
+    // reported as a change to `deliver`.
+    const lines = [
+      'class Shipment:', //          1
+      '    def deliver(self):', //    2
+      '        return 2', //          3
+      '', //                          4
+      'DEFAULT_CARRIER = "post"' //   5
+    ]
+    const result = collectChangedSymbols({
+      files: [
+        {
+          path: 'src/shipping.py',
+          content: lines.join('\n'),
+          changeKind: 'modified',
+          hunks: [
+            { oldStartLine: 5, oldLineCount: 1, newStartLine: 5, newLineCount: 1 }
+          ]
+        }
+      ],
+      maxChangedSymbols: 100
+    })
+
+    expect(result.symbols.map((symbol) => symbol.name)).toEqual([])
+  })
+
   test('covers every language the signal extractors support', () => {
     expect(
       [...languageCases.map((languageCase) => languageCase.language)].sort()

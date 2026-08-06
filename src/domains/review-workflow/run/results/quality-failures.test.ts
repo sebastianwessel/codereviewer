@@ -41,6 +41,7 @@ const analysis = {
       path: 'src/a.ts',
       name: 'alpha',
       line: 1,
+      endLine: 1,
       summary: 'alpha declaration',
       contentHash: sha256('let alpha = 1')
     }

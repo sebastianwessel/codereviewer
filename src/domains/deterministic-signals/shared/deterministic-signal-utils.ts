@@ -147,8 +147,15 @@ export const createSupportSignalFact = (input: {
   readonly name: string
   readonly moduleSpecifier?: string
   readonly line: number
+  readonly endLine: number
   readonly contentHash: string
 }): SupportSignalFact => {
+  if (input.endLine < input.line) {
+    throw new TypeError(
+      `Support signal fact for "${input.name}" ends at ${input.endLine}, before its start line ${input.line}.`
+    )
+  }
+
   const moduleText =
     input.moduleSpecifier === undefined ? '' : ` from ${input.moduleSpecifier}`
   const actionByKind = {
@@ -173,6 +180,7 @@ export const createSupportSignalFact = (input: {
       ? {}
       : { moduleSpecifier: input.moduleSpecifier }),
     line: input.line,
+    endLine: input.endLine,
     summary: `${actionByKind[input.kind]} ${input.name}${moduleText}.`,
     contentHash: input.contentHash
   }

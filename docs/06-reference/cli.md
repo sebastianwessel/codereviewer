@@ -608,9 +608,17 @@ it produces silence, so it is written down instead.
    nothing.
 4. **A change that touches no symbol's span seeds nothing.** Import blocks,
    top-level configuration and file headers above the first declaration are
-   outside every span.
-5. **A symbol's span ends at the next declaration.** A change between two methods
-   of a class is attributed to the earlier method rather than to the class.
+   outside every span. A module whose whole content is imports or re-exports —
+   a package index, for instance — declares nothing, so a change to it reports
+   nothing and raises the "no changed symbols were seeded" warning.
+5. **A symbol's span is the declaration's own range, and declarations nest.** The
+   symbol reported is the most specific one whose *own* lines the change touched:
+   a body line names the member, a class-body line between two members names the
+   class, and one hunk covering both names both.
+5a. **A declaration's modifiers count only where the grammar nests them.** Java
+   annotations and Python decorators are part of their declaration. A Rust
+   `#[attribute]` and a decorator on an exported ECMAScript class are separate
+   nodes, so a change confined to one of those seeds nothing (entry 4).
 6. **The seed cap silently bounds the population.** Past
    `changeImpact.maxChangedSymbols`, symbols are absent from the report entirely.
    `summary.changedSymbolsTruncated` is the only signal that happened.
@@ -653,6 +661,11 @@ it produces silence, so it is written down instead.
     carried inside a string such as a URI query parameter produce **no** contract
     statement. Ordering, resource ownership and serialised-value changes are
     likewise not covered.
+14a. **A decorator or annotation on a declaration is silent too.** Adding
+    `@keep_lazy(...)`, `@Deprecated` or `#[serde(...)]` replaces what every caller
+    of that name receives, and it carries none of the six markers, so the symbol is
+    listed with an empty contract delta and its dependents are settled as
+    `no-impact` without a model call.
 15. **A rename in place is reported as a removal plus an addition.** The pairing
     predicate is the name, and a rename changes it.
 16. **A symbol moved into a file in a language the registry does not cover is

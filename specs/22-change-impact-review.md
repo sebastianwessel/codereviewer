@@ -897,6 +897,106 @@ recall and precision are computed from the same predictions and are unaffected,
 but a pre-bump removal figure is the sum of the two new groups and may not be
 compared against either.
 
+## Spans Are Read, Not Guessed — 2026-08-06
+
+The 2026-08-06 adjudication measurement recorded that **five of ten cases spent
+zero model calls**, and named seeding as the next constraint. Investigating that
+found a defect in seeding, but not the one expected, and the honest result is
+recorded here in full because two thirds of the expectation was wrong.
+
+### What the three zero-reference cases actually were
+
+Only ONE of the three enumerates nothing because seeding failed:
+`django-messages-package-import-pulls-in-level-tag-initialisation` changes a file
+whose entire content is import statements. It declares nothing, so no span exists
+to touch. That is entry 4 above, it is the shape that raises the warning, and
+widening the seed to imports would invert this capability's direction.
+
+The other two seed correctly and enumerate nothing for a DIFFERENT reason.
+`django-union-default-ordering` seeds `_combinator_query`, a private helper whose
+only references are inside its own file; `django-relation-transform-guards` seeds
+`build_lookup` and its neighbours, whose only outside reference is a test the
+manifest excludes. Discovery excluded the definition file, correctly, and there
+was nothing else. **Seeding was not the limit on either.**
+
+### The defect that was there
+
+A symbol's span was GUESSED — from its declaration line to the line before the
+next declaration in the file — because a support-signal fact carried only a start
+line. That rule is wrong in both directions on the same file:
+
+- it ended a type at its FIRST member, so a class-body line between two methods was
+  attributed to the method above it; and
+- it ran the LAST member of a type past the type's own closing line, so a
+  module-level edit below a class was reported as a contract change to that member.
+
+Both are CONFIDENT FALSE STATEMENTS about a named symbol, which is worse than a
+missing one, and neither had a test. Measured on the corpus: the whole 7-file
+reference list of `django-mark-safe-keeps-lazy-strings-lazy` was the references of
+`_safety_decorator`, a symbol the change never touched — the decorator line above
+`mark_safe` had been credited to the declaration above it.
+
+The fix is to READ the extent instead: every `SupportSignalFact` now carries
+`endLine` from the AST node's own range, required rather than optional, for all
+seven languages at once. It is one field in the shared fact contract and one
+`spanFor` helper in the shared extractor; no consumer branches on a language and
+nothing about the change is Python-shaped. Python decorators are the one adapter
+detail: that grammar puts them in a wrapper node instead of inside the definition,
+where Java's grammar already nests annotations, so the adapter reads the wrapper
+and the two languages come to mean the same thing.
+
+Spans then nest, and the seed rule is stated rather than implied: **the most
+specific declaration whose own lines the change touched**, resolved per hunk by
+line coverage, so a hunk spanning a class attribute and a method names both.
+
+### The widening that was built, measured and rejected
+
+Seeding EVERY enclosing declaration was the other reading of nested spans, and it
+was built first. Scored on this corpus with default limits it took the reference
+list from 67 files to 100, left the proven dependents found at 5, and dropped the
+precision lower bound from 7.5% to 5.0%. It is not in the engine.
+
+It failed for a reason worth recording, because it is about a different limit:
+with `changeImpact.maxReferencesPerSymbol` raised to 400 the same widening reaches
+**8 of 11 proven dependents instead of 5** — including the `attribute-owner` case
+that motivated it — at 424 predicted files and a 1.9% precision lower bound. So
+the type's reference list does contain the dependents; the per-symbol cap is spent
+on whatever the traversal reached first. **The next lever on this corpus is
+reference selection under the cap, not seeding.** The cap is NOT changed here: a
+default moved to make corpus cases score is fixture-fitting, and a 424-file arm 1
+is not a report.
+
+### Measured, on `openai/gpt-5.3-codex`
+
+Both runs are `eval impact --adjudication on --max-adjudication-calls 60`, 10
+cases, $0.083 each. The engine is pinned by commit in each report; the AFTER run
+records `workingTreeClean: false` and must be re-run on a committed tree before it
+is quoted as a baseline.
+
+| | before | after |
+| --- | ---: | ---: |
+| arm 1 predicted files | 67 | **59** |
+| arm 1 proven dependents found | 5 | 5 |
+| arm 1 precision lower bound | 7.5% | **8.5%** |
+| arm 2 adjudicated files | 9 | 11 |
+| arm 2 proven dependents found | 2 | 2 |
+| arm 2 precision lower bound | 22.2% | 18.2% |
+| adjudicated recall within the reference list | 2/4 | 2/4 |
+| `coverage.noAdjudicationCallCaseCount` | 5 | **5** |
+| `coverage.adjudicationCallCount` | 61 | 61 |
+| `deterministicNoImpactPairCount` | 38 | 30 |
+| model verdicts `relies` / `does-not-rely` / `undetermined` | 10 / 37 / 14 | 12 / 36 / 13 |
+
+**The counter this work was aimed at did not move.** Five cases still spend no
+model call, and they are the same five. Recall did not move in any reachability
+class. What moved is noise and correctness: eight fewer reference files for the
+same five dependents, and a whole reference list that had been attached to the
+wrong symbol now attached to the right one.
+
+No metrics-version entry is owed. No figure changed meaning: recall and precision
+are computed from the same predictions by the same definitions, and what changed is
+the engine that produced them, which provenance already carries as a commit.
+
 ## What Is Built, And What This Spec Still Asks For
 
 Recorded 2026-08-01 by an alignment audit. **These are unmet requirements, not
@@ -980,9 +1080,23 @@ produce silence, which is exactly why they are written down.
    (`Router.prototype.route = function route () {}`) and an export installed via
    `Object.defineProperty` yield no fact.
 4. A change touching no symbol's span — imports, top-level configuration, a file
-   header above the first declaration — seeds nothing.
-5. A symbol's span ends at the next declaration, so a change between two methods of
-   a class is attributed to the earlier method rather than to the class.
+   header above the first declaration — seeds nothing. A module whose whole
+   content is import or re-export statements therefore seeds nothing at all, and
+   it is the only shape that raises the "no changed symbols were seeded" warning.
+   Verified 2026-08-06 against a package `__init__` of pure re-exports: the change
+   added an import, the file declares nothing, and the report is empty. Widening
+   the seed to import facts would invert the direction this capability is defined
+   in — an import names a symbol this file CONSUMES — so it is not done.
+5. A symbol's span is the AST node's own range, so declarations NEST and the symbol
+   reported is the most specific one whose OWN lines the change touched: the member
+   for a body line, the type for a class-body line between two members, and both
+   when one hunk covers both. Rewritten 2026-08-06; see "Spans Are Read, Not
+   Guessed" below for what the previous rule got wrong.
+5a. A declaration's own modifiers are part of its span only where the grammar nests
+   them inside the declaration. Java annotations do, and Python decorators are read
+   from their wrapper node so they do too. A Rust `#[attribute]` and an ECMAScript
+   decorator on an exported class are SIBLING nodes, so a change confined to either
+   touches no symbol's span and falls under entry 4.
 6. `changeImpact.maxChangedSymbols` bounds the population; `changedSymbolsTruncated`
    is the only signal.
 
@@ -1012,6 +1126,16 @@ produce silence, which is exactly why they are written down.
     change, a visibility change, and a value carried inside a string such as a URI
     query parameter. Ordering, resource ownership and serialised values are not
     covered either.
+14a. A DECORATOR OR ANNOTATION applied to a declaration is silent for the same
+    reason, and it is the loudest instance of entry 14 because the construct
+    replaces what every caller of that name receives. Verified 2026-08-06 on
+    `@keep_lazy(SafeString)` added to `mark_safe`: the symbol is seeded and its
+    references are found, the delta is empty, and the deterministic tier settles
+    every dependent as `no-impact` without spending a call. The fix is NOT to add a
+    seventh dimension keyed on `@` or `#[`: the six dimensions are language-neutral
+    constructs, a decorator marker is a syntax list, and adding one because a corpus
+    case needs it is the fixture-fitting this spec forbids. A real fix reads what
+    the wrapper DOES, which is a resolution problem this engine does not have.
 15. A rename in place is reported as a removal plus an addition; the pairing
     predicate is the name.
 16. A symbol moved into a file in a language the registry does not cover is reported
@@ -1069,6 +1193,7 @@ it describes is built.
 | --- | --- |
 | Reuses intake, provider resolution, configuration, reporting, and reaches repository content only through `context-retrieval` | import-boundary test: the domain imports the shared entrypoints and contains no `node:fs`, `node:fs/promises`, or `node:child_process` |
 | Dependent discovery is bounded and diff-seeded | unit test |
+| A symbol's span is read from the parse and nests, so no change is attributed to a symbol that does not own it | `polyglot-signal-extractor.test.ts` (every fact carries `endLine`; a nested declaration's range is contained by its parent's, over three grammars), `changed-symbols.test.ts` (a body line names the member, a class-body line names the type, one hunk covering both names both, a module-level line below a type names nothing) |
 | Reference sites obey the configured include/exclude rules | unit test driving `paths.exclude` through discovery, plus an end-to-end test |
 | Non-source destinations are excluded, and reported rather than dropped | unit test over prose, fixture data and a snapshot; classifier test generated from the language registry |
 | Test call sites are reported separately rather than mixed in or lost | unit test, plus a CLI test over a real repository |

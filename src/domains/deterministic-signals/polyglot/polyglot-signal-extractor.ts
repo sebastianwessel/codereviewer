@@ -58,6 +58,7 @@ const createFact = (
     readonly kind: 'import' | 'export' | 'declaration' | 'public-symbol' | 'module'
     readonly name: string
     readonly line: number
+    readonly endLine: number
     readonly moduleSpecifier?: string
   }
 ): SupportSignalFact =>
@@ -70,6 +71,7 @@ const createFact = (
       ? {}
       : { moduleSpecifier: input.moduleSpecifier }),
     line: input.line,
+    endLine: input.endLine,
     contentHash
   })
 
@@ -78,6 +80,16 @@ type AstNode = SgNode
 const kindOf = (node: AstNode): string => String(node.kind())
 
 const lineFor = (node: AstNode): number => node.range().start.line + 1
+
+// The 1-based line range the node occupies, from the grammar's own range. Every
+// adapter below reports it for every fact, so the extent of a declaration is read
+// rather than inferred from whatever declaration happens to follow it.
+const spanFor = (node: AstNode): { readonly line: number; readonly endLine: number } => {
+  const range = node.range()
+  const line = range.start.line + 1
+
+  return { line, endLine: Math.max(line, range.end.line + 1) }
+}
 
 const childrenOfKind = (
   node: AstNode,
@@ -180,6 +192,15 @@ const pythonImportName = (
   return lastIdentifierText(node)
 }
 
+// The wrapper this grammar puts around a decorated definition, when there is one.
+const pythonDecoratedDefinition = (node: AstNode): AstNode | undefined => {
+  const parent = node.parent()
+
+  return parent !== null && parent !== undefined && kindOf(parent) === 'decorated_definition'
+    ? parent
+    : undefined
+}
+
 const extractPythonFacts = (
   path: string,
   root: AstNode,
@@ -209,7 +230,7 @@ const extractPythonFacts = (
                 kind: 'import',
                 name,
                 moduleSpecifier,
-                line: lineFor(child)
+                ...spanFor(child)
               })
             )
           }
@@ -243,7 +264,7 @@ const extractPythonFacts = (
                 kind: 'import',
                 name,
                 moduleSpecifier,
-                line: lineFor(child)
+                ...spanFor(child)
               })
             )
           }
@@ -255,11 +276,21 @@ const extractPythonFacts = (
       const name = textOf(firstChildOfKind(node, ['identifier']))
 
       if (name !== undefined) {
+        // A decorator is part of the declaration it decorates: it replaces what
+        // every caller of that name receives. This grammar puts it in a wrapper
+        // node instead of inside the definition, so the definition's own range
+        // stops below it and a decorator-only change would be attributed to
+        // whatever declaration happens to sit above — a confident statement about
+        // the wrong symbol. Java's grammar nests its annotations inside the
+        // declaration and already reports the annotated range; reading the wrapper
+        // here is what makes the two languages mean the same thing.
+        const declared = pythonDecoratedDefinition(node) ?? node
+
         facts.push(
           createFact('python', contentHash, path, {
             kind: 'declaration',
             name,
-            line: lineFor(node)
+            ...spanFor(declared)
           })
         )
 
@@ -268,7 +299,7 @@ const extractPythonFacts = (
             createFact('python', contentHash, path, {
               kind: 'public-symbol',
               name,
-              line: lineFor(node)
+              ...spanFor(declared)
             })
           )
         }
@@ -295,7 +326,7 @@ const extractGoFacts = (
           createFact('go', contentHash, path, {
             kind: 'module',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
       }
@@ -315,7 +346,7 @@ const extractGoFacts = (
             kind: 'import',
             name: alias ?? lastPathSegment(unquotedModule, '/'),
             moduleSpecifier: unquotedModule,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
       }
@@ -329,7 +360,7 @@ const extractGoFacts = (
           createFact('go', contentHash, path, {
             kind: 'declaration',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
 
@@ -338,7 +369,7 @@ const extractGoFacts = (
             createFact('go', contentHash, path, {
               kind: 'public-symbol',
               name,
-              line: lineFor(node)
+              ...spanFor(node)
             })
           )
         }
@@ -353,7 +384,7 @@ const extractGoFacts = (
           createFact('go', contentHash, path, {
             kind: 'declaration',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
 
@@ -362,7 +393,7 @@ const extractGoFacts = (
             createFact('go', contentHash, path, {
               kind: 'public-symbol',
               name,
-              line: lineFor(node)
+              ...spanFor(node)
             })
           )
         }
@@ -415,7 +446,7 @@ const extractRustFacts = (
             kind: 'import',
             name,
             ...(moduleSpecifier === undefined ? {} : { moduleSpecifier }),
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
       }
@@ -429,7 +460,7 @@ const extractRustFacts = (
           createFact('rust', contentHash, path, {
             kind: 'module',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
       }
@@ -463,7 +494,7 @@ const extractRustFacts = (
           createFact('rust', contentHash, path, {
             kind: 'declaration',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
 
@@ -472,7 +503,7 @@ const extractRustFacts = (
             createFact('rust', contentHash, path, {
               kind: 'public-symbol',
               name,
-              line: lineFor(node)
+              ...spanFor(node)
             })
           )
         }
@@ -507,7 +538,7 @@ const extractJavaFacts = (
           createFact('java', contentHash, path, {
             kind: 'module',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
       }
@@ -522,7 +553,7 @@ const extractJavaFacts = (
             kind: 'import',
             name: lastPathSegment(moduleSpecifier, '.'),
             moduleSpecifier,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
       }
@@ -541,7 +572,7 @@ const extractJavaFacts = (
           createFact('java', contentHash, path, {
             kind: 'declaration',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
 
@@ -550,7 +581,7 @@ const extractJavaFacts = (
             createFact('java', contentHash, path, {
               kind: 'public-symbol',
               name,
-              line: lineFor(node)
+              ...spanFor(node)
             })
           )
         }
@@ -627,7 +658,7 @@ const extractRubyFacts = (
           createFact('ruby', contentHash, path, {
             kind: 'module',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
       }
@@ -642,7 +673,7 @@ const extractRubyFacts = (
           createFact('ruby', contentHash, path, {
             kind: 'declaration',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
 
@@ -650,7 +681,7 @@ const extractRubyFacts = (
           createFact('ruby', contentHash, path, {
             kind: 'public-symbol',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
       }
@@ -665,7 +696,7 @@ const extractRubyFacts = (
           createFact('ruby', contentHash, path, {
             kind: 'declaration',
             name,
-            line: lineFor(node)
+            ...spanFor(node)
           })
         )
 
@@ -675,7 +706,7 @@ const extractRubyFacts = (
             createFact('ruby', contentHash, path, {
               kind: 'public-symbol',
               name,
-              line: lineFor(node)
+              ...spanFor(node)
             })
           )
         }
@@ -702,7 +733,7 @@ const extractRubyFacts = (
               kind: 'import',
               name: lastPathSegment(moduleSpecifier, '/'),
               moduleSpecifier,
-              line: lineFor(node)
+              ...spanFor(node)
             })
           )
         }
@@ -808,7 +839,7 @@ const collectEcmascriptImportFacts = (
   contentHash: string
 ): readonly SupportSignalFact[] => {
   const moduleSpecifier = ecmascriptModuleSpecifier(node)
-  const line = lineFor(node)
+  const span = spanFor(node)
   const names: string[] = []
   const clause = firstChildOfKind(node, ['import_clause'])
 
@@ -849,7 +880,7 @@ const collectEcmascriptImportFacts = (
       kind: 'import',
       name,
       ...(moduleSpecifier === undefined ? {} : { moduleSpecifier }),
-      line
+      ...span
     })
   )
 }
@@ -861,7 +892,7 @@ const collectEcmascriptExportFacts = (
   contentHash: string
 ): readonly SupportSignalFact[] => {
   const moduleSpecifier = ecmascriptModuleSpecifier(node)
-  const line = lineFor(node)
+  const span = spanFor(node)
   const withModule = moduleSpecifier === undefined ? {} : { moduleSpecifier }
   const clause = firstChildOfKind(node, ['export_clause'])
 
@@ -874,7 +905,7 @@ const collectEcmascriptExportFacts = (
           kind: 'export',
           name,
           ...withModule,
-          line
+          ...span
         })
       )
   }
@@ -889,7 +920,7 @@ const collectEcmascriptExportFacts = (
         kind: 'export',
         name: '*',
         ...withModule,
-        line
+        ...span
       })
     ]
   }
@@ -914,7 +945,7 @@ const collectEcmascriptExportFacts = (
           kind: 'export',
           name,
           ...withModule,
-          line
+          ...span
         })
       ]
 }
@@ -1090,22 +1121,22 @@ const extractEcmascriptFacts = (
         : undefined
 
     if (declaredName !== undefined) {
-      const line = lineFor(node)
+      const span = spanFor(node)
 
       facts.push(
         createFact(language, contentHash, path, {
           kind: 'declaration',
           name: declaredName,
-          line
+          ...span
         })
       )
 
-      if (exportedLines.has(line)) {
+      if (exportedLines.has(span.line)) {
         facts.push(
           createFact(language, contentHash, path, {
             kind: 'public-symbol',
             name: declaredName,
-            line
+            ...span
           })
         )
       }
@@ -1128,7 +1159,7 @@ const extractEcmascriptFacts = (
         createFact(language, contentHash, path, {
           kind: 'export',
           name,
-          line: lineFor(node)
+          ...spanFor(node)
         })
       )
     }

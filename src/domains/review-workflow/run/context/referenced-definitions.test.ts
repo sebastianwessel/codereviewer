@@ -20,6 +20,7 @@ const importFact = (
   name: moduleSpecifier,
   moduleSpecifier,
   line,
+  endLine: line,
   summary: `import ${moduleSpecifier}`,
   contentHash: 'a'.repeat(64)
 })

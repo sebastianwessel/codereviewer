@@ -220,6 +220,7 @@ describe('first-class deterministic support signal extractor registry', () => {
         path: 'src/app.ts',
         name: 'Run',
         line: 1,
+        endLine: 1,
         summary: 'Exposes public symbol Run.',
         contentHash:
           '1111111111111111111111111111111111111111111111111111111111111111'

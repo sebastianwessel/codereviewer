@@ -68,13 +68,15 @@ export type ChangedSymbol = {
   readonly kind: ChangedSymbolKind
   readonly language: SupportedSignalLanguage
   readonly line: number
-  // Last line the symbol OWNS, on the same side as `line`: the line before the
-  // next declaration, or the end of the file for the last one. Carried on the
-  // symbol rather than recomputed by consumers, because the span is derived from
-  // the neighbouring declarations of the whole file and a consumer holding one
-  // symbol cannot rederive it. `contract-changes` needs exactly this to decide
-  // which diff lines belong to which symbol; a second, weaker guess at the span
-  // there would disagree with the one that seeded the symbol in the first place.
+  // Last line the symbol OWNS, on the same side as `line`: the AST node's own end.
+  // Carried on the symbol rather than recomputed by consumers, because only the
+  // parse knows it. `contract-changes` needs exactly this to decide which diff
+  // lines belong to which symbol; a second, weaker guess at the span there would
+  // disagree with the one that seeded the symbol in the first place.
+  //
+  // Spans NEST, because declarations do: a line inside a method is owned by the
+  // method and by the class that contains it. See `changedFactsIn` for which of
+  // the two a change is attributed to.
   readonly spanEndLine: number
   readonly changeKind: ChangedSymbolChangeKind
   // What the pairing search concluded about a removed declaration. Present
@@ -125,82 +127,112 @@ const isChangedSymbolKind = (
 // correctly.
 const searchableSymbolNamePattern = /^[A-Za-z_$][A-Za-z0-9_$]*[?!=]?$/u
 
-// Whether a declaration line falls inside a hunk, in the line space the hunks are
-// expressed in.
+// A fact that can seed discovery: one whose kind names a symbol other code can
+// depend on. Narrowed once, at the point the kind is checked, so the seeding loop
+// below cannot silently widen back to every fact kind.
+type SeedableFact = SupportSignalFact & { readonly kind: ChangedSymbolKind }
+
+// Whether `inner` is a strictly narrower declaration than `outer` — nested inside
+// it, and not merely the same construct reported under a second fact kind.
+const isNestedInside = (
+  inner: SupportSignalFact,
+  outer: SupportSignalFact
+): boolean =>
+  inner.line >= outer.line &&
+  inner.endLine <= outer.endLine &&
+  (inner.line > outer.line || inner.endLine < outer.endLine)
+
+// The head-side line range one hunk occupies.
 //
-// A pure-deletion hunk reports `newLineCount === 0`, meaning nothing occupies
-// that position on the new side. `newStartLine` is then the line the removal sits
-// after, so that single line is treated as touched: it is the closest surviving
-// anchor for a symbol whose body lost code, and treating the hunk as covering
-// nothing would make every pure deletion invisible.
-const hunkTouchesRange = (
-  hunk: DiffHunk,
-  rangeStart: number,
-  rangeEnd: number
+// A pure-deletion hunk reports `newLineCount === 0`, meaning nothing occupies that
+// position on the new side. `newStartLine` is then the line the removal sits after,
+// so that single line is treated as touched: it is the closest surviving anchor for
+// a symbol whose body lost code, and treating the hunk as covering nothing would
+// make every pure deletion invisible.
+const hunkRange = (hunk: DiffHunk): readonly [number, number] => [
+  hunk.newStartLine,
+  hunk.newLineCount === 0
+    ? hunk.newStartLine
+    : hunk.newStartLine + hunk.newLineCount - 1
+]
+
+// Whether every line of `[start, end]` falls inside one of `covers`, which need be
+// neither sorted nor disjoint.
+const rangeIsCovered = (
+  start: number,
+  end: number,
+  covers: readonly (readonly [number, number])[]
 ): boolean => {
-  const firstLine = hunk.newStartLine
-  const lastLine =
-    hunk.newLineCount === 0
-      ? hunk.newStartLine
-      : hunk.newStartLine + hunk.newLineCount - 1
+  let reached = start
 
-  // Overlap, not containment: a hunk that starts inside the symbol and runs past
-  // its end still changed it.
-  return firstLine <= rangeEnd && lastLine >= rangeStart
-}
+  for (const [coverStart, coverEnd] of [...covers].sort(
+    (left, right) => left[0] - right[0]
+  )) {
+    if (coverStart > reached) {
+      return false
+    }
 
-// The line range a symbol OWNS: from its own declaration line up to the line
-// before the next declaration in the same file, or the end of the file for the
-// last one.
-//
-// A support-signal fact records only the line a symbol is declared on, not the
-// extent of its body, so the span is derived from the neighbouring declarations.
-// It is an approximation — a nested declaration ends its parent's span early, so
-// a change in a class body between two methods is attributed to the earlier
-// method rather than the class — but it is a sound one for this purpose: it never
-// attributes a change to a symbol declared after it, and the symbol it does name
-// is always the most specific one containing the change.
-const symbolSpansFor = (
-  declarationLines: readonly number[],
-  fileLineCount: number
-): ReadonlyMap<number, number> => {
-  const spans = new Map<number, number>()
+    reached = Math.max(reached, coverEnd + 1)
 
-  for (const [index, line] of declarationLines.entries()) {
-    const next = declarationLines[index + 1]
-
-    spans.set(line, next === undefined ? Math.max(line, fileLineCount) : next - 1)
+    if (reached > end) {
+      return true
+    }
   }
 
-  return spans
+  return reached > end
 }
 
-const factIsChanged = (
+/**
+ * The seedable facts of one changed file that the diff actually changed.
+ *
+ * A symbol is changed when the diff touches ANY line it owns, not only the line it
+ * is declared on. Declaration-line-only was the original rule and it made the whole
+ * capability inert on the changes it exists for: editing a function's BODY leaves
+ * its signature untouched, so no hunk ever reaches the declaration line. Measured on
+ * three real corpus cases (fastify, rack, typeorm), every changed line sat inside a
+ * body and all three reported an empty blast radius.
+ *
+ * Spans NEST, because declarations do, so a body line is owned by the method AND by
+ * the type around it. The symbol reported is the MOST SPECIFIC declaration whose own
+ * lines the change touched: a type is seeded by a change to its own body — its
+ * declaration line, a class-level attribute, a decorator — and not by a change that
+ * a member of it already accounts for. The test is line coverage rather than mere
+ * containment, so one hunk spanning a class attribute AND a method seeds both.
+ *
+ * Two reasons for the narrow rule, and the second is measured:
+ *
+ *   - The coarse claim is nearly vacuous. "This 1 400-line class changed, here is
+ *     everything that mentions it" tells a reader less than the reference list it
+ *     costs, and discovery searches for the NAME, so a type name returns the module.
+ *   - Seeding every enclosing declaration too was built and scored against the
+ *     change-impact corpus on 2026-08-06: 67 predicted files became 100, the proven
+ *     dependents found stayed at 5, and the precision lower bound fell from 7.5% to
+ *     5.0%. It bought nothing at the configured per-symbol reference cap.
+ */
+const changedFactsIn = (
   file: ChangedSymbolSourceFile,
-  fact: SupportSignalFact,
-  spanEndLine: number
-): boolean => {
+  facts: readonly SeedableFact[]
+): readonly SeedableFact[] => {
   // A deleted file has no surviving lines to intersect, and every symbol it
   // declared is gone. Anything less than "all of them" would be wrong.
   if (file.changeKind === 'deleted') {
-    return true
+    return facts
   }
 
-  // A symbol is changed when the diff touches ANY line it owns, not only the line
-  // it is declared on.
-  //
-  // Declaration-line-only was the original rule and it made the whole capability
-  // inert on the changes it exists for. Editing a function's BODY leaves its
-  // signature untouched, so no hunk ever reaches the declaration line and no
-  // symbol is seeded — yet a body change is precisely what alters behaviour for
-  // everything downstream. Measured on three real corpus cases (fastify, rack,
-  // typeorm): every changed line sat inside a body, not one declaration line was
-  // touched, and all three reported ZERO changed symbols and an empty blast
-  // radius. A signature change, the only case the old rule caught, is the rare one
-  // and is usually caught by the compiler anyway.
-  return file.hunks.some((hunk) =>
-    hunkTouchesRange(hunk, fact.line, spanEndLine)
-  )
+  const ranges = file.hunks.map((hunk) => hunkRange(hunk))
+
+  return facts.filter((fact) => {
+    const nested = facts
+      .filter((other) => isNestedInside(other, fact))
+      .map((other) => [other.line, other.endLine] as const)
+
+    return ranges.some(([hunkStart, hunkEnd]) => {
+      const start = Math.max(hunkStart, fact.line)
+      const end = Math.min(hunkEnd, fact.endLine)
+
+      return start <= end && !rangeIsCovered(start, end, nested)
+    })
+  })
 }
 
 // A candidate a removal could have moved to: a declaration this change wrote on
@@ -271,82 +303,68 @@ export const collectChangedSymbols = (
   const extraction = extractDeterministicSignals(
     input.files.map((file) => ({ path: file.path, content: file.content }))
   )
-  // Every line that declares a seedable symbol, per file, so each symbol's span
-  // can be bounded by the next declaration below it. Built from the seedable kinds
-  // only: an import sits above the first declaration and a module clause is not a
-  // symbol, so letting either act as a boundary would shorten a real span for no
-  // reason.
-  const declarationLinesByPath = new Map<string, number[]>()
-
-  for (const fact of extraction.facts) {
-    if (!isChangedSymbolKind(fact.kind)) {
-      continue
-    }
-
-    const lines = declarationLinesByPath.get(fact.path)
-
-    if (lines === undefined) {
-      declarationLinesByPath.set(fact.path, [fact.line])
-    } else if (!lines.includes(fact.line)) {
-      lines.push(fact.line)
-    }
-  }
-
-  const spansByPath = new Map<string, ReadonlyMap<number, number>>()
-
-  for (const [path, lines] of declarationLinesByPath) {
-    const file = filesByPath.get(path)
-
-    spansByPath.set(
-      path,
-      symbolSpansFor(
-        [...lines].sort((left, right) => left - right),
-        file === undefined ? 0 : file.content.split('\n').length
-      )
-    )
-  }
-
   // Keyed on path + name + line so two distinct symbols sharing a name in one
   // file stay distinct, while the same symbol reported under several fact kinds
   // collapses to its most visible one.
   const strongestByKey = new Map<string, ChangedSymbol>()
+  // Seedable facts per file, so the nesting question is asked among the
+  // declarations of one file rather than across the whole change.
+  const seedableByPath = new Map<string, SeedableFact[]>()
 
   for (const fact of extraction.facts) {
+    const kind = fact.kind
+
     if (
-      !isChangedSymbolKind(fact.kind) ||
-      !searchableSymbolNamePattern.test(fact.name)
+      !isChangedSymbolKind(kind) ||
+      !searchableSymbolNamePattern.test(fact.name) ||
+      !filesByPath.has(fact.path)
     ) {
       continue
     }
 
-    const file = filesByPath.get(fact.path)
-    // A declaration line missing from the span map owns only itself. That can
-    // only happen when the file contributed no seedable declaration at all, which
-    // cannot be true of a fact that reached this line, so the fallback is
-    // defensive rather than a case a run is expected to hit.
-    const spanEndLine = spansByPath.get(fact.path)?.get(fact.line) ?? fact.line
+    const seedableFact: SeedableFact = { ...fact, kind }
+    const seedable = seedableByPath.get(fact.path)
 
-    if (file === undefined || !factIsChanged(file, fact, spanEndLine)) {
+    if (seedable === undefined) {
+      seedableByPath.set(fact.path, [seedableFact])
+    } else {
+      seedable.push(seedableFact)
+    }
+  }
+
+  for (const [path, seedable] of seedableByPath) {
+    const file = filesByPath.get(path)
+
+    if (file === undefined) {
       continue
     }
 
-    const key = `${fact.path}\u0000${fact.name}\u0000${fact.line}`
-    const candidate: ChangedSymbol = {
-      path: fact.path,
-      name: fact.name,
-      kind: fact.kind,
-      language: fact.language,
-      line: fact.line,
-      spanEndLine,
-      changeKind: file.changeKind
-    }
-    const existing = strongestByKey.get(key)
+    for (const fact of changedFactsIn(file, seedable)) {
+      const key = `${fact.path}\u0000${fact.name}\u0000${fact.line}`
+      const candidate: ChangedSymbol = {
+        path: fact.path,
+        name: fact.name,
+        kind: fact.kind,
+        language: fact.language,
+        line: fact.line,
+        // Read from the parse, never inferred. The previous rule — "up to the line
+        // before the next declaration" — was wrong in both directions on the same
+        // file: it ended a type at its first member, so a type was seeded only by a
+        // change above that member; and it ran the LAST member of a type past the
+        // type's own closing line, so a module-level edit below the class was
+        // reported as a contract change to that member.
+        spanEndLine: fact.endLine,
+        changeKind: file.changeKind
+      }
+      const existing = strongestByKey.get(key)
 
-    if (
-      existing === undefined ||
-      changedSymbolKindRank[candidate.kind] < changedSymbolKindRank[existing.kind]
-    ) {
-      strongestByKey.set(key, candidate)
+      if (
+        existing === undefined ||
+        changedSymbolKindRank[candidate.kind] <
+          changedSymbolKindRank[existing.kind]
+      ) {
+        strongestByKey.set(key, candidate)
+      }
     }
   }
 

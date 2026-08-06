@@ -84,6 +84,7 @@ const commonInput = {
         path: 'src/a.ts',
         name: 'alpha',
         line: 1,
+        endLine: 1,
         summary: 'alpha declaration',
         contentHash:
           '2222222222222222222222222222222222222222222222222222222222222222'

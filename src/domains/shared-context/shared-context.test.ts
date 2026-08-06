@@ -13,6 +13,7 @@ describe('review shared context', () => {
       name: 'dep',
       moduleSpecifier: './dep.js',
       line: 1,
+      endLine: 1,
       summary: 'Imports dep.',
       contentHash:
         '1111111111111111111111111111111111111111111111111111111111111111'

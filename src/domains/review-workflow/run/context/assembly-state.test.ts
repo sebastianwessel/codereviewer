@@ -64,6 +64,7 @@ const analysis: DeterministicSignalExtraction = {
       path: 'src/app.ts',
       name: 'app',
       line: 1,
+      endLine: 1,
       summary: 'Exports app.',
       contentHash: 'hash-app'
     }
