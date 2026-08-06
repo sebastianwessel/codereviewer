@@ -615,8 +615,11 @@ use `null`, because a rate over no checks is undefined rather than zero.
 | `providerErrorRate` | Cases with an UNRECOVERED provider error divided by total cases. |
 | `providerIssueRate` | Cases carrying any provider issue, recovered or not, divided by total cases. Reported separately from `providerErrorRate` so a recovered retry stays visible without being counted as a case error. |
 | `providerIssueCount` | Total provider issues across cases. |
-| `securityRecallByMechanism` | Recall per CWE-family security mechanism (`authorization`, `injection`, `ssrf`, `xss`, `deserialization`, `secret-flow`, `cryptography`, `path-traversal`, `unsafe-config`, `concurrency-resource`, `prompt-injection`). Empty value `0`. |
+| `securityRecallByMechanism` | Recall per CWE-family security mechanism (`authorization`, `injection`, `ssrf`, `xss`, `deserialization`, `secret-flow`, `cryptography`, `path-traversal`, `unsafe-config`, `concurrency-resource`). Empty value `0`. `prompt-injection` was REMOVED from this set on 2026-08-06 and MUST NOT be reintroduced here: every other value names a defect class the reviewer should report, whereas prompt-injection resistance is whether the reviewer REFUSES an instruction planted in repository content — which no expected finding can express. Carried in the enum it had no expectation anywhere, so every report published `prompt-injection: 0%` over an empty denominator, which reads as a measured failure rather than as an absent measurement. It is verified behaviourally instead; see `15-security-focused-review.md` under *Mechanisms*. |
 | `securityMechanismCounts` | Expected-finding denominators behind `securityRecallByMechanism`. |
+| `securityAdjustedPrecisionByMechanism` | Matched divided by matched plus genuine false positives, per mechanism. **Nullable, and published only when bounded.** It is `null` when the mechanism's denominator is empty, and `null` for EVERY mechanism when any genuine security false positive in the run is unattributed — one unattributed false positive could belong to any mechanism, so it bounds all of them. A vacuous `100%` is never published. |
+| `securityFindingMechanismCounts` | `{matched, genuineFalsePositive}` per mechanism, plus an `unknown` bucket for findings no rule could attribute. The bucket is what makes an unbounded run visible rather than merely absent. |
+| `securityMechanismAttributionCounts` | `{expectation, cwe, unknown}` — where each label came from. A label read off a matched expectation is stronger evidence than one inferred from a finding's CWE tags, and pooling them would hide which. Attribution rules are specified in `15-security-focused-review.md` under *Attributing An Admitted Finding To A Mechanism*. |
 | `securityRecallByContextDepth` | Recall per declared context depth (`local`, `cross-function`, `callee`, `caller`, `implementation`, `cross-file`, `analyzer-path-dependent`), so a cross-file blind spot is readable separately from a local one. |
 | `securityContextDepthCounts` | Expected-finding denominators behind `securityRecallByContextDepth`. |
 | `securityObviousRecall` | Recall over security expectations whose context depth is `local` — the ones visible without leaving the changed file. |
@@ -1177,6 +1180,20 @@ location, match mode, summary, detection rate, and run marks.
 - Public benchmark fixtures are sanity checks only. Release gates must use a
   maintained private or project-owned fixture set to reduce benchmark
   contamination risk.
+- A real-repository corpus manifest MUST declare `splitIntegrity`, and it is
+  cross-checked against the cases rather than believed. A manifest declaring
+  `chronological-split` while one split is empty is REJECTED: with nothing on one
+  side there is nothing to compare, so the chronological check would pass without
+  checking anything — an anti-contamination guard that cannot fail is worse than
+  none, because it reports assurance it never established. The alternative
+  declaration, `single-split`, requires a written `contaminationNote` long enough
+  that the label alone is not a valid answer: it must state what a reader should
+  conclude about any figure produced from that corpus.
+- **Contamination is not only about training data.** A corpus whose cases all
+  postdate the model's training cutoff can still be a dev set, because every
+  baseline, A/B and prompt change decided on it has fitted the engine to it. Where
+  that is true the manifest must say so, and figures from that corpus must be read
+  as dev-set figures rather than as held-out evidence.
 
 ## Depth Profiles
 
