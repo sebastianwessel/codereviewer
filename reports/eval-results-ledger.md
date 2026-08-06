@@ -18,6 +18,59 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-08-06 — the prohibition verdict measured: correct, and far too rare to matter
+
+Spec 23 gained a fourth verdict, `not-contradicted`, for prohibition-shaped
+obligations — the 39.8% of false positives that were satisfied by ABSENCE and so
+could only ever be reported as unmet. Two rounds, engine `d2f5adb`,
+`openai/gpt-5.3-codex`, pre-written arm, **20 of 21 cases scored in both rounds**.
+
+| | round A | round B | prior baseline |
+| --- | ---: | ---: | ---: |
+| LIST precision | 51.6% (65/126) | 50.4% (61/121) | **51.5%** |
+| LANE precision | 93.7% | 93.4% | — |
+| outstanding recall | 87.8% (65/74) | 84.7% (61/72) | — |
+| false-satisfied | 4.3% (9/209) | 5.3% (11/209) | **6.0%** |
+| **`not-contradicted` fired** | **5 of 436 (1.1%)**, 0 wrong | **8 of 428 (1.9%)**, **1 wrong** | n/a |
+| spend | $5.06 | $4.65 | ~$4.87 |
+
+**Against its own pre-registration: the primary point FAILS.** Point 1 required
+outstanding precision to reach 60% from 51.5%. It measured 51.6% and 50.4% —
+unchanged. Points 2–4 hold: detection did not fall beyond the band, false-satisfied
+did not rise (it fell, 6.0% → 4.3/5.3%), and spend is flat.
+
+**The diagnosis is in the firing rate, not the precision.** The verdict fires on
+**1.1–1.9%** of obligations, where the classification that motivated it put
+prohibition-shaped obligations at **39.8% of the false positives**. It is right when
+it fires — 12 of 13 uses across both rounds were correct — and it is simply not
+reaching the population it was built for. **The boundary is too narrow, and the idea
+is not refuted.** That is a far more actionable result than the precision figure.
+
+One `not-contradicted` in round B landed on an obligation the answer key calls
+outstanding. It is counted twice, as the pre-registration demands: a recall loss and
+a false-satisfied claim. The corpus can catch this failure mode, which is the reason
+it was checked for before the run.
+
+**Corpus property worth knowing before any re-run.** `pw09-spec15-measure` sits
+exactly on its `maxObligations: 40` cap and therefore refuses non-deterministically:
+it scored in round A and returned `intent_too_many_obligations` (exit 4) in round B.
+The cap is NOT raised — the capped-to-uncapped move is recorded as worth 27.6 points
+of end-to-end recall, which would swamp anything a fourth verdict does. The case is
+excluded from every rate above, by id, in both rounds.
+
+**Three instrument defects were fixed before this could be read at all**, each the
+same shape as the engine bugs this project keeps finding: the scorer classified an
+unknown verdict by falling through to "satisfied"; the two scorers held separate
+copies of the vocabulary; and a legitimate refusal (exit 4, empty report) crashed
+the scorer with a raw `SyntaxError` instead of being recorded as a refusal. Both
+scorers now share one status table, throw on an unknown status, and classify a
+refusal as data.
+
+**Provenance caveat.** The sidecar records 1 dirty file at `d2f5adb` — a working-tree
+edit to `specs/23-*.md`, which the engine never reads but the harness counts as part
+of engine identity. Both rounds share it, so they pool with each other and **not**
+with any later re-run.
+
 ## 2026-08-06 — change-impact adjudication measured for the first time (after a void run)
 
 The first attempt on this corpus was **void**: in every case the scorer called

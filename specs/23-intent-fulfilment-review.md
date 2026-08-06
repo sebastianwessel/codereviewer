@@ -226,6 +226,139 @@ in the results ledger is compared across 2026-08-06. Every accuracy number in th
 document predates the fourth status, and none of them may be quoted as if it
 described the current engine.
 
+### How the measurement scores `not-contradicted` (2026-08-06)
+
+The pre-registration above is only unambiguous if the instrument agrees with it, and
+until this was written the instrument had not been told the verdict exists. Its
+scorer classified an obligation as outstanding on `not-evidenced`, `undetermined` or
+the pre-rename `unaddressed`; `not-contradicted` matched none of those and would have
+fallen through to "satisfied" **by accident rather than by decision** — a figure whose
+meaning nobody had chosen, which is the defect shape this project records as silent
+optimism. The classification is now explicit, and the reasoning is in the scorer
+beside it.
+
+**The decision: `not-contradicted` is OFF the outstanding list, and that is not the
+same as correct.** The scorer's one question is *"did the run leave this obligation on
+the list a human reads?"*, and this spec requires the engine's answer to be no. A
+scorer that put the row back on a list the engine took it off would be grading a
+report nobody receives. What follows from the decision is the part that matters, and
+both halves fall where this spec put them:
+
+- an obligation the answer key calls `outstanding` that comes back `not-contradicted`
+  is **a recall loss** — it is absent from reported outstanding recall, and from
+  end-to-end recall too when a fixed human item names it. Verified on the stored
+  round: flipping one such row moves reported recall 84.6% → 83.7% and end-to-end
+  81.2% → 79.7%;
+- **and the same row is a false-satisfied claim**, counted in that rate's numerator on
+  the same footing as a wrong `evidenced` — which is what point 3 of the
+  pre-registration demands. Verified on the same flip: 6.0% → 6.4%. The scorer does do
+  what the pre-registration says it must.
+
+**The volume is now printed** (`not-contradicted verdicts N of M reported`, with the
+subcount the answer key calls outstanding), because the verdict's whole behavioural
+effect is to remove rows from a count — without a line of its own that effect is
+invisible and every rate moves for no stated reason. A degenerate result is called out
+in both directions: zero says the verdict is unreachable rather than that nothing
+needed it, and a share past half says it is being handed to obligations that ask for
+work, which the first prompt boundary forbids.
+
+**An unrecognised status now throws** rather than being scored as anything. A fifth
+verdict must not be able to enter a published number the way the fourth nearly did.
+
+#### What the answer key can and cannot say, checked rather than assumed
+
+`ground-truth.mjs` has **no label for obligation shape**, and none was added: shape is
+a property of the statement text, and inventing a hand label mid-measurement would be
+changing the answer key. It does not need one. Its truth rule already binds the case
+that decides this classification — *"a clause describing a COMPONENT THAT DOES NOT
+EXIST is `outstanding`, whether it is phrased as a capability or as a prohibition"* —
+and **ten labelled rows are prohibition-shaped and labelled `outstanding`**, among
+them *"Never emit detected secret values"*, *"In event mode, the platform provider
+must not use network access"*, and *"The model call must not ask whether code is
+vulnerable, exploitable, or insecure"*.
+
+**Three of those ten are named by the FIXED human enumeration**, one of them in the
+human's own words: `pw17-spec24-req/obl_16` — *"the prohibition on asking the model
+whether the code is vulnerable is likewise undischarged"*. So the corpus does contain
+the case where the new verdict would be wrong, and it can lose recall on it. Nothing
+was added to `humanOutstanding`; it remains the fixed enumeration this spec's harness
+never extends because a run surfaced something new.
+
+That is also the standing answer to *"what would make this classification wrong?"*:
+it holds only while the answer key treats a prohibition as capable of being
+outstanding. If a later key ever made prohibitions `unclassifiable`, the scorer would
+be agreeing by luck and the decision has to be re-taken.
+
+#### Both scorers, one definition
+
+`score.mjs` joins the answer key by positional obligation id, so it can only ever
+score the ONE round the labels were written against. A re-run — which the
+pre-registration requires, at n ≥ 2 per case — is scored by `score-carried.mjs`, which
+matches statements instead. **That second scorer is the one a pre-registered result
+actually lands on**, and it held its own private copy of the mapping: three `===`
+comparisons and no final else. The fourth verdict would have been absorbed there by
+fallthrough while the sibling scorer had been told about it.
+
+The classification is therefore not written twice. It lives once, in
+`.codereviewer/eval/reported-status.mjs`, and both scorers read it, so the two cannot
+drift about what a verdict means. Both now throw on an unrecognised status and both
+print the count. `score-carried.mjs` places **every** reported status before scoring
+anything, including rows its statement matcher will drop — an unknown verdict hiding
+in an unmatched row is precisely how one would reach a published number unnoticed,
+since unmatched rows are silently unscored by design.
+
+The false-satisfied property was verified in `score-carried.mjs` directly rather than
+inferred from the sibling: flipping one carried-`outstanding` row in a stored round
+from `not-evidenced` to `not-contradicted` moves outstanding recall 100% → 91.7% and
+false-satisfied 0/18 → 1/19, with the new count reading `1 … of those, truth
+OUTSTANDING 1`.
+
+**Still outside the shared module**, and stated so it is not mistaken for done:
+`intent-corpus/score.mjs` — the commit-message corpus, a different corpus with its own
+scoring shape and not in scope on 2026-08-06 — keeps its own status clauses. It is
+owed the same treatment before another verdict is added.
+
+One further hazard the same pass made visible rather than fixed silently:
+`score-carried.mjs` totals whatever case ids it is handed, and this corpus **never
+pools its two arms**. It now names the arms in the total and says loudly when both are
+present. Run it once per arm.
+
+#### One corpus case sits exactly on the obligation cap, and flips between rounds
+
+`pw09-spec15-measure` is configured at `maxObligations: 40`, and its extraction
+produces **about forty obligations**. When it produces forty, the run refuses with
+`intent_too_many_obligations` and exits 4 — correctly, per *Limits Refuse; They Never
+Truncate*: reporting the first forty would under-report what is left, which is the one
+direction this command must not err in. When extraction lands one short, the same case
+scores normally.
+
+Extraction is not deterministic, so **the same case refuses in one round and scores in
+the next**. It did exactly that on 2026-08-06: scored in round A, refused in round B.
+Anyone re-running this corpus needs to know that before reading a between-round delta
+as an effect of anything, because the case carries roughly forty obligations and its
+presence or absence moves several rates on its own.
+
+**The cap is not raised to make it pass.** Changing a cap mid-measurement is a
+confound, and this corpus has the receipt: the capped-to-uncapped move is recorded as
+worth **27.6 points of end-to-end recall**. A cap change would swamp anything the
+fourth verdict does. The refusal is correct behaviour and stays.
+
+What changed is the instrument, which previously died on it with a raw
+`SyntaxError: Unexpected end of JSON input` — a legitimate engine outcome surfacing as
+noise instead of as data, the same defect shape as the verdict that fell through. A
+case with no report is now **classified** by `.codereviewer/eval/run-outcome.mjs`:
+`refused` (exit 4, with the structured code) is reported separately from `failed`
+(a crash, a truncated write, a missing file), because "the engine declined to answer"
+and "the run broke" are different facts. Either way the case is **excluded from every
+rate with its id and reason printed** — never counted as a case with zero obligations,
+which would drag every rate down while looking like a result.
+
+And because a case that scores in one round and refuses in another silently changes
+the denominator between them, `score-carried.mjs` now scores **only the cases every
+requested round scored**, prints that denominator, and names what differs. A figure
+quoted from the scoring round alone includes the case and is therefore not the figure
+the comparison prints.
+
 ## Aptness check — REJECTED DESIGN, REMOVED 2026-08-01
 
 **No citation-aptness stage exists.** Three designs were tried for the same signal
