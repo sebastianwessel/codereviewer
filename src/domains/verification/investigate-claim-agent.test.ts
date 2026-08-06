@@ -366,19 +366,27 @@ describe('investigate_claim agent (deterministic-provider integration)', () => {
     expect(ledgerEntries[0]?.path).toBe('fixed.ts')
     expect(bounded.citedEvidenceIds()).toHaveLength(1)
 
-    // The `.env` read was rejected: the first tool result is an error, not a
-    // successful mediated read (a success carries the read `summary`). No ledger
-    // entry, evidence, or budget was spent on it beyond the counted attempt.
+    // The `.env` read was rejected — and the investigator was TOLD SO. Spec 12
+    // promises it a recoverable, actionable answer (not found, not eligible,
+    // budget exceeded); a thrown error would have reached it as the harness's
+    // "Tool execution failed." with the reason dropped, and an investigator told
+    // nothing concludes the code it meant to check is not there. This lane uses
+    // the same shared disclosure as the discovery lane, so the wording matches.
     const toolResults = provider.requests
       .flatMap((request) => request.messages)
       .filter(
         (message): message is Extract<ModelMessage, { role: 'tool' }> =>
           message.role === 'tool'
       )
-    const secretResult = toolResults.find(
-      (message) => !message.content.includes('"summary"')
+    const secretResult = toolResults.find((message) =>
+      message.content.includes('PATH NOT ELIGIBLE')
     )
     expect(secretResult).toBeDefined()
+    expect(secretResult?.content).toContain(
+      'not evidence that anything is absent, correct, or safe'
+    )
+    // No ledger entry, evidence, or budget was spent on it beyond the counted
+    // attempt, so disclosing the refusal did not turn it into a read.
 
     // The secret contents never reached the model.
     const leaked = toolResults.some((message) =>

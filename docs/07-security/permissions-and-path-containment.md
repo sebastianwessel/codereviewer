@@ -163,8 +163,20 @@ discovery), reads go through mediated tools with a two-layer eligibility gate:
    re-cased segment on a case-insensitive filesystem cannot slip past.
 2. **Your configured scope.** `paths.exclude`, then `paths.include`.
 
-Ineligible paths return an actionable, recoverable "not eligible" result to the
-model rather than an error to retry, and the reason is recorded.
+A refusal the model is expected to hit — the path is not eligible, the path is
+not found, or the retriever's read or search budget is spent — comes back as an
+ordinary tool result naming that reason, not as an error to retry. Each one says
+in the text the model reads that the lookup did not run and that this is **not**
+evidence the code is absent, correct, or safe, so a refused lookup can never be
+mistaken for an observation. The reason is recorded.
+
+Eligibility is decided from the path alone, before the filesystem is consulted,
+so a "not eligible" answer reveals nothing about whether that path exists.
+
+A **path-containment violation is not** one of those refusals. An attempt to
+escape the repository root — including through a symlink whose real target lies
+outside it — is an invariant breach: it fails the call outright and is never
+softened into a result a model could reason past.
 
 ---
 

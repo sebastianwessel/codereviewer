@@ -105,6 +105,36 @@ precision holds" signature this capability's original verdict recorded. So:
 
 Spec 28 owns this design and its rationale.
 
+## Refusals Must Be Disclosed
+
+The same argument applies to a lookup that returned nothing at all, and until
+2026-08-06 this spec's promise to the model was false. The prompt segment tells the
+reviewer that "a path may be reported as not found, not eligible, or
+budget-exceeded" and to treat that as information. It was not reported: the harness
+normalizes any non-harness error to `Tool execution failed.` and drops the message,
+so every one of those conditions reached the model as an unexplained failure and it
+filled the gap the way it fills every gap — the code it meant to check is not there.
+That promise now holds. So:
+
+- The conditions a caller is EXPECTED to hit are a CLOSED, typed set: path not
+  eligible, path not found, retriever read budget exhausted, retriever search budget
+  exhausted, plus the scope's own tool-call bound. Each is disclosed as ordinary
+  tool-result content that names the specific reason, in ONE shape shared by every
+  lane exposing these tools, so a model never learns two vocabularies for "your
+  lookup did not happen".
+- Each disclosure MUST state that the tool did not run and returned no repository
+  content, and that this is **not** evidence that anything is absent, correct, or
+  safe. A refusal that a model can mistake for an observation is worse than no tool.
+- Everything else is a FAULT and MUST propagate. A **path-containment violation in
+  particular is never disclosed**: an escape from the repository root is a
+  security-relevant invariant breach, not a condition to shrug off. The distinction
+  is made by ERROR TYPE, never by matching an error message, so a reword in a shared
+  helper cannot silently reclassify a containment breach as an ordinary miss.
+- A disclosure carries only the tool id and the repository-relative path the caller
+  itself supplied — never file content, an absolute filesystem path, or which
+  eligibility rule fired. Eligibility is evaluated before existence, so a refusal
+  cannot be used to probe for excluded or secret files.
+
 ## Configuration
 
 A `review.crossFileRetrieval` block. Keys are defined in
@@ -153,6 +183,10 @@ than off (−7%, −5%).
   reports budget exhaustion; the disabled path configures the discovery agent with no
   tools and the compact step allowance (byte-for-byte unchanged prompt); the retriever
   mediation (eligibility, redaction, containment) is exercised as today.
+- Unit: each expected condition, driven through the real retriever and the real tool
+  handlers, produces content naming that reason and stating it is not evidence about
+  the code; a containment violation still throws; the disclosed text passes the
+  prompt-genericity guard.
 - Integration (hermetic, deterministic provider): a planted cross-file defect whose
   evidence lives in an unchanged imported file is caught only when the mode is enabled
   and the model reads that file; a run with the mode disabled is unchanged; an

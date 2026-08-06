@@ -24,6 +24,7 @@ import {
   RepoReadToolInputSchema,
   RepoToolOutputSchema,
   toRepoToolOutput,
+  withDisclosedRetrievalCondition,
   type RetrievalTools
 } from '../context-retrieval/index.js'
 import { ModelVerdictSchema } from './verification-report.js'
@@ -93,17 +94,26 @@ const buildInvestigateClaimHarness = (input: {
     // rejects a custom tool whose id equals a built-in name at build time, and a
     // colliding id would otherwise route execution to the sandbox built-in
     // instead of these mediated, ledgered, eligibility-gated handlers.
+    // Every refusal spec 12 promises the investigator — a path reported not found
+    // or not eligible, a budget that is spent — is disclosed as tool-result content
+    // by the SAME shared wrapper the discovery lane uses, so a refusal reads
+    // identically in both lanes. A thrown error would reach the model only as the
+    // harness's "Tool execution failed.", and an investigator told nothing
+    // concludes the code it meant to check is not there. Anything that is not an
+    // expected condition — a containment violation above all — still propagates.
     .tools({
       repo_read: {
         description: REPO_TOOL_DESCRIPTIONS.read,
         input: RepoReadToolInputSchema,
         output: RepoToolOutputSchema,
         handler: async (ctx, rawInput) =>
-          toRepoToolOutput(
-            await activeToolsFor(input.registry, ctx.sessionId).read(
-              readInputFrom(rawInput)
-            ),
-            true
+          withDisclosedRetrievalCondition('repo_read', async () =>
+            toRepoToolOutput(
+              await activeToolsFor(input.registry, ctx.sessionId).read(
+                readInputFrom(rawInput)
+              ),
+              true
+            )
           )
       },
       repo_list: {
@@ -111,28 +121,33 @@ const buildInvestigateClaimHarness = (input: {
         input: RepoListToolInputSchema,
         output: RepoToolOutputSchema,
         handler: async (ctx, rawInput) =>
-          toRepoToolOutput(
-            await activeToolsFor(input.registry, ctx.sessionId).list({
-              path: RepoListToolInputSchema.parse(rawInput).path
-            }),
-            false
+          withDisclosedRetrievalCondition('repo_list', async () =>
+            toRepoToolOutput(
+              await activeToolsFor(input.registry, ctx.sessionId).list({
+                path: RepoListToolInputSchema.parse(rawInput).path
+              }),
+              false
+            )
           )
       },
       repo_grep: {
         description: REPO_TOOL_DESCRIPTIONS.grep,
         input: RepoGrepToolInputSchema,
         output: RepoToolOutputSchema,
-        handler: async (ctx, rawInput) => {
-          const toolInput = RepoGrepToolInputSchema.parse(rawInput)
+        handler: async (ctx, rawInput) =>
+          withDisclosedRetrievalCondition('repo_grep', async () => {
+            const toolInput = RepoGrepToolInputSchema.parse(rawInput)
 
-          return toRepoToolOutput(
-            await activeToolsFor(input.registry, ctx.sessionId).grep({
-              query: toolInput.query,
-              ...(toolInput.paths === undefined ? {} : { paths: toolInput.paths })
-            }),
-            false
-          )
-        }
+            return toRepoToolOutput(
+              await activeToolsFor(input.registry, ctx.sessionId).grep({
+                query: toolInput.query,
+                ...(toolInput.paths === undefined
+                  ? {}
+                  : { paths: toolInput.paths })
+              }),
+              false
+            )
+          })
       }
     })
     .agents(({ agent }) => ({

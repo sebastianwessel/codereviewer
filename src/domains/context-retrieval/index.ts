@@ -1,7 +1,10 @@
 import { readdir, readFile, realpath, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { z } from 'zod'
-import { resolveExistingPathInsideRoot } from '../../platform/path-service.js'
+import {
+  resolveExistingPathInsideRoot,
+  resolvePathInsideRoot
+} from '../../platform/path-service.js'
 import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
 import {
   EvidenceRecordSchema,
@@ -20,6 +23,12 @@ import {
   type CompiledEligibilityConfig,
   type ContextRetrievalEligibilityConfig
 } from './eligibility.js'
+import {
+  pathNotEligibleCondition,
+  pathNotFoundCondition,
+  readBudgetExhaustedCondition,
+  searchBudgetExhaustedCondition
+} from './expected-conditions.js'
 
 export const ContextRetrievalBudgetSchema = z.strictObject({
   maxReads: z.int().min(0).default(4),
@@ -159,6 +168,16 @@ export {
   type SymbolReferenceSite
 } from './symbol-reference-lookup.js'
 export {
+  contextRetrievalConditions,
+  ContextRetrievalConditionError,
+  isContextRetrievalConditionError,
+  type ContextRetrievalCondition
+} from './expected-conditions.js'
+export {
+  disclosedRetrievalCondition,
+  withDisclosedRetrievalCondition
+} from './condition-disclosure.js'
+export {
   RepoReadToolInputSchema,
   RepoListToolInputSchema,
   RepoGrepToolInputSchema,
@@ -172,30 +191,33 @@ export {
 const evidenceIdFor = (value: string): string =>
   `ev_${sha256(value).slice(0, 24)}`
 
-const budgetExceeded = (kind: 'read' | 'search'): TypeError =>
-  new TypeError(`Context retrieval ${kind} budget exceeded.`)
+// Whether a filesystem error means "nothing is there". `ENOENT` is the plain
+// case; `ENOTDIR` is the same statement made about an intermediate segment (a
+// path under a regular file). Every other errno — a permission failure above
+// all — is a fault: reporting it as "not found" would be exactly the silent
+// optimism this surface exists to prevent.
+const isMissingEntryError = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  (error.code === 'ENOENT' || error.code === 'ENOTDIR')
 
-// Thrown for a path that resolved and passed containment, but that the
-// eligibility gate (dotfiles, node_modules/.git/dist/.codereviewer,
-// configured paths.include/exclude) rejects. Distinct from a budget or
-// not-found failure so a calling agent can react to each differently.
-const notEligibleError = (portablePath: string, reason: string): TypeError =>
-  new TypeError(
-    `Path "${portablePath}" is not eligible for context retrieval: ${reason}.`
-  )
+const pathExists = async (absolutePath: string): Promise<boolean> => {
+  try {
+    // Follows symlinks on purpose: a link to a deleted target is not there, and a
+    // link to a live target outside the root must reach the containment check
+    // below rather than being answered as a miss.
+    await stat(absolutePath)
 
-// Thrown when a requested path does not exist inside the repository. Reports
-// only the portable (repository-relative) path, never the resolved absolute
-// filesystem path, so the error stays safe to surface to a model.
-const notFoundError = (portablePath: string): TypeError =>
-  new TypeError(`Path "${portablePath}" was not found in the repository.`)
+    return true
+  } catch (error) {
+    if (isMissingEntryError(error)) {
+      return false
+    }
 
-// `resolveExistingPathInsideRoot` throws its own TypeError when a path (or a
-// symlink target) escapes the repository root. That message is already
-// actionable, so it is left to propagate as-is rather than being folded into
-// the generic not-found error below.
-const isPathContainmentError = (error: unknown): error is TypeError =>
-  error instanceof TypeError && /resolve inside the root/iu.test(error.message)
+    throw error
+  }
+}
 
 // Identifier characters shared by every language this engine analyses. Kept as
 // one definition so the two lookarounds below can never disagree.
@@ -254,22 +276,32 @@ const resolveEligibleExistingPath = async (options: {
   )
 
   if (!eligibility.eligible) {
-    throw notEligibleError(portablePath, eligibility.reason)
+    throw pathNotEligibleCondition(portablePath, eligibility.reason)
   }
 
-  let absolutePath: string
-  try {
-    absolutePath = await resolveExistingPathInsideRoot(
-      options.repositoryRoot,
-      portablePath
-    )
-  } catch (error) {
-    if (isPathContainmentError(error)) {
-      throw error
-    }
+  // Containment first, existence second, and NEITHER is decided by reading an
+  // error message. `resolvePathInsideRoot` refuses a path that escapes the root,
+  // and that refusal propagates as the fault it is — a containment breach is a
+  // security-relevant invariant, never an expected condition the model may treat
+  // as "the code is not there". Only once the path is contained is absence
+  // established by asking the filesystem directly, so the not-found condition is
+  // raised on positive evidence rather than by assuming that whatever the path
+  // service threw must have meant "missing".
+  const containedPath = resolvePathInsideRoot(
+    options.repositoryRoot,
+    portablePath
+  )
 
-    throw notFoundError(portablePath)
+  if (!(await pathExists(containedPath))) {
+    throw pathNotFoundCondition(portablePath)
   }
+
+  // Re-resolves through the same helper so the symlink-target containment check
+  // (real target inside the real root) still runs and still propagates.
+  const absolutePath = await resolveExistingPathInsideRoot(
+    options.repositoryRoot,
+    portablePath
+  )
 
   // Re-evaluate eligibility against the REAL target. `resolveExistingPathInsideRoot`
   // confirms the realpath is *contained* in the root but returns the requested
@@ -291,7 +323,7 @@ const resolveEligibleExistingPath = async (options: {
     )
 
     if (!targetEligibility.eligible) {
-      throw notEligibleError(
+      throw pathNotEligibleCondition(
         portablePath,
         `resolves to an ineligible target (${targetEligibility.reason})`
       )
@@ -401,7 +433,7 @@ export const createContextRetriever = (input: {
       )
 
       if (budget.usedReads >= budget.maxReads) {
-        throw budgetExceeded('read')
+        throw readBudgetExhaustedCondition()
       }
       budget.usedReads += 1
       const content = await readFile(absolutePath, 'utf8')
@@ -447,7 +479,7 @@ export const createContextRetriever = (input: {
       )
 
       if (budget.usedReads >= budget.maxReads) {
-        throw budgetExceeded('read')
+        throw readBudgetExhaustedCondition()
       }
       budget.usedReads += 1
       const entryNames = await readdir(absolutePath)
@@ -558,7 +590,7 @@ export const createContextRetriever = (input: {
     // full is refused rather than partially served, so the budget stays the
     // authority on how many searches a caller may make.
     if (budget.usedSearches + input.queries.length > budget.maxSearches) {
-      throw budgetExceeded('search')
+      throw searchBudgetExhaustedCondition()
     }
     budget.usedSearches += input.queries.length
 

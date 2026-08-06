@@ -1,6 +1,10 @@
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import {
   createBoundedRetrievalTools,
+  createContextRetriever,
   type ContextRetrievalResult,
   type ContextRetriever
 } from '../../context-retrieval/index.js'
@@ -99,14 +103,13 @@ describe('mediated repository tools', () => {
     expect(refused.summary).toContain('budget is exhausted')
   })
 
-  test('never disguises a genuine failure as a disclosed bound', async () => {
-    // Only the scope's own tool-call bound answers in content. An ineligible path,
-    // a missing file, or a containment violation must still propagate: swallowing
-    // one would hand the model a tool result it could reason from where the engine
-    // actually failed.
+  test('never disguises a genuine failure as a disclosed refusal', async () => {
+    // Only an EXPECTED condition answers in content. A fault must still propagate:
+    // swallowing one would hand the model a tool result it could reason from where
+    // the engine actually failed.
     const failing = {
       read: async () => {
-        throw new TypeError('Path "x" is not eligible for context retrieval.')
+        throw new TypeError('Path target must resolve inside the root.')
       },
       list: async () => {
         throw new TypeError('unused')
@@ -118,7 +121,7 @@ describe('mediated repository tools', () => {
 
     await expect(
       runWithMediatedRepoTools({ tools: failing }, () => runRead('x'))
-    ).rejects.toThrow(/not eligible/u)
+    ).rejects.toThrow(/resolve inside the root/u)
   })
 
   test('gives concurrent scopes independent tools and budgets', async () => {
@@ -148,6 +151,152 @@ describe('mediated repository tools', () => {
     expect(secondOutput.content).toContain('src/second.ts')
     expect(first.toolCallCount()).toBe(2)
     expect(second.toolCallCount()).toBe(1)
+  })
+})
+
+// Specs 12 and 16 both promise the model that a path may be reported as not found
+// or not eligible and a budget as spent. The harness normalizes a thrown error to
+// "Tool execution failed." and drops the message, so before this the promise was
+// false and the model filled the gap with the plausible assumption that the code it
+// meant to check is not there. These drive the REAL retriever through the REAL tool
+// handlers, so a change anywhere on that path is caught.
+describe('expected retrieval conditions reach the model as content', () => {
+  const createFixtureRepo = async (): Promise<string> => {
+    const root = await mkdtemp(join(tmpdir(), 'mediated-repo-tools-'))
+
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1\n')
+    await writeFile(join(root, '.env'), 'API_SECRET=never-served\n')
+
+    return root
+  }
+
+  const runInScope = async <T>(
+    root: string,
+    budget: { readonly maxReads: number; readonly maxSearches: number },
+    operation: () => Promise<T>
+  ): Promise<T> => {
+    const bounded = createBoundedRetrievalTools({
+      retriever: createContextRetriever({ repositoryRoot: root, budget }),
+      maxToolCalls: 10
+    })
+
+    return runWithMediatedRepoTools({ tools: bounded.tools }, operation)
+  }
+
+  test('an ineligible path is disclosed, naming the reason and the path', async () => {
+    const root = await createFixtureRepo()
+
+    try {
+      const output = await runInScope(
+        root,
+        { maxReads: 4, maxSearches: 2 },
+        () => runRead('.env')
+      )
+
+      expect(output.content).toContain('PATH NOT ELIGIBLE')
+      expect(output.content).toContain('.env')
+      expect(output.content).toContain(
+        'not evidence that anything is absent, correct, or safe'
+      )
+      // The refusal is not a back door to the file it refused.
+      expect(output.content).not.toContain('never-served')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a missing path is disclosed as a wrong path, not as absent code', async () => {
+    const root = await createFixtureRepo()
+
+    try {
+      const output = await runInScope(
+        root,
+        { maxReads: 4, maxSearches: 2 },
+        () => runRead('src/missing.ts')
+      )
+
+      expect(output.content).toContain('PATH NOT FOUND')
+      expect(output.content).toContain('src/missing.ts')
+      expect(output.content).toContain(
+        'not evidence that anything is absent, correct, or safe'
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('an exhausted read budget is disclosed rather than thrown', async () => {
+    const root = await createFixtureRepo()
+
+    try {
+      const output = await runInScope(
+        root,
+        { maxReads: 1, maxSearches: 2 },
+        async () => {
+          await runRead('src/app.ts')
+
+          return (await mediatedRepoToolDefinitions.repo_list.handler(undefined, {
+            path: 'src'
+          })) as { readonly summary: string; readonly content: string }
+        }
+      )
+
+      expect(output.content).toContain('READ BUDGET EXHAUSTED')
+      expect(output.content).toContain('repo_list')
+      expect(output.content).toContain(
+        'not evidence that anything is absent, correct, or safe'
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('an exhausted search budget is disclosed rather than thrown', async () => {
+    const root = await createFixtureRepo()
+
+    try {
+      const output = await runInScope(
+        root,
+        { maxReads: 4, maxSearches: 1 },
+        async () => {
+          await mediatedRepoToolDefinitions.repo_grep.handler(undefined, {
+            query: 'value'
+          })
+
+          return (await mediatedRepoToolDefinitions.repo_grep.handler(undefined, {
+            query: 'value'
+          })) as { readonly summary: string; readonly content: string }
+        }
+      )
+
+      expect(output.content).toContain('SEARCH BUDGET EXHAUSTED')
+      expect(output.content).toContain(
+        'not evidence that anything is absent, correct, or safe'
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a containment violation still throws instead of being disclosed', async () => {
+    const root = await createFixtureRepo()
+    const outside = await mkdtemp(join(tmpdir(), 'mediated-repo-tools-outside-'))
+
+    try {
+      await writeFile(join(outside, 'secret.ts'), 'export const leaked = 1\n')
+      // An eligible, existing in-repo name whose real target is outside the root.
+      await symlink(join(outside, 'secret.ts'), join(root, 'src', 'escape.ts'))
+
+      await expect(
+        runInScope(root, { maxReads: 4, maxSearches: 2 }, () =>
+          runRead('src/escape.ts')
+        )
+      ).rejects.toThrow(/resolve inside the root/iu)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
+    }
   })
 })
 

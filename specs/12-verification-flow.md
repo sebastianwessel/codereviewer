@@ -151,9 +151,14 @@ The agent's only tools are the mediated repository tools from the
 - Tool-call formatting differences between providers are handled by the harness;
   the tool contracts are defined once.
 - Tool implementations are liberal in what they accept: paths are normalized
-  through `path-service` (leading `./`, separators, case), and failures return a
-  recoverable, actionable error (not found, budget exceeded, path not eligible)
-  the model can respond to, rather than an opaque error.
+  through `path-service` (leading `./`, separators, case), and an expected
+  condition (path not found, path not eligible, read or search budget exhausted,
+  per-claim tool-call budget exhausted) comes back as a recoverable, actionable
+  **tool result naming that reason** rather than an opaque error. This lane uses
+  the same shared disclosure as tool-enabled discovery, so a refusal reads
+  identically in both — spec 16's *Refusals Must Be Disclosed* owns the shape, the
+  closed set, and the rule that every other failure (a containment violation above
+  all) stays a fault and propagates.
 - Tool output is deterministic and bounded (line-numbered, byte-capped) so every
   provider receives consistent context.
 - Integration tests run against more than one provider adapter shape so per-model
@@ -279,9 +284,11 @@ Keys are defined in `04-configuration-and-providers.md`:
   `investigate_claim` agent through a bounded loop against a fixture repository and
   assert: the returned verdict; a `false-positive` judgment on a planted
   non-defect and a `real` judgment plus an apply-checked fix on a genuine one;
-  that only eligible files were read; that the ledger records every read; that
-  budget/loop bounds are enforced; and that an untrusted claim or finding cannot
-  change the gate, severity, or the outcome of an unrelated finding.
+  that only eligible files were read; that a refused read reaches the investigator
+  as a tool result naming the reason and stating it is not evidence about the code;
+  that the ledger records every read; that budget/loop bounds are enforced; and that
+  an untrusted claim or finding cannot change the gate, severity, or the outcome of
+  an unrelated finding.
 
 ## Acceptance
 

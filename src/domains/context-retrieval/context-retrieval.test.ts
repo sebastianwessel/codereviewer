@@ -2,7 +2,10 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
-import { createContextRetriever } from './index.js'
+import {
+  createContextRetriever,
+  isContextRetrievalConditionError
+} from './index.js'
 import { toRepoToolOutput } from './repo-tool-contracts.js'
 import type { ContextLedgerEntry } from '../review-planning/index.js'
 
@@ -411,6 +414,111 @@ describe('context retrieval', () => {
 
       expect(fromDotSlash.path).toBe('src/app.ts')
       expect(fromBackslash.path).toBe('src/other.ts')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The four conditions a caller is EXPECTED to hit carry a type, so the lane that
+  // exposes these tools to a model can disclose them without having to read an
+  // error message to decide whether it may.
+  test('raises the four expected conditions as typed conditions', async () => {
+    const root = await createEligibilityFixtureRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxReads: 1, maxSearches: 1 }
+      })
+      const conditionOf = async (
+        operation: () => Promise<unknown>
+      ): Promise<string> => {
+        try {
+          await operation()
+        } catch (error) {
+          return isContextRetrievalConditionError(error)
+            ? error.condition
+            : `not a condition: ${String(error)}`
+        }
+
+        return 'no error'
+      }
+
+      expect(
+        await conditionOf(() => retriever.readRepositoryFile({ path: '.env' }))
+      ).toBe('path-not-eligible')
+      expect(
+        await conditionOf(() =>
+          retriever.readRepositoryFile({ path: 'src/missing.ts' })
+        )
+      ).toBe('path-not-found')
+      await retriever.readRepositoryFile({
+        path: 'src/level1/level2/level3/deep.ts'
+      })
+      expect(
+        await conditionOf(() =>
+          retriever.readRepositoryFile({
+            path: 'src/level1/level2/level3/deep.ts'
+          })
+        )
+      ).toBe('read-budget-exhausted')
+      await retriever.grepRepository({ query: 'needle' })
+      expect(
+        await conditionOf(() => retriever.grepRepository({ query: 'needle' }))
+      ).toBe('search-budget-exhausted')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Containment is the one refusal that must NOT become an expected condition: an
+  // escape from the repository root is a security invariant breach, and a lane that
+  // disclosed it as an ordinary tool result would let a model shrug it off. The
+  // classification used to be a regex over the thrown message, so a reword in the
+  // shared path helper would have silently demoted this to "not found".
+  test('a symlink escaping the root stays a fault, not an expected condition', async () => {
+    const root = await createTempRepo()
+    const outside = await mkdtemp(join(tmpdir(), 'codereviewer-outside-'))
+
+    try {
+      await writeFile(join(outside, 'secret.ts'), 'export const leaked = 1\n')
+      await symlink(join(outside, 'secret.ts'), join(root, 'src', 'escape.ts'))
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      let thrown: unknown
+
+      try {
+        await retriever.readRepositoryFile({ path: 'src/escape.ts' })
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(Error)
+      expect(isContextRetrievalConditionError(thrown)).toBe(false)
+      expect((thrown as Error).message).toMatch(/resolve inside the root/iu)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(outside, { recursive: true, force: true })
+    }
+  })
+
+  // A permission failure is not absence. Reporting it as "not found" would be the
+  // silent-optimism shape this surface exists to prevent, so it propagates.
+  test('an unreadable path is a fault rather than a not-found condition', async () => {
+    const root = await createTempRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      // A directory read as a file: the failure is EISDIR, not ENOENT.
+      let thrown: unknown
+
+      try {
+        await retriever.readRepositoryFile({ path: 'src' })
+      } catch (error) {
+        thrown = error
+      }
+
+      expect(thrown).toBeInstanceOf(Error)
+      expect(isContextRetrievalConditionError(thrown)).toBe(false)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

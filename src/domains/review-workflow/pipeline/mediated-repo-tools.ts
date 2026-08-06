@@ -21,14 +21,13 @@
 
 import { AsyncLocalStorage } from 'node:async_hooks'
 import {
-  isToolCallBudgetExceededError,
   REPO_TOOL_DESCRIPTIONS,
   RepoGrepToolInputSchema,
   RepoListToolInputSchema,
   RepoReadToolInputSchema,
   RepoToolOutputSchema,
   toRepoToolOutput,
-  type RepoToolOutput,
+  withDisclosedRetrievalCondition,
   type RetrievalTools
 } from '../../context-retrieval/index.js'
 
@@ -97,51 +96,23 @@ const readInputFrom = (rawInput: unknown): {
   }
 }
 
-// The scope's tool-call bound, disclosed as CONTENT the model reads.
+// Every refusal the model is MEANT to reason about — the scope's tool-call bound,
+// an ineligible path, a path that is not there, and either retriever budget running
+// out — is disclosed as content it reads, in one shape, by the shared
+// `withDisclosedRetrievalCondition` (see `context-retrieval/condition-disclosure.ts`
+// for why a thrown error never reaches the model as itself).
 //
-// A thrown error does not reach the model as itself: the harness normalizes any
-// non-harness failure to `ToolError("Tool execution failed.")` and drops the
-// message, so a model that spent its budget was told only that something broke. A
-// bound that produces an unexplained failure is the same defect shape as a
-// truncation the model is never told about — the model fills the gap with a
-// plausible assumption, and here the plausible assumption is that the code it meant
-// to check is not there.
-//
-// So the bound answers in the model's own channel and says what it means. It is
-// still CODE that refused the call: nothing was read, the scope's exhaustion flag
-// is already set, and no further call in this scope will succeed.
-const budgetExceededOutput = (toolId: string): RepoToolOutput => ({
-  summary: `${toolId} was refused: this call's repository tool-call budget is exhausted.`,
-  content: `[TOOL-CALL BUDGET EXHAUSTED: ${toolId} did NOT run and returned no repository content. You have no lookups left in this call. This is a limit of this engine, not a fact about the code: it is not evidence that anything is absent, correct, or safe. Decide from what you have already read, and say that a check you could not complete is unresolved.]`
-})
-
-// Only the scope's own tool-call bound is disclosed this way, because it is the one
-// failure that is expected, deliberate, and not a defect. Everything else — an
-// ineligible path, a missing file, a containment violation, a tool called with no
-// active scope — propagates, so a genuine engine fault stays a fault instead of
-// becoming a tool result the model reasons from.
-const withDisclosedBudgetBound = async (
-  toolId: string,
-  invoke: () => Promise<RepoToolOutput>
-): Promise<RepoToolOutput> => {
-  try {
-    return await invoke()
-  } catch (error: unknown) {
-    if (isToolCallBudgetExceededError(error)) {
-      return budgetExceededOutput(toolId)
-    }
-
-    throw error
-  }
-}
-
+// Everything else propagates: a containment violation, an unreadable path, a tool
+// called with no active scope, a schema failure. A genuine engine fault stays a
+// fault instead of becoming a tool result the model reasons from, and a containment
+// breach in particular is a security invariant that must never soften into one.
 export const mediatedRepoToolDefinitions = {
   repo_read: {
     description: REPO_TOOL_DESCRIPTIONS.read,
     input: RepoReadToolInputSchema,
     output: RepoToolOutputSchema,
     handler: async (_ctx: unknown, rawInput: unknown) =>
-      withDisclosedBudgetBound('repo_read', async () =>
+      withDisclosedRetrievalCondition('repo_read', async () =>
         toRepoToolOutput(
           await activeMediatedRepoTools().read(readInputFrom(rawInput)),
           true
@@ -153,7 +124,7 @@ export const mediatedRepoToolDefinitions = {
     input: RepoListToolInputSchema,
     output: RepoToolOutputSchema,
     handler: async (_ctx: unknown, rawInput: unknown) =>
-      withDisclosedBudgetBound('repo_list', async () =>
+      withDisclosedRetrievalCondition('repo_list', async () =>
         toRepoToolOutput(
           await activeMediatedRepoTools().list({
             path: RepoListToolInputSchema.parse(rawInput).path
@@ -167,7 +138,7 @@ export const mediatedRepoToolDefinitions = {
     input: RepoGrepToolInputSchema,
     output: RepoToolOutputSchema,
     handler: async (_ctx: unknown, rawInput: unknown) =>
-      withDisclosedBudgetBound('repo_grep', async () => {
+      withDisclosedRetrievalCondition('repo_grep', async () => {
         const toolInput = RepoGrepToolInputSchema.parse(rawInput)
 
         return toRepoToolOutput(
