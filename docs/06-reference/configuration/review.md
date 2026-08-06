@@ -98,31 +98,37 @@ Set `enabled: false` and discovery is single-shot with no tools.
 | `review.crossFileRetrieval.maxToolCallsPerTask` | integer 1–500 | `100` | Runaway-loop guard on mediated tool calls per task. It is not a context ration — models self-limit well below it. |
 | `review.crossFileRetrieval.maxBytesPerRead` | integer 1000–4000000 | *unset* | Per-read byte cap. Unset means a read is not cut in advance. Setting it is a deliberate operator choice and still binds, with the cut disclosed to the reviewer rather than silent. |
 
-### `review.refutationRetrieval`
+### `review.refutationRetrieval` — removed
 
-**Disabled by default, and unmeasured.** It gives the *refutation* stage the same
-mediated `repo_read` / `repo_list` / `repo_grep` tools discovery may hold, so the
-stage that decides what reaches you can check a claim against a file it was not
-handed instead of answering "not enough evidence" by construction.
+Giving the *refutation* stage the same mediated `repo_read` / `repo_list` /
+`repo_grep` tools discovery may hold. It shipped disabled on 2026-08-06, was
+measured the same day against the rule written down before the measurement, and was
+**removed**. Because the schema is strict, a config that still sets
+`review.refutationRetrieval` — even to `{ "enabled": false }` — now fails validation
+with **exit code 2**. Delete the block.
 
-No run has been scored with it on, so nothing is claimed for it. It is a
-verification-quality change and may move recall in **either** direction: a
-better-informed refuter may rescue candidates it could only mark
-`needs-more-evidence`, or refute candidates it previously let pass. The rule that
-decides whether it becomes a default, stays optional, or is removed was written down
-before any measurement, in
+On the 37-case real-repository corpus, `openai/gpt-5.3-codex`, three runs per arm
+interleaved, zero provider errors in either arm:
+
+| | control | retrieval on |
+| --- | ---: | ---: |
+| in-diff recall | 66.1% | 65.0% |
+| adjusted precision | **96.1%** | **92.9%** |
+| genuine false positives / run | 1.67 | 3.00 |
+| cost / run | $1.15 | $1.26 (+10%) |
+
+Paired over the in-diff population: 5 expectations gained, 7 lost, 48 unchanged,
+**p = 0.7744** — no recall effect. The rule's removal clause named a fall in adjusted
+precision, and adjusted precision fell. **The honest limit:** n = 3 per arm, and that
+difference is not formally significant on its own. The rule did not require
+significance for that clause on purpose — the burden was on the capability to show it
+had earned its extra 10% per run, not on the control to disprove it. The full record
+is in
 [`specs/05-review-workflow-and-runtime.md`](../../../specs/05-review-workflow-and-runtime.md).
 
-| Key | Type | Default | What it does |
-| --- | --- | --- | --- |
-| `review.refutationRetrieval.enabled` | boolean | `false` | Master switch. Off, the refuter is offered no tool and its prompt and packet are byte-for-byte those of a build without the capability. |
-| `review.refutationRetrieval.maxToolCallsPerBatch` | integer 1–500 | `24` | Runaway-loop guard on mediated tool calls in ONE adjudication call, enforced in code. It is the refuter's own budget: never shared with, nor drawn from, `crossFileRetrieval.maxToolCallsPerTask`, so enabling one stage cannot starve the other. |
-
-Cost: at most `maxToolCallsPerBatch` tool calls per refutation call, and refutation
-runs once per discovery partition (plus one call per split half and one per retried
-batch, each with its own allowance). There is no separate per-read byte key —
-retrieval uses the one retriever the run configures, so
-`crossFileRetrieval.maxBytesPerRead` governs the read whichever stage issued it.
+What survives it: a refused mediated tool call still tells the model *why* it was
+refused, in the tool result's own content, for the discovery lane that still holds
+those tools.
 
 ### `review.guardedRegionContext` — removed
 

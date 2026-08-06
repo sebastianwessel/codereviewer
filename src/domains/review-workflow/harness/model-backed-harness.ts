@@ -1,8 +1,8 @@
 import { defineHarness } from '@purista/harness'
 import { createNoopReviewLogger } from '../../observability/index.js'
 import {
-  findingRefuterInstructionsFor,
   holisticReviewerInstructionsFor,
+  modelFindingRefuterInstructions,
   modelSemanticMergeInstructions
 } from '../pipeline/agent-instructions.js'
 import {
@@ -10,9 +10,9 @@ import {
   type ContextRetriever
 } from '../../context-retrieval/index.js'
 import {
-  mediatedRepoToolDefinitions,
-  runWithMediatedRepoTools
-} from '../pipeline/mediated-repo-tools.js'
+  crossFileDiscoveryToolDefinitions,
+  runWithCrossFileDiscoveryTools
+} from '../pipeline/discovery/cross-file-tools.js'
 import {
   FindingRefutationBatchInputSchema,
   HolisticReviewInputSchema,
@@ -52,11 +52,6 @@ export const createModelBackedReviewHarness = (
   // unchanged single-shot prompt.
   const crossFileRetrieval = options.crossFileRetrieval
   const crossFileEnabled = crossFileRetrieval?.enabled === true
-  // Spec 05: the same switch for the refutation stage, read separately. The two
-  // capabilities share the tool DEFINITIONS and the mediated retriever, and nothing
-  // else: separate switches, separate budgets, separate prompt segments.
-  const refutationRetrieval = options.refutationRetrieval
-  const refutationRetrievalEnabled = refutationRetrieval?.enabled === true
 
   // Binds one task's bounded repository tools for the duration of its discovery
   // call, so every tool call the model makes resolves that task's own budget (see
@@ -76,7 +71,7 @@ export const createModelBackedReviewHarness = (
       maxToolCalls: crossFileRetrieval.maxToolCallsPerTask
     })
 
-    const result = await runWithMediatedRepoTools(
+    const result = await runWithCrossFileDiscoveryTools(
       {
         tools: bounded.tools,
         // Spec 28: nothing caps a read in advance, so an overflow is discovered by
@@ -103,8 +98,7 @@ export const createModelBackedReviewHarness = (
       ...(options.skillTools === undefined
         ? {}
         : { skillTools: options.skillTools }),
-      ...(crossFileRetrieval === undefined ? {} : { crossFileRetrieval }),
-      ...(refutationRetrieval === undefined ? {} : { refutationRetrieval })
+      ...(crossFileRetrieval === undefined ? {} : { crossFileRetrieval })
     })
 
   return defineHarness({ name: 'codereviewer-review' })
@@ -114,14 +108,9 @@ export const createModelBackedReviewHarness = (
     .models({
       reviewer: options.modelAlias
     })
-    // One definition set, registered when ANY lane may use it. Which lane actually
-    // holds the tools is decided per agent below; a lane whose capability is off is
-    // never offered them, so registering them costs a disabled lane nothing.
-    .tools(
-      crossFileEnabled || refutationRetrievalEnabled
-        ? mediatedRepoToolDefinitions
-        : {}
-    )
+    // Registered only when discovery may use them. No other lane holds them, so a
+    // run with cross-file retrieval off has no repository tool at all.
+    .tools(crossFileEnabled ? crossFileDiscoveryToolDefinitions : {})
     .skills(skills)
     .agents(({ agent }) => ({
       holistic_review: agent({
@@ -151,9 +140,7 @@ export const createModelBackedReviewHarness = (
         input: FindingRefutationBatchInputSchema,
         output: ModelFindingRefutationBatchResultSchema,
         ...agentOptionsForRole('refute_finding'),
-        instructions: findingRefuterInstructionsFor({
-          retrievalEnabled: refutationRetrievalEnabled
-        })
+        instructions: modelFindingRefuterInstructions
       })
     }))
     .workflows(({ workflow }) => ({
@@ -170,16 +157,6 @@ export const createModelBackedReviewHarness = (
             signal: ctx.signal,
             logger,
             maxConcurrentTasks,
-            // Spec 05: present only when enabled, so the handler leaves the
-            // refutation runner untouched otherwise.
-            ...(refutationRetrievalEnabled
-              ? {
-                  refutationRetrieval: {
-                    maxToolCallsPerBatch:
-                      refutationRetrieval.maxToolCallsPerBatch
-                  }
-                }
-              : {}),
             ...(options.onTaskEvent === undefined
               ? {}
               : { onTaskEvent: options.onTaskEvent }),

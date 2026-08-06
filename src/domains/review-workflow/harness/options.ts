@@ -4,10 +4,7 @@ import {
   type ModelAlias,
   type SkillsConfig
 } from '@purista/harness'
-import {
-  type CrossFileRetrievalConfig,
-  type RefutationRetrievalConfig
-} from '../../../shared/contracts/index.js'
+import { type CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
 import { type WorkflowTaskEvent } from '../pipeline/agent-contracts.js'
 
 export type CreateReviewHarnessOptions = {
@@ -24,9 +21,4 @@ export type CreateReviewHarnessOptions = {
   // tools, bounded per task. Omitted/disabled leaves discovery single-shot with no
   // tools (byte-for-byte unchanged).
   readonly crossFileRetrieval?: CrossFileRetrievalConfig
-  // Spec 05. When enabled, the batched refutation agent is given the same mediated
-  // repository tools, bounded per adjudication call by its own budget.
-  // Omitted/disabled leaves refutation single-shot with no tools (byte-for-byte
-  // unchanged prompt and packet).
-  readonly refutationRetrieval?: RefutationRetrievalConfig
 }

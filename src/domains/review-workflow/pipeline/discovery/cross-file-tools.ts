@@ -1,23 +1,21 @@
-// The mediated repository tools exposed to the review lanes that are allowed to
-// inspect code they were not handed: holistic discovery (spec 16, bounded per task)
-// and refutation (spec 05, bounded per batch).
+// Spec 16: the mediated repository tools exposed to holistic discovery when
+// `review.crossFileRetrieval.enabled` is true.
 //
-// ONE tool definition set, deliberately. The harness resolves a custom tool's
-// handler from a single registry keyed by tool id, so a second definition of
-// `repo_read` for a second lane is not possible — and would not be wanted: a model
-// should see the same tool surface, the same schemas, and the same output shaping
-// whichever lane it is running in.
+// Discovery is the ONLY lane that holds them. Refutation held them briefly under
+// `review.refutationRetrieval`; that capability was measured and removed on
+// 2026-08-06 (spec 05, *Measured Outcome Of The Withdrawn Refutation Retrieval*),
+// and the stage-neutral shape this module grew for it went with it rather than
+// staying behind as generality with one caller.
 //
-// The harness also resolves a handler from the agent definition, so a handler cannot
-// receive per-scope parameters directly. Discovery tasks run concurrently within ONE
-// workflow session, and so do refutation batches, so a session-keyed registry (the
+// The harness resolves a custom tool's handler from the agent definition, so a
+// handler cannot receive per-task parameters directly. Discovery tasks run
+// concurrently within ONE workflow session, so a session-keyed registry (the
 // per-claim approach in `investigate-claim-agent.ts`, where each claim owns its own
-// session) cannot isolate them. The per-scope bounded tools are therefore carried in
-// an AsyncLocalStorage scope: `runWithMediatedRepoTools` wraps the agent call for one
-// task or one batch, and every tool call the model makes inside that call — however
-// deep in the harness loop — resolves that scope's own bounded tools. Concurrent
-// scopes get independent budgets, which is what keeps one lane from spending
-// another's.
+// session) cannot isolate them. The per-task bounded tools are therefore carried in
+// an AsyncLocalStorage scope: `runWithCrossFileDiscoveryTools` wraps the agent call
+// for one task, and every tool call the model makes inside that call — however deep
+// in the harness loop — resolves that task's own bounded tools. Concurrent tasks get
+// independent scopes with independent budgets.
 
 import { AsyncLocalStorage } from 'node:async_hooks'
 import {
@@ -29,45 +27,44 @@ import {
   toRepoToolOutput,
   withDisclosedRetrievalCondition,
   type RetrievalTools
-} from '../../context-retrieval/index.js'
+} from '../../../context-retrieval/index.js'
 
-export type MediatedRepoToolScope = {
+// The scope carries the task's tools AND the ability to shrink what a read returns
+// (spec 28), because both belong to the same task and both are needed at points too
+// deep in the harness loop to reach by parameter.
+export type CrossFileDiscoveryScope = {
   readonly tools: RetrievalTools
-  // Shrinks what a read returns (spec 28), for a lane that retries a call the
-  // provider refused as oversized. Optional because only discovery has that retry:
-  // a refutation batch that overflows degrades to a recorded provider issue for
-  // that batch, which is visible, rather than to a smaller re-read.
-  readonly reduceReadBudget?: () => boolean
+  readonly reduceReadBudget: () => boolean
 }
 
-const mediatedRepoToolScope = new AsyncLocalStorage<MediatedRepoToolScope>()
+const crossFileToolScope = new AsyncLocalStorage<CrossFileDiscoveryScope>()
 
-// Runs `operation` with `scope`'s tools bound as the active mediated repository
-// tools for the current async scope (one discovery task, or one refutation batch).
-export const runWithMediatedRepoTools = <T>(
-  scope: MediatedRepoToolScope,
+// Runs `operation` with `scope`'s tools bound as the active cross-file tools for
+// the current async scope (one discovery task).
+export const runWithCrossFileDiscoveryTools = <T>(
+  scope: CrossFileDiscoveryScope,
   operation: () => Promise<T>
-): Promise<T> => mediatedRepoToolScope.run(scope, operation)
+): Promise<T> => crossFileToolScope.run(scope, operation)
 
 /**
- * Halve the active scope's per-read allowance, reporting whether it could.
+ * Halve the active task's per-read allowance, reporting whether it could.
  *
- * Returns false outside a scope, and inside a scope that declared no reduction —
- * a call with no tools has no reads to shrink, so an oversized context there is
- * about the packet and belongs to task splitting instead.
+ * Returns false outside a cross-file scope — a call with no tools has no reads to
+ * shrink, so an oversized context there is about the packet and belongs to task
+ * splitting instead.
  */
 export const reduceActiveReadBudget = (): boolean =>
-  mediatedRepoToolScope.getStore()?.reduceReadBudget?.() ?? false
+  crossFileToolScope.getStore()?.reduceReadBudget() ?? false
 
-const activeMediatedRepoTools = (): RetrievalTools => {
-  const scope = mediatedRepoToolScope.getStore()
+const activeCrossFileTools = (): RetrievalTools => {
+  const scope = crossFileToolScope.getStore()
 
   if (scope === undefined) {
-    // Only reachable if the model called a tool outside a scope, which would mean
-    // the tools were attached without the scope wrapper. Failing loudly keeps an
-    // unbounded, unattributed repository read from ever executing.
+    // Only reachable if the model called a tool outside a task scope, which would
+    // mean the tools were attached without the scope wrapper. Failing loudly keeps
+    // an unbounded, unattributed repository read from ever executing.
     throw new TypeError(
-      'No active mediated repository tools are registered for this call.'
+      'No active cross-file discovery tools are registered for this task.'
     )
   }
 
@@ -96,7 +93,7 @@ const readInputFrom = (rawInput: unknown): {
   }
 }
 
-// Every refusal the model is MEANT to reason about — the scope's tool-call bound,
+// Every refusal the model is MEANT to reason about — the task's tool-call bound,
 // an ineligible path, a path that is not there, and either retriever budget running
 // out — is disclosed as content it reads, in one shape, by the shared
 // `withDisclosedRetrievalCondition` (see `context-retrieval/condition-disclosure.ts`
@@ -106,7 +103,7 @@ const readInputFrom = (rawInput: unknown): {
 // called with no active scope, a schema failure. A genuine engine fault stays a
 // fault instead of becoming a tool result the model reasons from, and a containment
 // breach in particular is a security invariant that must never soften into one.
-export const mediatedRepoToolDefinitions = {
+export const crossFileDiscoveryToolDefinitions = {
   repo_read: {
     description: REPO_TOOL_DESCRIPTIONS.read,
     input: RepoReadToolInputSchema,
@@ -114,7 +111,7 @@ export const mediatedRepoToolDefinitions = {
     handler: async (_ctx: unknown, rawInput: unknown) =>
       withDisclosedRetrievalCondition('repo_read', async () =>
         toRepoToolOutput(
-          await activeMediatedRepoTools().read(readInputFrom(rawInput)),
+          await activeCrossFileTools().read(readInputFrom(rawInput)),
           true
         )
       )
@@ -126,7 +123,7 @@ export const mediatedRepoToolDefinitions = {
     handler: async (_ctx: unknown, rawInput: unknown) =>
       withDisclosedRetrievalCondition('repo_list', async () =>
         toRepoToolOutput(
-          await activeMediatedRepoTools().list({
+          await activeCrossFileTools().list({
             path: RepoListToolInputSchema.parse(rawInput).path
           }),
           false
@@ -142,7 +139,7 @@ export const mediatedRepoToolDefinitions = {
         const toolInput = RepoGrepToolInputSchema.parse(rawInput)
 
         return toRepoToolOutput(
-          await activeMediatedRepoTools().grep({
+          await activeCrossFileTools().grep({
             query: toolInput.query,
             ...(toolInput.paths === undefined ? {} : { paths: toolInput.paths })
           }),

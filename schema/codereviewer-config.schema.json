@@ -94,23 +94,6 @@
             }
           },
           "additionalProperties": false
-        },
-        "refutationRetrieval": {
-          "default": {},
-          "type": "object",
-          "properties": {
-            "enabled": {
-              "default": false,
-              "type": "boolean"
-            },
-            "maxToolCallsPerBatch": {
-              "default": 24,
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 500
-            }
-          },
-          "additionalProperties": false
         }
       },
       "additionalProperties": false

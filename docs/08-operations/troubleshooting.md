@@ -71,7 +71,7 @@ the submitted value.
 
 | Symptom | Cause |
 | --- | --- |
-| `Unrecognized key` | Every config object is strict. Check spelling and nesting; the [configuration reference](../06-reference/configuration/README.md) has the exact shape. Removed blocks (`review.contextScout`, `review.guardedRegionContext`, `invariantConformance`, `security.signals`) land here — delete them. |
+| `Unrecognized key` | Every config object is strict. Check spelling and nesting; the [configuration reference](../06-reference/configuration/README.md) has the exact shape. Removed blocks (`review.contextScout`, `review.guardedRegionContext`, `review.refutationRetrieval`, `invariantConformance`, `security.signals`) land here — delete them. |
 | `The configuration file "…" does not exist` | A config file named by `--config` or `CODEREVIEWER_CONFIG_PATH` is not there. A **named** file that is missing stops the run; continuing on defaults would review with settings nobody asked for and report success. A missing file at the **default** path is only the `config-file-missing` warning. |
 | A `security.*` key "must be false" | `allowShell`, `allowNetwork`, `allowFilesystemWrite` and `captureContentTelemetry` accept the literal `false` only. There is no override. |
 | `aiReview.requireRefutation` rejected | It accepts the literal `true` only. Refutation cannot be disabled. |

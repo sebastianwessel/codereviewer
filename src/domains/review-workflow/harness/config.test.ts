@@ -123,40 +123,24 @@ describe('workflow harness config', () => {
     ).toEqual({ builtinTools: false, maxSteps: 1 })
   })
 
-  test('attaches repository tools to refutation only when its own switch is enabled', () => {
-    // Off: the refuter is configured exactly as it was before the capability
-    // existed — no tools, compact step allowance.
-    expect(
-      reviewAgentOptionsForRole({
-        role: 'refute_finding',
-        skillIds: [],
-        refutationRetrieval: { enabled: false, maxToolCallsPerBatch: 24 }
-      })
-    ).toEqual({ builtinTools: false, maxSteps: 1 })
-
-    // On: the mediated repo tools plus enough steps to spend the per-batch budget,
-    // absorb the disclosed budget bound, and still return one verdict per
-    // candidate.
-    expect(
-      reviewAgentOptionsForRole({
-        role: 'refute_finding',
-        skillIds: [],
-        refutationRetrieval: { enabled: true, maxToolCallsPerBatch: 24 }
-      })
-    ).toEqual({
-      builtinTools: false,
-      maxSteps: 27,
-      tools: ['repo_read', 'repo_list', 'repo_grep']
-    })
-
-    // And the REFUTATION switch never reaches discovery.
-    expect(
-      reviewAgentOptionsForRole({
-        role: 'holistic_review',
-        skillIds: [],
-        refutationRetrieval: { enabled: true, maxToolCallsPerBatch: 24 }
-      })
-    ).toEqual({ builtinTools: false, maxSteps: 1 })
+  // Refutation is tool-free, whatever discovery is configured for. The capability
+  // that gave the refuter the mediated tools (`review.refutationRetrieval`) was
+  // measured and removed on 2026-08-06; there is no switch that can hand this role
+  // a repository tool.
+  test('never attaches repository tools to refutation', () => {
+    for (const crossFileRetrieval of [
+      undefined,
+      { enabled: false, maxToolCallsPerTask: 4, maxBytesPerRead: 24000 },
+      { enabled: true, maxToolCallsPerTask: 4, maxBytesPerRead: 24000 }
+    ]) {
+      expect(
+        reviewAgentOptionsForRole({
+          role: 'refute_finding',
+          skillIds: [],
+          ...(crossFileRetrieval === undefined ? {} : { crossFileRetrieval })
+        })
+      ).toEqual({ builtinTools: false, maxSteps: 1 })
+    }
   })
 
   test('grows the budget for the dedicated security pass second discovery call', () => {

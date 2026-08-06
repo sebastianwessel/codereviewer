@@ -624,11 +624,14 @@ it produces silence, so it is written down instead.
     Only `impactFindings` is triaged, and only when
     `changeImpact.adjudication.enabled` is set.
 14. **The contract delta covers six text-visible dimensions only**: absence,
-    failure, return shape, guard, mutation, concurrency. Verified silent:
-    a parameter-list or arity change, a type change, a default-value change, and a
-    visibility change (`export` removed) produce **no** contract statement.
-    Ordering, resource ownership and serialised-value changes are likewise not
-    covered.
+    failure, return shape, guard, mutation, concurrency. It reads the *code* lines
+    of a change — whole-line comments are excluded from both sides, so neither
+    editing a comment nor deleting a commented-out construct affects what is
+    reported. Verified silent: a parameter-list or arity change, a type change, a
+    default-value change, a visibility change (`export` removed), and a value
+    carried inside a string such as a URI query parameter produce **no** contract
+    statement. Ordering, resource ownership and serialised-value changes are
+    likewise not covered.
 15. **A rename in place is reported as a removal plus an addition.** The pairing
     predicate is the name, and a rename changes it.
 16. **A symbol moved into a file in a language the registry does not cover is

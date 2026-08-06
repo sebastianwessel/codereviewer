@@ -18,6 +18,61 @@ Raw artifacts under `.codereviewer/eval/runs/<timestamp>/eval-report.json`.
 
 ---
 
+## 2026-08-06 — refutation retrieval measured and REMOVED; control arm is the current baseline
+
+Two arms, three runs each, **interleaved C,T,C,T,C,T** rather than run in blocks, so
+neither arm inherits the other's warm provider cache. Engine pinned `c3c0c3d`,
+37-case real-repository corpus, `openai/gpt-5.3-codex`, metrics version
+`2026-08-03.plausibility-source-window` — the same version as the 2026-08-05
+re-baseline, so these figures ARE comparable with it. Zero provider errors in all
+six runs. Artefacts: `.codereviewer/eval/campaign-2026-08-06/`.
+
+| metric | control | `refutationRetrieval` on |
+| --- | ---: | ---: |
+| in-diff recall | 60.0 / 68.3 / 70.0 — mean **66.1%** | 65.0 / 65.0 / 65.0 — mean **65.0%** |
+| adjusted precision | 97.3 / 93.2 / 97.7 — mean **96.1%** | 92.9 / 90.7 / 95.1 — mean **92.9%** |
+| raw precision | mean 74.5% | mean 75.5% |
+| genuine false positives | 1 / 3 / 1 | **3 / 4 / 2** |
+| out-of-diff recall | 0/27 in every run | 0/27 in every run |
+| cost per run | $1.15 | $1.26 (+10%) |
+
+Pooled per-expectation paired test over the in-diff population, one observation per
+expectation across three runs per arm: **5 gained, 7 lost, 48 unchanged, exact
+two-sided sign test p = 0.7744.** No recall effect.
+
+**Removed under its own pre-registered rule**, which named "adjusted precision
+falls" as a removal condition. It fell, and the genuine-false-positive counts were
+higher in every seed position (mean 1.67 → 3.00), which is what makes the fall
+credible rather than an artefact of one run. The capability was justified as a
+verification-QUALITY improvement, and it produced no recall movement and more false
+positives. Recorded in spec 05 under a new identifier; the removed one is not reused.
+
+**Honest limit:** n=3 per arm, and the adjusted-precision difference is not formally
+significant on its own. The rule deliberately did not require significance for that
+clause — the burden was on the feature to show it earned its cost, not on the
+control to disprove it.
+
+**What this does not establish.** It does not refute the published finding that
+motivated the arm (cross-file navigation was the largest single factor in a
+verification-stage study). It establishes that the effect did not transfer to this
+engine, this corpus and this model. Both differ from the study in ways that could
+account for it, and the study itself reports the benefit concentrating in the
+strongest models.
+
+### The control arm supersedes the 2026-08-05 baseline
+
+Same corpus, same model, same metrics version, one engine later. In-diff **66.1%**
+against the previous **68.3%**, adjusted precision **96.1%** against **96.2%**,
+out-of-diff unchanged at 0/27. The recall difference is small and this run cannot
+separate it from noise; the two engines differ by a large amount of work whose
+individual effects were not isolated.
+
+**The spread is the finding worth carrying forward.** The control arm produced
+60.0 / 68.3 / 70.0 on identical inputs — a **10-point range across three runs of the
+same engine.** Every single-run comparison in this project's history should be read
+against that, and it is a stronger argument for the paired per-expectation
+instrument than any variance statistic quoted so far.
+
 ## 2026-08-05 — stage 1 re-baselined after the instruction and disclosure changes
 
 Owed since the 2026-08-05 improvement pass changed what the model sees. Three runs,

@@ -157,8 +157,7 @@ On top of that: path containment through the path service, per-read byte caps,
 per-search match caps, traversal-depth caps, redaction of every result, a
 context-ledger entry per result, and a **tool-call budget enforced by code**
 (`verification.maxToolCallsPerClaim`,
-`review.crossFileRetrieval.maxToolCallsPerTask`,
-`review.refutationRetrieval.maxToolCallsPerBatch`). Budget exhaustion is a
+`review.crossFileRetrieval.maxToolCallsPerTask`). Budget exhaustion is a
 deterministic stop, not something the model can talk its way past — in the
 verification lane it forces an `uncertain` verdict even if the agent still
 returned a confident one.

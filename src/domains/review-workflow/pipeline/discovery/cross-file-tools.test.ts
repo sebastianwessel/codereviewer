@@ -7,12 +7,12 @@ import {
   createContextRetriever,
   type ContextRetrievalResult,
   type ContextRetriever
-} from '../../context-retrieval/index.js'
+} from '../../../context-retrieval/index.js'
 import {
-  mediatedRepoToolDefinitions,
+  crossFileDiscoveryToolDefinitions,
   reduceActiveReadBudget,
-  runWithMediatedRepoTools
-} from './mediated-repo-tools.js'
+  runWithCrossFileDiscoveryTools
+} from './cross-file-tools.js'
 
 const retrievalResult = (
   tool: ContextRetrievalResult['tool'],
@@ -38,18 +38,18 @@ const fakeRetriever = (): ContextRetriever =>
   }) as unknown as ContextRetriever
 
 const runRead = (path: string): Promise<{ content: string }> =>
-  mediatedRepoToolDefinitions.repo_read.handler(undefined, {
+  crossFileDiscoveryToolDefinitions.repo_read.handler(undefined, {
     path
   }) as Promise<{ content: string }>
 
-describe('mediated repository tools', () => {
+describe('cross-file discovery tools', () => {
   test('resolves the active scope and line-numbers retrieved file content', async () => {
     const bounded = createBoundedRetrievalTools({
       retriever: fakeRetriever(),
       maxToolCalls: 4
     })
 
-    const output = await runWithMediatedRepoTools(
+    const output = await runWithCrossFileDiscoveryTools(
       { tools: bounded.tools, reduceReadBudget: () => false },
       () => runRead('src/dep.ts')
     )
@@ -63,7 +63,7 @@ describe('mediated repository tools', () => {
   test('rejects a tool call made outside any scope', async () => {
     // No scope bound: an unattributed, unbounded repository read must never run.
     await expect(runRead('src/dep.ts')).rejects.toThrow(
-      /No active mediated repository tools/u
+      /No active cross-file discovery tools/u
     )
   })
 
@@ -73,18 +73,18 @@ describe('mediated repository tools', () => {
       maxToolCalls: 2
     })
 
-    const refused = await runWithMediatedRepoTools(
+    const refused = await runWithCrossFileDiscoveryTools(
       { tools: bounded.tools, reduceReadBudget: () => false },
       async () => {
-        await mediatedRepoToolDefinitions.repo_read.handler(undefined, {
+        await crossFileDiscoveryToolDefinitions.repo_read.handler(undefined, {
           path: 'src/a.ts'
         })
-        await mediatedRepoToolDefinitions.repo_grep.handler(undefined, {
+        await crossFileDiscoveryToolDefinitions.repo_grep.handler(undefined, {
           query: 'permission'
         })
 
         // Third call exceeds the budget regardless of which tool is used.
-        return (await mediatedRepoToolDefinitions.repo_list.handler(undefined, {
+        return (await crossFileDiscoveryToolDefinitions.repo_list.handler(undefined, {
           path: 'src'
         })) as { readonly summary: string; readonly content: string }
       }
@@ -120,7 +120,10 @@ describe('mediated repository tools', () => {
     }
 
     await expect(
-      runWithMediatedRepoTools({ tools: failing }, () => runRead('x'))
+      runWithCrossFileDiscoveryTools(
+        { tools: failing, reduceReadBudget: () => false },
+        () => runRead('x')
+      )
     ).rejects.toThrow(/resolve inside the root/u)
   })
 
@@ -135,15 +138,19 @@ describe('mediated repository tools', () => {
     })
 
     // Interleave two scopes: each tool call must resolve the bounded tools of its
-    // OWN scope, so concurrent tasks and batches never consume each other's budget.
+    // OWN scope, so concurrent tasks never consume each other's budget.
     const [firstOutput, secondOutput] = await Promise.all([
-      runWithMediatedRepoTools({ tools: first.tools }, async () => {
-        const output = await runRead('src/first.ts')
-        await runRead('src/first-again.ts')
-        return output
-      }),
-      runWithMediatedRepoTools({ tools: second.tools }, () =>
-        runRead('src/second.ts')
+      runWithCrossFileDiscoveryTools(
+        { tools: first.tools, reduceReadBudget: () => false },
+        async () => {
+          const output = await runRead('src/first.ts')
+          await runRead('src/first-again.ts')
+          return output
+        }
+      ),
+      runWithCrossFileDiscoveryTools(
+        { tools: second.tools, reduceReadBudget: () => false },
+        () => runRead('src/second.ts')
       )
     ])
 
@@ -162,7 +169,7 @@ describe('mediated repository tools', () => {
 // handlers, so a change anywhere on that path is caught.
 describe('expected retrieval conditions reach the model as content', () => {
   const createFixtureRepo = async (): Promise<string> => {
-    const root = await mkdtemp(join(tmpdir(), 'mediated-repo-tools-'))
+    const root = await mkdtemp(join(tmpdir(), 'cross-file-tools-'))
 
     await mkdir(join(root, 'src'), { recursive: true })
     await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1\n')
@@ -181,7 +188,10 @@ describe('expected retrieval conditions reach the model as content', () => {
       maxToolCalls: 10
     })
 
-    return runWithMediatedRepoTools({ tools: bounded.tools }, operation)
+    return runWithCrossFileDiscoveryTools(
+      { tools: bounded.tools, reduceReadBudget: () => false },
+      operation
+    )
   }
 
   test('an ineligible path is disclosed, naming the reason and the path', async () => {
@@ -236,7 +246,7 @@ describe('expected retrieval conditions reach the model as content', () => {
         async () => {
           await runRead('src/app.ts')
 
-          return (await mediatedRepoToolDefinitions.repo_list.handler(undefined, {
+          return (await crossFileDiscoveryToolDefinitions.repo_list.handler(undefined, {
             path: 'src'
           })) as { readonly summary: string; readonly content: string }
         }
@@ -260,11 +270,11 @@ describe('expected retrieval conditions reach the model as content', () => {
         root,
         { maxReads: 4, maxSearches: 1 },
         async () => {
-          await mediatedRepoToolDefinitions.repo_grep.handler(undefined, {
+          await crossFileDiscoveryToolDefinitions.repo_grep.handler(undefined, {
             query: 'value'
           })
 
-          return (await mediatedRepoToolDefinitions.repo_grep.handler(undefined, {
+          return (await crossFileDiscoveryToolDefinitions.repo_grep.handler(undefined, {
             query: 'value'
           })) as { readonly summary: string; readonly content: string }
         }
@@ -281,7 +291,7 @@ describe('expected retrieval conditions reach the model as content', () => {
 
   test('a containment violation still throws instead of being disclosed', async () => {
     const root = await createFixtureRepo()
-    const outside = await mkdtemp(join(tmpdir(), 'mediated-repo-tools-outside-'))
+    const outside = await mkdtemp(join(tmpdir(), 'cross-file-tools-outside-'))
 
     try {
       await writeFile(join(outside, 'secret.ts'), 'export const leaked = 1\n')
@@ -306,7 +316,7 @@ describe('read-budget reduction on context overflow (spec 28)', () => {
     // failure this project keeps hitting: the schema says one thing, the engine does
     // another, and nothing fails.
     let reductions = 0
-    const result = await runWithMediatedRepoTools(
+    const result = await runWithCrossFileDiscoveryTools(
       {
         tools: {
           read: async () => {
@@ -332,29 +342,6 @@ describe('read-budget reduction on context overflow (spec 28)', () => {
     )
 
     expect(result).toEqual([true, true, false])
-  })
-
-  test('reports false in a scope that declared no reduction', async () => {
-    // A refutation batch has no reads-first retry: its overflow degrades to a
-    // recorded provider issue, not to a smaller re-read.
-    expect(
-      await runWithMediatedRepoTools(
-        {
-          tools: {
-            read: async () => {
-              throw new Error('unused')
-            },
-            list: async () => {
-              throw new Error('unused')
-            },
-            grep: async () => {
-              throw new Error('unused')
-            }
-          }
-        },
-        async () => reduceActiveReadBudget()
-      )
-    ).toBe(false)
   })
 
   test('reports false outside any scope, so an overflow goes to splitting', async () => {

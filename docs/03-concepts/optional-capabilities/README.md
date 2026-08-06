@@ -27,7 +27,6 @@ models judging requirement conformance, not from a run of this engine.
 | --- | --- | --- | --- | --- | --- |
 | [Change-intent context](change-intent-context.md) | `contextSources.enabled` | `false` | Orientation: the reviewer learns *why* the change was made, which should reduce misunderstanding-driven false positives | One summarizer call per run (`model` mode); zero with `digest` | **Unmeasured.** No A/B exists. Rationale is design, not evidence. Enable if your pipeline already has PR/ticket text; do not expect a measured recall number |
 | [Cross-file retrieval](cross-file-retrieval.md) | `review.crossFileRetrieval.enabled` | **`true`** | Lets discovery read other-file code on demand through mediated tools | Measured *lower* (−8%, −5%) in the two runs that reversed the verdict | **Verdict withdrawn.** The three losing arms were measuring a per-read cut the model was never told about. With the cut disclosed, two independent re-runs led on every measured dimension. No specific gain is claimed: the recall difference is inside noise |
-| [Refutation retrieval](../pipeline/05-refutation.md#optional-letting-the-refuter-look-at-other-files) | `review.refutationRetrieval.enabled` | `false` | Lets the refutation stage read other-file code through the same mediated tools, so a candidate it cannot decide from its packet can be checked instead of left unproven | At most `maxToolCallsPerBatch` (default 24) tool calls per refutation call, and refutation runs once per discovery partition | **Unmeasured.** No run has been scored with it on. It is a verification-quality change and may move recall in *either* direction; the decision rule that promotes, keeps, or removes it was pre-registered in spec 05 before any measurement |
 | [Dedicated security pass](dedicated-security-pass.md) | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task (generic OWASP/CWE checklist), merged additively | +61% | **Mixed.** 2026-07-24, full benchmark, n=1: overall recall 24.8% → 29.3%, +22 unlisted-real findings (trustworthy, large denominator). But labeled security recall 14 → 12 and authorization 8 → 6. The **security-specific lift it was built for is unproven** |
 | [Verification](verification-and-fix.md) | `verification.enabled` | `false` | Investigates external/prior claims against the real code and returns verdicts; corroborates findings | Bounded agent run per claim | **Unmeasured as a quality lever.** It is a distinct product feature, not a recall knob; its outputs never touch the gate |
 | [Fix lane](verification-and-fix.md#the-fix-lane) | `fix.enabled` | `false` | Real-file-grounded `real`/`false-positive` judgment plus an apply-checked fix per admitted finding | One bounded agent run per eligible finding | **Unmeasured as a quality lever.** Advisory: it enriches `fixProposal`, never admission, severity, or the gate |
@@ -49,6 +48,16 @@ adjusted precision fell 0.819 → 0.628 at +67% cost — and the run falsified t
 premise the feature was built on, measuring the union ceiling at ~4pp rather than
 the assumed ~20pp. See [independent sampling (removed)](independent-sampling.md),
 including why that ceiling bounds identical-input resampling only.
+
+**Refutation retrieval** — giving the refutation stage the same mediated repository
+tools discovery holds — shipped disabled on 2026-08-06 and was removed the same day,
+with its `review.refutationRetrieval` key, after the A/B fired the removal clause of
+a rule written before the measurement: adjusted precision fell 96.1% → 92.9% with
+more genuine false positives in every run, and recall did not move (p = 0.7744), for
++10% cost. See
+[`review.refutationRetrieval` — removed](../../06-reference/configuration/review.md#reviewrefutationretrieval--removed),
+including the honest limit that at n=3 that precision difference is not significant
+on its own.
 
 The **context scout** was removed too, and its `review.contextScout` key with it.
 It is the one removal without a failed measurement behind it: its only A/B was run

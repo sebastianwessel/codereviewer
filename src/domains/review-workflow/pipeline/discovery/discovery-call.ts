@@ -13,7 +13,7 @@ import {
 import { createIndivisibleTaskError } from '../packet-budget.js'
 import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
 import { isContextLengthExceeded } from '../../../../shared/errors/context-overflow.js'
-import { reduceActiveReadBudget } from '../mediated-repo-tools.js'
+import { reduceActiveReadBudget } from './cross-file-tools.js'
 import { MAX_REACTIVE_SPLIT_DEPTH, splitTaskInputInHalf } from './reactive-split.js'
 
 // Two ways a discovery CALL can fail without the review being broken: the agent

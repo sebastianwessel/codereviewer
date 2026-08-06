@@ -11,7 +11,7 @@ import {
   type WorkflowReviewTask
 } from '../agent-contracts.js'
 import type { RetrievalTools } from '../../../context-retrieval/index.js'
-import { runWithMediatedRepoTools } from '../mediated-repo-tools.js'
+import { runWithCrossFileDiscoveryTools } from './cross-file-tools.js'
 import { runDiscoveryCall } from './discovery-call.js'
 
 const contextOverflow = (): Error =>
@@ -94,7 +94,7 @@ describe('runDiscoveryCall — oversized context', () => {
   test('narrows the reads and retries the WHOLE task before splitting it', async () => {
     const { scope, reductions } = scopeWithReductions(1)
     const seenTaskIds: string[] = []
-    const result = await runWithMediatedRepoTools(scope, () =>
+    const result = await runWithCrossFileDiscoveryTools(scope, () =>
       runDiscoveryCall({
         runner: async (holisticInput) => {
           seenTaskIds.push(holisticInput.taskId)
@@ -125,7 +125,7 @@ describe('runDiscoveryCall — oversized context', () => {
   test('splits only once the reads cannot be narrowed any further', async () => {
     const { scope } = scopeWithReductions(0)
     const seenTaskIds: string[] = []
-    const result = await runWithMediatedRepoTools(scope, () =>
+    const result = await runWithCrossFileDiscoveryTools(scope, () =>
       runDiscoveryCall({
         runner: async (holisticInput) => {
           seenTaskIds.push(holisticInput.taskId)

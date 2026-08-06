@@ -109,41 +109,21 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
-  test('refutation retrieval defaults to OFF, with its own per-batch tool budget', () => {
-    // OFF because it is unmeasured: no run has been scored with it on, and it may
-    // move recall in either direction. The pre-registered decision rule that
-    // settles it lives in spec 05.
-    const defaults = CodeReviewerConfigSchema.parse({})
-    expect(defaults.review.refutationRetrieval).toEqual({
-      enabled: false,
-      maxToolCallsPerBatch: 24
-    })
-
-    // Its budget is its own field, not a share of the discovery budget, so one
-    // stage cannot starve the other.
-    const enabled = CodeReviewerConfigSchema.parse({
-      review: {
-        refutationRetrieval: { enabled: true, maxToolCallsPerBatch: 6 }
-      }
-    })
-    expect(enabled.review.refutationRetrieval).toEqual({
-      enabled: true,
-      maxToolCallsPerBatch: 6
-    })
-    expect(enabled.review.crossFileRetrieval.maxToolCallsPerTask).toBe(100)
-
-    // A runaway-loop guard, so a generous value is valid and only an absurd one is
-    // rejected.
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        review: { refutationRetrieval: { maxToolCallsPerBatch: 0 } }
-      })
-    ).toThrow()
-    expect(() =>
-      CodeReviewerConfigSchema.parse({
-        review: { refutationRetrieval: { maxToolCallsPerBatch: 501 } }
-      })
-    ).toThrow()
+  // Refutation retrieval was removed on 2026-08-06, after the A/B recorded in spec
+  // 05 fired the removal clause of the rule pre-registered before the measurement:
+  // adjusted precision fell 96.1% → 92.9% with genuine false positives up in every
+  // seed position, no recall effect (5 gained, 7 lost, p = 0.7744), for +10% cost.
+  // Same rule as the removals below: no compatibility shim, so a config that still
+  // asks the refuter to retrieve fails loudly rather than running a review that
+  // quietly ignores what the file asks for.
+  test('a config still setting the removed refutation retrieval block fails validation', () => {
+    for (const removed of [
+      { refutationRetrieval: { enabled: true, maxToolCallsPerBatch: 24 } },
+      { refutationRetrieval: { enabled: false } },
+      { refutationRetrieval: {} }
+    ]) {
+      expect(() => CodeReviewerConfigSchema.parse({ review: removed })).toThrow()
+    }
   })
 
   // The context scout was removed on 2026-07-27, along with its configuration.

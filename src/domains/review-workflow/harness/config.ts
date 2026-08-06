@@ -4,10 +4,7 @@ import {
   HOLISTIC_MAX_CANDIDATES,
   SECURITY_MAX_CANDIDATES
 } from '../pipeline/discovery/holistic-task-review.js'
-import {
-  type CrossFileRetrievalConfig,
-  type RefutationRetrievalConfig
-} from '../../../shared/contracts/index.js'
+import { type CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
 
 const defaultMaxConcurrentTasks = 4
 const defaultRunTimeoutMs = 0
@@ -72,10 +69,9 @@ export const maxChildAgentCallsForReview = (
         (input.securityPassEnabled === true ? SECURITY_MAX_CANDIDATES : 0))) /
       2
   )
-  // Mediated retrieval — discovery's (spec 16) and refutation's (spec 05) alike —
-  // needs no reservation here: a mediated tool call is an agent STEP, bounded by the
-  // agent's maxSteps, and never counts against the workflow's child-agent call
-  // budget (which counts agent invocations).
+  // Cross-file retrieval (spec 16) needs no reservation here: a mediated tool call
+  // is an agent STEP, bounded by the agent's maxSteps, and never counts against the
+  // workflow's child-agent call budget (which counts agent invocations).
   const holisticCalls = taskCount * discoveryCallsPerTask
   const refutationCalls = taskCount * refutationCallsPerTask
   const mergeCalls = taskCount * mergeCallsPerTask
@@ -156,58 +152,46 @@ export const reviewSkillAgentOptions = (
         maxSteps: contextHeavyAgentMaxSteps
       }
 
-// Spec 16 (discovery) and spec 05 (refutation): an agent given the mediated
-// repository tools also needs enough steps to spend its tool-call budget and still
-// answer. The allowance is budget + MEDIATED_TOOL_STEP_HEADROOM, not budget + 1: a
-// model that requests one more call after the budget is gone receives a recoverable
-// budget error and needs a further step to answer. Too tight a step allowance makes
-// the agent loop throw `iterations_exceeded`, which for discovery costs the task
-// every finding it had, and for refutation costs the batch every verdict — the
-// opposite of an additive mode in both cases.
-const MEDIATED_TOOL_STEP_HEADROOM = 3
+// Spec 16: when cross-file retrieval is enabled, the holistic discovery agent also
+// gets the mediated repository tools and enough steps to spend its tool-call budget
+// and still emit findings. The allowance is budget + CROSS_FILE_STEP_HEADROOM, not
+// budget + 1: a model that requests one more read after the budget is gone receives
+// a recoverable budget error and needs a further step to answer. Too tight a step
+// allowance makes the agent loop throw `iterations_exceeded`, which would cost the
+// task every finding it had — the opposite of an additive mode.
+const CROSS_FILE_STEP_HEADROOM = 3
 
-const mediatedToolAgentOptions = (
+const crossFileDiscoveryAgentOptions = (
   base: ReturnType<typeof reviewSkillAgentOptions>,
-  maxToolCalls: number
+  maxToolCallsPerTask: number
 ) => ({
   ...base,
   tools: [...REPO_TOOL_IDS],
-  maxSteps: Math.max(base.maxSteps, maxToolCalls + MEDIATED_TOOL_STEP_HEADROOM)
+  maxSteps: Math.max(
+    base.maxSteps,
+    maxToolCallsPerTask + CROSS_FILE_STEP_HEADROOM
+  )
 })
 
-// Each role reads its OWN capability switch and its own budget. A role whose
-// capability is off is configured exactly as it was before that capability existed:
-// no tool list, and the compact step allowance.
+// Only DISCOVERY reads a retrieval switch. Refutation is tool-free: the capability
+// that gave it the mediated tools was measured and removed on 2026-08-06 (spec 05,
+// *Measured Outcome Of The Withdrawn Refutation Retrieval*), so the refuter is
+// configured exactly as it was before that capability existed.
 export const reviewAgentOptionsForRole = (
   input: {
     readonly role: ReviewAgentRole
     readonly skillIds: readonly string[]
     readonly skillTools?: readonly BuiltinToolName[]
     readonly crossFileRetrieval?: CrossFileRetrievalConfig
-    readonly refutationRetrieval?: RefutationRetrievalConfig
   }
 ) => {
   const base = reviewSkillAgentOptions(input)
 
-  if (
-    input.role === 'holistic_review' &&
+  return input.role === 'holistic_review' &&
     input.crossFileRetrieval?.enabled === true
-  ) {
-    return mediatedToolAgentOptions(
-      base,
-      input.crossFileRetrieval.maxToolCallsPerTask
-    )
-  }
-
-  if (
-    input.role === 'refute_finding' &&
-    input.refutationRetrieval?.enabled === true
-  ) {
-    return mediatedToolAgentOptions(
-      base,
-      input.refutationRetrieval.maxToolCallsPerBatch
-    )
-  }
-
-  return base
+    ? crossFileDiscoveryAgentOptions(
+        base,
+        input.crossFileRetrieval.maxToolCallsPerTask
+      )
+    : base
 }
