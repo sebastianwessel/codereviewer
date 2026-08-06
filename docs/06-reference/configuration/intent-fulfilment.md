@@ -51,18 +51,30 @@ to the whole of the intent.
 
 ## What the statuses mean: `evidenced`, not "done"
 
-Every obligation in the report carries one of three statuses, and they are all
+Every obligation in the report carries one of four statuses, and they are all
 statements about **what the changed lines show** — never about whether the work
 exists somewhere in the repository:
 
 | Status | What it means | What it does **not** mean |
 | --- | --- | --- |
 | `evidenced` | Changed lines do what the obligation asks, and the report cites them by path, line and side. | — |
-| `not-evidenced` | Nothing among the changed lines does what the obligation asks. | That the obligation is undone. An earlier commit, existing code, or a prohibition satisfied by changing nothing all land here. |
-| `undetermined` | The material did not let the judgement decide — including when the call itself failed. | That anything is wrong with the change. |
+| `not-evidenced` | Nothing among the changed lines does what the obligation asks. | That the obligation is undone. An earlier commit or existing code may already have satisfied it. |
+| `not-contradicted` | The obligation asks that something *not* be done, and nothing among the changed lines does it. There is no line to cite: keeping such an obligation looks like an absence in a diff. | That the obligation holds at head, or that this change put it in place. A change that establishes the restriction is `evidenced`, with the line quoted. |
+| `undetermined` | The material did not let the judgement decide — including when the call itself failed, or when part of the change could not be read. | That anything is wrong with the change. |
 
 The headline count is **`summary.notEvidencedCount`**: `not-evidenced` plus
-`undetermined`. An `evidenced` obligation is never on it.
+`undetermined`. Neither an `evidenced` nor a `not-contradicted` obligation is ever
+on it. `not-contradicted` obligations are tallied separately in
+`summary.notContradictedCount`.
+
+**Why `not-contradicted` exists.** An obligation like *"do not log the token"* is
+kept by changing nothing, so it can never produce a citation however completely it
+is honoured. While `not-evidenced` was the only answer available for that shape, it
+appeared on the outstanding list on every run — a false alarm by construction rather
+than a judgement error. Measured on the realistic corpus, on `openai/gpt-5.3-codex`,
+**33 of this lane's 83 false positives (39.8%, the largest single mode)** were
+obligations of exactly this shape. The status was added on 2026-08-06 and **has not
+been measured since**: treat the precision figures below as predating it.
 
 **Why these words, and not `addressed` / `unaddressed`.** The judgement is shown only
 the changed lines, so it can answer *"do these lines evidence this obligation?"* and
@@ -75,6 +87,14 @@ all — and were counted as errors because `unaddressed` was read as "not done".
 verdicts did not change with the rename; only the words did. Read a
 `not-evidenced` item as *"this change does not show me this"*, which is a question for
 a reviewer rather than a defect.
+
+**The rename did not fix the prohibition half of that figure, and could not.** No
+wording of a three-status vocabulary can hold an obligation that produces no
+citation when it is kept; that needed a status of its own, which is
+`not-contradicted` above. The remaining 21 — obligations satisfied *outside* the
+changed lines — stay `not-evidenced` deliberately: the judgement is shown only the
+change, so the honest report is that this change does not evidence them, and the
+words are chosen so that it cannot be read as a claim that they are undone.
 
 ## It needs `contextSources`, and it needs a provider
 

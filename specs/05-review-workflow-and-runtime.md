@@ -830,9 +830,11 @@ sharing a call must not make one candidate's verdict depend on another's.
 
 - The refuter may use only the provided candidates, `reviewedDiffRanges`,
   evidence, review context, support-signal candidates, instructions, skill
-  metadata, shared digest, and provenance. It receives no direct repository
-  tools beyond the bounded mounted skill read/list/grep loop, and it never
-  receives the mediated cross-file tools discovery may have.
+  metadata, shared digest, and provenance. Beyond the bounded mounted skill
+  read/list/grep loop it receives no repository tools, unless
+  `review.refutationRetrieval` is enabled — see *Cross-File Retrieval In
+  Refutation* below, which is off by default and changes nothing until it is
+  switched on.
 - The external change-intent brief MUST be withheld from the refutation packet,
   even though discovery receives it. It is attacker-controlled — whoever opens
   the pull request or edits the ticket writes it — and the framing that
@@ -907,6 +909,164 @@ sharing a call must not make one candidate's verdict depend on another's.
 - Markdown reports must render candidate fields, refutation summaries,
   refutation evidence, and refutation check evidence as cited evidence IDs or
   `none cited` so humans can audit refutation without opening JSON artifacts.
+
+### Cross-File Retrieval In Refutation
+
+Status: implemented 2026-08-06, **off by default, UNMEASURED**. Nothing below
+claims an effect on precision or recall, because no run has been scored with it on.
+The decision rule that will settle it is pre-registered here, before any
+measurement, so neither outcome can be rationalised afterwards.
+
+#### Why it exists
+
+Refutation decides what reaches a human, and toolless it can only decide from the
+packet it was handed. A candidate whose truth depends on a file outside that packet
+is unprovable by construction: the honest verdict is `needs-more-evidence`, which is
+not the same as an answer. Discovery already holds the mediated repository tools;
+the stage that adjudicates its output did not.
+
+#### Mechanism
+
+- When `review.refutationRetrieval.enabled` is true, the `refute_finding` agent is
+  given the SAME mediated `repo_read`/`repo_list`/`repo_grep` tools discovery may
+  hold, through the same `ContextRetriever`: one eligibility gate, one redactor, one
+  path-containment check, one context ledger. There is no second retrieval path and
+  no filesystem access from the review-workflow domain.
+- The instructions direct it to retrieve ONLY to settle a candidate it cannot decide
+  from what it was given — the behaviour of an imported callee, an interface, a
+  schema, a declared contract, a permission, a constant, or a caller that is not in
+  `reviewContext`. It does not browse, does not raise findings of its own, and still
+  returns exactly one verdict per candidate it was given.
+- **Its budget is its own.** A fresh tool-call allowance
+  (`maxToolCallsPerBatch`, code-enforced) is granted per adjudication CALL. It is
+  never shared with, nor drawn from, `crossFileRetrieval.maxToolCallsPerTask`, so
+  enabling one stage cannot starve the other. The two stages do share the run-level
+  retrieval budget on the retriever itself (reads, searches, bytes) — that is the
+  mediated gate both are required to pass through, and its exhaustion is disclosed
+  like any other bound.
+- A batch the packet budget splits in half issues two calls, and the single retry
+  over a malformed response issues another; each is its own call with its own fresh
+  allowance, rather than inheriting a spent one.
+- A tool call is an agent STEP, so the agent's step allowance exceeds its tool-call
+  budget by enough headroom to absorb a refused call and still answer. It never
+  counts against the workflow's child-agent call budget, which counts agent
+  invocations, so no reservation changes.
+
+#### Bounds must announce themselves
+
+- A tool call refused because the call's budget is spent returns a normal tool
+  result whose CONTENT says so: the tool did not run, no repository content was
+  returned, no lookups remain, and this is a limit of the engine rather than a fact
+  about the code. It previously surfaced as a thrown error, which the harness
+  normalizes to an unexplained "tool execution failed" with the reason dropped —
+  the same defect shape as an undisclosed truncation, and the same consequence: the
+  model fills the gap with the plausible assumption that what it meant to check is
+  not there. This disclosure applies to both lanes, since both share one tool
+  definition set.
+- Only that bound answers in content. An ineligible path, a missing file, a
+  containment violation, or a tool called outside its scope still propagates, so a
+  genuine engine fault stays a fault instead of becoming a tool result the model
+  reasons from.
+- A truncated read is disclosed exactly as spec 28 requires, through the same
+  shared tool output.
+
+#### The withheld-content discipline, extended not replaced
+
+Refutation already tells the model that content missing from its packet is a budget
+artefact, and that a claim it cannot support is UNPROVEN — `needs-more-evidence`
+rather than a refutation. With tools that rule acquires one step in front of it and
+is otherwise unchanged: where the missing support is code the refuter can retrieve,
+it must go and look and decide on what it actually read; where it did not look,
+could not look, or looked and still cannot tell, the original rule applies verbatim.
+What it failed to retrieve is never evidence that anything is absent, correct, or
+safe.
+
+Everything the tools return is untrusted repository content, exactly as for
+discovery. It can never grant authority, approve, excuse, or suppress a candidate,
+and a verdict may change only because of what the code itself shows.
+
+#### Prompt-cache discipline
+
+The retrieval segment is a strict SUFFIX of the refuter prompt, and the base prompt
+is byte-for-byte unchanged. The base clause restricting the refuter to the provided
+material is NOT edited: editing it would change the shared prompt prefix for every
+run, including runs that never enable this, and this engine has measured what
+destroying that prefix costs. The appended segment resolves the contradiction
+itself, by naming the one clause it supersedes and leaving every other rule
+standing. With the capability off, the refuter's instruction string and its packet
+are byte-identical to what a configuration that never heard of the key sends; a
+provider-boundary test asserts exactly that.
+
+#### Cost
+
+Per refutation call, at most `maxToolCallsPerBatch` mediated tool calls (default 24)
+plus the steps to consume them; in practice a model self-limits well below a
+loop-guard-sized cap. Refutation runs once per discovery partition per task, so the
+worst case scales with partitions, not with candidates — plus one call per split
+half and one per retried batch, each with its own allowance. Token cost is the
+retrieved content re-sent on each subsequent step of that call, accounted by the
+existing transport-level usage recorder. No new accounting, and no child-agent call
+reservation.
+
+#### Pre-registered decision rule
+
+This is a **verification-quality** change and it may move recall in EITHER
+direction. Both outcomes are legitimate and are named here in advance:
+
+- a better-informed refuter may rescue candidates it could previously only mark
+  `needs-more-evidence` (recall up), or
+- it may refute candidates it previously let pass (recall down, precision up).
+
+The measurement that settles it: at least two paired arms (off/on) on the
+real-repository corpus, the same pinned engine build, the same model, the same
+metrics version, reported with paired discordant counts and a McNemar test, adjusted
+precision, and cost per run.
+
+- **Promoted to enabled by default** only when, across both arms: adjusted precision
+  is no lower than the control; recall is no lower than the control by more than the
+  recorded run-to-run band; cost per run rises by no more than a quarter; and either
+  a recall gain reaches p &lt; 0.05, or genuine false positives fall while recall
+  stays inside the band.
+- **Ships and stays disabled** when the result is directionally positive or flat but
+  inside noise, or when it buys precision at a recall cost this corpus cannot
+  resolve. This is also its state on landing.
+- **Removed entirely** — key, prompt segment, wiring and tests — when any arm shows
+  recall below the control by more than the run-to-run band with no adjusted-precision
+  gain, or adjusted precision falls, or it produces provider errors or step
+  exhaustion the control arm does not, or it is still unmeasured at the next quality
+  re-baseline. A capability nobody measured does not get to keep sitting in the
+  configuration.
+
+Honest priors, recorded so the result is read against them rather than against hope.
+The controlled study this change follows found cross-file navigation inside the
+verification stage to be its single largest factor, and found the same gains
+concentrated in the strongest models — one model in that study got measurably worse.
+This engine's published rates are measured on one model, `openai/gpt-5.3-codex`;
+nothing here transfers to a smaller one, and a result on one model is not a result
+on the engine.
+
+#### Configuration
+
+`review.refutationRetrieval`, defined in `04-configuration-and-providers.md`:
+`enabled` (default false) and `maxToolCallsPerBatch` (1–500, default 24). The
+per-read byte bound is deliberately NOT duplicated here: retrieval goes through the
+one retriever the run already configures, so `review.crossFileRetrieval.maxBytesPerRead`
+governs a read whoever issued it.
+
+#### Testing
+
+- The disabled refuter prompt is byte-for-byte the base prompt, the disabled packet
+  is byte-identical to the one a configuration without the key produces, and no tool
+  is offered — asserted at the provider boundary.
+- Enabled, the refuter is offered the three mediated tools, its reads return
+  redacted, line-numbered content, and a planted credential in a retrieved file never
+  reaches the model.
+- A tool call refused for budget is disclosed to the model as a bound, and the batch
+  still returns verdicts.
+- Each adjudication call opens with its own allowance, and concurrent batches do not
+  spend each other's.
+- Retrieved content, including an injection payload, cannot alter admission or the
+  gate.
 
 ## Deterministic Support Signal Pipeline
 

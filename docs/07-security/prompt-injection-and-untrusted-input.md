@@ -157,10 +157,16 @@ On top of that: path containment through the path service, per-read byte caps,
 per-search match caps, traversal-depth caps, redaction of every result, a
 context-ledger entry per result, and a **tool-call budget enforced by code**
 (`verification.maxToolCallsPerClaim`,
-`review.crossFileRetrieval.maxToolCallsPerTask`). Budget exhaustion is a
+`review.crossFileRetrieval.maxToolCallsPerTask`,
+`review.refutationRetrieval.maxToolCallsPerBatch`). Budget exhaustion is a
 deterministic stop, not something the model can talk its way past — in the
 verification lane it forces an `uncertain` verdict even if the agent still
 returned a confident one.
+
+The stop is also **disclosed**. A review-lane tool call refused for budget returns
+a result whose text says the tool did not run, that no lookups remain, and that
+this is a limit of the engine rather than a fact about the code — so a spent budget
+cannot be mistaken for evidence that something is absent.
 
 There is no write tool, no shell tool, no network tool, and no environment
 access in any lane.

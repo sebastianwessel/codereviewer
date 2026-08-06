@@ -247,7 +247,7 @@ A **completed** `intent check` writes its own run directory under
 
 | File | Contents |
 | --- | --- |
-| `intent-report.md` | The rendered mapping. Obligations this change does not evidence come first, then the ones the judgement could not decide, then the evidenced ones with the path, line and side of every citation. Each entry shows the line of the stated intent it was read from, so an obligation you disagree with can be rejected at source. |
+| `intent-report.md` | The rendered mapping. Obligations this change does not evidence come first, then the ones the judgement could not decide, then the evidenced ones with the path, line and side of every citation, and last the ones asking that something *not* be done which nothing in the change does. Each entry shows the line of the stated intent it was read from, so an obligation you disagree with can be rejected at source. |
 | `intent-report.json` | The same report, identical to `--format json` on stdout. |
 
 The path of the Markdown file is printed to stderr. The four outcomes that map

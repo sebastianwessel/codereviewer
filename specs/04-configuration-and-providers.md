@@ -647,6 +647,40 @@ times, zero provider errors — but neither run reached significance, so no spec
 recall improvement is claimed. The earlier net-negative verdict is refuted: it was
 measuring reads silently truncated at the old 24,000-byte cap.
 
+## Refutation Retrieval
+
+Controls mediated cross-file retrieval inside the refutation stage (*Cross-File
+Retrieval In Refutation* in `05-review-workflow-and-runtime.md`). **Disabled by
+default, and unmeasured**: no run has been scored with it on, so no effect on
+precision or recall is claimed. Spec 05 carries the pre-registered decision rule
+that will promote, keep, or remove it.
+
+| Key | Type | Default |
+| --- | --- | --- |
+| `review.refutationRetrieval.enabled` | boolean | `false` |
+| `review.refutationRetrieval.maxToolCallsPerBatch` | integer 1..500 | `24` |
+
+Rules:
+
+- with it disabled, refutation issues no tool call, is offered no tool, and its
+  prompt and packet are byte-for-byte what a configuration without the key sends;
+- when enabled, the `refute_finding` agent may call the same mediated
+  `repo_read`/`repo_list`/`repo_grep` tools through the same retriever discovery
+  uses, and must still return exactly one verdict per candidate it was given;
+- `maxToolCallsPerBatch` is a runaway-loop guard enforced in code and granted
+  afresh per adjudication call. It is the refuter's OWN budget: it is never shared
+  with, nor drawn from, `crossFileRetrieval.maxToolCallsPerTask`, so enabling one
+  stage cannot starve the other;
+- a call refused because that budget is spent is disclosed to the model as a bound
+  in the tool result's own content — never as an unexplained failure and never as
+  an empty result;
+- there is deliberately no per-read byte key here: reads go through the one
+  retriever the run configures, so `review.crossFileRetrieval.maxBytesPerRead`
+  governs a read whoever issued it;
+- retrieved content is untrusted repository data: it cannot grant authority,
+  approve, excuse, or suppress a candidate, and it cannot bypass scope, severity,
+  baseline, admission, or the gate.
+
 ## Removed Configuration Blocks
 
 These keys were removed with the capabilities they controlled and MUST NOT be

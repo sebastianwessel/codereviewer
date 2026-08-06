@@ -108,7 +108,8 @@ describe('workflow harness config', () => {
       tools: ['repo_read', 'repo_list', 'repo_grep']
     })
 
-    // Other roles never receive the discovery tools.
+    // The DISCOVERY switch never reaches another role: enabling cross-file
+    // retrieval must not hand the refuter tools it was not configured for.
     expect(
       reviewAgentOptionsForRole({
         role: 'refute_finding',
@@ -118,6 +119,42 @@ describe('workflow harness config', () => {
         maxToolCallsPerTask: 4,
         maxBytesPerRead: 24000
       }
+      })
+    ).toEqual({ builtinTools: false, maxSteps: 1 })
+  })
+
+  test('attaches repository tools to refutation only when its own switch is enabled', () => {
+    // Off: the refuter is configured exactly as it was before the capability
+    // existed — no tools, compact step allowance.
+    expect(
+      reviewAgentOptionsForRole({
+        role: 'refute_finding',
+        skillIds: [],
+        refutationRetrieval: { enabled: false, maxToolCallsPerBatch: 24 }
+      })
+    ).toEqual({ builtinTools: false, maxSteps: 1 })
+
+    // On: the mediated repo tools plus enough steps to spend the per-batch budget,
+    // absorb the disclosed budget bound, and still return one verdict per
+    // candidate.
+    expect(
+      reviewAgentOptionsForRole({
+        role: 'refute_finding',
+        skillIds: [],
+        refutationRetrieval: { enabled: true, maxToolCallsPerBatch: 24 }
+      })
+    ).toEqual({
+      builtinTools: false,
+      maxSteps: 27,
+      tools: ['repo_read', 'repo_list', 'repo_grep']
+    })
+
+    // And the REFUTATION switch never reaches discovery.
+    expect(
+      reviewAgentOptionsForRole({
+        role: 'holistic_review',
+        skillIds: [],
+        refutationRetrieval: { enabled: true, maxToolCallsPerBatch: 24 }
       })
     ).toEqual({ builtinTools: false, maxSteps: 1 })
   })

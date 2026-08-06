@@ -180,6 +180,14 @@ a model and is **unmeasured** — no figure for it exists or may be quoted.
   the 2026-08-05 pin). That is COVERAGE, not detection: it reports risk and
   never claims a defect, so the figure is not comparable to the review stage's
   recall.
+- **Every `intent check` figure below predates 2026-08-06**, when the lane gained a
+  fourth status, `not-contradicted`, for obligations asking that something *not* be
+  done — 33 of the 83 classified false positives (39.8%) were of that shape, and
+  under the previous three statuses no answer that could be right was available for
+  them. The change moves those obligations off the headline outstanding count.
+  **No accuracy measurement of any kind exists after it**, so none of the precision
+  or recall numbers here describes the current engine, and a re-measurement is owed
+  before any of them is compared across that date.
 - **`intent check` is the most-measured stage here, and none of its numbers
   describe the engine that ships.** Four scored rounds over two corpora put
   end-to-end outstanding recall at **81.2%** and outstanding precision at

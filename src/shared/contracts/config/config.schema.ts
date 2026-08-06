@@ -122,6 +122,34 @@ export const CrossFileRetrievalConfigSchema = z.strictObject({
   maxBytesPerRead: z.int().min(1000).max(4000000).optional()
 })
 
+// Mediated cross-file retrieval inside the REFUTATION stage (spec 05). Off by
+// default, and unmeasured: no run has been scored with it on, so nothing is claimed
+// about what it does to precision or recall. It may move recall in either direction
+// — a better-informed refuter may rescue candidates it previously could only mark
+// `needs-more-evidence`, or refute candidates it previously let pass — and the
+// pre-registered decision rule that settles which lives in spec 05.
+//
+// When enabled, the refutation agent is given the same mediated repo read/list/grep
+// tools discovery may hold, through the same retriever, eligibility gate, redaction
+// and ledger. Disabled, the refuter is offered no tool, its prompt is byte-for-byte
+// the base prompt, and the stage behaves exactly as it did before this key existed.
+export const RefutationRetrievalConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false),
+  // Runaway-loop guard on ONE refutation call, enforced by code. It is the refuter's
+  // own budget: a fresh allowance is granted per adjudication call and is never
+  // shared with, nor drawn from, `crossFileRetrieval.maxToolCallsPerTask`, so
+  // enabling one stage cannot starve the other.
+  //
+  // Sized from the shape of the call rather than from a measurement, because there
+  // is none: a refutation call adjudicates a BATCH of candidates, where the
+  // per-claim investigation lane (`verification.maxToolCallsPerClaim`, default 12)
+  // adjudicates one claim. Twice that leaves room for a locate-then-read pair on
+  // several candidates while still bounding a model that never stops asking. The
+  // worst-case cost this admits is stated in the spec: `maxToolCallsPerBatch` tool
+  // calls per refutation call, and a batch that splits or retries is another call.
+  maxToolCallsPerBatch: z.int().min(1).max(500).default(24)
+})
+
 // Accepted range for `review.maxConcurrentTasks`. Exported because `eval run`
 // also accepts it as a flag: a flag range that drifted below the schema's would
 // reject a value the config allows, and one above it would be accepted by the
@@ -143,7 +171,8 @@ export const ReviewConfigSchema = z.strictObject({
   contextMaxBytes: z.int().min(10000).max(10000000).optional(),
   inlineSeverityThreshold: SeveritySchema.default('high'),
   maxCostUsd: z.number().min(0).optional(),
-  crossFileRetrieval: CrossFileRetrievalConfigSchema.prefault({})
+  crossFileRetrieval: CrossFileRetrievalConfigSchema.prefault({}),
+  refutationRetrieval: RefutationRetrievalConfigSchema.prefault({})
 })
 
 export const ProviderConfigSchema = z
@@ -769,6 +798,9 @@ export type RepositoryRelativePath = z.infer<typeof RepositoryRelativePathSchema
 export type ReviewConfig = z.infer<typeof ReviewConfigSchema>
 export type CrossFileRetrievalConfig = z.infer<
   typeof CrossFileRetrievalConfigSchema
+>
+export type RefutationRetrievalConfig = z.infer<
+  typeof RefutationRetrievalConfigSchema
 >
 export type ProviderConfig = z.infer<typeof ProviderConfigSchema>
 export type InstructionsConfig = z.infer<typeof InstructionsConfigSchema>

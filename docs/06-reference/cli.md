@@ -801,6 +801,7 @@ and all of them exit `0`:
     "obligationCount": 2,
     "evidencedCount": 1,
     "notEvidencedStatusCount": 1,
+    "notContradictedCount": 0,
     "undeterminedCount": 0,
     "notEvidencedCount": 1,
     "obligationsTruncated": false,
@@ -848,11 +849,21 @@ and all of them exit `0`:
   given only the lines this change touched, so `evidenced` means "these changed
   lines show it" and `not-evidenced` means "nothing in these changed lines shows
   it" — which is **not** the same as "the work is undone". An obligation an earlier
-  commit already satisfied, or one that asks for something *not* to happen, is
-  correctly `not-evidenced` here. The words were renamed on 2026-08-01 for exactly
-  this reason: 54 of the lane's 83 apparent false positives were readers taking
-  `unaddressed` to mean "outstanding work". `summary.notEvidencedCount` is
-  `not-evidenced` + `undetermined`.
+  commit already satisfied is correctly `not-evidenced` here. The words were renamed
+  on 2026-08-01 for exactly this reason: 54 of the lane's 83 apparent false
+  positives were readers taking `unaddressed` to mean "outstanding work".
+  `summary.notEvidencedCount` is `not-evidenced` + `undetermined`.
+- **An obligation that asks for something *not* to happen has its own status.**
+  `not-contradicted` means the obligation rules something out and nothing among the
+  changed lines does it. There is no `evidence` array, and there cannot be: keeping
+  a prohibition looks like an absence in a diff. It is **not** a report that the
+  obligation holds at head — code outside the change can break it — and it is not a
+  report that this change established it, which would be `evidenced` with the line
+  quoted. It is counted in `summary.notContradictedCount` and is **not** on
+  `summary.notEvidencedCount`. Added 2026-08-06, after 33 of the lane's 83 false
+  positives were found to be obligations of this shape, for which no available
+  status could ever have been right. **No accuracy measurement exists after this
+  change.**
 - **`source` is on every obligation, including the ones with no evidence.** It is the
   origin and line of the stated intent the obligation was read out of, and the
   `text` is resolved from that line rather than repeated back by the model. An
@@ -866,7 +877,8 @@ and all of them exit `0`:
   satisfaction claim with nothing behind it is the most harmful thing this
   command could print, because it tells you to stop looking.
 - `undetermined` means the judgement could not be made — including when the call
-  failed. It asserts nothing about the change in either direction.
+  failed, and including a `not-contradicted` answer given over a change part of
+  which could not be read. It asserts nothing about the change in either direction.
 - **`extraScope` is neutral.** It lists changed files no obligation's evidence
   cites. A change doing more than the ticket asked is normal and frequently
   desirable, so the entry carries a path and a line count and nothing else —

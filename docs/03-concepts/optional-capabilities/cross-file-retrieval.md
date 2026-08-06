@@ -49,7 +49,7 @@ flowchart LR
   allowance. They never count against the workflow's child-agent call budget.
 - **Per-task isolation.** Tasks run concurrently in one workflow session, so the
   bounded tools are carried in an `AsyncLocalStorage` scope
-  ([`cross-file-tools.ts`](../../../src/domains/review-workflow/pipeline/discovery/cross-file-tools.ts)) —
+  ([`mediated-repo-tools.ts`](../../../src/domains/review-workflow/pipeline/mediated-repo-tools.ts)) —
   each task gets an independent scope with an independent budget.
 - **Additive to recall only, in principle.** Enabling it can only let the model see
   more; it never removes a finding the single-shot pass would make. What it can and
@@ -130,7 +130,7 @@ experiment showed the reviewer largely does not read the context it already has.
 
 ## Where it lives
 
-- [`src/domains/review-workflow/pipeline/discovery/cross-file-tools.ts`](../../../src/domains/review-workflow/pipeline/discovery/cross-file-tools.ts)
+- [`src/domains/review-workflow/pipeline/mediated-repo-tools.ts`](../../../src/domains/review-workflow/pipeline/mediated-repo-tools.ts)
 - `crossFileRetrievalInstructions` in [`agent-instructions.ts`](../../../src/domains/review-workflow/pipeline/agent-instructions.ts)
 - `CrossFileRetrievalConfigSchema` in [`config.schema.ts`](../../../src/shared/contracts/config/config.schema.ts)
 

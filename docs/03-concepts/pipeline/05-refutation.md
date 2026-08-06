@@ -103,6 +103,44 @@ Scope is stated the same way as in discovery: a real defect anywhere in a change
 file is in scope, whether introduced on the changed lines or exposed elsewhere in
 that file. Only genuinely unrelated concerns in unchanged files are out of scope.
 
+### Optional: letting the refuter look at other files
+
+> **Off by default and unmeasured.** No run has been scored with
+> `review.refutationRetrieval` enabled, so nothing on this page claims it improves
+> anything. It is a change to *verification quality*, and it may move recall in
+> either direction — a better-informed refuter may rescue candidates it could only
+> mark `needs-more-evidence`, or refute candidates it previously let pass. The rule
+> that decides its fate was written down before the measurement, in
+> [`specs/05-review-workflow-and-runtime.md`](../../../specs/05-review-workflow-and-runtime.md).
+
+Toolless, the refuter can only decide from the packet it was handed, so a candidate
+whose truth lives in a file that packet does not contain is unprovable by
+construction. Enabled, the refutation call gets the same mediated `repo_read` /
+`repo_list` / `repo_grep` tools [discovery may
+hold](../optional-capabilities/cross-file-retrieval.md) — the same retriever, the
+same eligibility gate, redaction, path containment and context ledger.
+
+- **Its budget is its own.** `maxToolCallsPerBatch` is granted afresh per
+  adjudication call and is never drawn from discovery's per-task budget, so enabling
+  one stage cannot starve the other. A split batch or a retried batch is another
+  call, and gets another allowance.
+- **A spent budget says so.** A refused tool call comes back as a result whose text
+  states that the tool did not run, that no lookups remain, and that this is a limit
+  of the engine rather than a fact about the code — never as an empty result or an
+  unexplained failure.
+- **"Unproven" still means `needs-more-evidence`.** The rule gains one step in front
+  of it: where the missing support is code the refuter can retrieve, it looks first
+  and decides on what it actually read. Where it did not look, could not look, or
+  looked and still cannot tell, the original rule applies unchanged. What it failed
+  to retrieve is never evidence that anything is absent, correct or safe.
+- **Retrieved content is untrusted data.** It can never grant authority, approve,
+  excuse or suppress a candidate — see [trust model](../trust-model.md).
+
+Disabled, the refuter is offered no tool and its prompt and packet are byte-for-byte
+what a build without the capability sends. That is deliberate: the optional
+instructions are a strict suffix, so every configuration shares the longest possible
+cached prompt prefix.
+
 ### Evidence
 
 Every adjudicated candidate produces a **refutation evidence record**: a
@@ -161,4 +199,6 @@ degrades exactly as an unretried failure would.
 | `aiReview.requireRefutation` | `true` (literal — cannot be turned off) | Refutation is mandatory whenever the model stages run |
 | `promotionPolicy.modelWeakOrRefuted` | `artifact-only` | Disposition of `needs-more-evidence`: keep it in the artifacts but out of the inline review, or drop it entirely (`rejected`) |
 | `review.maxConcurrentTasks` | `4` | Refutation batches run with the same bounded concurrency as discovery |
+| `review.refutationRetrieval.enabled` | `false` | Gives the refuter the mediated repo tools. Unmeasured — see above |
+| `review.refutationRetrieval.maxToolCallsPerBatch` | `24` | The refuter's own runaway-loop guard, granted per adjudication call |
 | `provider.maxRetries`, `provider.timeoutMs` | `2`, `120000` | Transient-failure behaviour for the call |

@@ -94,6 +94,7 @@ export const runProviderWorkflow = async (
     maxConcurrentTasks: input.config.review.maxConcurrentTasks,
     maxChildAgentCalls,
     crossFileRetrieval: input.config.review.crossFileRetrieval,
+    refutationRetrieval: input.config.review.refutationRetrieval,
     ...(input.logger === undefined ? {} : { logger: input.logger }),
     ...(input.onTaskEvent === undefined
       ? {}

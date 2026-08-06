@@ -15,6 +15,7 @@ import {
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
   EvalReportSchema,
+  parseEvalComparisonReport,
   assertBenchmarkSlicesHydrated,
   createModelPlausibilityJudge,
   createModelSemanticJudge,
@@ -27,6 +28,7 @@ import {
   stableJsonDigest,
   type EvalCaseFileReader,
   type EvalRegressionThresholds,
+  type EvalComparisonReport,
   type EvalReport,
 } from '../domains/evaluation/index.js'
 import {
@@ -1164,21 +1166,36 @@ const runEval = async (
   }
 }
 
-// Reads a saved eval report and validates it against the contract. Both readers
-// below go through this so a malformed or foreign JSON file is rejected by the
-// schema rather than rendered as a report with missing metrics.
+const readEvalReportJson = async (
+  repositoryRoot: string,
+  reportPath: string
+): Promise<unknown> =>
+  JSON.parse(
+    await readFile(
+      await resolveExistingPathInsideRoot(repositoryRoot, reportPath),
+      'utf8'
+    )
+  )
+
+// The recall report renders one run's own numbers, so it validates against the
+// PRODUCER contract: a report that does not satisfy it was not written by a
+// compatible build and cannot be rendered field-for-field.
 const readEvalReport = async (
   repositoryRoot: string,
   reportPath: string
 ): Promise<EvalReport> =>
-  EvalReportSchema.parse(
-    JSON.parse(
-      await readFile(
-        await resolveExistingPathInsideRoot(repositoryRoot, reportPath),
-        'utf8'
-      )
-    )
-  )
+  EvalReportSchema.parse(await readEvalReportJson(repositoryRoot, reportPath))
+
+// Comparison reads through the tolerant comparison view instead. Its whole job
+// is to span engine changes, and an engine change is what adds a field to the
+// report -- validating an archived report against today's producer contract
+// fails on the fields that did not exist yet. The view keeps absence as absence:
+// a counter the older run never recorded renders "unknown", never 0.
+const readEvalComparisonReport = async (
+  repositoryRoot: string,
+  reportPath: string
+): Promise<EvalComparisonReport> =>
+  parseEvalComparisonReport(await readEvalReportJson(repositoryRoot, reportPath))
 
 const runEvalRecallReport = async (
   args: readonly string[],
@@ -1238,8 +1255,8 @@ const runEvalCompare = async (
       return usageError('eval compare requires --base and --head report paths')
     }
 
-    const baseReport = await readEvalReport(options.cwd, basePath)
-    const headReport = await readEvalReport(options.cwd, headPath)
+    const baseReport = await readEvalComparisonReport(options.cwd, basePath)
+    const headReport = await readEvalComparisonReport(options.cwd, headPath)
 
     return {
       exitCode: 0,

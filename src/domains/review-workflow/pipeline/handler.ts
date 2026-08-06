@@ -22,6 +22,10 @@ import {
 import { createStructuredError } from '../../../shared/errors/error-normalizer.js'
 import { sha256 } from '../../../shared/hash/hash.js'
 import { prepareCandidatesForAdmission } from './admission/review.js'
+import {
+  findingRefutationRunnerWithRetrieval,
+  type RefutationRetrievalOptions
+} from './refutation/retrieval.js'
 import { summarizeDiscoveryTelemetry } from './discovery/discovery-telemetry.js'
 import { taskReviewInputFor } from './discovery/task-packet.js'
 import { renderSharedDigest } from './shared-digest.js'
@@ -150,6 +154,9 @@ export const runReviewWorkflowHandler = async (params: {
   readonly onTaskEvent?: (event: WorkflowTaskEvent) => void
   readonly runTask: ReviewWorkflowTaskRunner
   readonly refuteFinding?: FindingRefutationRunner
+  // Spec 05: present only when refutation cross-file retrieval is enabled. The
+  // harness passes it; absent, the refutation runner is used exactly as given.
+  readonly refutationRetrieval?: RefutationRetrievalOptions
 }): Promise<ReviewWorkflowOutput> => {
   const { input, logger } = params
   const tasks = tasksForWorkflowInput(input)
@@ -177,6 +184,20 @@ export const runReviewWorkflowHandler = async (params: {
             ? {}
             : { budget: input.contextRetrievalBudget }),
           ledgerEntries: contextLedgerEntries
+        })
+  // Spec 05: the refuter's own bounded mediated-tool scope, entered per
+  // adjudication call. It draws on the SAME retriever discovery uses — one mediated
+  // gate, one ledger — while its tool-call budget is its own, so neither stage can
+  // spend the other's. Off (or without a repository root) this is the unwrapped
+  // runner, so a disabled run issues no tool call at all.
+  const refuteFinding =
+    params.refuteFinding === undefined
+      ? undefined
+      : findingRefutationRunnerWithRetrieval({
+          refuteFinding: params.refuteFinding,
+          contextRetriever,
+          retrieval: params.refutationRetrieval,
+          logger
         })
   const queued = await runQueuedReviewTasks<TaskReviewResult>({
     tasks,
@@ -254,9 +275,7 @@ export const runReviewWorkflowHandler = async (params: {
     ),
     sharedDigest: renderSharedDigest(shared.digest()),
     reviewEvidence: [...input.evidence, ...taskEvidenceRecords],
-    ...(params.refuteFinding === undefined
-      ? {}
-      : { refuteFinding: params.refuteFinding }),
+    ...(refuteFinding === undefined ? {} : { refuteFinding }),
     ...(params.signal === undefined ? {} : { signal: params.signal }),
     logger
   }).catch((error: unknown) => {

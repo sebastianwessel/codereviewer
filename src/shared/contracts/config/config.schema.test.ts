@@ -109,6 +109,43 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
+  test('refutation retrieval defaults to OFF, with its own per-batch tool budget', () => {
+    // OFF because it is unmeasured: no run has been scored with it on, and it may
+    // move recall in either direction. The pre-registered decision rule that
+    // settles it lives in spec 05.
+    const defaults = CodeReviewerConfigSchema.parse({})
+    expect(defaults.review.refutationRetrieval).toEqual({
+      enabled: false,
+      maxToolCallsPerBatch: 24
+    })
+
+    // Its budget is its own field, not a share of the discovery budget, so one
+    // stage cannot starve the other.
+    const enabled = CodeReviewerConfigSchema.parse({
+      review: {
+        refutationRetrieval: { enabled: true, maxToolCallsPerBatch: 6 }
+      }
+    })
+    expect(enabled.review.refutationRetrieval).toEqual({
+      enabled: true,
+      maxToolCallsPerBatch: 6
+    })
+    expect(enabled.review.crossFileRetrieval.maxToolCallsPerTask).toBe(100)
+
+    // A runaway-loop guard, so a generous value is valid and only an absurd one is
+    // rejected.
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        review: { refutationRetrieval: { maxToolCallsPerBatch: 0 } }
+      })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        review: { refutationRetrieval: { maxToolCallsPerBatch: 501 } }
+      })
+    ).toThrow()
+  })
+
   // The context scout was removed on 2026-07-27, along with its configuration.
   // No compatibility shim is offered on purpose: a config that still enables it
   // would otherwise run a review that silently does something different from

@@ -98,6 +98,32 @@ Set `enabled: false` and discovery is single-shot with no tools.
 | `review.crossFileRetrieval.maxToolCallsPerTask` | integer 1–500 | `100` | Runaway-loop guard on mediated tool calls per task. It is not a context ration — models self-limit well below it. |
 | `review.crossFileRetrieval.maxBytesPerRead` | integer 1000–4000000 | *unset* | Per-read byte cap. Unset means a read is not cut in advance. Setting it is a deliberate operator choice and still binds, with the cut disclosed to the reviewer rather than silent. |
 
+### `review.refutationRetrieval`
+
+**Disabled by default, and unmeasured.** It gives the *refutation* stage the same
+mediated `repo_read` / `repo_list` / `repo_grep` tools discovery may hold, so the
+stage that decides what reaches you can check a claim against a file it was not
+handed instead of answering "not enough evidence" by construction.
+
+No run has been scored with it on, so nothing is claimed for it. It is a
+verification-quality change and may move recall in **either** direction: a
+better-informed refuter may rescue candidates it could only mark
+`needs-more-evidence`, or refute candidates it previously let pass. The rule that
+decides whether it becomes a default, stays optional, or is removed was written down
+before any measurement, in
+[`specs/05-review-workflow-and-runtime.md`](../../../specs/05-review-workflow-and-runtime.md).
+
+| Key | Type | Default | What it does |
+| --- | --- | --- | --- |
+| `review.refutationRetrieval.enabled` | boolean | `false` | Master switch. Off, the refuter is offered no tool and its prompt and packet are byte-for-byte those of a build without the capability. |
+| `review.refutationRetrieval.maxToolCallsPerBatch` | integer 1–500 | `24` | Runaway-loop guard on mediated tool calls in ONE adjudication call, enforced in code. It is the refuter's own budget: never shared with, nor drawn from, `crossFileRetrieval.maxToolCallsPerTask`, so enabling one stage cannot starve the other. |
+
+Cost: at most `maxToolCallsPerBatch` tool calls per refutation call, and refutation
+runs once per discovery partition (plus one call per split half and one per retried
+batch, each with its own allowance). There is no separate per-read byte key —
+retrieval uses the one retriever the run configures, so
+`crossFileRetrieval.maxBytesPerRead` governs the read whichever stage issued it.
+
 ### `review.guardedRegionContext` — removed
 
 Spec 25's guarded-region context. Both arms were **measured on 2026-07-30 and
