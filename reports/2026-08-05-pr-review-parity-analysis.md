@@ -164,19 +164,37 @@ The pipeline's shape matches a disciplined human's process closely (§2 table),
 including things most tools skip (read-the-ticket-first, chase-suspicions,
 must-fix-vs-question separation). Four structural judgments, honestly:
 
-**a) The precision architecture is right; its load-bearing point is not where
-it was designed to be.** Precision was designed to come from refutation; it is
-measured to come from **discovery being conservative** (refuter kills 1.4%).
-That couples precision and recall at the same knob — which is exactly why every
-"find more" intervention so far cost precision. The refutation stage is a paid,
-built, idle absorber for wider discovery. The literature's prescription
-(generate wide, verify hard) is the direction the architecture already supports
-and current tuning does not exploit. This is the most consequential "right way"
-finding: nothing needs re-architecting; the knob is discovery framing, and the
-verifier's capacity is the safety net for turning it. (Caveat: the three widened
-arms tried so far — sweep, lens, sampling — all failed to convert extra
-candidates into recall; whatever widening comes next must be *differently
-scoped*, not merely louder. See §6/B2.)
+**a) The precision architecture is right — and CORRECTED 2026-08-05, its idle
+verification stage is not the invitation this section originally called it.**
+Precision was designed to come from refutation; it is measured to come from
+**discovery being conservative** (refuter kills 1.4%). That couples precision and
+recall at the same knob, which is why every "find more" intervention so far cost
+precision.
+
+This section first read the 1.4% as spare capacity and cited "generate wide,
+verify hard" as the literature's prescription. **A targeted literature check
+contradicts that**, and the correction is worth more than the original claim
+because it rules out the obvious move:
+
+- **CR-Bench** (584 review instances) measured this exact trade on code review:
+  Reflexion-style widening raised recall +5.75pp and cut signal-to-noise from
+  **5.11 to 1.95**.
+- **ISSTA 2026** (*Sifting the Noise*) finds noise removal and true-positive
+  retention are anti-correlated, and that gains concentrate in the strongest
+  models — weaker ones get *worse* under agentic filtering.
+- Our own 1.4% kill rate is evidence the refuter is **not built to absorb a
+  flood**, not evidence that it is idle.
+
+So "raise the candidate cap and let refutation catch it" is the most directly
+contradicted change available, and the conservative-discovery regime this engine
+already runs is the empirically safer one.
+
+What the same ISSTA study *does* identify is a different lever, and the largest
+single one it measured: **cross-file navigation inside the verification stage** —
+ablating it collapsed F1 from 95.5% to 62.5%. This engine's refutation is
+explicitly toolless; discovery has the retrieval tools and the verifier does not.
+That is the evidence-backed gap, and it improves verification quality rather than
+discovery volume. Full sourcing in `2026-08-05-recall-lever-research.md`.
 
 **b) The intent trust model is better than a human's.** A human both benefits
 from and is misled by the PR description ("looks right because the description
