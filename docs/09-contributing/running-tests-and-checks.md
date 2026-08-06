@@ -51,6 +51,11 @@ npm test
 Vitest over `src/**/*.test.ts`. **Hermetic and free**: it never calls a real
 model provider. `src/**/*.live.test.ts` is excluded.
 
+This suite includes the check that validates every JSON configuration example
+printed in `docs/` and `skills/` — see
+[Configuration examples in documentation](#configuration-examples-in-documentation)
+below for the convention it relies on.
+
 ### 3. Generated-schema check
 
 ```bash
@@ -110,6 +115,60 @@ npm run clean
 > and nothing else. `tsconfig.json` stays broader on purpose: `typecheck`
 > covers the tests and `vitest.config.ts` as well, which the build must not
 > emit, and it keeps source maps on for local debugging.
+
+---
+
+## Configuration examples in documentation
+
+Every JSON configuration example in `docs/` and `skills/` is validated against
+`CodeReviewerConfigSchema` itself by
+`src/domains/drift/config-example-checker.ts`, under `npm test`. An example the
+schema rejects fails the suite naming the file, the line of the opening fence
+and the configuration path the schema objected to.
+
+It runs as a test rather than as a `drift check` category for two reasons. A new
+drift category would be gated by `drift.failOn`, whose default set is
+`generated-artifact-drift` and `security-drift` — so a broken example would be
+reported as a warning while `drift check` exited `0`, which is the "absence
+produces a confident pass" shape this project has a standing rule against. And
+`drift check` scans `README.md`, `docs/` and `specs/`, never `skills/`, which is
+where the defect that motivated the check actually lived.
+
+### The convention
+
+- **Write a configuration example rooted at the top level of the configuration
+  document** — the shape you would paste into `.codereviewer/config.json`. A
+  block is recognised as a configuration example when at least one of its
+  top-level keys is a top-level key of `CodeReviewerConfigSchema`.
+- **A fragment needs no marker and no exemption.** Every top-level block of the
+  schema is optional, so `{ "review": { "maxCostUsd": 5 } }` is a complete,
+  valid configuration document on its own. A fragment is validated exactly as
+  far as it goes and is never reported for what it leaves out.
+- **Everything else is left alone.** A report body, an error envelope, an eval
+  fixture, or an illustration with a `…` elision in it carries no top-level
+  configuration key, so it is never parsed as configuration.
+
+Two markers on the fence's info string handle the cases classification cannot
+reach on its own. Neither is needed anywhere today; they exist so a page that
+needs one is not forced to choose between a wrong classification and a silent
+skip.
+
+| Info string | Meaning |
+| --- | --- |
+| `json` | Classified by content, per the rules above. |
+| `json config` | Force validation. Use it for an example content classification would miss (an intentionally empty `{}`). A block marked this way that is not valid JSON is a failure — an elision is not allowed under this marker. |
+| `json not-config` | Not a configuration example. Use it only if a non-configuration document genuinely needs a top-level key name the schema also uses. |
+
+### If the check fails
+
+Fix the example. Do not weaken the check or add `not-config` to silence it — a
+documented configuration that `config validate` exits `2` on is worse than no
+example, because it is a broken setup handed to somebody who trusted the page.
+
+The check cannot pass by finding nothing: a scanned root that holds Markdown and
+yields no configuration example is itself reported, its block count is
+cross-checked against an independent line scan, and each root carries a floor on
+how many examples it must still contain.
 
 ---
 

@@ -8,6 +8,14 @@ own evaluation corpus is several percentage points of recall, so two runs that
 differ slightly have told you nothing. If you want to claim a change helped, you
 need repeated runs on a fixed corpus — see the project's `docs/05-quality/`.
 
+The most recent three-run baseline puts the standard deviation of in-diff recall
+at **2.89pp**; the previous one put it at 0.96pp. Judge a change against the
+**wider** band, because under-stating it is the error that manufactures false
+positives. Do not read the difference between the two as stability having
+regressed: at three runs per arm an sd is barely an estimate, the two intervals
+overlap heavily, and the project's own ledger declines to call the difference
+established.
+
 ## "There is too much noise"
 
 In this order:
@@ -49,9 +57,9 @@ In this order:
 
 Be honest with the user about what is and is not fixable by configuration.
 
-**Measured, on the 37-case real-repository corpus with the engine pinned: in-diff
-recall is a mean 61.1% over three runs (sd 0.96pp), and recall on defects
-outside the diff is 0
+**Measured, on the 37-case real-repository corpus with the engine pinned
+(`db78900`): in-diff recall is a mean 68.3% over three runs — 66.7 / 66.7 / 71.7,
+sd 2.89pp — and recall on defects outside the diff is 0
 of 27 — and every one of those 27 sat in a file the reviewer had already been
 shown in full.** None of them needed extra context or retrieval. That is an
 attention problem, not an information problem, and no configuration key addresses
@@ -112,8 +120,10 @@ In order of leverage:
 3. **Set `aiReview.deterministicSignalMode: "disabled"`** if the support facts are
    not earning their bytes. Planning still uses them; only the injection into the
    model packet stops.
-4. **Trim `instructions`** — they ride along on *every* call, discovery and
-   refutation alike.
+4. **Trim `instructions`, or scope them** — they ride along on *every* call,
+   discovery and refutation alike. `instructions.files[].scope` limits a file to
+   the tasks that touch matching paths, which in a monorepo removes those bytes
+   from every packet that had no use for them. See below.
 5. **Always pass `--base-ref`** so the diff is against the merge base rather than a
    stale branch point.
 6. **Set `review.maxCostUsd`** so a runaway change fails loudly.
@@ -127,8 +137,15 @@ tasks and file count, not with findings.
 `review.maxConcurrentTasks` (default 4) changes throughput and rate-limit
 pressure. It does **not** change the number of calls or the total cost.
 
-What is free: `config validate`, `drift check`, `baseline write`, `impact check`,
-`intent check` while disabled, and any `review` run with no provider
+A cold cache roughly doubles the bill. The three-run baseline recorded **$1.97
+for a cold run against $0.82–$0.83 warm** over the same 37-case corpus, with 79–80%
+of input tokens served from cache once warm. Quote both numbers, and never compare
+two configurations by running them back to back — the second arm inherits the
+first arm's warm cache.
+
+What is free: `config validate`, `drift check`, `baseline write`,
+`intent check` while disabled, `impact check` unless
+`changeImpact.adjudication.enabled` is set, and any `review` run with no provider
 configured.
 
 ## Project review instructions
@@ -138,23 +155,74 @@ If the team has house rules the reviewer keeps missing:
 ```json
 {
   "instructions": {
-    "files": [".codereviewer/instructions/house-rules.md"],
+    "files": [{ "path": ".codereviewer/instructions/house-rules.md" }],
     "inline": "Treat any new public HTTP handler without an authorization check as critical."
   }
 }
 ```
 
+`files` is an array of **objects**, not of path strings. The config object is
+strict, so the old `["…/house-rules.md"]` spelling exits `2`.
+
 Instruction files resolve under the repository root, are redacted before use, and
 are recorded in the context ledger and in each finding's provenance hashes. They
-are added to every task packet, so keep them short — they are on the bill twice
-per task.
+are added to every matching task packet — the discovery call and the refutation
+call both receive them — so keep them short; they are on the bill twice per task.
+
+### Scope a file to part of the repository
+
+An entry with no `scope` key applies repository-wide, exactly as `files` behaved
+before scoping existed. Add `scope` to limit a file to review tasks that touch
+matching paths:
+
+```json
+{
+  "instructions": {
+    "files": [
+      { "path": ".codereviewer/instructions/house-rules.md" },
+      {
+        "path": ".codereviewer/instructions/payments-service.md",
+        "scope": ["services/payments/**"]
+      }
+    ]
+  }
+}
+```
+
+`scope` is a list of glob patterns in the same dialect as
+`paths.include`/`paths.exclude` (`*`, `**`, `?`, matched against
+repository-relative paths) — there is one glob matcher in the project and this
+reuses it.
+
+A review task can cover more than one changed file, so "matches" needs a rule for
+a many-files-to-many-patterns comparison: **a scope matches when any one file in
+the packet matches any one pattern**, and the whole packet then gets the
+instruction. That fails safe towards inclusion — guidance a reviewer never sees is
+invisible and uncatchable, while guidance shown for one extra file in a mixed
+packet is noise a reader can see and discount.
+
+`scope: []` is rejected at config load. Delete the key to go back to unscoped;
+an empty list would otherwise silently hide a configured instruction with nothing
+saying why.
+
+`inline` has no `scope` and always applies repository-wide. A team that wants
+area-specific free text should use a short scoped file instead.
+
+**This is a cost and attention lever, not tidiness.** An unscoped instruction
+rides on every packet of every task and is paid for on every call. In a monorepo,
+scoping one service's rules to that service removes those bytes from every other
+service's packets and stops them competing with source for the model's attention.
+Where a scope keeps a file out of a packet, the context ledger records it —
+`decision: "skipped"`, reason `instruction-scope-excluded`, with the byte count
+withheld — so "scoped out of this task" stays distinguishable from "never
+loaded".
 
 ## What cannot be turned off
 
 `aiReview.requireRefutation` accepts the literal `true` only. Every model-origin
 candidate is independently adjudicated before it can be admitted. That is the
-mechanism the measured 99.1% mean adjusted precision rests on; there is no fast path
-around it.
+mechanism the measured **96.2% mean adjusted precision** rests on; there is no
+fast path around it.
 
 `security.allowShell`, `security.allowNetwork`, `security.allowFilesystemWrite`
 and `security.captureContentTelemetry` accept the literal `false` only. The

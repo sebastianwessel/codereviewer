@@ -281,8 +281,13 @@ const renderUnresolvedFinding = (
 
 // What the gate is, said in the words of what it did. `passed` is a comparison
 // against configured thresholds over the findings THIS RUN produced; with recall
-// measured at roughly three in five in-diff defects, a run that crosses no
+// measured at roughly seven in ten in-diff defects, a run that crosses no
 // threshold has established that and nothing more.
+//
+// Keep this rate in step with MEASURED_RELIABILITY above and with the ledger
+// entry both cite. This comment said "three in five" while the paragraph it
+// describes said "seven in ten" — one file quoting two recall rates, which is
+// how a reader loses confidence in both.
 const renderGate = (report: ReviewReport): readonly string[] => {
   const gate = report.qualityGate
 

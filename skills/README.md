@@ -19,6 +19,12 @@ Every command, flag, config key, environment variable, exit code and measured
 rate quoted in a skill here is verified against `src/` rather than against the
 docs. When behaviour changes, update the skill in the same change.
 
+The JSON configuration examples are checked automatically: `npm test` validates
+every one of them in `docs/` and `skills/` against the real configuration schema
+and fails naming the file, the line and the schema objection. See
+[Configuration examples in documentation](../docs/09-contributing/running-tests-and-checks.md#configuration-examples-in-documentation).
+Nothing checks the prose, so the rest still has to be verified by reading.
+
 ## Using a skill
 
 With Claude Code, copy or symlink the skill directory into `.claude/skills/` (or

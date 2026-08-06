@@ -162,6 +162,66 @@ before the run. Gathered text is redacted, bounded, summarised, and injected as
 **untrusted informational context** — it cannot approve a finding, change a
 severity, or affect the gate.
 
+### `instructions` — house rules the reviewer keeps missing
+
+`files` is an array of **objects**. The old array-of-path-strings spelling exits
+`2`.
+
+```json
+{
+  "instructions": {
+    "files": [
+      { "path": ".codereviewer/instructions/house-rules.md" },
+      {
+        "path": ".codereviewer/instructions/payments-service.md",
+        "scope": ["services/payments/**"]
+      }
+    ],
+    "inline": "Treat any new public HTTP handler without an authorization check as critical."
+  }
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `path` | Repository-relative. Traversal, absolute paths and symlink escapes are rejected before the file is opened; a missing file fails the run rather than being skipped. |
+| `scope` | Optional list of globs, same dialect as `paths.include`/`paths.exclude`. Omitted means repository-wide, exactly as before scoping existed. A task packet can cover several files, and the instruction applies when **any** file in it matches **any** pattern. `scope: []` is rejected — delete the key instead. |
+| `inline` | One string, always repository-wide. It has no `scope`; use a short scoped file for area-specific text. |
+
+Instruction documents ride on **every matching packet**, on both the discovery
+and the refutation call, so they are paid for twice per task. Scoping is
+therefore a cost and attention lever in a monorepo, not just tidiness. Every
+instruction the run loaded is hashed into each finding's provenance; a packet a
+scope kept an instruction out of gets a context-ledger entry with
+`decision: "skipped"` and reason `instruction-scope-excluded`, so "scoped out" is
+never confused with "never loaded".
+
+### `changeImpact.adjudication` — opt-in, and unmeasured
+
+```json
+{
+  "changeImpact": {
+    "enabled": true,
+    "adjudication": { "enabled": true, "maxCalls": 40 }
+  }
+}
+```
+
+`adjudication.enabled` defaults to `false` **independently of
+`changeImpact.enabled`**, so enabling `impact check` never silently starts
+spending. Everything else the stage does is deterministic and free; this is the
+only part that reaches a provider, and only for behavioural changes — a removed,
+relocated or newly added declaration is settled in code at no cost.
+`maxCalls` (default `40`, max `500`) bounds model calls only; a run that binds it
+says so, and every pair past the cap is counted as unadjudicated rather than
+reported as a weak finding.
+
+**There is no measurement of this layer.** Its spec forbids inventing,
+estimating or extrapolating one, and records in advance that published prior art
+for the task sits near 28% precision and that adjudication is *expected* to
+reduce recall relative to the raw reference list. Offer it as an experiment; do
+not present its value as established.
+
 ## Keys people reach for and should not
 
 | Key | Why not |
@@ -189,6 +249,13 @@ Writing any of these exits `2`:
   stages, not four.
 - `qualityGate.minProductRecall` and every other eval threshold — see the
   `qualityGate` recipe above.
+
+There is also **no key for the test-adequacy signal**, under any name, and there
+is deliberately never going to be one. It reports which changed source files
+carry no changed test; it is free, calls no provider, renders nothing when it has
+nothing to say, and cannot affect the gate — so there is no spend, latency, noise
+or risk to switch away from. A key would be a dead switch, which this project has
+shipped and removed before.
 
 ## Keys that accept only one value
 
@@ -235,5 +302,7 @@ named `CODEREVIEWER_*` is ignored.
 | `CODEREVIEWER_COST_INPUT_PER_MILLION` / `_CACHED_INPUT_PER_MILLION` / `_OUTPUT_PER_MILLION` | `costs.*` pricing overrides |
 
 Provider **credentials** are never config keys. The adapter reads them from the
-environment itself: `OPENAI_API_KEY`; `AWS_REGION` / `AWS_ACCESS_KEY_ID` /
-`AWS_SECRET_ACCESS_KEY`; `AZURE_AI_ENDPOINT` / `AZURE_AI_API_KEY`.
+environment itself: `OPENAI_API_KEY`; `AZURE_AI_ENDPOINT` / `AZURE_AI_API_KEY`;
+and for `bedrock`, `AWS_REGION` plus the standard AWS credential chain — only
+the region is checked by name, so a role or OIDC works and static access keys are
+not required.

@@ -195,7 +195,7 @@ needed and none should be added — a step that reads their JSON and exits non-z
 would reintroduce a gate the measurement says is not accurate enough to gate on.
 
 ```yaml
-      - name: Impact (deterministic, free)
+      - name: Impact (deterministic and free unless adjudication is enabled)
         working-directory: project
         run: node "$GITHUB_WORKSPACE/engine/dist/cli/main.js" impact check --base-ref "origin/${{ github.base_ref }}" --head-ref HEAD --format markdown >> "$GITHUB_STEP_SUMMARY"
 
@@ -218,6 +218,13 @@ are not in the run index, so `baseline write` never picks one up.
 A run that mapped nothing writes nothing at all — `disabled` for impact;
 `disabled`, `no-intent`, `unusable-intent` or `provider-unavailable` for intent.
 `no-intent` is the ordinary outcome when the pipeline supplied no change intent.
+
+`impact check` needs no credential and makes no provider call **unless
+`changeImpact.adjudication.enabled` is set** — a separate switch from
+`changeImpact.enabled`, deliberately, so turning the stage on cannot silently
+start spending. Leave it off: the layer is unmeasured. If you do enable it, the
+step needs the provider credential in its `env:` like the review step, and
+`changeImpact.adjudication.maxCalls` (default `40`) is what bounds the spend.
 
 ## What to keep from a run
 

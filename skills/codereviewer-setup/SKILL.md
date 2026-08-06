@@ -21,7 +21,7 @@ Three independently runnable stages. They share no context and no output.
 | --- | --- | --- | --- |
 | Review | `review` | Yes — exit `1` on gate failure | Yes |
 | Intent | `intent check` | No, never — always exits `0` | Yes, when enabled and a provider resolves |
-| Impact | `impact check` | No, never | No — deterministic, makes no provider call |
+| Impact | `impact check` | No, never | No by default — deterministic. Only `changeImpact.adjudication.enabled` makes it call a provider, and that is off separately from the command |
 
 Advisory is a spec requirement for the two `check` stages, not a default: there
 is no `blocking` key to find, and writing one exits `2`.
@@ -55,9 +55,10 @@ accepts is still unknown to another.
 | `impact check` | `--config`, `--base-ref`, `--head-ref`, `--format json\|markdown` |
 | `intent check` | `--config`, `--base-ref`, `--head-ref`, `--format json\|markdown` |
 
-Always write a flag and its value as **two argv tokens** (`--base-ref main`). The
-`--flag=value` spelling is honoured by some parsers and not by others
-(`--config`, `--file`), so it is not a form to rely on.
+Both spellings work: `--base-ref main` and `--base-ref=main` are equivalent, on
+every flag. That was not always true — four parsers accepted the joined form by
+name and then silently dropped it, so a run proceeded on defaults at exit `0` —
+and it was fixed by teaching every parser both forms rather than by rejecting one.
 
 `--config`, `--debug`, `--log-level` and `--log-file` are global; the last three
 only take effect on `review` and `eval run`, which build a logger. `--file` /
@@ -83,16 +84,30 @@ them.
 Say this before the user invests in the setup. The report says it too, in its
 own opening paragraph.
 
-On a 37-case real-repository corpus with the engine pinned:
+On a 37-case real-repository corpus with the engine pinned (`db78900`):
 
-- **In-diff recall mean 61.1%** over three runs (sd 0.96pp) — about 3 in 5
-  defects sitting inside the diff.
+- **In-diff recall mean 68.3%** over three runs — 66.7 / 66.7 / 71.7, sd 2.89pp —
+  about 7 in 10 defects sitting inside the diff.
 - **0 of 27** for defects sitting elsewhere in a changed file. A measured zero
   over a full denominator, and by design: this stage is diff-scoped.
-- **Adjusted precision mean 99.1%** — roughly 99 in 100 of what it reports
-  stands up.
-- 94.2% of what it reports lands inside the diff.
+- **Adjusted precision mean 96.2%** — roughly 19 in 20 of what it reports stands
+  up. Raw precision 77.8%.
+- **$1.97 for a cold-cache run, $0.82 warm.** Quote both: the spread is more
+  than 2x, and an A/B whose second arm inherits the first's warm cache is
+  measuring the cache.
 - Two runs over the same commit do not produce the same report.
+
+The adjusted-precision figure is **not** comparable to the 99.1% an earlier
+baseline recorded. The eval's scoring version changed in a way that alters which
+findings are credited for identical review output, so the two numbers answer
+slightly different questions. Publish 96.2% as the current rate; never present it
+as a fall from 99.1%.
+
+Judge any change to this stage against the **wider** of the two spreads on
+record — 2.89pp, not the earlier 0.96pp — because under-stating the band is what
+manufactures false positives. That is caution about a three-run estimate, not a
+claim that stability regressed; the ledger explicitly declines to call the
+difference established.
 
 **Every one of those rates was measured on `openai/gpt-5.3-codex`.** A rate is a
 property of a model, not of the engine. If the user configures a different
@@ -103,8 +118,10 @@ model and the one the run used, and every report carries a `- Model:` line.
 `intent check` has its own measured rates, printed in its own report: about 1 in
 29 obligations it calls *evidenced* is still outstanding at head, and about 1 in
 10 genuinely outstanding obligations never appear on the list. `impact check`
-has one measurement — it localises 20 of 27 out-of-diff expectations inside a
-symbol it flagged — which is coverage, not detection.
+has one measurement — its deterministic reference report localises 20 of 27
+out-of-diff expectations inside a symbol it flagged — which is coverage, not
+detection. Its optional adjudication layer has **no** measurement at all; see
+step 9.
 
 Consequences for how you set it up:
 
@@ -149,7 +166,7 @@ Do not pick on model quality — pick on what they can legally send code to.
 | --- | --- | --- |
 | `openai` | `@purista/harness-openai` | `OPENAI_API_KEY` |
 | `openai-compatible` | `@purista/harness-openai` | `OPENAI_API_KEY` + a required `provider.baseUrl` |
-| `bedrock` | `@purista/harness-bedrock` | `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` |
+| `bedrock` | `@purista/harness-bedrock` | `AWS_REGION`, plus the standard AWS credential chain |
 | `azure` | `@purista/harness-azure-foundry` | `AZURE_AI_ENDPOINT`, `AZURE_AI_API_KEY` |
 
 Adapters are optional peer packages imported dynamically; only the one for the
@@ -157,11 +174,17 @@ configured provider is loaded, so install exactly one. Inside the checkout,
 `npm run provider:install:openai` / `:bedrock` / `:azure` are thin wrappers
 around `npm install`.
 
+Only `AWS_REGION` is checked for `bedrock`; the credentials themselves come from
+the AWS credential chain, so a role or OIDC works and static access keys are not
+required. Prefer OIDC in CI.
+
 `openai-compatible` must implement the OpenAI **Responses** API — a
 chat-completions gateway fails on the first call. A missing adapter is a
 **config** error (`provider_adapter_missing`, exit `2`), and its message names
 the `npm install` command; a missing credential is `provider_credentials_missing`
-(exit `2`) and names the variable, never the value.
+(exit `2`) and names the variable, never the value. A missing `provider.baseUrl`
+on `openai-compatible` is rejected at config load, and again at resolution as
+`provider_base_url_missing` (exit `2`).
 
 `provider.model` is free text and is never validated against a catalogue. A
 wrong name surfaces as a provider error on the first call, which is one reason
@@ -254,8 +277,18 @@ Point them at these `report.md` sections, in this order:
 - **Scope of this search** — the run id, the `- Model:` line, the refs, and how
   much source was actually read. Coverage means *the source reached a model*,
   never *every defect was found*.
+- **Changed source files with no test file in this change** — a deterministic,
+  free observation, not a finding. It has no severity, counts toward no
+  threshold, cannot affect the gate, and has no configuration key to turn on or
+  off. Explain the limit rather than letting them infer a stronger claim: it
+  compares only the files this change touched, so **a file it names may already
+  be covered completely by an existing test the change had no reason to touch —
+  it cannot see that test and does not say the file is untested.** The section is
+  absent entirely when nothing is unpaired; an empty section would read as a
+  clearance.
 - **Cost And Timing** — what the run actually cost. Cost is reported as
-  `unavailable` when token counts or model prices are missing, never as free.
+  `unavailable` when token counts or model prices are missing, never as free. A
+  warm cache can move the figure by more than 2x with no change to the review.
 
 Ask them one question: *would you have wanted these comments on your PR?* If the
 answer is no, tune before you gate — see
@@ -376,9 +409,32 @@ Add these only once `review` is trusted, one at a time.
 | Stage | Enable with | Cost |
 | --- | --- | --- |
 | `impact check` | `changeImpact.enabled` | Free — no provider call |
+| `impact check` adjudication | `changeImpact.adjudication.enabled` (separate switch) | 1 call per behavioural (dependent, changed symbol) pair, capped by `changeImpact.adjudication.maxCalls` (default `40`) |
 | `intent check` | `intentFulfilment.enabled` **and** a `contextSources` provider | 1 extraction call + 1 call per obligation + 1 explanation call |
 
-Both require the literal subcommand `check` and accept
+### Impact adjudication is off separately, and unmeasured
+
+`changeImpact.enabled` gives the deterministic reference report and nothing else.
+`changeImpact.adjudication.enabled` is the only part of the stage that can reach
+a provider, and it is a **second switch on purpose**: turning the command on must
+never silently start spending for someone who asked for a reference list. Leave it
+off, and say why if asked to enable it.
+
+Adjudication triages the reference list down to the dependents shown to rely on
+the part of the contract that changed. Structural outcomes — a removed, relocated
+or newly added declaration — are settled in code and cost nothing; only a
+behavioural change ("does this call site touch the part that moved?") costs a
+call, and a pair the model could not settle is counted as unadjudicated and
+reported nowhere.
+
+**It has no performance number. None exists, and none may be invented.** Its spec
+records the calibration in advance: published prior art for this task sits around
+28% precision, adjudication is *expected* to reduce recall relative to the raw
+reference list, and a first measurement near those figures would be a normal
+result rather than a broken one. Do not recommend it as an improvement — present
+it as an unmeasured experiment whose value is not established.
+
+Both stages require the literal subcommand `check` and accept
 `--config`, `--base-ref`, `--head-ref`, `--format json|markdown`. Stdout is one
 JSON document by default; `--format markdown` puts the rendered report there
 instead. Either way a **completed** run also writes
