@@ -428,9 +428,19 @@ export const EvalMetricsSchema = z.strictObject({
   // Cached input tokens are a SUBSET of inputTokens (already counted there).
   cachedInputTokens: z.int().min(0).default(0),
   outputTokens: z.int().min(0).default(0),
+  // Cases whose model cost is UNKNOWN: a provider-errored case (no report, so
+  // no usage was ever surfaced), or a completed case whose report carried
+  // `cost-unavailable`. `costUsd` below sums only the cases whose cost IS known,
+  // so a nonzero count here is what stops that partial total being read as an
+  // exact one -- see `formatCostMetric`, which renders "known; unavailable for N
+  // case(s)" rather than a bare figure whenever this is nonzero.
   costUnavailableCount: z.int().min(0).default(0),
   costUsd: z.number().min(0),
+  // Summed review time over the cases that HAVE a review duration, with the
+  // cases that do not counted beside it for the same reason as cost above. A
+  // provider-errored case never reported one.
   durationMs: z.int().min(0),
+  durationUnavailableCount: z.int().min(0).default(0),
   // Judge + plausibility-judge provider spend for the WHOLE run, wrapped by the
   // SAME `createProviderUsageRecorder` mechanism the review path uses (see
   // provider-usage-recorder.ts) and priced with the SAME `summarizeRunCost`
@@ -557,12 +567,18 @@ export type EvalMetricCaseResult = {
   readonly coverageIncomplete: boolean
   readonly contextLedgerEntryCount: number
   readonly mutatedContextLedgerEntryCount: number
-  readonly costUsd: number
+  // `null` means the value was NOT MEASURED, and is deliberately not `0`:
+  // a provider-errored case surfaced no usage and no timing, and a completed
+  // case can still report `cost-unavailable`. The aggregate sums only the
+  // measured cases and counts the unmeasured ones, so an incomplete total is
+  // never published as an exact one. There is no separate `costUnavailable`
+  // flag: it was a second encoding of `costUsd === null` and could disagree
+  // with it.
+  readonly costUsd: number | null
   readonly inputTokens: number
   readonly cachedInputTokens: number
   readonly outputTokens: number
-  readonly costUnavailable: boolean
-  readonly durationMs: number
+  readonly durationMs: number | null
   readonly warnings: readonly string[]
   readonly failingFindingIds: readonly string[]
 }
@@ -586,6 +602,12 @@ const harmonicMean = (left: number, right: number): number =>
 
 const sum = (values: readonly number[]): number =>
   values.reduce((total, value) => total + value, 0)
+
+// The measured values only. Summing a `number | null` series by coercing null to
+// 0 is exactly the defect this typing exists to prevent: it produces a total
+// that looks complete. Callers pair this with a count of the unmeasured cases.
+const measured = (values: readonly (number | null)[]): readonly number[] =>
+  values.filter((value): value is number => value !== null)
 
 export const severityWeight = (severity: Severity): number =>
   severityWeights[severity]
@@ -1120,10 +1142,15 @@ export const calculateEvalMetrics = (
     inputTokens: sum(caseResults.map((result) => result.inputTokens)),
     cachedInputTokens: sum(caseResults.map((result) => result.cachedInputTokens)),
     outputTokens: sum(caseResults.map((result) => result.outputTokens)),
-    costUnavailableCount: caseResults.filter((result) => result.costUnavailable)
+    costUnavailableCount: caseResults.filter((result) => result.costUsd === null)
       .length,
-    costUsd: roundMetric(sum(caseResults.map((result) => result.costUsd))),
-    durationMs: sum(caseResults.map((result) => result.durationMs)),
+    costUsd: roundMetric(
+      sum(measured(caseResults.map((result) => result.costUsd)))
+    ),
+    durationMs: sum(measured(caseResults.map((result) => result.durationMs))),
+    durationUnavailableCount: caseResults.filter(
+      (result) => result.durationMs === null
+    ).length,
     scoringInputTokens: runTotals.scoringInputTokens,
     scoringCachedInputTokens: runTotals.scoringCachedInputTokens,
     scoringOutputTokens: runTotals.scoringOutputTokens,

@@ -15,6 +15,11 @@ import {
   SecurityContextDepthSchema,
   SecurityMechanismSchema
 } from './eval-fixture.schema.js'
+import { emptySecurityFindingMechanismCounts } from './security-mechanism-attribution.js'
+
+const nullSecurityRecordByMechanism = Object.fromEntries(
+  SecurityMechanismSchema.options.map((mechanism) => [mechanism, null])
+) as Record<(typeof SecurityMechanismSchema.options)[number], number | null>
 
 const zeroSecurityRecordByMechanism = Object.fromEntries(
   SecurityMechanismSchema.options.map((mechanism) => [mechanism, 0])
@@ -35,7 +40,7 @@ describe('eval report rendering', () => {
   })
 
   test('renders semantic judge match reasons in the summary', () => {
-    const summary = renderEvalSummary({
+    const summaryInput = {
       cases: [
         {
           id: 'semantic-case',
@@ -212,6 +217,13 @@ describe('eval report rendering', () => {
           },
           securityRecallByMechanism: zeroSecurityRecordByMechanism,
           securityMechanismCounts: emptySecurityMechanismCounts(),
+          securityAdjustedPrecisionByMechanism: nullSecurityRecordByMechanism,
+          securityFindingMechanismCounts: emptySecurityFindingMechanismCounts(),
+          securityMechanismAttributionCounts: {
+            expectation: 0,
+            cwe: 0,
+            unknown: 0
+          },
           securityRecallByContextDepth: zeroSecurityRecordByContextDepth,
           securityContextDepthCounts: emptySecurityContextDepthCounts(),
           securityObviousRecall: 0,
@@ -224,6 +236,7 @@ describe('eval report rendering', () => {
           costUnavailableCount: 0,
           costUsd: 0,
           durationMs: 1,
+          durationUnavailableCount: 0,
           scoringInputTokens: 0,
           scoringCachedInputTokens: 0,
           scoringOutputTokens: 0,
@@ -241,7 +254,8 @@ describe('eval report rendering', () => {
           failingCaseIds: []
         }
       }
-    })
+    } satisfies Parameters<typeof renderEvalSummary>[0]
+    const summary = renderEvalSummary(summaryInput)
 
     // A population with no expectation reports `n/a`, never 0.0%: the engine's
     // real out-of-diff result IS 0.0% over a full denominator, so the two must
@@ -261,6 +275,45 @@ describe('eval report rendering', () => {
     expect(summary).toContain('| semantic-case | tool-result: 1, support-signal-output: 1 | 2 | 1 |')
     expect(summary).toContain(
       '| semantic-case | find_semantic1 | expected #0 high bug | Both findings describe the leaked descriptor. |'
+    )
+    // No security expectation anywhere, so the mechanism table is ABSENT rather
+    // than rendered as a wall of 0.0% rows over empty denominators.
+    expect(summary).not.toContain('## Security by Mechanism')
+
+    // An unattributed genuine security false positive bounds every mechanism at
+    // once, so no rate is published and the summary says why. This is the branch
+    // that keeps a vacuous 100% out of a report.
+    const boundedOut = renderEvalSummary({
+      ...summaryInput,
+      report: {
+        ...summaryInput.report,
+        metrics: {
+          ...summaryInput.report.metrics,
+          securityMechanismCounts: {
+            ...summaryInput.report.metrics.securityMechanismCounts,
+            authorization: { expected: 2, matched: 2 }
+          },
+          securityRecallByMechanism: {
+            ...summaryInput.report.metrics.securityRecallByMechanism,
+            authorization: 1
+          },
+          securityFindingMechanismCounts: {
+            ...summaryInput.report.metrics.securityFindingMechanismCounts,
+            authorization: { matched: 2, genuineFalsePositive: 0 },
+            unknown: { matched: 0, genuineFalsePositive: 3 }
+          },
+          securityMechanismAttributionCounts: {
+            expectation: 2,
+            cwe: 0,
+            unknown: 3
+          }
+        }
+      }
+    })
+
+    expect(boundedOut).toContain('| authorization | 100.0% | 2/2 | n/a | 2/2 |')
+    expect(boundedOut).toContain(
+      '3 genuine security false positive(s) in this run could not be attributed to one'
     )
   })
 })

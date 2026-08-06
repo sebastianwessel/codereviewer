@@ -66,6 +66,7 @@ const ComparisonMetricsSchema = z.object({
   fixProduceRate: optionalNumber,
   fixApplyFailureRate: optionalNumber,
   durationMs: optionalInteger,
+  durationUnavailableCount: optionalInteger,
   inputTokens: optionalInteger,
   cachedInputTokens: optionalInteger,
   outputTokens: optionalInteger,

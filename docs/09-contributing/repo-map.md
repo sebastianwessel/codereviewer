@@ -82,6 +82,7 @@ path input, route it through this module — see
 | `contracts/` | Zod contracts: `config/`, `findings/`, `report/`, `verification/`. The config schema and the review-report schema are the two generated artifacts. |
 | `errors/` | `error-normalizer.ts`: the `StructuredError` shape, category → exit-code mapping, provider error sub-classification, redaction of messages and details |
 | `redaction/` | The single redactor used before logs, errors, reports and model-bound context |
+| `diff/` | `git-diff-header.ts`: unified-diff header parsing (the `diff --git` path and the `@@` hunk ranges), shared so `repository-intake` and the evaluation corpus hydrator cannot disagree about what a diff changed |
 | `glob/`, `hash/`, `json/`, `schema/`, `text/` | Small focused helpers (glob matching, sha256, JSON value types, JSON-Schema conversion, UTF-8 byte slicing and truncation) |
 
 Reuse these helpers rather than re-deriving path handling, redaction, schema

@@ -8,6 +8,11 @@ import {
   EvalSliceCaseSchema,
   resolveExpectedFindingMatchMode
 } from './eval-fixture.schema.js'
+// The SAME canonical serializer the answer-key and config digests use. These
+// digests all answer one question -- may these two runs be compared? -- and a
+// second, independently-written serializer behind the same question drifts into
+// either a spuriously accepted comparison or an unexplained mismatch.
+import { stableJsonDigest } from './stable-json-digest.js'
 
 const sha256HexSchema = z.string().regex(/^[a-f0-9]{64}$/u)
 
@@ -40,14 +45,6 @@ export const EvalSliceManifestSchema = z.strictObject({
 export type EvalSliceManifestCase = z.infer<typeof EvalSliceManifestCaseSchema>
 export type EvalSliceManifest = z.infer<typeof EvalSliceManifestSchema>
 
-type StableJsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | readonly StableJsonValue[]
-  | { readonly [key: string]: StableJsonValue }
-
 type RepositoryFileIdentity = {
   readonly relativePath: string
   readonly sizeBytes: number
@@ -55,12 +52,11 @@ type RepositoryFileIdentity = {
 }
 
 type EvalSliceManifestDigestPayload = {
-  readonly [key: string]: StableJsonValue
   readonly schemaVersion: '1.0'
   readonly sliceRoot: string
   readonly caseCount: number
   readonly caseIds: readonly string[]
-  readonly cases: readonly StableJsonValue[]
+  readonly cases: readonly unknown[]
 }
 
 const hashBytes = (bytes: Buffer | string): string =>
@@ -68,26 +64,6 @@ const hashBytes = (bytes: Buffer | string): string =>
 
 const toPortableRelativePath = (rootPath: string, filePath: string): string =>
   path.relative(rootPath, filePath).split(path.sep).join(path.posix.sep)
-
-const isStableJsonObject = (
-  value: StableJsonValue
-): value is { readonly [key: string]: StableJsonValue } =>
-  value !== null && typeof value === 'object' && !Array.isArray(value)
-
-const stableStringify = (value: StableJsonValue): string => {
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`
-  }
-
-  if (isStableJsonObject(value)) {
-    return `{${Object.keys(value)
-      .sort((left, right) => left.localeCompare(right))
-      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key] ?? null)}`)
-      .join(',')}}`
-  }
-
-  return JSON.stringify(value)
-}
 
 const collectRepositoryFiles = async (
   repositoryRoot: string,
@@ -135,14 +111,12 @@ const collectRepositoryFiles = async (
 const repositoryTreeDigest = (
   files: readonly RepositoryFileIdentity[]
 ): string =>
-  hashBytes(
-    stableStringify(
-      files.map((file) => ({
-        path: file.relativePath,
-        sha256: file.sha256,
-        sizeBytes: file.sizeBytes
-      }))
-    )
+  stableJsonDigest(
+    files.map((file) => ({
+      path: file.relativePath,
+      sha256: file.sha256,
+      sizeBytes: file.sizeBytes
+    }))
   )
 
 const createDigestPayload = (
@@ -260,6 +234,6 @@ export const createEvalSliceManifest = async (
   return EvalSliceManifestSchema.parse({
     ...digestPayload,
     generatedAt: input.generatedAt ?? new Date().toISOString(),
-    digest: hashBytes(stableStringify(digestPayload))
+    digest: stableJsonDigest(digestPayload)
   })
 }

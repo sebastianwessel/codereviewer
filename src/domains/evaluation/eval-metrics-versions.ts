@@ -97,6 +97,11 @@ export const EVAL_METRICS_VERSION_HISTORY: readonly MetricsVersionEntry<EvalComp
         'genuineFalsePositiveCount'
       ],
       note: 'The plausibility judge stopped being shown a blind prefix of an oversized file and now fails closed when the window cannot hold the cited line. For identical review output this changes which findings are credited unlisted-real, hence the precision upper bound and the two counts behind it.'
+    },
+    {
+      id: '2026-08-06.unmeasured-case-cost-and-duration',
+      affects: ['costUnavailableCount', 'durationUnavailableCount'],
+      note: 'A provider-errored case stopped being scored as costing exactly $0.00 for 0ms. Its cost and duration were never measured -- the call failed before any usage or timing was surfaced -- so it is now counted as unavailable instead of contributing a confident zero. `costUnavailableCount` therefore counts a strictly larger population than before and is not comparable across this boundary; `durationUnavailableCount` did not exist earlier and reads as absent rather than 0. `costUsd` and `durationMs` are unaffected: the cases now excluded from those sums contributed 0 to them before.'
     }
   ]
 

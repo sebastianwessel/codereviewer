@@ -613,9 +613,10 @@ use `null`, because a rate over no checks is undefined rather than zero.
 | `securityHardRecall` | Recall over security expectations at every other context depth. |
 | `securityObviousCount` | Denominator of `securityObviousRecall`. |
 | `securityHardCount` | Denominator of `securityHardRecall`. |
-| `costUnavailableCount` | Cases whose cost/token metadata was incomplete, so their cost could not be priced. |
+| `costUnavailableCount` | Cases whose cost is unknown: cost/token metadata was incomplete, or the case errored before any usage was surfaced. `costUsd` sums only the cases whose cost IS known, so a non-zero count here is what marks that total as partial rather than exact. |
 | `costUsd` | Provider-reported or estimated cost, summed across each case's REVIEW report only. Does not include judge or plausibility-judge provider spend — see `scoringCostUsd`. |
-| `durationMs` | Summed per-case review duration (each case's own `run.durationMs`, added together). This is **not** a wall-clock measurement: it excludes judge/plausibility-judge calls, calibration, orchestration, and any idle time between cases, so it cannot be compared to how long the run actually took. See `elapsedMs` for that. |
+| `durationMs` | Summed per-case review duration, over the cases that reported one (each case's own `run.durationMs`, added together); see `durationUnavailableCount` for the cases that did not. This is **not** a wall-clock measurement: it excludes judge/plausibility-judge calls, calibration, orchestration, and any idle time between cases, so it cannot be compared to how long the run actually took. See `elapsedMs` for that. |
+| `durationUnavailableCount` | Cases with no review duration at all (they errored before one was measured). Mirrors `costUnavailableCount` for the duration sum, so a partial total is never rendered as an exact one. |
 | `scoringInputTokens` | Input tokens the semantic-match judge and the plausibility judge consumed across the WHOLE run — both matching and their own calibration passes — captured by wrapping the judge model alias in the same usage-recorder mechanism the review path uses. `0` when no judge ran (an offline run). |
 | `scoringCachedInputTokens` | Cached (prompt-cache read) subset of `scoringInputTokens`. |
 | `scoringOutputTokens` | Output tokens the judge/plausibility judge produced across the whole run. |
@@ -1040,7 +1041,7 @@ availability from the review report:
 | `providerErrored` | boolean | Whether the case ended with an unrecovered provider error. |
 | `inlineFindingCount` | integer >= 0 | Admitted findings the case marked inline-eligible. |
 | `warnings` | string[] | Case-level warnings, including `cost-unavailable`, `eval-inconclusive-match:<n>`, and `eval-plausibility-fail-closed:<n>`. |
-| `durationMs` | integer >= 0 | The case's own review duration. |
+| `durationMs` | integer >= 0, optional | The case's own review duration. **Absent when the case produced no review report at all** (a provider-errored case), because no duration was ever measured. Absence is never written as `0`. |
 | `artifactOnlyFindingIds` | string[] | Admitted findings with `reporterEligibility = "artifact-only"`; these are diagnostic and excluded from main recall/precision gates. |
 | `artifactOnlyMatchedFindings` | object[] | Match records for artifact-only findings that overlap expected findings. |
 | `artifactOnlyFalsePositiveFindingIds` | string[] | Artifact-only findings that neither match an expected finding nor duplicate a matched artifact-only finding. |
@@ -1056,8 +1057,8 @@ availability from the review report:
 | `inputTokens` | integer >= 0 | Total input tokens surfaced by the review report for this case, or `0` when unavailable. |
 | `cachedInputTokens` | integer >= 0 | Cached (prompt-cache read) input tokens surfaced by the review report for this case (a subset of `inputTokens`), or `0` when unavailable. |
 | `outputTokens` | integer >= 0 | Total output tokens surfaced by the review report for this case, or `0` when unavailable. |
-| `costUsd` | number >= 0 | Known cost for this case, or `0` when unavailable. |
-| `costUnavailable` | boolean | `true` when cost/token metadata was incomplete and the case warnings include `cost-unavailable`. |
+| `costUsd` | number >= 0, optional | Known cost for this case. **Absent when the cost is unavailable**, which is either a report carrying the `cost-unavailable` warning or a provider-errored case that produced no report at all. Absence is never written as `0`: a case whose cost was never measured must not contribute a confident zero to the run total. |
+| `costUnavailable` | boolean | `true` exactly when `costUsd` is absent — a report carrying the `cost-unavailable` warning, or a provider-errored case with no report. Derived from the same value that decides whether `costUsd` is present, so the flag and the figure cannot disagree. |
 
 `metrics` and every `metricGroups[].metrics` entry must aggregate
 `duplicateFindingCount`, artifact-only diagnostic metrics,
@@ -1068,7 +1069,8 @@ availability from the review report:
 without being treated as unrecovered case errors. Markdown summaries must render
 token totals and must not present missing cost as a free run. When any case has
 unavailable cost, the cost row must show known cost plus the number of cases
-with unavailable cost.
+with unavailable cost, and the summed-duration row must do the same for cases
+with no measured duration.
 
 `scoringInputTokens`, `scoringCachedInputTokens`, `scoringOutputTokens`,
 `scoringCostUsd`, `scoringCostUnavailable`, and `elapsedMs` are **run-level

@@ -8,6 +8,7 @@ import {
   severityWeight,
   type EvalMetricCaseResult
 } from './metrics.js'
+import { emptySecurityFindingMechanismCounts } from './security-mechanism-attribution.js'
 
 const caseResult = (
   overrides: Partial<EvalMetricCaseResult> = {}
@@ -56,6 +57,7 @@ const caseResult = (
     nit: { expected: 0, matched: 0 }
   },
   securityMechanismCounts: emptySecurityMechanismCounts(),
+  securityFindingMechanismCounts: emptySecurityFindingMechanismCounts(),
   securityContextDepthCounts: emptySecurityContextDepthCounts(),
   diffScopeCounts: emptyDiffScopeCounts(),
   noFindingZoneFalsePositiveCount: 1,
@@ -68,7 +70,6 @@ const caseResult = (
   inputTokens: 100,
   cachedInputTokens: 40,
   outputTokens: 50,
-  costUnavailable: false,
   durationMs: 1200,
   warnings: ['coverage-incomplete'],
   failingFindingIds: ['find_noise1'],
@@ -112,8 +113,24 @@ describe('eval metrics', () => {
       outputTokens: 50,
       costUnavailableCount: 0,
       costUsd: 0.25,
-      durationMs: 1200
+      durationMs: 1200,
+      durationUnavailableCount: 0
     })
+  })
+
+  // The run's headline cost is a decision input in capability-withdrawal rules.
+  // A case whose cost was never measured must not be able to lower it while the
+  // report still presents the total as exact.
+  test('excludes an unmeasured case from the cost and duration totals and counts it', () => {
+    const metrics = calculateEvalMetrics([
+      caseResult({ costUsd: 0.25, durationMs: 1200 }),
+      caseResult({ costUsd: null, durationMs: null })
+    ])
+
+    expect(metrics.costUsd).toBe(0.25)
+    expect(metrics.costUnavailableCount).toBe(1)
+    expect(metrics.durationMs).toBe(1200)
+    expect(metrics.durationUnavailableCount).toBe(1)
   })
 
   test('reports per-tier recall and the headline product recall', () => {
@@ -268,7 +285,6 @@ describe('eval metrics', () => {
         inputTokens: 0,
         cachedInputTokens: 0,
         outputTokens: 0,
-        costUnavailable: false,
         durationMs: 0,
         warnings: [],
         failingFindingIds: []
@@ -388,6 +404,65 @@ describe('eval metrics', () => {
       expected: 3,
       matched: 2
     })
+  })
+
+  test('publishes per-mechanism adjusted precision once every security false positive is attributed', () => {
+    const findingCounts = emptySecurityFindingMechanismCounts()
+    findingCounts.authorization = { matched: 3, genuineFalsePositive: 1 }
+    findingCounts.injection = { matched: 0, genuineFalsePositive: 2 }
+
+    const metrics = calculateEvalMetrics([
+      caseResult({ securityFindingMechanismCounts: findingCounts })
+    ])
+
+    expect(metrics.securityAdjustedPrecisionByMechanism.authorization).toBe(0.75)
+    expect(metrics.securityAdjustedPrecisionByMechanism.injection).toBe(0)
+    // No admitted finding, so nothing was measured: null, never a vacuous 100%.
+    expect(metrics.securityAdjustedPrecisionByMechanism.ssrf).toBeNull()
+    expect(metrics.securityFindingMechanismCounts.authorization).toEqual({
+      matched: 3,
+      genuineFalsePositive: 1
+    })
+    expect(metrics.securityMechanismAttributionCounts).toEqual({
+      expectation: 3,
+      cwe: 3,
+      unknown: 0
+    })
+  })
+
+  test('withholds every per-mechanism precision while a genuine security false positive is unattributed', () => {
+    // One false positive nobody could label could belong to any mechanism, so it
+    // bounds all of them. Publishing authorization at 100% here would report a
+    // precision no evidence supports.
+    const findingCounts = emptySecurityFindingMechanismCounts()
+    findingCounts.authorization = { matched: 4, genuineFalsePositive: 0 }
+    findingCounts.unknown = { matched: 0, genuineFalsePositive: 1 }
+
+    const metrics = calculateEvalMetrics([
+      caseResult({ securityFindingMechanismCounts: findingCounts })
+    ])
+
+    expect(metrics.securityAdjustedPrecisionByMechanism.authorization).toBeNull()
+    expect(metrics.securityFindingMechanismCounts.authorization.matched).toBe(4)
+    expect(metrics.securityMechanismAttributionCounts.unknown).toBe(1)
+  })
+
+  test('aggregates per-mechanism precision counts across cases', () => {
+    const first = emptySecurityFindingMechanismCounts()
+    first.xss = { matched: 1, genuineFalsePositive: 1 }
+    const second = emptySecurityFindingMechanismCounts()
+    second.xss = { matched: 1, genuineFalsePositive: 0 }
+
+    const metrics = calculateEvalMetrics([
+      caseResult({ securityFindingMechanismCounts: first }),
+      caseResult({ securityFindingMechanismCounts: second })
+    ])
+
+    expect(metrics.securityFindingMechanismCounts.xss).toEqual({
+      matched: 2,
+      genuineFalsePositive: 1
+    })
+    expect(metrics.securityAdjustedPrecisionByMechanism.xss).toBe(0.666667)
   })
 
   test('exports one centralized severity weighting helper', () => {

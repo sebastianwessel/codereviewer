@@ -336,7 +336,8 @@ These decide whether the quality numbers should be read at all.
 | `inconclusiveMatchCount` | Expected/finding pairs the judge could not decide | — | These leave **both** the recall and precision denominators. A large value means the run scored fewer pairs than the corpus declares. |
 | `incompleteCoverageRate` | Cases whose report coverage is `incomplete` | Total cases | Release target `0`. |
 | `contextMutationRate` | Context-ledger entries truncated by budget | Ledger entries considered for model context | Release target `0`. Above `0` means the model saw less than intended. |
-| `costUnavailableCount` | Cases with no provider pricing data | — | Non-zero means `costUsd` is a partial total. |
+| `costUnavailableCount` | Cases whose cost is unknown — no provider pricing data, or the case errored before any usage was surfaced | — | Non-zero means `costUsd` is a partial total, and the report renders it as "known; unavailable for N case(s)" rather than a bare figure. |
+| `durationUnavailableCount` | Cases with no measured review duration (they errored before one was recorded) | — | Non-zero means `durationMs` is a partial total, rendered the same way. |
 
 Fail-closed events also surface as per-case warnings:
 `eval-inconclusive-match:<n>` and `eval-plausibility-fail-closed:<n>`.
@@ -352,8 +353,8 @@ Fail-closed events also surface as per-case warnings:
 | `commentsPerDiffHunk` | Actionable admitted findings | Parsed diff hunks |
 | `inputTokens` / `outputTokens` | Summed provider usage | — |
 | `cachedInputTokens` | Cached input tokens — a **subset** of `inputTokens`, already counted there | — |
-| `costUsd` | Provider-reported or estimated cost, summed | — |
-| `durationMs` | Summed wall-clock case duration | — |
+| `costUsd` | Provider-reported or estimated cost, summed over the cases whose cost is known | — |
+| `durationMs` | Summed wall-clock case duration, over the cases that reported one | — |
 
 `commentsPerKloc` and `commentsPerDiffHunk` are the noise-volume metrics: a
 change that raises them must justify the extra noise with recall, severity or

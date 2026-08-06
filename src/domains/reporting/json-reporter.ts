@@ -26,7 +26,11 @@ export type WrittenReportArtifact = {
   readonly content: string
 }
 
-const stableStringify = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
+// Pretty-prints for a human-readable artifact. Deliberately NOT canonical: it
+// preserves insertion order and does not sort keys, so its output must never be
+// used as a digest input. The canonical, key-sorting serializer digests are
+// taken over is `stableJsonDigest` in the evaluation domain.
+const prettyJson = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
 
 const redactJsonValue = (value: unknown): JsonValue | undefined => {
   if (value === undefined) {
@@ -60,7 +64,7 @@ const redactJsonValue = (value: unknown): JsonValue | undefined => {
 }
 
 export const renderJsonReport = (report: unknown): string =>
-  stableStringify(redactJsonValue(validateReviewReport(report)) ?? null)
+  prettyJson(redactJsonValue(validateReviewReport(report)) ?? null)
 
 export const writeReportingArtifacts = async (
   input: {
@@ -113,7 +117,7 @@ export const writeReportingArtifacts = async (
       suggestionCount: drafts.filter((draft) => draft.suggestion !== undefined)
         .length
     })
-    const neutral = stableStringify(drafts)
+    const neutral = prettyJson(drafts)
     // Neutral drafts are the source of truth; the JSON artifact `format` field is
     // the closed `ReportFormat` enum, so review-comment files record as `json`.
     nonJsonArtifacts.push({
@@ -122,7 +126,7 @@ export const writeReportingArtifacts = async (
     })
 
     const { platform } = input.reviewComments
-    const rendered = stableStringify(renderReviewComments(drafts, platform))
+    const rendered = prettyJson(renderReviewComments(drafts, platform))
     nonJsonArtifacts.push({
       artifact: createReportArtifact(
         'json',

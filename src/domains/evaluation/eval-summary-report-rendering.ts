@@ -12,6 +12,7 @@ import {
   escapeMarkdownCell,
   formatCostMetric,
   formatDuration,
+  formatDurationMetric,
   formatInteger,
   formatListValue,
   formatPercent,
@@ -284,7 +285,7 @@ const appendEvalSummaryMetrics = (
       // plus judge/plausibility scoring); Duration only SUMS each case's own
       // review time and cannot be compared to how long the run actually took.
       `| Elapsed (wall clock) | ${formatDuration(report.metrics.elapsedMs)} |`,
-      `| Duration (summed review time) | ${formatDuration(report.metrics.durationMs)} |`,
+      `| Duration (summed review time) | ${formatDurationMetric(report.metrics)} |`,
       `| Input tokens | ${formatInteger(report.metrics.inputTokens)} |`,
       `| Input tokens (cached) | ${formatCachedInputTokens(report.metrics)} |`,
       `| Output tokens | ${formatInteger(report.metrics.outputTokens)} |`,

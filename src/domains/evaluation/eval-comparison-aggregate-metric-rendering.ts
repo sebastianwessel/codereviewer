@@ -1,7 +1,7 @@
 import {
   appendMarkdownTable,
   formatCostMetric,
-  formatDuration,
+  formatDurationMetric,
   formatInteger,
   formatPercent,
   formatPrecisionBracket,
@@ -135,16 +135,6 @@ const integerRow: ScalarMetricRowRenderer = (input, comparability) =>
     comparability
   )
 
-const durationRow: ScalarMetricRowRenderer = (input, comparability) =>
-  formatScalarMetricRow(
-    {
-      ...input,
-      formatValue: formatDuration,
-      formatDelta: (base, head) => `${formatNumberDelta(base, head)}ms`
-    },
-    comparability
-  )
-
 // Diff-scope recall (spec 17) is nullable per side: a run whose fixture set
 // carries no expectation in a population measured nothing there. `null` (nothing
 // to measure) and `undefined` (never recorded) are different statements and are
@@ -223,6 +213,36 @@ const costRow = (
         : baseCost === undefined || headCost === undefined
           ? UNKNOWN_VALUE
           : formatNumberDelta(baseCost, headCost)
+  })
+}
+
+// Summed review time, rendered on the same terms as cost: a run with an
+// unmeasured case publishes a floor, not a total, and both sides must say so
+// before their difference means anything.
+const durationRow = (input: EvalComparisonInput): string => {
+  const format = (
+    metrics: EvalComparisonMetrics | undefined
+  ): string =>
+    metrics?.durationMs === undefined ||
+    metrics.durationUnavailableCount === undefined
+      ? UNKNOWN_VALUE
+      : formatDurationMetric({
+          durationMs: metrics.durationMs,
+          durationUnavailableCount: metrics.durationUnavailableCount
+        })
+  const baseDuration = input.base.metrics?.durationMs
+  const headDuration = input.head.metrics?.durationMs
+
+  return formatRow({
+    metric: 'Duration',
+    base: format(input.base.metrics),
+    head: format(input.head.metrics),
+    delta:
+      input.comparability.refusalReason('durationMs') !== undefined
+        ? NOT_COMPARABLE
+        : baseDuration === undefined || headDuration === undefined
+          ? UNKNOWN_VALUE
+          : `${formatNumberDelta(baseDuration, headDuration)}ms`
   })
 }
 
@@ -347,7 +367,12 @@ export const appendEvalComparisonMetricDeltas = (
       ),
       scalar('Fix produce rate', 'fixProduceRate', percentRow),
       scalar('Fix apply failure rate', 'fixApplyFailureRate', percentRow),
-      scalar('Duration', 'durationMs', durationRow),
+      durationRow(input),
+      scalar(
+        'Duration unavailable cases',
+        'durationUnavailableCount',
+        countRow
+      ),
       scalar('Input tokens', 'inputTokens', integerRow),
       scalar('Input tokens (cached)', 'cachedInputTokens', integerRow),
       scalar('Output tokens', 'outputTokens', integerRow),

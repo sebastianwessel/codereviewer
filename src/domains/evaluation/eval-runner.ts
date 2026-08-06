@@ -97,9 +97,9 @@ export {
 export {
   casesWithDivergedAnswerKeys,
   computeAnswerKeyDigest,
-  computeAnswerKeyDigestByCase,
-  stableJsonDigest
+  computeAnswerKeyDigestByCase
 } from './eval-report-provenance.js'
+export { stableJsonDigest } from './stable-json-digest.js'
 export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
@@ -601,6 +601,67 @@ export const fixLaneCaseTallies = (
   }
 }
 
+type EvalCaseSpend = {
+  // `null` means NOT MEASURED. See `EvalCaseReportSchema` and
+  // `EvalMetricCaseResult` for why absence is never flattened to 0 here.
+  readonly costUsd: number | null
+  readonly durationMs: number | null
+}
+
+/**
+ * The model cost and review duration of one case, with unknown represented as
+ * `null` rather than 0.
+ *
+ * A provider-errored case has NO review report: the call failed before any usage
+ * or timing was surfaced, so both quantities are genuinely unknown. Publishing
+ * them as 0 made the run's headline cost silently understate itself while
+ * `costUnavailableCount` stayed at zero — an incomplete total presented as an
+ * exact one. Cost is a decision input in capability-withdrawal rules, and the
+ * arm that errors more is usually the more expensive one, so the understatement
+ * lands on whichever side the rule is about to judge.
+ *
+ * Cost is also unknown for a COMPLETED case whose report carries
+ * `COST_UNAVAILABLE_WARNING` (no surfaced token usage, or no provider cost and no
+ * configured prices). `costs/token-cost.ts` already models that as
+ * `costUsd: number | null`; this is the single place the eval lane reads it, so
+ * it cannot be re-flattened.
+ *
+ * A completed report always carries a duration, so `durationMs` is `null`
+ * exactly when there is no report at all.
+ */
+const caseSpend = (
+  reviewReport: ReviewReport | undefined
+): EvalCaseSpend => {
+  if (reviewReport === undefined) {
+    return { costUsd: null, durationMs: null }
+  }
+
+  return {
+    costUsd: reviewReport.run.warnings.includes(COST_UNAVAILABLE_WARNING)
+      ? null
+      : // Absent WITHOUT the warning means a deterministic run with no provider
+        // configured, which genuinely cost nothing (see `summarizeRunCost`).
+        (reviewReport.run.costUsd ?? 0),
+    durationMs: reviewReport.run.durationMs
+  }
+}
+
+// The saved report's rendering of the same value. An unmeasured quantity is
+// OMITTED rather than written as 0, and `costUnavailable` is derived from the
+// very value that decides whether `costUsd` is present, so the flag the
+// aggregate counts cannot disagree with the figure it qualifies.
+const spendReportFields = (
+  spend: EvalCaseSpend
+): {
+  readonly costUnavailable: boolean
+  readonly costUsd?: number
+  readonly durationMs?: number
+} => ({
+  costUnavailable: spend.costUsd === null,
+  ...(spend.costUsd === null ? {} : { costUsd: spend.costUsd }),
+  ...(spend.durationMs === null ? {} : { durationMs: spend.durationMs })
+})
+
 const buildMetricCase = (
   input: {
     readonly evalCase: EvalCase
@@ -783,12 +844,10 @@ const buildMetricCase = (
     mutatedContextLedgerEntryCount: contextLedgerEntries.filter(
       (entry) => entry.truncated
     ).length,
-    costUsd: input.reviewReport?.run.costUsd ?? 0,
+    ...caseSpend(input.reviewReport),
     inputTokens: input.reviewReport?.run.inputTokens ?? 0,
     cachedInputTokens: input.reviewReport?.run.cachedInputTokens ?? 0,
     outputTokens: input.reviewReport?.run.outputTokens ?? 0,
-    costUnavailable: warnings.includes(COST_UNAVAILABLE_WARNING),
-    durationMs: input.reviewReport?.run.durationMs ?? 0,
     warnings,
     failingFindingIds: input.matchResult.falsePositiveFindingIds
   }
@@ -890,12 +949,10 @@ const buildReportCase = (
     ),
     ...plausibilityFailClosedWarnings(input.plausibility.failClosedFindingIds.length)
   ],
-  durationMs: input.reviewReport.run.durationMs,
   inputTokens: input.reviewReport.run.inputTokens ?? 0,
   cachedInputTokens: input.reviewReport.run.cachedInputTokens ?? 0,
   outputTokens: input.reviewReport.run.outputTokens ?? 0,
-  costUnavailable: input.reviewReport.run.warnings.includes(COST_UNAVAILABLE_WARNING),
-  costUsd: input.reviewReport.run.costUsd ?? 0
+  ...spendReportFields(caseSpend(input.reviewReport))
 })
 
 // One case-computation path. The semantic judge is optional only because a case
@@ -970,12 +1027,13 @@ const computeCaseResult = async (
         refutationResults: [],
         inlineFindingCount: 0,
         warnings: [],
-        durationMs: 0,
         inputTokens: 0,
         cachedInputTokens: 0,
         outputTokens: 0,
-        costUnavailable: false,
-        costUsd: 0
+        // No review report exists, so cost and duration were never measured.
+        // They are omitted, not zeroed, and the case is counted as
+        // cost-unavailable in the run's totals.
+        ...spendReportFields(caseSpend(undefined))
       },
       metricCase: buildMetricCase({
         evalCase,

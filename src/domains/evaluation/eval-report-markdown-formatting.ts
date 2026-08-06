@@ -8,6 +8,11 @@ export type EvalCostMetricInput = {
   readonly costUsd: number
 }
 
+export type EvalDurationMetricInput = {
+  readonly durationUnavailableCount: number
+  readonly durationMs: number
+}
+
 export const formatPercent = (value: number): string =>
   `${(value * 100).toFixed(1)}%`
 
@@ -32,10 +37,22 @@ const formatCurrency = (value: number): string =>
 export const formatInteger = (value: number): string =>
   value.toLocaleString('en-US')
 
+// A total summed over only the cases that reported one is not an exact total,
+// and must not be printed as though it were. The suffix is what a reader needs
+// to know the figure is a floor rather than the run's actual spend.
 export const formatCostMetric = (metrics: EvalCostMetricInput): string =>
   metrics.costUnavailableCount === 0
     ? formatCurrency(metrics.costUsd)
     : `${formatCurrency(metrics.costUsd)} known; unavailable for ${metrics.costUnavailableCount} case(s)`
+
+// Summed review time, disclosed on the same terms as cost above: a case that
+// never produced a review report contributed no duration, and the total says so.
+export const formatDurationMetric = (
+  metrics: EvalDurationMetricInput
+): string =>
+  metrics.durationUnavailableCount === 0
+    ? formatDuration(metrics.durationMs)
+    : `${formatDuration(metrics.durationMs)} known; unavailable for ${metrics.durationUnavailableCount} case(s)`
 
 // The precision bracket is rendered as one cell so the two bounds cannot be
 // separated in transit. See `eval-precision-bracket.ts` for why the upper bound

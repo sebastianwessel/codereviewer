@@ -1,51 +1,8 @@
-import { createHash } from 'node:crypto'
 import {
   resolveExpectedFindingMatchMode,
   type EvalCase
 } from './eval-fixture.schema.js'
-
-// Generic canonical-JSON digest: recursively sorts object keys (arrays keep
-// their original order, since array order is sometimes semantically
-// meaningful -- see `computeAnswerKeyDigest` below) before hashing, so two
-// logically-identical values that merely differ in key order, or in which
-// case happened to load first, produce the SAME digest. Without this, a
-// report re-run after something as unrelated as a directory read order change
-// could report a spurious mismatch and refuse a legitimate comparison.
-//
-// Takes `unknown` rather than a closed JSON-value type so it can digest
-// arbitrary already-validated domain values (an effective configuration
-// object, in the CLI's case) without forcing every optional field across
-// every caller to satisfy a strict recursive union. `undefined` and functions
-// are treated as absent, matching `JSON.stringify`'s own behaviour for object
-// properties, so the digest of a value is stable under the same rules
-// `JSON.stringify` already uses.
-const isPlainObject = (
-  value: unknown
-): value is Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value)
-
-const stableStringify = (value: unknown): string => {
-  if (value === undefined || typeof value === 'function') {
-    return 'null'
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(',')}]`
-  }
-
-  if (isPlainObject(value)) {
-    return `{${Object.keys(value)
-      .filter((key) => value[key] !== undefined && typeof value[key] !== 'function')
-      .sort((left, right) => left.localeCompare(right))
-      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
-      .join(',')}}`
-  }
-
-  return JSON.stringify(value) ?? 'null'
-}
-
-export const stableJsonDigest = (value: unknown): string =>
-  createHash('sha256').update(stableStringify(value)).digest('hex')
+import { stableJsonDigest } from './stable-json-digest.js'
 
 // The answer-key digest covers exactly the expected-finding CONTENT of every
 // selected case -- category, severity, path, effective match mode, declared

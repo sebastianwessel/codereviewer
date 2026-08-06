@@ -194,6 +194,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "duplicateFindingCount": 0,
         "durationMs": 2000,
+        "durationUnavailableCount": 0,
         "elapsedMs": 42,
         "f1": 0.666667,
         "falsePositiveCount": 1,
@@ -247,6 +248,18 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "scoringCostUsd": 0,
         "scoringInputTokens": 0,
         "scoringOutputTokens": 0,
+        "securityAdjustedPrecisionByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -277,8 +290,59 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
             "matched": 0,
           },
         },
+        "securityFindingMechanismCounts": {
+          "authorization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unknown": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+        },
         "securityHardCount": 0,
         "securityHardRecall": 0,
+        "securityMechanismAttributionCounts": {
+          "cwe": 0,
+          "expectation": 0,
+          "unknown": 0,
+        },
         "securityMechanismCounts": {
           "authorization": {
             "expected": 0,
@@ -301,10 +365,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
             "matched": 0,
           },
           "path-traversal": {
-            "expected": 0,
-            "matched": 0,
-          },
-          "prompt-injection": {
             "expected": 0,
             "matched": 0,
           },
@@ -343,7 +403,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "deserialization": 0,
           "injection": 0,
           "path-traversal": 0,
-          "prompt-injection": 0,
           "secret-flow": 0,
           "ssrf": 0,
           "unsafe-config": 0,
@@ -395,6 +454,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "duplicateFindingCount": 0,
         "durationMs": 2000,
+        "durationUnavailableCount": 0,
         "elapsedMs": 42,
         "f1": 0.666667,
         "falsePositiveCount": 1,
@@ -448,6 +508,18 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "scoringCostUsd": 0,
         "scoringInputTokens": 0,
         "scoringOutputTokens": 0,
+        "securityAdjustedPrecisionByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -478,8 +550,59 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
             "matched": 0,
           },
         },
+        "securityFindingMechanismCounts": {
+          "authorization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unknown": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+        },
         "securityHardCount": 0,
         "securityHardRecall": 0,
+        "securityMechanismAttributionCounts": {
+          "cwe": 0,
+          "expectation": 0,
+          "unknown": 0,
+        },
         "securityMechanismCounts": {
           "authorization": {
             "expected": 0,
@@ -502,10 +625,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
             "matched": 0,
           },
           "path-traversal": {
-            "expected": 0,
-            "matched": 0,
-          },
-          "prompt-injection": {
             "expected": 0,
             "matched": 0,
           },
@@ -544,7 +663,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "deserialization": 0,
           "injection": 0,
           "path-traversal": 0,
-          "prompt-injection": 0,
           "secret-flow": 0,
           "ssrf": 0,
           "unsafe-config": 0,
@@ -595,6 +713,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "duplicateFindingCount": 0,
         "durationMs": 1000,
+        "durationUnavailableCount": 0,
         "elapsedMs": 42,
         "f1": 0,
         "falsePositiveCount": 1,
@@ -648,6 +767,18 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "scoringCostUsd": 0,
         "scoringInputTokens": 0,
         "scoringOutputTokens": 0,
+        "securityAdjustedPrecisionByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -678,8 +809,59 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
             "matched": 0,
           },
         },
+        "securityFindingMechanismCounts": {
+          "authorization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unknown": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+        },
         "securityHardCount": 0,
         "securityHardRecall": 0,
+        "securityMechanismAttributionCounts": {
+          "cwe": 0,
+          "expectation": 0,
+          "unknown": 0,
+        },
         "securityMechanismCounts": {
           "authorization": {
             "expected": 0,
@@ -702,10 +884,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
             "matched": 0,
           },
           "path-traversal": {
-            "expected": 0,
-            "matched": 0,
-          },
-          "prompt-injection": {
             "expected": 0,
             "matched": 0,
           },
@@ -744,7 +922,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "deserialization": 0,
           "injection": 0,
           "path-traversal": 0,
-          "prompt-injection": 0,
           "secret-flow": 0,
           "ssrf": 0,
           "unsafe-config": 0,
@@ -795,6 +972,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "duplicateFindingCount": 0,
         "durationMs": 1000,
+        "durationUnavailableCount": 0,
         "elapsedMs": 42,
         "f1": 1,
         "falsePositiveCount": 0,
@@ -848,6 +1026,18 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "scoringCostUsd": 0,
         "scoringInputTokens": 0,
         "scoringOutputTokens": 0,
+        "securityAdjustedPrecisionByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -878,8 +1068,59 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
             "matched": 0,
           },
         },
+        "securityFindingMechanismCounts": {
+          "authorization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unknown": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+        },
         "securityHardCount": 0,
         "securityHardRecall": 0,
+        "securityMechanismAttributionCounts": {
+          "cwe": 0,
+          "expectation": 0,
+          "unknown": 0,
+        },
         "securityMechanismCounts": {
           "authorization": {
             "expected": 0,
@@ -902,10 +1143,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
             "matched": 0,
           },
           "path-traversal": {
-            "expected": 0,
-            "matched": 0,
-          },
-          "prompt-injection": {
             "expected": 0,
             "matched": 0,
           },
@@ -944,7 +1181,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "deserialization": 0,
           "injection": 0,
           "path-traversal": 0,
-          "prompt-injection": 0,
           "secret-flow": 0,
           "ssrf": 0,
           "unsafe-config": 0,
@@ -996,6 +1232,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         },
         "duplicateFindingCount": 0,
         "durationMs": 2000,
+        "durationUnavailableCount": 0,
         "elapsedMs": 42,
         "f1": 0.666667,
         "falsePositiveCount": 1,
@@ -1049,6 +1286,18 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "scoringCostUsd": 0,
         "scoringInputTokens": 0,
         "scoringOutputTokens": 0,
+        "securityAdjustedPrecisionByMechanism": {
+          "authorization": null,
+          "concurrency-resource": null,
+          "cryptography": null,
+          "deserialization": null,
+          "injection": null,
+          "path-traversal": null,
+          "secret-flow": null,
+          "ssrf": null,
+          "unsafe-config": null,
+          "xss": null,
+        },
         "securityContextDepthCounts": {
           "analyzer-path-dependent": {
             "expected": 0,
@@ -1079,8 +1328,59 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
             "matched": 0,
           },
         },
+        "securityFindingMechanismCounts": {
+          "authorization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "concurrency-resource": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "cryptography": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "deserialization": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "injection": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "path-traversal": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "secret-flow": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "ssrf": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unknown": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "unsafe-config": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+          "xss": {
+            "genuineFalsePositive": 0,
+            "matched": 0,
+          },
+        },
         "securityHardCount": 0,
         "securityHardRecall": 0,
+        "securityMechanismAttributionCounts": {
+          "cwe": 0,
+          "expectation": 0,
+          "unknown": 0,
+        },
         "securityMechanismCounts": {
           "authorization": {
             "expected": 0,
@@ -1103,10 +1403,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
             "matched": 0,
           },
           "path-traversal": {
-            "expected": 0,
-            "matched": 0,
-          },
-          "prompt-injection": {
             "expected": 0,
             "matched": 0,
           },
@@ -1145,7 +1441,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
           "deserialization": 0,
           "injection": 0,
           "path-traversal": 0,
-          "prompt-injection": 0,
           "secret-flow": 0,
           "ssrf": 0,
           "unsafe-config": 0,
@@ -1190,6 +1485,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     },
     "duplicateFindingCount": 0,
     "durationMs": 2000,
+    "durationUnavailableCount": 0,
     "elapsedMs": 42,
     "f1": 0.666667,
     "falsePositiveCount": 1,
@@ -1243,6 +1539,18 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "scoringCostUsd": 0,
     "scoringInputTokens": 0,
     "scoringOutputTokens": 0,
+    "securityAdjustedPrecisionByMechanism": {
+      "authorization": null,
+      "concurrency-resource": null,
+      "cryptography": null,
+      "deserialization": null,
+      "injection": null,
+      "path-traversal": null,
+      "secret-flow": null,
+      "ssrf": null,
+      "unsafe-config": null,
+      "xss": null,
+    },
     "securityContextDepthCounts": {
       "analyzer-path-dependent": {
         "expected": 0,
@@ -1273,8 +1581,59 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "matched": 0,
       },
     },
+    "securityFindingMechanismCounts": {
+      "authorization": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "concurrency-resource": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "cryptography": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "deserialization": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "injection": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "path-traversal": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "secret-flow": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "ssrf": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "unknown": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "unsafe-config": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+      "xss": {
+        "genuineFalsePositive": 0,
+        "matched": 0,
+      },
+    },
     "securityHardCount": 0,
     "securityHardRecall": 0,
+    "securityMechanismAttributionCounts": {
+      "cwe": 0,
+      "expectation": 0,
+      "unknown": 0,
+    },
     "securityMechanismCounts": {
       "authorization": {
         "expected": 0,
@@ -1297,10 +1656,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
         "matched": 0,
       },
       "path-traversal": {
-        "expected": 0,
-        "matched": 0,
-      },
-      "prompt-injection": {
         "expected": 0,
         "matched": 0,
       },
@@ -1339,7 +1694,6 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "deserialization": 0,
       "injection": 0,
       "path-traversal": 0,
-      "prompt-injection": 0,
       "secret-flow": 0,
       "ssrf": 0,
       "unsafe-config": 0,
@@ -1352,7 +1706,7 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
     "severityWeightedRecall": 1,
     "unlistedRealFindingCount": 0,
   },
-  "metricsVersion": "2026-08-03.plausibility-source-window",
+  "metricsVersion": "2026-08-06.unmeasured-case-cost-and-duration",
   "provenance": {
     "answerKeyDigest": "8a0f6c4247b62cb5ae0d182f93ca56547fb831d783599d2c4d19626a6452d8e2",
     "answerKeyDigestByCase": {

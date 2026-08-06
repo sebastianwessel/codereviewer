@@ -264,9 +264,9 @@ export {
 export {
   computeAnswerKeyDigest,
   computeChangeImpactAnswerKeyDigest,
-  computeChangeImpactAnswerKeyDigestByCase,
-  stableJsonDigest
+  computeChangeImpactAnswerKeyDigestByCase
 } from './eval-report-provenance.js'
+export { stableJsonDigest } from './stable-json-digest.js'
 export {
   loadEvalCasesFromFixtures
 } from './eval-fixture-loader.js'

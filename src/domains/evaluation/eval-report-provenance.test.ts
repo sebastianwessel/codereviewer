@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import {
-  computeAnswerKeyDigest,
-  stableJsonDigest
-} from './eval-report-provenance.js'
+import { computeAnswerKeyDigest } from './eval-report-provenance.js'
 import type { EvalCase } from './eval-fixture.schema.js'
 
 const evalCase = (overrides: Partial<EvalCase> = {}): EvalCase => ({
@@ -22,39 +19,6 @@ const evalCase = (overrides: Partial<EvalCase> = {}): EvalCase => ({
   expectedNoFindingZones: [],
   tags: ['unit'],
   ...overrides
-})
-
-describe('stableJsonDigest', () => {
-  test('is insensitive to object key order', () => {
-    const left = stableJsonDigest({ a: 1, b: 2, c: [1, 2, 3] })
-    const right = stableJsonDigest({ c: [1, 2, 3], b: 2, a: 1 })
-
-    expect(left).toBe(right)
-  })
-
-  test('is sensitive to array element order', () => {
-    // Arrays are NOT canonicalized: some arrays carry meaning in their order
-    // (expectedFindings' expectedIndex, for one), so silently sorting every
-    // array would erase exactly the distinction `computeAnswerKeyDigest` below
-    // depends on to keep case-internal ordering significant.
-    const left = stableJsonDigest({ items: [1, 2, 3] })
-    const right = stableJsonDigest({ items: [3, 2, 1] })
-
-    expect(left).not.toBe(right)
-  })
-
-  test('is deterministic across repeated calls on identical input', () => {
-    const value = { nested: { z: 1, a: [1, { y: 2, x: 1 }] } }
-
-    expect(stableJsonDigest(value)).toBe(stableJsonDigest(value))
-  })
-
-  test('treats undefined object properties as absent, matching JSON.stringify', () => {
-    const withUndefined = stableJsonDigest({ a: 1, b: undefined })
-    const withoutKey = stableJsonDigest({ a: 1 })
-
-    expect(withUndefined).toBe(withoutKey)
-  })
 })
 
 describe('computeAnswerKeyDigest', () => {

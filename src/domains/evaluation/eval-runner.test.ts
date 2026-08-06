@@ -374,9 +374,11 @@ describe('eval runner', () => {
     expect(result.report.caseResults[0]).toMatchObject({
       inputTokens: 12,
       outputTokens: 8,
-      costUnavailable: true,
-      costUsd: 0
+      costUnavailable: true
     })
+    // Absent, not 0: the run reported tokens but no cost, so writing 0 would
+    // state a measurement nobody took.
+    expect(result.report.caseResults[0]).not.toHaveProperty('costUsd')
 
     const summary = renderEvalSummary({ cases, report: result.report })
     expect(summary).toContain('| Input tokens | 12 |')
@@ -619,6 +621,65 @@ describe('eval runner', () => {
 
     // No call was issued, so nothing is claimed — not a recorded zero.
     expect(result.report.caseResults[0]?.discovery).toBeUndefined()
+  })
+
+  // A provider-errored case surfaced no usage and no timing, so its cost and
+  // duration are UNKNOWN. Publishing them as an exact $0.00 for 0ms understated
+  // whichever arm errored more — usually the more expensive one — in the very
+  // figures capability-withdrawal rules are decided on.
+  test('reports an errored case cost as unavailable rather than as a confident zero', async () => {
+    const cases = parseEvalCases(inlineEvalCases)
+    const result = await runEvaluation({
+      cases,
+      judge: acceptingJudge,
+      outputs: [
+        {
+          caseId: 'typescript-positive',
+          changedLineCount: 50,
+          diffHunkCount: 2,
+          contextLedger: [],
+          result: {
+            status: 'ok',
+            reviewReport: reviewReport([admittedFinding()])
+          }
+        },
+        {
+          caseId: 'typescript-negative',
+          changedLineCount: 10,
+          diffHunkCount: 1,
+          contextLedger: [],
+          result: {
+            status: 'provider-error',
+            code: 'provider_unavailable',
+            message: 'The provider refused the request.'
+          }
+        }
+      ],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    const erroredCase = result.report.caseResults.find(
+      (caseResult) => caseResult.caseId === 'typescript-negative'
+    )
+    expect(erroredCase?.providerErrored).toBe(true)
+    expect(erroredCase?.costUnavailable).toBe(true)
+    expect(erroredCase).not.toHaveProperty('costUsd')
+    expect(erroredCase).not.toHaveProperty('durationMs')
+
+    // The totals carry only the case that actually reported them...
+    expect(result.report.metrics.costUsd).toBe(0.1)
+    expect(result.report.metrics.durationMs).toBe(1000)
+    // ...and say so, so neither is read as the run's exact spend.
+    expect(result.report.metrics.costUnavailableCount).toBe(1)
+    expect(result.report.metrics.durationUnavailableCount).toBe(1)
+
+    const summary = renderEvalSummary({ cases, report: result.report })
+    expect(summary).toContain(
+      '| Review cost | $0.1000 known; unavailable for 1 case(s) |'
+    )
+    expect(summary).toContain(
+      '| Duration (summed review time) | 1.0s known; unavailable for 1 case(s) |'
+    )
   })
 
   test('derives refutation metrics and surfaces refutation results in case reports', async () => {
@@ -2167,11 +2228,36 @@ describe('eval runner', () => {
       matched: 0
     })
 
+    // Per-mechanism precision (spec 15). Matched findings inherit the mechanism
+    // of the expectation they matched, so authorization and injection each have
+    // a real denominator; ssrf was never reported, so its denominator is empty
+    // and its rate is null rather than a vacuous 100%.
+    expect(metrics.securityFindingMechanismCounts.authorization).toEqual({
+      matched: 1,
+      genuineFalsePositive: 0
+    })
+    expect(metrics.securityFindingMechanismCounts.ssrf).toEqual({
+      matched: 0,
+      genuineFalsePositive: 0
+    })
+    expect(metrics.securityAdjustedPrecisionByMechanism.authorization).toBe(1)
+    expect(metrics.securityAdjustedPrecisionByMechanism.ssrf).toBeNull()
+    expect(metrics.securityMechanismAttributionCounts).toEqual({
+      expectation: 2,
+      cwe: 0,
+      unknown: 0
+    })
+
     const summary = renderEvalSummary({ cases, report: result.report })
     expect(summary).toContain('## Security by Mechanism')
-    expect(summary).toContain('| authorization | 100.0% | 1/1 |')
-    expect(summary).toContain('| injection | 100.0% | 1/1 |')
-    expect(summary).toContain('| ssrf | 0.0% | 0/1 |')
+    expect(summary).toContain('| authorization | 100.0% | 1/1 | 100.0% | 1/1 |')
+    expect(summary).toContain('| injection | 100.0% | 1/1 | 100.0% | 1/1 |')
+    // Reported but never matched: recall is a real 0.0% over a real denominator,
+    // while precision has nothing in its denominator and says so.
+    expect(summary).toContain('| ssrf | 0.0% | 0/1 | n/a | 0/0 |')
+    expect(summary).toContain(
+      'no genuine security false positive was left unattributed'
+    )
     expect(summary).toContain('## Security by Context Depth')
     expect(summary).toContain('| local | 100.0% | 2/2 |')
     expect(summary).toContain('| cross-file | 0.0% | 0/1 |')

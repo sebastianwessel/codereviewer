@@ -34,6 +34,11 @@ const manifestFixture = {
   schemaVersion: '1.0',
   datasetId: 'test-corpus',
   modelTrainingCutoff: '2026-01-01',
+  splitIntegrity: {
+    status: 'single-split',
+    contaminationNote:
+      'Every case here is held-out and there is no dev set, so the chronological rule compares nothing. Read every figure from this corpus as a dev-set figure that does not satisfy the held-out criterion.'
+  },
   description: 'Test corpus.',
   cases: [
     {

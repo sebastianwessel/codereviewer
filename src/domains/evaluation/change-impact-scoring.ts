@@ -40,6 +40,7 @@
 
 import { precisionBracket, type PrecisionBracket } from './eval-precision-bracket.js'
 import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
+import { uniqueSorted } from '../../shared/text/unique-sorted.js'
 import type { CorpusSplit } from './real-repo-corpus.schema.js'
 import {
   isDirectlyReachable,
@@ -311,9 +312,6 @@ const normalizePath = (value: string): string => {
     return value
   }
 }
-
-const uniqueSorted = (values: Iterable<string>): readonly string[] =>
-  [...new Set(values)].sort((left, right) => left.localeCompare(right))
 
 // Every destination file the deterministic reference list enumerates —
 // production and test alike. A test that calls a changed symbol is a real

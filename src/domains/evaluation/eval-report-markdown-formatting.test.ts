@@ -5,6 +5,7 @@ import {
   escapeMarkdownCell,
   formatCostMetric,
   formatDuration,
+  formatDurationMetric,
   formatInteger,
   formatListValue,
   formatPercent
@@ -31,6 +32,23 @@ describe('eval report markdown formatting', () => {
         costUsd: 0.12567
       })
     ).toBe('$0.1257 known; unavailable for 2 case(s)')
+  })
+
+  test('formats summed duration with unavailable-case context', () => {
+    expect(
+      formatDurationMetric({
+        durationUnavailableCount: 0,
+        durationMs: 1250
+      })
+    ).toBe('1.3s')
+    // A case that never produced a review report contributed no duration, so
+    // the sum is a floor and must not read as the run's measured total.
+    expect(
+      formatDurationMetric({
+        durationUnavailableCount: 1,
+        durationMs: 1250
+      })
+    ).toBe('1.3s known; unavailable for 1 case(s)')
   })
 
   test('escapes Markdown cells and skips empty optional tables consistently', () => {

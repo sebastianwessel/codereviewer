@@ -4,7 +4,10 @@ import {
   resolveExistingPathInsideRoot,
   resolveWritePathInsideRoot
 } from '../../platform/path-service.js'
-import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
+import {
+  parseGitDiffHunkHeader,
+  parseGitDiffNewPath
+} from '../../shared/diff/git-diff-header.js'
 
 const defaultSourceSliceRoot = 'eval/benchmarks/code-review-bench-style'
 const defaultOutputSliceRoot =
@@ -88,52 +91,6 @@ type MutableDiffFile = {
   path: string
   lines: string[]
   hasHunkContent: boolean
-}
-
-const diffPathPattern =
-  /^diff --git (?:"a\/(.+?)"|a\/(\S+)) (?:"b\/(.+?)"|b\/(\S+))$/u
-const hunkPattern = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/u
-const gitEscapePattern = /\\(\\|"|t|n|r|[0-7]{1,3})/gu
-
-const unescapeGitPath = (value: string): string =>
-  value.replace(gitEscapePattern, (_match, escape: string) => {
-    switch (escape) {
-      case '\\':
-        return '\\'
-      case '"':
-        return '"'
-      case 't':
-        return '\t'
-      case 'n':
-        return '\n'
-      case 'r':
-        return '\r'
-      default:
-        return String.fromCharCode(Number.parseInt(escape, 8))
-    }
-  })
-
-const normalizeDiffPath = (rawPath: string): string =>
-  normalizeRepositoryRelativePath(rawPath, {
-    flavor: rawPath.includes('\\') ? 'win32' : 'posix'
-  })
-
-const parseDiffNewPath = (line: string): string | undefined => {
-  const match = diffPathPattern.exec(line)
-
-  if (match === null) {
-    return undefined
-  }
-
-  const quotedPath = match[3]
-
-  if (quotedPath !== undefined) {
-    return normalizeDiffPath(unescapeGitPath(quotedPath))
-  }
-
-  const unquotedPath = match[4]
-
-  return unquotedPath === undefined ? undefined : normalizeDiffPath(unquotedPath)
 }
 
 const diffUrlFor = (sourceUrl: string): string => {
@@ -315,7 +272,7 @@ export const materializeDiffFiles = (
   let currentNewLine: number | undefined
 
   for (const line of diff.split(/\r?\n/u)) {
-    const nextPath = parseDiffNewPath(line)
+    const nextPath = parseGitDiffNewPath(line)
 
     if (nextPath !== undefined) {
       currentFile = {
@@ -332,10 +289,10 @@ export const materializeDiffFiles = (
       continue
     }
 
-    const hunk = hunkPattern.exec(line)
+    const hunk = parseGitDiffHunkHeader(line)
 
-    if (hunk !== null) {
-      currentNewLine = Number.parseInt(hunk[1] ?? '0', 10)
+    if (hunk !== undefined) {
+      currentNewLine = hunk.newStartLine
       continue
     }
 

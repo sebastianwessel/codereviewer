@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, test } from 'vitest'
 import { createEvalSliceManifest } from './eval-slice-manifest.js'
+import { stableJsonDigest } from './stable-json-digest.js'
 
 const createTempDir = async (): Promise<string> => {
   const directory = join(
@@ -104,6 +105,38 @@ describe('eval slice manifest', () => {
       expect(first.cases[0]?.sliceJsonSha256).toMatch(/^[a-f0-9]{64}$/u)
       expect(first.cases[0]?.repositoryTreeSha256).toMatch(/^[a-f0-9]{64}$/u)
       expect(JSON.stringify(first)).not.toContain('do-not-print-this-source')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The manifest digest and the answer-key/config digests decide the same thing
+  // -- whether two runs may be compared -- and used to be produced by two
+  // independently-written canonical serializers that disagreed on `undefined`.
+  // This pins the manifest to the shared one, so a re-added private copy that
+  // canonicalizes differently is caught here rather than as an unexplained
+  // mismatch between two archived runs.
+  test('digests the manifest payload with the shared canonical serializer', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeBenchmarkSlice(root)
+
+      const manifest = await createEvalSliceManifest({
+        repositoryRoot: root,
+        sliceRoot: 'eval/benchmarks/pack-a',
+        generatedAt: '2026-06-21T00:00:00.000Z'
+      })
+
+      expect(manifest.digest).toBe(
+        stableJsonDigest({
+          schemaVersion: manifest.schemaVersion,
+          sliceRoot: manifest.sliceRoot,
+          caseCount: manifest.caseCount,
+          caseIds: manifest.caseIds,
+          cases: manifest.cases
+        })
+      )
     } finally {
       await rm(root, { recursive: true, force: true })
     }

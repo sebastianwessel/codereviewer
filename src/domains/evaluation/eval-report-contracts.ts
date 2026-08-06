@@ -192,12 +192,18 @@ export const EvalCaseReportSchema = z.strictObject({
   fixOutcomes: z.array(EvalFixOutcomeReportSchema).default([]),
   inlineFindingCount: z.int().min(0).default(0),
   warnings: z.array(z.string()),
-  durationMs: z.int().min(0),
+  // ABSENT means NOT MEASURED, and is never the same claim as `0`. A
+  // provider-errored case produced no review report at all, so neither its
+  // review duration nor its model cost was ever surfaced; writing 0 for either
+  // states a measurement that was not taken. `costUnavailable` stays the
+  // machine-readable flag the aggregate counts, and is set from the same value
+  // that decides whether `costUsd` is present, so the two cannot disagree.
+  durationMs: z.int().min(0).optional(),
   inputTokens: z.int().min(0).default(0),
   cachedInputTokens: z.int().min(0).default(0),
   outputTokens: z.int().min(0).default(0),
   costUnavailable: z.boolean().default(false),
-  costUsd: z.number().min(0)
+  costUsd: z.number().min(0).optional()
 })
 
 export const EvalRegressionGateSchema = z.strictObject({
