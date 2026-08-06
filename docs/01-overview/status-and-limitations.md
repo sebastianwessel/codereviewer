@@ -77,13 +77,29 @@ unfinished. Enabling them is a deliberate, measured choice.
 | `reporting.reviewComments.enabled` | `false` | Writes inline review-comment draft artifacts. |
 | `skills.enabled` | `false` | Mounted reviewer skill directory with bounded read/list/grep tools. |
 | `observability.openTelemetry.enabled` | `false` | No-content telemetry export. |
+| `security.signals.enabled` | `false` | Ingests already-produced analyzer artifacts (SARIF 2.1.0) as evidence — spec 15, Mechanism 2. **Unmeasured**: no figure exists for what it contributes to security recall, and the one probe run against it attributed nothing at all (below). It also does nothing without `security.signals.artifacts`, and a run that enables it with no artifact configured is rejected rather than quietly reviewing nothing. |
 
-The deterministic security-signal evidence layer (spec 15, Mechanism 2) has no
-implementation yet, so there is no `security.signals.enabled` key — a key with no
-behavior behind it would be a switch that lies about doing something. It ships
-alongside the layer, not before it. Similarly, the evaluation block has no
-`enabled` key: case selection is driven by `eval run` CLI flags, and the SARIF
-reporter has no `sarif.redact` key, since it redacts unconditionally regardless.
+**What the security-signal layer does and does not do.** It reads analyzer
+artifacts you already produced; it never runs an analyzer, and no analyzer is a
+dependency of this package. An ingested alert seeds no finding on its own — it
+enters the discovery packet as an untrusted third-party claim, and anything
+reported afterwards is an ordinary candidate that still passes refutation and the
+admission gate.
+
+**Its recall contribution is unmeasured, and one probe found nothing to measure.**
+On 2026-08-06, a public analyzer ruleset was run over all 37 cases of the
+real-repository corpus and produced 924 alerts. Changed-side attribution — the
+rule that a pull request is not blamed for pre-existing repository debt — held
+**all 924** back as pre-existing, so **0** reached the reviewer. That is the
+attribution rule working rather than a defect, and it is also why the layer's
+effect on security recall has no number: on that corpus the evidence channel was
+empty, so there was nothing for an A/B to compare. Spec 15 records this under
+"Why Mechanism 2 Is Still Unmeasured". Do not read the layer as improving
+security recall; nothing has shown that it does.
+
+The evaluation block has no `enabled` key: case selection is driven by `eval run`
+CLI flags, and the SARIF reporter has no `sarif.redact` key, since it redacts
+unconditionally regardless.
 
 **Consequence of the defaults:** out of the box, discovery is a single general
 pass per review task — no security pass, no extra sweep, no pre-selected extra
