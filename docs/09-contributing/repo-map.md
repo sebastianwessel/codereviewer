@@ -30,7 +30,7 @@ for the conventions that govern how code inside these folders is written.
 
 ```
 src/
-  index.ts        public library surface (re-exports domain entrypoints)
+  index.ts        public library surface (an explicit list of named re-exports)
   cli/            command dispatch, argument parsing, artifact writing
   platform/       filesystem primitives (path service, repository paths)
   shared/         cross-domain primitives (contracts, errors, redaction, …)
@@ -41,6 +41,10 @@ The organizing rule from `AGENTS.md` and `.agent/IMPLEMENTATION.md`: code is
 grouped by **domain**, not by technical layer. Each domain exposes a narrow
 public entrypoint (`index.ts`); sibling domains import that entrypoint, never
 each other's internal files.
+
+A domain entrypoint is an **internal** seam, sized for those sibling imports. The
+package's public API is only what `src/index.ts` names, so a symbol on a domain
+barrel is not published by being there (spec 01, *Public Surface*).
 
 ---
 

@@ -7,7 +7,7 @@
 // typed in terms of `domains/change-impact`'s `ChangeImpactReferenceReport`, and
 // spec 01 forbids `shared` importing from `domains` outright. Putting it on the
 // `evaluation` barrel instead would be worse — a test-only module on a runtime
-// entrypoint that `src/index.ts` re-exports wholesale. So the two CLI tests
+// entrypoint that `src/cli/` and the hydration scripts import. So the two CLI tests
 // (`cli/eval-impact-command.test.ts`, `cli/impact-eval-runner.test.ts`) import
 // this path directly, and that is deliberate: `src/cli/` is the composition
 // root, not a sibling domain, so "no domain imports sibling internals" is not

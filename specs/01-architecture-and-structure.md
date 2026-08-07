@@ -154,11 +154,36 @@ executes no commands.
 
 | Entrypoint | Path | Contract |
 | --- | --- | --- |
-| Library entry | `src/index.ts` | Re-export stable public types and runtime helpers. No side effects. |
+| Library entry | `src/index.ts` | Re-export stable public types and runtime helpers by name. No wildcards, no side effects. See *Public Surface* below. |
 | CLI entry | `src/cli/index.ts` | Dispatch a command line to one module in `src/cli/commands/`, which parses its own args, calls domain services, and maps errors to exit codes. Returns a `CliResult`; it never exits the process itself. |
 | CLI binary | `src/cli/main.ts` | The `codereviewer` bin (`dist/cli/main.js`). Calls `runCli`, writes stdout/stderr, sets `process.exitCode`, and holds no other logic. |
 | Specs | `specs/` | Source of truth until readiness approval and implementation. |
 | User docs | `docs/` | Implemented behavior only. |
+
+## Public Surface
+
+The package's public API is the explicit list of named re-exports in
+`src/index.ts`, plus `runCli` and its two types from `src/cli/index.ts`. There is
+no other definition of it, and nothing else counts as published.
+
+- `src/index.ts` must not contain `export *`. A wildcard makes the surface
+  unenumerable, so nobody can say whether a change to a domain is breaking.
+- A domain barrel (`src/domains/*/index.ts`) is an INTERNAL SEAM. It exists so a
+  sibling domain can import a domain without reaching into its files, and its
+  contents are decided by that need alone. Appearing on a barrel does not make a
+  symbol public.
+- Adding a symbol to `src/index.ts` is a deliberate act, reviewed as an addition
+  to the public API. A symbol earns its place by being needed to type or load a
+  configuration, to run a review, or to read, validate or render a report —
+  including any type named in the signature of something already published,
+  because a signature a caller cannot write down is not usable.
+- Removing a symbol from `src/index.ts` is a breaking change and must be stated
+  as one.
+
+This separation is what makes barrel narrowing safe. Once the public surface is
+stated independently of the barrels, removing an over-shared symbol from a domain
+barrel is an internal refactor with no effect on consumers, and it can be
+reviewed as one.
 
 ## Generated Outputs
 

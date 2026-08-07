@@ -21,7 +21,7 @@ import { refutedCandidateOutcome } from './verdict-outcome.js'
 //
 // Widening `review-workflow`'s barrel to let the shared tests reach in was the
 // alternative and is the wrong direction: that barrel publishes five names, and
-// `src/index.ts` re-exports it wholesale.
+// `src/index.ts` names all five on the package's public surface.
 
 // Regression guard for the cap drift where model-authored rejection summaries
 // (capped at 1200 upstream) flowed into `RejectedFinding.message` (capped at 500)
