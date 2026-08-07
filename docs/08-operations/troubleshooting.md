@@ -320,6 +320,7 @@ reports what was spent rather than stopping it. See
 | Misses a second defect in a file where it found one | Known limitation, no dial. Three passes built for it were measured and [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md) |
 | Misses security issues specifically | `security.dedicatedPass.enabled: true` |
 | Misses defects that depend on unchanged code | `review.crossFileRetrieval` is the dial and is **on by default** — its old net-negative verdict was measuring a truncation bug and does not stand. But out-of-diff recall is 0 of 27 on the 37-case corpus, and every miss sat in a file shown in full, so this is attention, not information. The context scout was [removed](../03-concepts/optional-capabilities/context-scout.md) for the same reason |
+| Cross-file tool calls are refused as "not eligible" | `paths.include` / `paths.exclude` gate the cross-file discovery tools, not only which files get reviewed. An include list naming a subtree (`src/**/*`) matches no directory to start a traversal from, so a repository-wide `repo_grep` and a `repo_list` of that subtree are refused while `repo_read` of a matching file still works. Leave `paths.include` at its default and narrow with `paths.exclude` instead |
 | Two runs disagree | Expected. Model output is non-deterministic; a small difference between runs is noise. Measure on a corpus, not on one run — see the [quality docs](../05-quality/README.md) |
 
 Depth guidance and the full dial list: [tuning-noise-and-recall.md](../04-guides/tuning-noise-and-recall.md).

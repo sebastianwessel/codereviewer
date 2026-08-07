@@ -30,8 +30,20 @@ import {
 } from '../../../context-retrieval/index.js'
 
 // The scope carries the task's tools AND the ability to shrink what a read returns
-// (spec 28), because both belong to the same task and both are needed at points too
-// deep in the harness loop to reach by parameter.
+// (spec 28). Both are needed at points too deep in the harness loop to reach by
+// parameter, which is why they travel together — but they are not scoped alike, and
+// the difference matters to anyone reading a run.
+//
+// The tools ARE per task: `createBoundedRetrievalTools` is called once per discovery
+// task, so `maxToolCallsPerTask` is genuinely a per-task allowance.
+// `reduceReadBudget` is NOT: it halves `maxBytesPerRead` on the ONE retriever the
+// workflow builds for the whole run (`pipeline/handler.ts`), which is the same
+// object holding the run-wide `usedReads`/`usedSearches` counters. So a task that
+// overflows the provider's context shrinks every other task's reads too, including
+// tasks already in flight, and nothing restores it. Whether that should instead be
+// per task is a design question about where the retrieval budget binds, not a local
+// detail of this scope — the run-wide read and search caps are a deliberate bound
+// and cannot be made per task without loosening them.
 export type CrossFileDiscoveryScope = {
   readonly tools: RetrievalTools
   readonly reduceReadBudget: () => boolean

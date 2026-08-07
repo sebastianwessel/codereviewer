@@ -12,13 +12,30 @@
 //
 // The predicate never throws; callers decide how to react (reject an
 // explicit request, silently prune a traversal candidate).
+import { z } from 'zod'
 import { defaultReviewExcludePatterns } from '../../shared/contracts/index.js'
 import { compileGlobMatchers, matchesAnyGlob } from '../../shared/glob/glob-matcher.js'
 
+// Both lists are `| undefined` rather than merely optional so a caller that
+// carried this shape through a schema (`ContextRetrievalEligibilityConfigSchema`
+// below) can hand it straight over: the project runs `exactOptionalPropertyTypes`,
+// under which a parsed `include?: string[] | undefined` is not assignable to a
+// plainly optional one, and rebuilding the object field by field at every call
+// site to work around that would be four copies of the same conditional.
 export type ContextRetrievalEligibilityConfig = {
-  readonly include?: readonly string[]
-  readonly exclude?: readonly string[]
+  readonly include?: readonly string[] | undefined
+  readonly exclude?: readonly string[] | undefined
 }
+
+// The same shape as a validated contract field, for the one caller that carries
+// the configured scope across a schema boundary (the review workflow input,
+// spec 16). Both lists stay optional so the absent case keeps meaning "no scope
+// was configured, use this module's defaults" rather than "an empty scope",
+// which for `include` would be a gate that admits nothing.
+export const ContextRetrievalEligibilityConfigSchema = z.strictObject({
+  include: z.array(z.string().min(1)).optional(),
+  exclude: z.array(z.string().min(1)).optional()
+})
 
 export type EligibilityResult =
   | { readonly eligible: true }

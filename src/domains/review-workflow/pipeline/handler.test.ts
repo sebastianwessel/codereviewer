@@ -1,7 +1,11 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { type EvidenceRecord } from '../../../shared/contracts/index.js'
 import { type CandidateFinding } from '../../admission/index.js'
 import { createNoopReviewLogger } from '../../observability/index.js'
+import { type ContextRetriever } from '../../context-retrieval/index.js'
 import { TaskReviewResultSchema } from './agent-contracts.js'
 import { runReviewWorkflowHandler } from './handler.js'
 import { ReviewWorkflowInputSchema } from './contracts.js'
@@ -309,6 +313,120 @@ describe('workflow handler', () => {
     // And the run reports the instruction it actually used, once.
     expect(output.instructionHashes).toHaveLength(1)
     expect(output.admittedFindings).toHaveLength(1)
+  })
+
+  // Spec 16 ("the mode never bypasses eligibility ... scope") and spec 07's
+  // agentic-tool-abuse threat: the tools holistic discovery drives must gate on
+  // the SAME configured scope every other mediated lane gates on. The workflow
+  // builds its retriever itself, so this is the only place that can be proven —
+  // the per-task bounded tools wrap whatever retriever they are handed, and a
+  // separately constructed one proves nothing about the one discovery uses.
+  describe('the cross-file retriever the workflow hands its tasks', () => {
+    type ReadOutcome =
+      | { readonly served: string }
+      | { readonly refused: string }
+
+    // Reads both paths through the retriever the HANDLER built and reports what
+    // each attempt produced. The outcomes are asserted by the caller rather than
+    // inside `runTask`, because a failed assertion there is caught by the task
+    // queue and re-thrown as a generic task failure, which hides which of the
+    // two reads was wrong.
+    const readThroughWorkflowRetriever = async (paths: {
+      readonly include: string[]
+      readonly exclude: string[]
+    }): Promise<Record<string, ReadOutcome>> => {
+      const root = await mkdtemp(join(tmpdir(), 'workflow-scope-'))
+      const outcomes: Record<string, ReadOutcome> = {}
+
+      try {
+        await mkdir(join(root, 'src'), { recursive: true })
+        await mkdir(join(root, 'secrets'), { recursive: true })
+        await writeFile(
+          join(root, 'src/handler.ts'),
+          'export const handle = () => 1\n',
+          'utf8'
+        )
+        await writeFile(
+          join(root, 'secrets/prod.yaml'),
+          'apiToken: hunter2\n',
+          'utf8'
+        )
+
+        const read = async (
+          retriever: ContextRetriever,
+          requestedPath: string
+        ): Promise<void> => {
+          try {
+            const result = await retriever.readRepositoryFile({
+              path: requestedPath
+            })
+            outcomes[requestedPath] = { served: result.content }
+          } catch (error) {
+            outcomes[requestedPath] = {
+              refused: error instanceof Error ? error.message : String(error)
+            }
+          }
+        }
+
+        await runReviewWorkflowHandler({
+          input: ReviewWorkflowInputSchema.parse({
+            ...workflowInput,
+            repositoryRoot: root,
+            paths
+          }),
+          signal: undefined,
+          logger: createNoopReviewLogger(),
+          maxConcurrentTasks: 1,
+          runTask: async (_taskInput, _task, _signal, contextRetriever) => {
+            if (contextRetriever === undefined) {
+              throw new TypeError(
+                'The workflow built no retriever for a run that has a repository root.'
+              )
+            }
+
+            await read(contextRetriever, 'secrets/prod.yaml')
+            await read(contextRetriever, 'src/handler.ts')
+
+            return TaskReviewResultSchema.parse({ candidates: [] })
+          }
+        })
+      } finally {
+        await rm(root, { recursive: true, force: true })
+      }
+
+      return outcomes
+    }
+
+    test('refuses a path the operator excluded', async () => {
+      const outcomes = await readThroughWorkflowRetriever({
+        include: ['**/*'],
+        exclude: ['secrets/**']
+      })
+
+      expect(outcomes['secrets/prod.yaml']).toEqual({
+        refused: expect.stringContaining('paths.exclude')
+      })
+      // The exclusion is the only thing refusing it: the same retriever still
+      // serves a path inside the configured scope, so this is not a retriever
+      // that refuses everything.
+      expect(outcomes['src/handler.ts']).toEqual({
+        served: expect.stringContaining('export const handle')
+      })
+    })
+
+    test('refuses a path outside the operator’s include globs', async () => {
+      const outcomes = await readThroughWorkflowRetriever({
+        include: ['src/**/*'],
+        exclude: []
+      })
+
+      expect(outcomes['secrets/prod.yaml']).toEqual({
+        refused: expect.stringContaining('paths.include')
+      })
+      expect(outcomes['src/handler.ts']).toEqual({
+        served: expect.stringContaining('export const handle')
+      })
+    })
   })
 
   test('records no discovery at all when no task issued a discovery call', async () => {

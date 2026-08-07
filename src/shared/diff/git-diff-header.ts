@@ -2,13 +2,17 @@ import { normalizeRepositoryRelativePath } from '../../platform/repository-path.
 
 // UNIFIED-DIFF HEADER SYNTAX, PARSED IN ONE PLACE.
 //
-// Two domains read the same `git diff` text for different reasons:
+// Three domains read the same `git diff` text for different reasons:
 // `repository-intake` derives the changed-line set the reviewer is scored ON,
-// and `evaluation`'s benchmark hydration derives the head-side files the
-// corpus's expectations are anchored TO. Those two must agree by construction.
-// When each domain kept its own copy of this parsing, a fix to git's C-quoted
-// path decoding applied to one side could move measured recall without the
-// engine changing, and nothing in a report would say so.
+// `evaluation`'s benchmark hydration derives the head-side files the corpus's
+// expectations are anchored TO, and `review-workflow`'s discovery packet selects
+// the hunks the reviewer is SHOWN for the paths intake named. Those must agree by
+// construction. When each domain kept its own copy of this parsing, a fix to
+// git's C-quoted path decoding applied to one side could move measured recall
+// without the engine changing, and nothing in a report would say so — which is
+// precisely what the packet's own copy did: it compared undecoded header bytes
+// against intake's decoded paths and silently dropped the hunks of every file
+// git had quoted.
 
 const diffHeaderPattern =
   /^diff --git (?:"a\/(.+?)"|a\/(\S+)) (?:"b\/(.+?)"|b\/(\S+))$/u

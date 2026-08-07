@@ -176,6 +176,14 @@ export const runReviewWorkflowHandler = async (params: {
           ...(input.contextRetrievalBudget === undefined
             ? {}
             : { budget: input.contextRetrievalBudget }),
+          // The operator's configured scope, on the same terms every other
+          // mediated lane passes it (verification, impact, intent). Omitting it
+          // does not fall back to something stricter: the eligibility gate then
+          // compiles `**/*` plus the built-in excludes, so an operator's
+          // `paths.exclude` stopped binding on the one surface an untrusted
+          // model drives against a live working tree, and cross-file retrieval
+          // is on by default.
+          ...(input.paths === undefined ? {} : { paths: input.paths }),
           ledgerEntries: contextLedgerEntries
         })
   const queued = await runQueuedReviewTasks<TaskReviewResult>({

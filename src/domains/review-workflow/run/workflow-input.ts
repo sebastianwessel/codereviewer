@@ -150,6 +150,15 @@ export const createWorkflowInput = (
             input.config.review.crossFileRetrieval.maxBytesPerRead
         }
       : input.aiReviewBudget.contextRetrievalBudget,
+  // The scope that retriever's eligibility gate binds to (spec 04). Carried
+  // rather than left to the gate's defaults, which are `**/*` plus the built-in
+  // excludes and therefore ignore whatever the operator configured — the same
+  // scope the verification, impact and intent lanes each pass to their own
+  // retriever.
+  paths: {
+    include: [...input.config.paths.include],
+    exclude: [...input.config.paths.exclude]
+  },
   promotionPolicy: input.config.promotionPolicy,
   provenance: {
     reviewer: 'review-agent',

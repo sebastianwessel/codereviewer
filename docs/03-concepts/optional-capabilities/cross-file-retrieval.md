@@ -54,6 +54,12 @@ flowchart LR
 - **Additive to recall only, in principle.** Enabling it can only let the model see
   more; it never removes a finding the single-shot pass would make. What it can and
   did do is change what the model *attends to*.
+- **Gated by your configured scope.** Every call goes through the same two-layer
+  eligibility gate the verification agent uses — the hard floor first (dotfiles,
+  `node_modules`, `dist`), then `paths.exclude`, then `paths.include`. A path your
+  configuration excludes is refused here too, and the refusal is disclosed to the
+  model rather than answered as an empty result. See
+  [permissions and path containment](../../07-security/permissions-and-path-containment.md).
 - Retrieved content is untrusted repository data and the prompt is hardened against
   injection from it — see [trust model](../trust-model.md).
 

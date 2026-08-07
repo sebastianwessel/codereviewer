@@ -109,6 +109,43 @@ describe('review runner workflow input', () => {
     expect(chunkEvidence?.location?.startLine).toBe(201)
   })
 
+  // The configured scope has to travel WITH the workflow input, because the
+  // workflow builds the cross-file discovery retriever itself (spec 16) and the
+  // eligibility gate it compiles is only as narrow as what it is handed. The run
+  // is the only place that holds the configuration, so a scope that stops here
+  // stops everywhere: `reviewedPaths` names the changed files and says nothing
+  // about which unchanged files the discovery tools may open.
+  test('carries the configured paths.include/exclude into the workflow input', () => {
+    const config = CodeReviewerConfigSchema.parse({
+      paths: { include: ['src/**/*'], exclude: ['secrets/**'] }
+    })
+
+    const workflowInput = createWorkflowInput({
+      runId: 'run-scope',
+      repositoryRoot: '/repo/project',
+      reviewedPaths: ['src/a.ts'],
+      reviewedLineRanges: [],
+      reviewedDiffRanges: [],
+      reviewedDiffText: '',
+      evidence: [],
+      candidates: [],
+      config,
+      configHash: sha256('config'),
+      providerId: 'openai',
+      modelName: 'review-model',
+      admittedAt: '2026-06-22T10:00:00.000Z',
+      baselineConfigured: false,
+      skills: [],
+      tasks: [task({ id: 'task_a' })],
+      aiReviewBudget: aiReviewBudgetFor(config)
+    })
+
+    expect(workflowInput.paths).toEqual({
+      include: ['src/**/*'],
+      exclude: ['secrets/**']
+    })
+  })
+
   test('creates provider workflow input with budgets, context evidence, and cloned baseline', () => {
     const evidence = EvidenceRecordSchema.parse({
       id: 'ev_alpha',

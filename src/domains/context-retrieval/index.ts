@@ -82,6 +82,13 @@ export type ContextRetrievalResult = {
   readonly queryHash?: string
   readonly summary: string
   readonly content: string
+  // The file line `content` begins at, present only for a `read` that was
+  // narrowed to a range (spec 28). Without it the content is just bytes, and the
+  // only thing that could number them is 1 — which contradicts the summary this
+  // same result carries ("Lines 20-23 of 30") and, worse, contradicts the
+  // absolute `path:line` coordinates `grep` hands back, which is where a ranged
+  // read's bounds came from in the first place.
+  readonly startLine?: number
   // Structured matches, present only for `grep`. Additive: `content` keeps its
   // historical `path:line` shape so every existing caller and every model-facing
   // tool output is byte-identical.
@@ -145,6 +152,7 @@ export type ContextRetriever = {
   }) => Promise<readonly ContextRetrievalResult[]>
 }
 
+export { ContextRetrievalEligibilityConfigSchema } from './eligibility.js'
 export type {
   ContextRetrievalEligibilityConfig,
   EligibilityResult
@@ -377,6 +385,8 @@ export const createContextRetriever = (input: {
     readonly summary: string
     readonly queryHash?: string
     readonly redactionApplied?: boolean
+    // The file line `content` starts at, when it is not the top of the file.
+    readonly startLine?: number
   }): ContextRetrievalResult => {
     const ledgerEntry = createContextLedgerEntry({
       kind: 'tool-result',
@@ -403,7 +413,10 @@ export const createContextRetriever = (input: {
         : {
             location: {
               path: record.path,
-              startLine: 1,
+              // Where the served content begins, not the top of the file. A
+              // ranged read pinned to line 1 points its evidence at content it
+              // never returned.
+              startLine: record.startLine ?? 1,
               side: 'file'
             }
           }),
@@ -417,6 +430,7 @@ export const createContextRetriever = (input: {
       tool: record.tool,
       ...(record.path === undefined ? {} : { path: record.path }),
       ...(record.queryHash === undefined ? {} : { queryHash: record.queryHash }),
+      ...(record.startLine === undefined ? {} : { startLine: record.startLine }),
       summary: record.summary,
       content: record.content,
       ledgerEntry,
@@ -473,11 +487,21 @@ export const createContextRetriever = (input: {
         startLine === undefined && endLine === undefined
           ? ''
           : ` Lines ${startLine ?? 1}-${endLine ?? lines.length} of ${lines.length}.`
+      // The file line the served bytes begin at, reported so a consumer can
+      // address them in the file's own coordinates instead of guessing 1. Absent
+      // for a whole-file read, where there is nothing to say. `Math.max` mirrors
+      // the slice above: a start below 1 still serves the top of the file, so it
+      // must still be described as starting there.
+      const servedStartLine =
+        startLine === undefined && endLine === undefined
+          ? undefined
+          : Math.max(1, startLine ?? 1)
 
       return recordResult({
         tool: 'read',
         path: portablePath,
         ...(taskId === undefined ? {} : { taskId }),
+        ...(servedStartLine === undefined ? {} : { startLine: servedStartLine }),
         reason: 'context-retrieval-read',
         content: includedText,
         bytesConsidered: Buffer.byteLength(ranged),

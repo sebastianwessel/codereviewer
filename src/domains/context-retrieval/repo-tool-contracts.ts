@@ -60,12 +60,21 @@ export const REPO_TOOL_DESCRIPTIONS = {
 // The tool ids exposed to a model, in the order they are declared on an agent.
 export const REPO_TOOL_IDS = ['repo_read', 'repo_list', 'repo_grep'] as const
 
-// Adds 1-based line numbers so every provider receives file content in the same
+// Adds line numbers so every provider receives file content in the same
 // deterministic, line-anchored shape the general review's mediated read uses.
-const withLineNumbers = (content: string): string =>
+//
+// Numbered from the served content's own origin, exactly as that read numbers a
+// file chunk from the chunk's absolute origin — and for the same reason it gives:
+// numbering every chunk from 1 produced locations that were plausible but wrong.
+// Here the contradiction was inside a single tool result, whose summary already
+// said "Lines 20-23 of 30" over a body numbered `1:`. Spec 28 makes that the
+// normal case, not an edge one: `repo_grep` answers in absolute `path:line`
+// coordinates and the tool description tells the model to re-read that range, so
+// the first hop of the advertised loop is a ranged read.
+const withLineNumbers = (content: string, firstLine: number): string =>
   content
     .split(/\r\n|\n|\r/u)
-    .map((line, index) => `${index + 1}: ${line}`)
+    .map((line, index) => `${index + firstLine}: ${line}`)
     .join('\n')
 
 // A read that hit `maxBytesPerRead` is CUT MID-FILE. The model was never told.
@@ -102,6 +111,7 @@ export const toRepoToolOutput = (
       ? `${result.summary} TRUNCATED at the per-read byte limit; the file continues.`
       : result.summary,
   content:
-    (lineNumbered ? withLineNumbers(result.content) : result.content) +
-    truncationNotice(result)
+    (lineNumbered
+      ? withLineNumbers(result.content, result.startLine ?? 1)
+      : result.content) + truncationNotice(result)
 })

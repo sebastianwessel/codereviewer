@@ -8,7 +8,10 @@ import {
 } from '../../../shared/contracts/index.js'
 import { ContextLedgerEntrySchema } from '../../review-planning/index.js'
 import { CandidateFindingSchema } from '../../admission/index.js'
-import { ContextRetrievalBudgetSchema } from '../../context-retrieval/index.js'
+import {
+  ContextRetrievalBudgetSchema,
+  ContextRetrievalEligibilityConfigSchema
+} from '../../context-retrieval/index.js'
 import {
   BaselineFingerprintRecordSchema,
   QualityGateThresholdsSchema,
@@ -55,6 +58,18 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   maxConcurrentTasks: z.int().min(1).max(32).optional(),
   maxTaskInputBytes: z.int().min(10000).max(10000000).optional(),
   contextRetrievalBudget: ContextRetrievalBudgetSchema.optional(),
+  // The operator's configured `paths.include` / `paths.exclude` (spec 04), for
+  // the retriever the workflow builds to back cross-file discovery (spec 16).
+  //
+  // It has to be carried explicitly. The workflow receives `reviewedPaths` — the
+  // files this change touched — and those are the OUTPUT of scoping, not the
+  // scope: they say nothing about which unchanged files the discovery tools may
+  // look at, which is the whole question the eligibility gate answers. Without
+  // this field the gate compiled its permissive defaults (`**/*` plus the
+  // built-in excludes), so a path the operator excluded was read in full by the
+  // one lane where an untrusted model drives the tools. Absent means no scope was
+  // configured, which is not the same as an empty one.
+  paths: ContextRetrievalEligibilityConfigSchema.optional(),
   promotionPolicy: PromotionPolicyConfigSchema.default({
     modelWeakOrRefuted: 'artifact-only'
   }),

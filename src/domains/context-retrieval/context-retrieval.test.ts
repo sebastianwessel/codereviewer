@@ -808,3 +808,92 @@ describe('a truncated read tells the model it was truncated', () => {
     }
   })
 })
+
+// Spec 28 lets the reviewer narrow a read to a line range after `repo_grep` has
+// told it where to look, and `repo_grep` answers in absolute `path:line`
+// coordinates. The numbers on the read must therefore be absolute too: a body
+// numbered from 1 under a summary saying "Lines 20-23" is two contradictory
+// claims about the same bytes in one tool result, and the model has no way to
+// tell which coordinate system the next tool call should use. The general
+// review's mediated read already numbers from its chunk's absolute origin for
+// this reason — numbering every chunk from 1 produced locations that were
+// plausible but wrong.
+describe('a line-numbered read is numbered where the content actually starts', () => {
+  const thirtyLineRepo = async (): Promise<string> => {
+    const root = await mkdtemp(join(tmpdir(), 'ctx-ranged-'))
+
+    await writeFile(
+      join(root, 'big.ts'),
+      Array.from({ length: 30 }, (_, index) => `const v${index + 1} = ${index + 1}`)
+        .join('\n'),
+      'utf8'
+    )
+
+    return root
+  }
+
+  test('numbers a requested range from the range’s own first line', async () => {
+    const root = await thirtyLineRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const output = toRepoToolOutput(
+        await retriever.readRepositoryFile({
+          path: 'big.ts',
+          startLine: 20,
+          endLine: 23
+        }),
+        true
+      )
+
+      expect(output.summary).toContain('Lines 20-23 of 30')
+      expect(output.content.split('\n')).toEqual([
+        '20: const v20 = 20',
+        '21: const v21 = 21',
+        '22: const v22 = 22',
+        '23: const v23 = 23'
+      ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('numbers a whole-file read from 1', async () => {
+    const root = await thirtyLineRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const output = toRepoToolOutput(
+        await retriever.readRepositoryFile({ path: 'big.ts' }),
+        true
+      )
+
+      expect(output.content.startsWith('1: const v1 = 1\n2: const v2 = 2\n')).toBe(
+        true
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('numbers an open-ended range from the line it was given', async () => {
+    const root = await thirtyLineRepo()
+
+    try {
+      const retriever = createContextRetriever({ repositoryRoot: root })
+      const output = toRepoToolOutput(
+        await retriever.readRepositoryFile({ path: 'big.ts', startLine: 28 }),
+        true
+      )
+
+      expect(output.summary).toContain('Lines 28-30 of 30')
+      expect(output.content.split('\n')).toEqual([
+        '28: const v28 = 28',
+        '29: const v29 = 29',
+        '30: const v30 = 30'
+      ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})

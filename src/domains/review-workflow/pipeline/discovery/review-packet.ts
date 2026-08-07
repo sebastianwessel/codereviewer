@@ -6,6 +6,7 @@
 // numbered it. Two copies of the numbering rule would eventually disagree about
 // which line a candidate names.
 
+import { parseGitDiffNewPath } from '../../../../shared/diff/git-diff-header.js'
 import {
   type ContextDocument,
   type HolisticReviewInput,
@@ -19,6 +20,17 @@ import {
 // structured packet dilutes whole-file reasoning. Extract the unified-diff
 // segments for the task's paths from the raw diff blob (the blob covers all
 // changed files; split on `diff --git` file headers).
+//
+// The header is read with the SHARED parser, which is authoritative for a reason
+// this function is a live example of: `task.paths` is produced by intake from the
+// same header text through that same parser, so the two strings compared below
+// are only comparable if one parser produced both. A private copy of the pattern
+// kept the header bytes verbatim, and git C-quotes and octal-escapes any path
+// with a non-ASCII byte — so a changed `café.ts` was captured as
+// `src/caf\303\251.ts`, matched no reviewed path, and had its entire hunk dropped
+// from a section headed "What this change modified". Nothing said so: an
+// unmatched segment is simply not emitted, and the reviewed-diff-ranges fallback
+// only fires when there is no diff text at all.
 const diffSegmentsForPaths = (
   rawDiff: string,
   paths: readonly string[]
@@ -27,7 +39,6 @@ const diffSegmentsForPaths = (
     return ''
   }
 
-  const headerPattern = /^diff --git (?:"?a\/(.+?)"?) (?:"?b\/(.+?)"?)$/u
   const segments: string[] = []
   let current: string[] | undefined
   let currentPath: string | undefined
@@ -43,12 +54,12 @@ const diffSegmentsForPaths = (
   }
 
   for (const line of rawDiff.split('\n')) {
-    const match = headerPattern.exec(line)
+    const headerPath = parseGitDiffNewPath(line)
 
-    if (match !== null) {
+    if (headerPath !== undefined) {
       flush()
       current = [line]
-      currentPath = match[2] ?? match[1]
+      currentPath = headerPath
       continue
     }
 
