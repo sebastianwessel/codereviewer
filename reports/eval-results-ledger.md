@@ -2635,3 +2635,34 @@ hand. A corpus manifest is invisible to the suite until someone hydrates it, and
 hydration is not part of the suite. `real-repo-corpus.schema.test.ts` now DISCOVERS
 every directory under `eval/corpora/` and parses each with a declared parser, so a new
 corpus fails until its coverage is declared rather than being silently skipped.
+
+## 2026-08-08 — What the reviewer says INSTEAD ($0, from the control runs)
+
+259 missed expectation-observations across the 10 control runs. Detail:
+`reports/2026-08-08-what-it-says-instead.md`.
+
+| | share |
+|---|---|
+| spoke only in other files | 28.2% |
+| **real but NON-SECURITY defect, same file** | **18.9%** |
+| duplicate / inconclusive, same file | 17.0% |
+| discovery spoke, nothing survived the pipeline | 16.6% |
+| discovery returned nothing | 15.4% |
+| genuine false positive, same file | 2.3% |
+| **competing real SECURITY defect, same file** | **1.5%** |
+
+**61 of the 103 same-file misses put a finding INSIDE the expected range**, and the
+nearest finding was categorised `bug` 78 times against `security` 15.
+
+**The reviewer reads the right lines and describes a correctness bug where a security
+defect is.** Not retrieval (file open), not attention (finding on the defect's own
+lines), not volume (it produced one), not matcher strictness (genuinely different
+defects). Only 1.5% of misses are it choosing a competing security defect, so this is
+not security judgement exercised differently — it is security framing not applied.
+
+**Bucket-semantics warning, now cost four figures in this project.** The eval report's
+finding arrays OVERLAP: `unlistedRealFindingIds` is a SUBSET of
+`falsePositiveFindingIds` (15/15 cases). Classify findings by ID-SET membership and
+dedupe by `findingId`; never by which array they appear in. Two earlier versions of
+this analysis reported 68.7% silence and a 39.8% "non-real finding" category. Both are
+artefacts. True silence is 15.4% and the non-real category does not exist.
