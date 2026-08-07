@@ -2103,6 +2103,60 @@ extraction is measurably non-deterministic (±10% on any count). The 51.5% headl
 single run.
 
 
+## 2026-08-07 — Intent-framing clause REVERTED, and the real variance (CORRECTS AN EARLIER ENTRY)
+
+Control `f2a6ee8` vs treatment `9ac762e`, 3 seeds, 51-case corpus. **First A/B under
+the alternating arm-order rule** — control first twice, treatment first once,
+positions recorded. Rule: `reports/2026-08-07-intent-framing-prereg.md`; result:
+`reports/2026-08-07-three-nulls-and-the-real-variance.md`.
+
+Recall control 63.5% vs treatment 60.3% — **fell**. Paired: 7 gained, 7 lost, 38
+unchanged, exact sign test **p = 1.0000**. Empty returns 15 -> 12, genuine FPs 3 -> 2,
+adjusted precision 97.0% -> 98.2%. **Rejected and reverted.** No precision delta is
+cited, per the standing restriction.
+
+### THE CORRECTION — the variance figure published earlier today does not hold
+
+The control arm read **53.85 / 67.31 / 69.23%**: a 15.4-point spread on identical
+inputs. Four independent three-seed estimates of no-intervention recall now exist:
+
+| arm | mean | sd |
+| --- | --- | --- |
+| baseline (50c) | 60.8% | 3.92pp |
+| authorization control (50c) | 59.5% | 6.30pp |
+| boundary control (51c) | 60.9% | 2.22pp |
+| intent control (51c) | 63.5% | 8.38pp |
+
+**The estimates span 2.22–8.38pp, a 3.8x spread, for the same quantity.** Pooled over
+8 degrees of freedom the sd is **5.71pp**; all twelve no-intervention runs span
+53.85–69.23%.
+
+So the claim in the 50-case entry below — that doubling the corpus HALVED the
+variance from 7.69pp to 3.92pp — **is not supported**. Both were single three-seed
+estimates of a quantity whose estimator varies by 3.8x between samples; 3.92 was a low
+draw. Doubling the corpus was still correct, but the evidence offered for it was a
+favourable coin, and it was presented as a demonstration.
+
+**Three seeds resolve ~11pp, not ~8 and not ~16.** Detecting a 5-point effect at this
+variance needs roughly 20 seeds per arm.
+
+### What the three nulls of 2026-08-07 do and do not establish
+
+All three interventions — weakness-class clause, stale precision boundary,
+intent-framing clause — read null with paired p = 1.0000 each. That establishes none
+of them produces an effect this setup can SEE. It does **not** establish they do
+nothing: the design was underpowered for anything below ~11pp, which is nearly every
+realistic change. "Rejected" under their pre-registered rules is correct; "these
+ideas do not work" would not be.
+
+**Further prompt-level A/Bs on this corpus are not a productive use of spend.** What
+would change it, by expected value: more cases (60+ further adjudicated candidates
+exist); ~20 seeds per arm; or carrying claims on per-expectation paired outcomes,
+which remove between-run variance, rather than on run-level means.
+
+The quotable position: this project can measure its LEVEL of security recall — about
+**61%** pooled over twelve runs — and cannot currently measure an IMPROVEMENT to it.
+
 ## 2026-08-07 — Stale precision boundary: REVERTED, and an ARM-ORDER ARTIFACT found
 
 Control `15b4781` vs treatment `41157ab`, 3 seeds each, 51-case corpus, all six arms

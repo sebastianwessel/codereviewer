@@ -718,8 +718,12 @@ on the 50-case corpus. Report: `reports/2026-08-07-security-corpus-baseline.md`.
 unmatched finding was judged a real defect the advisory did not name, which is what
 an advisory-derived key predicts and why precision here is a bracket.
 
-**Doubling the corpus halved the variance: sd 7.69pp → 3.92pp**, so this instrument
-now resolves about 8 percentage points at three seeds rather than 16. That was the
+**The variance claim once made here — that doubling the corpus halved sd from
+7.69pp to 3.92pp — does not hold.** Four independent three-seed estimates of
+no-intervention recall span 2.22–8.38pp; pooled over 8 degrees of freedom the sd is
+**5.71pp** and three seeds resolve about **11 percentage points**. Both earlier
+figures were single estimates of a quantity whose estimator varies by 3.8x between
+samples. That was the
 purpose of the second curation round, and it is the only lever that works — more
 seeds on the same expectations add denominator without adding information.
 

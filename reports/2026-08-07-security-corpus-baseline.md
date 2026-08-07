@@ -12,7 +12,7 @@ of the engine.
 
 | | seeds | mean | sd |
 | --- | --- | --- | --- |
-| recall | 60.8 / 56.9 / 64.7% | **60.8%** | **3.92pp** |
+| recall | 60.8 / 56.9 / 64.7% | **60.8%** | 3.92pp (see correction below) |
 | precision, raw (lower bound) | 70.5 / 69.0 / 73.3% | **71.0%** | 2.18pp |
 | precision, adjusted (upper bound) | 100 / 100 / 100% | **100%** | 0 |
 | cost per run | $3.19 / $1.24 / $1.22 | $1.88 | cold, then cache-warm |
@@ -24,22 +24,40 @@ one defect and the file may contain others. Precision is a bracket **[71.0%,
 100%]** and this corpus cannot narrow it: under an incomplete key precision is not
 identifiable.
 
-## The instrument got twice as sharp, which was the point
+## CORRECTION 2026-08-07: the variance claim below does not hold
+
+> This section originally reported that doubling the corpus halved the standard
+> deviation from 7.69pp to 3.92pp. **That is not supported.** Four independent
+> three-seed estimates of no-intervention recall on this corpus have since been
+> taken and they span **2.22 to 8.38pp — a 3.8x spread**. Pooled over 8 degrees of
+> freedom the standard deviation is **5.71pp**, and the 3.92pp above was a low
+> draw. Three seeds resolve about **11 percentage points**, not 8. Doubling the
+> corpus was still right; the evidence offered for it was a favourable coin.
+> See `reports/2026-08-07-three-nulls-and-the-real-variance.md`.
+
+## Why the corpus was doubled, and what that did and did not buy
 
 | | 25-case corpus | 50-case corpus |
 | --- | --- | --- |
 | expectations | 26 | 51 |
 | recall | 57.7% | 60.8% |
-| **sd over three seeds** | **7.69pp** | **3.92pp** |
-| resolves a difference of | ~16pp | **~8pp** |
+| sd, one three-seed estimate | 7.69pp | 3.92pp |
+| sd, pooled over four three-seed arms (8 df) | — | **5.71pp** |
+| resolves a difference of | — | **~11pp** |
 
-The second round of curation existed for exactly this reason: the first baseline's
-own variance said 26 expectations could not settle any intervention worth making.
-Doubling the cases halved the standard deviation, as sampling theory says it should.
-More seeds on the same expectations would not have.
+The second round of curation happened because the first baseline's own variance said
+26 expectations could not settle any intervention worth making. That reasoning was
+sound and more cases genuinely do reduce sampling variance.
+
+**What cannot be claimed is that it halved the variance.** The 3.92pp was one
+three-seed estimate, and three further estimates of the same quantity have since come
+in at 6.30, 2.22 and 8.38pp. The estimator varies by 3.8× between samples; 3.92 was a
+low draw. Pooled, the standard deviation is 5.71pp and three seeds resolve about
+eleven percentage points.
 
 **The two recall figures are not a change and must not be read as one.** They are
-two measurements of different corpora. 60.8% is the number; 57.7% is superseded.
+two measurements of different corpora. 60.8% is this corpus's figure; pooled over all
+twelve no-intervention runs since, the level is about **61%**.
 
 ## By mechanism
 
@@ -119,10 +137,16 @@ Do not quote this gap.
   100% precision. The upper bound is what an incomplete key permits, not what was
   measured.
 
-## What to do next, and it is now decidable
+## What to do next — and it is NOT decidable by an A/B at this size
 
-At sd 3.92pp this instrument resolves about 8 percentage points at three seeds. Two
-rows are worth more than that on their face:
+At a pooled sd of 5.71pp, three seeds resolve about **eleven** percentage points, and
+no plausible prompt-level intervention is that large. Three were pre-registered,
+measured and rejected on 2026-08-07; all three read null, and the paired sign test
+returned p = 1.0000 each time. See
+`reports/2026-08-07-three-nulls-and-the-real-variance.md`.
+
+Two rows remain the largest deficits and are worth targeting once the instrument can
+see a change:
 
 - **`authorization` at 39%** over 18 observations, in the class this spec identifies
   as carrying the majority of real security defects.

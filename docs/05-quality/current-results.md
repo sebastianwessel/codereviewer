@@ -143,8 +143,12 @@ Source: `reports/2026-08-07-security-corpus-baseline.md`.
 **This is not comparable to the in-diff figure above.** Different corpus, different
 question, different answer-key construction. Do not difference them.
 
-**The corpus doubled and the variance halved: sd 7.69pp → 3.92pp.** This instrument
-now resolves about 8 percentage points at three seeds rather than 16. The earlier
+**Do not read the sd in the table as the instrument's precision.** Four independent
+three-seed estimates of no-intervention recall on this corpus span 2.22–8.38pp;
+pooled over 8 degrees of freedom it is **5.71pp**, and three seeds resolve about
+**11 percentage points**. Twelve no-intervention runs span 53.85%–69.23%, so the
+quotable level is about **61%** and this setup cannot currently measure an
+improvement smaller than ~11pp. The earlier
 57.7% on 25 cases is superseded, and the two figures are **not a change** — they
 measure different corpora.
 
