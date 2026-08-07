@@ -101,7 +101,29 @@ findings as today.
 
 A read that is cut and not disclosed is worse than no read: the model concludes a
 guard is absent from a file it only partly saw, which is exactly the "recall falls,
-precision holds" signature this capability's original verdict recorded. So:
+precision holds" signature this capability's original verdict recorded.
+
+**The rule is about truncation, not about tools, and it was scoped too narrowly.**
+Amended 2026-08-07. As written below it reads as a property of `repo_read`,
+`repo_list` and `repo_grep` output — so it did not reach the referenced-definition
+digest the discovery packet builds, which no tool mediates. That digest was cut at a
+byte budget with no disclosure and, because the cut was not line-aware, could end
+mid-line and present a fragment of a source line as if it were the whole line. The
+defect sat outside this section purely because of where the section was drawn.
+
+**The rule therefore binds every truncation this engine performs on text a model
+reads**, whatever produced it — mediated tool output, packet sections, digests,
+summaries. Each of the requirements below applies to all of them; the tool wording
+that follows is an instance, not the scope.
+
+**A cut MUST fall on a boundary the format itself defines.** A digest whose skipped
+regions are marked cannot end unmarked, because within that format an unmarked end
+asserts that nothing follows; and a cut taken at a byte offset rather than a line
+boundary makes the packet state something false rather than merely incomplete. That
+distinction is what makes such a fix correctness rather than a recall bet — see spec
+05's referenced-definition bullet.
+
+So:
 
 - A read that is narrowed MUST say so in the content the model reads, not only in a
   field it may ignore, and MUST state that absence of something below the cut is not

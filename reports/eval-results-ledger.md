@@ -2103,6 +2103,40 @@ extraction is measurably non-deterministic (±10% on any count). The 51.5% headl
 single run.
 
 
+## 2026-08-07 — A capability restored, and why no A/B is owed for it
+
+`paths.include` was applied to directories as well as files, so for any operator who
+scoped a review — `include: ['src/**/*']`, the value the configuration and cost
+guides both recommend — `repo_grep` and `repo_list` were refused **outright**.
+Measured on this repository before the fix:
+
+    grep, no paths      REFUSED        list '.'    REFUSED
+    grep paths:['src']  REFUSED        list 'src'  REFUSED
+    read 'src/app.ts'   OK
+
+**The search half of cross-file retrieval was non-functional for those operators.**
+`repo_read` still worked when the model already knew a path, but nothing could find
+one — the grep-then-read loop the capability is built around could not start.
+
+This project measured cross-file retrieval at **+5.7pp recall with 100% adjusted
+precision** when it works (`spec16-crossfile-verdict-reversed`). A scoped-include
+operator was receiving none of the half that locates code.
+
+**No A/B is owed, and that is not an evasion.** The claim is not statistical. A tool
+that returns REFUSED to every call contributes no findings; one that answers can. The
+size of the gain for that configuration is not measured here and is not asserted —
+what is established is that a capability with a measured benefit was inert for a
+documented, recommended configuration and is now live.
+
+**It is invisible to this project's own corpus**, which configures no narrowed
+`include`, so no figure in this ledger moves. That is the honest reason it never
+surfaced in five days of A/Bs: the eval never exercised the configuration the defect
+required.
+
+Recorded here rather than in the measurement entries because it is a different kind
+of statement — deductive rather than inferential — and pooling the two kinds is how
+"we fixed something real" turns into an unearned percentage.
+
 ## 2026-08-07 — Correctness fixes CONFIRMATION: not reproduced (the +5.13pp was noise)
 
 Control `f2a6ee8` vs treatment `0504e49`, **ten seeds per arm**, alternating order.
