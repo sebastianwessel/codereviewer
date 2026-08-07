@@ -224,4 +224,45 @@ describe('review runner workflow input', () => {
       expect.objectContaining({ maxCritical: 0, maxHigh: 0 })
     )
   })
+
+  test('carries the sub-file split settings only when the split is configured', () => {
+    // Spec 27: unset MUST leave behaviour byte-identical, and the group cap decides
+    // nothing on its own — carrying it alone would put a value in the workflow
+    // input of a run that never splits a file.
+    const inputFor = (aiReview: Record<string, unknown>) =>
+      createWorkflowInput({
+        runId: 'run-sub-file',
+        repositoryRoot: '/repo/project',
+        reviewedPaths: ['src/a.ts'],
+        reviewedLineRanges: [],
+        reviewedDiffRanges: [],
+        reviewedDiffText: '',
+        evidence: [],
+        candidates: [],
+        config: CodeReviewerConfigSchema.parse({ aiReview }),
+        configHash: sha256('config'),
+        providerId: 'openai',
+        modelName: 'review-model',
+        admittedAt: '2026-06-22T10:00:00.000Z',
+        baselineConfigured: false,
+        skills: [],
+        tasks: [task({ id: 'task_a' })],
+        aiReviewBudget: aiReviewBudgetFor(
+          CodeReviewerConfigSchema.parse({ aiReview })
+        )
+      })
+
+    const off = inputFor({})
+
+    expect(off.maxDeclarationsPerDiscoveryCall).toBeUndefined()
+    expect(off.maxDeclarationGroupsPerFile).toBeUndefined()
+
+    const on = inputFor({
+      maxDeclarationsPerDiscoveryCall: 16,
+      maxDeclarationGroupsPerFile: 3
+    })
+
+    expect(on.maxDeclarationsPerDiscoveryCall).toBe(16)
+    expect(on.maxDeclarationGroupsPerFile).toBe(3)
+  })
 })

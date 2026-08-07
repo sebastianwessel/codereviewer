@@ -3,9 +3,11 @@ import { CodeReviewerConfigSchema } from '../../../../shared/contracts/index.js'
 import { assembleContext } from '../../run/context/context.js'
 import {
   TaskReviewInputSchema,
+  type HolisticReviewInput,
   type ModelHolisticReviewResult,
   type WorkflowReviewTask
 } from '../agent-contracts.js'
+import { buildReviewText, holisticReviewInputFor } from './review-packet.js'
 import { ReviewWorkflowInputSchema } from '../contracts.js'
 import {
   createBoundedRetrievalTools,
@@ -1262,5 +1264,164 @@ describe('discovery partitioning end to end (spec 27)', () => {
     // Only the call that was actually shown src/c.ts may raise it.
     expect(result.candidates).toHaveLength(1)
     expect(result.candidates[0]?.location.path).toBe('src/c.ts')
+  })
+})
+
+describe('sub-file discovery partitioning end to end (spec 27)', () => {
+  // Six declarations, four lines each: anchors on 1/5/9/13/17/21 in a 24-line file.
+  const declarationSource = Array.from(
+    { length: 6 },
+    (_unused, index) =>
+      `export const fn${index} = (): number => {\n  return ${index}\n}\n`
+  ).join('\n')
+  const singleFileTask: WorkflowReviewTask = {
+    ...task,
+    id: 'task_single_file',
+    paths: ['src/sample.ts'],
+    reviewContext: [
+      {
+        kind: 'file',
+        path: 'src/sample.ts',
+        content: declarationSource,
+        startLine: 1,
+        endLine: 24,
+        ledgerEntryId: 'ctx_bbbbbbbbbbbbbbbbbbbbbbbb'
+      }
+    ]
+  }
+  const singleFileInput = TaskReviewInputSchema.parse({
+    ...taskInput,
+    task: singleFileTask,
+    reviewedDiffRanges: [{ path: 'src/sample.ts', startLine: 1, endLine: 24 }]
+  })
+
+  const runWith = async (
+    declarationSettings: {
+      readonly maxDeclarationsPerDiscoveryCall?: number
+      readonly maxDeclarationGroupsPerFile?: number
+    },
+    findingsFor: (
+      holisticInput: HolisticReviewInput
+    ) => readonly unknown[] = () => []
+  ) => {
+    const packets: HolisticReviewInput[] = []
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: ReviewWorkflowInputSchema.parse({
+        runId: 'run-holistic',
+        reviewedPaths: ['src/sample.ts'],
+        evidence: [],
+        candidates: [],
+        skills: [],
+        ...declarationSettings,
+        provenance: {
+          reviewer: 'review-agent',
+          modelProvider: 'openai',
+          modelName: 'holistic-test',
+          signalVersions: { typescript: '6.0.3' },
+          configHash
+        }
+      }),
+      taskInput: singleFileInput,
+      task: singleFileTask,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          packets.push(holisticInput)
+          return holisticResultWith(findingsFor(holisticInput))
+        }
+      },
+      logger: { debug: () => {} }
+    })
+
+    return { packets, result }
+  }
+
+  test('unset config issues ONE call with a byte-identical packet', async () => {
+    const { packets, result } = await runWith({})
+
+    // The requirement is not "roughly the same": the packet a run sends with the
+    // key unset must be the one the undivided task builds, byte for byte, or the
+    // default has quietly changed behaviour.
+    expect(packets).toHaveLength(1)
+    expect(packets[0]).toEqual(
+      holisticReviewInputFor(
+        singleFileTask,
+        buildReviewText(singleFileInput, '')
+      )
+    )
+    expect(packets[0]?.reviewText).toContain('export const fn0')
+    expect(packets[0]?.reviewText).toContain('export const fn5')
+    expect(result.discovery?.callCount).toBe(1)
+  })
+
+  test('a configured declaration limit spreads ONE file over several calls', async () => {
+    const { packets, result } = await runWith({
+      maxDeclarationsPerDiscoveryCall: 3,
+      maxDeclarationGroupsPerFile: 3
+    })
+
+    expect(packets).toHaveLength(3)
+    expect(result.discovery?.callCount).toBe(3)
+    // Shown LESS, not merely told to focus: a split that still showed the whole
+    // file would be the un-anchored pass, measured at +0.83pp for +136% cost.
+    expect(packets[2]?.reviewText).not.toContain('export const fn0')
+    expect(packets[0]?.reviewText).not.toContain('export const fn5')
+    for (const packet of packets) {
+      expect(packet.paths).toEqual(['src/sample.ts'])
+      // Numbering stays absolute, so a finding's line is the file's real line.
+      expect(packet.reviewText.length).toBeLessThan(
+        buildReviewText(singleFileInput, '').length
+      )
+    }
+    expect(packets[1]?.reviewText).toContain('9: export const fn2')
+  })
+
+  test('a finding outside the line range its call was shown is dropped and counted', async () => {
+    const { result } = await runWith(
+      { maxDeclarationsPerDiscoveryCall: 3, maxDeclarationGroupsPerFile: 3 },
+      (holisticInput) =>
+        // Only the FIRST call answers, and it names a line that lives in the last
+        // group. Admission would otherwise anchor the finding against source this
+        // call never read.
+        holisticInput.reviewText.includes('1: export const fn0')
+          ? [
+              {
+                category: 'bug',
+                severity: 'high',
+                title: 'Reported outside this call’s line range',
+                description: 'Names a line this call was never shown.',
+                path: 'src/sample.ts',
+                startLine: 22
+              }
+            ]
+          : []
+    )
+
+    expect(result.candidates).toHaveLength(0)
+    // Counted exactly like the existing out-of-scope drop, rather than vanishing.
+    expect(result.discovery?.rawFindingCount).toBe(1)
+    expect(result.discovery?.droppedCount).toBe(1)
+  })
+
+  test('a finding inside the range its call was shown is admitted', async () => {
+    const { result } = await runWith(
+      { maxDeclarationsPerDiscoveryCall: 3, maxDeclarationGroupsPerFile: 3 },
+      (holisticInput) =>
+        holisticInput.reviewText.includes('1: export const fn0')
+          ? [
+              {
+                category: 'bug',
+                severity: 'high',
+                title: 'Reported inside this call’s line range',
+                description: 'Names a line this call was actually shown.',
+                path: 'src/sample.ts',
+                startLine: 6
+              }
+            ]
+          : []
+    )
+
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0]?.location.startLine).toBe(6)
+    expect(result.discovery?.droppedCount).toBe(0)
   })
 })

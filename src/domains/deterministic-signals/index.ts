@@ -4,6 +4,7 @@ export {
   detectDeterministicSignalFiles,
   discoverDeterministicSignalTestMappings
 } from './deterministic-signal-registry.js'
+export { declarationAnchorLines } from './declaration-anchors.js'
 export {
   extractPolyglotSignals,
   detectPolyglotSignalFiles,

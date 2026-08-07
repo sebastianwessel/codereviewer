@@ -28,8 +28,14 @@ describe('CodeReviewerConfigSchema', () => {
       actionableSeverityThreshold: 'medium',
       // Measured, not chosen: a 1 / 2 / 4 / unlimited sweep put 2 level with the
       // strongest setting on both recall and precision at 27% less cost.
-      maxFilesPerDiscoveryCall: 2
+      maxFilesPerDiscoveryCall: 2,
+      // The sub-file split's group ceiling. It has a default while
+      // `maxDeclarationsPerDiscoveryCall` deliberately has none, because the cap is
+      // inert on its own: with no declarations-per-call value set, no file is ever
+      // split and this number decides nothing.
+      maxDeclarationGroupsPerFile: 3
     })
+    expect(parsed.aiReview.maxDeclarationsPerDiscoveryCall).toBeUndefined()
     expect(parsed.promotionPolicy).toEqual({
       modelWeakOrRefuted: 'artifact-only'
     })

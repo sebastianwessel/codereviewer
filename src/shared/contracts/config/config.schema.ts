@@ -367,6 +367,13 @@ export const QualityGateConfigSchema = z.strictObject({
   failOnNewOnly: z.boolean().optional()
 })
 
+// Spec 27's measured operating point for the sub-file split's group ceiling: 16
+// declarations per group capped at 3 groups per file affects half the corpus at 1.8x
+// calls, where the uncapped settings reach 9.0x. Exported so the child-agent call
+// budget reserves against the SAME number the split honours — an under-reserved
+// budget makes the workflow refuse a call mid-run.
+export const defaultMaxDeclarationGroupsPerFile = 3
+
 export const AiReviewConfigSchema = z.strictObject({
   // A plain boolean, defaulting ON. It used to be `.optional()`, which made it a
   // TRI-state where `undefined` and `true` behaved identically and only an explicit
@@ -400,7 +407,35 @@ export const AiReviewConfigSchema = z.strictObject({
   // Partitioning only engages above this many changed files, so a typical small
   // change is unaffected; the cost applies to large changes, which are precisely the
   // ones the unpartitioned reviewer served worst.
-  maxFilesPerDiscoveryCall: z.int().min(1).default(2)
+  maxFilesPerDiscoveryCall: z.int().min(1).default(2),
+  // Spec 27, Sub-File Partitioning: how many DECLARATIONS one discovery call may be
+  // shown of a single file. A file with more is spread over several calls, each
+  // carrying that group's absolute line range and nothing else of the file.
+  //
+  // It exists because `maxFilesPerDiscoveryCall` multiplies calls by splitting the
+  // SET of files: a change touching one file yields one partition and one call, so
+  // the only mechanism this project has measured as working cannot engage. On the
+  // security corpus that is most of the corpus.
+  //
+  // OPTIONAL WITH NO DEFAULT, and unset means off. This is unmeasured, and the
+  // honest prior stated in the spec is a TRADE rather than a gain — local and
+  // implementation recall up, cross-function recall down, net sign unknown, because
+  // a defect whose two halves land in non-adjacent groups is lost. Shipping a
+  // chosen-by-feel default is the failure this project has corrected five times.
+  // The spec's operating point to measure is 16.
+  maxDeclarationsPerDiscoveryCall: z.int().min(1).optional(),
+  // Hard ceiling on the groups one file is split into. Without it the split is
+  // unbounded in cost: one corpus file carries 200 anchors, which at 4 per group is
+  // 50 calls for a single case, against the +136% that got the un-anchored pass
+  // removed. When the cap binds, the groups are ENLARGED — the whole file stays
+  // covered, and no part of it is silently dropped from review.
+  //
+  // Inert unless `maxDeclarationsPerDiscoveryCall` is set, so its default changes
+  // nothing on its own.
+  maxDeclarationGroupsPerFile: z
+    .int()
+    .min(1)
+    .default(defaultMaxDeclarationGroupsPerFile)
 })
 
 export const PromotionPolicyConfigSchema = z.strictObject({

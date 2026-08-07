@@ -3,8 +3,7 @@ import path from 'node:path'
 import { resolveExistingPathInsideRoot } from '../../../../platform/path-service.js'
 import { utf8ByteLength } from '../../../../shared/text/utf8-bytes.js'
 import {
-  extractDeterministicSignals,
-  type DeterministicSignalExtraction,
+  declarationAnchorLines,
   type SupportSignalFact
 } from '../../../deterministic-signals/index.js'
 
@@ -246,30 +245,9 @@ const buildDefinitionDigest = (
   const lines = content.split('\n')
   const numbered = (index: number): string => `${index + 1}: ${lines[index]}`
 
-  let facts: readonly SupportSignalFact[] = []
-
-  try {
-    const extraction: DeterministicSignalExtraction = extractDeterministicSignals(
-      [{ path: dependencyPath, content }]
-    )
-    facts = extraction.facts
-  } catch {
-    facts = []
-  }
-
-  const relevantKinds = new Set<SupportSignalFact['kind']>([
-    'export',
-    'public-symbol',
-    'declaration'
-  ])
-  const anchorLines = [
-    ...new Set(
-      facts
-        .filter((fact) => relevantKinds.has(fact.kind))
-        .map((fact) => fact.line)
-        .filter((line) => line >= 1 && line <= lines.length)
-    )
-  ].sort((left, right) => left - right)
+  // Shared with spec 27's sub-file split: one answer to "where does a declaration
+  // start here", so the two features cannot drift apart on it.
+  const anchorLines = declarationAnchorLines(dependencyPath, content)
 
   const selected = new Set<number>()
 

@@ -84,6 +84,14 @@ export const runProviderWorkflow = async (
       : {
           maxFilesPerDiscoveryCall:
             input.config.aiReview.maxFilesPerDiscoveryCall
+        }),
+    // Spec 27's sub-file split multiplies the calls a partition costs again, by up
+    // to the group cap. Reserved on the same terms and for the same reason.
+    ...(input.config.aiReview.maxDeclarationsPerDiscoveryCall === undefined
+      ? {}
+      : {
+          maxDeclarationGroupsPerFile:
+            input.config.aiReview.maxDeclarationGroupsPerFile
         })
   })
   const harness = createModelBackedReviewHarness({

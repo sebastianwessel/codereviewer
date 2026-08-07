@@ -134,9 +134,10 @@ export const DiscoveryTelemetrySchema = z.strictObject({
   // post-suppression, and before the semantic merge groups duplicates away.
   candidateCount: z.int().min(0),
   // Raw findings that never became candidates, separated by cause. A finding that
-  // failed to parse or named an out-of-scope path is a different problem from one
-  // suppressed as a duplicate, and one counter for all of them hides each behind
-  // the others.
+  // failed to parse, named an out-of-scope path, or named a line its own call was
+  // never shown (spec 27's sub-file split narrows a call to one declaration group)
+  // is a different problem from one suppressed as a duplicate, and one counter for
+  // all of them hides each behind the others.
   droppedCount: z.int().min(0),
   suppressedByIdCount: z.int().min(0),
   suppressedByLocationCount: z.int().min(0),

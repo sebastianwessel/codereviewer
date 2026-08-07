@@ -34,6 +34,12 @@ export const maxChildAgentCallsForReview = (
     readonly maxConcurrentTasks?: number
     readonly securityPassEnabled?: boolean
     readonly maxFilesPerDiscoveryCall?: number
+    // Spec 27's sub-file split (`aiReview.maxDeclarationsPerDiscoveryCall`). Only
+    // the CEILING is passed, never the declarations-per-call value: how many groups
+    // a file really produces depends on its AST, and this budget must bound the
+    // worst case rather than predict the actual one. Absent means the split is off,
+    // which is one group per file.
+    readonly maxDeclarationGroupsPerFile?: number
   } = {}
 ): number => {
   const taskCount = Math.max(0, input.taskCount ?? 0)
@@ -46,10 +52,17 @@ export const maxChildAgentCallsForReview = (
   // This must track partitioning rather than be re-guessed: under-reserving is fatal
   // (the workflow refuses the call) while over-reserving costs nothing, because this
   // is a ceiling and not a spend.
-  const partitionsPerTask =
+  const filePartitionsPerTask =
     input.maxFilesPerDiscoveryCall === undefined
       ? 1
       : Math.ceil(maxPathsPerReviewTask / input.maxFilesPerDiscoveryCall)
+  // Spec 27's sub-file split multiplies again, INSIDE each file partition: a
+  // partition becomes as many sub-tasks as the largest group count among its files,
+  // and that count is capped by `maxDeclarationGroupsPerFile`. The cap is the exact
+  // worst case, so it is what is reserved — a file that splits into fewer groups
+  // simply leaves budget unspent, which costs nothing.
+  const partitionsPerTask =
+    filePartitionsPerTask * Math.max(1, input.maxDeclarationGroupsPerFile ?? 1)
   const discoveryCallsPerTask =
     partitionsPerTask * (1 + (input.securityPassEnabled === true ? 1 : 0))
   const refutationCallsPerTask =

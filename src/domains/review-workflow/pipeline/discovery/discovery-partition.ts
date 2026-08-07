@@ -20,12 +20,23 @@
 // about and the unit findings are reported against; a byte rule would reintroduce
 // exactly the content-dependent guess spec 26 removed.
 //
+// A SECOND split composes on top of it (spec 27, Sub-File Partitioning, added
+// 2026-08-07, off by default and unmeasured): splitting the file SET does nothing on
+// a change that touches one file, which on the security corpus is most of the
+// corpus, so a file's body is spread over several calls by declaration. Its unit is
+// a declaration from the AST, so the byte rule stays out of both splits.
+//
 // This is NOT a second pass over the same context. Repeated passes were measured and
 // rejected (2026-07-26: sweep and lens both failed to beat baseline at +40-47% cost)
 // because a second look at identical material re-derives the same findings.
 // Partitioned calls see DIFFERENT material, which is why the spec 26 arms diverged.
 
+import { defaultMaxDeclarationGroupsPerFile } from '../../../../shared/contracts/index.js'
 import { type WorkflowReviewTask } from '../agent-contracts.js'
+import {
+  splitDocumentByDeclarations,
+  type DeclarationSplitOptions
+} from './declaration-groups.js'
 import { partitionReviewContext, subTaskFrom } from './task-context-split.js'
 
 /**
@@ -36,7 +47,7 @@ import { partitionReviewContext, subTaskFrom } from './task-context-split.js'
  * fit. Callers therefore always iterate the result and never branch on whether
  * partitioning applied.
  */
-export const partitionTaskForDiscovery = (
+const partitionTaskByFile = (
   task: WorkflowReviewTask,
   maxFiles: number | undefined
 ): readonly WorkflowReviewTask[] => {
@@ -65,3 +76,101 @@ export const partitionTaskForDiscovery = (
 
   return partitions
 }
+
+/**
+ * Spread a partition's reviewed file bodies over several calls, by declaration.
+ *
+ * Group `n` of the partition carries group `n` of every file that HAS one, so each
+ * declaration group is shown exactly once and a call is never handed the same body
+ * twice. A file with fewer groups than its siblings simply stops appearing, rather
+ * than repeating its last group to fill the shape — repetition would be a second
+ * look at identical material, which this project measured and rejected.
+ *
+ * The number of sub-tasks is therefore the largest group count among the
+ * partition's files, and it is one (the partition itself, unchanged) whenever no
+ * file split.
+ */
+const partitionTaskByDeclarations = (
+  partition: WorkflowReviewTask,
+  options: DeclarationSplitOptions
+): readonly WorkflowReviewTask[] => {
+  const { targets, contextOnly } = partitionReviewContext(partition)
+  const groupsPerTarget = targets.map((target) =>
+    splitDocumentByDeclarations(target, options)
+  )
+  const groupCount = Math.max(
+    0,
+    ...groupsPerTarget.map((groups) => groups.length)
+  )
+
+  if (groupCount < 2) {
+    return [partition]
+  }
+
+  const subTasks: WorkflowReviewTask[] = []
+
+  for (let index = 0; index < groupCount; index += 1) {
+    subTasks.push(
+      subTaskFrom(
+        partition,
+        `declarations:${index}`,
+        groupsPerTarget
+          .map((groups) => groups[index])
+          .filter(
+            (group): group is (typeof targets)[number] => group !== undefined
+          ),
+        contextOnly
+      )
+    )
+  }
+
+  return subTasks
+}
+
+/**
+ * Every discovery call this task will issue, as a sub-task apiece.
+ *
+ * Two independent splits compose here, in this order: by FILE
+ * (`maxFilesPerDiscoveryCall`), then by DECLARATION inside each file partition
+ * (`maxDeclarationsPerDiscoveryCall`). The second exists because the first cannot
+ * engage at all on a single-file change, which is most of the security corpus.
+ *
+ * With `declarations` absent — the default — this is byte-for-byte the file
+ * partitioning that shipped, including the identity return for a task that does not
+ * split.
+ */
+export const partitionTaskForDiscovery = (
+  task: WorkflowReviewTask,
+  maxFiles: number | undefined,
+  declarations?: DeclarationSplitOptions | undefined
+): readonly WorkflowReviewTask[] => {
+  const filePartitions = partitionTaskByFile(task, maxFiles)
+
+  return declarations === undefined
+    ? filePartitions
+    : filePartitions.flatMap((partition) =>
+        partitionTaskByDeclarations(partition, declarations)
+      )
+}
+
+/**
+ * The sub-file split options a workflow input asks for, or `undefined` for off.
+ *
+ * `maxDeclarationsPerDiscoveryCall` is the switch: the group cap alone means
+ * nothing, so an input that carries only the cap leaves splitting off. Shared by
+ * every caller that has to reproduce the exact call set — discovery itself and the
+ * packet budget guard — because a guard that partitioned differently from the
+ * discovery it guards would measure a packet nobody sends.
+ */
+export const declarationSplitOptionsFor = (input: {
+  readonly maxDeclarationsPerDiscoveryCall?: number | undefined
+  readonly maxDeclarationGroupsPerFile?: number | undefined
+}): DeclarationSplitOptions | undefined =>
+  input.maxDeclarationsPerDiscoveryCall === undefined
+    ? undefined
+    : {
+        maxDeclarationsPerCall: input.maxDeclarationsPerDiscoveryCall,
+        maxGroupsPerFile:
+          input.maxDeclarationGroupsPerFile ??
+          defaultMaxDeclarationGroupsPerFile
+      }

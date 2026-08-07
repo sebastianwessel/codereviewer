@@ -195,3 +195,93 @@ is nothing left to buy.
 Partitioning engages only above two changed files, so small changes are unaffected;
 the cost falls on large changes, which are the ones the unpartitioned reviewer served
 worst.
+
+## Sub-File Partitioning (added 2026-08-07)
+
+The section above named sub-file partitioning "the untested lever […] where the curve
+points next". This is its design. It is **off by default and unmeasured**; nothing
+here may be quoted as a result.
+
+### Why the file is the wrong unit on a single-file change
+
+`maxFilesPerDiscoveryCall` multiplies calls by **splitting the set of files**. On a
+change that touches one file there is one partition and one call, so the only
+mechanism this project has measured as working **cannot engage at all**. On the
+security corpus that is most of the corpus.
+
+### The mechanism this must reproduce, and the trap
+
+Partitioning works because a call is **shown less**: per-file attention decays as
+`shown^-0.30`. It does **not** work because the call is told to focus. A sub-file
+split that still showed the whole file would change only the label, which is the
+un-anchored pass — measured at +0.83pp for +136% cost and removed. **A sub-file
+partition MUST therefore reduce what its call is shown, or it is not this mechanism.**
+
+### Design
+
+1. A file's split points are its **declaration anchors** — the `export`,
+   `public-symbol` and `declaration` facts the deterministic extractor already
+   produces for all seven languages. Anchors come from the AST, never from a byte
+   count, so spec 26's content-dependent guess is not reintroduced and rule 4 above
+   still holds: the unit is a declaration, not a size.
+2. Anchors are grouped into **contiguous runs of at most
+   `maxDeclarationsPerDiscoveryCall`**. Each group becomes a sub-task whose reviewed
+   file document carries that group's absolute line range — the `startLine`/`endLine`
+   chunk representation that already exists.
+3. **Consecutive groups overlap by one declaration.** A defect that spans two adjacent
+   declarations is otherwise invisible to every call, and adjacent declarations are
+   where same-file cross-function defects mostly live. The overlap is one declaration
+   and no more: it is a bounded concession, not a restoration of whole-file context.
+4. The number of groups per file is capped by `maxDeclarationGroupsPerFile`. Without a
+   cap the split is unbounded in cost — one corpus file carries 200 anchors, which at
+   4 per group is 50 calls for a single case.
+5. Every sub-task receives the same shared context the undivided task would have —
+   diff, change intent, support signals, referenced definitions — exactly as rule 3
+   requires. Only the **reviewed file body** is narrowed.
+6. A finding MUST remain restricted to the **line range** its own call was shown, not
+   merely to the file. This extends the existing admission rule; without it a call
+   could anchor a finding against lines it never read.
+
+### The predicted harm, stated before measuring
+
+Narrowing what a call sees must cost something, and the corpus says where: **16 of 17
+cross-function and 13 of 15 cross-file expectations sit in cases this knob would
+split**. A defect whose two halves land in non-adjacent groups is lost, and the
+one-declaration overlap does not save it. Spec 26 is the precedent that this is not
+hypothetical — splitting a task's context cost **−8.5pp**.
+
+So the honest prior is a **trade**, not a gain: `local` and `implementation` recall up,
+`cross-function` down, with the sign of the net unknown. Any measurement MUST report
+recall **per context depth**, because a null in the aggregate could be a real gain and
+a real loss cancelling, and that would be the most misleading possible summary.
+
+### Requirements
+
+- `maxDeclarationsPerDiscoveryCall` unset MUST leave behaviour byte-identical.
+- Splitting MUST NOT apply to a file with no declaration anchors: an extractor
+  failure or an unsupported language falls back to the whole file, never to a byte
+  slice.
+- Cost MUST be reported as measured call count, never estimated.
+
+### Measurability precheck (2026-08-07, $0)
+
+Run before any spend, per the spec 26 precedent.
+
+| `maxDeclarationsPerDiscoveryCall` / cap | cases split | calls per run | worst case |
+|---|---|---|---|
+| 4 / uncapped | 57/70 (81%) | **11.6x** | 67 calls |
+| 8 / uncapped | 50/70 (71%) | 5.3x | 29 calls |
+| 16 / uncapped | 35/70 (50%) | 2.8x | 14 calls |
+| **16 / 3** | **35/70 (50%)** | **1.8x** | **3 calls** |
+| 8 / 4 | 50/70 (71%) | 2.6x | 4 calls |
+
+Counted with the overlap identity — because consecutive groups share one anchor, `n`
+anchors at `size` per group give `ceil((n - 1) / (size - 1))` groups, not
+`ceil(n / size)`. A first pass at this table used the naive form and understated every
+uncapped multiplier.
+
+Uncapped settings are refused on cost alone: the un-anchored pass was removed at
++136%, and 9.0x cannot be justified by any effect this instrument can resolve. **16
+declarations per group, capped at 3 groups per file** is the operating point to
+measure — half the corpus affected at 1.8x calls, against the +63% that bought the
+file-partitioning win.
