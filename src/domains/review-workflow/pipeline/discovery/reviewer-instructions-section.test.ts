@@ -151,7 +151,7 @@ const discoveryReviewTexts = async (
 
   await runModelBackedHolisticTaskReview({
     workflowInput,
-    taskInput: taskReviewInputFor(workflowInput, task, 'digest'),
+    taskInput: taskReviewInputFor(workflowInput, task),
     task,
     runners: {
       holisticReview: async (holisticInput) => {

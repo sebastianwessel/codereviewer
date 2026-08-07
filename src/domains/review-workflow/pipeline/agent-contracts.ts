@@ -697,13 +697,22 @@ export type SemanticMergeRunner = (
 // same documents in the packet twice and give a reader two places to ask which
 // instructions this task got, which is exactly how the two answers start
 // disagreeing.
+//
+// It carries no shared-context digest either. One was threaded through every
+// packet builder and rendered into none of them, and it could not have carried
+// anything: the digest rendered only admitted findings, task states, and support
+// signal facts, and the run appends all three AFTER the task queue drains. Every
+// discovery and refutation packet of every run therefore held the same constant
+// "no admitted shared context yet" string, while the refuter's instructions named
+// it as a source to consult. Making it genuinely accumulate was the alternative
+// and was rejected: it would make one task's packet depend on another task's
+// completion order, and no measurement supports a benefit.
 export const TaskReviewInputSchema = z.strictObject({
   task: WorkflowReviewTaskSchema,
   reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
   skills: z.array(SkillContextDocumentSchema),
-  sharedDigest: z.string(),
   provenance: WorkflowProvenanceInputSchema
 })
 
@@ -784,14 +793,18 @@ export type FindingRefutationResult = z.infer<
 // 04), because scoping resolves the set per task — so a run that scopes an
 // instruction to part of the repository shortens its own refutation prefix to
 // `provenance` + the leading bytes of `instructions`. The field is left here rather
-// than demoted below `sharedDigest`: refutation caches nothing either way (see the
-// 968-against-1024 measurement below), and keeping the operator's guidance in the
-// head is what makes the prefix long enough to matter at all if this prompt ever
-// grows past the threshold.
+// than demoted: refutation caches nothing either way (see the 968-against-1024
+// measurement below), and keeping the operator's guidance in the head is what makes
+// the prefix long enough to matter at all if this prompt ever grows past the
+// threshold.
 //
-// What that prefix currently measures (recorded off the real pipeline over the
-// 37-slice real-repo corpus, o200k_base, no provider spend): refuter instructions
-// 783 tokens + static packet head 185 tokens = 968 identical leading tokens. The
+// What that prefix measured when it was last recorded off the real pipeline (over
+// the 37-slice real-repo corpus, o200k_base, no provider spend): refuter
+// instructions 783 tokens + static packet head 185 tokens = 968 identical leading
+// tokens. That measurement predates the removal of the always-constant
+// `sharedDigest` field, which took roughly a dozen tokens out of both the head and
+// the instructions; the conclusion is unchanged, because the prefix was already
+// short of the threshold and got shorter. The
 // provider caches only a prefix of at least 1024 tokens, in 128-token increments,
 // so refutation caches NOTHING and is 56 tokens short — while discovery's 1,621-token
 // prefix caches 1,536 per call, which is every cached token a run reports.
@@ -815,12 +828,25 @@ export const FindingRefutationBatchInputSchema = z.strictObject({
   provenance: WorkflowProvenanceInputSchema,
   instructions: z.array(ContextDocumentSchema),
   skills: z.array(SkillContextDocumentSchema),
-  sharedDigest: z.string(),
   reviewContext: z.array(ReviewContextDocumentSchema),
   reviewedDiffRanges: z.array(ReviewedDiffRangeSchema).default([]),
   evidence: z.array(EvidenceRecordSchema),
   supportSignalCandidates: z.array(CandidateFindingSchema),
-  candidates: z.array(CandidateFindingSchema).min(1)
+  candidates: z.array(CandidateFindingSchema).min(1),
+  // Present ONLY when the budget ladder in `refutation/packet.ts` withheld
+  // something, and last because it is per-batch and must not sit in the shared
+  // prefix above.
+  //
+  // It exists because the ladder empties `supportSignalCandidates` and
+  // `reviewContext`, and the refuter's instructions treat review context as
+  // evidentiary — so an emptied packet reads as "there is no context and no
+  // corroboration" rather than "these were withheld", and a candidate gets refuted
+  // on the strength of an absence the engine itself created. A refuted finding
+  // produces no output at all, so nothing downstream can show what was suppressed.
+  // The notice used to ride on the shared-context digest field, which was the only
+  // free text the packet had; that field was always the same constant and is gone,
+  // so the notice is declared for what it is.
+  budgetNotice: z.string().optional()
 })
 
 // Loose by design, like holistic discovery's output: the provider receives an

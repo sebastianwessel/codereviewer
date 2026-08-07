@@ -71,7 +71,6 @@ const taskInputFor = (paths: readonly string[]) =>
     evidence: [],
     candidates: [],
     skills: [],
-    sharedDigest: 'digest',
     provenance: {
       reviewer: 'review-agent',
       modelProvider: 'openai',

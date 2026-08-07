@@ -15,8 +15,8 @@ optional change-intent brief, and the operator's reviewer instructions.
 
 That document is the whole packet. A discovery call sends `{taskId, paths,
 reviewText}` and nothing else — so the evidence records, seed candidates, skill
-metadata, shared digest, and provenance that the workflow assembles alongside it
-never reach this stage, and the packet budget is measured against what is sent.
+metadata, and provenance that the workflow assembles alongside it never reach
+this stage, and the packet budget is measured against what is sent.
 Refutation is the stage that receives those fields.
 
 ## What it does

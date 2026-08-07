@@ -76,7 +76,6 @@ const taskInputWithIntent = (brief: string) =>
     evidence: [],
     candidates: [],
     skills: [],
-    sharedDigest: 'digest',
     provenance
   })
 

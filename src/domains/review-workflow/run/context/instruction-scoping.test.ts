@@ -149,7 +149,7 @@ const instructionContentsInDiscoveryPacket = (
   workflowInput: ReviewWorkflowInput,
   task: WorkflowReviewTask
 ): readonly string[] =>
-  taskReviewInputFor(workflowInput, task, 'digest').task.instructions.map(
+  taskReviewInputFor(workflowInput, task).task.instructions.map(
     (instruction) => instruction.content
   )
 
@@ -163,8 +163,7 @@ const instructionContentsInRefutationPacket = (
     workflowInput,
     task,
     candidates: [candidate],
-    allCandidates: [candidate],
-    sharedDigest: 'digest'
+    allCandidates: [candidate]
   }).instructions.map((instruction) => instruction.content)
 }
 

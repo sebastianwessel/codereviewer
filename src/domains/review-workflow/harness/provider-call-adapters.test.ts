@@ -80,7 +80,6 @@ describe('model provider call adapters', () => {
       instructions: [],
       reviewContext: [],
       skills: [],
-      sharedDigest: '(no admitted shared context yet)',
       provenance
     })
 

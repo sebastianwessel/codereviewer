@@ -228,7 +228,7 @@ task.
 - Contracts: model-assisted or hermetic-test refutation uses only the provided
   candidates, reviewed diff ranges, evidence, review context (excluding the
   change-intent brief), support-signal candidates, instructions, skills metadata,
-  shared digest, and provenance to prove or disprove each candidate
+  and provenance to prove or disprove each candidate
   (reachability, guards, framework semantics, declared contracts, outside-scope
   status, evidence sufficiency). Each candidate receives its own verdict, and
   sharing a call must not make one candidate's verdict depend on another's.

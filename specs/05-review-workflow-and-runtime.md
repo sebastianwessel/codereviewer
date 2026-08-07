@@ -177,7 +177,7 @@ Task limits:
   the packet is assembled from. They are different objects: `reviewText` renders
   the unified diff and a line number on every source line, neither of which the
   task input carries, while the task input carries evidence, candidates, skills,
-  the shared digest, and provenance, none of which any discovery prompt renders.
+  and provenance, none of which any discovery prompt renders.
   Measured by driving this engine's own assembly path offline over a 38-file
   change of its own history (10 tasks, 21 discovery packets), the task input
   ranged from 0.99x to 3.08x the largest packet its task sends — and from 0.71x to
@@ -189,12 +189,13 @@ Task limits:
   security pass is enabled (spec 15), whose packet is the general one plus two
   static blocks. Reactive splitting (spec 26) only produces smaller packets and
   needs no measurement;
-- shedding the shared digest was removed rather than repaired. The digest is not
-  rendered into any discovery prompt — it appeared in none of the 21 packets
-  measured above — so replacing it shortened the guard's arithmetic and never the
-  packet, which is to say it admitted packets by mis-measuring them. Refutation is
-  a different packet and keeps its own shedding ladder, which does shorten what it
-  sends;
+- shedding the shared digest was removed rather than repaired, and the digest
+  field itself has since been removed from the packet entirely (see *The Shared
+  Digest Was A Constant* below). The digest was not rendered into any discovery
+  prompt — it appeared in none of the 21 packets measured above — so replacing it
+  shortened the guard's arithmetic and never the packet, which is to say it
+  admitted packets by mis-measuring them. Refutation is a different packet and
+  keeps its own shedding ladder, which does shorten what it sends;
 - every source chunk must carry the absolute line range it occupies in its file,
   and chunks must be cut on line boundaries (a single line longer than the split
   size is the only exception and keeps one line number across its pieces). This
@@ -326,8 +327,11 @@ record. A sub-task's `paths` MUST be narrowed to its own review targets.
 | `evidence` | evidence records in task scope |
 | `candidates` | support-signal seed candidates in task scope |
 | `skills` | redacted skill metadata |
-| `sharedDigest` | compact admitted shared-context digest with relevant-entry filtering, per-summary truncation, and recency-preserving byte cap |
 | `provenance` | workflow provenance input |
+
+`TaskReviewInput` carries no shared-context digest. It did until 2026-08-08; see
+*The Shared Digest Was A Constant* below for why the field is gone rather than
+repaired.
 
 `runId` and the raw unified-diff text are run-wide, not task-scoped: they live on
 the workflow input, and the discovery prompt cuts the task's own diff segments
@@ -376,13 +380,12 @@ Task queue rules:
 - task state transitions are append-only: `planned -> running -> completed`
   or `planned -> running -> failed`;
 - worker inputs contain only task-scoped context, evidence, deterministic signals,
-  instructions, mounted skill references, and a compact shared digest from
-  earlier admitted task output;
-- live shared digests passed to later workers must not include raw candidate
-  findings or admission decisions before they pass the configured safe digest
-  boundary. Raw candidate content may remain in its owning task packet and final
-  admission input, but only admitted findings and other explicitly safe shared
-  entries are rendered into live worker digests;
+  instructions, and mounted skill references. No worker input carries output from
+  another task: a task's packet MUST NOT depend on which other tasks have finished
+  (see *The Shared Digest Was A Constant* below);
+- raw candidate findings and admission decisions MUST NOT reach any other task's
+  worker input. Raw candidate content may remain in its owning task packet and
+  final admission input;
 - provider-backed review invokes worker agents per task, never with the entire
   repository context as one model call.
 - signal-only review uses the same task queue state machine and
@@ -406,8 +409,8 @@ is not that: partitioned calls see different material, which is the whole reason
 behaves differently.
 
 - The review input is the task's unified-diff segment plus the full
-  line-numbered changed files, alongside deterministic support signals,
-  instruction/skill metadata, and a compact safe digest.
+  line-numbered changed files, alongside deterministic support signals and
+  instruction/skill metadata.
 - When the task carries reviewer instruction documents (`04-configuration-and-
   providers.md`), the input opens with a separate reviewer-instructions section
   holding those documents, ahead of every untrusted section. Its header marks it
@@ -456,8 +459,7 @@ behaves differently.
   cap is not what binds in practice — a call typically returns far fewer — and
   refutation, not this cap, is what controls precision.
 - Candidate findings are untrusted until they pass refutation and admission.
-  Raw candidates do not influence later workers before they pass the configured
-  safe digest boundary.
+  Raw candidates do not influence any other task's worker input at all.
 
 ### Reviewer Instructions In The Discovery Prompt (2026-08-05, Unmeasured)
 
@@ -862,7 +864,7 @@ sharing a call must not make one candidate's verdict depend on another's.
 
 - The refuter may use only the provided candidates, `reviewedDiffRanges`,
   evidence, review context, support-signal candidates, instructions, skill
-  metadata, shared digest, and provenance. Beyond the bounded mounted skill
+  metadata, and provenance. Beyond the bounded mounted skill
   read/list/grep loop it receives no repository tools. Giving it the mediated
   retrieval tools was built, measured and removed — see *Measured Outcome Of The
   Withdrawn Refutation Retrieval* below.
@@ -890,14 +892,25 @@ sharing a call must not make one candidate's verdict depend on another's.
   changed lines or exposed elsewhere in that file.
 - Refutation input construction is a model-bound packet boundary that uses the
   shared `maxTaskInputBytes` provider budget. Under budget pressure, it omits
-  the shared digest first, then support-signal corroboration candidates, then
-  ambient review context before failing the packet budget. It must preserve the
-  candidates, candidate-scoped evidence, reviewed diff ranges, instructions,
-  skill metadata, and provenance before a provider call starts. A batch that
-  still exceeds the budget is split in half and each half retried, so an
-  oversized task costs more calls rather than losing its candidates; a single
-  candidate that cannot fit records the shared packet-budget error instead of
-  truncating source-bearing fields.
+  support-signal corroboration candidates first, then ambient review context,
+  before failing the packet budget. It must preserve the candidates,
+  candidate-scoped evidence, reviewed diff ranges, instructions, skill metadata,
+  and provenance before a provider call starts. A batch that still exceeds the
+  budget is split in half and each half retried, so an oversized task costs more
+  calls rather than losing its candidates; a single candidate that cannot fit
+  records the shared packet-budget error instead of truncating source-bearing
+  fields. A rung that shed the shared digest used to run ahead of both: it dropped
+  a constant of a few dozen bytes and could never make an oversized packet fit, so
+  it read as a reduction while doing nothing, and it went with the field.
+- Every rung of that ladder MUST state what it withheld, in a `budgetNotice` field
+  the refuter is instructed to read. Both rungs empty an array, and the refuter's
+  instructions make review context evidentiary, so an emptied packet otherwise
+  reads as "there is no context and no corroboration" rather than "these were
+  withheld" — and a candidate is then refuted on the strength of an absence the
+  engine itself created, invisibly, because a refuted finding produces no output.
+  The notice must also state what the absence does NOT mean: a claim that cannot
+  be supported from what remains is `needs-more-evidence`, never `refuted`. A
+  packet that fits carries no notice.
 - Packet fields are ordered so everything shared across batches comes first and
   the per-candidate payload last, keeping the longest possible stable prompt
   prefix for provider prompt caches.
@@ -1213,10 +1226,10 @@ Rules:
   run-wide source context outside the task packets. Task packets are the model
   boundary.
 - Provider-backed workflows orchestrate queued `holistic_review` worker calls
-  through a bounded rolling worker pool, update workflow-local shared context
-  after each completed task, pass compact shared digests to later workers, and
-  then run refutation, candidate admission, baseline matching, and quality
-  gates.
+  through a bounded rolling worker pool, and then run refutation, candidate
+  admission, baseline matching, and quality gates. No worker call is fed from
+  another worker's output, so the packet a task sends does not depend on the order
+  the queue completed in.
 - Provider-backed harness creation must pass the scale-derived child-agent call
   cap from the provider workflow boundary, where workflow input task count and
   AI review budgets are available. Direct harness construction may fall back to
@@ -1357,11 +1370,12 @@ Rules:
 
 ## Shared Context
 
-The shared context is an append-only run-local substrate. Provider-backed
-workflows maintain a live shared digest while workers run; review artifacts
-persist a JSON snapshot at completion or after a recoverable terminal provider
-task failure. Shared context must use actual queue/admission events and backing
-references rather than a single repository prompt.
+The shared context is an append-only run-local substrate. It is a RECORD, not a
+channel between tasks: review artifacts persist a JSON snapshot of it at
+completion or after a recoverable terminal provider task failure, and nothing it
+holds is rendered into a model packet. Shared context must use actual
+queue/admission events and backing references rather than a single repository
+prompt.
 
 Review context documents supplied to model tasks may be partial excerpts
 selected for budget. Model instructions and refutation must not treat omitted
@@ -1427,6 +1441,34 @@ Compact shared entries contain summaries, source, task ID when available,
 evidence IDs, and backing record references. Consumers may unfold backing
 evidence by shared entry ID; compact summaries must not inline raw source,
 prompt text, secrets, or provider output.
+
+### The Shared Digest Was A Constant (Removed 2026-08-08)
+
+Until 2026-08-08 the discovery and refutation packets each carried a
+`sharedDigest` field, described here as "a compact shared digest from earlier
+admitted task output". It never carried one. The renderer emitted only three
+entry kinds — `support-signal-fact`, `task-state`, and `admitted-finding` — and a
+run appends all three AFTER the task queue has drained: task states and support
+signal facts during result assembly, admitted findings at workflow completion.
+While tasks ran, the workflow's shared context held evidence records and nothing
+else, and evidence is not a digest kind. Every discovery packet and every
+refutation packet of every run therefore carried the same constant string,
+`(no admitted shared context yet)` — which the committed tests asserted — while
+the refuter's instructions named the field as a source to consult. The field, its
+renderer, and the plumbing that threaded it through the task queue are removed.
+
+Making it genuinely accumulate was the alternative, and it is rejected rather than
+deferred. A task's packet would then depend on which other tasks had finished
+first, turning a pipeline whose packets are a deterministic function of the change
+into one whose packets depend on completion order — for a benefit no measurement
+supports. The rule above stands instead: a worker input carries no other task's
+output.
+
+Two other things go with it. The refutation shedding ladder loses its first rung,
+which shed the constant and could never make an oversized packet fit; and the
+budget-omission notice that rode on the digest field moves to its own
+`budgetNotice` field, because that notice is the one thing the field carried that
+a call actually depended on.
 
 When a provider-backed worker task fails after review context was assembled,
 the runner must preserve a partial shared-context snapshot. The snapshot must
@@ -1829,6 +1871,7 @@ provider messages, prompt text, source snippets, tool output, or secrets.
 | Split halves keep their absolute line origins so a finding reports the file's real line | source chunk numbering unit tests |
 | The child-agent call budget scales with `maxFilesPerDiscoveryCall` and never under-reserves | harness config unit tests |
 | The change-intent brief reaches discovery and never reaches refutation | refutation packet unit tests |
+| Each refutation shedding rung names what it withheld in `budgetNotice`, and a packet that fits carries none | refutation packet unit tests |
 | Baseline marks new/existing/resolved findings deterministically | baseline fixture tests |
 | No raw source in default logs | log snapshot/redaction test |
 | Provider task failure writes artifact-ready partial state | runner partial-failure regression test |

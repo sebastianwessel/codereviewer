@@ -59,7 +59,6 @@ export const prepareCandidatesForAdmission = async (
     readonly workflowInput: ReviewWorkflowInput
     readonly tasks: readonly WorkflowReviewTask[]
     readonly candidates: readonly CandidateFinding[]
-    readonly sharedDigest: string
     readonly reviewEvidence?: readonly EvidenceRecord[]
     readonly refuteFinding?: FindingRefutationRunner
     readonly signal?: AbortSignal
@@ -92,7 +91,6 @@ export const prepareCandidatesForAdmission = async (
         tasks: input.tasks,
         candidates,
         allCandidates: input.candidates,
-        sharedDigest: input.sharedDigest,
         reviewEvidence,
         refuteFinding,
         ...(input.signal === undefined ? {} : { signal: input.signal }),

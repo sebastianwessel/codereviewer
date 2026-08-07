@@ -20,28 +20,27 @@ const task = (id: string, priority: number): WorkflowReviewTask => ({
 })
 
 describe('workflow task queue', () => {
-  test('runs queued tasks in deterministic order with live shared digest snapshots', async () => {
+  test('runs queued tasks in deterministic round, priority, id order', async () => {
     const calls: string[] = []
     const events: string[] = []
 
     const result = await runQueuedReviewTasks({
       tasks: [task('b', 1), task('a', 0)],
       maxConcurrentTasks: 1,
-      sharedDigest: () => `digest-${calls.length}`,
       onTaskEvent: (event) => {
         events.push(
           `${event.id}:${event.state}:${event.workerId ?? '-'}:${event.message ?? '-'}`
         )
       },
-      runTask: async (queuedTask, sharedDigest) => {
-        calls.push(`${queuedTask.id}:${sharedDigest}`)
+      runTask: async (queuedTask) => {
+        calls.push(queuedTask.id)
 
         return queuedTask.id
       }
     })
 
     expect(result.results).toEqual(['task_a', 'task_b'])
-    expect(calls).toEqual(['task_a:digest-0', 'task_b:digest-1'])
+    expect(calls).toEqual(['task_a', 'task_b'])
     expect(events).toEqual([
       'task_a:planned:-:-',
       'task_b:planned:-:-',

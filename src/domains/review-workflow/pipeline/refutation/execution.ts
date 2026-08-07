@@ -60,7 +60,6 @@ export type BatchRefutationInput = {
   readonly tasks: readonly WorkflowReviewTask[]
   readonly candidates: readonly CandidateFinding[]
   readonly allCandidates: readonly CandidateFinding[]
-  readonly sharedDigest: string
   readonly reviewEvidence: readonly EvidenceRecord[]
   readonly refuteFinding: FindingRefutationRunner
   readonly signal?: AbortSignal
@@ -118,7 +117,6 @@ export const executeBatchRefutation = async (
       task,
       candidates: input.candidates,
       allCandidates: input.allCandidates,
-      sharedDigest: input.sharedDigest,
       reviewEvidence: input.reviewEvidence
     })
   } catch (error: unknown) {

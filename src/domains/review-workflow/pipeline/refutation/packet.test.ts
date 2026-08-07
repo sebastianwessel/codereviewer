@@ -156,8 +156,7 @@ describe('finding refutation packet', () => {
       workflowInput: workflowInput(),
       task: task([context]),
       candidates: [modelCandidate],
-      allCandidates: [modelCandidate, supportCandidate],
-      sharedDigest: '(no admitted shared context yet)'
+      allCandidates: [modelCandidate, supportCandidate]
     })
 
     expect(packet.evidence.map((record) => record.id)).toEqual([
@@ -182,8 +181,7 @@ describe('finding refutation packet', () => {
       workflowInput: workflowInput(),
       task: task([context]),
       candidates: [modelCandidate, secondModelCandidate],
-      allCandidates: [modelCandidate, secondModelCandidate, supportCandidate],
-      sharedDigest: '(no admitted shared context yet)'
+      allCandidates: [modelCandidate, secondModelCandidate, supportCandidate]
     })
 
     expect(packet.candidates.map((entry) => entry.id)).toEqual([
@@ -209,8 +207,7 @@ describe('finding refutation packet', () => {
       workflowInput: workflowInput(),
       task: task([reviewContext()], scoped),
       candidates: [modelCandidate],
-      allCandidates: [modelCandidate],
-      sharedDigest: '(no admitted shared context yet)'
+      allCandidates: [modelCandidate]
     })
 
     expect(packet.instructions).toEqual(scoped)
@@ -219,8 +216,7 @@ describe('finding refutation packet', () => {
       workflowInput: workflowInput(),
       task: task([reviewContext()]),
       candidates: [modelCandidate],
-      allCandidates: [modelCandidate],
-      sharedDigest: '(no admitted shared context yet)'
+      allCandidates: [modelCandidate]
     })
 
     expect(unscopedPacket.instructions).toEqual([])
@@ -235,8 +231,7 @@ describe('finding refutation packet', () => {
         modelCandidate,
         supportCandidate,
         unrelatedSamePathSupportCandidate
-      ],
-      sharedDigest: '(no admitted shared context yet)'
+      ]
     })
 
     expect(packet.supportSignalCandidates).toEqual([supportCandidate])
@@ -258,8 +253,7 @@ describe('finding refutation packet', () => {
         workflowInput: input,
         task: task([reviewContext('first task context')], instructions),
         candidates: [modelCandidate],
-        allCandidates: [modelCandidate],
-        sharedDigest: '(no admitted shared context yet)'
+        allCandidates: [modelCandidate]
       })
     )
     const secondBatch = JSON.stringify(
@@ -267,8 +261,7 @@ describe('finding refutation packet', () => {
         workflowInput: input,
         task: task([reviewContext('second task context')], instructions),
         candidates: [secondModelCandidate],
-        allCandidates: [secondModelCandidate],
-        sharedDigest: '(no admitted shared context yet)'
+        allCandidates: [secondModelCandidate]
       })
     )
 
@@ -281,12 +274,11 @@ describe('finding refutation packet', () => {
     }
     const sharedPrefix = firstBatch.slice(0, sharedPrefixLength)
 
-    // Provenance, instructions, skills, and the shared digest are constant for
-    // every refutation call of a run and must all sit inside the shared prefix.
+    // Provenance, instructions, and skills are constant for every refutation call
+    // of a run and must all sit inside the shared prefix.
     expect(sharedPrefix).toContain('"provenance":')
     expect(sharedPrefix).toContain('Repository review instructions.')
     expect(sharedPrefix).toContain('"skills":')
-    expect(sharedPrefix).toContain('"sharedDigest":')
     // The prefix reaches the first per-task field and stops inside it.
     expect(sharedPrefix).toContain('"reviewContext":')
     expect(sharedPrefix).not.toContain('first task context')
@@ -303,8 +295,7 @@ describe('finding refutation packet', () => {
           instructionDocuments('irreducible instruction '.repeat(800))
         ),
         candidates: [modelCandidate],
-        allCandidates: [modelCandidate],
-        sharedDigest: '(no admitted shared context yet)'
+        allCandidates: [modelCandidate]
       })
     } catch (error: unknown) {
       thrown = error
@@ -313,7 +304,22 @@ describe('finding refutation packet', () => {
     expect(isTaskPacketBudgetExceededError(thrown)).toBe(true)
   })
 
-  test('compacts optional digest and support-signal context before failing the packet budget', () => {
+  // A packet that fits carries no notice at all: the field exists to explain a
+  // withheld field, and an always-present one would be a second constant of the
+  // kind the shared-context digest already turned out to be.
+  test('carries no budget notice when the packet fits', () => {
+    const packet = findingRefutationBatchInput({
+      workflowInput: workflowInput({ maxTaskInputBytes: 100000 }),
+      task: task([reviewContext()]),
+      candidates: [modelCandidate],
+      allCandidates: [modelCandidate, supportCandidate]
+    })
+
+    expect(packet.budgetNotice).toBeUndefined()
+    expect(packet.supportSignalCandidates).toEqual([supportCandidate])
+  })
+
+  test('compacts support-signal context before failing the packet budget', () => {
     const context = reviewContext('decisive context')
     const supportCandidates = Array.from({ length: 40 }, (_, index) => ({
       ...supportCandidate,
@@ -325,8 +331,7 @@ describe('finding refutation packet', () => {
       }),
       task: task([context]),
       candidates: [modelCandidate],
-      allCandidates: [modelCandidate, ...supportCandidates],
-      sharedDigest: 'large admitted digest '.repeat(700)
+      allCandidates: [modelCandidate, ...supportCandidates]
     })
 
     expect(packet.evidence.map((record) => record.id)).toEqual([
@@ -334,35 +339,33 @@ describe('finding refutation packet', () => {
     ])
     expect(packet.reviewContext).toEqual([context])
     expect(packet.supportSignalCandidates).toEqual([])
-    // The support signals were shed, so the notice NAMES them. It used to say
-    // only that the digest was gone, and the emptied array read to the refuter as
-    // "there is no corroboration" rather than "it was withheld".
-    expect(packet.sharedDigest).toContain('WITHHELD')
-    expect(packet.sharedDigest).toContain('the shared digest')
-    expect(packet.sharedDigest).toContain('the deterministic support signals')
+    // The support signals were shed, so the notice NAMES them. Without it the
+    // emptied array read to the refuter as "there is no corroboration" rather than
+    // "it was withheld".
+    expect(packet.budgetNotice).toContain('WITHHELD')
+    expect(packet.budgetNotice).toContain('the deterministic support signals')
     // And what the absence must NOT be read as. A candidate refuted because the
     // budget removed its support produces no output at all, so the mistake is
     // invisible downstream.
-    expect(packet.sharedDigest).toContain('needs-more-evidence')
+    expect(packet.budgetNotice).toContain('needs-more-evidence')
   })
 
   test('naming the withheld context is the last thing shed, not the first', () => {
     // Every rung of the ladder carries the notice, including the one that empties
     // the review context — the rung whose silence was most costly, because the
     // refuter's instructions treat review context as evidentiary.
-    // Large enough that shedding the digest and the signals still does not fit,
-    // so the ladder reaches its last rung. 10000 is the schema floor for the cap.
+    // Large enough that shedding the signals still does not fit, so the ladder
+    // reaches its last rung. 10000 is the schema floor for the cap.
     const context = reviewContext('decisive context '.repeat(1200))
     const packet = findingRefutationBatchInput({
       workflowInput: workflowInput({ maxTaskInputBytes: 10000 }),
       task: task([context]),
       candidates: [modelCandidate],
-      allCandidates: [modelCandidate],
-      sharedDigest: 'large admitted digest '.repeat(700)
+      allCandidates: [modelCandidate]
     })
 
     expect(packet.reviewContext).toEqual([])
-    expect(packet.sharedDigest).toContain('the review context')
-    expect(packet.sharedDigest).toContain('artefact of the budget')
+    expect(packet.budgetNotice).toContain('the review context')
+    expect(packet.budgetNotice).toContain('artefact of the budget')
   })
 })

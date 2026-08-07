@@ -155,11 +155,12 @@ against what it sends: a discovery call sends `{taskId, paths, reviewText}`, and
 refutation call sends its whole batch input.
 
 A discovery packet drops nothing — it is refused whole. It has nothing optional to
-drop: everything a discovery call transmits is the rendered review document, and
-the shared digest that used to be dropped here is not part of it. A refutation
-packet still drops the shared digest, then the support signals, then the ambient
-review context, each replaced by a notice naming what was withheld, because those
-fields really are in what it sends. Nothing else is dropped and nothing is ever
+drop: everything a discovery call transmits is the rendered review document. A
+refutation packet still drops the support signals, then the ambient review
+context, each accompanied by a `budgetNotice` naming what was withheld, because
+those fields really are in what it sends. The shared digest that both stages once
+carried is gone entirely (spec 05, *The Shared Digest Was A Constant*): it was
+always the same constant, so dropping it never removed a byte that mattered. Nothing else is dropped and nothing is ever
 truncated — a packet still over budget fails with `task_packet_budget_exceeded`
 (exit code `4`, recoverable). At the default 8,000,000-byte ceiling this path is
 not reached by any realistic change.

@@ -65,16 +65,14 @@ const workflowInput = ReviewWorkflowInputSchema.parse({
 describe('workflow handler', () => {
   test('runs task results through shared completion without harness builder wiring', async () => {
     let observedTaskPaths: readonly string[] = []
-    let observedSharedDigest = ''
 
     const output = await runReviewWorkflowHandler({
       input: workflowInput,
       signal: undefined,
       logger: createNoopReviewLogger(),
       maxConcurrentTasks: 1,
-      runTask: async (taskInput, task) => {
+      runTask: async (_taskInput, task) => {
         observedTaskPaths = task.paths
-        observedSharedDigest = taskInput.sharedDigest
 
         return TaskReviewResultSchema.parse({
           candidates: [candidate]
@@ -83,7 +81,6 @@ describe('workflow handler', () => {
     })
 
     expect(observedTaskPaths).toEqual(['src/handler.ts'])
-    expect(observedSharedDigest).toContain('(no admitted shared context yet)')
     expect(output.candidateFindings).toEqual([candidate])
     expect(output.admittedFindings).toHaveLength(1)
     expect(output.admittedFindings[0]).toMatchObject({

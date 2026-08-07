@@ -51,7 +51,6 @@ const taskInput: TaskReviewInput = TaskReviewInputSchema.parse({
   evidence: [],
   candidates: [],
   skills: [],
-  sharedDigest: '',
   provenance: {
     reviewer: 'review-agent',
     modelProvider: 'openai',

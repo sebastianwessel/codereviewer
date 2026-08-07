@@ -169,7 +169,6 @@ describe('prepareReviewRunnerAnalyzerSignalContext', () => {
         evidence: [],
         candidates: [],
         skills: [],
-        sharedDigest: '',
         provenance: {
           reviewer: 'review-agent',
           signalVersions: {},
@@ -251,7 +250,6 @@ describe('discovery packet without analyzer signals', () => {
       evidence: [],
       candidates: [],
       skills: [],
-      sharedDigest: '',
       provenance: {
         reviewer: 'review-agent',
         signalVersions: {},

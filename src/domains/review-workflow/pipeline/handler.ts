@@ -15,16 +15,11 @@ import {
   type ContextRetriever
 } from '../../context-retrieval/index.js'
 import { type ContextLedgerEntry } from '../../review-planning/index.js'
-import {
-  createReviewSharedContext,
-  type ReviewSharedContext
-} from '../../shared-context/index.js'
 import { createStructuredError } from '../../../shared/errors/error-normalizer.js'
 import { sha256 } from '../../../shared/hash/hash.js'
 import { prepareCandidatesForAdmission } from './admission/review.js'
 import { summarizeDiscoveryTelemetry } from './discovery/discovery-telemetry.js'
 import { taskReviewInputFor } from './discovery/task-packet.js'
-import { renderSharedDigest } from './shared-digest.js'
 import { tasksForWorkflowInput } from './task-planning.js'
 import {
   ReviewTaskExecutionError,
@@ -123,18 +118,6 @@ const mergeCandidates = (
   return [...candidatesById.values()]
 }
 
-const createWorkflowSharedContext = (
-  input: ReviewWorkflowInput
-): ReviewSharedContext => {
-  const shared = createReviewSharedContext()
-
-  for (const evidence of input.evidence) {
-    shared.appendEvidenceRecord(evidence)
-  }
-
-  return shared
-}
-
 export type ReviewWorkflowTaskRunner = (
   taskInput: TaskReviewInput,
   task: WorkflowReviewTask,
@@ -166,7 +149,6 @@ export const runReviewWorkflowHandler = async (params: {
     instructionsAcrossTasks(tasks)
   )
   const skillHashes = hashAllowedSkillContent(input.skills)
-  const shared = createWorkflowSharedContext(input)
   const contextLedgerEntries: ContextLedgerEntry[] = []
   const contextRetriever =
     input.repositoryRoot === undefined
@@ -193,10 +175,9 @@ export const runReviewWorkflowHandler = async (params: {
     ...(params.onTaskEvent === undefined
       ? {}
       : { onTaskEvent: params.onTaskEvent }),
-    sharedDigest: () => renderSharedDigest(shared.digest()),
-    runTask: async (task, sharedDigest) => {
+    runTask: async (task) => {
       return params.runTask(
-        taskReviewInputFor(input, task, sharedDigest),
+        taskReviewInputFor(input, task),
         task,
         params.signal,
         contextRetriever
@@ -260,7 +241,6 @@ export const runReviewWorkflowHandler = async (params: {
     candidates: mergedCandidates.filter(
       (candidate) => !taskRejectedCandidateIds.has(candidate.id)
     ),
-    sharedDigest: renderSharedDigest(shared.digest()),
     reviewEvidence: [...input.evidence, ...taskEvidenceRecords],
     ...(params.refuteFinding === undefined
       ? {}

@@ -77,11 +77,10 @@ describe('model task packet', () => {
   // The budget guards the packet a discovery call SENDS — `{taskId, paths,
   // reviewText}` — not the `TaskReviewInput` it is assembled from. The two are
   // different objects, and the fields below are on the assembly side only: no
-  // discovery prompt renders the shared digest, the evidence records, the
-  // candidates, the skills, or the provenance. Counting them was refusing tasks
-  // over bytes that were never transmitted.
+  // discovery prompt renders the evidence records, the candidates, the skills, or
+  // the provenance. Counting them was refusing tasks over bytes that were never
+  // transmitted.
   test('counts only what a discovery call sends, not the assembly input', () => {
-    const digest = 'large admitted digest '.repeat(700)
     const input = ReviewWorkflowInputSchema.parse({
       ...workflowInput(),
       // Well past the 10,000-byte budget on its own, and never sent.
@@ -99,12 +98,11 @@ describe('model task packet', () => {
     })
     const scopedTask = input.tasks?.[0] as WorkflowReviewTask
 
-    const packet = taskReviewInputFor(input, scopedTask, digest)
+    const packet = taskReviewInputFor(input, scopedTask)
 
     expect(serializedBytes(packet)).toBeGreaterThan(10000)
-    // Nothing was shed to get here: the digest survives verbatim, because
-    // shedding it never removed a byte from any packet in the first place.
-    expect(packet.sharedDigest).toBe(digest)
+    // Nothing was shed to get here: the assembly input keeps every evidence
+    // record, because none of them costs the packet a byte.
     expect(packet.evidence).toHaveLength(40)
   })
 
@@ -131,13 +129,13 @@ describe('model task packet', () => {
     // The same task without the diff is far inside the budget, so the refusal
     // below is caused by bytes the old measurement could not see at all.
     expect(
-      serializedBytes(taskReviewInputFor(workflowInput(), task, 'digest'))
+      serializedBytes(taskReviewInputFor(workflowInput(), task))
     ).toBeLessThan(10000)
 
     let thrown: unknown
 
     try {
-      taskReviewInputFor(input, task, 'digest')
+      taskReviewInputFor(input, task)
     } catch (error: unknown) {
       thrown = error
     }
@@ -166,9 +164,9 @@ describe('model task packet', () => {
       tasks: [task, scoped]
     })
 
-    expect(taskReviewInputFor(input, scoped, 'digest').task.instructions).toEqual(
+    expect(taskReviewInputFor(input, scoped).task.instructions).toEqual(
       scoped.instructions
     )
-    expect(taskReviewInputFor(input, task, 'digest').task.instructions).toEqual([])
+    expect(taskReviewInputFor(input, task).task.instructions).toEqual([])
   })
 })

@@ -48,7 +48,6 @@ const createFindingRefutationBatchInput = (
     readonly task: WorkflowReviewTask | undefined
     readonly candidates: readonly CandidateFinding[]
     readonly allCandidates: readonly CandidateFinding[]
-    readonly sharedDigest: string
     readonly reviewEvidence?: readonly EvidenceRecord[]
   }
 ): FindingRefutationBatchInput => {
@@ -115,7 +114,6 @@ const createFindingRefutationBatchInput = (
     // the planned ones for exactly this lookup).
     instructions: input.task?.instructions ?? [],
     skills: input.workflowInput.skills,
-    sharedDigest: input.sharedDigest,
     reviewContext,
     reviewedDiffRanges: (input.workflowInput.reviewedDiffRanges ?? []).filter(
       (range) => candidatePaths.has(range.path)
@@ -134,27 +132,32 @@ const createFindingRefutationBatchInput = (
 
 // What the refuter is told when a rung of the ladder below sheds something.
 //
-// The first rung already replaced the shared digest with a visible marker. The
-// next two set `supportSignalCandidates` and `reviewContext` to EMPTY ARRAYS, and
-// the refuter's instructions treat review context as evidentiary — so an emptied
-// packet read as "there is no context and no corroboration" rather than "these
-// were withheld", and the candidate was refuted or marked weak on the strength of
-// an absence the engine itself created. A refuted finding produces no output at
-// all, so nothing downstream could show what had been suppressed.
+// Both rungs set an array — `supportSignalCandidates`, then `reviewContext` — to
+// EMPTY, and the refuter's instructions treat review context as evidentiary. So an
+// emptied packet read as "there is no context and no corroboration" rather than
+// "these were withheld", and the candidate was refuted or marked weak on the
+// strength of an absence the engine itself created. A refuted finding produces no
+// output at all, so nothing downstream could show what had been suppressed.
 //
-// One notice, carried on the digest field, because that is text the refuter
-// already reads. It names what is missing AND what missing must not be taken to
-// mean — absence of support is unproven, which is `needs-more-evidence`, not
-// refuted.
+// One notice, on its own `budgetNotice` field. It names what is missing AND what
+// missing must not be taken to mean — absence of support is unproven, which is
+// `needs-more-evidence`, not refuted. It rode on the shared-context digest field
+// until that field was removed for being an unread constant; the notice is the only
+// thing the field was carrying that any call actually depended on.
 const budgetOmissionNotice = (omitted: readonly string[]): string =>
   `(WITHHELD from this refutation packet to fit the provider input budget: ${omitted.join(
     ', '
   )}. Their absence here is an artefact of the budget, NOT evidence against any candidate. A claim you cannot support from what remains is UNPROVEN — answer needs-more-evidence rather than refuting it.)`
 
 // Shed the least load-bearing context first when a batch packet exceeds the
-// provider input budget: the shared digest, then deterministic support signals,
-// then the review context. A batch that still does not fit is reported so the
-// caller can split it into smaller batches rather than losing the candidates.
+// provider input budget: the deterministic support signals, then the review
+// context. A batch that still does not fit is reported so the caller can split it
+// into smaller batches rather than losing the candidates.
+//
+// A rung for the shared-context digest used to come first. It shed a constant
+// string of a few dozen bytes and could never have made an oversized packet fit,
+// which made it read as a reduction while doing nothing; the field is gone and so
+// is the rung.
 const fitFindingRefutationBatchInputToBudget = (
   refutationInput: FindingRefutationBatchInput,
   maxTaskInputBytes: number | undefined
@@ -169,21 +172,9 @@ const fitFindingRefutationBatchInputToBudget = (
     return refutationInput
   }
 
-  const withoutSharedDigest = FindingRefutationBatchInputSchema.parse({
-    ...refutationInput,
-    sharedDigest: budgetOmissionNotice(['the shared digest'])
-  })
-
-  if (serializedBytes(withoutSharedDigest) <= maxTaskInputBytes) {
-    return withoutSharedDigest
-  }
-
   const withoutSupportSignals = FindingRefutationBatchInputSchema.parse({
-    ...withoutSharedDigest,
-    sharedDigest: budgetOmissionNotice([
-      'the shared digest',
-      'the deterministic support signals'
-    ]),
+    ...refutationInput,
+    budgetNotice: budgetOmissionNotice(['the deterministic support signals']),
     supportSignalCandidates: []
   })
 
@@ -193,8 +184,7 @@ const fitFindingRefutationBatchInputToBudget = (
 
   const withoutReviewContext = FindingRefutationBatchInputSchema.parse({
     ...withoutSupportSignals,
-    sharedDigest: budgetOmissionNotice([
-      'the shared digest',
+    budgetNotice: budgetOmissionNotice([
       'the deterministic support signals',
       'the review context'
     ]),
@@ -218,7 +208,6 @@ export const findingRefutationBatchInput = (
     readonly task: WorkflowReviewTask | undefined
     readonly candidates: readonly CandidateFinding[]
     readonly allCandidates: readonly CandidateFinding[]
-    readonly sharedDigest: string
     readonly reviewEvidence?: readonly EvidenceRecord[]
   }
 ): FindingRefutationBatchInput =>

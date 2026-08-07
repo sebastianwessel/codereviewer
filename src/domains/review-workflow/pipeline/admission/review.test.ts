@@ -180,7 +180,6 @@ describe('model admission review', () => {
       workflowInput: workflowInput(),
       tasks: [task],
       candidates: [supportSignalCandidate, modelCandidate],
-      sharedDigest: '(no admitted shared context yet)',
       refuteFinding: async (input) => {
         refutationCalls += 1
         refutationInputs.push(input)
@@ -215,7 +214,6 @@ describe('model admission review', () => {
       workflowInput: workflowInput(),
       tasks: [task],
       candidates: [supportSignalCandidate, modelCandidate],
-      sharedDigest: '(no admitted shared context yet)',
       refuteFinding: async (input) => {
         refutationCalls += 1
 
@@ -262,7 +260,6 @@ describe('model admission review', () => {
       workflowInput: workflowInput(),
       tasks: [task],
       candidates: [investigatedCandidate],
-      sharedDigest: '(no admitted shared context yet)',
       reviewEvidence: [supportEvidence, investigationEvidence],
       refuteFinding: async (input) => {
         refutationCalls += 1
@@ -296,7 +293,6 @@ describe('model admission review', () => {
       workflowInput: workflowInput(),
       tasks: [task],
       candidates: [modelCandidate],
-      sharedDigest: '(no admitted shared context yet)',
       refuteFinding: async (input) =>
         batchVerdicts(input, {
           verdict: 'needs-more-evidence',
@@ -329,7 +325,6 @@ describe('model admission review', () => {
       workflowInput: workflowInput(),
       tasks: [task],
       candidates: siblingCandidates,
-      sharedDigest: '(no admitted shared context yet)',
       refuteFinding: async (input) => {
         batchedCandidateIds.push(input.candidates.map((entry) => entry.id))
 
@@ -359,7 +354,6 @@ describe('model admission review', () => {
       workflowInput: workflowInput({ maxConcurrentTasks: 2 }),
       tasks: [task, otherTask],
       candidates: [modelCandidate, otherTaskModelCandidate],
-      sharedDigest: '(no admitted shared context yet)',
       refuteFinding: async (input) => {
         activeRefutationCalls += 1
         maxActiveRefutationCalls = Math.max(
@@ -407,7 +401,6 @@ describe('model admission review', () => {
       workflowInput: workflowInput(),
       tasks: [task],
       candidates: [modelCandidate, secondModelCandidate],
-      sharedDigest: '(no admitted shared context yet)',
       // The model adjudicated only the first candidate.
       refuteFinding: async () => ({
         verdicts: [
@@ -438,7 +431,6 @@ describe('model admission review', () => {
       workflowInput: workflowInput(),
       tasks: [task],
       candidates: [modelCandidate],
-      sharedDigest: '(no admitted shared context yet)',
       refuteFinding: async () => ({
         verdicts: [
           {

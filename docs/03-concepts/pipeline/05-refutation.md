@@ -12,8 +12,7 @@ All candidates produced by discovery except the ones the [semantic finding
 merge](04-holistic-discovery.md#semantic-finding-merge) already grouped away — a
 candidate that is already terminal must not spend an adjudication slot — plus the
 workflow input (review context, diff ranges, evidence, deterministic
-support-signal candidates, instructions, skills metadata, shared digest,
-provenance).
+support-signal candidates, instructions, skills metadata, provenance).
 
 ## What it does
 
@@ -128,9 +127,9 @@ candidate's fix proposal (`safety: manual-review`).
 ### Budget handling
 
 If a batch packet exceeds the provider input budget, the packet sheds context in
-a fixed order — shared digest, then deterministic support signals, then the
-review context — and if it still does not fit, the batch is **split in half and
-each half retried**. An oversized task therefore degrades into more calls rather
+a fixed order — the deterministic support signals, then the review context, each
+time adding a `budgetNotice` that names what was withheld — and if it still does
+not fit, the batch is **split in half and each half retried**. An oversized task therefore degrades into more calls rather
 than losing its candidates. A single candidate that still does not fit is a
 genuine packet failure.
 

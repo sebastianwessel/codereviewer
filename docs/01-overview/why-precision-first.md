@@ -48,9 +48,8 @@ candidates. It is explicitly told to skip style, naming, formatting,
 documentation, and cleanup-only concerns, but within the space of concrete
 defects it is allowed to be aggressive.
 
-Nothing it produces is user-visible yet. Candidates are quarantined: they do not
-even reach later workers' shared digest until they pass the safe-digest
-boundary.
+Nothing it produces is user-visible yet. Candidates are quarantined: one task's
+candidates never reach another task's packet at all.
 
 ### 2. Refutation is the precision lever
 

@@ -129,7 +129,6 @@ const batchInput = (
   tasks: [input.task ?? task],
   candidates: input.candidates,
   allCandidates: input.candidates,
-  sharedDigest: '(no admitted shared context yet)',
   reviewEvidence: [evidence],
   refuteFinding: async (packet: FindingRefutationBatchInput) =>
     input.refuteFinding(packet),

@@ -122,8 +122,7 @@ const assertDiscoveryPacketWithinBudget = (
 
 export const taskReviewInputFor = (
   input: ReviewWorkflowInput,
-  task: WorkflowReviewTask,
-  sharedDigest: string
+  task: WorkflowReviewTask
 ): TaskReviewInput => {
   const evidence = input.evidence.filter((record) =>
     task.evidenceIds.length > 0
@@ -149,7 +148,6 @@ export const taskReviewInputFor = (
     // No `instructions` key: the task's own, scope-resolved instruction
     // documents travel inside `task` (see `TaskReviewInputSchema`).
     skills: input.skills,
-    sharedDigest,
     provenance: input.provenance
   })
 

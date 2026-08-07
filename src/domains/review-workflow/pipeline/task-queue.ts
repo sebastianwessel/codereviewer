@@ -8,7 +8,6 @@ import {
   type WorkflowTaskEvent
 } from './agent-contracts.js'
 import { type DebugLogger } from './debug-logger.js'
-import { EMPTY_SHARED_DIGEST } from './shared-digest.js'
 
 export class ReviewTaskExecutionError<R = unknown> extends Error {
   readonly taskEvents: readonly WorkflowTaskEvent[]
@@ -51,11 +50,7 @@ export const runQueuedReviewTasks = async <R>(
     readonly tasks: readonly WorkflowReviewTask[]
     readonly maxConcurrentTasks: number
     readonly logger?: DebugLogger
-    readonly runTask: (
-      task: WorkflowReviewTask,
-      sharedDigest: string
-    ) => Promise<R>
-    readonly sharedDigest?: () => string
+    readonly runTask: (task: WorkflowReviewTask) => Promise<R>
     readonly onTaskEvent?: (event: WorkflowTaskEvent) => void
   }
 ): Promise<{
@@ -140,10 +135,8 @@ export const runQueuedReviewTasks = async <R>(
         pending_task_count: Math.max(0, input.tasks.length - results.length)
       })
 
-      const sharedDigest = input.sharedDigest?.() ?? EMPTY_SHARED_DIGEST
-
       try {
-        const result = await input.runTask(task, sharedDigest)
+        const result = await input.runTask(task)
 
         queue.complete(task.id, 'worker completed')
         notifyQueueChanged()
