@@ -118,48 +118,58 @@ review + $0.81 scoring = $4.44** for 3 × 37 cases.
 
 ## Security headline
 
-Measured **2026-08-07** on the **security-advisory corpus**: 25 cases, 26 expected
-findings, 24 upstream projects, all seven languages, all ten security mechanisms.
+Measured **2026-08-07** on the **security-advisory corpus**: 50 cases, 51 expected
+findings, 33 upstream projects, all seven languages, all ten security mechanisms.
 Every case is a defect because a reviewed GitHub Security Advisory published after
-the training cutoff says so. Model `openai/gpt-5.3-codex`, engine pinned `9e410d2`,
+the training cutoff says so. Model `openai/gpt-5.3-codex`, engine pinned `49f0c669`,
 three seeds, 0 dirty files in each.
 
 | Metric | Value | Per run |
 | --- | ---: | --- |
-| Recall | **57.7%** (sd 7.69pp) | 65.4 / 57.7 / 50.0 |
-| Precision (raw to adjusted bracket) | **71.3% to 97.6%** | 73.9–100 / 75.0–100 / 65.0–92.9 |
-| Genuine false positives | **1**, across three seeds | 0 / 0 / 1 |
-| Cost per run | $0.84 | $1.34 cold, then $0.53 / $0.65 |
+| Recall | **60.8%** (sd 3.92pp) | 60.8 / 56.9 / 64.7 |
+| Precision (raw to adjusted bracket) | **71.0% to 100%** | 70.5–100 / 69.0–100 / 73.3–100 |
+| Genuine false positives | **0**, all three seeds | 0 / 0 / 0 |
+| Cost per run | $1.88 | $3.19 cold, then $1.24 / $1.22 |
 
 Source: `reports/2026-08-07-security-corpus-baseline.md`.
 
 **This is not comparable to the in-diff figure above.** Different corpus, different
 question, different answer-key construction. Do not difference them.
 
-**sd 7.69pp is the number to carry.** At three seeds this corpus cannot resolve a
-difference below roughly 16 percentage points — worse than the cross-file corpus.
-More seeds on 26 expectations will not help; more cases will.
+**The corpus doubled and the variance halved: sd 7.69pp → 3.92pp.** This instrument
+now resolves about 8 percentage points at three seeds rather than 16. The earlier
+57.7% on 25 cases is superseded, and the two figures are **not a change** — they
+measure different corpora.
 
-**What changed in the picture.** The classes previously recorded at 0% — XSS, SSRF,
-cryptography — are not at 0% once the material is chosen for them rather than
-incidentally containing them: pooled over three seeds, path-traversal 9/9,
-cryptography 12/12, xss 6/12, ssrf 5/9. The weakest are unsafe-config 0/3, injection
-1/3, concurrency-resource 3/9. Every one of those is a **direction, not a number** —
-the denominator is three seeds over one to four expectations, and repeating a run
-triples the denominator without adding information.
+**Where the reviewer is weakest, on denominators large enough to act on:**
 
-**The gap is context depth, not mechanism.** Cross-file expectations score **9/24
-(38%)** against local 72% and cross-function 100%. Cross-file retrieval has been on
-by default since 2026-08-01, so that 38% is what the reviewer achieves *with* the
-mediated read/list/grep tools in hand. It is also the only row that came out
-identical before and after a seed was re-run, which is what makes it the claim worth
-acting on.
+| | pooled over 3 seeds | |
+| --- | --- | --- |
+| `authorization` | 7/18 | **39%** |
+| `xss` | 10/21 | 48% |
+| `injection` | 10/21 | 48% |
+| `cross-file` (context depth) | 20/42 | **48%** |
 
-**Analyzer ingestion (`security.signals`) stays off, now for a measured reason.** On
-132 advisory-confirmed vulnerabilities, a public analyzer flags a line the fix
-changed **3.0% of the time** (4/132; 2 of those 4 describe the advisory's weakness).
-That bounds the layer's possible recall lift at 3 points against a promotion bar of
-3, so no A/B was run — the bound answers the question. See
+`authorization` is the one that got *worse* with better data — 2/6 on the small
+corpus, dismissible as noise; 7/18 here, the worst substantial mechanism. It is also
+the class carrying the majority of real security findings.
+
+`cross-file` reads 48% against the small corpus's 38% — a better measurement of the
+same thing, not an improvement — and cross-file retrieval has been on by default
+since 2026-08-01, so that is what the reviewer achieves *with* the mediated tools.
+
+**Strongest:** path-traversal 22/24, cryptography 12/15. The classes this project
+once recorded at 0% are not at 0% on material chosen for them.
+
+**A worked example of why per-mechanism rows are directions.** On the 25-case corpus
+`cross-function` read 9/9 — a perfect 100%. On 24 observations it is 15/24 (62%). A
+perfect row on a small denominator is an artifact.
+
+**Analyzer ingestion (`security.signals`) stays off, for a measured reason.** On 132
+advisory-confirmed vulnerabilities, a public analyzer flags a line the fix changed
+**3.0% of the time** (4/132; 2 of those 4 describe the advisory's weakness). That
+bounds the layer's possible recall lift at 3 points against a promotion bar of 3, so
+no A/B was run — the bound answers the question. See
 `reports/2026-08-07-analyzer-firing-base-rate.md`. The 3.0% is a property of Semgrep
 OSS with public rules, not of the layer.
 

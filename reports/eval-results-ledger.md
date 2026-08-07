@@ -2103,52 +2103,65 @@ extraction is measurably non-deterministic (±10% on any count). The 51.5% headl
 single run.
 
 
-## 2026-08-07 — Security recall on advisory-confirmed defects (first baseline)
+## 2026-08-07 — Security recall on advisory-confirmed defects (50-case baseline)
 
-Provider `openai/gpt-5.3-codex`, engine pinned `9e410d2` (0 dirty in all three runs),
-corpus `security-advisory-2026` (25 cases / 26 expectations), 3 seeds. Full report:
+Provider `openai/gpt-5.3-codex`, engine pinned `49f0c669` (0 dirty in all three
+runs), corpus `security-advisory-2026` (50 cases / 51 expectations / 33
+repositories), 3 seeds. Full report:
 `reports/2026-08-07-security-corpus-baseline.md`.
 
 | | seeds | mean | sd |
 | --- | --- | --- | --- |
-| recall | 65.4 / 57.7 / 50.0% | **57.7%** | 7.69pp |
-| precision raw (lower bound) | 73.9 / 75.0 / 65.0% | 71.3% | 5.49pp |
-| precision adjusted (upper bound) | 100 / 100 / 92.9% | 97.6% | 4.12pp |
-| cost | $1.34 / $0.53 / $0.65 | $0.84 | cold then cache-warm |
+| recall | 60.8 / 56.9 / 64.7% | **60.8%** | **3.92pp** |
+| precision raw (lower bound) | 70.5 / 69.0 / 73.3% | 71.0% | 2.18pp |
+| precision adjusted (upper bound) | 100 / 100 / 100% | 100% | 0 |
+| cost | $3.19 / $1.24 / $1.22 | $1.88 | cold then cache-warm |
 
-**A draft of this entry published 61.5% / sd 3.85pp / adjusted precision 100% / zero
-genuine false positives. Those figures were wrong.** The third seed had originally
-run against a working tree carrying 5 dirty files (documentation), which
-`engine-consistency.mjs` refuses to pool even though the pinned worktree makes the
-dirty work provably inert. Re-running it clean returned **50.0%, not 61.5%** — same
-engine, ordinary variance. Honouring the guard rather than arguing past it moved the
-headline 3.8 points and doubled the measured variance. The discarded run is named in
-the report and excluded here; across four executions at this engine the spread is
-50.0–65.4%.
+**Zero genuine false positives across three seeds and 51 expectations.**
 
-**sd 7.69pp is the consequential number.** At three seeds this instrument cannot
-resolve a difference below roughly **16 percentage points** — worse than the
-cross-file corpus. Growing the corpus is the fix; more seeds on 26 expectations is
-not.
+**This supersedes the 25-case entry below, and the two recall figures are NOT a
+change.** They measure different corpora. What matters is the variance: doubling the
+cases took sd from **7.69pp to 3.92pp**, so the instrument now resolves ~8pp instead
+of ~16pp. That was the entire purpose of the second curation round, and sampling
+theory says it should have worked; it did.
 
-**What it overturns anyway.** The classes previously recorded at 0% are not at 0% on
-material chosen for them: path-traversal 9/9 and cryptography 12/12 pooled, xss 6/12,
-ssrf 5/9. Weakest: unsafe-config 0/3, injection 1/3, concurrency-resource 3/9. Every
-per-mechanism row is a DIRECTION — three seeds × 1–4 expectations — and several moved
-by a third of their denominator when one seed was replaced.
+**Two rows the small corpus got wrong, both worth keeping as worked examples of why
+per-mechanism rows are directions:**
 
-**The wall is cross-file: 9/24 = 38%**, against local 72% and cross-function 100%.
-It came out at exactly 9/24 both before and after the correction — the only row that
-did not move — which makes it the one claim here strong enough to act on. Cross-file
-retrieval has been ON by default since 2026-08-01, so 38% is what the reviewer
-achieves WITH the mediated tools.
+- `cross-function` read 9/9 (100%) on 9 observations. On 24 it is 15/24 (62%).
+- `cross-file` read 9/24 (38%). On 42 it is **20/42 (48%)** — still the worst row
+  with a real denominator, still the largest bucket, and still measured with
+  cross-file retrieval already on by default.
 
-**Do not quote the dev/held-out gap** (80.0% vs 43.8% pooled). The seeds are repeated
-measures on the same 26 expectations, so the real denominators are 10 and 16; on
-those, z ≈ 1.82, p ≈ 0.07. Suggestive, not established.
+**The finding that got worse with better data: `authorization` at 7/18 (39%)**, the
+worst substantial mechanism row, in the class spec 15 has said from its first line
+carries the majority of real security defects. On the 25-case corpus it was 2/6 and
+dismissible.
 
-**Not comparable to any cross-file-corpus figure.** Different corpus, different
-question, different answer-key construction.
+Full mechanism order: path-traversal 92%, cryptography 80%, concurrency-resource
+67%, deserialization 67%, secret-flow 60%, ssrf 60%, injection 48%, xss 48%,
+authorization 39%, unsafe-config 0% (3 observations, one expectation — not yet
+evidence).
+
+**The dev/held-out gap got LESS significant with more data** — z ≈ 1.82 on 25 cases,
+z ≈ 1.39 (p ≈ 0.16) on 50, per-expectation denominators 15 and 36. That is evidence
+against the leakage reading. Still not quotable.
+
+**Not comparable to any cross-file-corpus figure.**
+
+## 2026-08-07 — Security recall, 25-case corpus (SUPERSEDED)
+
+Kept as a dated record of how the figure above was reached. Engine `9e410d2`, 3
+seeds, 25 cases / 26 expectations: recall **57.7%** (sd 7.69pp), precision bracket
+[73.9%, 97.6%], one genuine false positive.
+
+That sd is why the corpus was doubled. A draft of this entry published 61.5% / sd
+3.85pp / adjusted precision 100% / zero genuine false positives, from a seed that
+had run against a tree carrying 5 dirty documentation files —
+`engine-consistency.mjs` refuses to pool on the dirty digest even though the pinned
+worktree makes such work provably inert. Re-running it clean returned 50.0%, not
+61.5%. Honouring a conservative provenance guard rather than arguing past it moved
+the headline 3.8 points and doubled the measured variance.
 
 ## 2026-08-07 — Analyzer firing base rate (Mechanism 2 bounded, no A/B run)
 

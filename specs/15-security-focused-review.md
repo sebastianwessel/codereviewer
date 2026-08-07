@@ -686,88 +686,50 @@ published with its counts.
 
 ### Measured Baseline
 
-Provider `openai/gpt-5.3-codex`, engine pinned `9e410d2`, three seeds, 2026-08-07.
-Report: `reports/2026-08-07-security-corpus-baseline.md`.
+Provider `openai/gpt-5.3-codex`, engine pinned `49f0c669`, three seeds, 2026-08-07,
+on the 50-case corpus. Report: `reports/2026-08-07-security-corpus-baseline.md`.
 
 | | mean | sd |
 | --- | --- | --- |
-| recall | **57.7%** | 7.69pp |
-| precision, raw (lower bound) | 71.3% | 5.49pp |
-| precision, adjusted (upper bound) | 97.6% | 4.12pp |
+| recall | **60.8%** | **3.92pp** |
+| precision, raw (lower bound) | 71.0% | 2.18pp |
+| precision, adjusted (upper bound) | 100% | 0 |
 
-One genuine false positive across three seeds. Nearly every unmatched finding was
-judged a real defect the advisory did not name, which is what an advisory-derived
-key predicts and why precision here is a bracket rather than a number.
+**Zero genuine false positives across three seeds and 51 expectations.** Every
+unmatched finding was judged a real defect the advisory did not name, which is what
+an advisory-derived key predicts and why precision here is a bracket.
 
-**A draft of this section published 61.5% / sd 3.85pp / 100% / zero false positives.
-It was wrong.** One seed had run against a working tree with 5 dirty documentation
-files, which the engine-consistency check refuses to pool even though the pinned
-worktree makes such work provably inert. Re-running it clean returned 50.0% rather
-than 61.5% — same engine, ordinary variance. The episode is recorded because the
-tempting move was to argue the guard over-strict and pool anyway, and doing so would
-have published a headline 3.8 points high with half the true variance.
+**Doubling the corpus halved the variance: sd 7.69pp → 3.92pp**, so this instrument
+now resolves about 8 percentage points at three seeds rather than 16. That was the
+purpose of the second curation round, and it is the only lever that works — more
+seeds on the same expectations add denominator without adding information.
 
-**sd 7.69pp is the number that governs everything else here.** At three seeds this
-instrument cannot resolve a difference below roughly 16 percentage points. No A/B on
-this corpus can settle anything smaller, and more seeds on 26 expectations will not
-help — only more cases will.
+The earlier 57.7% on 25 cases is superseded and the two figures are **not a change**:
+they measure different corpora.
 
-The classes this spec previously recorded at 0% are not at 0% on material chosen for
-them: path-traversal 9/9 and cryptography 12/12 pooled, xss 6/12, ssrf 5/9. Weakest
-are unsafe-config 0/3, injection 1/3, concurrency-resource 3/9.
+**By mechanism** (pooled, 3 seeds × expectations): path-traversal 22/24,
+cryptography 12/15, concurrency-resource 12/18, deserialization 2/3, secret-flow
+9/15, ssrf 9/15, injection 10/21, xss 10/21, **authorization 7/18**, unsafe-config
+0/3.
 
-**The deficit is context depth, not mechanism.** Cross-file expectations score 9/24
-(38%) against local 72% and cross-function 100% — and cross-file came out at exactly
-9/24 both before and after the correction above, the only row that did not move when
-a seed was replaced. Cross-file retrieval has been enabled by default since
-2026-08-01, so that 38% is what the reviewer achieves *with* the mediated
-read/list/grep tools. The lever intended for this class has already been pulled and
-the class is still the gap.
+**`authorization` at 39% is the result that got worse with better data**, and it
+matters more than any other row here: this spec's opening evidence is that
+authorization and access-control logic carry ~59% of real security findings. On the
+25-case corpus the row was 2/6 and dismissible as noise. On 18 observations it is
+the worst substantial mechanism.
 
-### Pre-Registered Decision Rule For The Findings-Per-Call Lever
+**By context depth**: local 18/21, caller 5/6, callee 12/18, cross-function 15/24,
+implementation 22/36, **cross-file 20/42 (48%)**, analyzer-path-dependent 1/6.
 
-**Written 2026-08-07, before any measurement of this lever, and not to be edited
-after one is taken.** No such intervention exists yet; this fixes how one would be
-read, because the honest reading is fixed in advance or it is fixed to suit the
-result.
+Cross-file remains the worst row with a real denominator and the largest bucket in
+the corpus, measured with cross-file retrieval already enabled by default. It reads
+48% here against 38% on the small corpus — a better measurement of the same thing,
+not an improvement.
 
-The diagnosis it responds to is in `reports/2026-08-07-why-cross-file-misses.md`.
-The engine emits **1.17 candidates per case-run** against a key naming **1.04
-defects per case**; **19.3%** of what it emits is a real defect the advisory does not
-list; and of 15 cross-file misses, **zero** were silent. Cross-file loses a selection
-contest under a one-finding budget rather than failing to look. Two neighbouring
-levers are already excluded by evidence: more discovery calls (missed cross-file
-expectations already had *more* calls than found ones, and extra passes were measured
-and rejected in July) and more retrieval (enabled by default since 2026-08-01).
-
-**The trap this rule exists to close.** On an answer key that names about one defect
-per case, raising findings-per-case raises recall almost mechanically — a reviewer
-that reports three defects instead of one is likelier to include the listed one
-whether or not it reasons any better. A recall gain alone is therefore *not* evidence
-of improvement here, and any report that quotes one alone is misreading its own
-instrument.
-
-The measurement is a paired A/B on the security corpus, **≥3 seeds per arm**, run on
-the **dev** split for iteration and confirmed on **held-out** before any acceptance
-claim. It reports, together and never separately: recall, **raw** precision, adjusted
-precision, genuine false positives, and **candidates per case**.
-
-- **Promotes** only if all four hold: recall rises; **raw precision does not fall**;
-  genuine false positives do not rise; and the effect exceeds the corpus's resolution
-  at the time of measurement. Raw precision is the load-bearing one — if the extra
-  findings are real-but-unlisted, raw precision falls and recall rose for the wrong
-  reason; if recall rises while raw precision holds, the extra findings are landing
-  on listed defects, which is the thing worth having.
-- **Keeps shipping disabled** if the result is neutral, inside the seed variance, or
-  unmeasured. Disabled is the default outcome, not the punishment outcome.
-- **Is rejected** if raw precision falls, if genuine false positives rise, or if two
-  independent cycles produce no movement outside variance.
-
-**This rule may not be run on the corpus as it stands.** At sd 7.69pp over 26
-expectations the instrument cannot resolve anything under roughly 16 percentage
-points, and an intervention on this lever would have to more than double cross-file
-recall to clear that. Growing the corpus is a precondition of the measurement, not a
-follow-up to it.
+**Two rows the small corpus got wrong, kept as worked examples.** `cross-function`
+read 9/9 (100%) on nine observations and is 15/24 (62%) on twenty-four;
+`local` read 72% and is 86%. A perfect row on a small denominator is an artifact,
+which is what the "directions, not numbers" rule exists to prevent.
 
 ### Reviewing a fix backwards contaminates a third of the candidates
 
