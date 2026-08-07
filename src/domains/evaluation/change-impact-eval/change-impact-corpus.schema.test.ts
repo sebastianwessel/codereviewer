@@ -21,6 +21,7 @@ const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',
   '..',
+  '..',
   '..'
 )
 

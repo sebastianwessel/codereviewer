@@ -28,7 +28,7 @@
 
 import { z } from 'zod'
 import { RepositoryRelativePathSchema } from '../../shared/contracts/index.js'
-import { LaneUsageSchema } from '../costs/lane-usage.js'
+import { LaneUsageSchema } from '../costs/index.js'
 
 // A line of the STATED INTENT, resolved from the redacted change-intent fragment
 // the obligation was read out of (spec 11's origin label plus a line number).

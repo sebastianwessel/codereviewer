@@ -1,4 +1,4 @@
-import { hydrateRealRepoCorpus } from '../src/domains/evaluation/real-repo-corpus-hydration.js'
+import { hydrateRealRepoCorpus } from '../src/domains/evaluation/index.js'
 
 const valueAfter = (args: readonly string[], flag: string): string | undefined => {
   const index = args.indexOf(flag)

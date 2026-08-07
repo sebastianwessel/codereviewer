@@ -22,7 +22,7 @@ import {
   MEASURED_ON_PROVIDER
 } from './measured-reliability.js'
 import { renderMarkdownReport } from './markdown-reporter.js'
-import { createReportFixture } from './reporting-fixture.js'
+import { createReportFixture } from '../../shared/testing/report-fixture.js'
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

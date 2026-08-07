@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
-import { FindingRefutationResultSchema } from '../../domains/review-workflow/pipeline/agent-contracts.js'
 import {
   ClaimSchema,
   FixProposalSchema,
@@ -99,34 +98,10 @@ describe('contract bounds have exactly one definition', () => {
     expect(stringFieldBound(RejectedFindingSchema.shape.message)).toBe(1200)
     expect(stringFieldBound(RefutationResultSchema.shape.summary)).toBe(1200)
   })
-
-  // The rule the values follow, asserted as a rule rather than as seven numbers.
-  //
-  // A destination smaller than its only producer does not guard against a runaway
-  // model — it guarantees a cut on ordinary output. Every field the refuter's
-  // 1200-character rationale flows into is therefore at least 1200. Two were not:
-  // `RefutationResult.summary` at 1000 and `RejectedFinding.message` at 500,
-  // which discarded 16% and 58% of the argument respectively.
-  test('nothing the refutation rationale flows into is smaller than the rationale', () => {
-    const rationaleBound = stringFieldBound(
-      FindingRefutationResultSchema.shape.rationaleSummary
-    )
-
-    expect(stringFieldBound(RefutationResultSchema.shape.summary)).toBeGreaterThanOrEqual(
-      rationaleBound
-    )
-    expect(
-      stringFieldBound(RejectedFindingSchema.shape.message)
-    ).toBeGreaterThanOrEqual(rationaleBound)
-  })
-
-  // The counterweight, so "size it to the producer" does not become "make every
-  // cap enormous". A check summary is NOT fed the rationale — it states which
-  // check ran, while the rationale sits one line above it in full — so it stays
-  // small on purpose. Raising it would print the same argument twice.
-  test('a field that is not fed the rationale stays small', () => {
-    expect(
-      stringFieldBound(RefutationResultSchema.shape.checks.element.shape.summary)
-    ).toBe(500)
-  })
 })
+
+// The companion rule — that every field the refuter's rationale flows into is at
+// least as large as the rationale, and that a field which is NOT fed it stays
+// small — needs the producing agent contract, which lives in `review-workflow`.
+// Asserting it here would make `shared` import from `domains`, so it lives in
+// `domains/review-workflow/pipeline/refutation/refutation-text-cap-drift.test.ts`.

@@ -11,6 +11,11 @@
 // A checker that reports the truth as drift is worse than no checker: it trains people
 // to ignore it. This test lives in the CLI layer so it may import both sides, and
 // fails whenever a command is added or removed without updating the mirror.
+//
+// `implementedCliCommands` is deliberately NOT on `drift`'s barrel and is imported by
+// module path instead. It is an internal of the checker, and `src/index.ts` re-exports
+// the `drift` barrel wholesale, so publishing it to satisfy one test would put an
+// implementation detail in the package's public API. This is the whole exception.
 
 import { describe, expect, test } from 'vitest'
 import { implementedCliCommands } from '../domains/drift/drift-checker.js'

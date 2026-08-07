@@ -8,7 +8,7 @@ import {
   type AdmissionPolicy,
   type CandidateFinding
 } from '../admission/index.js'
-import { createReportFixture } from './reporting-fixture.js'
+import { createReportFixture } from '../../shared/testing/report-fixture.js'
 import { renderReviewComments } from './review-comment-renderers.js'
 import { buildReviewCommentDrafts } from './review-comments.js'
 

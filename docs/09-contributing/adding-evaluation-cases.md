@@ -5,9 +5,9 @@ behavior is judged. A case you add becomes part of that judgement, so the bar
 for a case is high: it must be real, unambiguous, and free of the answer.
 
 Contracts:
-[`src/domains/evaluation/eval-fixture.schema.ts`](../../src/domains/evaluation/eval-fixture.schema.ts)
+[`src/domains/evaluation/corpus/eval-fixture.schema.ts`](../../src/domains/evaluation/corpus/eval-fixture.schema.ts)
 and
-[`src/domains/evaluation/real-repo-corpus.schema.ts`](../../src/domains/evaluation/real-repo-corpus.schema.ts).
+[`src/domains/evaluation/corpus/real-repo-corpus.schema.ts`](../../src/domains/evaluation/corpus/real-repo-corpus.schema.ts).
 Policy: [`specs/06-evaluation-and-quality-gates.md`](../../specs/06-evaluation-and-quality-gates.md)
 and [`specs/17-real-repository-eval-corpus.md`](../../specs/17-real-repository-eval-corpus.md).
 

@@ -23,7 +23,7 @@ export {
   type ExpectedFinding,
   type ExpectedFindingTier,
   type ExpectedNoFindingZone
-} from './eval-fixture.schema.js'
+} from './corpus/eval-fixture.schema.js'
 export {
   assertBenchmarkSlicesHydrated,
   hydrateCodeReviewBenchmarkPack,
@@ -31,7 +31,7 @@ export {
   placeholderSliceMarker,
   type HydrateBenchmarkPackOptions,
   type HydrateBenchmarkPackResult
-} from './benchmark-hydration.js'
+} from './corpus/benchmark-hydration.js'
 export {
   answerKeyLeakIn,
   containsAnswerKey,
@@ -50,7 +50,7 @@ export {
   type RealRepoCorpusCase,
   type RealRepoCorpusManifest,
   type RemovedCommentDisclosureReview
-} from './real-repo-corpus.schema.js'
+} from './corpus/real-repo-corpus.schema.js'
 export {
   countExpectedImpactByReachability,
   directlyReachableImpactClasses,
@@ -71,14 +71,14 @@ export {
   type ExpectedImpact,
   type ImpactReachability,
   type ImpactReachabilityCounts
-} from './change-impact-corpus.schema.js'
+} from './change-impact-eval/change-impact-corpus.schema.js'
 export {
   createMetricsVersionHistory,
   type MetricComparabilityOf,
   type MetricsVersionDivergenceOf,
   type MetricsVersionEntry,
   type MetricsVersionHistory
-} from './metrics-version-history.js'
+} from './report/versions/metrics-version-history.js'
 export {
   CHANGE_IMPACT_METRICS_VERSION,
   CHANGE_IMPACT_METRICS_VERSION_HISTORY,
@@ -87,7 +87,7 @@ export {
   type ChangeImpactComparabilityKey,
   type ChangeImpactMetricComparability,
   type ChangeImpactMetricsVersionDivergence
-} from './change-impact-metrics-versions.js'
+} from './change-impact-eval/change-impact-metrics-versions.js'
 export {
   adjudicatedDestinationFiles,
   changeImpactArms,
@@ -109,7 +109,7 @@ export {
   type ChangeImpactScore,
   type ChangeImpactUnmeasuredReason,
   type ScoredExpectation
-} from './change-impact-scoring.js'
+} from './change-impact-eval/change-impact-scoring.js'
 export {
   buildChangeImpactEvalReport,
   parseChangeImpactEvalReport,
@@ -118,15 +118,15 @@ export {
   CHANGE_IMPACT_EVAL_REPORT_ARTIFACT_NAME,
   CHANGE_IMPACT_EVAL_SUMMARY_ARTIFACT_NAME,
   type ChangeImpactEvalReport
-} from './change-impact-eval-report.js'
-export { renderChangeImpactEvalSummary } from './change-impact-eval-rendering.js'
+} from './change-impact-eval/change-impact-eval-report.js'
+export { renderChangeImpactEvalSummary } from './change-impact-eval/change-impact-eval-rendering.js'
 export {
   readEngineIdentity,
   ENGINE_COMMIT_UNKNOWN,
   engineCommitArgs,
   engineWorkingTreeArgs,
   type EngineIdentity
-} from './engine-identity.js'
+} from './report/engine-identity.js'
 export {
   buildChangeImpactCase,
   changeImpactHydrationSource,
@@ -137,13 +137,13 @@ export {
   type ChangeImpactCaseResult,
   type HydrateChangeImpactCorpusOptions,
   type HydrateChangeImpactCorpusResult
-} from './change-impact-corpus-hydration.js'
+} from './change-impact-eval/change-impact-corpus-hydration.js'
 export {
   minimumDisclosureWordCount,
   removedProseCommentsIn,
   resolveRemovedCommentDisclosures,
   type RemovedCommentDisclosureResolution
-} from './real-repo-diff-comment-disclosure.js'
+} from './corpus/real-repo-diff-comment-disclosure.js'
 export {
   assertReviewedDiffIsUncontaminated,
   buildRealRepoSlice,
@@ -158,7 +158,7 @@ export {
   type HydrateRealRepoCorpusOptions,
   type HydrateRealRepoCorpusResult,
   type RealRepoCaseResult
-} from './real-repo-corpus-hydration.js'
+} from './corpus/real-repo-corpus-hydration.js'
 export {
   EVAL_SEMANTIC_JUDGE_STAGE,
   matchEvalFindings,
@@ -169,10 +169,10 @@ export {
   type EvalSemanticJudge,
   type EvalSemanticJudgeInput,
   type EvalSemanticJudgeResult
-} from './eval-matcher.js'
+} from './judging/eval-matcher.js'
 export {
   createModelSemanticJudge
-} from './eval-semantic-judge.js'
+} from './judging/eval-semantic-judge.js'
 export {
   createModelPlausibilityJudge,
   judgeUnmatchedFindingsPlausibility,
@@ -186,7 +186,7 @@ export {
   type EvalPlausibilityOutcome,
   type EvalPlausibilityResult,
   type EvalPlausibilitySource
-} from './eval-plausibility-judge.js'
+} from './judging/eval-plausibility-judge.js'
 export {
   DEFAULT_MINIMUM_JUDGE_AGREEMENT,
   EvalJudgeCalibrationPairSchema,
@@ -194,7 +194,7 @@ export {
   scoreJudgeCalibration,
   type EvalJudgeCalibrationPair,
   type EvalJudgeCalibrationResult
-} from './eval-judge-calibration.js'
+} from './judging/eval-judge-calibration.js'
 export {
   DEFAULT_MINIMUM_PLAUSIBILITY_AGREEMENT,
   EvalPlausibilityCalibrationPairSchema,
@@ -202,7 +202,7 @@ export {
   scorePlausibilityCalibration,
   type EvalPlausibilityCalibrationPair,
   type EvalPlausibilityCalibrationResult
-} from './eval-plausibility-calibration.js'
+} from './judging/eval-plausibility-calibration.js'
 export {
   calculateEvalMetrics,
   EvalMetricsSchema,
@@ -210,15 +210,15 @@ export {
   type EvalJudgeReliability,
   type EvalMetricCaseResult,
   type EvalMetrics
-} from './metrics.js'
-export { runEvaluation } from './eval-runner.js'
+} from './scoring/metrics.js'
+export { runEvaluation } from './run/eval-runner.js'
 export {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
   renderEvalSummary
-} from './eval-summary-report-rendering.js'
-export { renderEvalComparison } from './eval-comparison-report-rendering.js'
+} from './rendering/eval-summary-report-rendering.js'
+export { renderEvalComparison } from './rendering/comparison/eval-comparison-report-rendering.js'
 export {
   EvalComparisonReportSchema,
   parseEvalComparisonReport,
@@ -227,7 +227,7 @@ export {
   type EvalComparisonMetrics,
   type EvalComparisonReport,
   type EvalComparisonRun
-} from './eval-comparison-view.js'
+} from './report/eval-comparison-view.js'
 export {
   EVAL_METRICS_VERSION_HISTORY,
   metricComparability,
@@ -235,7 +235,7 @@ export {
   type EvalComparabilityKey,
   type MetricComparability,
   type MetricsVersionDivergence
-} from './eval-metrics-versions.js'
+} from './report/versions/eval-metrics-versions.js'
 export {
   PAIRED_SIGNIFICANCE_ALPHA,
   pairedRecallVerdict,
@@ -244,13 +244,13 @@ export {
   type PairedPopulationKind,
   type PairedPopulationVerdict,
   type PairedRecallVerdict
-} from './eval-paired-recall-verdict.js'
+} from './scoring/eval-paired-recall-verdict.js'
 export {
   precisionBracket,
   type PrecisionBracket,
   type PrecisionBracketBound
-} from './eval-precision-bracket.js'
-export { renderEvalRecallReport } from './eval-recall-report-rendering.js'
+} from './scoring/eval-precision-bracket.js'
+export { renderEvalRecallReport } from './rendering/eval-recall-report-rendering.js'
 export {
   EVAL_METRICS_VERSION,
   EvalRegressionThresholdsSchema,
@@ -261,27 +261,26 @@ export {
   type EvalRegressionThresholds,
   type EvalReport,
   type EvalReportProvenance
-} from './eval-report-contracts.js'
+} from './report/eval-report-contracts.js'
 export {
   computeAnswerKeyDigest,
   computeChangeImpactAnswerKeyDigest,
   computeChangeImpactAnswerKeyDigestByCase
-} from './eval-report-provenance.js'
-export { stableJsonDigest } from './stable-json-digest.js'
+} from './report/eval-report-provenance.js'
 export {
   loadEvalCasesFromFixtures
-} from './eval-fixture-loader.js'
+} from './corpus/eval-fixture-loader.js'
 export {
   createEvalSliceManifest,
   EvalSliceManifestCaseSchema,
   EvalSliceManifestSchema,
   type EvalSliceManifest,
   type EvalSliceManifestCase
-} from './eval-slice-manifest.js'
+} from './corpus/eval-slice-manifest.js'
 export {
   calculateEvalDiffStats,
   type EvalDiffStats
-} from './eval-diff-stats.js'
+} from './scoring/eval-diff-stats.js'
 export {
   allDiffScopes,
   classifyExpectedFindingDiffScope,
@@ -290,4 +289,4 @@ export {
   hunkSpansByPath,
   type DiffScope,
   type DiffHunkSpansByPath
-} from './eval-diff-scope.js'
+} from './scoring/eval-diff-scope.js'

@@ -5,7 +5,7 @@
 
 import { z } from 'zod'
 import { FixEditSchema } from '../../shared/contracts/findings/finding.schema.js'
-import { LaneUsageSchema } from '../costs/lane-usage.js'
+import { LaneUsageSchema } from '../costs/index.js'
 import { ContextLedgerEntrySchema } from '../review-planning/index.js'
 import { MAX_CLAIMS_PER_PROVIDER } from './contracts.js'
 import {

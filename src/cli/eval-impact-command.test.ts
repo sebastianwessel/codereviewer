@@ -15,7 +15,7 @@ import {
   buildChangeImpactCase,
   parseChangeImpactEvalReport
 } from '../domains/evaluation/index.js'
-import { corpusCaseFixture } from '../domains/evaluation/change-impact-fixture.js'
+import { corpusCaseFixture } from '../domains/evaluation/change-impact-eval/change-impact-fixture.js'
 import { runCli } from './index.js'
 
 const git = (root: string, args: readonly string[]): string =>

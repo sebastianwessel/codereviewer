@@ -195,7 +195,7 @@ all.
 The command renders a **`Scoring Rules`** section naming both versions before any
 number, then suppresses exactly the affected deltas as `not comparable` and
 compares the rest. Which metrics are affected is derived from an ordered
-scoring-rule history in `src/domains/evaluation/eval-metrics-versions.ts`, where
+scoring-rule history in `src/domains/evaluation/report/versions/eval-metrics-versions.ts`, where
 every version declares what it changed — it is not a hand-maintained list in the
 renderer.
 

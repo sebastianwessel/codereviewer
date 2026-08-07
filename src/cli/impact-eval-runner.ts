@@ -13,12 +13,12 @@
 import path from 'node:path'
 import { readFile } from 'node:fs/promises'
 import { createContextRetriever } from '../domains/context-retrieval/index.js'
+import { stableJsonDigest } from '../shared/json/stable-json-digest.js'
 import {
   runChangeImpact,
   type ChangeImpactAgents
 } from '../domains/change-impact/index.js'
 import {
-  stableJsonDigest,
   type ChangeImpactCaseInput,
   type ChangeImpactCaseOutcome,
   type ChangeImpactCorpusCase

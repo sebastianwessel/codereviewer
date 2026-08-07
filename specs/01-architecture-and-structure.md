@@ -30,6 +30,7 @@ domain folders require a spec update.
 src/
   index.ts
   cli/
+    commands/
   platform/
     path-service.ts
     repository-path.ts
@@ -62,6 +63,15 @@ src/
     admission/
     reporting/
     evaluation/
+      corpus/
+      judging/
+      scoring/
+      report/
+        versions/
+      rendering/
+        comparison/
+      run/
+      change-impact-eval/
     costs/
     observability/
     drift/
@@ -80,6 +90,34 @@ src/
 `shared/testing/` holds assertions a spec requires more than one domain to
 satisfy. It is compiled out of the published build (`tsconfig.build.json`
 excludes it) because nothing at runtime may import it.
+
+`cli/commands/` holds one module per dispatchable command, named after the
+command it implements (`eval-run.ts` for `eval run`, `impact-check.ts` for
+`impact check`). A command owns its option set, its error classification and its
+exit code, and no command imports another. What more than one command shares —
+the `CliResult`/`CliRunOptions` contract, error-to-exit-code mapping,
+configuration loading, logger construction, and the advisory `check` skeleton —
+stays in `cli/` beside `commands/`, so the dependency direction is one way:
+`index.ts` → `commands/*` → `cli/*`.
+
+`evaluation/` is grouped by what a module is FOR, not by the artifact it ends up
+in: `corpus/` defines and hydrates the cases, `judging/` holds the model-backed
+judges and their calibration, `scoring/` turns matches into numbers, `report/`
+owns the artifact contracts and provenance (`report/versions/` the
+metrics-version comparability rules), `rendering/` the Markdown surfaces
+(`rendering/comparison/` the `eval compare` ones), and `run/` the runner.
+`eval-warnings.ts` stays at the domain root because `run/`, `scoring/` and
+`index.ts` all read it.
+
+`evaluation/change-impact-eval/` is the one group defined by its CORPUS rather
+than by its role, and that is deliberate. Spec 22's change-impact review is
+scored against a different corpus with a different answer key from the diff
+reviewer's, and the two must never be pooled or run with each other's
+`--slice-root`/`--manifest`. Distributing these modules by technical role would
+file each one next to its diff-reviewer counterpart — corpus schema beside
+corpus schema, scoring beside scoring — which is precisely the adjacency the
+separation exists to prevent. Keep them together. Do not "tidy" them back into
+the role folders.
 
 ## Ownership Rules
 
@@ -117,7 +155,7 @@ executes no commands.
 | Entrypoint | Path | Contract |
 | --- | --- | --- |
 | Library entry | `src/index.ts` | Re-export stable public types and runtime helpers. No side effects. |
-| CLI entry | `src/cli/index.ts` | Parse args, call domain services, map errors to exit codes. Returns a `CliResult`; it never exits the process itself. |
+| CLI entry | `src/cli/index.ts` | Dispatch a command line to one module in `src/cli/commands/`, which parses its own args, calls domain services, and maps errors to exit codes. Returns a `CliResult`; it never exits the process itself. |
 | CLI binary | `src/cli/main.ts` | The `codereviewer` bin (`dist/cli/main.js`). Calls `runCli`, writes stdout/stderr, sets `process.exitCode`, and holds no other logic. |
 | Specs | `specs/` | Source of truth until readiness approval and implementation. |
 | User docs | `docs/` | Implemented behavior only. |
@@ -175,6 +213,28 @@ This is recorded as an unmet architectural goal rather than written out of the
 spec, because consolidating those reads behind `context-retrieval` is a real
 improvement that nobody has done, and deleting the requirement would erase the
 reason to do it. It is not a security defect and should not be described as one.
+
+### Known Divergence: The Evaluation Harness's Git Seam
+
+The Ownership Rules give "Git refs" to `repository-intake` and grant
+`evaluation` no git access. Two evaluation modules nevertheless shell out to
+git: `evaluation/report/engine-identity.ts`, which stamps the engine's own
+commit and working-tree cleanliness onto every eval report, and
+`evaluation/corpus/real-repo-corpus-hydration.ts`, whose
+`CorpusGitCommandRunner` checks out upstream corpus slices.
+
+This is recorded rather than normalised, and it is not the same git.
+`repository-intake` reads the repository **under review** at the refs a run was
+pointed at. These two read the engine's **own** checkout and **upstream** corpus
+repositories — neither is the subject of a review. Routing them through
+`repository-intake` would widen that domain from "the repository we are
+reviewing" to "any repository", a larger change to the ownership model than the
+problem warrants.
+
+What is owed is a decision, not a refactor: either grant `evaluation` a bounded
+git seam in the Ownership Rules and say what it may and may not read, or name
+another owner. Until then the divergence is not permission for other evaluation
+modules to shell out; these two are the whole list.
 
 - Deterministic signal extractors must be removable without changing core
   finding/report schemas. They can improve evidence quality but cannot be a

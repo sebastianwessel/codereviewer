@@ -5,7 +5,7 @@ import {
   renderJsonReport,
   writeReportingArtifacts
 } from './index.js'
-import { createReportFixture } from './reporting-fixture.js'
+import { createReportFixture } from '../../shared/testing/report-fixture.js'
 
 describe('JSON reporter', () => {
   test('renders canonical JSON that validates against the report schema', () => {

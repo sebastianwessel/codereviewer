@@ -2,6 +2,11 @@
 // warning carrying either prefix marks a case as provider-affected; the text
 // after the prefix is the provider error/retry code.
 //
+// This sits at the domain root rather than in one of the subfolders because
+// three of them read it: `run/` writes the warnings, `scoring/` counts them, and
+// `index.ts` publishes the prefixes. Filing it under any one of those would make
+// the other two import across a sibling boundary to reach a constant.
+//
 // `provider-error:` — the review run terminated in a provider error.
 // `eval-provider-retry:` — a transient provider error the eval harness retried
 // past (the run recovered), recorded so recovered degradation stays visible.

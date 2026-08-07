@@ -25,20 +25,24 @@
     "sourceMap": false
   },
   "include": ["src/**/*.ts"],
-  // `src/shared/testing/` holds assertions shared BETWEEN test suites. Nothing at
-  // runtime imports it, so shipping it in `dist/` would only add dead weight to
-  // the published package.
+  // `src/shared/testing/` holds assertions and fixtures shared BETWEEN test
+  // suites. Nothing at runtime imports it, so shipping it in `dist/` would only
+  // add dead weight to the published package.
   //
-  // `reporting-fixture.ts` is the same thing under a different name: the report
-  // fixture the four reporter suites share. It sits beside the domain rather
-  // than in `shared/testing/`, so the rule above missed it and it was shipping.
-  // Only `*.test.ts` files import it — an excluded file that a shipped module
-  // imported would still be compiled in, so this exclusion drops it only
-  // because nothing at runtime needs it.
+  // The report fixture the reporter suites and `cli/run-artifacts.test.ts` share
+  // used to sit beside the `reporting` domain as `reporting-fixture.ts`, where
+  // the rule above missed it and it shipped. It is now
+  // `src/shared/testing/report-fixture.ts` and needs no entry of its own.
+  //
+  // `change-impact-fixture.ts` cannot follow it. It builds corpus cases out of
+  // `domains/change-impact` types, and `shared` must not import from `domains`
+  // (spec 01, Dependency Direction), so it stays with the corpus it belongs to
+  // and keeps a path exclusion. Only `*.test.ts` files import it — an excluded
+  // file that a shipped module imported would still be compiled in, so this
+  // exclusion drops it only because nothing at runtime needs it.
   "exclude": [
     "src/**/*.test.ts",
     "src/shared/testing/**",
-    "src/domains/reporting/reporting-fixture.ts",
-    "src/domains/evaluation/change-impact-fixture.ts"
+    "src/domains/evaluation/change-impact-eval/change-impact-fixture.ts"
   ]
 }

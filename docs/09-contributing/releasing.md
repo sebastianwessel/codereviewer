@@ -144,10 +144,13 @@ you change `files`, `tsconfig.build.json` or where a module lives.
 
 Two exclusions in `tsconfig.build.json` are load-bearing and easy to undo by
 accident: `src/**/*.test.ts` with `src/shared/testing/**`, and
-`src/domains/reporting/reporting-fixture.ts`, a test-only fixture that sits
-beside the domain it serves rather than under `shared/testing/` and therefore
-shipped until it was named explicitly. A new test helper placed next to
-production code will ship unless you add it there too.
+`src/domains/evaluation/change-impact-eval/change-impact-fixture.ts`, a
+test-only fixture that cannot move under `shared/testing/` because it is typed
+in terms of a domain and `shared` may not import from `domains`. The report
+fixture used to need the same treatment for the same reason and now lives at
+`src/shared/testing/report-fixture.ts`, where the directory rule covers it. A
+new test helper placed next to production code will ship unless you add it
+there too.
 
 Source maps are off for the published build. `files` does not ship `src/`, so
 every emitted `.js.map` pointed at paths absent from the tarball — half the

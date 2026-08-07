@@ -3,7 +3,7 @@ import { describe, expect, test } from 'vitest'
 import { renderSarifReport } from './index.js'
 import { SARIF_INFORMATION_URI } from './sarif-reporter.js'
 import { validateSarifDocument } from './sarif-validation.js'
-import { createReportFixture } from './reporting-fixture.js'
+import { createReportFixture } from '../../shared/testing/report-fixture.js'
 
 // A security finding carrying every field the SARIF reporter has to project:
 // a stable rule id, CWE classification, a CVSS-like score, a help URL and a

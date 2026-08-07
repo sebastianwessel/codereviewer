@@ -1243,7 +1243,7 @@ Gate result:
 
 `codereviewer eval run`'s exit code is a SEPARATE gate from the
 review command's Quality Gate above: it is computed from
-`EvalRegressionThresholds` (`src/domains/evaluation/eval-report-contracts.ts`)
+`EvalRegressionThresholds` (`src/domains/evaluation/report/eval-report-contracts.ts`)
 against the run's own `metrics`, and is recorded on the saved report as
 `regressionGate`.
 

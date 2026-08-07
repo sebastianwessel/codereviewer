@@ -1,4 +1,4 @@
-import { hydrateChangeImpactCorpus } from '../src/domains/evaluation/change-impact-corpus-hydration.js'
+import { hydrateChangeImpactCorpus } from '../src/domains/evaluation/index.js'
 
 const valueAfter = (args: readonly string[], flag: string): string | undefined => {
   const index = args.indexOf(flag)

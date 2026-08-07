@@ -178,7 +178,8 @@ review can be — that is a design argument, and it has not been quantified.
 - [`src/domains/verification/`](../../../src/domains/verification/) —
   `investigate-claim-agent.ts`, `apply-check.ts`, `corroboration.ts`,
   `fix-run.ts`, `verification-run.ts`, the claim providers
-- Lane wiring in [`src/cli/index.ts`](../../../src/cli/index.ts)
+- Lane wiring in
+  [`src/cli/investigation-lanes.ts`](../../../src/cli/investigation-lanes.ts)
   (`runVerificationForReview`, `runFixForReview`)
 - `VerificationConfigSchema` / `FixConfigSchema` in
   [`config.schema.ts`](../../../src/shared/contracts/config/config.schema.ts)

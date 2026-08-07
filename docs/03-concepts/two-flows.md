@@ -16,7 +16,8 @@ same machine. Everything else in the architecture follows from this split.
 
 Source: [`specs/12-verification-flow.md`](../../specs/12-verification-flow.md),
 [`specs/05-review-workflow-and-runtime.md`](../../specs/05-review-workflow-and-runtime.md),
-wiring in [`src/cli/index.ts`](../../src/cli/index.ts).
+wiring in
+[`src/cli/investigation-lanes.ts`](../../src/cli/investigation-lanes.ts).
 
 ## Why the split exists
 

@@ -7,9 +7,10 @@ Every command is a fixed word pair or single word. There is no `--help` and no
 `--version`. A flag and its value may be written either way: `--config path` and
 `--config=path` are both accepted, everywhere.
 
-Source of truth: [`src/cli/index.ts`](../../src/cli/index.ts) (command dispatch)
-and [`src/cli/args.ts`](../../src/cli/args.ts) (parsers). Only the flags listed
-below are parsed.
+Source of truth: [`src/cli/index.ts`](../../src/cli/index.ts) (command dispatch),
+[`src/cli/commands/`](../../src/cli/commands/) (one module per command, each
+declaring the flags it accepts) and [`src/cli/args.ts`](../../src/cli/args.ts)
+(parsers). Only the flags listed below are parsed.
 
 ## Commands
 

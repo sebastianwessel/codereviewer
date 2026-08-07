@@ -32,7 +32,7 @@ import { runEvaluation } from './eval-runner.js'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const fixtureRoot = path.resolve(
   here,
-  '../../..',
+  '../../../..',
   'eval/fixtures/typescript/fix-lane/repo'
 )
 

@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { CodeReviewerConfigSchema } from '../shared/contracts/index.js'
-import { createReportFixture } from '../domains/reporting/reporting-fixture.js'
+import { createReportFixture } from '../shared/testing/report-fixture.js'
 import { writeReviewArtifacts } from './run-artifacts.js'
 
 const artifactRoot = '.codereviewer/runs/test-run'

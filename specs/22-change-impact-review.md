@@ -252,9 +252,17 @@ relative to that list.
 
 ### The Scorer, As Built
 
-Built 2026-08-06 as `eval impact`, in `src/domains/evaluation/`. **It is an
-instrument, not a result**: no number has been produced by it, and nothing in this
-repository or in `docs/` quotes one.
+Built 2026-08-06 as `eval impact`, in
+`src/domains/evaluation/change-impact-eval/`. **It is an instrument, not a
+result**: no number has been produced by it, and nothing in this repository or in
+`docs/` quotes one.
+
+That subfolder holds the whole family — corpus schema, hydration, scoring,
+report, rendering, metrics versions — deliberately apart from the diff
+reviewer's equivalents, which are grouped by role one level up. The two are
+scored against different corpora with different answer keys and must never be
+pooled or given each other's `--slice-root`/`--manifest`; filing them side by
+side by technical role would invite exactly that.
 
 The unit is the destination FILE, per the pre-registered decision rule and the
 file-granularity result recorded under Prior Art. It scores THREE ARMS, and emits

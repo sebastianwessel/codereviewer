@@ -1,7 +1,7 @@
 # Metrics
 
 Every number in `eval-report.json` is produced by `calculateEvalMetrics` in
-`src/domains/evaluation/metrics.ts`. This page gives the exact counter and
+`src/domains/evaluation/scoring/metrics.ts`. This page gives the exact counter and
 denominator for each one, and — more importantly — the three ways these numbers
 are commonly misread.
 

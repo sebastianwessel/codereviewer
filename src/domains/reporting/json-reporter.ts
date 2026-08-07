@@ -29,7 +29,7 @@ export type WrittenReportArtifact = {
 // Pretty-prints for a human-readable artifact. Deliberately NOT canonical: it
 // preserves insertion order and does not sort keys, so its output must never be
 // used as a digest input. The canonical, key-sorting serializer digests are
-// taken over is `stableJsonDigest` in the evaluation domain.
+// taken over is `stableJsonDigest` in `shared/json/`.
 const prettyJson = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`
 
 const redactJsonValue = (value: unknown): JsonValue | undefined => {

@@ -49,16 +49,30 @@ each other's internal files.
 | File | Owns |
 | --- | --- |
 | `main.ts` | The executable entry: reads `process.argv`, `process.cwd()` and `process.env`, writes stdout/stderr, sets the exit code |
-| `index.ts` | Command dispatch and per-command orchestration |
+| `index.ts` | Command dispatch, and nothing else |
+| `commands/` | One module per command, named after it (`eval-run.ts` for `eval run`); each owns its option set, its error classification and its exit code |
+| `cli-contract.ts` | The `CliResult` a command returns and the `CliRunOptions` it receives |
+| `cli-error-results.ts` | Failure as a `CliResult`: `usageError` (always exit `2`) and the thrown-error-to-exit-code mapping |
+| `command-config.ts` | The one way a command resolves its configuration, `--config` included |
+| `command-logging.ts` | The `--log-file` sink and the logger bound to a command name |
+| `advisory-check-command.ts` | The skeleton `impact check` and `intent check` share, including the rule that presentation can never fail an advisory stage |
+| `investigation-lanes.ts` | The two post-review lanes `review` drives (`runVerificationForReview`, `runFixForReview`) |
+| `mediated-file-reader.ts` | Reading one repository file through the mediated retriever, skipping what it may not read |
 | `args.ts` | Pure argument parsers — no IO, no runtime state |
 | `run-artifacts.ts` | Writing run artifacts and maintaining the run index |
 | `baseline-source.ts` | Resolving and validating the report `baseline write` builds from — the source of `baseline_source_unavailable` and `baseline_source_invalid` |
 | `review-completion.ts` | The one rule about what a completed run may tell a machine: an absent quality gate is `quality_gate_missing` (exit `5`), never a reported pass |
 | `eval-case-runner.ts` | Running one evaluation case through the review pipeline |
+| `impact-eval-runner.ts` | Running one change-impact corpus case through the `impact check` engine |
+| `eval-regression-gate-policy.ts` | Which thresholds `eval run` is judged against, and what the gate's outcome means as an exit code |
+| `eval-report-files.ts` | Reading an eval report back off disk, against the producer contract or the tolerant comparison view |
+| `eval-run-archive-id.ts` | Naming the per-run archive directory both eval commands write to |
 
 `main.ts` is intentionally thin; everything testable lives in `index.ts` and
 below, and `runCli` takes its cwd, environment and provider import as injected
-options so tests never touch the real process.
+options so tests never touch the real process. `index.ts` dispatches and holds
+no logic of its own, so the dependency direction is one way: `index.ts` →
+`commands/*` → the shared modules above.
 
 ---
 
@@ -83,7 +97,8 @@ path input, route it through this module — see
 | `errors/` | `error-normalizer.ts`: the `StructuredError` shape, category → exit-code mapping, provider error sub-classification, redaction of messages and details |
 | `redaction/` | The single redactor used before logs, errors, reports and model-bound context |
 | `diff/` | `git-diff-header.ts`: unified-diff header parsing (the `diff --git` path and the `@@` hunk ranges), shared so `repository-intake` and the evaluation corpus hydrator cannot disagree about what a diff changed |
-| `glob/`, `hash/`, `json/`, `schema/`, `text/` | Small focused helpers (glob matching, sha256, JSON value types, JSON-Schema conversion, UTF-8 byte slicing and truncation) |
+| `glob/`, `hash/`, `json/`, `schema/`, `text/` | Small focused helpers (glob matching, sha256, JSON value types, `stable-json-digest.ts`'s canonical-JSON hash, JSON-Schema conversion, UTF-8 byte slicing and truncation) |
+| `testing/` | Test-only assets more than one suite needs: the prompt-genericity guard, the injected change-intent helper, and `report-fixture.ts` (the one valid `ReviewReport` the reporter suites and `cli/run-artifacts.test.ts` render from). Excluded from the published build. |
 
 Reuse these helpers rather than re-deriving path handling, redaction, schema
 parsing, hashing or error normalization inside a domain.
@@ -128,7 +143,29 @@ parsing, hashing or error normalization inside a domain.
 | `costs/` | Token accounting, price resolution (provider → configured → built-in snapshot), the pricing snapshot |
 | `observability/` | The no-content event recorder, the review logger, optional OpenTelemetry setup |
 | `drift/` | The deterministic drift checker over `README.md`, `docs/` and `specs/` |
-| `evaluation/` | The evaluation harness: fixture and corpus schemas, loaders, the semantic and plausibility judges, the matcher, metrics, report and comparison rendering, hydration |
+| `evaluation/` | The evaluation harness, grouped by responsibility — see the table below |
+
+### `src/domains/evaluation/`
+
+| Folder | Owns |
+| --- | --- |
+| `corpus/` | What a case IS and where it comes from: the fixture and real-repo corpus schemas, the fixture loader, slice manifests, benchmark and real-repo hydration, removed-comment disclosure |
+| `judging/` | The model-backed half: the matcher, the semantic judge, the plausibility judge, and the two calibration sets that hold them honest |
+| `scoring/` | Matches turned into numbers: `metrics.ts`, diff-scope and diff-stats classification, security-mechanism attribution, significance, the paired-recall verdict, precision brackets |
+| `report/` | The eval artifact contracts, answer-key provenance, engine identity, and the tolerant comparison read model |
+| `report/versions/` | Metrics-version history and the comparability rules that decide whether two runs may be compared at all |
+| `rendering/` | Markdown surfaces for the summary and recall reports, plus the shared label and formatting helpers |
+| `rendering/comparison/` | The `eval compare` renderers, one per section |
+| `run/` | `eval-runner.ts`: the runner that drives a corpus through the review pipeline and assembles the report |
+| `change-impact-eval/` | The spec 22 change-impact corpus and everything that scores, reports and renders it |
+| `eval-warnings.ts` (root) | Provider-issue warning prefixes, read by `run/`, `scoring/` and the barrel alike |
+
+`change-impact-eval/` is grouped by its corpus rather than by role on purpose.
+It is scored against a different corpus with a different answer key from the
+diff reviewer's, and the two must never be pooled or given each other's
+`--slice-root`/`--manifest`. Splitting it across the role folders would file
+each module beside its diff-reviewer counterpart, which is exactly the adjacency
+the separation exists to prevent.
 
 ---
 

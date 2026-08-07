@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { loadCodeReviewerConfig } from '../configuration/config-loader.js'
+import { loadCodeReviewerConfig } from '../configuration/index.js'
 import { runVerificationRun } from './verification-run.js'
 
 // LIVE integration: exercises the verification flow against a REAL model provider

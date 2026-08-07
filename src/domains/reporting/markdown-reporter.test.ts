@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { renderMarkdownReport } from './index.js'
-import { createReportFixture } from './reporting-fixture.js'
+import { createReportFixture } from '../../shared/testing/report-fixture.js'
 
 describe('Markdown reporter', () => {
   test('renders deterministic report sections and escapes user-controlled text', () => {
