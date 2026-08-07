@@ -717,6 +717,51 @@ a seed was replaced. Cross-file retrieval has been enabled by default since
 read/list/grep tools. The lever intended for this class has already been pulled and
 the class is still the gap.
 
+### Pre-Registered Decision Rule For The Findings-Per-Call Lever
+
+**Written 2026-08-07, before any measurement of this lever, and not to be edited
+after one is taken.** No such intervention exists yet; this fixes how one would be
+read, because the honest reading is fixed in advance or it is fixed to suit the
+result.
+
+The diagnosis it responds to is in `reports/2026-08-07-why-cross-file-misses.md`.
+The engine emits **1.17 candidates per case-run** against a key naming **1.04
+defects per case**; **19.3%** of what it emits is a real defect the advisory does not
+list; and of 15 cross-file misses, **zero** were silent. Cross-file loses a selection
+contest under a one-finding budget rather than failing to look. Two neighbouring
+levers are already excluded by evidence: more discovery calls (missed cross-file
+expectations already had *more* calls than found ones, and extra passes were measured
+and rejected in July) and more retrieval (enabled by default since 2026-08-01).
+
+**The trap this rule exists to close.** On an answer key that names about one defect
+per case, raising findings-per-case raises recall almost mechanically — a reviewer
+that reports three defects instead of one is likelier to include the listed one
+whether or not it reasons any better. A recall gain alone is therefore *not* evidence
+of improvement here, and any report that quotes one alone is misreading its own
+instrument.
+
+The measurement is a paired A/B on the security corpus, **≥3 seeds per arm**, run on
+the **dev** split for iteration and confirmed on **held-out** before any acceptance
+claim. It reports, together and never separately: recall, **raw** precision, adjusted
+precision, genuine false positives, and **candidates per case**.
+
+- **Promotes** only if all four hold: recall rises; **raw precision does not fall**;
+  genuine false positives do not rise; and the effect exceeds the corpus's resolution
+  at the time of measurement. Raw precision is the load-bearing one — if the extra
+  findings are real-but-unlisted, raw precision falls and recall rose for the wrong
+  reason; if recall rises while raw precision holds, the extra findings are landing
+  on listed defects, which is the thing worth having.
+- **Keeps shipping disabled** if the result is neutral, inside the seed variance, or
+  unmeasured. Disabled is the default outcome, not the punishment outcome.
+- **Is rejected** if raw precision falls, if genuine false positives rise, or if two
+  independent cycles produce no movement outside variance.
+
+**This rule may not be run on the corpus as it stands.** At sd 7.69pp over 26
+expectations the instrument cannot resolve anything under roughly 16 percentage
+points, and an intervention on this lever would have to more than double cross-file
+recall to clear that. Growing the corpus is a precondition of the measurement, not a
+follow-up to it.
+
 ### Reviewing a fix backwards contaminates a third of the candidates
 
 This is the methodological result, and it constrains every future corpus of this

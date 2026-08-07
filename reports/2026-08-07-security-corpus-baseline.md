@@ -131,13 +131,31 @@ corpus grows" is doing the load-bearing work in that sentence.
   corpus.** The moment an intervention is chosen on the dev half, the dev half has
   absorbed the iteration and only the held-out half backs an acceptance claim.
 
-## The one thing to do next
+## The one thing to do next — corrected
 
-Cross-file at 38%, with retrieval already enabled, is the largest measured deficit
-this project has that instrument noise does not explain — and it is the only row
-that survived a seed being replaced unchanged.
+Cross-file at 38% is the largest deficit here that noise does not explain, and it is
+the only row that survived a seed being replaced unchanged. But the lever it implies
+is **not** "reach further into other files", and a companion analysis of the same
+three runs says why: `reports/2026-08-07-why-cross-file-misses.md`.
 
-Acting on it needs a bigger corpus first. At sd 7.69pp, an intervention would have
-to move cross-file recall by more than half its current value before this instrument
-could tell. 91 screened candidates from the same harvest were never curated; that is
-where the next cases come from.
+On the cross-file expectations it missed, the reviewer made **more** discovery calls
+(1.20 vs 1.00) and produced **more** findings (1.47 vs 1.11) than on the ones it
+found, and **none of the 15 cross-file misses was silent**. It looked, it reported —
+it reported something else.
+
+The binding constraint is that the engine emits **1.17 candidates per case-run**
+against an answer key naming **1.04 defects per case**, and 19.3% of what it emits is
+a real defect the advisory does not list. Recall here is largely *did the one thing
+it reported match the one thing the advisory named*, and cross-file loses that
+selection contest more often than local does.
+
+That rules out the two obvious levers — more calls is contradicted by the data above
+and was already measured and rejected in July; more retrieval is already on by
+default. What is left is findings-per-call, and it comes with a trap: raising it
+would lift recall on a single-defect key almost mechanically, improvement or not. Any
+intervention there must be pre-registered against **precision at the same time**.
+
+And acting on any of it needs a bigger corpus first. At sd 7.69pp an intervention
+would have to move cross-file recall by more than half its current value before this
+instrument could see it. 91 screened candidates from the same harvest were never
+curated; that is where the next cases come from.
