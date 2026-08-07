@@ -2666,3 +2666,33 @@ finding arrays OVERLAP: `unlistedRealFindingIds` is a SUBSET of
 dedupe by `findingId`; never by which array they appear in. Two earlier versions of
 this analysis reported 68.7% silence and a 39.8% "non-real finding" category. Both are
 artefacts. True silence is 15.4% and the non-real category does not exist.
+
+## 2026-08-08 — Impact-framing clause REJECTED ($29.26)
+
+Control `0dcfeb8` vs treatment `a9d24b3`, 10 seeds/arm, alternating order, 5/5
+position balance, `dirty=0`, 0 provider errors, 71 cases / 73 expectations. Detail:
+`reports/2026-08-08-impact-framing-result.md`.
+
+| | control | treatment |
+|---|---|---|
+| recall | 63.8% (sd 3.66pp) | 62.5% (sd 3.66pp) |
+| adjusted precision | 97.7% (sd 3.10pp) | 97.0% (sd 3.19pp) |
+| genuine false positives | 11 | **14** |
+| discovery calls | 720 | 720 (**1.00x**) |
+| raw findings | 893 | 844 |
+
+**16 gained / 16 lost, one-sided exact p = 0.5700.** Fails criterion 1 (p) and
+criterion 3 (genuine FPs must not rise). Rejected and reverted; the branch is deleted.
+
+**Why this null is worth more than the six before it.** The diagnosis behind it was
+measured, specific and correct (61 of 103 same-file misses inside the expected range,
+`bug` 78 vs `security` 15); the clause attached to WRITING a finding rather than to
+searching, which is what separated it from the four prior security interventions; and
+it cost nothing at all. It still moved nothing. **Knowing precisely where the failure
+is did not make it fixable by instruction.**
+
+**Prompt-level instruction is now a closed family.** Five prompt interventions measured
+against pre-registered rules — weakness-class, precision-boundary, intent-framing, the
+correctness-fix confirmation, impact-framing — with paired splits **7/8, 7/8, 7/7,
+12/12, 16/16**. Five coin flips from five different angles. Do not run another
+prompt-level A/B on this corpus without evidence that overturns that table.
