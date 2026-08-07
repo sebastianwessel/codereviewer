@@ -2272,13 +2272,22 @@ nothing: the design was underpowered for anything below ~11pp, which is nearly e
 realistic change. "Rejected" under their pre-registered rules is correct; "these
 ideas do not work" would not be.
 
-**Further prompt-level A/Bs on this corpus are not a productive use of spend**, and
-the way out is narrower than first written here. **More cases is NOT available at the
-scale required**: only 21 screened candidates remain unadjudicated (not the "60+"
-this entry originally claimed), yielding ~9 more cases and taking the resolvable
-difference from ~13.7pp to ~12.5pp. Reaching 8pp needs 149 expectations and 6pp needs
-264; the entire post-cutoff advisory harvest produced 132 structurally reviewable
-candidates and 111 are already used.
+**Further prompt-level A/Bs on this corpus are not a productive use of spend.**
+
+**CORRECTION (same day): the "more cases is NOT available" claim in this entry was
+wrong.** It rested on the screen's own output without re-reading its rejection
+reasons. The screen carried two filters inherited from the analyzer-firing
+measurement — it rejected all 33 add-only fixes ("no parent-side line is changed, so
+no alert can be attributed", a statement about attribution, not about recall) and all
+52 multi-commit advisories (most of which are one fix cherry-picked onto several
+release branches). Re-screening recovered **59 candidates**; curators kept 26 at the
+same ~45% rate as earlier rounds, the removed-comment gate dropped 6, and the corpus
+is now **70 cases / 72 expectations / 44 repositories**. Detail:
+`reports/2026-08-07-recovered-from-a-wrong-screen.md`.
+
+**What still stands:** 8pp resolution needs ~149 expectations and 6pp needs ~264, so
+72 expectations (sd 5.8pp, resolving ~11.7pp instead of ~13.7pp) is an improvement,
+not a fix. Wrong about availability, right about sufficiency.
 
 The only affordable route is **more seeds carried by the paired test**. Extra seeds
 barely move the run-level mean's binomial noise — that is set by the number of
@@ -2520,3 +2529,33 @@ configuration against a control before reporting a null.
   cases whose `engine.json` sidecars disagree). **Runs predating the fix carry no
   sidecar and are reported as unknown-engine, not as agreeing.** Treat small
   deltas above as correspondingly weaker.
+
+## 2026-08-07 — Security corpus grown to 70 cases from a wrong screen ($0 provider spend)
+
+`eval/corpora/security-advisory-2026`: **51 → 70 cases, 52 → 72 expectations, 34 → 44
+repositories**, held-out/dev 52/18. All ten security mechanisms and all seven
+languages still covered; `callee` (8) and `caller` (3) — the depths the silence
+analysis singled out — both gained.
+
+Recovered by re-screening two rejection classes that were correct for the
+analyzer-firing measurement and wrong for a recall corpus:
+
+| rejection class | recovered | curators kept |
+|---|---|---|
+| "fix only ADDS lines; no alert can be attributed" | 32 | 16 |
+| "advisory references more than one fix commit" | 27 | 10 |
+
+A pairwise ancestor test correctly refused **8** as genuinely staged fixes, where one
+`fixCommit`/`parentCommit` pair would show the reviewer half the defect. Keep rate
+44%, matching rounds one and two — these were ordinary material, not scrapings.
+**Curators dropped zero add-only candidates for "no defect in the parent"**: that
+exclusion was wrong on the merits, not at the margin.
+
+Integrity: two curators keyed different sites of the same russh fix, merged to one
+case with two disjoint expectations; the hydrator's removed-comment gate dropped 6
+more after curation (3 unambiguous, 3 under a conservative default); the independent
+self-disclosure sweep reports **0 of 70** checkouts naming their own advisory.
+
+**No recall figure is published here.** The ~61% baseline describes the 51-case
+corpus and is not comparable across a corpus change; a re-baseline is owed before any
+figure is quoted against this corpus.

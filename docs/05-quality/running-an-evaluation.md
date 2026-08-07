@@ -87,7 +87,7 @@ node --import tsx scripts/hydrate-real-repo-corpus.ts \
   --output-slice-root .codereviewer/eval/security-cases/security-advisory-2026
 ```
 
-51 cases, each a security defect confirmed by a reviewed GitHub Security Advisory
+70 cases, each a security defect confirmed by a reviewed GitHub Security Advisory
 published after the training cutoff, covering all ten security mechanisms and all
 seven supported languages. Score it with `eval run --slice-root` exactly like the
 cross-file corpus — it is the same command, because it is the same kind of

@@ -9,16 +9,16 @@
   "screening": {
     "commitBodiesScreened": 0,
     "repositoriesScreened": 251,
-    "candidatesAdjudicated": 111,
-    "note": "Not a commit-body sweep, so commitBodiesScreened is 0 and the denominator is the advisory database instead. GitHub Security Advisories with published > 2026-01-01, type=reviewed, across npm/PyPI/Go/Maven/RubyGems/crates.io: 401 carried a fix-commit reference into their own source repository, 251 of those on permissively licensed repositories (repositoriesScreened counts these advisories, not distinct repositories - 33 distinct repositories survive in the cases). Structural screening kept 132 as single reviewable changes. Curation ran in two rounds: 41 candidates adjudicated in round one and 70 in round two, for 50 surviving cases. Round two's curators pre-screened for the removed-comment disclosure gate themselves, which cut the gate's kill rate from 15 of 38 to 8 of 29. See reports/2026-08-07-analyzer-firing-base-rate.md for the harvest and reports/2026-08-07-security-corpus-baseline.md for what the cases measure.",
+    "candidatesAdjudicated": 170,
+    "note": "Not a commit-body sweep, so commitBodiesScreened is 0 and the denominator is the advisory database instead. GitHub Security Advisories with published > 2026-01-01, type=reviewed, across npm/PyPI/Go/Maven/RubyGems/crates.io: 401 carried a fix-commit reference into their own source repository, 251 of those on permissively licensed repositories (repositoriesScreened counts these advisories, not distinct repositories - 44 distinct repositories survive in the cases). Curation ran in FOUR rounds. Rounds one and two adjudicated 111 candidates for 50 cases. Rounds three and four exist because the structural screen was found to carry two filters inherited from the analyzer-firing measurement, both wrong for a recall corpus: see the two rejection entries marked CORRECTED. Re-screening recovered 59 further candidates (32 add-only, 27 single-fix-commit-after-all), of which curators kept 26 and the hydrator's removed-comment gate then dropped 6, for 70 cases and 72 expectations. The keep rate across all four rounds is stable at ~45%. See reports/2026-08-07-analyzer-firing-base-rate.md for the harvest, reports/2026-08-07-security-corpus-baseline.md for what the cases measure, and reports/2026-08-07-recovered-from-a-wrong-screen.md for the recovery.",
     "rejections": [
       {
-        "candidate": "52 advisories referencing more than one fix commit",
-        "reason": "The repair is spread over commits, so no single reviewable change contains the defect and its removal. Reviewing one of them backwards shows a partial fix."
+        "candidate": "CORRECTED - 52 advisories referencing more than one fix commit",
+        "reason": "Originally rejected wholesale on the reasoning that the repair is spread over commits. That is true of only a minority. Most are ONE fix cherry-picked onto several release branches: the commits are pairwise DIVERGED, so any single one is complete against its own parent. Re-screening with a pairwise ancestor test recovered 27 (26 backports, 1 where only one commit touched source) and correctly refused 8 as genuinely STAGED, where one commit pair would show the reviewer half the defect. The original reason survives only for those 8."
       },
       {
-        "candidate": "33 advisories whose fix only ADDS lines",
-        "reason": "A fix that adds a guard without touching the sink leaves no parent-side changed line. Reviewed backwards the defect is an absence, and no analyzer alert can ever attribute to it. Recorded rather than silently filtered: these are real defects on which analyzer ingestion cannot help by construction."
+        "candidate": "CORRECTED - 33 advisories whose fix only ADDS lines",
+        "reason": "Originally rejected because 'no parent-side line is changed, so no alert can be attributed'. That reason is about ANALYZER ATTRIBUTION - correct for the Mechanism 2 firing measurement, wrong for a recall corpus. Reviewed backwards an add-only fix REMOVES a guard, and noticing a missing check is exactly what a security reviewer is for. 32 were re-screened and curators dropped NONE of them for 'no defect in the parent' - the exclusion was wrong on the merits, not merely at the margin. Attrition among them was disclosure, which is orthogonal."
       },
       {
         "candidate": "12 advisories whose fix touches 9 to 34 source files",
@@ -55,6 +55,14 @@
       {
         "candidate": "round two: candidates dropped by curators before writing a case",
         "reason": "Round two offered 70 candidates and kept 30. The dominant killer is the fix stating its own defect in prose, and the cheapest predictor is a fix that touches a single source file - there is then no file to exclude without losing the defect. Disclosure also travels in error-message strings, config-option help text and parameter docs, none of which the automated comment gate reads."
+      },
+      {
+        "candidate": "rounds three and four: 33 recovered candidates dropped by curators",
+        "reason": "59 recovered, 26 kept. Disclosure remained the dominant killer and bit HARDER here than in earlier rounds: a guard-addition fix almost always explains the guard it adds, and a backported security fix is maintainer-authored prose by construction. One slice lost 7 of 10 to disclosure alone. Two were dropped because no value in the security-mechanism vocabulary honestly described them, and one because the fix closed only half of what the advisory covered."
+      },
+      {
+        "candidate": "6 cases dropped by the removed-comment gate after curation",
+        "reason": "Curators pre-screen for disclosure by reading the fix's added prose; the hydrator's gate then re-checks mechanically and still found 6. Three unambiguously stated the missing check in English. The other three were dropped under a conservative default rather than individually adjudicated: dropping a case costs corpus size, keeping a contaminated one corrupts every measurement made on it. They remain recoverable through removedCommentDisclosureReview.acknowledgedComments if a reader judges the quoted comments harmless."
       }
     ]
   },
@@ -2187,6 +2195,792 @@
         "cors"
       ],
       "notes": "Verified by printing lines 118-147 of src/middleware/cors/index.ts at parent 51db3131: line 130 reads the request header, line 132 is `headers = requestHeaders.split(/\\s*,\\s*/)`. The header is attacker-controlled on any preflight request, and the value is used before any allow-list check, so no configuration is needed to reach it. Advisory GHSA-8j4g-w8fx-2239 (CWE-1333); the fix's own regression test sends 'x' + 200000 spaces + 'x'. Test file src/middleware/cors/index.test.ts excluded from reviewedPaths."
+    },
+    {
+      "id": "russh-client-curve25519-shared-secret-unchecked-peer-length",
+      "language": "rust",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/Eugeny/russh.git",
+      "upstreamOwner": "Eugeny",
+      "upstreamRepo": "russh",
+      "license": "Apache-2.0",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "a7fc1eb5717264e31c3c5f7dd849b73989a08f3d",
+      "fixCommittedAt": "2026-07-22T18:58:38Z",
+      "parentCommit": "2311de11d0880f761dbe33df4b7b7239e3d92e3d",
+      "reviewedPaths": [
+        "russh/src/kex/curve25519.rs"
+      ],
+      "reviewIntent": "Reduce branching in the curve25519 key exchange: use the decoded peer ephemeral directly in server_dh and compute_shared_secret, and drop the accompanying debug logging.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "russh/src/kex/curve25519.rs",
+          "lineRange": [
+            110,
+            117
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "Client-side Curve25519Kex::compute_shared_secret copies the peer ephemeral into a fixed 32-byte MontgomeryPoint via clone_from_slice at line 113 without checking remote_pubkey_.len(). clone_from_slice panics on a length mismatch, so a malicious or MitM SSH server answering KEX_ECDH_INIT with an f field of any length but 32 deterministically panics the client session task before the host key is verified: single-packet, pre-auth, per-connection denial of service.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "cross-function"
+        },
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "russh/src/kex/curve25519.rs",
+          "lineRange": [
+            63,
+            86
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "server_dh accepts the peer's Curve25519 ephemeral public value after checking only that it is 32 bytes long, then multiplies it by the server secret at line 85. An unauthenticated peer can send the all-zero point; the Montgomery ladder maps it to an all-zero shared secret that the peer therefore also knows, so every key derived from this exchange is predictable.",
+          "securityMechanism": "cryptography",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "concurrency-resource",
+        "panic",
+        "denial-of-service"
+      ],
+      "notes": "Verified: printed parent russh/src/kex/curve25519.rs (175 lines) at 2311de1. Lines 110-117 are exactly fn compute_shared_secret; line 113 is `remote_pubkey.0.clone_from_slice(remote_pubkey_);` and no length guard precedes it. Cross-function contrast confirmed by printing lines 60-73: server_dh checks `if pubkey_len != 32` at 63-65 before its own clone_from_slice at 73. No parentSideTouchedLines existed (pure addition); range derived from where the guard belongs. EXCLUDED russh/src/kex/mod.rs from reviewedPaths: the fix adds a #[cfg(test)] block there whose comment states a defect verbatim ('used to index s[s.len()] and panic'), and the encode_mpint repair there is a second defect this advisory does not name. Residual risk: the reversed diff still removes two all-zero-point checks; their debug! strings only restate their own condition, but a reviewer reporting missing zero-point validation would be an extra, plausible finding. MERGED with `curve25519-peer-public-value-unvalidated`: the "
+    },
+    {
+      "id": "ghost-archived-offer-redeemable-at-member-checkout",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/TryGhost/Ghost.git",
+      "upstreamOwner": "TryGhost",
+      "upstreamRepo": "Ghost",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "d91c0fc52dfc987d71a9803dbcbe6447d21b92fb",
+      "fixCommittedAt": "2026-07-27T19:21:49Z",
+      "parentCommit": "377890db22b0167347374cd50afb9f814f0ffa9a",
+      "reviewedPaths": [
+        "ghost/core/core/server/services/members/members-api/controllers/router-controller.js"
+      ],
+      "reviewIntent": "Reduce validation branching in the members checkout data helper so an offer looked up by id flows straight into tier and cadence resolution.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "ghost/core/core/server/services/members/members-api/controllers/router-controller.js",
+          "lineRange": [
+            460,
+            477
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "_getSubscriptionCheckoutData fetches an offer by the request-supplied offerId (line 461) and, after only a null check, reads offer.tier and offer.cadence and proceeds to build a Stripe checkout session. It never inspects offer.status, so any unauthenticated visitor who knows or guesses an archived offer's id can still redeem it and obtain the discount the site owner withdrew. The sibling tier path does check status === 'archived' a few lines below.",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "authorization",
+        "business-logic",
+        "missing-state-check"
+      ],
+      "notes": "Verified: printed parent router-controller.js (1271 lines) at 377890d, lines 430-500. Line 461 is `offer = await this._offersAPI.getOffer({id: offerId});`, 463-468 the null check, 470-474 the !offer.tier check, 476-477 the tier read and cadence assignment; there is no status check anywhere in that block. Range derived from where the guard belongs (immediately after the null check at 468), not from the fix's new lines. Confirmed the in-file contrast by printing lines 498-500: the tier branch does `if (tier.status === 'archived') throw new NoPermissionError(...)`. Also confirmed by grep that messages.offerArchived is already defined in the parent at line 22 and referenced nowhere else, i.e. the parent carries an unused message constant; that is genuine upstream state, not curator leakage, but it is a mild in-tree hint. The fix adds only one English string, a context line restating its own status condition."
+    },
+    {
+      "id": "kin-openapi-content-parameter-media-type-schema-nil-deref",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/getkin/kin-openapi.git",
+      "upstreamOwner": "getkin",
+      "upstreamRepo": "kin-openapi",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "68ac2affa325514d7d6e731204d6a1edf6bdff64",
+      "fixCommittedAt": "2026-07-23T21:00:10Z",
+      "parentCommit": "3e5d7f4d5a0c335d8085de5c0e552efe61e37e03",
+      "reviewedPaths": [
+        "openapi3filter/req_resp_decoder.go"
+      ],
+      "reviewIntent": "Trim a redundant precondition branch from defaultContentParameterDecoder: once the application/json media type is resolved, read its schema value directly.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "openapi3filter/req_resp_decoder.go",
+          "lineRange": [
+            192,
+            197
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "defaultContentParameterDecoder checks that the media type itself is non-nil (lines 192-196) and then dereferences mt.Schema.Value at line 197 without checking mt.Schema. A media type that declares no schema is legal OpenAPI and passes document validation, so any unauthenticated request that reaches a 'content' parameter of such a document nil-pointer-panics inside request validation instead of failing cleanly, taking the serving goroutine (and typically the process) down.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "concurrency-resource",
+        "nil-dereference",
+        "denial-of-service"
+      ],
+      "notes": "Verified: printed parent openapi3filter/req_resp_decoder.go (1723 lines) at 3e5d7f4, lines 175-215. Line 192 is `mt := content.Get(\"application/json\")`, 193-196 the mt == nil guard, and line 197 is exactly `outSchema = mt.Schema.Value` with no mt.Schema check. Range derived from where the missing guard belongs (between 196 and 197), not from the fix's new lines; there were no parentSideTouchedLines. Corroborating evidence in the same parent file: line 209 passes mt.Schema into unmarshal, whose body at 201 already tests `paramSchema != nil`, so the nil case is anticipated one statement later. reviewedPaths excludes openapi3filter/validate_request_test.go, whose added test comment names the weakness explicitly. The only English the fix adds to the reviewed file is an error string restating its own nil condition."
+    },
+    {
+      "id": "gitpython-checkout-index-forwards-unscreened-git-options",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/gitpython-developers/GitPython.git",
+      "upstreamOwner": "gitpython-developers",
+      "upstreamRepo": "GitPython",
+      "license": "BSD-3-Clause",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "3af0c2516c5e18c829da30338614688f6b69b49c",
+      "fixCommittedAt": "2026-07-26T05:37:08Z",
+      "parentCommit": "07e8055585491aa3d0b42f79c5bc2bdd027fa6c0",
+      "reviewedPaths": [
+        "git/index/base.py"
+      ],
+      "reviewIntent": "Align IndexFile.checkout with the thin git-checkout-index wrapper it used to be: drop the extra keyword-only parameter and the class attribute it consulted, and forward the caller's keyword arguments to git unchanged.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "git/index/base.py",
+          "lineRange": [
+            1264,
+            1331
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "IndexFile.checkout accepts arbitrary **kwargs and forwards them unscreened to self.repo.git.checkout_index(*args, **kwargs) at lines 1331 and 1349. GitPython turns a kwarg into a git command-line option, so a caller-influenced value such as prefix='/home/app/.ssh/' becomes `git checkout-index --prefix=/home/app/.ssh/` and git writes index contents to that location. Result: arbitrary file creation and overwrite outside the working tree at process privilege.",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "injection",
+        "argument-injection",
+        "arbitrary-file-write"
+      ],
+      "notes": "Verified: printed parent git/index/base.py (1585 lines) at 07e8055, lines 1209-1266 and 1320-1352. Line 1264 is `args = [\"--index\"]` (first statement after the docstring, where the screening belongs), line 1331 is `proc = self.repo.git.checkout_index(*args, **kwargs)` and line 1349 the --stdin twin; grep confirms no check_unsafe_options call anywhere between them. Range derived from the guard's home, not the fix's new lines. In-file contrast confirmed: IndexFile.diff in the same parent already takes allow_unsafe_options (1496) and calls Git.check_unsafe_options (1509-1512). Rule 5: git/refs/tag.py is excluded from reviewedPaths; it carries the same defect via --file/-F on git tag (arbitrary read), and a reviewer reporting it should not be scored a false positive. DISCLOSURE FLAGGED, NOT DROPPED: the fix adds `:param allow_unsafe_options: Allow unsafe options, such as --prefix.` Both identifiers already appear in removed code, matching an accepted round-2 precedent."
+    },
+    {
+      "id": "gitpython-config-section-name-escapes-section-header",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/gitpython-developers/GitPython.git",
+      "upstreamOwner": "gitpython-developers",
+      "upstreamRepo": "GitPython",
+      "license": "BSD-3-Clause",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "1ed1b924f4e2d2ee7bab296df77b978af21853f1",
+      "fixCommittedAt": "2026-07-20T12:13:41Z",
+      "parentCommit": "5bc256060cfaf8f32100780f17e0846f3e69d8b7",
+      "reviewedPaths": [
+        "git/config.py"
+      ],
+      "reviewIntent": "Simplify _assure_config_name_safe back to the single character check it shares with option names, dropping the per-character quoting scan that only ran for the section label.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "git/config.py",
+          "lineRange": [
+            897,
+            899
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "_assure_config_name_safe rejects only CR, LF and NUL in a section name, and every writer entry point (set, set_value, add_value, add_section, rename_section) relies on it. The name is later interpolated raw into the header via fp.write('[%s]\\n' % name). A caller-influenced section name containing an unquoted ']' closes the header early and appends attacker-chosen sections and directives to the config file, including core.sshCommand, which git executes on the next remote operation.",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "injection",
+        "config-injection",
+        "command-execution"
+      ],
+      "notes": "Verified: printed parent git/config.py (1000 lines) at 5bc2560, lines 860-960. Lines 897-899 are exactly def _assure_config_name_safe plus its single `if isinstance(name, str) and UNSAFE_CONFIG_CHARS_RE.search(name): raise ValueError(...)`; UNSAFE_CONFIG_CHARS_RE is defined at line 75 as re.compile(r'[\\r\\n\\x00]'), so ']' and '\"' pass. Range is the guard's home, derived from the code; no parentSideTouchedLines existed. Sink confirmed by printing line 693: `fp.write((\"[%s]\\n\" % name).encode(defenc))` inside _write's write_section, hence contextDepth cross-function. Callers confirmed by grep at 786, 909, 935, 965, 987. DISCLOSURE FLAGGED, NOT DROPPED: the fix adds three ValueError strings ('must not contain an unquoted closing bracket', etc). Each restates the condition of the branch it sits in and none names the consequence, so I judged it inside the rule 7 boundary."
+    },
+    {
+      "id": "keycloak-realm-scope-mapping-write-skips-per-role-check",
+      "language": "java",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/keycloak/keycloak.git",
+      "upstreamOwner": "keycloak",
+      "upstreamRepo": "keycloak",
+      "license": "Apache-2.0",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "8894c027e788904c740ff9a1a60fcfaa34a10d13",
+      "fixCommittedAt": "2026-07-01T14:28:56Z",
+      "parentCommit": "c4e7976547335e2a9afba0603be8ceab89cc8f60",
+      "reviewedPaths": [
+        "services/src/main/java/org/keycloak/services/resources/admin/ScopeMappedResource.java"
+      ],
+      "reviewIntent": "Reduce per-role work in ScopeMappedResource's realm-level scope mapping endpoints: add and bulk delete operate directly on the resolved role models under the resource-level manage permission already required at the top of each method.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "services/src/main/java/org/keycloak/services/resources/admin/ScopeMappedResource.java",
+          "lineRange": [
+            221,
+            234
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "addRealmScopeMappings requires only managePermission on the client (line 222) and then calls scopeContainer.addScopeMapping(roleModel) for every role id in the request body, with no per-role evaluation. An administrator holding just client-management rights can therefore attach any realm role, including highly privileged ones, to a client's scope, and that role is then projected into tokens issued for the client, escalating privilege. deleteRealmScopeMappings has the same gap.",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "authorization",
+        "privilege-escalation",
+        "missing-permission-check"
+      ],
+      "notes": "Verified: printed parent ScopeMappedResource.java (283 lines) at c4e7976, lines 200-283. Lines 221-234 are exactly addRealmScopeMappings: managePermission.require() at 222, the role loop at 228-234, and scopeContainer.addScopeMapping(roleModel) at 233 with no per-role check. The delete twin is lines 249-269 (bulk stream at 257-260, explicit loop at 262-268). Range derived from where the missing check belongs; no parentSideTouchedLines existed. In-file contrast confirmed by grep: the listing endpoint at line 174 already filters with auth.roles()::canMapClientScope, so the read path enforces what the write path does not. Rule 5: ScopeMappedClientResource.java is excluded from reviewedPaths - same defect at the client-level sites. The fix adds NO comments and NO string literals to either source file, so this case has no disclosure surface at all."
+    },
+    {
+      "id": "pion-dtls-ecdhe-psk-server-key-exchange-empty-body-panic",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/pion/dtls.git",
+      "upstreamOwner": "pion",
+      "upstreamRepo": "dtls",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "49458d604a4f3ebce1bf9587a0f3e5f3f6b4a55e",
+      "fixCommittedAt": "2026-06-02T17:22:34Z",
+      "parentCommit": "e4b257d7ea9ce71c683f62a8533e06ffe1c433ee",
+      "reviewedPaths": [
+        "pkg/protocol/handshake/message_server_key_exchange.go"
+      ],
+      "reviewIntent": "Simplify MessageServerKeyExchange.Unmarshal by dropping a length branch that duplicates the minimum-size check already made by the switch at the top of the function.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "pkg/protocol/handshake/message_server_key_exchange.go",
+          "lineRange": [
+            95,
+            100
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "Unmarshal reslices data past the PSK identity hint at line 85 and then reads data[0] at lines 99-100 without rechecking the remaining length. For an ECDHE_PSK suite a two-byte message whose hint length is zero leaves data empty, so the index is out of range and the handshake goroutine panics. The entry check at line 76 only validated the original buffer. A remote peer needs no credentials to send this, so it is a pre-authentication remote crash.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "local"
+        }
+      ],
+      "tags": [
+        "security",
+        "concurrency-resource",
+        "out-of-bounds-read",
+        "denial-of-service"
+      ],
+      "notes": "Verified: printed parent pkg/protocol/handshake/message_server_key_exchange.go (153 lines) at e4b257d, lines 70-125. Line 76 is `case len(data) < 2:`, line 85 is `data = data[2+hintLength:]`, line 95 the `!Has(KeyExchangeAlgorithmEcdhe)` early return, and lines 99-100 read data[0] twice with no intervening length check. Traced the reaching path by hand: with KeyExchangeAlgorithm = Psk|Ecdhe and data = {0x00,0x00}, hintLength is 0, line 83 is true so data becomes empty, line 87's equality with Psk alone is false, line 95 passes, and line 99 panics. Range covers the Ecdhe branch through the unguarded read, which is where the missing bounds check belongs; no parentSideTouchedLines existed. reviewedPaths excludes the test file, whose added cases comment 'Previously panicked'. The fix adds no comments or strings to the reviewed file."
+    },
+    {
+      "id": "completion-handler-dereferences-unchecked-request-ref",
+      "language": "go",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/github/github-mcp-server.git",
+      "upstreamOwner": "github",
+      "upstreamRepo": "github-mcp-server",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "c88d2ecdd3bb07f7bdd75296e3ee676febf14f58",
+      "fixCommittedAt": "2026-05-19T09:55:44Z",
+      "parentCommit": "7e394af647018d1c90b5aa4d492a553447b1b697",
+      "reviewedPaths": [
+        "pkg/github/server.go"
+      ],
+      "reviewIntent": "Simplify the completion handler so it dispatches on the reference type directly; the transport layer already rejects requests that arrive without the parameters this handler needs.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "pkg/github/server.go",
+          "lineRange": [
+            206,
+            217
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "The completion/complete closure reads req.Params.Ref.Type at line 207 and req.Params.Ref.URI at 209/212 without checking req, req.Params or req.Params.Ref for nil. The MCP runtime leaves Params and Ref nil for a request whose parameters are missing or empty, so any peer able to send one malformed completion request triggers a nil pointer dereference and panics the server process, denying service to every other client of that process.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "denial-of-service",
+        "nil-dereference",
+        "mcp"
+      ],
+      "notes": "Verified against the parent tree by printing pkg/github/server.go lines 205-219 at 7e394af6: line 206 is the returned closure signature and line 207 is `switch req.Params.Ref.Type {` with no preceding nil check; the range ends at line 217, the closing brace of the switch. The added guard belongs at line 207, immediately before the switch. pkg/github/server_test.go is excluded as a test file. The only English the fix adds to the source file is the error string 'missing required parameter: ref', which restates the nil comparison on the adjacent removed line. securityMechanism concurrency-resource follows the precedent set by wings-sftp-subsystem-payload-slice-panic in curated-slice-2 for a remote panic; the taxonomy has no availability label."
+    },
+    {
+      "id": "unsafe-option-guard-misses-split-short-option-values",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/gitpython-developers/GitPython.git",
+      "upstreamOwner": "gitpython-developers",
+      "upstreamRepo": "GitPython",
+      "license": "BSD-3-Clause",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "e8d0fbf774d1f6baa3b481adfe48bd262e43b453",
+      "fixCommittedAt": "2026-07-22T03:54:45Z",
+      "parentCommit": "faf3c09038b03bc2bdd8545ef34bbf6d7f1cd11f",
+      "reviewedPaths": [
+        "git/cmd.py"
+      ],
+      "reviewIntent": "Trim _option_candidates back to the spellings derived from the keyword names; the extra per-value entries collected for single-character keywords duplicated tokens the name-derived candidates already cover.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "git/cmd.py",
+          "lineRange": [
+            1041,
+            1047
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "_option_candidates enumerates the tokens that check_unsafe_options screens, but for a single-character keyword it appends only '-k' (line 1046) and never the keyword's value. transform_kwarg emits such a keyword as two separate argv tokens, '-k' and str(value), so a caller-supplied value like '--upload-pack=cmd' reaches git as an option token that the guard never saw. The unsafe-option blocklist shared by clone, remote, revision, blame and archive is bypassed and an arbitrary command runs.",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "injection",
+        "argument-injection"
+      ],
+      "notes": "Verified against the parent tree by printing git/cmd.py lines 1035-1047 at faf3c090: line 1041 is `if kwargs:`, line 1046 appends only `f\"-{key}\" if len(key) == 1 else f\"--{dashify(key)}\"`, and line 1047 is `return options` (the range end). Cross-checked transform_kwarg at lines 1600-1614 of the same parent file: when split_single_char_options is true (the default used by transform_kwargs at 1616 and by _persistent_git_options at 1104) a one-character name yields `[\"-%s\" % name, \"%s\" % value]`, i.e. two tokens. check_unsafe_options at 973-1033 only inspects what _option_candidates returns. The fix adds no comments and no string literals to the source file, so there is nothing to disclose; test/test_git.py is excluded as a test file."
+    },
+    {
+      "id": "schema-default-factory-emitted-into-generated-code",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/koxudaxi/datamodel-code-generator.git",
+      "upstreamOwner": "koxudaxi",
+      "upstreamRepo": "datamodel-code-generator",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "17fc235e234cbcfaaadef8c74cb72c9687db0d1d",
+      "fixCommittedAt": "2026-06-08T08:18:27Z",
+      "parentCommit": "b73abb5cd703a50471b8950bbd3bd0b82ad71de7",
+      "reviewedPaths": [
+        "src/datamodel_code_generator/parser/jsonschema.py"
+      ],
+      "reviewIntent": "Support custom default_factory values in schemas: the property is forwarded to the generated model exactly as written, so factories beyond the built-in container types can be used.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/datamodel_code_generator/parser/jsonschema.py",
+          "lineRange": [
+            797,
+            812
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "'default_factory' is one of DEFAULT_FIELD_KEYS (line 607), so get_field_extras copies whatever the input schema places in that property straight into the field extras and returns it at line 812 with no check on its value. The generator renders field extras verbatim into the emitted module as Field(default_factory=<value>), so a schema taken from an untrusted source can plant an arbitrary Python expression that executes as soon as the generated model is imported.",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "injection",
+        "code-generation"
+      ],
+      "notes": "Verified against the parent tree by printing src/datamodel_code_generator/parser/jsonschema.py at b73abb5c: lines 797-812 are the whole of get_field_extras, line 797 the def and line 812 the bare `return extras` (the range end); the fix inserts its validation immediately before that return. Also printed lines 600-614 to confirm 'default_factory' sits in DEFAULT_FIELD_KEYS, which is what admits the property into extras in the first place. The added guard therefore belongs at line 812. The fix adds no comments to the source file; the only added English is the message f'default_factory must be one of: {allowed_values}', which restates the ALLOWED_DEFAULT_FACTORIES frozenset defined on the adjacent removed lines. The test file is excluded."
+    },
+    {
+      "id": "proportion-filter-value-has-no-upper-bound",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/thumbor/thumbor.git",
+      "upstreamOwner": "thumbor",
+      "upstreamRepo": "thumbor",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "2c716119de986cfc68c7071af52a98187e006023",
+      "fixCommittedAt": "2026-05-30T23:06:01Z",
+      "parentCommit": "e3ae3e2500537b4d735df4144129a649374bb70b",
+      "reviewedPaths": [
+        "thumbor/filters/proportion.py"
+      ],
+      "reviewIntent": "Let the proportion filter scale in either direction: the supplied value is applied to the source dimensions as given, so callers can enlarge an image as well as shrink it.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "thumbor/filters/proportion.py",
+          "lineRange": [
+            16,
+            24
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "The filter multiplies the source width and height by the caller's value (lines 18-19) and hands the product to engine.resize (line 24). The only bound applied is a lower one, `new_width < 1 or new_height < 1`; nothing caps the value from above. A request carrying proportion(10000) therefore asks the imaging engine to allocate and resample an image about 1e8 times the source area. Filter arguments come from the request URL, so a single request exhausts server CPU and memory.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "denial-of-service",
+        "resource-exhaustion",
+        "image-processing"
+      ],
+      "notes": "Verified against the parent tree by printing the whole of thumbor/filters/proportion.py at e3ae3e25 (24 lines): line 16 is `source_width, source_height = self.context.request.engine.size`, lines 18-19 are the two multiplications, lines 21-22 are the existing lower bound, and line 24 (the range end) is `self.engine.resize(new_width, new_height)`. The added guard belongs at line 16, the first line of the function body. contextDepth is implementation because the reviewer must know that @filter_method(BaseFilter.DecimalNumber) parses the argument out of the request URL, which is not visible in this file. The fix adds no comments and no string literals to the source file; tests/filters/test_proportion.py, whose docstring names the weakness, is excluded as a test file."
+    },
+    {
+      "id": "plaintext-message-length-allocated-before-bounds-check",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/gotd/td.git",
+      "upstreamOwner": "gotd",
+      "upstreamRepo": "td",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "9d5d1f31ea5022d9798d84ccce15de2e91ba6baa",
+      "fixCommittedAt": "2026-06-03T04:01:04Z",
+      "parentCommit": "83879426c1dce45fba83c5eacb10285155fd9a78",
+      "reviewedPaths": [
+        "proto/unencrypted_message.go"
+      ],
+      "reviewIntent": "Tidy the plaintext MTProto message decoder: collapse the intermediate error branches on the payload read path and drop the io import that is no longer referenced.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "proto/unencrypted_message.go",
+          "lineRange": [
+            36,
+            40
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "Decode reads a 32-bit dataLen straight off the wire and immediately does make([]byte, dataLen) before checking it against the bytes actually remaining in the buffer. A ~20-byte packet declaring dataLen near 2^31 forces a multi-gigabyte zeroed heap allocation, and a negative dataLen panics the decoder. Unencrypted messages sit on the unauthenticated handshake path, so a remote attacker with no credentials can drive memory exhaustion or OOM termination.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "local"
+        }
+      ],
+      "tags": [
+        "security",
+        "resource-exhaustion",
+        "unbounded-allocation"
+      ],
+      "notes": "Curator: printed parent 83879426 proto/unencrypted_message.go lines 34-43 and verified line 36 is 'dataLen, err := b.Int32()' and line 40 is 'u.MessageData = append(u.MessageData[:0], make([]byte, dataLen)...)'. The fix inserts its two guards between parent lines 39 and 40; the range therefore points at the unchecked read-and-allocate pair that exists in the parent, not at the fix's new code. Disclosure screen: the fix adds NO comments to the source file. The only added string literals are the InvalidLengthError Where value 'plaintext message data' and 'consume payload', which already exists verbatim in the parent at line 42. Test file proto/unencrypted_message_test.go deliberately excluded from reviewedPaths. Advisory GHSA-whmm-qj9r-wvr2 / CVE-2026-54638 confirms pre-auth reachability and the 0x70000000 payload figure."
+    },
+    {
+      "id": "oidc-refresh-grant-skips-current-authorization-state",
+      "language": "go",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/pocket-id/pocket-id.git",
+      "upstreamOwner": "pocket-id",
+      "upstreamRepo": "pocket-id",
+      "license": "BSD-2-Clause",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "978ac87deffec58beaccd15aead975e91b94c8a5",
+      "fixCommittedAt": "2026-04-19T16:27:44Z",
+      "parentCommit": "59fe481af9284406e0c45385be729a293e90ffaa",
+      "reviewedPaths": [
+        "backend/internal/service/oidc_service.go"
+      ],
+      "reviewIntent": "Reduce database round-trips in the OIDC refresh grant by relying on the refresh token record already loaded in the transaction, and keep RevokeAuthorizedClient's transaction to the authorization record it owns.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "backend/internal/service/oidc_service.go",
+          "lineRange": [
+            532,
+            539
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "createTokenFromRefreshToken validates the refresh token signature, the client credentials and the stored token row, then mints a new access token and ID token without re-checking the user's current authorization state. It never confirms a UserAuthorizedOidcClient row still exists, never checks user.Disabled, and never calls IsUserGroupAllowedToAuthorize even though UserGroups are preloaded. A revoked, disabled or group-removed user keeps rotating tokens indefinitely.",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "authorization",
+        "revocation-bypass"
+      ],
+      "notes": "Curator: printed parent 59fe481a oidc_service.go lines 532-539 and verified they are the last existing guard (comment 'Verify that the refresh token belongs to the provided client', then if storedRefreshToken.ClientID != input.ClientID) followed immediately by 'Generate a new access token' and the GenerateOAuthAccessToken call. The fix inserts all three missing checks between parent lines 535 and 537, so the range names the parent's check-then-issue seam. Cross-function confirmed in the same parent file: Authorize calls IsUserGroupAllowedToAuthorize at line 194, VerifyDeviceCode at 1368, GetClientPreview at 1843. Secondary site deliberately given no expectation of its own (one advisory, one defect): RevokeAuthorizedClient at parent lines 1483-1509 deletes only the authorization row and leaves OidcRefreshToken rows live; flagging it is reporting the same defect. Disclosure screen: the fix adds no comments and no string literals to the source file. Test file excluded from reviewedPaths."
+    },
+    {
+      "id": "blob-content-type-written-to-request-headers-unvalidated",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nodejs/undici.git",
+      "upstreamOwner": "nodejs",
+      "upstreamRepo": "undici",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "740a0b7c173cb4a83a5b693e96e8f3a116cfc400",
+      "fixCommittedAt": "2026-07-24T08:09:59Z",
+      "parentCommit": "2698e492ed22c9ec704b5df573d612bdd03f6ca0",
+      "reviewedPaths": [
+        "lib/dispatcher/client-h1.js"
+      ],
+      "reviewIntent": "Set the content-type of a blob body straight from the blob's own type in writeH1, so the blob branch stays a single condition like the form-data branch just above it.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "lib/dispatcher/client-h1.js",
+          "lineRange": [
+            996,
+            997
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "writeH1 pushes the blob body's `type` onto the outgoing header list without checking it is a legal header value. util.isBlobLike only duck-types (Symbol.toStringTag plus a stream/arrayBuffer method), so `type` is an arbitrary caller-supplied string - e.g. a getter returning 'text/html\\r\\nX-Injected: true'. The header list is later serialised raw as `${key}: ${val}\\r\\n` (same function, ~line 1107), so CR/LF in the type injects attacker-chosen headers into the request.",
+          "securityMechanism": "injection",
+          "contextDepth": "callee"
+        }
+      ],
+      "tags": [
+        "security",
+        "injection",
+        "crlf"
+      ],
+      "notes": "Rule 12: read the parent tree (2698e492) and printed client-h1.js lines 994-998; line 996-997 are exactly the `else if (util.isBlobLike(body) && request.contentType == null && body.type)` branch and the bare `headers.push('content-type', body.type)`. Also printed the parent's raw serialisation loop at 1100-1113 (`header += `${key}: ${val}\\r\\n``) and the parent's lib/core/util.js isBlobLike (77) to confirm it accepts any duck-typed object. Rule 13: the commit adds the isValidHeaderValue guard at the only site that writes blob type into h1 headers (the h2 dispatcher never pushes body.type); the two siblings carry the identical message on other release branches. Disclosure: the only English the fix adds is the error string 'invalid content-type header', which names nothing beyond the identifier already in the removed code; test/request-crlf.js is excluded as a test."
+    },
+    {
+      "id": "s3-object-key-joined-into-backend-path-without-canonical-check",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/rclone/rclone.git",
+      "upstreamOwner": "rclone",
+      "upstreamRepo": "rclone",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "c89b766cf417fddbe7eace40d31262ecb85bfa93",
+      "fixCommittedAt": "2026-07-08T15:51:49Z",
+      "parentCommit": "9ebca99cd22c078d8e81d0d05cdd68cbf1954f20",
+      "reviewedPaths": [
+        "cmd/serve/s3/backend.go"
+      ],
+      "reviewIntent": "Build the VFS path for each serve s3 object operation inline with path.Join of the bucket name and the object key, so HeadObject, GetObject, PutObject, deleteObject and CopyObject all derive the path the same one-line way.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "cmd/serve/s3/backend.go",
+          "lineRange": [
+            175,
+            176
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "GetObject builds the VFS path as path.Join(bucketName, objectName) and stats it. S3 object keys are opaque strings that may legally contain '..' segments, and path.Join runs path.Clean, so the dot-dot segments resolve: GET /bucket/../root-secret.txt reads a file outside the selected bucket, anywhere under the serve root. The same unchecked join backs HeadObject (120), PutObject (313), deleteObject (406) and CopyObject (477), so files outside the bucket can also be overwritten or deleted.",
+          "securityMechanism": "path-traversal",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "path-traversal"
+      ],
+      "notes": "Rule 12: read the parent tree (9ebca99c) and printed backend.go lines 175-176 - `fp := path.Join(bucketName, objectName)` then `node, err := _vfs.Stat(fp)` inside GetObject; grep of the same parent file confirms the identical join at 120, 313, 406 and 477. Keyed on GetObject because the advisory names reading root-level files first. Rule 13: the commit adds bucketObjectPath/bucketDirPath and converts every call site, so it closes the advisory alone; the sibling is the other release branch. Rule 5/7: reviewedPaths is narrowed to backend.go - cmd/serve/s3/utils.go is excluded because the fix's new doc comments there state the defect ('would escape the bucket'), cmd/serve/s3/list.go because it adds a comment too and is a secondary site, serve_s3.md as docs, backend_test.go as a fix-created test."
+    },
+    {
+      "id": "redirect-copies-credentials-to-cross-origin-location",
+      "language": "java",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/micronaut-projects/micronaut-core.git",
+      "upstreamOwner": "micronaut-projects",
+      "upstreamRepo": "micronaut-core",
+      "license": "Apache-2.0",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "64e539736b8168f201d868b02ace50fe14f57418",
+      "fixCommittedAt": "2026-06-01T13:40:12Z",
+      "parentCommit": "fb9f485c55d77913e27284b008356586737e77c7",
+      "reviewedPaths": [
+        "http-client/src/main/java/io/micronaut/http/client/netty/DefaultHttpClient.java"
+      ],
+      "reviewIntent": "Simplify redirect handling in the Netty HTTP client by copying the original request's headers onto the redirect request through one shared static header list held on the client class, instead of header sets built per client configuration at request time.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "http-client/src/main/java/io/micronaut/http/client/netty/DefaultHttpClient.java",
+          "lineRange": [
+            2104,
+            2119
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "setRedirectHeaders copies every header of the original request onto the redirect request, skipping only the five names in REDIRECT_HEADER_BLOCKLIST (Host, Content-Type, Content-Length, Transfer-Encoding, Connection). Authorization, Proxy-Authorization and Cookie are not among them, and the Location URL's host/scheme/port is never compared with the original request's, so a 3xx pointing at an attacker-controlled host makes the client replay the caller's credentials to that host.",
+          "securityMechanism": "secret-flow",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "secret-flow",
+        "redirect",
+        "credential-forwarding"
+      ],
+      "notes": "Verified by printing parent lines 2104-2119 of DefaultHttpClient.java at fb9f485: exactly the setRedirectHeaders method, whose only filter is `if (!REDIRECT_HEADER_BLOCKLIST.contains(originalHeader.getKey()))`. Call site is line 2071. Rule 12: the construct IS in this backport branch's parent - also printed lines 213-232, the static block populating REDIRECT_HEADER_BLOCKLIST with only HOST/CONTENT_TYPE/CONTENT_LENGTH/TRANSFER_ENCODING/CONNECTION, and grepped the parent file for isSameOrigin/crossOrigin: no match, no origin check exists. Rule 13: siblings 70cab4b and 9770328 are the same fix on other branches, so this commit is complete alone. Disclosure: the fix adds no strings and only the comment `// fallback` to this file. HttpClientConfiguration.java is EXCLUDED from reviewedPaths - its added javadoc names Authorization, Proxy-Authorization and Cookie as the cross-origin filtered set; the defect is fully present without it. build.gradle, the .adoc guide and all tests also excluded."
+    },
+    {
+      "id": "netty-http-client-follows-redirects-without-a-depth-limit",
+      "language": "java",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/micronaut-projects/micronaut-core.git",
+      "upstreamOwner": "micronaut-projects",
+      "upstreamRepo": "micronaut-core",
+      "license": "Apache-2.0",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "c06a2715ca7f78321bc3ca05f41cca78cd351320",
+      "fixCommittedAt": "2026-06-01T09:30:09Z",
+      "parentCommit": "61c2d6610418d217233ad9269fa6a7e5fe91becf",
+      "reviewedPaths": [
+        "http-client/src/main/java/io/micronaut/http/client/netty/DefaultHttpClient.java"
+      ],
+      "reviewIntent": "Simplify redirect handling in the Netty HTTP client: resolve the Location header and re-issue the request directly, without threading a per-request counter attribute through every hop of the chain.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "http-client/src/main/java/io/micronaut/http/client/netty/DefaultHttpClient.java",
+          "lineRange": [
+            2059,
+            2075
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "On any 3xx with a Location header the client builds a redirect request and re-subscribes through makeRedirectHandler, which lands back in this same handler for the next response. Nothing counts or caps the hops. A server the client is pointed at (a user-supplied URL, a webhook target) can return a Location that redirects to itself, so the client loops indefinitely, holding a connection, an event-loop slot and memory until the process degrades.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "callee"
+        }
+      ],
+      "tags": [
+        "security",
+        "denial-of-service",
+        "redirect-loop",
+        "http-client"
+      ],
+      "notes": "Curator: printed parent 61c2d661 http-client/.../netty/DefaultHttpClient.java lines 2020-2090 and verified line 2059 is the 'if (code > 300 && code < 400 && configuration.isFollowRedirects() ...)' branch, line 2070 'setRedirectHeaders(finalRequest, redirectRequest);' and 2071-2073 the Flux re-subscription, with no redirect counter present (rule 12). Rule 13: this commit adds both the configuration property and the enforcement, so it closes the advisory alone; the two siblings are the same change on other branches. reviewedPaths deliberately excludes http-client-core/.../HttpClientConfiguration.java: its added javadoc ('The maximum number of redirects to follow') would become removed prose, and the defect is fully present in DefaultHttpClient.java without it. Groovy specs excluded as tests."
+    },
+    {
+      "id": "binary-packet-with-zero-attachments-leaves-the-reconstructor-buffering",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/socketio/socket.io.git",
+      "upstreamOwner": "socketio",
+      "upstreamRepo": "socket.io",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "9c6323e5cde41bd75df3379b5fc9293664a5f240",
+      "fixCommittedAt": "2026-07-16T08:13:04Z",
+      "parentCommit": "a20f10c64fdbcd1ba08ce6dfeb24dc11b663e7c3",
+      "reviewedPaths": [
+        "index.js"
+      ],
+      "reviewIntent": "Accept an attachment count of zero on binary packets and hand the packet straight to the decoded listener, so a peer that labels a packet binary but has no buffers to send still produces an event instead of an error.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "index.js",
+          "lineRange": [
+            323,
+            328
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "decodeString accepts an attachment count of 0 for BINARY_EVENT/BINARY_ACK (the bound is n < 0, and the maxAttachments cap does not help). Decoder.add then installs a BinaryReconstructor for that packet and, because attachments is 0, emits immediately without clearing this.reconstructor. Later binary frames are appended to reconstructor.buffers, whose completion test buffers.length === attachments can never hold, so a remote peer pushes unbounded buffers into memory until the process runs out.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "resource-exhaustion",
+        "denial-of-service",
+        "protocol-parser"
+      ],
+      "notes": "Curator: printed parent a20f10c6 index.js lines 235-340 and 355-455. Verified line 323 is 'var n = Number(buf);', 324 'if (!isInteger(n) || n < 0) {', 326 the maxAttachments branch; lines 250-256 create the BinaryReconstructor and emit for attachments === 0 without resetting this.reconstructor; takeBinaryData (419-427) only finishes when buffers.length === reconPack.attachments, which 0 can never reach (rule 12). Rule 13: the commit both rejects n < 1 and deletes the zero-attachment branch, so the advisory is closed here; the siblings are the same change on other release lines. Disclosure: the fix adds no comment or string to index.js at all (it only removes). Test file excluded."
+    },
+    {
+      "id": "island-vfor-helper-expands-a-numeric-source-without-a-ceiling",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nuxt/nuxt.git",
+      "upstreamOwner": "nuxt",
+      "upstreamRepo": "nuxt",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "4e35ae9babd94be53246e31200232d48438bb34e",
+      "fixCommittedAt": "2026-07-27T09:56:30Z",
+      "parentCommit": "1fbbd27c30bede910c0f022cec4a348f12239801",
+      "reviewedPaths": [
+        "packages/nuxt/src/app/components/utils.ts"
+      ],
+      "reviewIntent": "Build the scoped-data array in the island v-for helper straight from the numeric source it is handed, keeping the helper self-contained instead of importing a shared constant from another component module.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "packages/nuxt/src/app/components/utils.ts",
+          "lineRange": [
+            94,
+            102
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "vforToArray, the helper the island transform emits as __vforToArray around every server-rendered v-for source, materialises a full number[] of length `source` with no upper bound. The island endpoint takes its props from the request, so a v-for whose count comes from a prop lets an unauthenticated caller ask for an array of billions of elements. A single small request makes the server allocate until it is out of memory and the process dies.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "caller"
+        }
+      ],
+      "tags": [
+        "security",
+        "resource-exhaustion",
+        "denial-of-service",
+        "server-components"
+      ],
+      "notes": "Curator: printed parent 1fbbd27c packages/nuxt/src/app/components/utils.ts lines 80-115 and verified line 94 is '} else if (typeof source === 'number') {', 98 'const array: number[] = []', 99 'for (let i = 0; i < source; i++) {' and 102 'return array', with no cap (rule 12). Also grepped parent islands-transform.ts: line 196 emits '__vforToArray(${vfor[1]}).map(...)', so this site is reachable from request-supplied island props independently of the transform-side fix. Rule 7 applied: the advisory's primary file (islands-transform.ts) is the disclosing one \u2014 its added comment names attacker-supplied magnitudes \u2014 as are vfor.ts (created by the fix, rule 2) and render.ts (diagnostic prose). All are excluded; utils.ts carries the same defect and no added English. GHSA-9pgf on this commit is dropped, so no duplicate."
     }
   ]
 }

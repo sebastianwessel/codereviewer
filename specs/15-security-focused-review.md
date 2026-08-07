@@ -664,7 +664,7 @@ reviewer against defect classes the previous corpus barely contained.
 ## The Security Corpus
 
 Added 2026-08-07, grown twice the same day. `eval/corpora/security-advisory-2026/`,
-51 cases, hydrated by spec 17's machinery unchanged — same manifest schema, same orientation, same
+70 cases, hydrated by spec 17's machinery unchanged — same manifest schema, same orientation, same
 hydration gates. Nothing new was built for it, which is the point: a corpus that
 needs its own runner is a corpus whose numbers cannot be compared to anything.
 

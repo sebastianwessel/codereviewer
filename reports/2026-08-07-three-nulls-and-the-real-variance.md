@@ -89,15 +89,21 @@ zero.
 
 What would change that, in order of expected value per unit of effort:
 
-1. **More cases — but the pool is nearly exhausted, and this was overstated when
-   first written.** Only **21** screened candidates remain unadjudicated, not the
-   "60+" originally claimed here. At the observed ~45% keep rate they yield about
-   **9 more cases**, taking the corpus to ~60 expectations and the binomial sd from
-   6.8pp to 6.3pp — resolving ~12.5pp instead of ~13.7pp. Effectively nothing.
-   Reaching an 8pp resolution needs **149 expectations**, and 6pp needs **264**;
-   the whole post-cutoff advisory harvest yielded 132 structurally reviewable
-   candidates, of which 111 are already adjudicated. **More cases is not available
-   at the scale required.**
+1. **More cases — the "pool is exhausted" reasoning here was WRONG; see
+   `2026-08-07-recovered-from-a-wrong-screen.md`.** This section originally concluded
+   that only 21 screened candidates remained and therefore *"more cases is not
+   available at the scale required"*. The arithmetic was right and the conclusion was
+   not: the screen carried two filters inherited from the analyzer-firing measurement
+   — it rejected every add-only fix ("no parent-side line is changed, so no alert can
+   be attributed") and every multi-commit advisory. Neither reason applies to a recall
+   corpus. Re-screening recovered **59 candidates**, curation kept 26, and the corpus
+   is now **70 cases / 72 expectations**, with the binomial sd at 5.8pp resolving
+   ~11.7pp rather than ~13.7pp.
+
+   **What survives from the original point:** reaching an 8pp resolution still needs
+   roughly **149 expectations** and 6pp roughly **264**, so 72 does not lift this out
+   of the underpowered regime. The claim was wrong about *availability* and right
+   about *sufficiency*.
 2. **More seeds, carried by the paired test — the only affordable route.** Extra
    seeds barely move the run-level mean's binomial noise, which is set by the
    number of expectations. What they do change is the reliability of each
