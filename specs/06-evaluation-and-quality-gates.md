@@ -455,6 +455,45 @@ digest: its reports form one arm whose per-expectation hit rates share a
 denominator, so pooling different selections computes a rate over a population
 that never existed. Comparison tolerates a difference that pooling cannot.
 
+### Arm Order In An A/B Is A Confound, And Must Be Balanced
+
+Added 2026-08-07, from a measured artifact rather than from principle.
+
+Two unrelated A/Bs were run on the same day, each as `for each seed: control, then
+treatment` — so the treatment arm ran **second** every time. In both, raw precision
+came out 5–6 percentage points higher in the treatment arm, with an
+order-of-magnitude tighter standard deviation:
+
+| A/B | arm | position | mean | sd |
+| --- | --- | --- | --- | --- |
+| authorization-scope | control | 1st | .6941 | .0238 |
+| authorization-scope | treatment | 2nd | .7420 | .0034 |
+| precision-boundary | control | 1st | .6608 | .0227 |
+| precision-boundary | treatment | 2nd | .7232 | .0052 |
+
+A treatment effect does not replicate across unrelated treatments. Position does.
+**The cause is not established, and this rule does not assume one** — it removes the
+confound by construction, because a confound whose mechanism is unknown is still a
+confound.
+
+Two requirements follow:
+
+- **Arm order alternates across seeds.** Odd seeds run the control first, even seeds
+  run the treatment first, so across three or more seeds neither arm is
+  systematically second.
+- **Arm label and 1-based position within the seed are recorded in the provenance
+  sidecar** (`armLabel`, `armPosition`). Recording is the load-bearing half:
+  the artifact was visible only because two A/Bs happened to run the same day, and a
+  single A/B would have published it as an effect.
+
+**Interleaving is not this rule and does not satisfy it.** Interleaving was adopted
+so the second arm would not inherit a warm cost profile, and it does that. It leaves
+position completely fixed. Two distinct confounds, one of which looked handled.
+
+Until an A/B satisfies both requirements, it may report **recall** and mechanism
+counts, and **must not report a precision delta between arms.** Both A/Bs above are
+subject to that restriction retroactively.
+
 ## Metrics
 
 ### How A Metric May Be Read
