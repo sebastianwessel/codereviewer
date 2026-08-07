@@ -122,19 +122,23 @@ Measured **2026-08-07** on the **security-advisory corpus**: 25 cases, 26 expect
 findings, 24 upstream projects, all seven languages, all ten security mechanisms.
 Every case is a defect because a reviewed GitHub Security Advisory published after
 the training cutoff says so. Model `openai/gpt-5.3-codex`, engine pinned `9e410d2`,
-three seeds.
+three seeds, 0 dirty files in each.
 
 | Metric | Value | Per run |
 | --- | ---: | --- |
-| Recall | **61.5%** (sd 3.85pp) | 65.4 / 57.7 / 61.5 |
-| Precision (raw to adjusted bracket) | **73.9% to 100%** | 73.9–100 / 75.0–100 / 72.7–100 |
-| Genuine false positives | **0**, all three seeds | 0 / 0 / 0 |
-| Cost per run | $0.86 | $1.34 cold, then $0.53 / $0.71 |
+| Recall | **57.7%** (sd 7.69pp) | 65.4 / 57.7 / 50.0 |
+| Precision (raw to adjusted bracket) | **71.3% to 97.6%** | 73.9–100 / 75.0–100 / 65.0–92.9 |
+| Genuine false positives | **1**, across three seeds | 0 / 0 / 1 |
+| Cost per run | $0.84 | $1.34 cold, then $0.53 / $0.65 |
 
 Source: `reports/2026-08-07-security-corpus-baseline.md`.
 
 **This is not comparable to the in-diff figure above.** Different corpus, different
 question, different answer-key construction. Do not difference them.
+
+**sd 7.69pp is the number to carry.** At three seeds this corpus cannot resolve a
+difference below roughly 16 percentage points — worse than the cross-file corpus.
+More seeds on 26 expectations will not help; more cases will.
 
 **What changed in the picture.** The classes previously recorded at 0% — XSS, SSRF,
 cryptography — are not at 0% once the material is chosen for them rather than
@@ -145,10 +149,11 @@ the denominator is three seeds over one to four expectations, and repeating a ru
 triples the denominator without adding information.
 
 **The gap is context depth, not mechanism.** Cross-file expectations score **9/24
-(38%)** against local 78% and cross-function 89%, stable across every seed. Cross-file
-retrieval has been on by default since 2026-08-01, so that 38% is what the reviewer
-achieves *with* the mediated read/list/grep tools in hand. This is the largest
-measured deficit here that instrument noise does not explain.
+(38%)** against local 72% and cross-function 100%. Cross-file retrieval has been on
+by default since 2026-08-01, so that 38% is what the reviewer achieves *with* the
+mediated read/list/grep tools in hand. It is also the only row that came out
+identical before and after a seed was re-run, which is what makes it the claim worth
+acting on.
 
 **Analyzer ingestion (`security.signals`) stays off, now for a measured reason.** On
 132 advisory-confirmed vulnerabilities, a public analyzer flags a line the fix

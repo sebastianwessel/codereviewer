@@ -17,14 +17,18 @@ cache-eligibility floor, so installing one is a prerequisite for those three.
 
 ## The resolution limit that governs all of them
 
-The best instrument this project has for a change of this kind is the
-security-advisory corpus at **sd 3.85pp over three seeds**, which cannot resolve a
-difference below roughly **8 percentage points**. The cross-file corpus is worse
-(sd ≈ 4.8pp).
+The two instruments available are the cross-file corpus at **sd ≈ 4.8pp** and the
+security-advisory corpus at **sd 7.69pp over three seeds**. Neither can resolve a
+difference below roughly **10 and 16 percentage points** respectively.
+
+(An earlier draft of this report quoted the security corpus at sd 3.85pp. That
+figure came from a seed later re-run for provenance reasons, and the clean re-run
+doubled the measured variance. The correction makes the argument below stronger, not
+weaker.)
 
 That matters more for these than for a recall lever. A token reduction's *benefit*
 is certain and measurable to the byte; its *cost* is a possible quality regression
-that the instrument can only bound at 8 points. So an A/B here does not clear a
+that the instrument can only bound at 10-16 points. So an A/B here does not clear a
 change — it rules out a large harm and leaves a small one unmeasurable. Whether
 that trade is acceptable is a product decision, not a measurement one, and it
 should be made deliberately rather than inherited from a green run.
@@ -51,11 +55,14 @@ should be made deliberately rather than inherited from a green run.
 - **No UUID, timestamp or run id reaches any packet anywhere.** The 2026 `runId`
   regression that silently disabled prompt caching has not crept back.
 
-## One refused fix, and why it is a spec question
+## One refused fix, since resolved and worse than reported
 
-The packet budget measures `serializedBytes` over the whole `TaskReviewInput` while
-discovery sends only a subset — **64,417 B guarded against 53,920 B sent, 19.5%
-off**. The obvious correction makes the "shed the shared digest before refusing"
-step dead, but that step is mandated by `specs/05` and `specs/04` and asserted by a
-test. It is a spec decision, not an implementation one, and is being resolved
-separately.
+The packet budget measured `serializedBytes` over the whole `TaskReviewInput` while
+discovery sends only a subset. The audit reported it 19.5% over. Driving the real
+assembly path offline put the ratio between **0.71x and 3.08x** — it also
+*under*-measured, so a runaway guard could admit the packet it exists to refuse.
+
+Fixed 2026-08-07: `holisticReviewInputFor` defines the sent shape once and both the
+call and the guard use it. The shed-the-shared-digest step is gone, because a
+sentinel digest appeared in 0 of 21 discovery packets — it was correcting arithmetic,
+not a packet. Specs 04 and 05 were corrected with it.

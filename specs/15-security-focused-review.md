@@ -684,30 +684,38 @@ Report: `reports/2026-08-07-security-corpus-baseline.md`.
 
 | | mean | sd |
 | --- | --- | --- |
-| recall | **61.5%** | 3.85pp |
-| precision, raw (lower bound) | 73.9% | 1.14pp |
-| precision, adjusted (upper bound) | 100% | 0 |
+| recall | **57.7%** | 7.69pp |
+| precision, raw (lower bound) | 71.3% | 5.49pp |
+| precision, adjusted (upper bound) | 97.6% | 4.12pp |
 
-**Zero genuine false positives across all three seeds.** Every unmatched finding
-was judged a real defect the advisory did not name, which is what an
-advisory-derived key predicts and why precision here is a bracket rather than a
-number.
+One genuine false positive across three seeds. Nearly every unmatched finding was
+judged a real defect the advisory did not name, which is what an advisory-derived
+key predicts and why precision here is a bracket rather than a number.
 
-The classes this spec previously recorded at 0% are not at 0% on material chosen
-for them: path-traversal 9/9 and cryptography 12/12 pooled, xss 6/12, ssrf 5/9.
-Weakest are unsafe-config 0/3, injection 1/3, concurrency-resource 3/9.
+**A draft of this section published 61.5% / sd 3.85pp / 100% / zero false positives.
+It was wrong.** One seed had run against a working tree with 5 dirty documentation
+files, which the engine-consistency check refuses to pool even though the pinned
+worktree makes such work provably inert. Re-running it clean returned 50.0% rather
+than 61.5% — same engine, ordinary variance. The episode is recorded because the
+tempting move was to argue the guard over-strict and pool anyway, and doing so would
+have published a headline 3.8 points high with half the true variance.
 
-**The deficit is context depth, not mechanism.** Cross-file expectations score
-9/24 (38%) against local 78% and cross-function 89%, stable across every seed —
-and cross-file retrieval has been enabled by default since 2026-08-01, so that
-38% is what the reviewer achieves *with* the mediated read/list/grep tools. The
-lever intended for this class has already been pulled and the class is still the
-gap. That is the largest measured deficit in this spec that noise does not
-explain.
+**sd 7.69pp is the number that governs everything else here.** At three seeds this
+instrument cannot resolve a difference below roughly 16 percentage points. No A/B on
+this corpus can settle anything smaller, and more seeds on 26 expectations will not
+help — only more cases will.
 
-sd 3.85pp at three seeds means this instrument cannot resolve a difference below
-roughly 8 percentage points. An intervention smaller than that needs more seeds or
-more cases, not a stronger claim.
+The classes this spec previously recorded at 0% are not at 0% on material chosen for
+them: path-traversal 9/9 and cryptography 12/12 pooled, xss 6/12, ssrf 5/9. Weakest
+are unsafe-config 0/3, injection 1/3, concurrency-resource 3/9.
+
+**The deficit is context depth, not mechanism.** Cross-file expectations score 9/24
+(38%) against local 72% and cross-function 100% — and cross-file came out at exactly
+9/24 both before and after the correction above, the only row that did not move when
+a seed was replaced. Cross-file retrieval has been enabled by default since
+2026-08-01, so that 38% is what the reviewer achieves *with* the mediated
+read/list/grep tools. The lever intended for this class has already been pulled and
+the class is still the gap.
 
 ### Reviewing a fix backwards contaminates a third of the candidates
 
