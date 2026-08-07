@@ -56,6 +56,20 @@ export const runWithCrossFileDiscoveryTools = <T>(
 export const reduceActiveReadBudget = (): boolean =>
   crossFileToolScope.getStore()?.reduceReadBudget() ?? false
 
+/**
+ * Whether the caller is inside a task's cross-file discovery scope.
+ *
+ * The scope is what makes the task's tool-call budget and read allowance SHARED
+ * mutable state: every call made inside it draws on the same
+ * `maxToolCallsPerTask` and the same `reduceReadBudget`. A caller that wants to
+ * issue two of this task's model calls concurrently has to know that, because
+ * concurrency would turn the split of one budget between them into a race — the
+ * total is unchanged, its allocation is not. Outside a scope there is no such
+ * state and nothing to race.
+ */
+export const hasActiveCrossFileDiscoveryScope = (): boolean =>
+  crossFileToolScope.getStore() !== undefined
+
 const activeCrossFileTools = (): RetrievalTools => {
   const scope = crossFileToolScope.getStore()
 

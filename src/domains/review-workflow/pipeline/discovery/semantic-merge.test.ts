@@ -28,6 +28,13 @@ const fileTextByPath = new Map([
   ['src/app.ts', '1: const value = read()\n2: return value.name']
 ])
 
+// The stage takes a lookup rather than a map, so the caller can defer building
+// one. These tests already have the map, so they adapt it.
+const mapLookup =
+  (byPath: ReadonlyMap<string, string>) =>
+  (path: string): string | undefined =>
+    byPath.get(path)
+
 const candidate = (
   input: {
     readonly id: string
@@ -85,7 +92,7 @@ describe('runSemanticFindingMerge', () => {
     const outcome = await runSemanticFindingMerge({
       task,
       candidates: [first, second],
-      fileTextByPath,
+      fileTextFor: mapLookup(fileTextByPath),
       runMerge: merge.runMerge
     })
 
@@ -132,7 +139,7 @@ describe('runSemanticFindingMerge', () => {
     const outcome = await runSemanticFindingMerge({
       task,
       candidates: [first, second],
-      fileTextByPath,
+      fileTextFor: mapLookup(fileTextByPath),
       runMerge: merge.runMerge
     })
 
@@ -173,7 +180,7 @@ describe('runSemanticFindingMerge', () => {
     const outcome = await runSemanticFindingMerge({
       task,
       candidates: [first, second],
-      fileTextByPath,
+      fileTextFor: mapLookup(fileTextByPath),
       runMerge: merge.runMerge
     })
 
@@ -200,7 +207,7 @@ describe('runSemanticFindingMerge', () => {
     const outcome = await runSemanticFindingMerge({
       task,
       candidates: [missingGuard, wrongOperator],
-      fileTextByPath,
+      fileTextFor: mapLookup(fileTextByPath),
       runMerge: merge.runMerge
     })
 
@@ -221,7 +228,7 @@ describe('runSemanticFindingMerge', () => {
           title: 'The only candidate for this file'
         })
       ],
-      fileTextByPath,
+      fileTextFor: mapLookup(fileTextByPath),
       runMerge: merge.runMerge
     })
 
@@ -246,10 +253,9 @@ describe('runSemanticFindingMerge', () => {
     const outcome = await runSemanticFindingMerge({
       task,
       candidates: [...appCandidates, otherCandidate],
-      fileTextByPath: new Map([
-        ...fileTextByPath,
-        ['src/other.ts', '4: const other = 1']
-      ]),
+      fileTextFor: mapLookup(
+        new Map([...fileTextByPath, ['src/other.ts', '4: const other = 1']])
+      ),
       runMerge: merge.runMerge
     })
 
@@ -266,7 +272,7 @@ describe('runSemanticFindingMerge', () => {
     const outcome = await runSemanticFindingMerge({
       task,
       candidates: [first, second],
-      fileTextByPath,
+      fileTextFor: mapLookup(fileTextByPath),
       runMerge: async () => {
         throw new Error('connection reset by peer')
       }
@@ -308,7 +314,7 @@ describe('runSemanticFindingMerge', () => {
     const outcome = await runSemanticFindingMerge({
       task,
       candidates: [low, highWideSpan, highNarrowSpan],
-      fileTextByPath,
+      fileTextFor: mapLookup(fileTextByPath),
       runMerge: merge.runMerge
     })
 
@@ -333,7 +339,7 @@ describe('runSemanticFindingMerge', () => {
     const outcome = await runSemanticFindingMerge({
       task,
       candidates: [first, second, third],
-      fileTextByPath,
+      fileTextFor: mapLookup(fileTextByPath),
       runMerge: merge.runMerge
     })
 
@@ -356,7 +362,7 @@ describe('runSemanticFindingMerge', () => {
         candidate({ id: 'cand_1212121212121212', startLine: 2, title: 'One' }),
         candidate({ id: 'cand_3434343434343434', startLine: 3, title: 'Two' })
       ],
-      fileTextByPath: new Map(),
+      fileTextFor: () => undefined,
       runMerge: merge.runMerge
     })
 
@@ -365,5 +371,29 @@ describe('runSemanticFindingMerge', () => {
     expect(merge.calls).toEqual([])
     expect(outcome.mergeCallCount).toBe(0)
     expect(outcome.rejectedFindings).toEqual([])
+  })
+
+  // The lookup exists so the caller can DEFER line-numbering every file in the
+  // task. The engine produces roughly one candidate per file, so the common case
+  // must not consult it at all — otherwise the deferral buys nothing.
+  test('does not consult the file lookup when no file has two candidates', async () => {
+    const consulted: string[] = []
+    const merge = scriptedMerge([])
+
+    await runSemanticFindingMerge({
+      task,
+      candidates: [
+        candidate({ id: 'cand_5656565656565656', startLine: 2, title: 'Only one' })
+      ],
+      fileTextFor: (path) => {
+        consulted.push(path)
+
+        return fileTextByPath.get(path)
+      },
+      runMerge: merge.runMerge
+    })
+
+    expect(consulted).toEqual([])
+    expect(merge.calls).toEqual([])
   })
 })

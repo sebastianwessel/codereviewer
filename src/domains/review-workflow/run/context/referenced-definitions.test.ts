@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import type { SupportSignalFact } from '../../../deterministic-signals/index.js'
 import {
   collectReferencedDefinitions,
+  createReferencedDefinitionCache,
   referencedDefinitionBounds
 } from './referenced-definitions.js'
 
@@ -325,6 +326,119 @@ describe('collectReferencedDefinitions', () => {
 
       expect(result.droppedByFileCap).toBe(0)
       expect(result.droppedByBudget).toBe(0)
+    })
+  })
+
+  // Assembly calls this once per task, and tasks legitimately import the same
+  // dependencies, so a run-scoped memo carries the resolved paths and the digests
+  // between them. Each probe is two `realpath` syscalls and each digest re-runs
+  // the whole extractor over the dependency file.
+  describe('the run cache', () => {
+    test('digests a shared dependency once and returns the same digest to both tasks', async () => {
+      for (const name of ['a', 'b']) {
+        await writeFile(
+          path.join(repositoryRoot, 'src', `${name}.ts`),
+          "import { calc } from './dep.js'\n",
+          'utf8'
+        )
+      }
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'dep.ts'),
+        'export const calc = (value: number): number => value * 2\n',
+        'utf8'
+      )
+
+      const cache = createReferencedDefinitionCache()
+      const readPaths: string[] = []
+      const collectFor = (taskPath: string) =>
+        collectReferencedDefinitions({
+          repositoryRoot,
+          taskPaths: [taskPath],
+          facts: [importFact(taskPath, './dep.js')],
+          knownPaths: new Set(['src/a.ts', 'src/b.ts']),
+          readDependencyFile: async (absolutePath) => {
+            readPaths.push(absolutePath)
+
+            return 'export const calc = (value: number): number => value * 2\n'
+          },
+          cache
+        })
+
+      const first = await collectFor('src/a.ts')
+      const second = await collectFor('src/b.ts')
+
+      // Same answer, and the dependency was read (and extracted) once.
+      expect(second.digests).toEqual(first.digests)
+      expect(readPaths).toHaveLength(1)
+    })
+
+    test('does not remember a read that failed', async () => {
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'changed.ts'),
+        "import { calc } from './dep.js'\n",
+        'utf8'
+      )
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'dep.ts'),
+        'export const calc = (value: number): number => value * 2\n',
+        'utf8'
+      )
+
+      const cache = createReferencedDefinitionCache()
+      let attempt = 0
+      const collect = () =>
+        collectReferencedDefinitions({
+          repositoryRoot,
+          taskPaths: ['src/changed.ts'],
+          facts: [importFact('src/changed.ts', './dep.js')],
+          knownPaths: new Set(['src/changed.ts']),
+          readDependencyFile: async () => {
+            attempt += 1
+
+            if (attempt === 1) {
+              throw new Error('transient read failure')
+            }
+
+            return 'export const calc = (value: number): number => value * 2\n'
+          },
+          cache
+        })
+
+      // A failed read is skipped and NOT cached, so the next task retries it
+      // rather than inheriting a verdict about a failure this one hit.
+      expect((await collect()).digests).toHaveLength(0)
+      expect((await collect()).digests).toHaveLength(1)
+    })
+
+    test('is optional: without one, every call resolves and digests from scratch', async () => {
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'changed.ts'),
+        "import { calc } from './dep.js'\n",
+        'utf8'
+      )
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'dep.ts'),
+        'export const calc = (value: number): number => value * 2\n',
+        'utf8'
+      )
+
+      const readPaths: string[] = []
+      const collect = () =>
+        collectReferencedDefinitions({
+          repositoryRoot,
+          taskPaths: ['src/changed.ts'],
+          facts: [importFact('src/changed.ts', './dep.js')],
+          knownPaths: new Set(['src/changed.ts']),
+          readDependencyFile: async (absolutePath) => {
+            readPaths.push(absolutePath)
+
+            return 'export const calc = (value: number): number => value * 2\n'
+          }
+        })
+
+      expect((await collect()).digests).toHaveLength(1)
+      expect((await collect()).digests).toHaveLength(1)
+      expect(readPaths).toHaveLength(2)
     })
   })
 })

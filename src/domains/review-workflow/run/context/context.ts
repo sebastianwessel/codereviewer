@@ -35,7 +35,10 @@ import {
   type InstructionContextDocument,
   type SkillContextDocument
 } from './static-context.js'
-import { collectReferencedDefinitions } from './referenced-definitions.js'
+import {
+  collectReferencedDefinitions,
+  createReferencedDefinitionCache
+} from './referenced-definitions.js'
 
 export type {
   InstructionContextDocument,
@@ -314,6 +317,10 @@ export const assembleContext = async (
 
   const tasks: WorkflowReviewTask[] = []
   let referencedDefinitionsDropped = 0
+  // Shared by every task in this assembly. Tasks legitimately import the same
+  // dependencies, and without this each one re-probed the same import candidates
+  // and re-ran the extractor over the same dependency files.
+  const referencedDefinitionCache = createReferencedDefinitionCache()
   const testMappings = discoverDeterministicSignalTestMappings(input.sourceFiles)
   // Every changed/source file path: referenced-definition resolution must never
   // surface one of these (they are reviewed directly, not injected as context).
@@ -501,7 +508,8 @@ export const assembleContext = async (
             repositoryRoot: input.repositoryRoot,
             taskPaths: task.paths,
             facts: input.analysis.facts,
-            knownPaths: allSourcePaths
+            knownPaths: allSourcePaths,
+            cache: referencedDefinitionCache
           })
 
     referencedDefinitionsDropped +=

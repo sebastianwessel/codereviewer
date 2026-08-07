@@ -75,17 +75,31 @@ export const runQueuedReviewTasks = async <R>(
     emitTaskEvent(record)
   }
 
-  const hasOpenTasks = (): boolean => {
-    const latestByTaskId = new Map(
-      queue.snapshot().map((record) => [record.id, record])
-    )
+  // A worker that finds nothing to claim waits to be TOLD the queue moved, rather
+  // than polling for it. The poll it replaces ran at 1 kHz and rebuilt the queue's
+  // whole state from its append-only history on every tick, so every run's tail —
+  // where there are fewer remaining tasks than workers — spent the duration of the
+  // longest outstanding provider call burning the event loop in 1 ms slices while
+  // that provider I/O was in flight.
+  //
+  // Ordering is what makes this safe: a waiter is registered BEFORE the claim
+  // attempt, and nothing between the registration and the wait yields, so any
+  // transition is either already visible to that claim or still to come and
+  // therefore certain to wake it. Registering after a failed claim would lose the
+  // transition that happened in between and hang the worker.
+  let queueChangeWaiters: (() => void)[] = []
+  const nextQueueChange = (): Promise<void> =>
+    new Promise((resolve) => {
+      queueChangeWaiters.push(resolve)
+    })
+  const notifyQueueChanged = (): void => {
+    const waiters = queueChangeWaiters
 
-    return [...latestByTaskId.values()].some(
-      (record) => record.state === 'planned' || record.state === 'running'
-    )
+    queueChangeWaiters = []
+    for (const wake of waiters) {
+      wake()
+    }
   }
-  const waitForEligibleTask = (): Promise<void> =>
-    new Promise((resolve) => setTimeout(resolve, 1))
 
   input.logger?.debug('Review task queue started.', {
     task_count: input.tasks.length,
@@ -96,23 +110,26 @@ export const runQueuedReviewTasks = async <R>(
     const workerId = `worker-${workerIndex + 1}`
 
     while (firstError === undefined) {
+      // Registered before the claim, see `nextQueueChange`.
+      const queueChanged = nextQueueChange()
       const [task] = queue.claimBatch({
         limit: 1,
         workerId
       })
-      const claimedRecord = queue.snapshot().at(-1)
-
-      if (claimedRecord !== undefined && claimedRecord.id === task?.id) {
-        emitTaskEvent(claimedRecord)
-      }
 
       if (task === undefined) {
-        if (!hasOpenTasks()) {
+        if (!queue.hasOpenTasks()) {
           return
         }
 
-        await waitForEligibleTask()
+        await queueChanged
         continue
+      }
+
+      const claimedRecord = queue.lastRecord()
+
+      if (claimedRecord !== undefined && claimedRecord.id === task.id) {
+        emitTaskEvent(claimedRecord)
       }
 
       input.logger?.debug('Review task claimed.', {
@@ -129,7 +146,8 @@ export const runQueuedReviewTasks = async <R>(
         const result = await input.runTask(task, sharedDigest)
 
         queue.complete(task.id, 'worker completed')
-        const completedRecord = queue.snapshot().at(-1)
+        notifyQueueChanged()
+        const completedRecord = queue.lastRecord()
 
         if (completedRecord !== undefined) {
           emitTaskEvent(completedRecord)
@@ -144,12 +162,16 @@ export const runQueuedReviewTasks = async <R>(
         })
       } catch (error) {
         queue.fail(task.id, 'worker failed')
-        const failedRecord = queue.snapshot().at(-1)
+        firstError ??= error
+        // After `firstError` is set, so a waiting worker wakes to a loop
+        // condition that is already false and returns instead of claiming
+        // another task out of a queue the run has given up on.
+        notifyQueueChanged()
+        const failedRecord = queue.lastRecord()
 
         if (failedRecord !== undefined) {
           emitTaskEvent(failedRecord)
         }
-        firstError ??= error
         input.logger?.debug('Review task failed.', {
           task_id: task.id,
           task_round: task.round,

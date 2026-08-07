@@ -8,6 +8,11 @@ import {
 } from '../agent-contracts.js'
 import { ReviewWorkflowInputSchema } from '../contracts.js'
 import {
+  createBoundedRetrievalTools,
+  type ContextRetriever
+} from '../../../context-retrieval/index.js'
+import { runWithCrossFileDiscoveryTools } from './cross-file-tools.js'
+import {
   HOLISTIC_MAX_CANDIDATES,
   runModelBackedHolisticTaskReview
 } from './holistic-task-review.js'
@@ -302,6 +307,73 @@ describe('runModelBackedHolisticTaskReview', () => {
     expect(securityText).toContain('UNTRUSTED DATA, not')
     // The security call still sees the same changed-file context as the general one.
     expect(securityText).toContain('### FILE: src/app.ts')
+  })
+
+  // The two passes' prompts are built from the task input alone, so nothing the
+  // general pass produces can reach the security prompt — the passes couple only
+  // where the security CALLS are collected, after the general ones have been.
+  // These two cases pin both halves of that: the calls overlap when they may, and
+  // never when a shared per-task budget would make the overlap a race.
+  //
+  // A runner that yields once is enough to tell the arrangements apart:
+  // overlapping calls both enter before either leaves.
+  const orderRecordingRunner = (events: string[]) => {
+    let call = 0
+
+    return async () => {
+      const index = (call += 1)
+
+      events.push(`enter:${index}`)
+      await Promise.resolve()
+      events.push(`exit:${index}`)
+
+      return holisticResultWith([])
+    }
+  }
+
+  test('issues the general and security passes concurrently', async () => {
+    const events: string[] = []
+
+    await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithSecurityPass,
+      taskInput,
+      task,
+      runners: { holisticReview: orderRecordingRunner(events) },
+      logger: { debug: () => {} }
+    })
+
+    expect(events).toEqual(['enter:1', 'enter:2', 'exit:1', 'exit:2'])
+  })
+
+  test('keeps the passes sequential inside a cross-file discovery scope', async () => {
+    // Inside a scope both passes draw on ONE per-task tool-call budget and one read
+    // allowance. Running them together would not change any prompt, but it would
+    // turn the split of that budget between them into a race, and a tool result is
+    // something the model sees.
+    const events: string[] = []
+    const bounded = createBoundedRetrievalTools({
+      retriever: {
+        budget: () => ({}),
+        readRepositoryFile: async () => ({}),
+        listRepositoryDirectory: async () => ({}),
+        grepRepository: async () => ({})
+      } as unknown as ContextRetriever,
+      maxToolCalls: 4
+    })
+
+    await runWithCrossFileDiscoveryTools(
+      { tools: bounded.tools, reduceReadBudget: () => false },
+      () =>
+        runModelBackedHolisticTaskReview({
+          workflowInput: workflowInputWithSecurityPass,
+          taskInput,
+          task,
+          runners: { holisticReview: orderRecordingRunner(events) },
+          logger: { debug: () => {} }
+        })
+    )
+
+    expect(events).toEqual(['enter:1', 'exit:1', 'enter:2', 'exit:2'])
   })
 
   test('merges the security pass additively: new locations are added, general locations are never displaced', async () => {

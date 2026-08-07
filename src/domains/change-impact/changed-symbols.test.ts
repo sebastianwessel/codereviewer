@@ -313,6 +313,75 @@ describe('changed symbols', () => {
     expect(result.symbols.map((symbol) => symbol.name)).toEqual([])
   })
 
+  // The coverage sweep walks the nested declarations in START-LINE ORDER and
+  // stops at the first gap, so it is only correct on a sorted list. That sort used
+  // to run inside the sweep — once per hunk per fact, over an array that is
+  // constant for the fact — and was hoisted to where the list is built. These two
+  // cases are what proves the hoist kept the sweep's answer: they need SEVERAL
+  // nested ranges to be walked in order, which a single-member case never does.
+  test('a hunk fully covered by two consecutive members does not seed the type', () => {
+    const lines = [
+      'class Shipment:', //         1
+      '    def prepare(self):', //   2
+      '        return 1', //         3
+      '    def deliver(self):', //   4
+      '        return 2', //         5
+      '    def cancel(self):', //    6
+      '        return 3' //          7
+    ]
+    const result = collectChangedSymbols({
+      files: [
+        {
+          path: 'src/shipping.py',
+          content: lines.join('\n'),
+          changeKind: 'modified',
+          // Lines 2-5: exactly `prepare` and `deliver`, back to back, with no
+          // class-body line of its own left over.
+          hunks: [
+            { oldStartLine: 2, oldLineCount: 4, newStartLine: 2, newLineCount: 4 }
+          ]
+        }
+      ],
+      maxChangedSymbols: 100
+    })
+
+    expect(new Set(result.symbols.map((symbol) => symbol.name))).toEqual(
+      new Set(['prepare', 'deliver'])
+    )
+  })
+
+  test('a hunk two members leave a gap in still seeds the type', () => {
+    const lines = [
+      'class Shipment:', //         1
+      '    def prepare(self):', //   2
+      '        return 1', //         3
+      '    carrier = "default"', //  4
+      '    def deliver(self):', //   5
+      '        return 2', //         6
+      '    def cancel(self):', //    7
+      '        return 3' //          8
+    ]
+    const result = collectChangedSymbols({
+      files: [
+        {
+          path: 'src/shipping.py',
+          content: lines.join('\n'),
+          changeKind: 'modified',
+          // Lines 2-6 span two members AND the class attribute between them, so
+          // the members do not account for every line and the class is seeded too.
+          hunks: [
+            { oldStartLine: 2, oldLineCount: 5, newStartLine: 2, newLineCount: 5 }
+          ]
+        }
+      ],
+      maxChangedSymbols: 100
+    })
+
+    expect(new Set(result.symbols.map((symbol) => symbol.name))).toEqual(
+      new Set(['Shipment', 'prepare', 'deliver'])
+    )
+  })
+
   test('covers every language the signal extractors support', () => {
     expect(
       [...languageCases.map((languageCase) => languageCase.language)].sort()

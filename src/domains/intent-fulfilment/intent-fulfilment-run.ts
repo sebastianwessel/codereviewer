@@ -151,10 +151,29 @@ const collectSourceFiles = async (
   let unreadableFileCount = 0
   let unmappedFileCount = 0
 
-  for (const changedFile of intake.changedFiles) {
-    const diffMap = byPath.get(changedFile.path)
+  // Every read is independent of every other, so they are issued together and
+  // folded back IN FILE ORDER below. The fold, not the issue order, is what fixes
+  // `files` and both counters, so the result is identical to reading them one at
+  // a time.
+  const reads = await Promise.all(
+    intake.changedFiles.map(async (changedFile) => {
+      const diffMap = byPath.get(changedFile.path)
 
-    if (diffMap === undefined) {
+      if (diffMap === undefined) {
+        return { path: changedFile.path, unmapped: true as const }
+      }
+
+      return {
+        path: changedFile.path,
+        unmapped: false as const,
+        diffMap,
+        content: await readChangedFile(changedFile.path)
+      }
+    })
+  )
+
+  for (const read of reads) {
+    if (read.unmapped) {
       // Counted, not just skipped. Its neighbour below has counted unreadable
       // files from the start; this branch dropped a changed file from the whole
       // report — it contributes no citable line AND no extra-scope row — so a
@@ -165,21 +184,19 @@ const collectSourceFiles = async (
       continue
     }
 
-    const content = await readChangedFile(changedFile.path)
-
-    if (content === undefined) {
+    if (read.content === undefined) {
       unreadableFileCount += 1
       continue
     }
 
-    const removedLines = removedByPath.get(changedFile.path) ?? []
+    const removedLines = removedByPath.get(read.path) ?? []
 
     files.push({
-      path: changedFile.path,
-      content,
-      hunks: diffMap.hunks,
+      path: read.path,
+      content: read.content,
+      hunks: read.diffMap.hunks,
       ...(removedLines.length === 0 ? {} : { removedLines }),
-      isNewFile: diffMap.changeKind === 'new'
+      isNewFile: read.diffMap.changeKind === 'new'
     })
   }
 

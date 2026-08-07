@@ -145,25 +145,41 @@ const collectSourceFiles = async (
   const files: ChangedSymbolSourceFile[] = []
   let unreadableFileCount = 0
 
-  for (const changedFile of intake.changedFiles) {
-    const diffMap = byPath.get(changedFile.path)
+  // Every read is independent of every other, so they are issued together and
+  // folded back IN FILE ORDER below. The fold, not the issue order, is what fixes
+  // `files` and `unreadableFileCount`, so the result is identical to reading them
+  // one at a time.
+  const reads = await Promise.all(
+    intake.changedFiles.map(async (changedFile) => {
+      const diffMap = byPath.get(changedFile.path)
 
-    if (diffMap === undefined) {
+      if (diffMap === undefined) {
+        return undefined
+      }
+
+      return {
+        path: changedFile.path,
+        diffMap,
+        content: await readChangedFile(changedFile.path)
+      }
+    })
+  )
+
+  for (const read of reads) {
+    if (read === undefined) {
       continue
     }
 
-    const content = await readChangedFile(changedFile.path)
-
-    if (content === undefined) {
+    if (read.content === undefined) {
       unreadableFileCount += 1
       continue
     }
 
     files.push({
-      path: changedFile.path,
-      content,
-      changeKind: diffMap.changeKind,
-      hunks: diffMap.hunks
+      path: read.path,
+      content: read.content,
+      changeKind: read.diffMap.changeKind,
+      hunks: read.diffMap.hunks
     })
   }
 

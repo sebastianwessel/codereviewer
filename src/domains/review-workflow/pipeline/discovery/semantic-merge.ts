@@ -198,7 +198,9 @@ export const runSemanticFindingMerge = async (
   input: {
     readonly task: WorkflowReviewTask
     readonly candidates: readonly CandidateFinding[]
-    readonly fileTextByPath: ReadonlyMap<string, string>
+    // A lookup rather than a prebuilt map: line-numbering every file in the task
+    // is wasted whenever no file has two candidates, which is the common case.
+    readonly fileTextFor: (path: string) => string | undefined
     readonly runMerge: SemanticMergeRunner
     readonly signal?: AbortSignal | undefined
   }
@@ -217,12 +219,19 @@ export const runSemanticFindingMerge = async (
       break
     }
 
-    const fileText = input.fileTextByPath.get(path)
+    // Nothing to merge: a single candidate has nothing to be grouped with, and
+    // asking is pure cost. Checked before the file is looked up, because the
+    // lookup is what materializes the line-numbered content.
+    if (fileCandidates.length < 2) {
+      continue
+    }
 
-    // Nothing to merge, or nothing to merge it against: the spec's call receives
-    // the candidates for one file TOGETHER WITH the file, so a file whose content
-    // this task never carried cannot be judged and is left ungrouped.
-    if (fileCandidates.length < 2 || fileText === undefined || fileText.length === 0) {
+    const fileText = input.fileTextFor(path)
+
+    // Nothing to merge it against: the spec's call receives the candidates for one
+    // file TOGETHER WITH the file, so a file whose content this task never carried
+    // cannot be judged and is left ungrouped.
+    if (fileText === undefined || fileText.length === 0) {
       continue
     }
 

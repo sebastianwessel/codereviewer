@@ -228,4 +228,97 @@ describe('impact admission', () => {
       ).toBe('rejected')
     }
   })
+
+  // The production caller loops over candidates and hands each one a policy whose
+  // FILE LISTS are the same two arrays every time, while `admittedFindings` grows.
+  // The dependent index built from those lists is therefore memoized on their
+  // identity. These three cases are what says the memo did not freeze anything
+  // that must still change, and did not blur two runs together.
+  describe('the memoized dependent index', () => {
+    test('does not freeze the growing admitted-findings list', () => {
+      // Reused across the loop exactly as the caller reuses them.
+      const impactedFiles = [dependent]
+      const impactedTestFiles: readonly ImpactedFile[] = []
+      const admittedFindings: ImpactFinding[] = []
+
+      const first = admitImpactFinding({
+        candidate: candidate(),
+        policy: { impactedFiles, impactedTestFiles, admittedFindings }
+      })
+
+      expect(first.status).toBe('admitted')
+
+      if (first.status === 'admitted') {
+        admittedFindings.push(first.finding)
+      }
+
+      // Second candidate, same dependent, same arrays — and the duplicate rule
+      // must still see the finding admitted one iteration ago.
+      const second = admitImpactFinding({
+        candidate: candidate(),
+        policy: { impactedFiles, impactedTestFiles, admittedFindings }
+      })
+
+      expect(second.status === 'rejected' && second.reason).toBe('duplicate')
+    })
+
+    test('still rejects an unknown dependent on a later candidate', () => {
+      const impactedFiles = [dependent]
+      const impactedTestFiles: readonly ImpactedFile[] = []
+
+      expect(
+        admitImpactFinding({
+          candidate: candidate(),
+          policy: { impactedFiles, impactedTestFiles, admittedFindings: [] }
+        }).status
+      ).toBe('admitted')
+
+      const unknown = admitImpactFinding({
+        candidate: candidate({ path: 'src/never-searched.ts' }),
+        policy: { impactedFiles, impactedTestFiles, admittedFindings: [] }
+      })
+
+      expect(unknown.status === 'rejected' && unknown.reason).toBe(
+        'unknown-dependent'
+      )
+    })
+
+    test('does not answer one run from another run’s file lists', () => {
+      const other: ImpactedFile = {
+        path: 'src/other-caller.ts',
+        symbols: [
+          {
+            name: 'legacyApi',
+            definitionPath: 'src/legacy.ts',
+            definitionLine: 1,
+            sites: [{ line: 3, text: 'legacyApi()' }]
+          }
+        ]
+      }
+
+      // A first policy that locates only `src/caller.ts`...
+      expect(
+        admitImpactFinding({
+          candidate: candidate({ path: 'src/other-caller.ts' }),
+          policy: {
+            impactedFiles: [dependent],
+            impactedTestFiles: [],
+            admittedFindings: []
+          }
+        }).status
+      ).toBe('rejected')
+
+      // ...must not decide anything about a second one that locates the other.
+      expect(
+        admitImpactFinding({
+          candidate: candidate({ path: 'src/other-caller.ts' }),
+          policy: {
+            impactedFiles: [other],
+            impactedTestFiles: [],
+            admittedFindings: []
+          }
+        }).status
+      ).toBe('admitted')
+    })
+  })
 })

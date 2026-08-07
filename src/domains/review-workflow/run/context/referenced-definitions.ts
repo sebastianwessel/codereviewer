@@ -98,27 +98,87 @@ const relativeImportCandidates = (
   return candidates
 }
 
+/**
+ * A run's memo for referenced-definition work that repeats across tasks.
+ *
+ * The collector runs once per task and every task re-resolves the same import
+ * specifiers and re-digests the same shared dependencies: each probe costs two
+ * `realpath` syscalls (`path-service.ts`) and each digest re-runs the whole
+ * ast-grep extractor over the dependency file. Measured on this repository, 18
+ * digests were built over 14 distinct paths in one run.
+ *
+ * Scoped to one `assembleContext` call rather than to the process, because it
+ * caches filesystem state and file content: a memo that outlived the run would
+ * answer for a repository that had since moved on.
+ *
+ * `has` rather than a truthiness test on `get` decides a hit, so "probed, and it
+ * does not resolve" stays distinguishable from "not probed yet".
+ */
+export type ReferencedDefinitionCache = {
+  // Repo-relative candidate path -> its absolute path, or undefined when the
+  // path does not exist or resolves outside the root.
+  readonly probedPaths: Map<string, string | undefined>
+  // Repo-relative dependency path -> its bounded digest.
+  readonly digests: Map<string, string>
+}
+
+export const createReferencedDefinitionCache = (): ReferencedDefinitionCache => ({
+  probedPaths: new Map(),
+  digests: new Map()
+})
+
+// Resolve one candidate repo-relative path to its absolute path, or undefined when
+// it does not exist or escapes the root. `resolveExistingPathInsideRoot` throws for
+// both, and both mean "not a valid dependency target".
+const probeCandidatePath = async (
+  repositoryRoot: string,
+  candidate: string,
+  cache: ReferencedDefinitionCache | undefined
+): Promise<string | undefined> => {
+  if (cache?.probedPaths.has(candidate) === true) {
+    return cache.probedPaths.get(candidate)
+  }
+
+  let resolved: string | undefined
+
+  try {
+    resolved = await resolveExistingPathInsideRoot(repositoryRoot, candidate)
+  } catch {
+    resolved = undefined
+  }
+
+  cache?.probedPaths.set(candidate, resolved)
+
+  return resolved
+}
+
 // Resolve a relative import to an existing repo file path, always going through
 // resolveExistingPathInsideRoot for path-safety (never escapes the repo root).
 // Returns the repo-relative path on success, undefined otherwise.
+//
+// Candidates are probed in declared order and the first hit wins, because the
+// order encodes the resolution rules (literal specifier, then source extensions,
+// then a directory index).
 const resolveRelativeDependencyPath = async (
   input: {
     readonly repositoryRoot: string
     readonly fromPath: string
     readonly moduleSpecifier: string
+    readonly cache?: ReferencedDefinitionCache | undefined
   }
 ): Promise<string | undefined> => {
   for (const candidate of relativeImportCandidates(
     input.fromPath,
     input.moduleSpecifier
   )) {
-    try {
-      // resolveExistingPathInsideRoot throws when the path escapes the root or
-      // does not exist; both mean "not a valid dependency target".
-      await resolveExistingPathInsideRoot(input.repositoryRoot, candidate)
+    const resolved = await probeCandidatePath(
+      input.repositoryRoot,
+      candidate,
+      input.cache
+    )
+
+    if (resolved !== undefined) {
       return candidate
-    } catch {
-      // Try the next candidate; unresolvable imports are expected and skipped.
     }
   }
 
@@ -210,6 +270,9 @@ export type CollectReferencedDefinitionsInput = {
   // directly).
   readonly knownPaths: ReadonlySet<string>
   readonly readDependencyFile?: (absolutePath: string) => Promise<string>
+  // Shared across the tasks of one run. Omitted, every task resolves and digests
+  // from scratch, which is the correct behaviour for a one-shot caller.
+  readonly cache?: ReferencedDefinitionCache | undefined
 }
 
 // Collect bounded referenced-definition digests for a task: resolve each changed
@@ -245,7 +308,8 @@ export const collectReferencedDefinitions = async (
     const resolved = await resolveRelativeDependencyPath({
       repositoryRoot: input.repositoryRoot,
       fromPath: fact.path,
-      moduleSpecifier: fact.moduleSpecifier
+      moduleSpecifier: fact.moduleSpecifier,
+      ...(input.cache === undefined ? {} : { cache: input.cache })
     })
 
     if (
@@ -285,20 +349,30 @@ export const collectReferencedDefinitions = async (
   let droppedByBudget = 0
 
   for (const dependencyPath of rankedPaths) {
-    let content: string
+    // The digest is a pure function of the dependency file, so a dependency two
+    // tasks share is read once and extracted once. A read that FAILS is not
+    // cached: the next task retries it rather than inheriting a verdict this one
+    // reached about a transient failure.
+    let digest = input.cache?.digests.get(dependencyPath)
 
-    try {
-      const absolutePath = await resolveExistingPathInsideRoot(
-        input.repositoryRoot,
-        dependencyPath
-      )
-      content = await readDependencyFile(absolutePath)
-    } catch {
-      // Best-effort: a file that vanished or failed to read is simply skipped.
-      continue
+    if (digest === undefined) {
+      let content: string
+
+      try {
+        const absolutePath = await resolveExistingPathInsideRoot(
+          input.repositoryRoot,
+          dependencyPath
+        )
+        content = await readDependencyFile(absolutePath)
+      } catch {
+        // Best-effort: a file that vanished or failed to read is simply skipped.
+        continue
+      }
+
+      digest = buildDefinitionDigest(dependencyPath, content)
+      input.cache?.digests.set(dependencyPath, digest)
     }
 
-    const digest = buildDefinitionDigest(dependencyPath, content)
     const digestBytes = utf8ByteLength(digest)
 
     if (digestBytes === 0) {

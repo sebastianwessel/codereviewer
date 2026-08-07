@@ -31,7 +31,7 @@
 // suppression and no gate to explain a rejection to.
 
 import { z } from 'zod'
-import { createRedactor } from '../../shared/redaction/redactor.js'
+import { redactText } from '../../shared/redaction/redactor.js'
 import { sha256 } from '../../shared/hash/hash.js'
 import { truncateToFieldBound } from '../../shared/text/truncate.js'
 import {
@@ -102,7 +102,22 @@ type LocatedDependent = {
   readonly symbolKeys: ReadonlySet<string>
 }
 
-const locatedDependents = (
+// The index is a pure function of the two FILE LISTS, and `admitImpactFinding` is
+// called once per candidate against a policy whose file lists are the same arrays
+// every time — only `admittedFindings` grows between calls. Rebuilding the index
+// per candidate walked every file, every symbol and every reference site again for
+// a result that could not have changed.
+//
+// Keyed on the identity of both lists rather than on the policy object, because
+// the policy is a fresh literal at each call site. A caller that mutates either
+// list in place would see a stale index; both are `readonly` in the policy type
+// and are built once per run by `groupImpactedFiles`.
+const dependentIndexByFileLists = new WeakMap<
+  object,
+  WeakMap<object, ReadonlyMap<string, LocatedDependent>>
+>()
+
+const buildLocatedDependents = (
   policy: ImpactAdmissionPolicy
 ): ReadonlyMap<string, LocatedDependent> => {
   const dependents = new Map<string, LocatedDependent>()
@@ -131,11 +146,37 @@ const locatedDependents = (
   return dependents
 }
 
+const locatedDependents = (
+  policy: ImpactAdmissionPolicy
+): ReadonlyMap<string, LocatedDependent> => {
+  let byTestFiles = dependentIndexByFileLists.get(policy.impactedFiles)
+
+  if (byTestFiles === undefined) {
+    byTestFiles = new WeakMap()
+    dependentIndexByFileLists.set(policy.impactedFiles, byTestFiles)
+  }
+
+  const cached = byTestFiles.get(policy.impactedTestFiles)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const built = buildLocatedDependents(policy)
+  byTestFiles.set(policy.impactedTestFiles, built)
+
+  return built
+}
+
 // Redaction can lengthen text (a configured secret becomes `[REDACTED]`), so the
 // result is truncated back to the bound its DESTINATION FIELD declares. The bound
 // is read off the schema rather than restated here, so the two cannot drift.
+//
+// `redactText` rather than a fresh `createRedactor()` per field: the shared
+// default redactor is exactly what `createRedactor()` with no options builds, and
+// this was constructing one — compiling its pattern list — twice per reliance.
 const safeField = (value: string, field: Parameters<typeof truncateToFieldBound>[1]): string =>
-  truncateToFieldBound(createRedactor().redact(value), field)
+  truncateToFieldBound(redactText(value), field)
 
 /**
  * Admits one candidate impact finding, or rejects it with a reason.

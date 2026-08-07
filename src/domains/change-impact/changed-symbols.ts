@@ -156,18 +156,22 @@ const hunkRange = (hunk: DiffHunk): readonly [number, number] => [
     : hunk.newStartLine + hunk.newLineCount - 1
 ]
 
-// Whether every line of `[start, end]` falls inside one of `covers`, which need be
-// neither sorted nor disjoint.
+// Whether every line of `[start, end]` falls inside one of `covers`, which need
+// not be disjoint but MUST be sorted by start line — the sweep below depends on
+// it and does not verify it.
+//
+// The sort is the caller's job because `covers` is constant for a fact while this
+// is asked once per hunk: sorting here re-copied and re-sorted the same array on
+// every invocation. `sortedNestedRanges` is the only way this array is built, so
+// there is one place that owes the ordering.
 const rangeIsCovered = (
   start: number,
   end: number,
-  covers: readonly (readonly [number, number])[]
+  sortedCovers: readonly (readonly [number, number])[]
 ): boolean => {
   let reached = start
 
-  for (const [coverStart, coverEnd] of [...covers].sort(
-    (left, right) => left[0] - right[0]
-  )) {
+  for (const [coverStart, coverEnd] of sortedCovers) {
     if (coverStart > reached) {
       return false
     }
@@ -181,6 +185,19 @@ const rangeIsCovered = (
 
   return reached > end
 }
+
+// The line ranges of every declaration strictly nested inside `outer`, ordered by
+// start line so `rangeIsCovered` can sweep them directly. Built once per fact
+// because it depends on nothing else: it is the same set for every hunk the fact
+// is tested against.
+const sortedNestedRanges = (
+  facts: readonly SupportSignalFact[],
+  outer: SupportSignalFact
+): readonly (readonly [number, number])[] =>
+  facts
+    .filter((other) => isNestedInside(other, outer))
+    .map((other) => [other.line, other.endLine] as const)
+    .sort((left, right) => left[0] - right[0])
 
 /**
  * The seedable facts of one changed file that the diff actually changed.
@@ -222,9 +239,7 @@ const changedFactsIn = (
   const ranges = file.hunks.map((hunk) => hunkRange(hunk))
 
   return facts.filter((fact) => {
-    const nested = facts
-      .filter((other) => isNestedInside(other, fact))
-      .map((other) => [other.line, other.endLine] as const)
+    const nested = sortedNestedRanges(facts, fact)
 
     return ranges.some(([hunkStart, hunkEnd]) => {
       const start = Math.max(hunkStart, fact.line)

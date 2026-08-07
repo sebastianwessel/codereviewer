@@ -157,23 +157,40 @@ export const enrichFindingsWithFixes = async (input: {
   const outcomesByFindingId = new Map<string, PerClaimOutcome>()
   const enrichedByFindingId = new Map<string, AdmittedFinding>()
 
-  for (const finding of input.findings) {
-    const verdict = verdictByClaimId.get(currentFindingClaimId(finding.id))
-    // Only current-finding claims that actually produced a judgment participate;
-    // a finding the agent could not judge is left exactly as admitted.
-    if (verdict === undefined || verdict.findingJudgment === undefined) {
+  // Each finding's outcome depends only on that finding, its verdict and the file
+  // it names, so the per-finding reads and apply-checks are issued together and
+  // folded back IN FINDING ORDER below. The fold is what fixes the insertion order
+  // of both maps, so `fixOutcomes` comes out exactly as it did one at a time.
+  const outcomes = await Promise.all(
+    input.findings.map(async (finding) => {
+      const verdict = verdictByClaimId.get(currentFindingClaimId(finding.id))
+
+      // Only current-finding claims that actually produced a judgment participate;
+      // a finding the agent could not judge is left exactly as admitted.
+      if (verdict === undefined || verdict.findingJudgment === undefined) {
+        return undefined
+      }
+
+      return {
+        findingId: finding.id,
+        outcome: await outcomeForFinding({
+          finding,
+          verdict,
+          readFile: input.readFile,
+          redact: redactor.redact
+        })
+      }
+    })
+  )
+
+  for (const entry of outcomes) {
+    if (entry === undefined) {
       continue
     }
 
-    const outcome = await outcomeForFinding({
-      finding,
-      verdict,
-      readFile: input.readFile,
-      redact: redactor.redact
-    })
-    outcomesByFindingId.set(finding.id, outcome)
-    if (outcome.enrichedFinding !== undefined) {
-      enrichedByFindingId.set(finding.id, outcome.enrichedFinding)
+    outcomesByFindingId.set(entry.findingId, entry.outcome)
+    if (entry.outcome.enrichedFinding !== undefined) {
+      enrichedByFindingId.set(entry.findingId, entry.outcome.enrichedFinding)
     }
   }
 

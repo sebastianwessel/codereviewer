@@ -52,6 +52,59 @@ describe('workflow task queue', () => {
     ])
   })
 
+  // A worker with nothing to claim used to poll for a change at 1 kHz; it now
+  // waits to be told. These two cases are what says the waiting still ends: a
+  // later round is gated behind an earlier one (so the free workers genuinely
+  // wait), and a failure has to wake them too or the run would never return.
+  test('later-round tasks still run once the earlier round drains, with idle workers waiting', async () => {
+    const started: string[] = []
+    const result = await runQueuedReviewTasks({
+      tasks: [
+        task('first', 0),
+        { ...task('second', 0), id: 'task_second', round: 2 },
+        { ...task('third', 1), id: 'task_third', round: 2 }
+      ],
+      // More workers than round 1 has tasks, so two of them find nothing to claim
+      // while the round-1 task is still running and must wait for it.
+      maxConcurrentTasks: 3,
+      runTask: async (queuedTask) => {
+        started.push(queuedTask.id)
+        await Promise.resolve()
+
+        return queuedTask.id
+      }
+    })
+
+    expect(started[0]).toBe('task_first')
+    expect([...result.results].sort()).toEqual([
+      'task_first',
+      'task_second',
+      'task_third'
+    ])
+  })
+
+  test('a failing task releases the workers waiting on the queue', async () => {
+    const error = new Error('provider failed')
+
+    // Without a wake on failure, the two workers idling behind round 1 would wait
+    // for a change that never comes and this call would never settle.
+    await expect(
+      runQueuedReviewTasks({
+        tasks: [
+          task('first', 0),
+          { ...task('second', 0), id: 'task_second', round: 2 }
+        ],
+        maxConcurrentTasks: 3,
+        runTask: async () => {
+          throw error
+        }
+      })
+    ).rejects.toSatisfy(
+      (caught: unknown) =>
+        isReviewTaskExecutionError(caught) && caught.originalError === error
+    )
+  })
+
   test('throws execution error with partial results and queue events on task failure', async () => {
     const error = new Error('provider failed')
 

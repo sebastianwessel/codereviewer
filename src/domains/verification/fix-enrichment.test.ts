@@ -288,4 +288,60 @@ describe('enrichFindingsWithFixes', () => {
       'find_fix1'
     ])
   })
+
+  // The per-finding reads and apply-checks are issued together, so the order of
+  // `fixOutcomes` — which is report output — comes from the fold rather than from
+  // whichever read happened to finish first. The reader below finishes them in
+  // reverse to make the difference observable.
+  test('reports outcomes in finding order however the reads complete', async () => {
+    const findings = ['find_a', 'find_b', 'find_c'].map((id, index) =>
+      finding({
+        id,
+        fingerprints: [{ algorithm: 'v2', value: `fp${index}` }]
+      })
+    )
+    let pending = findings.length
+    const reversingReader: CurrentFileReader = async () => {
+      // Later findings resolve first: each waits one fewer turn than the one
+      // before it.
+      const turns = (pending -= 1)
+
+      for (let turn = 0; turn < turns; turn += 1) {
+        await Promise.resolve()
+      }
+
+      return 'const first = 1\nfor (i <= n)\n'
+    }
+
+    const result = await enrichFindingsWithFixes({
+      findings,
+      verdicts: findings.map((entry) =>
+        verdict({
+          findingId: entry.id,
+          findingJudgment: 'real',
+          fixEdits: [
+            {
+              path: 'src/app.ts',
+              startLine: 2,
+              endLine: 2,
+              replacement: 'for (i < n)'
+            }
+          ]
+        })
+      ),
+      observations: findings.map((entry) => observation(entry.id, 'real')),
+      readFile: reversingReader
+    })
+
+    expect(result.fixOutcomes.map((outcome) => outcome.findingId)).toEqual([
+      'find_a',
+      'find_b',
+      'find_c'
+    ])
+    expect(result.findings.map((entry) => entry.id)).toEqual([
+      'find_a',
+      'find_b',
+      'find_c'
+    ])
+  })
 })

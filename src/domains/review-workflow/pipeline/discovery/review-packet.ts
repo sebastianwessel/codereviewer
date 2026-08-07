@@ -215,6 +215,26 @@ export const numberedFileContentByPath = (
   return byPath
 }
 
+/**
+ * The same lookup, built only if something asks for a file.
+ *
+ * The semantic finding merge skips any file with fewer than two candidates, and
+ * the engine produces roughly one candidate per file — so the common case
+ * line-numbered every file in the task and then discarded the whole map. This
+ * defers that work to the first lookup and shares one map across the rest.
+ */
+export const numberedFileContentLookupFor = (
+  taskInput: TaskReviewInput
+): ((path: string) => string | undefined) => {
+  let byPath: ReadonlyMap<string, string> | undefined
+
+  return (path) => {
+    byPath ??= numberedFileContentByPath(taskInput)
+
+    return byPath.get(path)
+  }
+}
+
 // Assemble the shared context sections (diff, changed files, referenced definitions,
 // change intent) presented to every discovery call.
 //

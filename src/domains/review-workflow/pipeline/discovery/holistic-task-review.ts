@@ -13,12 +13,13 @@ import {
 } from '../agent-contracts.js'
 import { type DebugLogger } from '../debug-logger.js'
 import { type ProviderIssue } from '../provider-issues.js'
-import { runDiscoveryCall } from './discovery-call.js'
+import { hasActiveCrossFileDiscoveryScope } from './cross-file-tools.js'
+import { runDiscoveryCall, type DiscoveryCallResult } from './discovery-call.js'
 import { partitionTaskForDiscovery } from './discovery-partition.js'
 import {
   buildContextSections,
   buildReviewText,
-  numberedFileContentByPath
+  numberedFileContentLookupFor
 } from './review-packet.js'
 import { runSemanticFindingMerge } from './semantic-merge.js'
 import { type SemanticMergeRunner } from '../agent-contracts.js'
@@ -220,29 +221,70 @@ type DiscoveryPassResult = {
   readonly collected: CollectedCandidates
 }
 
+// One partition's discovery call, paired with the partition it was issued for.
+// The pairing is what lets the calls be issued apart from being collected: a
+// finding is collected against the PARTITION its own call was shown, so the
+// partition has to travel with the result.
+type IssuedDiscoveryCall = {
+  readonly partition: WorkflowReviewTask
+  readonly call: DiscoveryCallResult
+}
+
 /**
- * Issue one discovery call per partition and collect what it found.
+ * Issue one discovery call per partition.
  *
  * The general pass and the dedicated security pass (spec 15) differ only in the
  * prompt they build, the stage they report under, their candidate cap, and whether
- * they exclude already-flagged locations. Everything else — partition ordering,
- * where candidates are collected against, how provider issues and reviewed tasks
- * accumulate — must be identical, so it lives here once.
+ * they exclude already-flagged locations. The first two belong here; the last two
+ * belong to collection, which is why the two halves are separate functions.
  *
- * Sequential, not concurrent: the partitions hit the same provider under the same
- * rate limit, and firing them together would turn one large change into a burst.
+ * Sequential over the PARTITIONS, not concurrent: the partitions hit the same
+ * provider under the same rate limit, and firing them together would turn one
+ * large change into a burst.
+ *
+ * Issuing touches no shared candidate state, which is what makes it safe to run a
+ * whole pass before any of it is collected — and what lets the two passes be
+ * issued concurrently (see the caller).
  */
-const runDiscoveryPass = async (params: {
+const issueDiscoveryPass = async (params: {
   readonly runner: HolisticReviewRunner
   readonly taskInput: TaskReviewInput
   readonly partitions: readonly WorkflowReviewTask[]
   readonly buildText: (taskInput: TaskReviewInput) => string
   readonly stage: string
   readonly signal: AbortSignal | undefined
+}): Promise<readonly IssuedDiscoveryCall[]> => {
+  const issued: IssuedDiscoveryCall[] = []
+
+  for (const partition of params.partitions) {
+    issued.push({
+      partition,
+      call: await runDiscoveryCall({
+        runner: params.runner,
+        taskInput: { ...params.taskInput, task: partition },
+        buildText: params.buildText,
+        signal: params.signal,
+        stage: params.stage
+      })
+    })
+  }
+
+  return issued
+}
+
+/**
+ * Fold one pass's issued calls into the shared candidate map, in issue order.
+ *
+ * Order is load-bearing here in a way it is not during issue: `into` is shared
+ * across passes, and the security pass's `excludeLocations` is derived from what
+ * the general pass already put in it.
+ */
+const collectDiscoveryPass = (params: {
+  readonly issued: readonly IssuedDiscoveryCall[]
   readonly into: Map<string, CandidateFinding>
   readonly maxCandidatesPerCall: number
   readonly excludeLocations?: ReadonlySet<string>
-}): Promise<DiscoveryPassResult> => {
+}): DiscoveryPassResult => {
   const providerIssues: ProviderIssue[] = []
   const reviewedTasks: WorkflowReviewTask[] = []
   const rawFindingsPerCall: number[] = []
@@ -253,15 +295,7 @@ const runDiscoveryPass = async (params: {
   let suppressedById = 0
   let cappedByLimit = 0
 
-  for (const partition of params.partitions) {
-    const call = await runDiscoveryCall({
-      runner: params.runner,
-      taskInput: { ...params.taskInput, task: partition },
-      buildText: params.buildText,
-      signal: params.signal,
-      stage: params.stage
-    })
-
+  for (const { partition, call } of params.issued) {
     providerIssues.push(...call.providerIssues)
     reviewedTasks.push(...call.reviewedTasks)
     findingCount += call.findings.length
@@ -293,6 +327,42 @@ const runDiscoveryPass = async (params: {
     splitCount,
     rawFindingsPerCall,
     collected: { dropped, suppressedByLocation, suppressedById, cappedByLimit }
+  }
+}
+
+/**
+ * Await both passes' calls, surfacing failures in the order the sequential
+ * arrangement would have surfaced them.
+ *
+ * `Promise.allSettled` rather than `Promise.all`: with `all`, a general pass that
+ * throws leaves the security promise to reject with nobody listening, which is an
+ * unhandled rejection. Settling both and rethrowing general's failure first keeps
+ * the error a caller sees identical to the one the sequential order produced —
+ * the general pass ran first there, so its failure is the one that escaped.
+ */
+const issueBothPasses = async (
+  general: Promise<readonly IssuedDiscoveryCall[]>,
+  security: Promise<readonly IssuedDiscoveryCall[]>
+): Promise<{
+  readonly generalIssued: readonly IssuedDiscoveryCall[]
+  readonly securityIssued: readonly IssuedDiscoveryCall[]
+}> => {
+  const [generalResult, securityResult] = await Promise.allSettled([
+    general,
+    security
+  ])
+
+  if (generalResult.status === 'rejected') {
+    throw generalResult.reason
+  }
+
+  if (securityResult.status === 'rejected') {
+    throw securityResult.reason
+  }
+
+  return {
+    generalIssued: generalResult.value,
+    securityIssued: securityResult.value
   }
 }
 
@@ -391,40 +461,74 @@ export const runModelBackedHolisticTaskReview = async (
     input.workflowInput.maxFilesPerDiscoveryCall
   )
 
-  const general = await runDiscoveryPass({
-    runner: input.runners.holisticReview,
-    taskInput: input.taskInput,
-    partitions,
-    // Rebuilt per task rather than prebuilt, so a task the provider refuses can be
-    // halved and each half prompted from its OWN context (spec 26).
-    buildText: (taskInput) => buildReviewText(taskInput, rawDiff),
-    stage: 'holistic_review',
-    signal: input.signal,
+  const issueGeneral = (): Promise<readonly IssuedDiscoveryCall[]> =>
+    issueDiscoveryPass({
+      runner: input.runners.holisticReview,
+      taskInput: input.taskInput,
+      partitions,
+      // Rebuilt per task rather than prebuilt, so a task the provider refuses can be
+      // halved and each half prompted from its OWN context (spec 26).
+      buildText: (taskInput) => buildReviewText(taskInput, rawDiff),
+      stage: 'holistic_review',
+      signal: input.signal
+    })
+  // Partitioned on the same terms as the general pass. Spec 27's requirement is
+  // unqualified, and a security call that reviewed the whole task while the general
+  // pass reviewed slices would be both the largest packet in the run and the one
+  // call not getting the attention benefit the whole feature rests on.
+  const issueSecurity = (): Promise<readonly IssuedDiscoveryCall[]> =>
+    issueDiscoveryPass({
+      runner: input.runners.holisticReview,
+      taskInput: input.taskInput,
+      partitions,
+      buildText: (taskInput) => buildSecurityReviewText(taskInput, rawDiff),
+      stage: 'holistic_review_security',
+      signal: input.signal
+    })
+
+  // The security prompt is built from `taskInput` alone: it depends on nothing the
+  // general pass produced. The only coupling between the passes is
+  // `excludeLocations`, and that is applied when the security calls are COLLECTED,
+  // after the general ones have been. So the two passes' calls can be in flight
+  // together, and both models see byte-identical prompts either way.
+  //
+  // Except inside a cross-file discovery scope. There both passes draw on ONE
+  // per-task tool-call budget and one read allowance, so running them together
+  // would turn the split of that budget between them into a race — same total,
+  // different allocation, and therefore possibly different tool results. That is a
+  // model-visible difference, so the passes stay sequential whenever the scope
+  // exists.
+  const passesShareOneToolBudget = hasActiveCrossFileDiscoveryScope()
+  const securityPassEnabled = input.workflowInput.securityPassEnabled
+  const { generalIssued, securityIssued } =
+    securityPassEnabled && !passesShareOneToolBudget
+      ? await issueBothPasses(issueGeneral(), issueSecurity())
+      : {
+          generalIssued: await issueGeneral(),
+          securityIssued: securityPassEnabled ? await issueSecurity() : undefined
+        }
+
+  const general = collectDiscoveryPass({
+    issued: generalIssued,
     into: candidatesById,
     maxCandidatesPerCall: HOLISTIC_MAX_CANDIDATES
   })
 
   const generalCandidateCount = candidatesById.size
 
-  // Partitioned on the same terms as the general pass. Spec 27's requirement is
-  // unqualified, and a security call that reviewed the whole task while the general
-  // pass reviewed slices would be both the largest packet in the run and the one
-  // call not getting the attention benefit the whole feature rests on.
-  const security = input.workflowInput.securityPassEnabled
-    ? await runDiscoveryPass({
-        runner: input.runners.holisticReview,
-        taskInput: input.taskInput,
-        partitions,
-        buildText: (taskInput) => buildSecurityReviewText(taskInput, rawDiff),
-        stage: 'holistic_review_security',
-        signal: input.signal,
-        into: candidatesById,
-        maxCandidatesPerCall: SECURITY_MAX_CANDIDATES,
-        excludeLocations: new Set(
-          [...candidatesById.values()].map(locationKey)
-        )
-      })
-    : undefined
+  const security =
+    securityIssued === undefined
+      ? undefined
+      : collectDiscoveryPass({
+          issued: securityIssued,
+          into: candidatesById,
+          maxCandidatesPerCall: SECURITY_MAX_CANDIDATES,
+          // Derived from the map AFTER the general pass has been folded in, which
+          // is exactly the set the sequential arrangement derived it from.
+          excludeLocations: new Set(
+            [...candidatesById.values()].map(locationKey)
+          )
+        })
 
   const providerIssues: ProviderIssue[] = [
     ...general.providerIssues,
@@ -458,7 +562,7 @@ export const runModelBackedHolisticTaskReview = async (
       : await runSemanticFindingMerge({
           task: input.task,
           candidates: discovered,
-          fileTextByPath: numberedFileContentByPath(input.taskInput),
+          fileTextFor: numberedFileContentLookupFor(input.taskInput),
           runMerge: input.runners.semanticMerge,
           ...(input.signal === undefined ? {} : { signal: input.signal })
         })

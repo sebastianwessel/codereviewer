@@ -84,6 +84,22 @@ export const runReview = async (
     ...(options.logger === undefined ? {} : { logger: options.logger })
   })
 
+  // Started here and awaited where its result is first needed, below. It reads one
+  // JSON file and depends on nothing any later stage produces, so there is no
+  // reason for repository intake, planning and context assembly to wait behind it.
+  const baselinePending = prepareReviewRunnerBaseline({
+    repositoryRoot: options.repositoryRoot,
+    config: options.config,
+    baselineExplicitlyConfigured: options.baselineExplicitlyConfigured,
+    observability,
+    logger
+  })
+  // A stage before the await point can throw, and this promise would then be
+  // rejected with nobody listening. The failure is not swallowed: the await below
+  // is what reports it, and this only keeps an unrelated failure from being
+  // reported as an unhandled rejection instead.
+  baselinePending.catch(() => undefined)
+
   try {
     const { drift } = await runReviewRunnerPreflight({
       repositoryRoot: options.repositoryRoot,
@@ -166,19 +182,17 @@ export const runReview = async (
     // review was shown. It seeds no candidate: nothing reaches a finding except
     // through discovery, refutation, and the admission gate.
     const reviewEvidence = [...evidence, ...analyzerSignals.evidence]
-    const baseline = await prepareReviewRunnerBaseline({
-      repositoryRoot: options.repositoryRoot,
-      config: options.config,
-      baselineExplicitlyConfigured: options.baselineExplicitlyConfigured,
-      observability,
-      logger
-    })
-    const { baselineFingerprints, baselineConfigured } = baseline
+    const { baselineFingerprints, baselineConfigured } = await baselinePending
+    // Both derivations are consumed twice — once by the workflow input and once by
+    // the completion state — and `reviewedLineRangesForSourceFiles` walks the
+    // content of every source file to produce them.
+    const reviewedPaths = intake.changedFiles.map((file) => file.path)
+    const reviewedLineRanges = reviewedLineRangesForSourceFiles(sourceFiles)
     const workflowInput = createWorkflowInput({
       runId,
       repositoryRoot: options.repositoryRoot,
-      reviewedPaths: intake.changedFiles.map((file) => file.path),
-      reviewedLineRanges: reviewedLineRangesForSourceFiles(sourceFiles),
+      reviewedPaths,
+      reviewedLineRanges,
       reviewedDiffRanges: effectiveDiffRanges,
       reviewedDiffText: effectiveRawDiff,
       evidence: reviewEvidence,
@@ -247,8 +261,8 @@ export const runReview = async (
       ],
       providerWorkflow,
       providerTaskEventsObservedLive,
-      reviewedPaths: intake.changedFiles.map((file) => file.path),
-      reviewedLineRanges: reviewedLineRangesForSourceFiles(sourceFiles),
+      reviewedPaths,
+      reviewedLineRanges,
       reviewedDiffRanges: effectiveDiffRanges,
       admittedAt: startedAt.toISOString(),
       instructionHashes,
