@@ -7,7 +7,7 @@ import type { DeterministicSignalExtraction } from '../../../deterministic-signa
 import type { DriftFinding } from '../../../drift/index.js'
 import type { NoContentEventRecorder } from '../../../observability/index.js'
 import type { ProviderImport } from '../../../provider-resolution/index.js'
-import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../../review-planning/index.js'
 import type { ReviewWorkflowInput, ReviewWorkflowOutput } from '../../harness/workflow.js'
 import { sharedTaskEventFromWorkflow } from '../admission.js'
 import { recordObservedTaskEvents } from '../support/observability.js'

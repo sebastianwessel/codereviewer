@@ -5,7 +5,7 @@ import type {
 import type { RunCostSummary } from '../../../costs/index.js'
 import type { DeterministicSignalExtraction } from '../../../deterministic-signals/index.js'
 import type { NoContentObservabilitySnapshot } from '../../../observability/index.js'
-import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../../review-planning/index.js'
 import {
   createCostBudgetExceededError,
   createCoverageIncompleteError,

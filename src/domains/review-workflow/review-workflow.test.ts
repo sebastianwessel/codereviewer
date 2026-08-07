@@ -20,7 +20,7 @@ import {
   isReviewRunFailedError,
   runReview
 } from './run/review-runner.js'
-import { buildReviewCommentDrafts } from '../reporting/review-comments.js'
+import { buildReviewCommentDrafts } from '../reporting/index.js'
 import { parseGitDiffMaps } from '../repository-intake/index.js'
 
 const configHash =
@@ -1401,7 +1401,11 @@ describe('review workflow', () => {
     }
   })
 
-  test('provider-backed workflow fails before provider calls when irreducible task packet exceeds budget', async () => {
+  // The other half of the same rule: the ceiling binds on the packet that is
+  // sent, so context that never leaves the engine cannot refuse a task. This
+  // evidence set serializes to several times the budget and reaches no prompt —
+  // discovery transmits `{taskId, paths, reviewText}` — so the review must run.
+  test('provider-backed workflow admits a task whose oversized context is never sent', async () => {
     const provider = new EmptyFindingProvider()
     const harness = createModelBackedReviewHarness({
       modelAlias: {
@@ -1427,39 +1431,40 @@ describe('review workflow', () => {
         redactionApplied: true
       }))
 
-      await expect(
-        runModelBackedReviewWorkflow({
-          harness,
-          sessionId: 'test-session',
-          input: {
-            runId: 'test-run',
-            reviewedPaths: ['src/large.ts'],
-            evidence,
-            candidates: [],
-            skills: [],
-            maxTaskInputBytes: 10000,
-            baselineConfigured: false,
-            provenance: {
-              reviewer: 'review-agent',
-              modelProvider: 'openai',
-              modelName: 'empty',
-              signalVersions: {
-                typescript: '6.0.3'
-              },
-              configHash
+      const result = await runModelBackedReviewWorkflow({
+        harness,
+        sessionId: 'test-session',
+        input: {
+          runId: 'test-run',
+          reviewedPaths: ['src/large.ts'],
+          evidence,
+          candidates: [],
+          skills: [],
+          reviewContext: [
+            {
+              kind: 'file',
+              path: 'src/large.ts',
+              content: 'export const head = 1;\n',
+              ledgerEntryId: 'ctx_cccccccccccccccccccccccc'
+            }
+          ],
+          maxTaskInputBytes: 10000,
+          baselineConfigured: false,
+          provenance: {
+            reviewer: 'review-agent',
+            modelProvider: 'openai',
+            modelName: 'empty',
+            signalVersions: {
+              typescript: '6.0.3'
             },
-            qualityGate: {}
-          }
-        })
-      ).rejects.toSatisfy(
-        (error: unknown) =>
-          isReviewTaskExecutionError(error) &&
-          typeof error.originalError === 'object' &&
-          error.originalError !== null &&
-          'code' in error.originalError &&
-          error.originalError.code === 'task_packet_budget_exceeded'
-      )
-      expect(provider.requests).toHaveLength(0)
+            configHash
+          },
+          qualityGate: {}
+        }
+      })
+
+      expect(result.admittedFindings).toEqual([])
+      expect(provider.requests).toHaveLength(1)
     } finally {
       await harness.shutdown()
     }

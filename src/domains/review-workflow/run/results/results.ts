@@ -15,7 +15,7 @@ import type {
   SupportSignalSourceFile
 } from '../../../deterministic-signals/index.js'
 import type { RunCostSummary } from '../../../costs/index.js'
-import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../../review-planning/index.js'
 import {
   createReviewSharedContext,
   type ReviewSharedContextSnapshot

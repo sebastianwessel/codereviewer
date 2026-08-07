@@ -159,7 +159,7 @@ success.
 | Situation | Behaviour |
 | --- | --- |
 | A file's bytes are not fully assigned to tasks | Run fails: `coverage incomplete` |
-| A task packet exceeds the packet ceiling | The shared digest is dropped first; if it still does not fit, the task packet fails as a budget error |
+| A task packet exceeds the packet ceiling | The task fails as a budget error. Nothing is dropped or shortened, and the ceiling is measured against the packet a discovery call sends, not against the assembly input it is built from |
 | An instruction or skill file is not allowed | Run fails with a config error before any finding is produced |
 | A dependency file cannot be read or resolved | Silently skipped — referenced definitions are best-effort |
 | Very large single file | Split across several workflow tasks; each is reviewed independently |

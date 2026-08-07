@@ -6,7 +6,7 @@ import { normalizeError } from '../../../../shared/errors/error-normalizer.js'
 import type { DeterministicSignalExtraction } from '../../../deterministic-signals/index.js'
 import type { DriftFinding } from '../../../drift/index.js'
 import type { NoContentObservabilitySnapshot } from '../../../observability/index.js'
-import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../../review-planning/index.js'
 import {
   candidateFindingsFromTaskResults,
   sharedTaskEventFromWorkflow

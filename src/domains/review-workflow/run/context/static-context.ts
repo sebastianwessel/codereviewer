@@ -11,11 +11,11 @@ import {
   sliceUtf8Bytes,
   utf8ByteLength
 } from '../../../../shared/text/utf8-bytes.js'
-import { createSkillIndex } from '../../../review-planning/index.js'
 import {
+  createSkillIndex,
   createTextContextLedgerEntry,
   type ContextLedgerEntry
-} from '../../../review-planning/context-ledger.js'
+} from '../../../review-planning/index.js'
 import type { ContextDocument } from '../../pipeline/agent-contracts.js'
 import type { ReviewWorkflowInput } from '../../harness/workflow.js'
 

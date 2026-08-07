@@ -17,11 +17,11 @@ import {
   type SupportSignalFact,
   type SupportSignalSourceFile
 } from '../../../deterministic-signals/index.js'
-import { type ReviewTask } from '../../../review-planning/index.js'
 import {
   createContextLedgerEntry,
-  type ContextLedgerEntry
-} from '../../../review-planning/context-ledger.js'
+  type ContextLedgerEntry,
+  type ReviewTask
+} from '../../../review-planning/index.js'
 import type { DiffMap } from '../../../repository-intake/index.js'
 import type { SkillsConfig } from '@purista/harness'
 import type { ReviewWorkflowInput } from '../../harness/workflow.js'

@@ -1,6 +1,6 @@
 import type { Logger } from '@purista/harness'
 import { describe, expect, test } from 'vitest'
-import { createContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import { createContextLedgerEntry } from '../../../review-planning/index.js'
 import {
   CodeReviewerConfigSchema,
   type EvidenceRecord

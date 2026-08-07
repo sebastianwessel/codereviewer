@@ -169,9 +169,32 @@ Task limits:
   beyond any current model context — and it REFUSES with
   `task_packet_budget_exceeded` rather than shortening the packet. An explicitly
   configured `review.contextMaxBytes` still binds below it and still refuses. The
-  discovery packet may shed only the shared digest before refusing; source,
-  instructions, skills, evidence, deterministic signal output, and metadata are
-  never shortened;
+  discovery packet sheds NOTHING before refusing: source, instructions, skills,
+  evidence, deterministic signal output, and metadata are never shortened, and
+  neither is anything else;
+- the ceiling MUST be measured against the packet a discovery call actually
+  sends — `{taskId, paths, reviewText}` — and not against the `TaskReviewInput`
+  the packet is assembled from. They are different objects: `reviewText` renders
+  the unified diff and a line number on every source line, neither of which the
+  task input carries, while the task input carries evidence, candidates, skills,
+  the shared digest, and provenance, none of which any discovery prompt renders.
+  Measured by driving this engine's own assembly path offline over a 38-file
+  change of its own history (10 tasks, 21 discovery packets), the task input
+  ranged from 0.99x to 3.08x the largest packet its task sends — and from 0.71x to
+  1.22x the undivided packet. The substitution was therefore wrong in both
+  directions, and the direction that matters is below 1.0x: a guard admitting a
+  packet larger than the ceiling it enforces. Every call the task will issue is
+  measured and the largest decides:
+  one per discovery partition (spec 27), and both passes when the dedicated
+  security pass is enabled (spec 15), whose packet is the general one plus two
+  static blocks. Reactive splitting (spec 26) only produces smaller packets and
+  needs no measurement;
+- shedding the shared digest was removed rather than repaired. The digest is not
+  rendered into any discovery prompt — it appeared in none of the 21 packets
+  measured above — so replacing it shortened the guard's arithmetic and never the
+  packet, which is to say it admitted packets by mis-measuring them. Refutation is
+  a different packet and keeps its own shedding ladder, which does shorten what it
+  sends;
 - every source chunk must carry the absolute line range it occupies in its file,
   and chunks must be cut on line boundaries (a single line longer than the split
   size is the only exception and keeps one line number across its pieces). This

@@ -8,7 +8,7 @@ import {
 import { sha256 } from '../../../../shared/hash/hash.js'
 import { evaluateQualityGate } from '../../../admission/index.js'
 import { createNoContentEventRecorder } from '../../../observability/index.js'
-import { createContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import { createContextLedgerEntry } from '../../../review-planning/index.js'
 import type { ReviewRunnerAdmissionState } from '../admission.js'
 import {
   createCoverageSummary,

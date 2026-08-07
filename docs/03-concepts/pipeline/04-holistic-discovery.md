@@ -8,10 +8,16 @@ survive refutation and admission.
 
 ## What it receives
 
-One **partition** of a workflow task: its paths, the per-path unified diff
-segment, the full line-numbered content of its changed files, optional
-support-signal facts, optional referenced-definition digests, optional
-change-intent brief, plus instructions, skills metadata, and a shared digest.
+One **partition** of a workflow task, rendered into a single document: its paths,
+the per-path unified diff segment, the full line-numbered content of its changed
+files, optional support-signal facts, optional referenced-definition digests,
+optional change-intent brief, and the operator's reviewer instructions.
+
+That document is the whole packet. A discovery call sends `{taskId, paths,
+reviewText}` and nothing else — so the evidence records, seed candidates, skill
+metadata, shared digest, and provenance that the workflow assembles alongside it
+never reach this stage, and the packet budget is measured against what is sent.
+Refutation is the stage that receives those fields.
 
 ## What it does
 

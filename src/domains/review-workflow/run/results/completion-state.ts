@@ -16,7 +16,7 @@ import {
 } from '../../../deterministic-signals/index.js'
 import type { DriftFinding } from '../../../drift/index.js'
 import type { NoContentEventRecorder } from '../../../observability/index.js'
-import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../../review-planning/index.js'
 import type { WorkflowReviewTask } from '../../pipeline/agent-contracts.js'
 import {
   prepareReviewRunnerAdmissionState

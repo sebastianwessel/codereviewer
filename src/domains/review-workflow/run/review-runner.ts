@@ -3,7 +3,7 @@ import {
   type CodeReviewerConfig,
   type ReviewReport
 } from '../../../shared/contracts/index.js'
-import type { ContextLedgerEntry } from '../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../review-planning/index.js'
 import {
   type NoContentEventRecorder,
   type NoContentObservabilitySnapshot

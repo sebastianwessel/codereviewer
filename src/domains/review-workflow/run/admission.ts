@@ -24,9 +24,9 @@ import {
 } from '../../deterministic-signals/index.js'
 import {
   createReviewTaskQueue,
+  type ContextLedgerEntry,
   type ReviewTaskQueueRecord
 } from '../../review-planning/index.js'
-import type { ContextLedgerEntry } from '../../review-planning/context-ledger.js'
 import type { ReviewSharedContextSnapshot } from '../../shared-context/index.js'
 import type { NoContentEventRecorder } from '../../observability/index.js'
 import { qualityGateThresholdsFor } from './workflow-input.js'

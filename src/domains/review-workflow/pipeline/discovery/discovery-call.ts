@@ -14,6 +14,7 @@ import { createIndivisibleTaskError } from '../packet-budget.js'
 import { providerIssueForError, type ProviderIssue } from '../provider-issues.js'
 import { isContextLengthExceeded } from '../../../../shared/errors/context-overflow.js'
 import { reduceActiveReadBudget } from './cross-file-tools.js'
+import { holisticReviewInputFor } from './review-packet.js'
 import { MAX_REACTIVE_SPLIT_DEPTH, splitTaskInputInHalf } from './reactive-split.js'
 
 // Two ways a discovery CALL can fail without the review being broken: the agent
@@ -98,11 +99,7 @@ export const runDiscoveryCall = async (
   try {
     const review = ModelHolisticReviewResultSchema.parse(
       await input.runner(
-        {
-          taskId: task.id,
-          paths: [...task.paths],
-          reviewText: input.buildText(input.taskInput)
-        },
+        holisticReviewInputFor(task, input.buildText(input.taskInput)),
         input.signal
       )
     )

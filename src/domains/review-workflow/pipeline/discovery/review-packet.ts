@@ -8,7 +8,9 @@
 
 import {
   type ContextDocument,
-  type TaskReviewInput
+  type HolisticReviewInput,
+  type TaskReviewInput,
+  type WorkflowReviewTask
 } from '../agent-contracts.js'
 
 // Present the changed source to the holistic reviewer as a clean, line-numbered
@@ -348,6 +350,29 @@ export const buildContextSections = (
     changeIntentSection
   ]
 }
+
+/**
+ * The packet one discovery call sends the provider.
+ *
+ * This is the WHOLE of what a discovery call transmits: the agent input is a
+ * strict object of exactly these three fields, so everything else a
+ * `TaskReviewInput` carries — evidence, candidates, skills, the shared digest,
+ * provenance — stays on this side of the provider boundary.
+ *
+ * It is a function rather than an object literal at the call site because two
+ * places need the identical shape: the call that sends it, and the budget guard
+ * that has to measure what is sent (see `taskReviewInputFor`). A second copy of
+ * the shape would eventually disagree with this one, and the direction that
+ * disagreement fails in is a guard that under-measures the packet it guards.
+ */
+export const holisticReviewInputFor = (
+  task: WorkflowReviewTask,
+  reviewText: string
+): HolisticReviewInput => ({
+  taskId: task.id,
+  paths: [...task.paths],
+  reviewText
+})
 
 // The general holistic discovery prompt: the shared context sections framed as a
 // whole-change review. Byte-for-byte identical to the pre-security-pass prompt.

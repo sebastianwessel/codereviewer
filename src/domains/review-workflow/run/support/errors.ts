@@ -6,7 +6,7 @@ import {
   normalizeError,
   type StructuredError
 } from '../../../../shared/errors/error-normalizer.js'
-import type { ContextLedgerEntry } from '../../../review-planning/context-ledger.js'
+import type { ContextLedgerEntry } from '../../../review-planning/index.js'
 import type { ReviewSharedContextSnapshot } from '../../../shared-context/index.js'
 import type { NoContentObservabilitySnapshot } from '../../../observability/index.js'
 

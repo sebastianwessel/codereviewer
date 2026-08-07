@@ -115,7 +115,10 @@ export const securityReviewInstruction = [
 // (see the refutation packet), so withholding them here would have the security
 // call search under rules its own adjudicator applies — an instruction visible only
 // after the fact, which is the defect this wiring exists to remove.
-const buildSecurityReviewText = (
+// Exported for the discovery packet budget guard (`taskReviewInputFor`), which
+// has to measure the LARGEST packet a task can send. This one always is, when the
+// pass is enabled: it is the general packet plus two static blocks.
+export const buildSecurityReviewText = (
   taskInput: TaskReviewInput,
   rawDiff: string
 ): string =>

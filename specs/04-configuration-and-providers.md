@@ -147,13 +147,19 @@ or publishing.
 | `maxFilesPerDiscoveryCall` | integer >= 1 | `2` | How many changed files ONE discovery call may review (spec 27). A task covering more is partitioned across several calls whose candidates are unioned; every partition receives the same shared context the undivided task would have. Partitioning engages only above this many changed files, so a small change is unaffected. When the dedicated security pass is on, it is partitioned on the same terms. |
 
 Holistic discovery and refutation packets reuse the provider task-input budget
-instead of introducing stage-specific public settings. When a packet exceeds that
-budget, optional context is dropped in a fixed order before the packet is refused:
-a discovery packet drops the shared digest; a refutation packet drops the shared
-digest, then the support signals, then the ambient review context. Nothing else is
-dropped and nothing is ever truncated — a packet still over budget fails with
-`task_packet_budget_exceeded` (exit code `4`, recoverable). At the default
-8,000,000-byte ceiling this path is not reached by any realistic change.
+instead of introducing stage-specific public settings. Each stage is measured
+against what it sends: a discovery call sends `{taskId, paths, reviewText}`, and a
+refutation call sends its whole batch input.
+
+A discovery packet drops nothing — it is refused whole. It has nothing optional to
+drop: everything a discovery call transmits is the rendered review document, and
+the shared digest that used to be dropped here is not part of it. A refutation
+packet still drops the shared digest, then the support signals, then the ambient
+review context, each replaced by a notice naming what was withheld, because those
+fields really are in what it sends. Nothing else is dropped and nothing is ever
+truncated — a packet still over budget fails with `task_packet_budget_exceeded`
+(exit code `4`, recoverable). At the default 8,000,000-byte ceiling this path is
+not reached by any realistic change.
 
 When `contextMaxBytes` is not set explicitly, nothing bounds the review packet in
 advance: the change is sent whole and split only if the provider refuses it
