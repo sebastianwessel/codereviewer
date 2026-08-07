@@ -42,6 +42,30 @@ callee body, an interface, or a constructor in an unchanged file is reachable.
 - Hydrated cases are consumed through the existing evaluation fixture contract, so
   the matcher, judges, and metrics apply unchanged.
 
+### One Machinery, More Than One Manifest
+
+Added 2026-08-07. Everything above describes a **shape**, not a single dataset. Two
+manifests are validated by this schema and hydrated by this script:
+
+| Manifest | Output root | Asks |
+| --- | --- | --- |
+| `eval/corpora/real-repo-cross-file/` | `.codereviewer/eval/corpus-slices/real-repo-cross-file` | Does the reviewer find a defect that needs another file? |
+| `eval/corpora/security-advisory-2026/` | `.codereviewer/eval/security-cases/security-advisory-2026` | Does it find a defect a published advisory confirms? (spec 15 §The Security Corpus) |
+
+They share this orientation, this schema and this hydrator deliberately: a corpus
+that needs its own runner produces figures comparable to nothing. What they do not
+share is a question or an answer key — the second's key is an advisory naming one
+defect, so its precision is a bracket for a different reason than the first's, and
+**their recalls must not be differenced.**
+
+Their output roots are not siblings, for the same reason spec 22's is not: an
+evaluation loads a slice root by directory, and a shared parent is one typo away
+from pooling two datasets that answer different questions.
+
+Adding a third manifest requires no code. It requires deciding, in writing, what
+question it asks and why its figures are not comparable to these — which is the
+part that is easy to skip and expensive to skip.
+
 **This corpus MUST NOT be pooled with the change-impact corpus**
 (`eval/corpora/change-impact-dependents/`, spec 22 §Evaluation), which inverts
 every one of the properties above: it reads a change **forwards** from the commit
