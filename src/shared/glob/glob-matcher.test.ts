@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest'
-import { compileGlobMatchers, globToRegExp, matchesAnyGlob } from './glob-matcher.js'
+import {
+  compileGlobMatchers,
+  globToAncestorRegExp,
+  globToRegExp,
+  matchesAnyGlob
+} from './glob-matcher.js'
 
 describe('glob matcher', () => {
   test('matches a single path segment with *', () => {
@@ -84,5 +89,56 @@ describe('glob matcher', () => {
     expect(matchesAnyGlob('dist/index.js', matchers)).toBe(true)
     expect(matchesAnyGlob('src/index.js.map', matchers)).toBe(true)
     expect(matchesAnyGlob('src/index.ts', matchers)).toBe(false)
+  })
+})
+
+// The directories a pattern's files can live beneath. `paths.include` scopes
+// files, so this is what a traversal has to ask before descending: could a path
+// matching this pattern exist below here?
+describe('glob ancestor matcher', () => {
+  test('admits every directory level a pattern can reach through', () => {
+    const matcher = globToAncestorRegExp('src/**/*')
+
+    expect(matcher.test('src')).toBe(true)
+    expect(matcher.test('src/domains')).toBe(true)
+    expect(matcher.test('src/domains/context-retrieval')).toBe(true)
+    expect(matcher.test('docs')).toBe(false)
+  })
+
+  test('handles a wildcard in the middle of a pattern', () => {
+    const matcher = globToAncestorRegExp('packages/*/src/**/*')
+
+    expect(matcher.test('packages')).toBe(true)
+    expect(matcher.test('packages/a')).toBe(true)
+    expect(matcher.test('packages/a/src')).toBe(true)
+    expect(matcher.test('packages/a/src/nested')).toBe(true)
+    // A sibling of the pattern's `src` segment holds no matching file.
+    expect(matcher.test('packages/a/lib')).toBe(false)
+  })
+
+  test('admits everything under a leading globstar', () => {
+    const matcher = globToAncestorRegExp('**/*.ts')
+
+    expect(matcher.test('docs')).toBe(true)
+    expect(matcher.test('docs/guides')).toBe(true)
+  })
+
+  test('a pattern naming one file admits no directory at all', () => {
+    // The only segment describes the file itself, and no path lies below a file.
+    expect(globToAncestorRegExp('README.md').test('README.md')).toBe(false)
+    expect(globToAncestorRegExp('*').test('src')).toBe(false)
+  })
+
+  test('the last segment of a globstar-free pattern is the file, not a directory', () => {
+    const matcher = globToAncestorRegExp('src/app.ts')
+
+    expect(matcher.test('src')).toBe(true)
+    expect(matcher.test('src/app.ts')).toBe(false)
+  })
+
+  test('rejects patterns beyond the supported length', () => {
+    expect(() => globToAncestorRegExp('*'.repeat(4097))).toThrow(
+      /maximum supported length/iu
+    )
   })
 })

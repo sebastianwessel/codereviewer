@@ -58,7 +58,10 @@ flowchart LR
   eligibility gate the verification agent uses — the hard floor first (dotfiles,
   `node_modules`, `dist`), then `paths.exclude`, then `paths.include`. A path your
   configuration excludes is refused here too, and the refusal is disclosed to the
-  model rather than answered as an empty result. See
+  model rather than answered as an empty result. `paths.include` scopes files, so
+  a directory stays traversable when an included file could live beneath it — a
+  review scoped to a subtree keeps a working `repo_grep`, and every file that
+  search reaches is checked against your include list on its own. See
   [permissions and path containment](../../07-security/permissions-and-path-containment.md).
 - Retrieved content is untrusted repository data and the prompt is hardened against
   injection from it — see [trust model](../trust-model.md).

@@ -151,7 +151,7 @@ Every call passes an eligibility gate before touching disk:
 | Layer | Rule |
 | --- | --- |
 | Hard floor (no configuration can widen it) | Any path segment that is a dotfile or hidden segment (`.env`, `.env.local`, `.git`, `.codereviewer`, …) is ineligible. So are `node_modules` and `dist`, matched case-insensitively anywhere in the path. |
-| Configured scope | `paths.exclude` then `paths.include`, mirroring the review's own file discovery. |
+| Configured scope | `paths.exclude` then `paths.include`, mirroring the review's own file discovery. `include` scopes files: a directory may be traversed when an included file could live beneath it, and every entry that traversal yields is gated again as a file. |
 
 On top of that: path containment through the path service, per-read byte caps,
 per-search match caps, traversal-depth caps, redaction of every result, a

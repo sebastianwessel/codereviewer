@@ -897,3 +897,186 @@ describe('a line-numbered read is numbered where the content actually starts', (
     }
   })
 })
+
+// A repository laid out the way this project's own configuration guide
+// recommends scoping a review: source in `src`, a workspace under `packages`,
+// and reviewable-but-unincluded material beside them.
+const createScopedRepo = async (): Promise<string> => {
+  const root = join(tmpdir(), `codereviewer-context-scoped-${crypto.randomUUID()}`)
+
+  await mkdir(join(root, 'src', 'domains'), { recursive: true })
+  await writeFile(
+    join(root, 'src', 'domains', 'deep.ts'),
+    'export const needle = 1\n'
+  )
+  await mkdir(join(root, 'packages', 'a', 'src'), { recursive: true })
+  await writeFile(join(root, 'packages', 'a', 'src', 'lib.ts'), 'const needle = 2\n')
+  await mkdir(join(root, 'docs'), { recursive: true })
+  await writeFile(join(root, 'docs', 'guide.md'), 'needle in documentation\n')
+  await writeFile(join(root, 'notes.md'), 'needle in a top-level note\n')
+
+  return root
+}
+
+// `paths.include` scopes FILES (spec 04). Applying it to directories too refused
+// every traversal that a configured subtree implies: `repo_grep` with no paths,
+// and `repo_list` of the very subtree the operator scoped the review to, while a
+// single-file `repo_read` still worked — the grep-then-read loop, dead.
+describe('a file-scoped include list still allows traversal', () => {
+  test('grep from the repository root searches a configured subtree', async () => {
+    const root = await createScopedRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        paths: { include: ['src/**/*'] }
+      })
+      const result = await retriever.grepRepository({ query: 'needle' })
+
+      // Traversal reached the subtree, and served ONLY what the include list
+      // covers: the documentation and the top-level note match the query too.
+      expect(result.matches?.map((match) => match.path)).toEqual([
+        'src/domains/deep.ts'
+      ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('grep descends a wildcard in the middle of an include pattern', async () => {
+    const root = await createScopedRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        paths: { include: ['packages/*/src/**/*'] }
+      })
+      const result = await retriever.grepRepository({ query: 'needle' })
+
+      // `packages/a` matches no include pattern of its own; a literal-prefix
+      // shortcut would stop at `packages` and find nothing.
+      expect(result.matches?.map((match) => match.path)).toEqual([
+        'packages/a/src/lib.ts'
+      ])
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('list works on the configured subtree and hides everything outside it', async () => {
+    const root = await createScopedRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        paths: { include: ['src/**/*'] }
+      })
+      const listedRoot = await retriever.listRepositoryDirectory({ path: '.' })
+      const listedSubtree = await retriever.listRepositoryDirectory({
+        path: 'src'
+      })
+
+      // The root is listable because an included file lives beneath it, and the
+      // entries it shows are still gated one by one.
+      expect(listedRoot.content).toContain('dir src')
+      expect(listedRoot.content).not.toMatch(/docs/u)
+      expect(listedRoot.content).not.toMatch(/notes\.md/u)
+      expect(listedSubtree.content).toContain('dir src/domains')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a traversable directory does not make the files inside it readable', async () => {
+    const root = await createScopedRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        paths: { include: ['src/**/*'] }
+      })
+
+      // `.` and `docs`' parent are traversable; `docs/guide.md` is not covered by
+      // the include list and a read of it must still be refused.
+      await expect(
+        retriever.readRepositoryFile({ path: 'docs/guide.md' })
+      ).rejects.toThrow(/paths\.include/u)
+      await expect(
+        retriever.readRepositoryFile({ path: 'src/domains/deep.ts' })
+      ).resolves.toMatchObject({ tool: 'read' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a grep root that is an unincluded file is refused, not scanned', async () => {
+    const root = await createScopedRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        // A leading globstar makes every directory traversable, so `notes.md`
+        // passes the ancestor test — a `.ts` file could live below a directory
+        // of that name. Only the check that it is not in fact a directory keeps
+        // its contents out of the search.
+        paths: { include: ['**/*.ts'] },
+        budget: { maxSearches: 4 }
+      })
+
+      await expect(
+        retriever.grepRepository({ query: 'needle', paths: ['notes.md'] })
+      ).rejects.toThrow(/is not eligible/u)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a path eligible only as a directory is refused identically whether or not it exists', async () => {
+    const root = await createScopedRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        paths: { include: ['**/*.ts'] },
+        budget: { maxSearches: 4 }
+      })
+      const reasonFor = async (searchPath: string): Promise<string> => {
+        try {
+          await retriever.grepRepository({ query: 'needle', paths: [searchPath] })
+        } catch (error) {
+          return (error as Error).message.replace(searchPath, '<path>')
+        }
+
+        throw new Error(`Expected a refusal for ${searchPath}.`)
+      }
+
+      // Eligibility is otherwise settled before existence so a refusal cannot be
+      // used to probe for a file the include list does not cover. This is the one
+      // check that must consult the filesystem, so "it is a file" and "it is not
+      // there" have to answer identically or the probe comes back.
+      expect(await reasonFor('notes.md')).toBe(await reasonFor('absent.md'))
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('a genuinely missing but includable path is still reported as not found', async () => {
+    const root = await createScopedRepo()
+
+    try {
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        paths: { include: ['src/**/*'] }
+      })
+
+      // The directory rule must not swallow the not-found condition: this path
+      // would be eligible if it existed, and saying "not eligible" would be a
+      // different, misleading answer.
+      await expect(
+        retriever.readRepositoryFile({ path: 'src/missing.ts' })
+      ).rejects.toThrow(/was not found in the repository/iu)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+})

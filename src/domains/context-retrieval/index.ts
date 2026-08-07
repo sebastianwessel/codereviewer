@@ -225,17 +225,21 @@ const isMissingEntryError = (error: unknown): boolean =>
   'code' in error &&
   (error.code === 'ENOENT' || error.code === 'ENOTDIR')
 
-const pathExists = async (absolutePath: string): Promise<boolean> => {
+// The entry at a path, or `undefined` when nothing is there. Returns the stats
+// rather than a boolean because the gate below needs the entry's KIND — whether
+// a path admitted as a directory really is one — and asking the filesystem twice
+// for one answer would let the two answers disagree.
+const statIfExists = async (
+  absolutePath: string
+): Promise<Awaited<ReturnType<typeof stat>> | undefined> => {
   try {
     // Follows symlinks on purpose: a link to a deleted target is not there, and a
     // link to a live target outside the root must reach the containment check
     // below rather than being answered as a miss.
-    await stat(absolutePath)
-
-    return true
+    return await stat(absolutePath)
   } catch (error) {
     if (isMissingEntryError(error)) {
-      return false
+      return undefined
     }
 
     throw error
@@ -280,6 +284,13 @@ const linePreview = (content: string, maxLines = 12): string =>
     .map((line, index) => `${index + 1}: ${line}`)
     .join('\n')
 
+// What the caller intends to do with a requested path, which is what decides
+// which eligibility rule it is held to. `read` addresses a file. `list`
+// addresses a directory. A `grep` root may legitimately be either — a subtree to
+// walk or a single file to scan — and is resolved to whichever it turns out to
+// be, under the rule for that kind.
+type RequestedEntryKind = 'file' | 'directory' | 'file-or-directory'
+
 // Normalizes a caller-supplied path (liberal about leading `./`, `\`
 // separators, and repeated slashes — see `repository-path.ts`), confirms it
 // is eligible, then confirms it exists inside the repository root. Any of the
@@ -289,18 +300,39 @@ const resolveEligibleExistingPath = async (options: {
   readonly repositoryRoot: string
   readonly requestedPath: string
   readonly compiledEligibility: CompiledEligibilityConfig
+  readonly entryKind: RequestedEntryKind
 }): Promise<{ readonly portablePath: string; readonly absolutePath: string }> => {
   const portablePath = RepositoryRelativePathSchema.parse(
     normalizeRepositoryRelativePath(options.requestedPath)
   )
+  // A path that may be a directory is gated by the directory rule first, because
+  // that is the only rule that can admit the subtree root a traversal starts
+  // from. Whether it really is a directory is settled below, once — and only
+  // once — the path is known to be eligible under SOME rule.
+  const gateKind = options.entryKind === 'file' ? 'file' : 'directory'
   const eligibility = evaluatePathEligibility(
     portablePath,
-    options.compiledEligibility
+    options.compiledEligibility,
+    gateKind
   )
 
   if (!eligibility.eligible) {
     throw pathNotEligibleCondition(portablePath, eligibility.reason)
   }
+  // Whether the path passed ONLY because directories are judged on what may live
+  // beneath them. If so it is eligible while it is a directory and not otherwise,
+  // so a file at this path must be refused rather than read: the directory rule
+  // is a traversal permit, never a permit to serve a file the include list does
+  // not cover.
+  const fileEligibility = evaluatePathEligibility(
+    portablePath,
+    options.compiledEligibility,
+    'file'
+  )
+  const directoryOnlyRefusalReason =
+    gateKind === 'directory' && !fileEligibility.eligible
+      ? fileEligibility.reason
+      : undefined
 
   // Containment first, existence second, and NEITHER is decided by reading an
   // error message. `resolvePathInsideRoot` refuses a path that escapes the root,
@@ -314,8 +346,22 @@ const resolveEligibleExistingPath = async (options: {
     options.repositoryRoot,
     portablePath
   )
+  const entryStat = await statIfExists(containedPath)
 
-  if (!(await pathExists(containedPath))) {
+  // A path admitted only as a directory that is not one — a file, or nothing at
+  // all — is refused as INELIGIBLE, identically in both cases. Eligibility is
+  // otherwise decided before existence precisely so a refusal cannot be used to
+  // probe for a file the include list does not cover, and this is the one check
+  // that has to consult the filesystem; answering "it is a file" differently from
+  // "it is not there" would hand that probe back (spec 07).
+  if (
+    directoryOnlyRefusalReason !== undefined &&
+    entryStat?.isDirectory() !== true
+  ) {
+    throw pathNotEligibleCondition(portablePath, directoryOnlyRefusalReason)
+  }
+
+  if (entryStat === undefined) {
     throw pathNotFoundCondition(portablePath)
   }
 
@@ -340,9 +386,13 @@ const resolveEligibleExistingPath = async (options: {
   // equal means no symlink indirection changed the path. Otherwise re-check.
   if (realRelative.length > 0 && realRelative !== portablePath) {
     const realPortable = normalizeRepositoryRelativePath(realRelative)
+    // Held to the rule for what the target actually IS, which the stat above
+    // already established: a link to a directory is a traversal root and is
+    // judged on what may live beneath it, a link to a file is judged as a file.
     const targetEligibility = evaluatePathEligibility(
       realPortable,
-      options.compiledEligibility
+      options.compiledEligibility,
+      entryStat.isDirectory() ? 'directory' : 'file'
     )
 
     if (!targetEligibility.eligible) {
@@ -367,11 +417,15 @@ export const createContextRetriever = (input: {
   const ledgerEntries = input.ledgerEntries
   const compiledEligibility = compileEligibilityConfig(input.paths)
 
-  const resolveEligibleExisting = (requestedPath: string) =>
+  const resolveEligibleExisting = (
+    requestedPath: string,
+    entryKind: RequestedEntryKind
+  ) =>
     resolveEligibleExistingPath({
       repositoryRoot: input.repositoryRoot,
       requestedPath,
-      compiledEligibility
+      compiledEligibility,
+      entryKind
     })
 
   const recordResult = (record: {
@@ -458,7 +512,8 @@ export const createContextRetriever = (input: {
     },
     readRepositoryFile: async ({ path: requestedPath, taskId, startLine, endLine }) => {
       const { portablePath, absolutePath } = await resolveEligibleExisting(
-        requestedPath
+        requestedPath,
+        'file'
       )
 
       if (budget.usedReads >= budget.maxReads) {
@@ -514,23 +569,35 @@ export const createContextRetriever = (input: {
     },
     listRepositoryDirectory: async ({ path: requestedPath, taskId }) => {
       const { portablePath, absolutePath } = await resolveEligibleExisting(
-        requestedPath
+        requestedPath,
+        'directory'
       )
 
       if (budget.usedReads >= budget.maxReads) {
         throw readBudgetExhaustedCondition()
       }
       budget.usedReads += 1
-      const entryNames = await readdir(absolutePath)
+      // Read with entry types because the gate below needs each entry's KIND: a
+      // subdirectory is judged on what may live beneath it, a file on its own
+      // name. A `Dirent` reports a symlink as neither, so a link is gated as the
+      // plain entry it is rather than as whatever it points at — the
+      // conservative direction, and the same one the search traversal takes.
+      const entries = await readdir(absolutePath, { withFileTypes: true })
       // Entries the eligibility gate rejects (dotfiles, excluded globs, ...)
       // are dropped before they are ever stat'd or surfaced, so a directory
-      // listing cannot reveal the presence of a secret or excluded file.
-      const eligibleEntryNames = entryNames.filter((entryName) =>
-        evaluatePathEligibility(
-          portableChildPath(portablePath, entryName),
-          compiledEligibility
-        ).eligible
-      )
+      // listing cannot reveal the presence of a secret or excluded file. This is
+      // half of what makes a traversable directory safe: being allowed to list a
+      // directory grants nothing about the entries inside it.
+      const eligibleEntryNames = entries
+        .filter(
+          (entry) =>
+            evaluatePathEligibility(
+              portableChildPath(portablePath, entry.name),
+              compiledEligibility,
+              entry.isDirectory() ? 'directory' : 'file'
+            ).eligible
+        )
+        .map((entry) => entry.name)
       const childSummaries = await Promise.all(
         eligibleEntryNames.slice(0, budget.maxMatches).map(async (entryName) => {
           const childAbsolutePath = path.join(absolutePath, entryName)
@@ -778,9 +845,17 @@ export const createContextRetriever = (input: {
 
         const childPortablePath = portableChildPath(portablePath, entry.name)
 
+        // Gated as the kind it is, before anything is read or descended into. A
+        // subdirectory passes when an included file could live beneath it; a FILE
+        // must match the include list itself. That is what keeps a traversable
+        // directory from serving the files in it that the configuration does not
+        // cover (spec 07, *Mediated Read Eligibility*).
         if (
-          !evaluatePathEligibility(childPortablePath, compiledEligibility)
-            .eligible
+          !evaluatePathEligibility(
+            childPortablePath,
+            compiledEligibility,
+            entry.isDirectory() ? 'directory' : 'file'
+          ).eligible
         ) {
           continue
         }
@@ -800,8 +875,13 @@ export const createContextRetriever = (input: {
         break
       }
 
+      // A search root is a subtree to walk or a single file to scan, and the
+      // resolver holds it to the rule for whichever it turns out to be: a file
+      // that reaches `collectFileMatches` below has passed the FILE rule, never
+      // the directory relaxation.
       const { portablePath, absolutePath } = await resolveEligibleExisting(
-        requestedPath
+        requestedPath,
+        'file-or-directory'
       )
       const entryStat = await stat(absolutePath)
 

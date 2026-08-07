@@ -33,19 +33,23 @@ type GlobPart =
   | { readonly kind: 'literal'; readonly source: string }
   | { readonly kind: 'globstar' }
 
-export const globToRegExp = (pattern: string): RegExp => {
+const parseGlobParts = (pattern: string): readonly GlobPart[] => {
   if (pattern.length > maxGlobPatternLength) {
     throw new TypeError('Glob pattern exceeds the maximum supported length.')
   }
 
-  const normalizedPattern = pattern.replaceAll('\\', '/')
-  const parts: readonly GlobPart[] = normalizedPattern
+  return pattern
+    .replaceAll('\\', '/')
     .split('/')
     .map((segment) =>
       segment === '**'
         ? { kind: 'globstar' }
         : { kind: 'literal', source: segmentToRegExpSource(segment) }
     )
+}
+
+export const globToRegExp = (pattern: string): RegExp => {
+  const parts = parseGlobParts(pattern)
 
   let source = '^'
 
@@ -93,9 +97,66 @@ export const globToRegExp = (pattern: string): RegExp => {
   return new RegExp(source)
 }
 
+// A pattern that can never match. Returned for a glob no directory can be an
+// ancestor of, so callers keep working with a plain `RegExp` instead of a
+// nullable one; an empty alternation would be a syntax error and `^$` would
+// wrongly match the empty path.
+const neverMatchingRegExpSource = '(?!)'
+
+// Builds the matcher for the DIRECTORIES a file matching `pattern` could live
+// beneath.
+//
+// The include layer scopes files (spec 04), so a pattern like `src/**/*` says
+// nothing about `src` itself — yet nothing under `src` is reachable without
+// traversing it. This answers the question a traversal actually asks: could a
+// path matching this pattern exist below this directory?
+//
+// A literal-prefix shortcut cannot answer it. `packages/*/src/**/*` requires
+// `packages/a` to be traversable, so every prefix is built from the same
+// per-segment sources `globToRegExp` uses, and a wildcard in the middle of a
+// pattern is handled like any other segment.
+export const globToAncestorRegExp = (pattern: string): RegExp => {
+  const parts = parseGlobParts(pattern)
+  const ancestorSources: string[] = []
+  let prefixSource = ''
+
+  for (const [index, part] of parts.entries()) {
+    if (part.kind === 'globstar') {
+      // `**` matches zero or more whole segments, so from here on ANY depth
+      // below the prefix can still lead to a matching file — and the prefix
+      // itself can, because the globstar may match nothing. Nothing after this
+      // point can narrow that, so the scan stops.
+      ancestorSources.push(
+        prefixSource === '' ? '.*' : `${prefixSource}(?:/.*)?`
+      )
+      break
+    }
+
+    prefixSource =
+      prefixSource === '' ? part.source : `${prefixSource}/${part.source}`
+
+    // The LAST segment of a globstar-free pattern describes the file itself, and
+    // a file has no path below it. Only the earlier segments name directories a
+    // matching file could live beneath.
+    if (index < parts.length - 1) {
+      ancestorSources.push(prefixSource)
+    }
+  }
+
+  return new RegExp(
+    ancestorSources.length === 0
+      ? neverMatchingRegExpSource
+      : `^(?:${ancestorSources.join('|')})$`
+  )
+}
+
 export const compileGlobMatchers = (
   patterns: readonly string[]
 ): readonly RegExp[] => patterns.map(globToRegExp)
+
+export const compileGlobAncestorMatchers = (
+  patterns: readonly string[]
+): readonly RegExp[] => patterns.map(globToAncestorRegExp)
 
 export const matchesAnyGlob = (
   portablePath: string,

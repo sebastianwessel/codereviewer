@@ -195,7 +195,7 @@ shared-context artifacts; only paths and hashes are recorded.
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `paths.include` | glob[] | `["**/*"]` | Files eligible for review. |
+| `paths.include` | glob[] | `["**/*"]` | Files eligible for review, and the files the mediated `read`/`list`/`grep` tools may serve. It scopes **files**: a directory is traversable when an included file could live beneath it, so `["src/**/*"]` still lets a search start at the repository root, and each file that search reaches is checked against the list on its own. |
 | `paths.exclude` | glob[] | see below | Files removed from review. **Replaces** the default list when set — re-list the defaults you want to keep. |
 | `paths.artifactDir` | repository-relative path | `".codereviewer/runs"` | Root for per-run artifact directories and the run index. Overridable with `CODEREVIEWER_ARTIFACT_DIR`. |
 

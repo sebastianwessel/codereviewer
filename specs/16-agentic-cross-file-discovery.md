@@ -4,6 +4,8 @@ Status: Approved (capability **enabled by default** since 2026-08-01; the earlie
 "measured net negative" verdict is **overturned** — see *Measured Outcome*)
 Date: 2026-07-24
 Amended: 2026-08-01 — default flipped on; the per-read excerpt cap removed (spec 28)
+Amended: 2026-08-07 — a configured `paths.include` no longer refuses this lane's
+traversals (specs 04 and 07)
 
 ## Purpose
 
@@ -73,6 +75,14 @@ findings as today.
   target), and repository content treated as untrusted (spec 07). Retrieved content
   cannot grant authority, change admission, severity, gates, or baseline, and the
   discovery prompt is hardened against injection from it.
+- **Traversable is not readable.** This lane is the one that starts traversals —
+  `repo_grep` with no `paths` walks from the repository root — so it is where the
+  include layer's scope matters most. `paths.include` scopes FILES: a directory is
+  traversable when an included file could live beneath it, and every entry that
+  traversal yields is gated individually as a file. The rule is defined under
+  *Paths* in spec 04 and its safety requirements under *Mediated Read Eligibility*
+  in spec 07. Before it, an operator who scoped the review to a subtree got a
+  discovery lane whose `repo_grep` and `repo_list` were refused outright.
 - **Deterministic mediation, non-deterministic use.** The tool surface and its bounds
   are deterministic; the model's decision to call a tool is not. Like every other
   model lane it is quarantined: findings still pass untrusted refutation and

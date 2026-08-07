@@ -2,6 +2,9 @@
 
 Status: Approved
 Date: 2026-07-31
+Amended: 2026-08-07 — `paths.include` scopes files; a directory is traversable
+when an included file could live beneath it (see *Include Scopes Files, Not
+Traversal*)
 
 ## Configuration Files
 
@@ -417,6 +420,34 @@ hashes and repository-relative paths are recorded for provenance.
 
 All path config is validated through `path-service` and must support Linux and
 Windows separators.
+
+### Include Scopes Files, Not Traversal
+
+`paths.include` selects FILES. A DIRECTORY is eligible for traversal when an
+included file could live beneath it — when some path under that directory
+matches an `include` pattern — even though the directory itself matches no
+pattern. Under `include: ["src/**/*"]` the repository root `.` and `src` are
+therefore traversable; under `include: ["packages/*/src/**/*"]` so are
+`packages` and `packages/a`, which means the ancestor test must handle a
+wildcard anywhere in a pattern and cannot be a literal-prefix shortcut. A
+directory beneath which no included file can exist (`docs`, under either
+example) stays ineligible.
+
+The rule binds wherever the include layer is applied to a path being TRAVERSED
+rather than served: the mediated `list` and `grep` of the verification,
+change-impact, intent-fulfilment, and cross-file discovery lanes. Without it an
+include list naming a subtree matched no directory to start a traversal from, so
+a repository-wide `grep` and a `list` of the configured subtree were both
+refused while a `read` of a file inside that same subtree succeeded — the whole
+grep-then-read loop, defeated by the configuration this project's own guides
+recommend.
+
+This WIDENS traversal and does NOT widen what is served. Every file a traversal
+yields — every entry a `list` returns, every file a `grep` opens, every path a
+`read` addresses — is still gated individually as a file against the unchanged
+`include` rule, and the hard floor and `paths.exclude` are evaluated first and
+prune a directory outright. The requirements that make that argument hold are in
+*Mediated Read Eligibility* in `07-security-privacy-operations.md`.
 
 ## Baseline
 

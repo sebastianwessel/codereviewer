@@ -2,6 +2,9 @@
 
 Status: Approved
 Date: 2026-07-22
+Amended: 2026-08-07 — the shared mediated-read eligibility gate and the
+requirements that make directory traversal safe are stated here (see *Mediated
+Read Eligibility*)
 
 ## Threat Model
 
@@ -168,6 +171,45 @@ provider network path explicitly defined by provider configuration.
 - For write destinations, the implementation must resolve existing parent
   directories with `realpath` when present to prevent symlink escape.
 - Public reports must use repository-relative portable paths only.
+
+## Mediated Read Eligibility
+
+Every mediated `read`/`list`/`grep` call — the verification and fix lanes
+(`12-verification-flow.md`), cross-file discovery
+(`16-agentic-cross-file-discovery.md`), change impact
+(`22-change-impact-review.md`), intent fulfilment
+(`23-intent-fulfilment-review.md`) — passes ONE shared eligibility gate, in this
+order:
+
+1. A hard floor no configuration can widen: any dotfile or hidden path segment,
+   plus `node_modules` and `dist` matched case-insensitively anywhere in the
+   path.
+2. `paths.exclude`.
+3. `paths.include`.
+
+The include layer scopes FILES: a directory is eligible for TRAVERSAL when an
+included file could live beneath it, as defined under *Paths* in
+`04-configuration-and-providers.md`. That is the only relaxation in this gate,
+and these requirements are what make it safe. They are load-bearing; the
+relaxation is not permitted without them.
+
+- The relaxation is for DIRECTORIES only. Any path served as a file — a `read`,
+  a `grep` root that turns out to be a file, a file a traversal opened — MUST be
+  gated against the file rule.
+- Every entry a traversal yields MUST be gated individually before it is opened
+  or reported: a directory listing MUST drop the entries the gate rejects, and a
+  recursive search MUST gate each child before descending into it or reading it.
+  A traversable directory therefore grants access to nothing inside it.
+- Layers 1 and 2 are unchanged and are still evaluated first, so a directory the
+  hard floor or `paths.exclude` rejects is never traversed, whatever could live
+  beneath it.
+- A path eligible ONLY under the directory rule that is not in fact a directory
+  MUST be refused as ineligible, and that refusal MUST be indistinguishable from
+  the one a path that does not exist receives. Eligibility is otherwise decided
+  from the path alone, before existence, precisely so that a refusal cannot be
+  used to probe for a file the include list does not cover; this is the single
+  check that has to consult the filesystem, so answering its two outcomes
+  differently would reintroduce that probe.
 
 ## Git Safety
 

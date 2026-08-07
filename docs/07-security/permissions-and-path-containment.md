@@ -163,6 +163,17 @@ discovery), reads go through mediated tools with a two-layer eligibility gate:
    re-cased segment on a case-insensitive filesystem cannot slip past.
 2. **Your configured scope.** `paths.exclude`, then `paths.include`.
 
+`paths.include` scopes **files**. A directory is eligible for *traversal* when an
+included file could live beneath it — otherwise scoping a review to `src/**/*`
+would leave no directory a search could start from, and `list`/`grep` would be
+refused while `read` of a file in that same subtree worked. This widens what may
+be walked and not what may be served: layers 1 and 2 are unchanged and prune a
+directory outright, and every entry a traversal produces is put through this gate
+again, on its own, as the file it is. A listing drops the entries the gate
+rejects, a search checks each child before descending into it or opening it, and
+a path served as a file — including a `grep` root that turns out to be one — must
+match `paths.include` itself.
+
 A refusal the model is expected to hit — the path is not eligible, the path is
 not found, or the retriever's read or search budget is spent — comes back as an
 ordinary tool result naming that reason, not as an error to retry. Each one says
