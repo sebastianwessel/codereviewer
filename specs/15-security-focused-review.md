@@ -644,8 +644,8 @@ reviewer against defect classes the previous corpus barely contained.
 
 ## The Security Corpus
 
-Added 2026-08-07. `eval/corpora/security-advisory-2026/`, 25 cases, hydrated by
-spec 17's machinery unchanged — same manifest schema, same orientation, same
+Added 2026-08-07, grown the same day. `eval/corpora/security-advisory-2026/`, 50
+cases, hydrated by spec 17's machinery unchanged — same manifest schema, same orientation, same
 hydration gates. Nothing new was built for it, which is the point: a corpus that
 needs its own runner is a corpus whose numbers cannot be compared to anything.
 
@@ -656,14 +656,21 @@ weakness class, language, fix size, severity. Whether any analyzer flags a case
 played no part, so recall measured here is a statement about the reviewer and not
 about a scanner.
 
-| | |
-| --- | --- |
-| cases | 25 (9 dev, 16 held-out) |
-| expected findings | 26 |
-| distinct repositories | 24 |
-| languages | all seven |
-| mechanisms | all ten |
-| context depth | mostly beyond `local` |
+| | round one | grown |
+| --- | --- | --- |
+| cases | 25 | **50** (14 dev, 36 held-out) |
+| expected findings | 26 | **51** |
+| distinct repositories | 24 | **33** |
+| cross-file expectations | 8 | **14** |
+| languages | all seven | all seven |
+| mechanisms | all ten | all ten |
+
+The second round exists because the first round's own baseline said so: at sd
+7.69pp over three seeds, 26 expectations could not resolve an intervention worth
+making. Doubling the cases is the only lever that moves that; more seeds on the
+same expectations does not. `cross-file` doubled deliberately — it is the row the
+first baseline identified as the deficit, and it was the thinnest evidence in the
+corpus at 8 expectations.
 
 **This corpus has a real chronological split, and it is the project's first.** Every
 fix is post-cutoff, dev is every fix before 2026-06-01, held-out is every fix on or
@@ -793,6 +800,77 @@ Three things follow:
 - **`reviewIntent` being clean is not sufficient.** The manifest's answer-key check
   reads the curator's prose, and the curator writes it carefully. It cannot read
   the diff. The two checks are independent and both are required.
+
+### The disclosure gate reads comments, and prose also travels in string literals
+
+Found 2026-08-07 during the second curation round, by a curator rather than by the
+gate.
+
+`removedProseCommentsIn` finds **comments**. A fix that explains itself in a string
+literal instead passes it. Two real examples from candidates that had to be dropped
+by hand:
+
+- a `ValidationError` message naming the check the fix adds;
+- a config option's `Help` text reading *"can plant a setuid binary, which is
+  dangerous … when restoring from an untrusted source while running as root"*.
+
+Neither is a comment. Neither contains an advisory id or the words
+vulnerability/exploit, so `answerKeyLeakIn` over the generated diff does not catch
+them either. Both hand the answer to a reviewer that reads the diff.
+
+**This is not fixed by broadening the detector**, and that is a deliberate decision
+rather than a deferral: every added string literal is prose by construction, so a
+literal-scanning gate would flag most security fixes and be switched off within a
+week. A gate that cries wolf is worse than a documented limit.
+
+The mitigation is therefore procedural and is stated as a rule for curators: **read
+every piece of English the fix ADDS — comment or string literal — before accepting a
+case.** The automated gates remain a floor. Three of the seven cases kept in that
+round survived only because a curator narrowed `reviewedPaths` around a disclosing
+literal.
+
+Two smaller rules the same round established, recorded so they are not re-derived:
+
+- **When the advisory's primary file is also the disclosing one**, keep the case on
+  an independently exploitable secondary site if one exists and say so in `notes`;
+  otherwise drop it. Do not reword upstream code.
+- **An advisory with no honest `securityMechanism`** is a drop, not a stretch. One
+  candidate was upstream-tagged `xss` and was in fact output-transcoding fidelity
+  with no attacker. Labelling it would have corrupted a per-mechanism denominator,
+  which is the one thing the mechanism vocabulary exists to protect.
+
+### Three more things the second round established
+
+Recorded 2026-08-07, from five curators working the same brief independently.
+
+**Inline unit tests disclose even when `reviewedPaths` excludes every test file.**
+Rust and Go keep tests in the source file, so a fix-added test *name* —
+`test_file_resolution_rejects_traversal_outside_agent_dir` — is in a reviewed path
+by construction. Two curators hit this in different languages. There is no path to
+exclude; the case is a drop.
+
+**A guard-addition fix is not automatically disclosing, and the boundary is
+this:** prose that only restates an identifier already visible in the removed code
+is not a statement of the defect; prose explaining *why the check must sit at that
+exact point* is. Reversed, every guard-addition shows a guard being deleted, so a
+rule of "names the missing check" would reject the entire class and with it most
+real security fixes. Two curators converged on this line independently before it
+was written down.
+
+**The mechanism vocabulary has no member for open redirect (CWE-601), and that
+gap cost a good case.** Two curators, working the same devise advisory without
+knowledge of each other, reached for two *different* wrong buckets — one
+`injection`, one `ssrf`. That they disagreed is the evidence: the class is absent,
+not merely awkward. The case was dropped under the rule that an advisory with no
+honest mechanism is a drop rather than a stretch, because either label would have
+polluted a per-mechanism denominator that exists precisely to be trustworthy.
+
+**Adding `open-redirect` to `SecurityMechanismSchema` is the right fix and is
+deliberately not made here.** It changes the shape of a published metrics contract
+— a new per-mechanism row — and doing that in the same change as a corpus that
+doubled would confound the re-baseline. It is a taxonomy improvement, not a corpus
+accommodation: CWE-601 is a standard class and this spec claims OWASP/CWE
+alignment. It should land as its own change with a metrics-version entry.
 
 ### A third channel, checked once and clean
 

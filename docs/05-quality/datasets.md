@@ -10,7 +10,7 @@ and recall on an exhaustive one are not the same quantity.
 | Code Review Bench-style | `eval/benchmarks/code-review-bench-style/` | 59 | 133 | **required** | Recall/precision on real PRs, changed files only |
 | Proof-quality slices | `eval/fixtures/proof-quality-slices/` | 15 | 14 | none | Trustworthy recall on an exhaustive key |
 | Real-repository cross-file | `eval/corpora/real-repo-cross-file/manifest.json` | 37 | 87 | **required** | Cross-file recall on full checkouts, and review of multi-file diffs |
-| Security advisory 2026 | `eval/corpora/security-advisory-2026/manifest.json` | 25 | 26 | **required** | Security recall per mechanism and per context depth, on advisory-confirmed defects |
+| Security advisory 2026 | `eval/corpora/security-advisory-2026/manifest.json` | 50 | 51 | **required** | Security recall per mechanism and per context depth, on advisory-confirmed defects |
 | Change-impact dependents | `eval/corpora/change-impact-dependents/manifest.json` | 10 | 11 | **required** | Whether `impact check` names a dependent a change provably broke |
 | Fix-lane fixture | `eval/fixtures/typescript/fix-lane/repo/` | 1 (test-only) | — | none | Fix-lane judgment, via a hermetic test |
 
@@ -373,8 +373,8 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
 
 ## Security-advisory corpus
 
-**What it is.** `eval/corpora/security-advisory-2026/manifest.json` — 25 cases, 26
-expected findings, 24 upstream projects, every one of the seven supported languages
+**What it is.** `eval/corpora/security-advisory-2026/manifest.json` — 50 cases, 51
+expected findings, 33 upstream projects, every one of the seven supported languages
 and all ten security mechanisms. Same manifest schema, same hydration script and
 same orientation as the real-repository corpus above: the tree is checked out at the
 commit **before** an upstream security fix, and the fix is reviewed backwards so the
@@ -388,8 +388,8 @@ whether any analyzer fires played no part, so recall measured here describes the
 reviewer rather than a scanner.
 
 **Its split is real, and it is the only one here that is.** Every fix is post-cutoff.
-Dev is every fix committed before 2026-06-01 (9 cases), held-out every fix on or
-after (16). That is the boundary `parseRealRepoCorpusManifest` actually verifies —
+Dev is every fix committed before 2026-06-01 (14 cases), held-out every fix on or
+after (36). That is the boundary `parseRealRepoCorpusManifest` actually verifies —
 the cross-file corpus is `single-split` and its figures are dev-set figures by its
 own admission. Once an A/B is decided on the dev half, only the held-out half backs
 an acceptance claim.
@@ -413,13 +413,14 @@ empty or near-empty denominators.
 **Curation cost, recorded because it is not obvious.** Reviewing a fix backwards
 turns every explanatory comment the fix **added** into a removed line the reviewer
 reads, and fix authors comment security repairs precisely. The hydration disclosure
-gate flagged 15 of 38 curated candidates and 13 were dropped — a **34% loss**. Budget
-roughly three candidates for every two cases that survive. A clean `reviewIntent` is
+gate flagged 15 of 38 curated candidates in the first round — a **34% loss**. A second
+round briefed with that lesson pre-screened and lost 8 of 29. Budget roughly two
+candidates adjudicated for every case that survives: 111 were adjudicated to reach 50. A clean `reviewIntent` is
 not sufficient: the manifest's answer-key check reads curator prose and cannot read
 the diff. Both gates are required.
 
 **A third channel, checked once and clean.** Neither gate reads the rest of the
-working tree, which the reviewer can reach through its read/list/grep tools. All 25
+working tree, which the reviewer can reach through its read/list/grep tools. All 50
 checkouts were scanned for their own GHSA and CVE identifiers: zero hits. That is a
 property of the orientation — the tree predates the fix, so the advisory did not
 exist yet — but worth re-checking for any project that publishes advisories ahead of
