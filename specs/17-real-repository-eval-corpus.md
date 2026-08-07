@@ -50,7 +50,7 @@ manifests are validated by this schema and hydrated by this script:
 | Manifest | Output root | Asks |
 | --- | --- | --- |
 | `eval/corpora/real-repo-cross-file/` | `.codereviewer/eval/corpus-slices/real-repo-cross-file` | Does the reviewer find a defect that needs another file? |
-| `eval/corpora/security-advisory-2026/` (70 cases) | `.codereviewer/eval/security-cases/security-advisory-2026` | Does it find a defect a published advisory confirms? (spec 15 §The Security Corpus) |
+| `eval/corpora/security-advisory-2026/` (71 cases) | `.codereviewer/eval/security-cases/security-advisory-2026` | Does it find a defect a published advisory confirms? (spec 15 §The Security Corpus) |
 
 They share this orientation, this schema and this hydrator deliberately: a corpus
 that needs its own runner produces figures comparable to nothing. What they do not

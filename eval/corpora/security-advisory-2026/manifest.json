@@ -10,7 +10,7 @@
     "commitBodiesScreened": 0,
     "repositoriesScreened": 251,
     "candidatesAdjudicated": 170,
-    "note": "Not a commit-body sweep, so commitBodiesScreened is 0 and the denominator is the advisory database instead. GitHub Security Advisories with published > 2026-01-01, type=reviewed, across npm/PyPI/Go/Maven/RubyGems/crates.io: 401 carried a fix-commit reference into their own source repository, 251 of those on permissively licensed repositories (repositoriesScreened counts these advisories, not distinct repositories - 44 distinct repositories survive in the cases). Curation ran in FOUR rounds. Rounds one and two adjudicated 111 candidates for 50 cases. Rounds three and four exist because the structural screen was found to carry two filters inherited from the analyzer-firing measurement, both wrong for a recall corpus: see the two rejection entries marked CORRECTED. Re-screening recovered 59 further candidates (32 add-only, 27 single-fix-commit-after-all), of which curators kept 26 and the hydrator's removed-comment gate then dropped 6, for 70 cases and 72 expectations. The keep rate across all four rounds is stable at ~45%. See reports/2026-08-07-analyzer-firing-base-rate.md for the harvest, reports/2026-08-07-security-corpus-baseline.md for what the cases measure, and reports/2026-08-07-recovered-from-a-wrong-screen.md for the recovery.",
+    "note": "Not a commit-body sweep, so commitBodiesScreened is 0 and the denominator is the advisory database instead. GitHub Security Advisories published > 2026-01-01, type=reviewed, across npm/PyPI/Go/Maven/RubyGems/crates.io: 401 carried a fix-commit reference into their own source repository, 251 of those on permissively licensed repositories (repositoriesScreened counts advisories, not distinct repositories). Curation ran in FOUR rounds. Rounds one and two adjudicated 111 candidates for 50 cases. Rounds three and four exist because the structural screen carried two filters inherited from the analyzer-firing measurement, both wrong for a recall corpus - see the two rejection entries marked CORRECTED. Re-screening recovered 59 candidates, curators kept 26, and the removed-comment gate then dropped 6 (one later re-admitted on review). Keep rate across all four rounds is stable at ~45%. See reports/2026-08-07-recovered-from-a-wrong-screen.md.",
     "rejections": [
       {
         "candidate": "CORRECTED - 52 advisories referencing more than one fix commit",
@@ -2981,6 +2981,54 @@
         "server-components"
       ],
       "notes": "Curator: printed parent 1fbbd27c packages/nuxt/src/app/components/utils.ts lines 80-115 and verified line 94 is '} else if (typeof source === 'number') {', 98 'const array: number[] = []', 99 'for (let i = 0; i < source; i++) {' and 102 'return array', with no cap (rule 12). Also grepped parent islands-transform.ts: line 196 emits '__vforToArray(${vfor[1]}).map(...)', so this site is reachable from request-supplied island props independently of the transform-side fix. Rule 7 applied: the advisory's primary file (islands-transform.ts) is the disclosing one \u2014 its added comment names attacker-supplied magnitudes \u2014 as are vfor.ts (created by the fix, rule 2) and render.ts (diagnostic prose). All are excluded; utils.ts carries the same defect and no added English. GHSA-9pgf on this commit is dropped, so no duplicate."
+    },
+    {
+      "id": "watch-range-end-rewritten-before-permission-check",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/etcd-io/etcd.git",
+      "upstreamOwner": "etcd-io",
+      "upstreamRepo": "etcd",
+      "license": "Apache-2.0",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "6643f80602461a6095c9b294b6512fd9719bef41",
+      "fixCommittedAt": "2026-07-10T14:29:05Z",
+      "parentCommit": "724eb19864381c9eea355c663004fe86ba9062ff",
+      "reviewedPaths": [
+        "server/etcdserver/api/v3rpc/watch.go"
+      ],
+      "reviewIntent": "Normalise a watch create request's RangeEnd next to the existing key default at the top of recvLoop, so the request is in the single representation watchStream.Watch expects before the rest of the loop works with it.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "server/etcdserver/api/v3rpc/watch.go",
+          "lineRange": [
+            263,
+            271
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "recvLoop rewrites creq.RangeEnd here, before isWatchPermitted runs at line 289. A RangeEnd of a single 0x00 byte - what clientv3.WithFromKey() sends for an open-ended '>= key' watch - becomes []byte{}, and authStore.isRangeOpPermitted treats len(rangeEnd)==0 as an exact single-key point query. A user granted read permission on just one key therefore passes the check and gets a watch covering [key, +inf), receiving events for every key it has no permission to read.",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "authorization"
+      ],
+      "notes": "Rule 12: read the parent tree (724eb198) and printed watch.go lines 263-271 - the two RangeEnd rewrites are present there, ahead of `err := sws.isWatchPermitted(creq)` at 289 (printed 240-330). Also printed the parent's server/auth/range_perm_cache.go: isRangeOpPermitted (110) branches to checkKeyPoint when len(rangeEnd)==0 - that second file is why contextDepth is cross-file. Rule 13: the commit moves the rewrite to after the check and needs nothing else; siblings are the release-branch backports. Disclosure: the fix adds no prose to the source file (the two comments it re-adds at the new site are the parent's own, moved verbatim); the full root-cause write-up lives in tests/e2e/watch_test.go, which is excluded from reviewedPaths as a test.",
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-08",
+        "verdict": "non-disclosing",
+        "rationale": "The gate flagged RELOCATED prose, not disclosure. The fix moves the RangeEnd rewrite block from before the permission check to after it, and both comments travel with the block unchanged (removed at the old site, added at the new). They explain that watchstream.Watch distinguishes nil from []byte{} for single-key versus >= queries. They say nothing about the permission check, which is the defect: a reader who saw only these comments would not know that an authorization check is bypassed. Verified against the real diff of 6643f80602461a6095c9b294b6512fd9719bef41.",
+        "acknowledgedComments": [
+          "// force nil since watchstream.Watch distinguishes",
+          "// between nil and []byte{} for single key / >="
+        ]
+      }
     }
   ]
 }

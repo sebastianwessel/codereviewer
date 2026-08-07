@@ -2559,3 +2559,79 @@ self-disclosure sweep reports **0 of 70** checkouts naming their own advisory.
 **No recall figure is published here.** The ~61% baseline describes the 51-case
 corpus and is not comparable across a corpus change; a re-baseline is owed before any
 figure is quoted against this corpus.
+
+## 2026-08-07 — Sub-file partitioning REJECTED, and the 70-case baseline ($42.41)
+
+Control `359161b` vs treatment `45a75da`, 10 seeds/arm, alternating order, **5/5
+position balance in each arm**, `dirty=0` on all twenty runs, one dependency digest.
+Corpus `security-advisory-2026` (70 cases / 72 expectations / 44 repositories at run
+time; one further case was re-admitted afterwards on review, see below), model
+`openai/gpt-5.3-codex`. Detail: `reports/2026-08-07-subfile-partitioning-result.md`.
+
+| | control | treatment |
+|---|---|---|
+| recall | **64.0%** (sd 2.22pp) | 61.1% (sd 4.68pp) |
+| adjusted precision | 95.0% | 96.9% |
+| raw precision | 72.9% | 58.4% |
+| genuine false positives | 25 | 14 |
+| discovery calls | 710 | 1260 (**1.77x**) |
+| raw findings | 886 | 1494 (+69%) |
+| spend | $18.42 | $23.99 (**1.30x**) |
+
+Paired over 72 expectations: **11 gained / 23 lost, two-sided exact p = 0.0576** —
+against the treatment. Not promoted; **code removed** (spec 27 now records the
+finding in place of the design).
+
+**Why it fails is the interesting part.** The predicted harm landed exactly
+(`cross-function` 82.4% → 71.2%). The predicted GAIN never appeared: `local` 86.7% →
+83.3% and `implementation` 51.1% → 49.4%, both down, when both were named in advance
+as the depths that would rise. Narrowing what a call is shown does not buy recall even
+on defects wholly inside the narrowed region. With raw findings up 69% and adjusted
+precision up while genuine FPs nearly halved, the extra looks find MORE real defects
+and FEWER of the advisory's — a ranking problem, not an attention problem.
+
+### The 70-case baseline, from the control arm at no extra cost
+
+**Security recall 64.0% (sd 2.22pp), adjusted precision 95.0%**, 10 seeds, engine
+`359161b`, `openai/gpt-5.3-codex`. This SUPERSEDES the ~61% figure, which described
+the old 51-case corpus and was never comparable to this one. The control engine
+carried the sub-file feature inert (unset was proven byte-identical by test), so this
+figure transfers to `2203bf7` where the feature is gone.
+
+Per-depth, control arm: `local` 86.7%, `caller` 90.0%, `cross-function` 82.4%,
+`callee` 62.5%, `implementation` 51.1%, `cross-file` 49.3%,
+`analyzer-path-dependent` 0%. Per-mechanism: `path-traversal` 94.4% and
+`concurrency-resource` 69.3% at the top; `xss` 40.0%, `ssrf` 54.0%, `injection` 55.0%
+and `authorization` 63.3% below the mean.
+
+### Attention is now closed as a line of work
+
+| mechanism | result |
+|---|---|
+| second, differently-framed pass over the same context | +0.83pp, p = 0.82, removed |
+| one file per call | 46.5% → 46.5%, +36% cost |
+| four prompt clauses | all null |
+| **splitting the file itself** | **−2.9pp, 11/23, p = 0.058, removed** |
+
+### Corpus amendment after that run: 71 cases / 73 expectations
+
+`watch-range-end-rewritten-before-permission-check` (etcd) was re-admitted with a
+`removedCommentDisclosureReview`. It had been dropped by the removed-comment gate
+under a conservative default; adjudicating it against the real diff showed the fix
+RELOCATES the `RangeEnd` rewrite block from before the permission check to after it,
+carrying its two comments unchanged. Those comments explain nil-vs-`[]byte{}`
+semantics in `watchstream.Watch` and say nothing about the permission check, which is
+the defect. Gate false positive, not disclosure.
+
+Corpus is now **71 cases / 73 expectations / 45 repositories**, dev 18 / held-out 53.
+The 64.0% baseline above was measured on the 70-case corpus and is NOT restated
+against 71; the next run re-establishes it.
+
+**A defect this exposed, and the guard that now closes it.** The manifest committed at
+`303dde5` FAILED its own schema — the screening note ran 1254 characters against a
+1200 bound — and nothing caught it: the suite was green, the drift check was green,
+and the only test that parsed a committed manifest named `real-repo-cross-file` by
+hand. A corpus manifest is invisible to the suite until someone hydrates it, and
+hydration is not part of the suite. `real-repo-corpus.schema.test.ts` now DISCOVERS
+every directory under `eval/corpora/` and parses each with a declared parser, so a new
+corpus fails until its coverage is declared rather than being silently skipped.

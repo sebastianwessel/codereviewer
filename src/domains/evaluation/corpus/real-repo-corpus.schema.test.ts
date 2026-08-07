@@ -1,4 +1,6 @@
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { parseChangeImpactCorpusManifestJson } from '../change-impact-eval/change-impact-corpus.schema.js'
 import { describe, expect, test } from 'vitest'
 import {
   containsAnswerKey,
@@ -11,6 +13,18 @@ import {
 } from './real-repo-corpus.schema.js'
 
 const committedManifestPath = 'eval/corpora/real-repo-cross-file/manifest.json'
+
+// Every corpus shipped in the repository, discovered rather than listed. Naming one
+// manifest is what let a second corpus ship with a screening note over its schema
+// bound: the suite was green, the drift check was green, and nothing parsed the file.
+const shippedManifestPaths = async (): Promise<readonly string[]> => {
+  const root = 'eval/corpora'
+  const entries = await readdir(root, { withFileTypes: true })
+
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(root, entry.name, 'manifest.json'))
+}
 
 const baseCase = {
   id: 'sample-case',
@@ -314,6 +328,40 @@ describe('token normalized diff fingerprint', () => {
         diff.replace('+  return lookup(id)', '+  return lookup(id, "")')
       )
     ).not.toBe(tokenNormalizedDiffFingerprint(diff))
+  })
+})
+
+// Which parser owns each shipped corpus. Corpora do not carry a discriminator, so
+// coverage is DECLARED: a new corpus directory fails the test below until it is
+// added here, rather than being silently skipped.
+const parserByCorpus: Readonly<Record<string, (json: string) => unknown>> = {
+  'real-repo-cross-file': parseRealRepoCorpusManifestJson,
+  'security-advisory-2026': parseRealRepoCorpusManifestJson,
+  'change-impact-dependents': parseChangeImpactCorpusManifestJson
+}
+
+describe('every shipped corpus manifest', () => {
+  // A manifest that fails its own schema is invisible until someone hydrates it, and
+  // hydration is not part of the suite. This is the cheap guard for that.
+  test('parses against the schema that owns it', async () => {
+    const paths = await shippedManifestPaths()
+
+    expect(paths.length).toBeGreaterThan(1)
+
+    for (const path of paths) {
+      const corpus = path.split('/')[2] ?? ''
+      const parse = parserByCorpus[corpus]
+
+      expect(parse, `${path} has no declared parser in parserByCorpus`).toBeDefined()
+
+      const contents = await readFile(path, 'utf8')
+
+      // Named in the failure so a broken manifest says WHICH corpus is broken.
+      expect(
+        () => parse?.(contents),
+        `${path} does not satisfy the schema that owns it`
+      ).not.toThrow()
+    }
   })
 })
 
