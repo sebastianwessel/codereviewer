@@ -82,10 +82,17 @@ Set it explicitly when the derivation would mislabel your case.
 ### Security labels
 
 On security findings you may add `securityMechanism` (`authorization`,
-`injection`, `ssrf`, `xss`, `deserialization`, `secret-flow`, `cryptography`,
-`path-traversal`, `unsafe-config`, `concurrency-resource`) and `contextDepth`
-(`local`, `cross-function`, `callee`, `caller`, `implementation`, `cross-file`,
-`analyzer-path-dependent`).
+`injection`, `ssrf`, `open-redirect`, `xss`, `deserialization`, `secret-flow`,
+`cryptography`, `path-traversal`, `unsafe-config`, `concurrency-resource`) and
+`contextDepth` (`local`, `cross-function`, `callee`, `caller`, `implementation`,
+`cross-file`, `analyzer-path-dependent`).
+
+Pick the mechanism the weakness *is*, never the nearest one. `open-redirect`
+(CWE-601) is a redirect target taken from attacker-controlled input, which the
+victim's browser follows; `ssrf` (CWE-918) is the server itself issuing an
+attacker-chosen request. If no label is honest for a case, the case is a drop, not
+a stretch — a wrong label pollutes a per-mechanism denominator that exists to be
+trustworthy.
 
 There is deliberately no `prompt-injection` mechanism. Every value above names a
 defect class the reviewer should **report**; the reviewer's own prompt-injection

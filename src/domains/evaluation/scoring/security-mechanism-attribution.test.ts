@@ -33,6 +33,19 @@ describe('security mechanism attribution', () => {
     expect(securityMechanismFromCwe(['cwe-22'])).toBe('path-traversal')
   })
 
+  // CWE-601 resolved to `ssrf` until 2026-08-07, which is the same conflation two
+  // curators made independently on the same advisory. The server issues no request
+  // in an open redirect; it emits a `Location` the victim's browser follows.
+  test('separates open redirect from server-side request forgery', () => {
+    expect(securityMechanismFromCwe(['CWE-601'])).toBe('open-redirect')
+    expect(securityMechanismFromCwe(['CWE-918'])).toBe('ssrf')
+    // The two ids a reader reaches for next are near-misses, and the table's rule
+    // is that only a CWE whose DEFINITION is the mechanism may be carried:
+    // CWE-610 is the parent that also spans SSRF, CWE-1022 is reverse tabnabbing.
+    expect(securityMechanismFromCwe(['CWE-610'])).toBeUndefined()
+    expect(securityMechanismFromCwe(['CWE-1022'])).toBeUndefined()
+  })
+
   test('refuses to guess when the CWE list is unknown, empty, or contradictory', () => {
     expect(securityMechanismFromCwe(undefined)).toBeUndefined()
     expect(securityMechanismFromCwe([])).toBeUndefined()

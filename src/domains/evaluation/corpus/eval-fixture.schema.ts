@@ -48,10 +48,28 @@ export const ExpectedFindingTierSchema = z.enum([
 // resistance is verified behaviourally instead (the injection-guard clauses in
 // the discovery, refutation, merge, and tool-result prompts, and their
 // colocated tests).
+//
+// `open-redirect` is its own member and is NOT a sub-case of `ssrf` or of
+// `injection`, on the public definitions rather than on any fixture. CWE-601,
+// *URL Redirection to Untrusted Site ('Open Redirect')*, is the weakness in which
+// attacker-controlled input reaches a redirect target, so a site the victim
+// already trusts forwards that victim to an attacker's site; OWASP has carried the
+// class since *Unvalidated Redirects and Forwards* (A10:2013) and maps CWE-601
+// into A01:2021 Broken Access Control. It fails to be `ssrf` because CWE-918 is
+// the SERVER issuing an attacker-chosen request — the server is the requester and
+// the target is typically a host only it can reach — whereas an open redirect
+// makes the server fetch nothing at all: it emits a `Location` and the victim's
+// BROWSER follows it. It fails to be `injection` because CWE-74 requires untrusted
+// input to change the STRUCTURE a downstream interpreter parses, and a redirect
+// target is a value arriving where a value is expected. Different actor, different
+// trust boundary, different fix — an allowlist of targets a user may be sent to,
+// not of hosts the server may reach. Two curators labelling the same advisory
+// `injection` and `ssrf` independently is the symptom; this is the correction.
 export const SecurityMechanismSchema = z.enum([
   'authorization',
   'injection',
   'ssrf',
+  'open-redirect',
   'xss',
   'deserialization',
   'secret-flow',

@@ -77,9 +77,17 @@ const cweMechanisms: Readonly<Record<string, SecurityMechanism>> = {
   'CWE-917': 'injection',
   'CWE-943': 'injection',
   'CWE-1336': 'injection',
-  // Server-side request forgery and unsafe URL/host construction.
-  'CWE-601': 'ssrf',
+  // Server-side request forgery: the SERVER is the one issuing the request.
   'CWE-918': 'ssrf',
+  // Open redirect. CWE-601 is the whole of this bucket because it is the only id
+  // in the catalog whose definition IS the mechanism, and the strict rule above
+  // forbids rounding a near-miss into it. The two ids a reader will reach for are
+  // deliberately absent: CWE-610 (*Externally Controlled Reference to a Resource
+  // in Another Sphere*) is CWE-601's PARENT and equally covers SSRF, so it states
+  // no mechanism on its own; CWE-1022 (*Use of Web Link to Untrusted Target with
+  // window.opener Access*) is reverse tabnabbing, where the destination is
+  // intended and the defect is the opener handle it inherits.
+  'CWE-601': 'open-redirect',
   // Cross-site scripting and output encoding.
   'CWE-79': 'xss',
   'CWE-80': 'xss',

@@ -283,9 +283,9 @@ label. Every empty value in the recall metrics is `0`, not `1`.
 | `securityObviousRecall` / `securityObviousCount` | Matched / expected at depth `local` | The self-contained class |
 | `securityHardRecall` / `securityHardCount` | Matched / expected at every other depth | Tracked separately so aced trivial sinks never mask the hard-class gap |
 
-Mechanisms: `authorization`, `injection`, `ssrf`, `xss`, `deserialization`,
-`secret-flow`, `cryptography`, `path-traversal`, `unsafe-config`,
-`concurrency-resource`.
+Mechanisms: `authorization`, `injection`, `ssrf`, `open-redirect`, `xss`,
+`deserialization`, `secret-flow`, `cryptography`, `path-traversal`,
+`unsafe-config`, `concurrency-resource`.
 Context depths: `local`, `cross-function`, `callee`, `caller`, `implementation`,
 `cross-file`, `analyzer-path-dependent`.
 

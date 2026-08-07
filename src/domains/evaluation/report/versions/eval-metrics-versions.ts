@@ -107,6 +107,14 @@ export const EVAL_METRICS_VERSION_HISTORY: readonly MetricsVersionEntry<EvalComp
       id: '2026-08-06.unmeasured-case-token-usage',
       affects: ['usageUnavailableCount'],
       note: 'The same fix applied to token usage: a case that surfaced no usage record (a provider-errored case, or a provider run whose usage never arrived) no longer contributes 0 input/cached/output tokens. `usageUnavailableCount` is new and reads as absent rather than 0 in any earlier report, so nothing is known about that population before this boundary. `inputTokens`, `cachedInputTokens` and `outputTokens` are declared unaffected for a reason a reader should not have to infer: their VALUES are identical for identical engine output, because every case now excluded from the sums contributed exactly 0 to it before. The gate change that landed with this entry -- `regressionGate` gaining a third `not-evaluable` outcome when `maxCostUsd`/`maxDurationMs` is compared against a known-only total -- affects no metric at all: it changes what the run REPORTS about itself, not what any metric computes, so it is deliberately absent from `affects` rather than declared `all`.'
+    },
+    {
+      id: '2026-08-07.open-redirect-mechanism',
+      affects: [
+        'securityAdjustedPrecisionByMechanism',
+        'securityFindingMechanismCounts'
+      ],
+      note: 'The security mechanism vocabulary gained `open-redirect` (CWE-601), and CWE-601 stopped resolving to `ssrf`. The REMAP is the part that changes a number: an unmatched genuine security false positive tagged CWE-601 used to land in the `ssrf` precision denominator and now lands in `open-redirect`, so for identical engine output the two per-mechanism precision structures differ and neither may be compared across this boundary. Everything else is declared unaffected deliberately rather than by omission. `securityRecallByMechanism` and `securityMechanismCounts` gain a key whose value is 0 and {expected: 0, matched: 0}: they are computed from expectation labels only, no committed expectation carries the new label, and a new empty row changes no existing row\'s value -- claiming a break there would refuse a comparison the evidence supports. `securityMechanismAttributionCounts` is unchanged: a CWE-601 finding was attributed from its CWE tag before and still is, only into a different bucket. Nothing outside the security dimension reads the mechanism enum. One consequence is not a metric change but is worth knowing: `EvalReportSchema` is exhaustive over the enum, so a report archived before this boundary no longer parses as a PRODUCER report; `eval compare` is unaffected because it reads through the tolerant comparison view, which models no per-mechanism metric.'
     }
   ]
 

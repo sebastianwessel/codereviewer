@@ -162,6 +162,7 @@ aligned):
 - authorization and tenant/access-control isolation;
 - injection: SQL, command, code/expression, template;
 - SSRF and unsafe URL/host construction;
+- open redirect: a redirect target taken from attacker-controlled input;
 - XSS and output encoding;
 - insecure deserialization;
 - secret and sensitive-data flow;
@@ -185,6 +186,24 @@ tool results under *Observability, Safety, Privacy*, and by their colocated
 tests. A mechanism nothing expects is now absent from the reported table rather
 than reported as zero, and this rule is general — it is not a carve-out for one
 value.
+
+**Open redirect is its own label rather than a sub-case of SSRF or injection**
+(added 2026-08-07, and the justification is the public catalog, not any fixture).
+CWE-601, *URL Redirection to Untrusted Site ('Open Redirect')*, is the weakness in
+which attacker-controlled input reaches a redirect target, so a site the victim
+already trusts forwards that victim onward to an attacker's site. OWASP has
+carried the class since *Unvalidated Redirects and Forwards* (A10:2013) and maps
+CWE-601 into A01:2021 Broken Access Control. It is not SSRF, because CWE-918 is
+the **server** issuing an attacker-chosen request to a host typically only it can
+reach, whereas an open redirect makes the server fetch nothing at all — it emits a
+`Location` and the victim's **browser** follows it. It is not injection, because
+CWE-74 requires untrusted input to change the STRUCTURE a downstream interpreter
+parses, and a redirect target is a value arriving where a value is expected.
+Different actor, different trust boundary, different fix: an allowlist of targets
+a user may be sent to, not of hosts the server may reach. CWE-601 was mapped to
+`ssrf` in the CWE→mechanism table until this change and now maps to
+`open-redirect`; no other id qualifies, because CWE-610 is the parent that spans
+SSRF as well and CWE-1022 is reverse tabnabbing.
 
 ## Mechanism 1: The Dedicated Additive Security Pass
 
@@ -827,12 +846,24 @@ not merely awkward. The case was dropped under the rule that an advisory with no
 honest mechanism is a drop rather than a stretch, because either label would have
 polluted a per-mechanism denominator that exists precisely to be trustworthy.
 
-**Adding `open-redirect` to `SecurityMechanismSchema` is the right fix and is
-deliberately not made here.** It changes the shape of a published metrics contract
-— a new per-mechanism row — and doing that in the same change as a corpus that
-doubled would confound the re-baseline. It is a taxonomy improvement, not a corpus
-accommodation: CWE-601 is a standard class and this spec claims OWASP/CWE
-alignment. It should land as its own change with a metrics-version entry.
+**Adding `open-redirect` to `SecurityMechanismSchema` was the right fix and was
+deliberately not made in that change.** It changes the shape of a published metrics
+contract — a new per-mechanism row — and doing that in the same change as a corpus
+that doubled would have confounded the re-baseline. It is a taxonomy improvement,
+not a corpus accommodation: CWE-601 is a standard class and this spec claims
+OWASP/CWE alignment.
+
+It landed on its own on 2026-08-07, once the re-baseline was committed, under
+metrics version `2026-08-07.open-redirect-mechanism`. The justification is in
+*Mechanisms* above. What the version entry declares is worth restating, because
+the honest answer is narrower than "a metrics contract changed": the only value
+that moves for identical engine output is a per-mechanism PRECISION structure, and
+it moves because CWE-601 stopped resolving to `ssrf`, not because a row was added.
+`securityRecallByMechanism` and `securityMechanismCounts` gain a key holding 0 and
+`{expected: 0, matched: 0}` — no committed expectation carries the label, and a new
+empty row changes no existing row's value, so they remain comparable across the
+boundary. The dropped case is left dropped: reviving it is separate work, and doing
+it here would confound the baseline exactly as the original deferral avoided.
 
 ### A third channel, checked once and clean
 

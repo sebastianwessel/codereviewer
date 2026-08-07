@@ -321,6 +321,43 @@ describe('eval report rendering', () => {
     )
   })
 
+  // The rule that retired `prompt-injection` is general, and the cost of it not
+  // being general is paid by whoever adds the NEXT mechanism: a member with no
+  // expectation anywhere would ride into the table as a `0.0%` row and read as a
+  // measured blind spot. Asserted over the whole enum rather than over one name,
+  // so a mechanism added later is covered without anyone remembering to come
+  // back here. `open-redirect` is exactly that member today.
+  test('omits every mechanism with an empty denominator from a table that renders others', () => {
+    const summary = renderEvalSummary({
+      ...summaryInput,
+      report: {
+        ...summaryInput.report,
+        metrics: {
+          ...summaryInput.report.metrics,
+          securityMechanismCounts: {
+            ...summaryInput.report.metrics.securityMechanismCounts,
+            authorization: { expected: 2, matched: 1 }
+          },
+          securityRecallByMechanism: {
+            ...summaryInput.report.metrics.securityRecallByMechanism,
+            authorization: 0.5
+          }
+        }
+      }
+    })
+
+    expect(summary).toContain('## Security by Mechanism')
+    expect(summary).toContain('| authorization | 50.0% | 1/2 |')
+
+    for (const mechanism of SecurityMechanismSchema.options) {
+      if (mechanism === 'authorization') {
+        continue
+      }
+
+      expect(summary).not.toContain(`| ${mechanism} |`)
+    }
+  })
+
   // Zero scoring spend is a cost like any other and must read like every other
   // cost cell in the same table. It rendered `$0.0000` next to the review cost's
   // `$0.00` because the scoring row re-implemented currency formatting instead
