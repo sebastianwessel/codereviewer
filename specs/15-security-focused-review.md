@@ -663,8 +663,8 @@ reviewer against defect classes the previous corpus barely contained.
 
 ## The Security Corpus
 
-Added 2026-08-07, grown the same day. `eval/corpora/security-advisory-2026/`, 50
-cases, hydrated by spec 17's machinery unchanged — same manifest schema, same orientation, same
+Added 2026-08-07, grown twice the same day. `eval/corpora/security-advisory-2026/`,
+51 cases, hydrated by spec 17's machinery unchanged — same manifest schema, same orientation, same
 hydration gates. Nothing new was built for it, which is the point: a corpus that
 needs its own runner is a corpus whose numbers cannot be compared to anything.
 
@@ -677,9 +677,9 @@ about a scanner.
 
 | | round one | grown |
 | --- | --- | --- |
-| cases | 25 | **50** (14 dev, 36 held-out) |
-| expected findings | 26 | **51** |
-| distinct repositories | 24 | **33** |
+| cases | 25 | **51** (15 dev, 36 held-out) |
+| expected findings | 26 | **52** |
+| distinct repositories | 24 | **34** |
 | cross-file expectations | 8 | **14** |
 | languages | all seven | all seven |
 | mechanisms | all ten | all ten |

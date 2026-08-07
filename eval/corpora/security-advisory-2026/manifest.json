@@ -312,6 +312,46 @@
       "notes": "Verified by printing lines 1533-1557 of packages/aws-cdk-lib/aws-codebuild/lib/project.ts at parent 99d0a5ba: line 1547 is exactly `encryptionDisabled: s3Logs.encrypted,` inside renderLoggingConfiguration. Grepped the same parent file: 'encrypted' occurs only on that line, so the S3LoggingOptions declaration is elsewhere - code search puts it in packages/aws-cdk-lib/aws-codebuild/lib/project-logs.ts, which is why contextDepth is cross-file and why project-logs.ts is not in reviewedPaths (the fix does not touch it). Advisory GHSA-464c-974j-9xm6 rates this low; kept at low. Test file excluded."
     },
     {
+      "id": "timeout-redirect-target-taken-from-request-referrer",
+      "language": "ruby",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/heartcombo/devise.git",
+      "upstreamOwner": "heartcombo",
+      "upstreamRepo": "devise",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "025fe2124f9928766fc46520e999633b598d0360",
+      "fixCommittedAt": "2026-05-08T14:29:59Z",
+      "parentCommit": "7ca7ed9c174525a4d36167441b35af4a0991b6af",
+      "reviewedPaths": [
+        "lib/devise/failure_app.rb",
+        "lib/devise/controllers/store_location.rb"
+      ],
+      "reviewIntent": "FailureApp#redirect_url: on a non-GET session timeout, redirect to the referrer directly rather than routing it through extract_path_from_location, and simplify that helper's guard back to a plain uri check.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "lib/devise/failure_app.rb",
+          "lineRange": [
+            139,
+            143
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "redirect_url takes the redirect target from request.referrer for any non-GET timeout, while the GET branch uses the server-side attempted_path. The Referer header is attacker-controlled and the value reaches redirect_to with no host check, so a cross-origin auto-submitting form against an expired session sends the victim from the application's own domain to an arbitrary external URL. The codebase's own extract_path_from_location strips scheme and host; this branch does not use it.",
+          "securityMechanism": "open-redirect",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "open-redirect"
+      ],
+      "notes": "GHSA-jp94-3292-c3xv. Re-curated 2026-08-07 once `open-redirect` entered the vocabulary; dropped earlier because neither `ssrf` nor `injection` described it honestly. PRINTED failure_app.rb 130-152 at parent 7ca7ed9c: redirect_url spans 135-149 and 139-143 is exactly the `if request.get? / attempted_path / else / request.referrer` branch, defect on 142. Also PRINTED store_location.rb 52-70, confirming extract_path_from_location at 56-65 and the `if uri` guard on 59. Disclosure screen: the fix adds NO prose - no comment, no string literal - only two one-line code edits. store_location.rb stays in reviewedPaths because a reviewer of this commit would see it and it discloses nothing; its change is a nil-path guard, not a security check, and carries no expectation. contextDepth is `implementation`, not `cross-file`: the minimum reasoning is knowing request.referrer is the client-supplied Referer header."
+    },
+    {
       "id": "hmac-empty-key-accepted-for-signature-verification",
       "language": "ruby",
       "split": "dev",

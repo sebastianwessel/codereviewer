@@ -118,8 +118,15 @@ review + $0.81 scoring = $4.44** for 3 × 37 cases.
 
 ## Security headline
 
-Measured **2026-08-07** on the **security-advisory corpus**: 50 cases, 51 expected
-findings, 33 upstream projects, all seven languages, all ten security mechanisms.
+Measured **2026-08-07** on the **security-advisory corpus as it stood at 50 cases**:
+51 expected findings, 33 upstream projects, all seven languages.
+
+> **The corpus has since grown to 51 cases / 52 expectations** — one case was
+> re-curated once `open-redirect` entered the mechanism vocabulary. Every figure in
+> this section was measured on the 50-case corpus and **must not be pooled with, or
+> differenced against, a run on the corpus as it stands now.** No figure here has
+> been re-measured, and none is restated as though it had been.
+
 Every case is a defect because a reviewed GitHub Security Advisory published after
 the training cutoff says so. Model `openai/gpt-5.3-codex`, engine pinned `49f0c669`,
 three seeds, 0 dirty files in each.

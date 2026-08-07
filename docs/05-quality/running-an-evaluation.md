@@ -87,7 +87,7 @@ node --import tsx scripts/hydrate-real-repo-corpus.ts \
   --output-slice-root .codereviewer/eval/security-cases/security-advisory-2026
 ```
 
-50 cases, each a security defect confirmed by a reviewed GitHub Security Advisory
+51 cases, each a security defect confirmed by a reviewed GitHub Security Advisory
 published after the training cutoff, covering all ten security mechanisms and all
 seven supported languages. Score it with `eval run --slice-root` exactly like the
 cross-file corpus — it is the same command, because it is the same kind of
@@ -98,7 +98,7 @@ two answer different questions and must never be pooled; a shared parent directo
 is one `--slice-root` typo away from doing exactly that.
 
 It is the only corpus here with a **verified chronological split** — every fix is
-post-cutoff, dev is every fix before 2026-06-01 (14 cases) and held-out every fix on or after (36).
+post-cutoff, dev is every fix before 2026-06-01 (15 cases) and held-out every fix on or after (36).
 Once an A/B has been decided on the dev half, only the held-out half may back an
 acceptance claim. Its per-mechanism denominators are one to eight findings each, so
 a per-mechanism rate from it is a direction and not a number: publish it with its

@@ -2103,6 +2103,35 @@ extraction is measurably non-deterministic (±10% on any count). The 51.5% headl
 single run.
 
 
+## 2026-08-07 — Security corpus grows to 51 cases (DENOMINATOR CHANGE — do not pool)
+
+`timeout-redirect-target-taken-from-request-referrer` (heartcombo/devise,
+GHSA-jp94-3292-c3xv / CVE-2026-40295) was re-curated into
+`eval/corpora/security-advisory-2026` with `securityMechanism: "open-redirect"`.
+
+It had been dropped, not missed: two curators working it independently reached for
+two different wrong buckets (`injection`, `ssrf`), and spec 15's rule is that an
+advisory with no honest mechanism is a drop rather than a stretch. Adding
+`open-redirect` to the vocabulary (metrics version
+`2026-08-07.open-redirect-mechanism`) is what made an honest label available.
+
+**The corpus is now 51 cases / 52 expectations (dev 15, held-out 36).** Every
+security figure in this ledger computed before this entry was measured on 50 cases /
+51 expectations and **must not be pooled with, or differenced against, any run after
+it.** The 60.8% / sd 3.92pp baseline immediately below stands as a dated record of
+the 50-case corpus; **no recall figure is re-published here, because none has been
+re-measured.** Re-running is the only way to get one.
+
+Curation record: the fix (`025fe212`) adds **no prose at all** — no comment, no
+string literal — only two one-line code edits, so the reverse-review disclosure
+screen has nothing to flag and hydration raised nothing. `lineRange` [139,143] was
+verified by printing `lib/devise/failure_app.rb` 130-152 at parent `7ca7ed9c`.
+`lib/devise/controllers/store_location.rb` is kept in `reviewedPaths` because a
+reviewer of that commit would see it and it discloses nothing; it carries no
+expectation. `contextDepth` is `implementation`, not `cross-file`: the minimum
+reasoning is knowing `request.referrer` is the client-supplied Referer header. The
+checkout was scanned for its own GHSA and CVE identifiers — 0 hits.
+
 ## 2026-08-07 — Security recall on advisory-confirmed defects (50-case baseline)
 
 Provider `openai/gpt-5.3-codex`, engine pinned `49f0c669` (0 dirty in all three
