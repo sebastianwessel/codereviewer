@@ -381,17 +381,6 @@
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
-        },
-        "maxDeclarationsPerDiscoveryCall": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 9007199254740991
-        },
-        "maxDeclarationGroupsPerFile": {
-          "default": 3,
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 9007199254740991
         }
       },
       "additionalProperties": false

@@ -15,10 +15,7 @@ import { type DebugLogger } from '../debug-logger.js'
 import { type ProviderIssue } from '../provider-issues.js'
 import { hasActiveCrossFileDiscoveryScope } from './cross-file-tools.js'
 import { runDiscoveryCall, type DiscoveryCallResult } from './discovery-call.js'
-import {
-  declarationSplitOptionsFor,
-  partitionTaskForDiscovery
-} from './discovery-partition.js'
+import { partitionTaskForDiscovery } from './discovery-partition.js'
 import {
   buildContextSections,
   buildReviewText,
@@ -378,40 +375,6 @@ const issueBothPasses = async (
 const markCut = (value: string, max: number): string =>
   value.length <= max ? value : `${value.slice(0, max - 1).trimEnd()}…`
 
-/**
- * Was this line inside what the call was actually shown?
- *
- * Spec 27 requirement 6: a finding stays restricted to the LINE RANGE its own call
- * saw, not merely to the file. The sub-file split makes that distinction real — a
- * call shown one declaration group can name a line from another group, and
- * admission would then anchor a finding against content that call never read.
- *
- * A reviewed document without a span is treated as unbounded rather than as empty:
- * "the span is not recorded" is not the same statement as "the call saw nothing",
- * and guessing the second from the first would drop real findings. Several
- * documents for one path pass if ANY of them contained the line, which is what
- * makes a path shown as two chunks behave like the file it came from.
- */
-const wasShownLine = (
-  task: WorkflowReviewTask,
-  path: string,
-  line: number
-): boolean => {
-  const documents = task.reviewContext.filter(
-    (document) => document.kind === 'file' && document.path === path
-  )
-
-  return (
-    documents.length === 0 ||
-    documents.some(
-      (document) =>
-        document.startLine === undefined ||
-        document.endLine === undefined ||
-        (line >= document.startLine && line <= document.endLine)
-    )
-  )
-}
-
 const candidateFromFinding = (
   task: WorkflowReviewTask,
   raw: unknown
@@ -431,8 +394,7 @@ const candidateFromFinding = (
     finding.description === undefined ||
     finding.path === undefined ||
     finding.startLine === undefined ||
-    !task.paths.includes(finding.path) ||
-    !wasShownLine(task, finding.path, finding.startLine)
+    !task.paths.includes(finding.path)
   ) {
     return undefined
   }
@@ -497,14 +459,9 @@ export const runModelBackedHolisticTaskReview = async (
   // attention yields ~1.2 findings regardless of how much the call was shown, so
   // spreading files across calls raises the share of files looked at and is the only
   // measured lever on recall. With no limit configured this is one partition.
-  // The sub-file split (spec 27, Sub-File Partitioning) composes on top: it is what
-  // lets a SINGLE-file change be spread over several calls at all, which
-  // `maxFilesPerDiscoveryCall` cannot do. Absent, this is the file partitioning
-  // alone.
   const partitions = partitionTaskForDiscovery(
     input.task,
-    input.workflowInput.maxFilesPerDiscoveryCall,
-    declarationSplitOptionsFor(input.workflowInput)
+    input.workflowInput.maxFilesPerDiscoveryCall
   )
 
   const issueGeneral = (): Promise<readonly IssuedDiscoveryCall[]> =>

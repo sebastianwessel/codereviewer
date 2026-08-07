@@ -196,92 +196,68 @@ Partitioning engages only above two changed files, so small changes are unaffect
 the cost falls on large changes, which are the ones the unpartitioned reviewer served
 worst.
 
-## Sub-File Partitioning (added 2026-08-07)
+## Sub-File Partitioning — MEASURED AND REJECTED (2026-08-07)
 
-The section above named sub-file partitioning "the untested lever […] where the curve
-points next". This is its design. It is **off by default and unmeasured**; nothing
-here may be quoted as a result.
+The section above called sub-file partitioning "the untested lever […] where the curve
+points next". **It has now been tested, it does not work, and the code has been
+removed.** This section exists so nobody proposes it again.
 
-### Why the file is the wrong unit on a single-file change
+### What was built and measured
 
-`maxFilesPerDiscoveryCall` multiplies calls by **splitting the set of files**. On a
-change that touches one file there is one partition and one call, so the only
-mechanism this project has measured as working **cannot engage at all**. On the
-security corpus that is most of the corpus.
+A file's body was cut at **declaration anchors from the AST** (never a byte count),
+grouped into contiguous runs overlapping by one declaration, capped at a fixed number
+of groups per file, with each group becoming its own discovery call carrying the full
+shared context. Operating point chosen by a $0 precheck: 16 declarations per group,
+3 groups per file — 35 of 70 corpus cases split, 1.77x discovery calls measured.
 
-### The mechanism this must reproduce, and the trap
+Control `359161b` vs treatment `45a75da`, **10 seeds per arm**, alternating order,
+5/5 position balance, `dirty=0` throughout, 70-case security corpus,
+`openai/gpt-5.3-codex`.
 
-Partitioning works because a call is **shown less**: per-file attention decays as
-`shown^-0.30`. It does **not** work because the call is told to focus. A sub-file
-split that still showed the whole file would change only the label, which is the
-un-anchored pass — measured at +0.83pp for +136% cost and removed. **A sub-file
-partition MUST therefore reduce what its call is shown, or it is not this mechanism.**
+| | control | treatment |
+|---|---|---|
+| recall | **64.0%** (sd 2.22pp) | **61.1%** (sd 4.68pp) |
+| adjusted precision | 95.0% | 96.9% |
+| raw findings | 886 | 1494 |
+| discovery calls | 710 | 1260 (1.77x) |
+| spend | $18.42 | $23.99 (1.30x) |
 
-### Design
+Paired over 72 expectations: **11 gained, 23 lost, two-sided exact p = 0.0576**.
 
-1. A file's split points are its **declaration anchors** — the `export`,
-   `public-symbol` and `declaration` facts the deterministic extractor already
-   produces for all seven languages. Anchors come from the AST, never from a byte
-   count, so spec 26's content-dependent guess is not reintroduced and rule 4 above
-   still holds: the unit is a declaration, not a size.
-2. Anchors are grouped into **contiguous runs of at most
-   `maxDeclarationsPerDiscoveryCall`**. Each group becomes a sub-task whose reviewed
-   file document carries that group's absolute line range — the `startLine`/`endLine`
-   chunk representation that already exists.
-3. **Consecutive groups overlap by one declaration.** A defect that spans two adjacent
-   declarations is otherwise invisible to every call, and adjacent declarations are
-   where same-file cross-function defects mostly live. The overlap is one declaration
-   and no more: it is a bounded concession, not a restoration of whole-file context.
-4. The number of groups per file is capped by `maxDeclarationGroupsPerFile`. Without a
-   cap the split is unbounded in cost — one corpus file carries 200 anchors, which at
-   4 per group is 50 calls for a single case.
-5. Every sub-task receives the same shared context the undivided task would have —
-   diff, change intent, support signals, referenced definitions — exactly as rule 3
-   requires. Only the **reviewed file body** is narrowed.
-6. A finding MUST remain restricted to the **line range** its own call was shown, not
-   merely to the file. This extends the existing admission rule; without it a call
-   could anchor a finding against lines it never read.
+### Why it fails, and it is not the cost
 
-### The predicted harm, stated before measuring
-
-Narrowing what a call sees must cost something, and the corpus says where: **16 of 17
-cross-function and 13 of 15 cross-file expectations sit in cases this knob would
-split**. A defect whose two halves land in non-adjacent groups is lost, and the
-one-declaration overlap does not save it. Spec 26 is the precedent that this is not
-hypothetical — splitting a task's context cost **−8.5pp**.
-
-So the honest prior is a **trade**, not a gain: `local` and `implementation` recall up,
-`cross-function` down, with the sign of the net unknown. Any measurement MUST report
-recall **per context depth**, because a null in the aggregate could be a real gain and
-a real loss cancelling, and that would be the most misleading possible summary.
-
-### Requirements
-
-- `maxDeclarationsPerDiscoveryCall` unset MUST leave behaviour byte-identical.
-- Splitting MUST NOT apply to a file with no declaration anchors: an extractor
-  failure or an unsupported language falls back to the whole file, never to a byte
-  slice.
-- Cost MUST be reported as measured call count, never estimated.
-
-### Measurability precheck (2026-08-07, $0)
-
-Run before any spend, per the spec 26 precedent.
-
-| `maxDeclarationsPerDiscoveryCall` / cap | cases split | calls per run | worst case |
+| context depth | control | treatment | delta |
 |---|---|---|---|
-| 4 / uncapped | 57/70 (81%) | **11.6x** | 67 calls |
-| 8 / uncapped | 50/70 (71%) | 5.3x | 29 calls |
-| 16 / uncapped | 35/70 (50%) | 2.8x | 14 calls |
-| **16 / 3** | **35/70 (50%)** | **1.8x** | **3 calls** |
-| 8 / 4 | 50/70 (71%) | 2.6x | 4 calls |
+| cross-function | 82.4% | 71.2% | **−11.2pp** |
+| caller | 90.0% | 80.0% | −10.0pp |
+| local | 86.7% | 83.3% | −3.3pp |
+| implementation | 51.1% | 49.4% | −1.7pp |
+| cross-file | 49.3% | 50.7% | +1.3pp |
+| callee | 62.5% | 68.8% | +6.2pp |
 
-Counted with the overlap identity — because consecutive groups share one anchor, `n`
-anchors at `size` per group give `ceil((n - 1) / (size - 1))` groups, not
-`ceil(n / size)`. A first pass at this table used the naive form and understated every
-uncapped multiplier.
+The predicted harm landed exactly where it was predicted: `cross-function` fell 11.2
+points, because a defect whose halves land in different groups is invisible to every
+call.
 
-Uncapped settings are refused on cost alone: the un-anchored pass was removed at
-+136%, and 9.0x cannot be justified by any effect this instrument can resolve. **16
-declarations per group, capped at 3 groups per file** is the operating point to
-measure — half the corpus affected at 1.8x calls, against the +63% that bought the
-file-partitioning win.
+**The predicted gain never appeared.** `local` and `implementation` were named in
+advance as the depths that would rise — the defect sits inside one group, and that
+group is most of what the call sees. Both **fell**. So the premise of the whole
+mechanism is falsified, not merely unproven: **narrowing what a call is shown does not
+buy recall even on defects wholly contained in the narrowed region.**
+
+Meanwhile raw findings rose **69%** and adjusted precision rose, while genuine false
+positives nearly halved. The extra looks find *more real defects* and *fewer of the
+advisory's*. That is a statement about ranking, not about attention.
+
+### The requirement this replaces
+
+The design requirements previously listed here are withdrawn with the code. What
+stands is the finding:
+
+- Discovery MUST NOT be partitioned below file granularity. Every sub-file split
+  measured here traded a large cross-function loss for no compensating gain.
+- Attention is now **closed** as a line of work. Four mechanically different ways of
+  giving the reviewer more, or narrower, attention have been measured: a second
+  differently-framed pass (+0.83pp, removed), one file per call (46.5% → 46.5%), four
+  prompt clauses (all null), and this (−2.9pp, removed). Any future proposal in this
+  family MUST first explain why it is not one of these four.

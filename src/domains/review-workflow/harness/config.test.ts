@@ -143,38 +143,6 @@ describe('workflow harness config', () => {
     }
   })
 
-  test('reserves for the sub-file split’s extra calls per partition', () => {
-    // Spec 27's sub-file split multiplies calls INSIDE each file partition, by up
-    // to the group cap. Under-reserving here is fatal — the workflow refuses a call
-    // mid-run — while over-reserving costs nothing, because this is a ceiling and
-    // not a spend.
-    const withoutSubFileSplit = maxChildAgentCallsForReview({
-      taskCount: 8,
-      maxConcurrentTasks: 2,
-      maxFilesPerDiscoveryCall: 2
-    })
-    const withSubFileSplit = maxChildAgentCallsForReview({
-      taskCount: 8,
-      maxConcurrentTasks: 2,
-      maxFilesPerDiscoveryCall: 2,
-      maxDeclarationGroupsPerFile: 3
-    })
-
-    // 8 planned paths at 2 per call is 4 file partitions, each of which becomes at
-    // most 3 declaration groups: 12 discovery calls, 12 refutation batches plus the
-    // split allowance, and a merge ceiling that rises with the per-call candidate
-    // caps. Every term scales with the partition count, so tripling the partitions
-    // triples the derived budget.
-    // The concurrency buffer (maxConcurrentTasks * 2) is per RUN, not per
-    // partition, so it is taken off both sides before comparing.
-    const concurrencyBuffer = 2 * 2
-
-    expect(withSubFileSplit - concurrencyBuffer).toBe(
-      (withoutSubFileSplit - concurrencyBuffer) * 3
-    )
-    expect(withSubFileSplit).toBeGreaterThan(withoutSubFileSplit)
-  })
-
   test('grows the budget for the dedicated security pass second discovery call', () => {
     // With the security pass enabled each task issues 2 discovery calls. Refutation
     // stays at one batched call per task (plus the split allowance) no matter how

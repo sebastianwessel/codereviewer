@@ -14,10 +14,7 @@ import {
   createTaskPacketBudgetExceededError,
   serializedBytes
 } from '../packet-budget.js'
-import {
-  declarationSplitOptionsFor,
-  partitionTaskForDiscovery
-} from './discovery-partition.js'
+import { partitionTaskForDiscovery } from './discovery-partition.js'
 import { buildSecurityReviewText } from './holistic-task-review.js'
 import { buildReviewText, holisticReviewInputFor } from './review-packet.js'
 
@@ -63,11 +60,7 @@ const largestDiscoveryPacketBytes = (
   const rawDiff = input.reviewedDiffText
   const partitions = partitionTaskForDiscovery(
     taskInput.task,
-    input.maxFilesPerDiscoveryCall,
-    // Partitioned exactly as discovery will partition, sub-file split included. A
-    // guard that measured the undivided file while discovery sends declaration
-    // groups would refuse a task whose calls each fit.
-    declarationSplitOptionsFor(input)
+    input.maxFilesPerDiscoveryCall
   )
   let largest = 0
 

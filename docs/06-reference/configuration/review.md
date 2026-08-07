@@ -70,32 +70,6 @@ small changes are unaffected and the cost falls on large ones.
 Raise it to `4` to trade some recall for roughly a third of the extra cost, or set it
 very high to disable partitioning entirely.
 
-### `aiReview.maxDeclarationsPerDiscoveryCall`
-
-Declarations of a single file that one discovery call may be shown. A file with
-more is spread across several calls, each shown that group of declarations and
-nothing else of the file. Consecutive groups overlap by one declaration, so a
-defect that spans two neighbouring functions is still visible to one call.
-
-**Unset by default, and unset means off.** With no value, no file is narrowed and a
-run behaves exactly as it did before this setting existed.
-
-It exists because `maxFilesPerDiscoveryCall` splits the SET of changed files: a
-change touching one file produces one call, so the lever above cannot move at all.
-This one can, and it is the only way to spread a single-file change over several
-calls.
-
-It is **not measured yet**, and the expectation is a trade rather than a gain.
-Narrowing what a call sees should help defects that live inside one function and
-hurt defects whose two halves sit in different parts of the file — the overlap
-covers neighbouring declarations only. Turn it on to experiment, and compare
-against a run with it unset before keeping it.
-
-`aiReview.maxDeclarationGroupsPerFile` (default `3`) caps how many calls one file
-can cost. When the cap binds the groups grow instead: the whole file is still
-reviewed, by fewer and larger calls. Without a cap, a file carrying 200
-declarations at 4 per call would cost 50 calls on its own.
-
 ### `review.crossFileRetrieval`
 
 **Enabled by default.** The reviewer may open other files in the repository —
@@ -189,8 +163,6 @@ the block. What it was and why it went:
 | --- | --- | --- | --- |
 | `aiReview.enabled` | boolean | `true` | Model-backed review runs when this is `true` **and** a `provider` is configured. Set `false` to force a deterministic-only run even with a provider present. It is a plain boolean, not a tri-state: it used to be optional, which made `undefined` and `true` behave identically and forced every reader to test `=== false`. |
 | `aiReview.maxFilesPerDiscoveryCall` | integer ≥ 1 | `2` | Changed files one discovery call reviews; a task covering more is partitioned across several calls. See above. |
-| `aiReview.maxDeclarationsPerDiscoveryCall` | integer ≥ 1 | *unset* | Declarations of ONE file that a single discovery call may be shown. Unset — the default — no file is ever narrowed and behaviour is unchanged. See below. |
-| `aiReview.maxDeclarationGroupsPerFile` | integer ≥ 1 | `3` | Ceiling on the number of calls one file is spread over. Inert unless `maxDeclarationsPerDiscoveryCall` is set. |
 | `aiReview.requireRefutation` | `true` (literal) | `true` | Every model candidate must survive the refutation pass before admission. `false` is not an accepted value. |
 | `aiReview.deterministicSignalMode` | `"support"` \| `"disabled"` | `"support"` | `support` injects deterministic facts into model packets (materially better recall). `disabled` keeps the facts for task clustering and admission contradiction checks but sends none to the model — cheaper, lower recall. |
 | `aiReview.actionableSeverityThreshold` | severity | `"medium"` | Severity floor for a MODEL-origin finding to be admitted as actionable. Below it, findings are recorded as rejected with reason `below-threshold` (still auditable in `report.json`). Trusted deterministic-rule findings are exempt. Lower to `low`/`info` to surface more. |

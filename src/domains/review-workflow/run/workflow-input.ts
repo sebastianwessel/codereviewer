@@ -117,18 +117,6 @@ export const createWorkflowInput = (
         maxFilesPerDiscoveryCall:
           input.config.aiReview.maxFilesPerDiscoveryCall
       }),
-  // Spec 27, Sub-File Partitioning. Both keys travel together or neither does: the
-  // group cap decides nothing on its own, and carrying it alone would put a value
-  // in the workflow input of a run that never splits a file — which is exactly the
-  // byte-identical-when-unset requirement.
-  ...(input.config.aiReview.maxDeclarationsPerDiscoveryCall === undefined
-    ? {}
-    : {
-        maxDeclarationsPerDiscoveryCall:
-          input.config.aiReview.maxDeclarationsPerDiscoveryCall,
-        maxDeclarationGroupsPerFile:
-          input.config.aiReview.maxDeclarationGroupsPerFile
-      }),
   evidence: [
     ...input.evidence.map((record) => ({ ...record })),
     ...contextEvidenceForTasks(input.tasks)

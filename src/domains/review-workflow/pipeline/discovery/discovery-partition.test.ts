@@ -1,9 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { type WorkflowReviewTask } from '../agent-contracts.js'
-import {
-  declarationSplitOptionsFor,
-  partitionTaskForDiscovery
-} from './discovery-partition.js'
+import { partitionTaskForDiscovery } from './discovery-partition.js'
 
 const document = (
   overrides: Partial<WorkflowReviewTask['reviewContext'][number]>
@@ -21,27 +18,6 @@ const fileDocuments = (count: number) =>
       ledgerEntryId: `ctx_00000000000000${index.toString().padStart(2, '0')}`
     })
   )
-
-// Four lines per declaration, so anchors land on 1, 5, 9, … and the document is
-// exactly `4 * count` lines long.
-const declarationDocument = (
-  path: string,
-  declarationCount: number
-): WorkflowReviewTask['reviewContext'][number] => {
-  const content = Array.from(
-    { length: declarationCount },
-    (_unused, index) =>
-      `export const fn${index} = (): number => {\n  return ${index}\n}\n`
-  ).join('\n')
-
-  return document({
-    path,
-    content,
-    startLine: 1,
-    endLine: content.split('\n').length,
-    ledgerEntryId: `ctx_${path.replace(/[^a-z0-9]/gu, '0').padEnd(24, '0').slice(0, 24)}`
-  })
-}
 
 const taskWith = (
   reviewContext: WorkflowReviewTask['reviewContext']
@@ -133,146 +109,6 @@ describe('discovery partitioning', () => {
     // a partition review with LESS context than the undivided task had.
     expect(kinds(0)).toContain('change-intent')
     expect(kinds(1)).toContain('change-intent')
-  })
-
-  test('sub-file splitting stays off unless it is configured', () => {
-    // The default must not change behaviour, and the group cap alone is not a
-    // configuration: without a declarations-per-call value nothing splits.
-    const task = taskWith([declarationDocument('src/sample.ts', 6)])
-
-    expect(partitionTaskForDiscovery(task, 2, undefined)).toEqual([task])
-    expect(
-      partitionTaskForDiscovery(task, 2, undefined)[0]
-    ).toBe(task)
-    expect(
-      declarationSplitOptionsFor({ maxDeclarationGroupsPerFile: 3 })
-    ).toBeUndefined()
-  })
-
-  test('the group cap defaults when only the declaration limit is configured', () => {
-    expect(
-      declarationSplitOptionsFor({ maxDeclarationsPerDiscoveryCall: 16 })
-    ).toEqual({ maxDeclarationsPerCall: 16, maxGroupsPerFile: 3 })
-  })
-
-  test('a single-file change is spread across calls by declaration', () => {
-    // This is the whole point of the sub-file split: `maxFilesPerDiscoveryCall`
-    // yields ONE call here, so the only mechanism measured as working cannot
-    // engage at all.
-    const task = taskWith([declarationDocument('src/sample.ts', 6)])
-    const partitions = partitionTaskForDiscovery(task, 2, {
-      maxDeclarationsPerCall: 3,
-      maxGroupsPerFile: 3
-    })
-
-    expect(partitions).toHaveLength(3)
-    expect(new Set(partitions.map((partition) => partition.id)).size).toBe(3)
-    for (const partition of partitions) {
-      expect(partition.paths).toEqual(['src/sample.ts'])
-    }
-    expect(
-      partitions.map((partition) => {
-        const document = partition.reviewContext.find(
-          (entry) => entry.kind === 'file'
-        )
-        return [document?.startLine, document?.endLine]
-      })
-    ).toEqual([
-      [1, 12],
-      [9, 20],
-      [17, 24]
-    ])
-  })
-
-  test('the per-file group cap bounds the number of calls', () => {
-    // Uncapped, 200 anchors at four per group is 50 calls for one case, which is
-    // refused on cost alone.
-    const partitions = partitionTaskForDiscovery(
-      taskWith([declarationDocument('src/big.ts', 200)]),
-      2,
-      { maxDeclarationsPerCall: 4, maxGroupsPerFile: 3 }
-    )
-
-    expect(partitions).toHaveLength(3)
-  })
-
-  test('every sub-task still receives the shared context', () => {
-    // The referenced-definition regression, guarded on the sub-file path too: an
-    // R4 digest is by construction an UNCHANGED dependency, so matching it against
-    // a sub-task's own paths never succeeds and every digest was silently dropped
-    // from every partition.
-    const partitions = partitionTaskForDiscovery(
-      taskWith([
-        declarationDocument('src/sample.ts', 6),
-        document({
-          kind: 'referenced-definition',
-          path: 'src/lib/unchanged-dependency.ts',
-          content: 'digest',
-          ledgerEntryId: 'ctx_0000000000000097'
-        }),
-        document({
-          kind: 'change-intent',
-          content: 'the brief for the whole change',
-          ledgerEntryId: 'ctx_0000000000000098'
-        }),
-        document({
-          kind: 'support-signal-output',
-          content: '{"facts":[]}',
-          ledgerEntryId: 'ctx_0000000000000099'
-        })
-      ]),
-      2,
-      { maxDeclarationsPerCall: 3, maxGroupsPerFile: 3 }
-    )
-
-    expect(partitions).toHaveLength(3)
-    for (const partition of partitions) {
-      const kinds = partition.reviewContext.map((entry) => entry.kind)
-
-      expect(kinds).toContain('referenced-definition')
-      expect(kinds).toContain('change-intent')
-      expect(kinds).toContain('support-signal-output')
-      // A sub-task must never be a review target for its dependency digest.
-      expect(partition.paths).toEqual(['src/sample.ts'])
-    }
-  })
-
-  test('a file with no declaration anchors is left undivided', () => {
-    const task = taskWith([
-      document({
-        path: 'notes/readme.txt',
-        content: 'alpha\nbeta\n',
-        startLine: 1,
-        endLine: 3,
-        ledgerEntryId: 'ctx_0000000000000042'
-      })
-    ])
-
-    expect(
-      partitionTaskForDiscovery(task, 2, {
-        maxDeclarationsPerCall: 1,
-        maxGroupsPerFile: 3
-      })
-    ).toEqual([task])
-  })
-
-  test('a file that yields fewer groups stops appearing rather than repeating', () => {
-    // Repeating a file's last group to fill the shape would be a second look at
-    // identical material, which this project measured and rejected.
-    const partitions = partitionTaskForDiscovery(
-      taskWith([
-        declarationDocument('src/wide.ts', 6),
-        declarationDocument('src/narrow.ts', 2)
-      ]),
-      2,
-      { maxDeclarationsPerCall: 3, maxGroupsPerFile: 3 }
-    )
-
-    expect(partitions.map((partition) => partition.paths)).toEqual([
-      ['src/narrow.ts', 'src/wide.ts'],
-      ['src/wide.ts'],
-      ['src/wide.ts']
-    ])
   })
 
   test('a partition’s paths are only the files it was shown', () => {

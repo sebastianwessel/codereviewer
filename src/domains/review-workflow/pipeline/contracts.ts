@@ -44,10 +44,6 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   securityPassEnabled: z.boolean().default(false),
   // Spec 27. Absent means unlimited, which is today's behaviour.
   maxFilesPerDiscoveryCall: z.int().min(1).optional(),
-  // Spec 27, Sub-File Partitioning. Absent means the file body is never narrowed,
-  // which is today's behaviour; the group cap is inert without it.
-  maxDeclarationsPerDiscoveryCall: z.int().min(1).optional(),
-  maxDeclarationGroupsPerFile: z.int().min(1).optional(),
   evidence: z.array(EvidenceRecordSchema),
   candidates: z.array(CandidateFindingSchema),
   // No run-wide `instructions` field: reviewer instructions are carried per task
