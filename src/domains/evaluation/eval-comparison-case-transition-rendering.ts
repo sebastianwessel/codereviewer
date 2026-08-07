@@ -1,4 +1,8 @@
-import { escapeMarkdownCell } from './eval-report-markdown-formatting.js'
+import {
+  appendMarkdownTable,
+  escapeMarkdownCell,
+  UNKNOWN_VALUE
+} from './eval-report-markdown-formatting.js'
 import { caseStatus } from './eval-report-case-labels.js'
 import {
   type EvalComparisonCase,
@@ -42,7 +46,7 @@ const transitionLabel = (
   headStatus: EvalComparisonCaseStatus | undefined
 ): string => {
   if (baseStatus === 'UNKNOWN' || headStatus === 'UNKNOWN') {
-    return 'unknown (not recorded)'
+    return UNKNOWN_VALUE
   }
 
   if (baseStatus === undefined) {
@@ -84,22 +88,16 @@ export const appendEvalComparisonCaseTransitions = (
     readonly headStatus: ReadonlyMap<string, EvalComparisonCaseStatus>
   }
 ): void => {
-  lines.push('## Case Transitions')
-  lines.push('')
-  lines.push('| Case | Base | Head | Change |')
-  lines.push('| --- | --- | --- | --- |')
-
-  for (const caseId of input.caseIds) {
-    const baseCaseStatus = input.baseStatus.get(caseId)
-    const headCaseStatus = input.headStatus.get(caseId)
-    lines.push(
+  appendMarkdownTable(lines, {
+    heading: '## Case Transitions',
+    header: '| Case | Base | Head | Change |',
+    alignment: '| --- | --- | --- | --- |',
+    rows: input.caseIds.map((caseId) =>
       formatCaseTransitionRow({
         caseId,
-        baseStatus: baseCaseStatus,
-        headStatus: headCaseStatus
+        baseStatus: input.baseStatus.get(caseId),
+        headStatus: input.headStatus.get(caseId)
       })
     )
-  }
-
-  lines.push('')
+  })
 }

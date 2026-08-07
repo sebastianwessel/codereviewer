@@ -1,6 +1,86 @@
 import { describe, expect, test } from 'vitest'
-import { parseEvalComparisonReport } from './eval-comparison-view.js'
+import {
+  ComparisonMetricsSchema,
+  parseEvalComparisonReport
+} from './eval-comparison-view.js'
 import { EvalReportSchema } from './eval-report-contracts.js'
+import { EvalMetricsSchema } from './metrics.js'
+
+// Metrics the producer records that the comparison read model deliberately does
+// not model. Absence from this list and from `ComparisonMetricsSchema` is the
+// failure the test below exists to catch: a new metric that silently renders as
+// "unknown" in every comparison, forever, with nothing to say it went missing.
+//
+// Adding a metric here is a decision, not a formality. State which group it
+// joins, and if none of them fit, model it in the read model instead.
+const METRICS_DELIBERATELY_NOT_COMPARED: readonly string[] = [
+  // Denominators. Each one is published in a single run's summary beside the
+  // rate it divides; a delta between two denominators is not a quality signal,
+  // and the rate above it already carries the comparison.
+  'lineCheckCount',
+  'severityCheckCount',
+  'linePlacementCheckCount',
+  'judgeAgreementPairCount',
+  'plausibilityJudgeAgreementPairCount',
+  'fixJudgedFindingCount',
+  'fixGroundTruthFalsePositiveCount',
+  'fixRealFindingCount',
+  'fixAttemptedCount',
+  'securityObviousCount',
+  'securityHardCount',
+  'artifactOnlyFindingCount',
+  'artifactOnlyMatchedFindingCount',
+  'artifactOnlyFalsePositiveCount',
+  'inconclusiveMatchCount',
+  'duplicateFindingCount',
+  'noFindingZoneFalsePositiveCount',
+  // Per-key record metrics. Comparison already diffs the populations it can
+  // adjudicate (diff scope, metric groups); these break down one run's result
+  // by a key set that is itself allowed to change between runs, so a
+  // key-by-key delta would compare populations that are not the same.
+  'recallByTier',
+  'rejectionReasonCounts',
+  'rejectionSeverityCounts',
+  'rejectionReasonBySeverityCounts',
+  'securityRecallByMechanism',
+  'securityMechanismCounts',
+  'securityRecallByContextDepth',
+  'securityContextDepthCounts',
+  'securityAdjustedPrecisionByMechanism',
+  'securityFindingMechanismCounts',
+  'securityMechanismAttributionCounts',
+  // Judge spend and wall-clock. These measure what scoring and the harness
+  // cost, not what the review under comparison did; `costUsd` and `durationMs`
+  // are the review-side figures the comparison does diff.
+  'scoringInputTokens',
+  'scoringCachedInputTokens',
+  'scoringOutputTokens',
+  'scoringCostUnavailable',
+  'scoringCostUsd',
+  'elapsedMs',
+  // Judge agreement is compared, but read from `scoring.judgeAgreement` rather
+  // than from metrics: the gate/selection section adjudicates judge reliability
+  // before any metric delta is allowed to be read as review quality.
+  'judgeAgreement',
+  // Quality rates not yet worth a comparison row. Every one of these is
+  // published per run; promoting one is a matter of modelling it in
+  // `ComparisonMetricsSchema` and giving it a row.
+  'parseValidity',
+  'severityWeightedPrecision',
+  'severityWeightedRecall',
+  'lineAccuracy',
+  'linePlacementRate',
+  'severityAccuracy',
+  'actionableRate',
+  'commentsPerKloc',
+  'commentsPerDiffHunk',
+  'incompleteCoverageRate',
+  'contextMutationRate',
+  'artifactOnlyRecall',
+  'artifactOnlyPrecision',
+  'productRecall',
+  'nitRecall'
+]
 
 // The archived shape that broke `eval compare`: discovery totals written before
 // `cappedByLimitCount` existed, in a report the producer contract now requires
@@ -93,5 +173,31 @@ describe('eval comparison view', () => {
 
     expect(current.regressionGate?.outcome).toBe('not-evaluable')
     expect(current.regressionGate?.passed).toBeUndefined()
+  })
+
+  // The read model is hand-maintained on purpose (see the module header), which
+  // means a metric can be added to the producer and forgotten here. That failure
+  // is invisible -- the metric renders as "unknown" in every comparison and
+  // nothing complains -- so it is converted into a failing test.
+  test('every producer metric is either compared or explicitly excluded', () => {
+    const comparedKeys = new Set(Object.keys(ComparisonMetricsSchema.shape))
+    const excludedKeys = new Set(METRICS_DELIBERATELY_NOT_COMPARED)
+    const unaccounted = Object.keys(EvalMetricsSchema.shape).filter(
+      (metric) => !comparedKeys.has(metric) && !excludedKeys.has(metric)
+    )
+
+    expect(unaccounted).toEqual([])
+  })
+
+  // The mirror failure: an entry left behind after the metric it names was
+  // renamed or removed, which would quietly re-open the gap it was closing.
+  test('nothing is compared or excluded that the producer no longer records', () => {
+    const producerKeys = new Set(Object.keys(EvalMetricsSchema.shape))
+    const stale = [
+      ...Object.keys(ComparisonMetricsSchema.shape),
+      ...METRICS_DELIBERATELY_NOT_COMPARED
+    ].filter((metric) => !producerKeys.has(metric))
+
+    expect(stale).toEqual([])
   })
 })

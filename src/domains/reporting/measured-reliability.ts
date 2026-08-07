@@ -15,9 +15,16 @@
 // re-baseline that updates one renderer and misses the other cannot happen: there
 // is only one renderer-visible copy to update.
 //
-// EVERY FIELD BELOW IS A TRANSCRIPTION, never a calculation. Source:
-// `reports/eval-results-ledger.md`, entry "2026-08-05 — stage 1 re-baselined after
-// the instruction and disclosure changes", mirrored in
+// TWO MEASUREMENTS LIVE HERE, and they answer different questions. `measuredReliability`
+// is stage 1's review recall and precision; `measuredIntentReliability` further down
+// is the intent-fulfilment stage's, measured on its own corpus against its own answer
+// key. They share this module because they share one failure mode — a published rate
+// going stale where prose cannot import it — and nothing else. Neither may be quoted
+// for the other's stage.
+//
+// EVERY FIELD IN EITHER ENTRY IS A TRANSCRIPTION, never a calculation. Source for the
+// entry immediately below: `reports/eval-results-ledger.md`, entry "2026-08-05 —
+// stage 1 re-baselined after the instruction and disclosure changes", mirrored in
 // `docs/05-quality/current-results.md`. Changing a field means new measurements
 // were taken, and the ledger entry they came from must be recorded in the same
 // commit.
@@ -43,6 +50,48 @@ export const measuredReliability = {
   outOfDiffRecallTotal: 27,
   /** Mean adjusted precision, 95.2 / 100 / 93.5. */
   adjustedPrecisionPercent: 96.2
+} as const
+
+// The intent-fulfilment stage's own measured error rates.
+//
+// A SEPARATE ENTRY, AND IT MUST STAY SEPARATE. These bound a different question
+// from the rates above: whether an obligation this stage calls evidenced is really
+// done, and whether a genuinely outstanding one reaches its list at all. They were
+// measured on a different corpus against a different answer key, so a review recall
+// or precision figure is not an intent figure and neither set may be derived from
+// the other.
+//
+// PROVENANCE IS WEAKER HERE THAN ABOVE, which is stated rather than smoothed over:
+// this round has no entry in `reports/eval-results-ledger.md`. Its scored output is
+// recorded in commit `d046f44` ("feat(intent): print the measured error rates where
+// the reader is") — the pre-registered round over the realistic corpus, at pinned
+// engine `d29aa99`, that cleared all six of the stage's criteria and made it
+// shippable as advisory. Every field below is transcribed from that commit.
+// Changing one means a new round was run, and where that round's output is
+// recorded must be named in the same commit.
+//
+// COUNTS RATHER THAN PERCENTAGES, because the prose renders both figures as ratios:
+// a count divides into a ratio exactly, where a rounded percentage would leave the
+// fraction rounding a rounding.
+export const measuredIntentReliability = {
+  /** Real changes in the round's corpus. */
+  corpusCaseCount: 28,
+  /** Runs of each case. */
+  runCount: 2,
+  /**
+   * `false-satisfied`: obligations reported as evidenced that the answer key says
+   * are still outstanding at head, over every obligation where that error was
+   * available to make.
+   */
+  falseSatisfiedClaims: 18,
+  falseSatisfiedOpportunities: 520,
+  /**
+   * Outstanding detection: obligations the answer key calls outstanding that the
+   * round put on its list, over every obligation it calls outstanding. The
+   * complement is what never reaches a reader at all.
+   */
+  outstandingDetected: 161,
+  outstandingTotal: 179
 } as const
 
 // The provider and model every published accuracy rate in this repository was
@@ -79,6 +128,30 @@ export const inDiffMissesInTen = 10 - inDiffRecallInTen
 export const adjustedPrecisionInTwenty = roundedFraction(
   measuredReliability.adjustedPrecisionPercent,
   20
+)
+
+// The same rule for the intent rates, which prose states as "about 1 in N": N is
+// computed from the transcribed counts, so editing the counts and leaving a
+// superseded ratio in the sentence beside them is not a state this module can reach.
+const oneIn = (part: number, whole: number): number => Math.round(whole / part)
+
+/**
+ * How often an obligation reported as evidenced is in fact still outstanding: one
+ * in this many. The rate that says a row here is not a certificate.
+ */
+export const falseSatisfiedOneIn = oneIn(
+  measuredIntentReliability.falseSatisfiedClaims,
+  measuredIntentReliability.falseSatisfiedOpportunities
+)
+
+/**
+ * How often a genuinely outstanding obligation never reaches the list at all: one
+ * in this many. The rate that says the list's silence is not a clearance.
+ */
+export const missedOutstandingOneIn = oneIn(
+  measuredIntentReliability.outstandingTotal -
+    measuredIntentReliability.outstandingDetected,
+  measuredIntentReliability.outstandingTotal
 )
 
 const numberWords = [

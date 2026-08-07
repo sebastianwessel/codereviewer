@@ -1,14 +1,8 @@
 import {
   appendMarkdownTable,
-  escapeMarkdownCell
+  escapeMarkdownCell,
+  formatNumberDelta
 } from './eval-report-markdown-formatting.js'
-
-const formatNumberDelta = (base: number, head: number): string => {
-  const delta = head - base
-  const sign = delta > 0 ? '+' : ''
-
-  return `${sign}${delta}`
-}
 
 const formatComparisonCountDeltaRow = (
   input: {

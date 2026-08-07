@@ -5,6 +5,7 @@ import {
   EvidenceRecordSchema,
   FindingProvenanceSchema,
   FixEditSchema,
+  RefutationVerdictSchema,
   RejectedFindingSchema,
   RepositoryRelativePathSchema,
   ReviewReportSchema,
@@ -728,70 +729,22 @@ export const TaskReviewResultSchema = z.strictObject({
   discovery: TaskDiscoveryTelemetrySchema.optional()
 })
 
+// The verdicts a MODEL may return, narrowed from the canonical enum rather than
+// restated, so a verdict added upstream reaches this contract instead of silently
+// staying behind. `provider-error` is excluded by construction: it is the runtime's
+// own record of a refutation call that produced no answer at all, so a response
+// claiming it would be a model reporting its own absence.
+const ModelRefutationVerdictSchema = RefutationVerdictSchema.exclude([
+  'provider-error'
+])
+const modelRefutationVerdictValues = ModelRefutationVerdictSchema.options
+
 export const FindingRefutationResultSchema = z.strictObject({
-  verdict: z.enum(['proved', 'refuted', 'needs-more-evidence']),
+  verdict: ModelRefutationVerdictSchema,
   rationaleSummary: z.string().min(1).max(1200),
   fixSummary: z.string().min(1).max(1200).optional(),
   fixEdits: z.array(FixEditSchema).max(5).optional()
 })
-
-// The adjudication fields a refuter returns for one candidate, defined once and
-// reused by the single-candidate and batched result schemas so the two can never
-// drift apart.
-const refutationVerdictFields = {
-  verdict: z.preprocess(
-    (value) =>
-      normalizeModelEnumValue(
-        value,
-        ['proved', 'refuted', 'needs-more-evidence'] as const,
-        {
-          valid: 'proved',
-          accepted: 'proved',
-          actionable: 'proved',
-          invalid: 'refuted',
-          rejected: 'refuted',
-          'false-positive': 'refuted',
-          falsepositive: 'refuted',
-          unproven: 'needs-more-evidence',
-          uncertain: 'needs-more-evidence',
-          unknown: 'needs-more-evidence',
-          inconclusive: 'needs-more-evidence'
-        }
-      ),
-    z.enum(['proved', 'refuted', 'needs-more-evidence'])
-  ),
-  rationaleSummary: z.preprocess(
-    (value) => truncateModelString(value, 1200),
-    FindingRefutationResultSchema.shape.rationaleSummary
-  ),
-  fixSummary: z
-    .preprocess(
-      (value) => truncateModelString(value, 1200),
-      FindingRefutationResultSchema.shape.fixSummary
-    )
-    .catch(undefined),
-  fixEdits: FindingRefutationResultSchema.shape.fixEdits.catch(undefined)
-} as const
-
-// The adjudication fields as the model may return them, before they are hardened
-// into a `FindingRefutationResult`. Derived from the shared field map so the input
-// type cannot drift from what the batch schema actually accepts.
-type ModelRefutationVerdictFields = z.infer<
-  z.ZodObject<typeof refutationVerdictFields>
->
-
-// Picks only the adjudication fields. The batched verdict a caller holds also
-// carries the `candidateId` that binds it to its candidate, and the result schema is
-// strict, so copying the input wholesale would throw on that extra key.
-export const normalizeFindingRefutationResult = (
-  result: ModelRefutationVerdictFields
-): z.infer<typeof FindingRefutationResultSchema> =>
-  FindingRefutationResultSchema.parse({
-    verdict: result.verdict,
-    rationaleSummary: result.rationaleSummary,
-    ...(result.fixSummary === undefined ? {} : { fixSummary: result.fixSummary }),
-    ...(result.fixEdits === undefined ? {} : { fixEdits: result.fixEdits })
-  })
 
 export type WorkflowReviewTask = z.infer<typeof WorkflowReviewTaskSchema>
 export type WorkflowTaskEvent = z.infer<typeof WorkflowTaskEventSchema>
@@ -878,9 +831,14 @@ export const ModelFindingRefutationBatchResultSchema = z.strictObject({
   verdicts: z.array(z.unknown()).default([])
 })
 
-// One adjudicated candidate inside a batch response: the per-candidate refutation
-// shape plus the id that binds it back to its candidate. Reuses the existing
-// verdict/rationale/fix normalization so batched and single verdicts cannot drift.
+// One adjudicated candidate inside a batch response: the adjudication fields plus
+// the id that binds them back to a candidate. This is the ONLY refutation response
+// shape — batched refutation (spec 05) replaced per-candidate refutation, so the
+// adjudication fields are declared here rather than extracted for sharing.
+//
+// The alternative key spellings are tolerance for a non-deterministic producer, not
+// artefact back-compat: the response is free-form model JSON and `fix_summary` is a
+// spelling a model plausibly emits for `fixSummary`.
 export const ModelRefutationBatchVerdictSchema = z.preprocess((value) => {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return value
@@ -897,13 +855,61 @@ export const ModelRefutationBatchVerdictSchema = z.preprocess((value) => {
       record.summary ??
       record.rationale ??
       record.reason,
-    fixSummary: record.fixSummary ?? record.fix_summary ?? record.suggestedFix,
+    fixSummary: record.fixSummary ?? record.fix_summary,
     fixEdits: record.fixEdits ?? record.fix_edits
   }
 }, z.object({
   candidateId: z.string().min(1),
-  ...refutationVerdictFields
+  verdict: z.preprocess(
+    (value) =>
+      normalizeModelEnumValue(value, modelRefutationVerdictValues, {
+        valid: 'proved',
+        accepted: 'proved',
+        actionable: 'proved',
+        invalid: 'refuted',
+        rejected: 'refuted',
+        'false-positive': 'refuted',
+        falsepositive: 'refuted',
+        unproven: 'needs-more-evidence',
+        uncertain: 'needs-more-evidence',
+        unknown: 'needs-more-evidence',
+        inconclusive: 'needs-more-evidence'
+      }),
+    ModelRefutationVerdictSchema
+  ),
+  rationaleSummary: z.preprocess(
+    (value) => truncateModelString(value, 1200),
+    FindingRefutationResultSchema.shape.rationaleSummary
+  ),
+  fixSummary: z
+    .preprocess(
+      (value) => truncateModelString(value, 1200),
+      FindingRefutationResultSchema.shape.fixSummary
+    )
+    .catch(undefined),
+  fixEdits: FindingRefutationResultSchema.shape.fixEdits.catch(undefined)
 }))
+
+// The adjudication fields as the model may return them, before they are hardened
+// into a `FindingRefutationResult`. Derived from the batch verdict schema minus the
+// binding id, so the input type cannot drift from what that schema actually accepts.
+type ModelRefutationVerdictFields = Omit<
+  z.infer<typeof ModelRefutationBatchVerdictSchema>,
+  'candidateId'
+>
+
+// Picks only the adjudication fields. The batched verdict a caller holds also
+// carries the `candidateId` that binds it to its candidate, and the result schema is
+// strict, so copying the input wholesale would throw on that extra key.
+export const normalizeFindingRefutationResult = (
+  result: ModelRefutationVerdictFields
+): FindingRefutationResult =>
+  FindingRefutationResultSchema.parse({
+    verdict: result.verdict,
+    rationaleSummary: result.rationaleSummary,
+    ...(result.fixSummary === undefined ? {} : { fixSummary: result.fixSummary }),
+    ...(result.fixEdits === undefined ? {} : { fixEdits: result.fixEdits })
+  })
 
 export type FindingRefutationBatchInput = z.infer<
   typeof FindingRefutationBatchInputSchema

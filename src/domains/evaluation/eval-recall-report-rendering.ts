@@ -1,6 +1,9 @@
 import { EvalReportSchema, type EvalReport } from './eval-report-contracts.js'
 import { expectedLocationLabel } from './eval-report-expected-finding-labels.js'
-import { escapeMarkdownCell } from './eval-report-markdown-formatting.js'
+import {
+  appendMarkdownTable,
+  escapeMarkdownCell
+} from './eval-report-markdown-formatting.js'
 
 type LabeledEvalReport = {
   readonly label: string
@@ -143,16 +146,15 @@ const appendEvalRecallReportRuns = (
   lines: string[],
   reports: readonly LabeledEvalReport[]
 ): void => {
-  lines.push('## Runs')
-  lines.push('')
-  lines.push('| # | Label | Generated | Fixtures |')
-  lines.push('| ---: | --- | --- | ---: |')
-  reports.forEach(({ label, report }, index) => {
-    lines.push(
-      `| ${index + 1} | ${escapeMarkdownCell(label)} | ${report.generatedAt} | ${report.fixtureCount} |`
+  appendMarkdownTable(lines, {
+    heading: '## Runs',
+    header: '| # | Label | Generated | Fixtures |',
+    alignment: '| ---: | --- | --- | ---: |',
+    rows: reports.map(
+      ({ label, report }, index) =>
+        `| ${index + 1} | ${escapeMarkdownCell(label)} | ${report.generatedAt} | ${report.fixtureCount} |`
     )
   })
-  lines.push('')
 }
 
 const appendEvalRecallReportSummary = (
@@ -162,14 +164,14 @@ const appendEvalRecallReportSummary = (
     readonly summary: ReturnType<typeof recallSummary>
   }
 ): void => {
-  lines.push('## Summary')
-  lines.push('')
-  lines.push('| Expected findings | Always detected | Never detected | Flaky |')
-  lines.push('| ---: | ---: | ---: | ---: |')
-  lines.push(
-    `| ${input.entries.length} | ${input.summary.alwaysDetected} | ${input.summary.neverDetected} | ${input.summary.flaky} |`
-  )
-  lines.push('')
+  appendMarkdownTable(lines, {
+    heading: '## Summary',
+    header: '| Expected findings | Always detected | Never detected | Flaky |',
+    alignment: '| ---: | ---: | ---: | ---: |',
+    rows: [
+      `| ${input.entries.length} | ${input.summary.alwaysDetected} | ${input.summary.neverDetected} | ${input.summary.flaky} |`
+    ]
+  })
 }
 
 const formatEvalRecallExpectedFindingRow = (entry: RecallEntry): string =>
@@ -179,14 +181,12 @@ const appendEvalRecallReportExpectedFindings = (
   lines: string[],
   entries: readonly RecallEntry[]
 ): void => {
-  lines.push('## Expected Findings')
-  lines.push('')
-  lines.push('| Case | # | Sev | Location | Mode | Summary | Rate | Runs |')
-  lines.push('| --- | ---: | --- | --- | --- | --- | ---: | --- |')
-  for (const entry of entries) {
-    lines.push(formatEvalRecallExpectedFindingRow(entry))
-  }
-  lines.push('')
+  appendMarkdownTable(lines, {
+    heading: '## Expected Findings',
+    header: '| Case | # | Sev | Location | Mode | Summary | Rate | Runs |',
+    alignment: '| --- | ---: | --- | --- | --- | --- | ---: | --- |',
+    rows: entries.map(formatEvalRecallExpectedFindingRow)
+  })
 }
 
 export const renderEvalRecallReport = (

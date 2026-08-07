@@ -84,33 +84,6 @@ import {
 } from './eval-report-provenance.js'
 import { EVAL_REPORT_ARTIFACT_NAME } from './eval-summary-report-rendering.js'
 
-export {
-  EvalRegressionThresholdsSchema,
-  EvalReportSchema,
-  type EvalCaseOutput,
-  type EvalContextLedgerEntry,
-  type EvalRegressionGateOutcome,
-  type EvalRegressionThresholds,
-  type EvalReport,
-  type EvalReportProvenance,
-  type EvalReportScoring,
-  type EvalReportSelection
-} from './eval-report-contracts.js'
-export {
-  casesWithDivergedAnswerKeys,
-  computeAnswerKeyDigest,
-  computeAnswerKeyDigestByCase
-} from './eval-report-provenance.js'
-export { stableJsonDigest } from './stable-json-digest.js'
-export {
-  EVAL_REPORT_ARTIFACT_NAME,
-  EVAL_RECALL_REPORT_ARTIFACT_NAME,
-  EVAL_SUMMARY_ARTIFACT_NAME,
-  renderEvalSummary
-} from './eval-summary-report-rendering.js'
-export { renderEvalComparison } from './eval-comparison-report-rendering.js'
-export { renderEvalRecallReport } from './eval-recall-report-rendering.js'
-
 type EvalCaseComputation = {
   readonly reportCase: z.infer<typeof EvalCaseReportSchema>
   readonly metricCase: EvalMetricCaseResult

@@ -1779,7 +1779,7 @@ Fixtures: 2
 | Priority | Severity accuracy | 100.0% (1 checked) |
 | Health | Provider error rate | 0.0% |
 | Health | Review cost | $0.2000 |
-| Health | Scoring cost (judge, separate from review cost) | $0.0000 |
+| Health | Scoring cost (judge, separate from review cost) | $0.00 |
 
 ## Selection
 
@@ -1847,7 +1847,7 @@ Fixtures: 2
 | Review cost | $0.2000 |
 | Scoring input tokens (judge + plausibility judge) | 0 |
 | Scoring output tokens (judge + plausibility judge) | 0 |
-| Scoring cost (judge, separate from review cost) | $0.0000 |
+| Scoring cost (judge, separate from review cost) | $0.00 |
 
 ## Recall by Tier
 

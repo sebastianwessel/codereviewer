@@ -128,21 +128,51 @@ const obligationBase = {
   statement: z.string().min(1).max(OBLIGATION_STATEMENT_MAX)
 }
 
-export const ObligationSchema = z.discriminatedUnion('status', [
-  z.strictObject({
+// Keyed by status and constrained to `Record<ObligationStatus, …>`, so a fifth
+// member added to the enum is a compile error here rather than a status the
+// contract silently refuses to parse. The keys cannot be dropped in favour of a
+// mapped construction: only `evidenced` carries evidence, and that asymmetry is the
+// whole reason this is a union and not one object with an optional field.
+const obligationVariants = {
+  evidenced: z.strictObject({
     ...obligationBase,
     status: z.literal('evidenced'),
     // At least one, always. See the header: this is the whole reason the entry is
     // a union member rather than an optional field.
     evidence: z.array(ChangeCitationSchema).min(1)
   }),
-  z.strictObject({ ...obligationBase, status: z.literal('not-evidenced') }),
+  'not-evidenced': z.strictObject({
+    ...obligationBase,
+    status: z.literal('not-evidenced')
+  }),
   // No `evidence` field, and its absence is the point rather than an omission:
   // there is no line to cite when what satisfies the obligation is that nothing
   // was done. A slot here would invite one to be invented.
-  z.strictObject({ ...obligationBase, status: z.literal('not-contradicted') }),
-  z.strictObject({ ...obligationBase, status: z.literal('undetermined') })
-])
+  'not-contradicted': z.strictObject({
+    ...obligationBase,
+    status: z.literal('not-contradicted')
+  }),
+  undetermined: z.strictObject({
+    ...obligationBase,
+    status: z.literal('undetermined')
+  })
+} satisfies Record<ObligationStatus, z.ZodObject>
+
+type ObligationVariant = (typeof obligationVariants)[ObligationStatus]
+
+// The union's members are looked up FROM THE ENUM rather than listed again, so the
+// enum is the only place a status is declared: adding one there forces a variant
+// above (the `Record`) and puts it in the union here with no third edit. The
+// assertion narrows an array to the non-empty tuple `discriminatedUnion` requires
+// and says nothing about the element type — the enum cannot be empty.
+const obligationVariantsByStatus = ObligationStatusSchema.options.map(
+  (status) => obligationVariants[status]
+) as [ObligationVariant, ...ObligationVariant[]]
+
+export const ObligationSchema = z.discriminatedUnion(
+  'status',
+  obligationVariantsByStatus
+)
 
 // Changed files no obligation's evidence cites.
 //
@@ -158,9 +188,9 @@ export const ExtraScopeEntrySchema = z.strictObject({
 const IntentFulfilmentSummarySchema = z.strictObject({
   intentFragmentCount: z.int().min(0),
   obligationCount: z.int().min(0),
-  // The three status tallies, one per member of `ObligationStatusSchema`.
+  // The four status tallies, one per member of `ObligationStatusSchema`.
   //
-  // The middle one carries `Status` in its name because `notEvidencedCount` below
+  // The second one carries `Status` in its name because `notEvidencedCount` below
   // is a DIFFERENT number — the headline, which adds `undetermined` in — and two
   // fields differing only by what they silently include is exactly the kind of
   // collision this vocabulary was renamed to remove. This one is the tally of the

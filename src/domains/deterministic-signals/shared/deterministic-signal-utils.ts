@@ -135,11 +135,6 @@ export const detectSupportSignalFiles = (
   }
 }
 
-export const optionalModuleSpecifier = (
-  moduleSpecifier: string | undefined
-): { readonly moduleSpecifier?: string } =>
-  moduleSpecifier === undefined ? {} : { moduleSpecifier }
-
 export const createSupportSignalFact = (input: {
   readonly language: SupportedSignalLanguage
   readonly kind: SupportSignalFactKind

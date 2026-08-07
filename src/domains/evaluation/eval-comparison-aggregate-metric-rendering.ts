@@ -2,10 +2,13 @@ import {
   appendMarkdownTable,
   formatCostMetric,
   formatDurationMetric,
+  formatNumberDelta,
   formatPercent,
+  formatPercentagePointDelta,
   formatPrecisionBracket,
   formatRateOverCount,
-  formatTokenMetric
+  formatTokenMetric,
+  UNKNOWN_VALUE
 } from './eval-report-markdown-formatting.js'
 import {
   type EvalComparabilityKey,
@@ -20,10 +23,6 @@ import {
   type EvalComparisonReport
 } from './eval-comparison-view.js'
 
-// A value the report never recorded. Rendered, never defaulted: a counter added
-// by a later engine build is absent from an older report, and printing 0 there
-// would claim a measurement nobody made.
-const UNKNOWN_VALUE = 'unknown (not recorded)'
 // A value both reports recorded, whose difference means nothing because the
 // scoring rules changed between them. The values still print -- they are facts
 // about each run -- but the delta does not.
@@ -33,20 +32,6 @@ export type EvalComparisonInput = {
   readonly base: EvalComparisonReport
   readonly head: EvalComparisonReport
   readonly comparability: MetricComparability
-}
-
-const formatPercentagePointDelta = (base: number, head: number): string => {
-  const delta = (head - base) * 100
-  const sign = delta > 0 ? '+' : ''
-
-  return `${sign}${delta.toFixed(1)}pp`
-}
-
-const formatNumberDelta = (base: number, head: number): string => {
-  const delta = head - base
-  const sign = delta > 0 ? '+' : ''
-
-  return `${sign}${delta}`
 }
 
 const formatRow = (

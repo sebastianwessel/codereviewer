@@ -2,9 +2,12 @@ import {
   appendMarkdownTable,
   escapeMarkdownCell,
   formatCostMetric,
+  formatNumberDelta,
   formatPercent,
+  formatPercentagePointDelta,
   formatPrecisionBracket,
-  formatTokenMetric
+  formatTokenMetric,
+  UNKNOWN_VALUE
 } from './eval-report-markdown-formatting.js'
 import {
   type EvalComparabilityKey,
@@ -25,22 +28,7 @@ type EvalReportPair = {
   readonly head: EvalComparisonReport
 }
 
-const UNKNOWN_VALUE = 'unknown (not recorded)'
 const NOT_COMPARABLE = 'not comparable'
-
-const formatPercentagePointDelta = (base: number, head: number): string => {
-  const delta = (head - base) * 100
-  const sign = delta > 0 ? '+' : ''
-
-  return `${sign}${delta.toFixed(1)}pp`
-}
-
-const formatNumberDelta = (base: number, head: number): string => {
-  const delta = head - base
-  const sign = delta > 0 ? '+' : ''
-
-  return `${sign}${delta}`
-}
 
 const metricGroupKey = (group: EvalComparisonMetricGroup): string =>
   `${group.groupBy}\0${group.key}`

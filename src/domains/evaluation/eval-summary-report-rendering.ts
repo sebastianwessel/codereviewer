@@ -11,6 +11,7 @@ import {
   appendMarkdownTable,
   escapeMarkdownCell,
   formatCostMetric,
+  formatCurrency,
   formatDuration,
   formatDurationMetric,
   formatEvalGateOutcome,
@@ -73,7 +74,7 @@ const formatCachedInputTokens = (metrics: EvalMetrics): string => {
 // "Cost" row: the two figures answer different questions and combining them
 // would make neither one trustworthy.
 const formatScoringCost = (metrics: EvalMetrics): string => {
-  const value = `$${metrics.scoringCostUsd.toFixed(4)}`
+  const value = formatCurrency(metrics.scoringCostUsd)
 
   return metrics.scoringCostUnavailable
     ? `${value} known; additional judge/plausibility spend unavailable`
@@ -533,21 +534,19 @@ const appendEvalSummaryCases = (
     readonly report: EvalReport
   }
 ): void => {
-  lines.push('## Cases')
-  lines.push('')
-  lines.push(
-    '| Case | Profile | Status | Provider | Expected | Matched | Inline | Artifact-only | False positives | Duplicates | Notes |'
-  )
-  lines.push(
-    '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |'
-  )
-
-  for (const caseResult of input.report.caseResults) {
-    const evalCase = findCase(input.cases, caseResult.caseId)
-    lines.push(formatEvalSummaryCaseRow(caseResult, evalCase))
-  }
-
-  lines.push('')
+  appendMarkdownTable(lines, {
+    heading: '## Cases',
+    header:
+      '| Case | Profile | Status | Provider | Expected | Matched | Inline | Artifact-only | False positives | Duplicates | Notes |',
+    alignment:
+      '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
+    rows: input.report.caseResults.map((caseResult) =>
+      formatEvalSummaryCaseRow(
+        caseResult,
+        findCase(input.cases, caseResult.caseId)
+      )
+    )
+  })
 }
 
 const formatEvalSummaryAgenticStageRow = (
@@ -569,22 +568,14 @@ const appendEvalSummaryAgenticStageCoverage = (
   lines: string[],
   report: EvalReport
 ): void => {
-  const stageCoverageCases = report.caseResults.filter(
-    (caseResult) => (caseResult.agenticStages ?? []).length > 0
-  )
-
-  if (stageCoverageCases.length === 0) {
-    return
-  }
-
-  lines.push('## Agentic Stage Coverage')
-  lines.push('')
-  lines.push('| Case | Refutation | Fix | Provider recovery |')
-  lines.push('| --- | --- | --- | --- |')
-  for (const caseResult of stageCoverageCases) {
-    lines.push(formatEvalSummaryAgenticStageRow(caseResult))
-  }
-  lines.push('')
+  appendMarkdownTable(lines, {
+    heading: '## Agentic Stage Coverage',
+    header: '| Case | Refutation | Fix | Provider recovery |',
+    alignment: '| --- | --- | --- | --- |',
+    rows: report.caseResults
+      .filter((caseResult) => (caseResult.agenticStages ?? []).length > 0)
+      .map(formatEvalSummaryAgenticStageRow)
+  })
 }
 
 const formatEvalSummaryContextLedgerRow = (
@@ -596,22 +587,14 @@ const appendEvalSummaryContextLedgerKinds = (
   lines: string[],
   report: EvalReport
 ): void => {
-  const contextLedgerCases = report.caseResults.filter(
-    (caseResult) => caseResult.contextLedger.length > 0
-  )
-
-  if (contextLedgerCases.length === 0) {
-    return
-  }
-
-  lines.push('## Context Ledger Kinds')
-  lines.push('')
-  lines.push('| Case | Kinds | Considered | Truncated |')
-  lines.push('| --- | --- | ---: | ---: |')
-  for (const caseResult of contextLedgerCases) {
-    lines.push(formatEvalSummaryContextLedgerRow(caseResult))
-  }
-  lines.push('')
+  appendMarkdownTable(lines, {
+    heading: '## Context Ledger Kinds',
+    header: '| Case | Kinds | Considered | Truncated |',
+    alignment: '| --- | --- | ---: | ---: |',
+    rows: report.caseResults
+      .filter((caseResult) => caseResult.contextLedger.length > 0)
+      .map(formatEvalSummaryContextLedgerRow)
+  })
 }
 
 const appendEvalSummaryGateReasons = (

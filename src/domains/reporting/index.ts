@@ -42,9 +42,12 @@ export {
 } from './run-index.js'
 export {
   adjustedPrecisionInTwenty,
+  falseSatisfiedOneIn,
   inDiffMissesInTen,
   inDiffRecallInTen,
+  measuredIntentReliability,
   measuredReliability,
+  missedOutstandingOneIn,
   numberWord,
   MEASURED_ON_MODEL,
   MEASURED_ON_PROVIDER
@@ -54,6 +57,7 @@ export {
   inlineCode,
   pluralize,
   renderMeasuredOn,
+  renderUsageLines,
   safeRedactedText,
   safeText,
   sortAdmittedFindings,

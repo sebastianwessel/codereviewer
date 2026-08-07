@@ -1,18 +1,20 @@
 import {
+  appendMarkdownTable,
   formatEvalGateOutcome,
-  formatListValue
+  formatListValue,
+  formatPercent,
+  UNKNOWN_VALUE
 } from './eval-report-markdown-formatting.js'
 import { type EvalComparisonReport } from './eval-comparison-view.js'
+
+// Nothing in this module defaults an absent value. A report that never recorded
+// its selection or its judge reliability says so through `UNKNOWN_VALUE`; it
+// does not report an empty selection or a trustworthy judge.
 
 type EvalReportPair = {
   readonly base: EvalComparisonReport
   readonly head: EvalComparisonReport
 }
-
-// Nothing here defaults an absent value. A report that never recorded its
-// selection or its judge reliability says so; it does not report an empty
-// selection or a trustworthy judge.
-const UNKNOWN_VALUE = 'unknown (not recorded)'
 
 const arraysEqual = (
   left: readonly string[],
@@ -49,7 +51,7 @@ export type EvalJudgeReliabilityStatus = {
 }
 
 const formatAgreement = (agreement: number | undefined): string =>
-  agreement === undefined ? 'not scored' : `${(agreement * 100).toFixed(1)}%`
+  agreement === undefined ? 'not scored' : formatPercent(agreement)
 
 const formatTrustworthy = (trustworthy: boolean | undefined): string =>
   trustworthy === undefined ? UNKNOWN_VALUE : trustworthy ? 'yes' : 'no'
@@ -160,13 +162,15 @@ export const appendEvalComparisonGate = (
   lines: string[],
   input: EvalReportPair
 ): void => {
-  lines.push('## Gate')
-  lines.push('')
-  lines.push('| Report | Gate | Fixtures | Generated |')
-  lines.push('| --- | --- | ---: | --- |')
-  lines.push(formatEvalComparisonGateRow('Base', input.base))
-  lines.push(formatEvalComparisonGateRow('Head', input.head))
-  lines.push('')
+  appendMarkdownTable(lines, {
+    heading: '## Gate',
+    header: '| Report | Gate | Fixtures | Generated |',
+    alignment: '| --- | --- | ---: | --- |',
+    rows: [
+      formatEvalComparisonGateRow('Base', input.base),
+      formatEvalComparisonGateRow('Head', input.head)
+    ]
+  })
 }
 
 const formatEvalComparisonSelectionRow = (
@@ -201,39 +205,33 @@ export const appendEvalComparisonSelection = (
     lines.push(warning)
     lines.push('')
   }
-  lines.push('| Field | Status |')
-  lines.push('| --- | --- |')
-  lines.push(
-    formatEvalComparisonSelectionRow('Fixture source', selection.fixtureSource)
-  )
-  lines.push(formatEvalComparisonSelectionRow('Slice root', selection.sliceRoot))
-  lines.push(
-    formatEvalComparisonSelectionRow('Case filters', selection.caseFilters)
-  )
-  lines.push(formatEvalComparisonSelectionRow('Case set', selection.caseSet))
-  lines.push(
-    formatEvalComparisonSelectionRow(
-      'Judge agreement',
-      `${formatAgreement(selection.judgeReliability.baseAgreement)} -> ${formatAgreement(selection.judgeReliability.headAgreement)}`
-    )
-  )
-  lines.push(
-    formatEvalComparisonSelectionRow(
-      'Judge trustworthy',
-      `${formatTrustworthy(selection.judgeReliability.baseTrustworthy)} -> ${formatTrustworthy(selection.judgeReliability.headTrustworthy)}`
-    )
-  )
-  lines.push(
-    formatEvalComparisonSelectionRow(
-      'Base-only cases',
-      formatListValue(selection.baseOnlyCaseIds)
-    )
-  )
-  lines.push(
-    formatEvalComparisonSelectionRow(
-      'Head-only cases',
-      formatListValue(selection.headOnlyCaseIds)
-    )
-  )
-  lines.push('')
+  appendMarkdownTable(lines, {
+    header: '| Field | Status |',
+    alignment: '| --- | --- |',
+    rows: [
+      formatEvalComparisonSelectionRow(
+        'Fixture source',
+        selection.fixtureSource
+      ),
+      formatEvalComparisonSelectionRow('Slice root', selection.sliceRoot),
+      formatEvalComparisonSelectionRow('Case filters', selection.caseFilters),
+      formatEvalComparisonSelectionRow('Case set', selection.caseSet),
+      formatEvalComparisonSelectionRow(
+        'Judge agreement',
+        `${formatAgreement(selection.judgeReliability.baseAgreement)} -> ${formatAgreement(selection.judgeReliability.headAgreement)}`
+      ),
+      formatEvalComparisonSelectionRow(
+        'Judge trustworthy',
+        `${formatTrustworthy(selection.judgeReliability.baseTrustworthy)} -> ${formatTrustworthy(selection.judgeReliability.headTrustworthy)}`
+      ),
+      formatEvalComparisonSelectionRow(
+        'Base-only cases',
+        formatListValue(selection.baseOnlyCaseIds)
+      ),
+      formatEvalComparisonSelectionRow(
+        'Head-only cases',
+        formatListValue(selection.headOnlyCaseIds)
+      )
+    ]
+  })
 }

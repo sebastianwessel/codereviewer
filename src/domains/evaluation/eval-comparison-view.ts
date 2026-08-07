@@ -44,7 +44,10 @@ const ComparisonScopeCountsSchema = z
   )
   .optional()
 
-const ComparisonMetricsSchema = z.object({
+// Exported so the producer's metric list can be checked against it: a metric
+// added to `EvalMetricsSchema` and forgotten here would render as "unknown"
+// forever, and nothing else in the system would say so.
+export const ComparisonMetricsSchema = z.object({
   recall: optionalNumber,
   precision: optionalNumber,
   adjustedPrecision: optionalNumber,

@@ -2,9 +2,16 @@ import { describe, expect, test } from 'vitest'
 import {
   EvalAgenticStageReportSchema,
   EvalContextLedgerEntrySchema,
+  EvalExpectedFindingReportSchema,
   EvalProviderIssueReportSchema,
+  EvalReportProvenanceSchema,
   EvalReportSchema
 } from './eval-report-contracts.js'
+
+const missingKeysOf = (result: {
+  readonly error?: { readonly issues: readonly { readonly path: PropertyKey[] }[] }
+}): readonly string[] =>
+  (result.error?.issues ?? []).map((issue) => issue.path.join('.'))
 
 describe('eval report contracts', () => {
   test('keeps provider issue visibility and scoring metadata in the report contract', () => {
@@ -47,5 +54,35 @@ describe('eval report contracts', () => {
       status: 'skipped',
       count: 0
     })
+  })
+
+  // This is the PRODUCER contract and it carries no sentinel defaults. A report an
+  // older build wrote must FAIL here rather than parse into a placeholder: reading
+  // across versions is `eval-comparison-view.ts`'s job, in one place, and a default
+  // in this layer would hand a caller a measured-looking value nobody measured.
+  test('refuses a report that omits a field the producer always writes', () => {
+    const missing = missingKeysOf(EvalReportSchema.safeParse({}))
+
+    expect(missing).toContain('metricsVersion')
+    expect(missing).toContain('provenance')
+    expect(
+      missingKeysOf(
+        EvalReportProvenanceSchema.safeParse({
+          answerKeyDigest: 'a'.repeat(64),
+          configHash: 'b'.repeat(64)
+        })
+      )
+    ).toContain('answerKeyDigestByCase')
+    expect(
+      missingKeysOf(
+        EvalExpectedFindingReportSchema.safeParse({
+          expectedIndex: 0,
+          category: 'bug',
+          severity: 'high',
+          matchMode: 'semantic-only',
+          semanticSummary: 'incorrect return value from changed branch'
+        })
+      )
+    ).toContain('diffScope')
   })
 })

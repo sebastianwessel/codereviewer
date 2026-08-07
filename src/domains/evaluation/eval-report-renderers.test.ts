@@ -29,6 +29,225 @@ const zeroSecurityRecordByContextDepth = Object.fromEntries(
   SecurityContextDepthSchema.options.map((depth) => [depth, 0])
 ) as Record<(typeof SecurityContextDepthSchema.options)[number], number>
 
+const summaryInput = {
+  cases: [
+    {
+      id: 'semantic-case',
+      language: 'typescript',
+      repositoryFixture: 'fixtures/typescript/semantic',
+      changedFiles: ['src/app.ts'],
+      expectedFindings: [
+        {
+          category: 'bug',
+          severity: 'high',
+          semanticSummary: 'descriptor resource is leaked',
+          matchMode: 'semantic-only'
+        }
+      ],
+      expectedNoFindingZones: [],
+      tags: ['semantic']
+    }
+  ],
+  report: {
+    schemaVersion: '1.0',
+  metricsVersion: 'test-metrics-version',
+    generatedAt: '2026-06-20T00:00:02.000Z',
+    fixtureCount: 1,
+    selection: {
+      fixtureSource: 'default',
+      caseFilters: [],
+      selectedCaseIds: ['semantic-case']
+    },
+    provenance: {
+      answerKeyDigestByCase: {},
+  answerKeyDigest: 'test-answer-key-digest',
+      configHash: 'test-config-hash'
+    },
+    scoring: {
+      judgeAgreement: 1,
+      judgeTrustworthy: true,
+      adjustedPrecisionTrustworthy: true
+    },
+    caseResults: [
+      {
+        caseId: 'semantic-case',
+        parseValid: true,
+        providerErrored: false,
+        providerIssues: [],
+        agenticStages: [],
+        contextLedger: [
+          {
+            kind: 'tool-result',
+            consideredForModelContext: true,
+            truncated: false
+          },
+          {
+            kind: 'support-signal-output',
+            consideredForModelContext: true,
+            truncated: true
+          }
+        ],
+        expectedFindings: [
+          {
+            expectedIndex: 0,
+            category: 'bug',
+            severity: 'high',
+            matchMode: 'semantic-only',
+            diffScope: 'undetermined',
+            semanticSummary: 'descriptor resource is leaked'
+          }
+        ],
+        matchedFindings: [
+          {
+            expectedIndex: 0,
+            findingId: 'find_semantic1',
+            semanticReason: 'Both findings describe the leaked descriptor.',
+            lineOverlaps: false,
+            severityMatches: true,
+            producedPath: 'src/app.ts',
+            producedStartLine: 12
+          }
+        ],
+        unmatchedExpectedIndexes: [],
+        inconclusiveExpectedIndexes: [],
+        inconclusiveFindingIds: [],
+        inconclusiveMatches: [],
+        duplicateFindingIds: [],
+        duplicateFindings: [],
+        falsePositiveFindingIds: [],
+        falsePositiveFindings: [],
+        unlistedRealFindingIds: [],
+        unlistedRealFindings: [],
+        genuineFalsePositiveFindingIds: [],
+        noFindingZoneFalsePositiveIds: [],
+        artifactOnlyFindingIds: [],
+        artifactOnlyMatchedFindings: [],
+        artifactOnlyFalsePositiveFindingIds: [],
+        artifactOnlyFalsePositiveFindings: [],
+        refutationResults: [],
+        fixOutcomes: [],
+        inlineFindingCount: 0,
+        warnings: [],
+        durationMs: 1,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        costUnavailable: false,
+        usageUnavailable: false,
+        costUsd: 0
+      }
+    ],
+    metrics: {
+      parseValidity: 1,
+      rejectionReasonCounts: {},
+      rejectionSeverityCounts: {},
+      rejectionReasonBySeverityCounts: {},
+      lineCheckCount: 0,
+      severityCheckCount: 0,
+      linePlacementRate: null,
+      linePlacementCheckCount: 0,
+      recall: 1,
+      precision: 1,
+      adjustedPrecision: 1,
+      f1: 1,
+      severityWeightedPrecision: 1,
+      severityWeightedRecall: 1,
+      severityWeightedF1: 1,
+      lineAccuracy: 1,
+      severityAccuracy: 1,
+      falsePositiveCount: 0,
+      genuineFalsePositiveCount: 0,
+      unlistedRealFindingCount: 0,
+      noFindingZoneFalsePositiveCount: 0,
+      actionableRate: 1,
+      commentsPerKloc: 0,
+      commentsPerDiffHunk: 0,
+      incompleteCoverageRate: 0,
+      contextMutationRate: 0,
+      providerErrorRate: 0,
+      providerIssueRate: 0,
+      providerIssueCount: 0,
+      duplicateFindingCount: 0,
+      artifactOnlyRecall: 1,
+      artifactOnlyPrecision: 1,
+      artifactOnlyFindingCount: 0,
+      artifactOnlyMatchedFindingCount: 0,
+      artifactOnlyFalsePositiveCount: 0,
+      refutationFalseNegativeCount: 0,
+      refutationFalsePositiveCount: 0,
+      fixJudgmentAccuracy: 0,
+      fixFalsePositiveDetectionRate: 0,
+      fixProduceRate: 0,
+      fixApplyFailureRate: 0,
+      fixJudgedFindingCount: 0,
+      fixGroundTruthFalsePositiveCount: 0,
+      fixRealFindingCount: 0,
+      fixAttemptedCount: 0,
+      recallByTier: {
+        'runtime-critical': 1,
+        security: 1,
+        logic: 1,
+        nit: 1
+      },
+      judgeAgreement: 1,
+      judgeAgreementPairCount: 12,
+      plausibilityJudgeAgreementPairCount: 0,
+      inconclusiveMatchCount: 0,
+      productRecall: 1,
+      nitRecall: 1,
+      recallByDiffScope: {
+        'in-diff': null,
+        'out-of-diff': null,
+        undetermined: 1
+      },
+      diffScopeCounts: {
+        'in-diff': { expected: 0, matched: 0 },
+        'out-of-diff': { expected: 0, matched: 0 },
+        undetermined: { expected: 1, matched: 1 }
+      },
+      securityRecallByMechanism: zeroSecurityRecordByMechanism,
+      securityMechanismCounts: emptySecurityMechanismCounts(),
+      securityAdjustedPrecisionByMechanism: nullSecurityRecordByMechanism,
+      securityFindingMechanismCounts: emptySecurityFindingMechanismCounts(),
+      securityMechanismAttributionCounts: {
+        expectation: 0,
+        cwe: 0,
+        unknown: 0
+      },
+      securityRecallByContextDepth: zeroSecurityRecordByContextDepth,
+      securityContextDepthCounts: emptySecurityContextDepthCounts(),
+      securityObviousRecall: 0,
+      securityHardRecall: 0,
+      securityObviousCount: 0,
+      securityHardCount: 0,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      usageUnavailableCount: 0,
+      costUnavailableCount: 0,
+      costUsd: 0,
+      durationMs: 1,
+      durationUnavailableCount: 0,
+      scoringInputTokens: 0,
+      scoringCachedInputTokens: 0,
+      scoringOutputTokens: 0,
+      scoringCostUnavailable: false,
+      scoringCostUsd: 0,
+      elapsedMs: 1
+    },
+    metricGroups: [],
+    regressionGate: {
+      outcome: 'passed',
+      reasons: [],
+      notEvaluableReasons: [],
+      thresholds: {
+        failOnProviderError: true
+      },
+      failingCaseIds: []
+    }
+  }
+} satisfies Parameters<typeof renderEvalSummary>[0]
+
 describe('eval report rendering', () => {
   test('owns eval Markdown renderer entry points and artifact names', () => {
     expect(EVAL_REPORT_ARTIFACT_NAME).toBe('eval-report.json')
@@ -40,224 +259,6 @@ describe('eval report rendering', () => {
   })
 
   test('renders semantic judge match reasons in the summary', () => {
-    const summaryInput = {
-      cases: [
-        {
-          id: 'semantic-case',
-          language: 'typescript',
-          repositoryFixture: 'fixtures/typescript/semantic',
-          changedFiles: ['src/app.ts'],
-          expectedFindings: [
-            {
-              category: 'bug',
-              severity: 'high',
-              semanticSummary: 'descriptor resource is leaked',
-              matchMode: 'semantic-only'
-            }
-          ],
-          expectedNoFindingZones: [],
-          tags: ['semantic']
-        }
-      ],
-      report: {
-        schemaVersion: '1.0',
-      metricsVersion: 'test-metrics-version',
-        generatedAt: '2026-06-20T00:00:02.000Z',
-        fixtureCount: 1,
-        selection: {
-          fixtureSource: 'default',
-          caseFilters: [],
-          selectedCaseIds: ['semantic-case']
-        },
-        provenance: {
-          answerKeyDigestByCase: {},
-      answerKeyDigest: 'test-answer-key-digest',
-          configHash: 'test-config-hash'
-        },
-        scoring: {
-          judgeAgreement: 1,
-          judgeTrustworthy: true,
-          adjustedPrecisionTrustworthy: true
-        },
-        caseResults: [
-          {
-            caseId: 'semantic-case',
-            parseValid: true,
-            providerErrored: false,
-            providerIssues: [],
-            agenticStages: [],
-            contextLedger: [
-              {
-                kind: 'tool-result',
-                consideredForModelContext: true,
-                truncated: false
-              },
-              {
-                kind: 'support-signal-output',
-                consideredForModelContext: true,
-                truncated: true
-              }
-            ],
-            expectedFindings: [
-              {
-                expectedIndex: 0,
-                category: 'bug',
-                severity: 'high',
-                matchMode: 'semantic-only',
-                diffScope: 'undetermined',
-                semanticSummary: 'descriptor resource is leaked'
-              }
-            ],
-            matchedFindings: [
-              {
-                expectedIndex: 0,
-                findingId: 'find_semantic1',
-                semanticReason: 'Both findings describe the leaked descriptor.',
-                lineOverlaps: false,
-                severityMatches: true,
-                producedPath: 'src/app.ts',
-                producedStartLine: 12
-              }
-            ],
-            unmatchedExpectedIndexes: [],
-            inconclusiveExpectedIndexes: [],
-            inconclusiveFindingIds: [],
-            inconclusiveMatches: [],
-            duplicateFindingIds: [],
-            duplicateFindings: [],
-            falsePositiveFindingIds: [],
-            falsePositiveFindings: [],
-            unlistedRealFindingIds: [],
-            unlistedRealFindings: [],
-            genuineFalsePositiveFindingIds: [],
-            noFindingZoneFalsePositiveIds: [],
-            artifactOnlyFindingIds: [],
-            artifactOnlyMatchedFindings: [],
-            artifactOnlyFalsePositiveFindingIds: [],
-            artifactOnlyFalsePositiveFindings: [],
-            refutationResults: [],
-            fixOutcomes: [],
-            inlineFindingCount: 0,
-            warnings: [],
-            durationMs: 1,
-            inputTokens: 0,
-            cachedInputTokens: 0,
-            outputTokens: 0,
-            costUnavailable: false,
-            usageUnavailable: false,
-            costUsd: 0
-          }
-        ],
-        metrics: {
-          parseValidity: 1,
-          rejectionReasonCounts: {},
-          rejectionSeverityCounts: {},
-          rejectionReasonBySeverityCounts: {},
-          lineCheckCount: 0,
-          severityCheckCount: 0,
-          linePlacementRate: null,
-          linePlacementCheckCount: 0,
-          recall: 1,
-          precision: 1,
-          adjustedPrecision: 1,
-          f1: 1,
-          severityWeightedPrecision: 1,
-          severityWeightedRecall: 1,
-          severityWeightedF1: 1,
-          lineAccuracy: 1,
-          severityAccuracy: 1,
-          falsePositiveCount: 0,
-          genuineFalsePositiveCount: 0,
-          unlistedRealFindingCount: 0,
-          noFindingZoneFalsePositiveCount: 0,
-          actionableRate: 1,
-          commentsPerKloc: 0,
-          commentsPerDiffHunk: 0,
-          incompleteCoverageRate: 0,
-          contextMutationRate: 0,
-          providerErrorRate: 0,
-          providerIssueRate: 0,
-          providerIssueCount: 0,
-          duplicateFindingCount: 0,
-          artifactOnlyRecall: 1,
-          artifactOnlyPrecision: 1,
-          artifactOnlyFindingCount: 0,
-          artifactOnlyMatchedFindingCount: 0,
-          artifactOnlyFalsePositiveCount: 0,
-          refutationFalseNegativeCount: 0,
-          refutationFalsePositiveCount: 0,
-          fixJudgmentAccuracy: 0,
-          fixFalsePositiveDetectionRate: 0,
-          fixProduceRate: 0,
-          fixApplyFailureRate: 0,
-          fixJudgedFindingCount: 0,
-          fixGroundTruthFalsePositiveCount: 0,
-          fixRealFindingCount: 0,
-          fixAttemptedCount: 0,
-          recallByTier: {
-            'runtime-critical': 1,
-            security: 1,
-            logic: 1,
-            nit: 1
-          },
-          judgeAgreement: 1,
-          judgeAgreementPairCount: 12,
-          plausibilityJudgeAgreementPairCount: 0,
-          inconclusiveMatchCount: 0,
-          productRecall: 1,
-          nitRecall: 1,
-          recallByDiffScope: {
-            'in-diff': null,
-            'out-of-diff': null,
-            undetermined: 1
-          },
-          diffScopeCounts: {
-            'in-diff': { expected: 0, matched: 0 },
-            'out-of-diff': { expected: 0, matched: 0 },
-            undetermined: { expected: 1, matched: 1 }
-          },
-          securityRecallByMechanism: zeroSecurityRecordByMechanism,
-          securityMechanismCounts: emptySecurityMechanismCounts(),
-          securityAdjustedPrecisionByMechanism: nullSecurityRecordByMechanism,
-          securityFindingMechanismCounts: emptySecurityFindingMechanismCounts(),
-          securityMechanismAttributionCounts: {
-            expectation: 0,
-            cwe: 0,
-            unknown: 0
-          },
-          securityRecallByContextDepth: zeroSecurityRecordByContextDepth,
-          securityContextDepthCounts: emptySecurityContextDepthCounts(),
-          securityObviousRecall: 0,
-          securityHardRecall: 0,
-          securityObviousCount: 0,
-          securityHardCount: 0,
-          inputTokens: 0,
-          cachedInputTokens: 0,
-          outputTokens: 0,
-          usageUnavailableCount: 0,
-          costUnavailableCount: 0,
-          costUsd: 0,
-          durationMs: 1,
-          durationUnavailableCount: 0,
-          scoringInputTokens: 0,
-          scoringCachedInputTokens: 0,
-          scoringOutputTokens: 0,
-          scoringCostUnavailable: false,
-          scoringCostUsd: 0,
-          elapsedMs: 1
-        },
-        metricGroups: [],
-        regressionGate: {
-          outcome: 'passed',
-          reasons: [],
-          notEvaluableReasons: [],
-          thresholds: {
-            failOnProviderError: true
-          },
-          failingCaseIds: []
-        }
-      }
-    } satisfies Parameters<typeof renderEvalSummary>[0]
     const summary = renderEvalSummary(summaryInput)
 
     // A population with no expectation reports `n/a`, never 0.0%: the engine's
@@ -318,5 +319,55 @@ describe('eval report rendering', () => {
     expect(boundedOut).toContain(
       '3 genuine security false positive(s) in this run could not be attributed to one'
     )
+  })
+
+  // Zero scoring spend is a cost like any other and must read like every other
+  // cost cell in the same table. It rendered `$0.0000` next to the review cost's
+  // `$0.00` because the scoring row re-implemented currency formatting instead
+  // of using the shared formatter.
+  test('renders zero scoring cost with the same currency convention as review cost', () => {
+    const summary = renderEvalSummary(summaryInput)
+
+    expect(summary).toContain('| Health | Review cost | $0.00 |')
+    expect(summary).toContain(
+      '| Health | Scoring cost (judge, separate from review cost) | $0.00 |'
+    )
+    expect(summary).not.toContain('$0.0000')
+  })
+
+  // An empty dataset gets no table at all, not a header and separator with no
+  // body underneath. Every eval table goes through `appendMarkdownTable` for
+  // this, so the sections below must vanish rather than render as an empty
+  // two-line husk.
+  test('omits eval tables whose dataset is empty instead of emitting a headerless body', () => {
+    const emptySummary = renderEvalSummary({
+      ...summaryInput,
+      report: {
+        ...summaryInput.report,
+        caseResults: []
+      }
+    })
+
+    expect(emptySummary).not.toContain('## Cases')
+    expect(emptySummary).not.toContain('## Context Ledger Kinds')
+    expect(emptySummary).not.toContain(
+      '| Case | Profile | Status | Provider | Expected |'
+    )
+
+    const emptyRecallReport = renderEvalRecallReport({
+      reports: [
+        {
+          label: 'empty',
+          report: {
+            ...summaryInput.report,
+            caseResults: []
+          }
+        }
+      ]
+    })
+
+    expect(emptyRecallReport).toContain('## Runs')
+    expect(emptyRecallReport).not.toContain('## Expected Findings')
+    expect(emptyRecallReport).not.toContain('| Case | # | Sev | Location |')
   })
 })

@@ -35,6 +35,7 @@ import {
   NO_REFUTATION_VERDICT,
   pluralize,
   renderMeasuredOn,
+  renderUsageLines,
   safeText,
   sortAdmittedFindings,
   validateReviewReport
@@ -564,45 +565,25 @@ const renderTestAdequacy = (report: ReviewReport): readonly string[] => {
 //
 // Tokens are reported alongside because cost alone cannot be acted on: input
 // dominates output by roughly 23:1 here, so a reader deciding whether to narrow
-// `paths.include` needs to see WHICH side is large. `cachedInputTokens` is a
-// SUBSET of `inputTokens`, never an addition, and is shown because a warm cache
-// can change spend severalfold with no change to the review itself.
+// `paths.include` needs to see WHICH side is large. How each of those three
+// figures is written, and what an unmeasured one says instead, is
+// `renderUsageLines`: this document and the intent-fulfilment report print the
+// same numbers and must not describe a missing one differently.
+//
+// Duration is this section's own, and stays here: it is timing rather than spend,
+// and the other surface has no equivalent.
 const renderCost = (report: ReviewReport): readonly string[] => {
   const { run } = report
-  const lines: string[] = [
+
+  return [
     '## Cost And Timing',
     '',
     // The model this cost was paid to is on the scope line above, not repeated
     // here: one statement of run identity, in the section that states it.
-    `- Duration: ${run.durationMs.toLocaleString('en-US')} ms`
+    `- Duration: ${run.durationMs.toLocaleString('en-US')} ms`,
+    ...renderUsageLines(run),
+    ''
   ]
-
-  if (run.costUsd === undefined) {
-    // Never silently omitted: a missing cost means tokens or prices were
-    // unavailable, and a reader must be able to tell that from "this was free".
-    lines.push('- Cost: unavailable (token counts or model prices were missing)')
-  } else {
-    lines.push(`- Cost: $${run.costUsd.toFixed(4)}`)
-  }
-
-  if (run.inputTokens !== undefined) {
-    const cached =
-      run.cachedInputTokens === undefined
-        ? ''
-        : ` (${run.cachedInputTokens.toLocaleString('en-US')} cached)`
-
-    lines.push(
-      `- Input tokens: ${run.inputTokens.toLocaleString('en-US')}${cached}`
-    )
-  }
-
-  if (run.outputTokens !== undefined) {
-    lines.push(`- Output tokens: ${run.outputTokens.toLocaleString('en-US')}`)
-  }
-
-  lines.push('')
-
-  return lines
 }
 
 const indexById = <T>(

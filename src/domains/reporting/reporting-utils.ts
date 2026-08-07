@@ -92,6 +92,57 @@ export const pluralize = (
   plural: string
 ): string => `${count} ${count === 1 ? singular : plural}`
 
+/**
+ * The spend and token lines a Markdown surface prints for one run, rendered once.
+ *
+ * WHY IT IS SHARED. The review report and the intent-fulfilment report each wrote
+ * these three figures out independently and disagreed on the only case that
+ * matters: a cost that could not be determined. One said so in words, the other
+ * dropped the line, so the same unmeasured figure read two ways depending on which
+ * document a reader opened.
+ *
+ * A FIGURE THAT WAS NOT MEASURED IS NEVER RENDERED AS A NUMBER. An absent cost is
+ * stated as unavailable, because a run whose price could not be computed must not
+ * be readable as a free one, and an absent token count omits its line rather than
+ * printing a zero nobody counted. `cachedInputTokens` is a SUBSET of `inputTokens`,
+ * never an addition, and is shown beside it because a warm cache changes spend
+ * severalfold with no change to the output.
+ *
+ * The caller supplies its own heading and any run identity around these lines: what
+ * the numbers are is one rule, where they sit is each document's own.
+ */
+export const renderUsageLines = (
+  usage: {
+    readonly costUsd?: number | undefined
+    readonly inputTokens?: number | undefined
+    readonly cachedInputTokens?: number | undefined
+    readonly outputTokens?: number | undefined
+  }
+): readonly string[] => {
+  const lines: string[] = [
+    usage.costUsd === undefined
+      ? '- Cost: unavailable (token counts or model prices were missing)'
+      : `- Cost: $${usage.costUsd.toFixed(4)}`
+  ]
+
+  if (usage.inputTokens !== undefined) {
+    const cached =
+      usage.cachedInputTokens === undefined
+        ? ''
+        : ` (${usage.cachedInputTokens.toLocaleString('en-US')} cached)`
+
+    lines.push(
+      `- Input tokens: ${usage.inputTokens.toLocaleString('en-US')}${cached}`
+    )
+  }
+
+  if (usage.outputTokens !== undefined) {
+    lines.push(`- Output tokens: ${usage.outputTokens.toLocaleString('en-US')}`)
+  }
+
+  return lines
+}
+
 // What a surface says when a finding carries no refutation verdict. It is NOT
 // the sentence used for an unresolved finding: "nothing was recorded" and "the
 // refuter could not decide" are different facts about the same field, and a

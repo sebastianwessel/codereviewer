@@ -388,4 +388,38 @@ describe('Markdown reporter', () => {
     expect(nothingToObserve).not.toContain(heading)
     expect(renderMarkdownReport(report)).not.toContain(heading)
   })
+
+  // Spend and tokens come from `renderUsageLines`, which the intent-fulfilment
+  // report renders too. The case worth pinning is the unmeasured one: a price that
+  // could not be computed must be readable as unknown and never as free, and a
+  // token count nobody took must not appear as a zero. `intent-markdown.test.ts`
+  // holds the matching assertions for the other surface.
+  test('an unmeasured cost is disclosed and unmeasured token counts are not invented', () => {
+    const rendered = renderMarkdownReport(createReportFixture())
+
+    expect(rendered).toContain(
+      '- Cost: unavailable (token counts or model prices were missing)'
+    )
+    expect(rendered).not.toContain('- Cost: $')
+    expect(rendered).not.toContain('- Input tokens:')
+    expect(rendered).not.toContain('- Output tokens:')
+  })
+
+  test('measured spend prints the cached tokens beside the input count they are part of', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      run: {
+        ...report.run,
+        costUsd: 0.125_104,
+        inputTokens: 382_152,
+        cachedInputTokens: 366_080,
+        outputTokens: 2351
+      }
+    })
+
+    expect(rendered).toContain('- Cost: $0.1251')
+    expect(rendered).toContain('- Input tokens: 382,152 (366,080 cached)')
+    expect(rendered).toContain('- Output tokens: 2,351')
+  })
 })

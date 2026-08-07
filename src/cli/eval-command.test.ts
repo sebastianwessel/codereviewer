@@ -8,6 +8,7 @@ import type {
   ObjectRequest,
   ObjectResponse
 } from '@purista/harness'
+import { EVAL_METRICS_VERSION } from '../domains/evaluation/index.js'
 import { runCli } from './index.js'
 
 const createTempDir = async (): Promise<string> => {
@@ -217,6 +218,15 @@ const evalReport = (
   } = {}
 ): Record<string, unknown> => ({
   schemaVersion: '1.0',
+  // The producer contract requires both: it carries no defaults for a report an
+  // older build wrote, so a fixture that omits them is not a report this build
+  // could have produced and must not stand in for one.
+  metricsVersion: EVAL_METRICS_VERSION,
+  provenance: {
+    answerKeyDigest: 'a'.repeat(64),
+    answerKeyDigestByCase: { 'case-a': 'a'.repeat(64) },
+    configHash: 'b'.repeat(64)
+  },
   generatedAt: '2026-06-20T00:00:00.000Z',
   fixtureCount: overrides.caseResults?.length ?? 1,
   selection: overrides.selection ?? {
@@ -242,6 +252,7 @@ const evalReport = (
             path: 'src/app.ts',
             lineRange: [4, 4],
             matchMode: 'path-line',
+            diffScope: 'undetermined',
             semanticSummary: 'incorrect return value from changed branch'
           }
         ],
@@ -1747,6 +1758,7 @@ describe('eval CLI', () => {
                     path: 'src/app.ts',
                     lineRange: [4, 4],
                     matchMode: 'path-line',
+                    diffScope: 'undetermined',
                     semanticSummary: 'incorrect return value from changed branch'
                   }
                 ],
@@ -2053,6 +2065,7 @@ describe('eval CLI', () => {
                     path: 'src/app.ts',
                     lineRange: [4, 4],
                     matchMode: 'path-line',
+                    diffScope: 'undetermined',
                     semanticSummary: 'incorrect return value from changed branch'
                   }
                 ],
@@ -2096,6 +2109,7 @@ describe('eval CLI', () => {
                     path: 'src/app.ts',
                     lineRange: [4, 4],
                     matchMode: 'path-line',
+                    diffScope: 'undetermined',
                     semanticSummary: 'incorrect return value from changed branch'
                   }
                 ],

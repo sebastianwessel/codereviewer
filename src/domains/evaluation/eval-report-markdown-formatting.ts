@@ -18,8 +18,34 @@ export type EvalTokenMetricInput = {
   readonly usageUnavailableCount: number
 }
 
+// A value the report never recorded. Rendered, never defaulted: a counter added
+// by a later engine build is absent from an older report, and printing 0 there
+// would claim a measurement nobody made. Declared once so every renderer that
+// has to say "the report is silent here" says it with the same words.
+export const UNKNOWN_VALUE = 'unknown (not recorded)'
+
 export const formatPercent = (value: number): string =>
   `${(value * 100).toFixed(1)}%`
+
+// Deltas between two runs carry an explicit `+` because a reader scanning a
+// comparison column needs the direction before the magnitude; a negative number
+// already carries its own sign.
+export const formatPercentagePointDelta = (
+  base: number,
+  head: number
+): string => {
+  const delta = (head - base) * 100
+  const sign = delta > 0 ? '+' : ''
+
+  return `${sign}${delta.toFixed(1)}pp`
+}
+
+export const formatNumberDelta = (base: number, head: number): string => {
+  const delta = head - base
+  const sign = delta > 0 ? '+' : ''
+
+  return `${sign}${delta}`
+}
 
 // A rate computed over an empty denominator is undefined, not zero. Rendering it
 // as 0.0% reads as total failure and has been misread that way: lineAccuracy
@@ -36,7 +62,7 @@ export const formatRateOverCount = (
 export const formatDuration = (durationMs: number): string =>
   durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`
 
-const formatCurrency = (value: number): string =>
+export const formatCurrency = (value: number): string =>
   value === 0 ? '$0.00' : `$${value.toFixed(4)}`
 
 export const formatInteger = (value: number): string =>
@@ -97,7 +123,7 @@ export const formatPrecisionBound = (bound: PrecisionBracketBound): string => {
     case 'not-measured':
       return 'not measured (no plausibility judge)'
     default:
-      return 'unknown (not recorded)'
+      return UNKNOWN_VALUE
   }
 }
 

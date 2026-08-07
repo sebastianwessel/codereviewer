@@ -1,5 +1,8 @@
 import { z } from 'zod'
-import { ReviewReportSchema } from '../../shared/contracts/index.js'
+import {
+  RefutationVerdictSchema,
+  ReviewReportSchema
+} from '../../shared/contracts/index.js'
 import { ContextLedgerKindSchema } from '../review-planning/context-ledger.js'
 import { DiffScopeSchema } from './eval-diff-scope.js'
 import { EvalMetricsSchema } from './metrics.js'
@@ -118,10 +121,13 @@ export const EvalAgenticStageReportSchema = z.strictObject({
   count: z.int().min(0)
 })
 
+// The eval domain owns the SHAPE of this mirror, but not the vocabulary: the
+// verdict is the shared contract's closed enum, so a verdict added there lands in
+// the eval report too instead of being silently unrepresentable here.
 export const EvalRefutationResultReportSchema = z.strictObject({
   id: z.string().min(1),
   candidateId: z.string().min(1),
-  verdict: z.enum(['proved', 'refuted', 'needs-more-evidence', 'provider-error'])
+  verdict: RefutationVerdictSchema
 })
 
 export const EvalExpectedFindingReportSchema = z.strictObject({
@@ -137,10 +143,11 @@ export const EvalExpectedFindingReportSchema = z.strictObject({
   // before this field it was re-derived by hand for every analysis, and two
   // people computing it two ways got two different headline numbers.
   //
-  // Defaulted for the same reason `metricsVersion` and `provenance` are: a
-  // report saved before the field existed must still parse, and such a report
-  // genuinely cannot answer the question — it is `undetermined`, not in-diff.
-  diffScope: DiffScopeSchema.default('undetermined'),
+  // `undetermined` is a value the PRODUCER writes when the case's diff cannot
+  // settle the question. It is not a parse fallback: an artifact that omits the
+  // field was not written by a compatible build and must fail to parse rather
+  // than be read as undetermined.
+  diffScope: DiffScopeSchema,
   semanticSummary: z.string().min(1)
 })
 
@@ -312,9 +319,9 @@ export const EvalReportProvenanceSchema = z.strictObject({
   // Per case, so a comparison can tell a deliberately different case selection
   // (legitimate, and already warned about) from the shared cases having been
   // scored against different expectations (the stale-answer-key incident).
-  // Defaulted empty so a report predating it still parses; such a report simply
-  // cannot answer the per-case question.
-  answerKeyDigestByCase: z.record(z.string(), z.string()).default({}),
+  // Empty is a value the producer writes for a selection with no cases, never a
+  // stand-in for a report that omitted the field.
+  answerKeyDigestByCase: z.record(z.string(), z.string()),
   // sha256 digest over the effective (file + environment + CLI-override
   // merged) configuration the run used. Comparison does NOT refuse across a
   // config-hash mismatch the way it does for `answerKeyDigest`: a maintainer
@@ -354,24 +361,19 @@ export { EVAL_METRICS_VERSION } from './eval-metrics-versions.js'
 
 export const EvalReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),
-  // Defaulted so a report written before this field existed still parses; such a
-  // report predates the scoring changes above and is correctly reported as
-  // incomparable to a current one.
-  metricsVersion: z.string().min(1).default('pre-2026-07-26'),
+  // This is the PRODUCER contract, and it carries no tolerance for an artifact an
+  // older build wrote: a report that does not satisfy it was not written by a
+  // compatible build and cannot be rendered field-for-field. Reading across
+  // versions is `eval-comparison-view.ts`, deliberately and in one place — a
+  // sentinel default here would put that job in the layer that disclaims it, and
+  // would turn a missing field into a plausible measured-looking value.
+  metricsVersion: z.string().min(1),
   generatedAt: z.iso.datetime(),
   fixtureCount: z.int().min(0),
   selection: EvalReportSelectionSchema,
-  // Defaulted for the same reason as `metricsVersion`: a report saved before
-  // this field existed must still parse. Such a report predates answer-key
-  // digesting entirely, so it is correctly treated as incomparable to a
-  // current one -- comparison and the significance module refuse to diff
-  // across a mismatch, and every pre-existing report shares this one sentinel
-  // digest, exactly mirroring how `metricsVersion`'s own sentinel behaves.
-  provenance: EvalReportProvenanceSchema.default({
-    answerKeyDigest: 'pre-2026-07-26.provenance',
-    answerKeyDigestByCase: {},
-    configHash: 'pre-2026-07-26.provenance'
-  }),
+  // Required for the same reason as `metricsVersion`: the producer always writes
+  // provenance, so an artifact without it is not one this build produced.
+  provenance: EvalReportProvenanceSchema,
   // Required: the producer always writes scoring. Defaulting it would let a
   // report carrying no scoring data silently claim `judgeTrustworthy: true`.
   scoring: EvalReportScoringSchema,

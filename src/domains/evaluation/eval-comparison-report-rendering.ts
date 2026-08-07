@@ -1,4 +1,5 @@
 import { casesWithDivergedAnswerKeys } from './eval-report-provenance.js'
+import { appendMarkdownTable } from './eval-report-markdown-formatting.js'
 import {
   appendEvalComparisonGate,
   appendEvalComparisonSelection,
@@ -63,21 +64,21 @@ const appendEvalComparisonScoringRules = (
     readonly comparability: ReturnType<typeof metricComparability>
   }
 ): void => {
-  lines.push('## Scoring Rules')
-  lines.push('')
-  lines.push('| Arm | Report | Metrics version |')
-  lines.push('| --- | --- | --- |')
-
-  for (const [armLabel, runs] of [
-    ['Base', input.base],
-    ['Head', input.head]
-  ] as const) {
-    for (const run of runs) {
-      lines.push(`| ${armLabel} | ${run.label} | ${run.report.metricsVersion} |`)
-    }
-  }
-
-  lines.push('')
+  appendMarkdownTable(lines, {
+    heading: '## Scoring Rules',
+    header: '| Arm | Report | Metrics version |',
+    alignment: '| --- | --- | --- |',
+    rows: (
+      [
+        ['Base', input.base],
+        ['Head', input.head]
+      ] as const
+    ).flatMap(([armLabel, runs]) =>
+      runs.map(
+        (run) => `| ${armLabel} | ${run.label} | ${run.report.metricsVersion} |`
+      )
+    )
+  })
 
   const { divergence } = input.comparability
 

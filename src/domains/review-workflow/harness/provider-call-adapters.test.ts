@@ -115,7 +115,7 @@ describe('model provider call adapters', () => {
       candidateId: 'cand_0000000000000001',
       decision: 'false_positive',
       summary: 'The finding is contradicted. '.repeat(80),
-      suggestedFix: 'No code change is needed. '.repeat(80)
+      fix_summary: 'No code change is needed. '.repeat(80)
     })
 
     const normalized = normalizeFindingRefutationResult(parsed)
@@ -123,5 +123,21 @@ describe('model provider call adapters', () => {
     expect(normalized.verdict).toBe('refuted')
     expect(normalized.rationaleSummary).toHaveLength(1200)
     expect(normalized.fixSummary).toHaveLength(1200)
+  })
+
+  test('ignores the retired suggestedFix spelling', () => {
+    // `suggestedFix` was removed from the candidate contract end-to-end, so it is
+    // not a spelling this engine ever asked a refuter for. Reading it back would
+    // resurrect a retired name through the one door still open to free-form model
+    // JSON; the surviving `fixSummary`/`fix_summary` pair is producer tolerance,
+    // which is a different thing.
+    const parsed = ModelRefutationBatchVerdictSchema.parse({
+      candidateId: 'cand_0000000000000002',
+      verdict: 'proved',
+      rationaleSummary: 'The proof holds.',
+      suggestedFix: 'Guard the null case.'
+    })
+
+    expect(normalizeFindingRefutationResult(parsed).fixSummary).toBeUndefined()
   })
 })

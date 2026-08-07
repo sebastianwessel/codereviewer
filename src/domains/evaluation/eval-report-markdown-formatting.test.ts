@@ -6,9 +6,13 @@ import {
   formatCostMetric,
   formatDuration,
   formatDurationMetric,
+  formatCurrency,
   formatInteger,
   formatListValue,
-  formatPercent
+  formatNumberDelta,
+  formatPercent,
+  formatPercentagePointDelta,
+  UNKNOWN_VALUE
 } from './eval-report-markdown-formatting.js'
 
 describe('eval report markdown formatting', () => {
@@ -17,6 +21,26 @@ describe('eval report markdown formatting', () => {
     expect(formatDuration(999)).toBe('999ms')
     expect(formatDuration(1250)).toBe('1.3s')
     expect(formatInteger(1234567)).toBe('1,234,567')
+  })
+
+  // Zero is the one cost that has a shorter spelling, and every cost cell must
+  // agree on it: two conventions in one table read as two different figures.
+  test('formats currency with one convention for zero', () => {
+    expect(formatCurrency(0)).toBe('$0.00')
+    expect(formatCurrency(0.12567)).toBe('$0.1257')
+  })
+
+  test('formats run-to-run deltas with an explicit sign', () => {
+    expect(formatPercentagePointDelta(0.6, 0.683)).toBe('+8.3pp')
+    expect(formatPercentagePointDelta(0.683, 0.6)).toBe('-8.3pp')
+    expect(formatPercentagePointDelta(0.5, 0.5)).toBe('0.0pp')
+    expect(formatNumberDelta(3, 7)).toBe('+4')
+    expect(formatNumberDelta(7, 3)).toBe('-4')
+    expect(formatNumberDelta(3, 3)).toBe('0')
+  })
+
+  test('spells an unrecorded value one way for every renderer', () => {
+    expect(UNKNOWN_VALUE).toBe('unknown (not recorded)')
   })
 
   test('formats cost metrics with unavailable-case context', () => {

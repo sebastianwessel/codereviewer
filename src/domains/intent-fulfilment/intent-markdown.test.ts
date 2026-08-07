@@ -10,6 +10,13 @@
 // reason the document exists, not its style.
 
 import { describe, expect, test } from 'vitest'
+import {
+  falseSatisfiedOneIn,
+  inDiffRecallInTen,
+  measuredIntentReliability,
+  measuredReliability,
+  missedOutstandingOneIn
+} from '../reporting/index.js'
 import { renderIntentFulfilmentMarkdown } from './intent-markdown.js'
 import {
   IntentFulfilmentReportSchema,
@@ -307,10 +314,29 @@ describe('what a reader can act on', () => {
 
     expect(markdown).toContain('- Cost: $0.1251')
     expect(markdown).toContain('- Input tokens: 382,152 (366,080 cached)')
+    expect(markdown).toContain('- Output tokens: 2,351')
   })
 
-  // The 1-in-29 and 1-in-10 rates above the table were measured on one model.
-  // Printed without it, a reader on another model reads them as their own.
+  // The lane prices its own call, so it can fail to price it: no provider prices
+  // configured leaves `costUsd` absent. The report then has to say the price is
+  // unknown, because a section listing tokens and no money reads as a free run —
+  // and the review report, which renders these lines from the same function, has
+  // said so in words for as long as it has had them.
+  test('a cost that could not be determined is stated, not omitted', () => {
+    const markdown = renderIntentFulfilmentMarkdown(
+      report([obligation({ id: 'obl_1' })], {
+        usage: { inputTokens: 10, outputTokens: 4 }
+      })
+    )
+
+    expect(markdown).toContain(
+      '- Cost: unavailable (token counts or model prices were missing)'
+    )
+    expect(markdown).not.toContain('- Cost: $')
+  })
+
+  // The measured rates above the table were measured on one model. Printed without
+  // it, a reader on another model reads them as their own.
   test('the rates name the model they were measured on, and the run names its own', () => {
     const markdown = renderIntentFulfilmentMarkdown(
       report([obligation({ id: 'obl_1' })], {
@@ -337,6 +363,60 @@ describe('what a reader can act on', () => {
 
     expect(markdown).toContain('did not record which model produced it')
     expect(markdown).toContain('- Model: not recorded')
+  })
+})
+
+// THE GUARD THIS GROUP EXISTS FOR. The paragraph above the mapping quotes two
+// measured rates, and a rate written into prose is a rate nothing can update — the
+// review report and the pull-request comment already drifted that way once, which
+// is why `measured-reliability.ts` exists. The expected ratios below are computed
+// from the round's transcribed counts INDEPENDENTLY of the renderer, so a
+// re-baseline that moves the counts and leaves the sentence behind fails here.
+describe('the measured rates the rows are weighed against', () => {
+  const oneIn = (part: number, whole: number): number => Math.round(whole / part)
+
+  test('both published ratios are computed from the round the module records', () => {
+    const markdown = renderIntentFulfilmentMarkdown(
+      report([obligation({ id: 'obl_1' })])
+    )
+    const falseSatisfied = oneIn(
+      measuredIntentReliability.falseSatisfiedClaims,
+      measuredIntentReliability.falseSatisfiedOpportunities
+    )
+    const missed = oneIn(
+      measuredIntentReliability.outstandingTotal -
+        measuredIntentReliability.outstandingDetected,
+      measuredIntentReliability.outstandingTotal
+    )
+
+    expect(markdown).toContain(
+      `about **1 in ${falseSatisfied}** obligations this stage calls evidenced`
+    )
+    expect(markdown).toContain(
+      `about **1 in ${missed}** genuinely outstanding obligations`
+    )
+    expect(markdown).toContain(
+      `over ${measuredIntentReliability.corpusCaseCount} real changes`
+    )
+    // The renderer must print the module's derived ratios, not fractions of its
+    // own: identical arithmetic in two places is the drift being prevented.
+    expect(falseSatisfiedOneIn).toBe(falseSatisfied)
+    expect(missedOutstandingOneIn).toBe(missed)
+  })
+
+  // The intent round and the review corpus measure different questions against
+  // different answer keys. A review rate printed here would describe nothing a
+  // reader of this document could check, however fresh the number was.
+  test('it never quotes stage 1 recall or precision', () => {
+    const markdown = renderIntentFulfilmentMarkdown(
+      report([obligation({ id: 'obl_1' })])
+    )
+
+    expect(markdown).not.toContain(String(measuredReliability.inDiffRecallPercent))
+    expect(markdown).not.toContain(
+      String(measuredReliability.adjustedPrecisionPercent)
+    )
+    expect(markdown).not.toContain(`${inDiffRecallInTen} in 10`)
   })
 })
 

@@ -25,9 +25,14 @@
 // configuration. The CLI decides where the string goes.
 
 import {
+  falseSatisfiedOneIn,
   inlineCode,
+  measuredIntentReliability,
+  missedOutstandingOneIn,
+  numberWord,
   pluralize,
   renderMeasuredOn,
+  renderUsageLines,
   safeText
 } from '../reporting/index.js'
 import type {
@@ -51,18 +56,21 @@ const WHAT_THIS_IS =
 // Stating the two rates that bound that risk is the only honest way to let someone
 // calibrate how much weight to put on a row.
 //
-// From a pre-registered round over 28 cases run twice against one pinned engine
-// (`d29aa99`), scored against hand labels frozen and digested before the first
-// call: about 1 in 29 rows called evidenced is genuinely outstanding at head, and
-// about 1 in 10 genuinely-outstanding obligations never reaches this list at all.
-// The first figure is why a row here is not a certificate; the second is why the
-// list's silence is not a clearance.
+// NOT ONE NUMBER IS WRITTEN HERE. Both ratios, the corpus size and the run count
+// come from `measuredIntentReliability`, which holds the round's transcribed counts
+// and derives the ratios from them, exactly as the review report's rates work. A
+// paragraph that states a measured figure in prose is a figure nothing can update:
+// prose cannot be imported, and this repository has already watched one renderer
+// keep quoting a superseded rate after its re-baseline because of it.
 //
-// Deliberately qualitative in the prose and exact in the numbers. Rounding "3.5%"
+// The two rates are the ones that bound the governing risk from both sides. The
+// false-satisfied rate is why a row here is not a certificate; the missed-outstanding
+// rate is why the list's silence is not a clearance.
+//
+// Deliberately qualitative in the prose and exact in the numbers. Rounding the rate
 // to "rarely" would let a reader supply their own optimistic figure, which is the
 // failure this paragraph exists to prevent.
-const MEASURED_RELIABILITY =
-  'Measured reliability, so these rows can be weighed rather than trusted: about **1 in 29** obligations this stage calls evidenced is in fact still outstanding at head, and about **1 in 10** genuinely outstanding obligations never appear on this list at all. Those rates come from a pre-registered round over 28 real changes, each run twice against one pinned engine. They are why this report is read alongside the diff and never in place of it.'
+const MEASURED_RELIABILITY = `Measured reliability, so these rows can be weighed rather than trusted: about **1 in ${falseSatisfiedOneIn}** obligations this stage calls evidenced is in fact still outstanding at head, and about **1 in ${missedOutstandingOneIn}** genuinely outstanding obligations never appear on this list at all. Those rates come from a pre-registered round over ${measuredIntentReliability.corpusCaseCount} real changes, with ${numberWord(measuredIntentReliability.runCount)} runs of each against one pinned engine. They are why this report is read alongside the diff and never in place of it.`
 
 // The sentence a reader most needs when the outstanding list is empty, and the one
 // most easily replaced by a congratulation. Spec 23 forbids certifying completion,
@@ -242,24 +250,17 @@ const renderUsage = (report: IntentFulfilmentReport): readonly string[] => {
     return []
   }
 
-  const cached =
-    usage.cachedInputTokens === undefined
-      ? ''
-      : ` (${usage.cachedInputTokens.toLocaleString('en-US')} cached)`
-
   return [
     '## Cost',
     '',
     // Named before the money: a price without the model it was paid to is not
     // comparable to anything.
     `- Model: ${usage.modelName === undefined ? 'not recorded' : inlineCode(`${usage.providerId ?? 'unknown provider'}/${usage.modelName}`)}`,
-    // Omitted rather than zeroed when pricing could not be determined, so a run
-    // whose price is unknown does not read as a free one.
-    ...(usage.costUsd === undefined
-      ? []
-      : [`- Cost: $${usage.costUsd.toFixed(4)}`]),
-    `- Input tokens: ${usage.inputTokens.toLocaleString('en-US')}${cached}`,
-    `- Output tokens: ${usage.outputTokens.toLocaleString('en-US')}`,
+    // The figures themselves are the review report's, rendered by the same
+    // function: a lane that priced its own call still owes the reader the same
+    // account of it, and an undeterminable price must not read as a free run on
+    // one document and as no run at all on the other.
+    ...renderUsageLines(usage),
     ''
   ]
 }

@@ -1,5 +1,3 @@
-import { EvalReportSchema, type EvalReport } from './eval-report-contracts.js'
-
 // Paired, finding-level comparison of two evaluation arms.
 //
 // The existing comparison contrasts run-level means, which throws away the fact
@@ -369,6 +367,3 @@ export const compareArms = (
     unpairedExpectations
   }
 }
-
-export const parseEvalReport = (value: unknown): EvalReport =>
-  EvalReportSchema.parse(value)

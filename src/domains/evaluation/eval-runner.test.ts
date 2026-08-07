@@ -16,12 +16,10 @@ import type {
   EvalPlausibilityJudgeResult
 } from './eval-plausibility-judge.js'
 import type { EvalSemanticJudge } from './eval-matcher.js'
-import {
-  renderEvalComparison,
-  renderEvalRecallReport,
-  renderEvalSummary,
-  runEvaluation
-} from './eval-runner.js'
+import { renderEvalComparison } from './eval-comparison-report-rendering.js'
+import { renderEvalRecallReport } from './eval-recall-report-rendering.js'
+import { renderEvalSummary } from './eval-summary-report-rendering.js'
+import { runEvaluation } from './eval-runner.js'
 
 // Hermetic judge: answers the committed calibration set exactly as a human
 // labeled it (so the run reports a trustworthy judge) and accepts every pair the
