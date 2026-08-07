@@ -2103,6 +2103,51 @@ extraction is measurably non-deterministic (±10% on any count). The 51.5% headl
 single run.
 
 
+## 2026-08-07 — Authorization-scope prompt clause: REVERTED (null)
+
+Control `b7456ac` vs treatment `b8ad0ec`, 3 seeds each, interleaved, all six arms
+sharing dirty digest `e3b0c442` and deps `52d22c48` and differing only by engine SHA.
+Corpus as it stood at **50 cases / 51 expectations**. Rule pre-registered in
+`reports/2026-08-07-authorization-scope-prereg.md`; result in
+`reports/2026-08-07-authorization-scope-result.md`.
+
+| | control | treatment | delta |
+| --- | --- | --- | --- |
+| recall | 59.5% (sd 6.30pp) | 60.1% (sd 3.00pp) | +0.65pp |
+| precision raw | 69.4% (sd 2.38pp) | 74.2% (sd 0.34pp) | +4.79pp |
+| precision adjusted | 97.9% | 99.0% | +1.09pp |
+| genuine false positives | 2 | 1 | −1 |
+| authorization held-out | 3/15 | 4/15 | +1 observation |
+
+**Paired verdict, and it settles the question: 7 gained, 8 lost, 36 unchanged,
+exact two-sided sign test p = 1.0000.** The clause did not move the class it names;
+it reshuffled findings across mechanisms and depths with no pattern. The +0.65pp
+whole-corpus movement is noise against sd 3.0–6.3pp on an instrument that resolves
+~8pp, and the authorization "rise" is one seed-observation — exactly what the
+pre-registration predicted that denominator could not settle.
+
+**A pre-registered criterion turned out to have a false premise, and it is recorded
+rather than quietly reinterpreted.** Criterion 3 required genuine false positives
+"not rise above 0", written against the 50-case baseline's 0. The CONTROL arm here
+produced 2, so the absolute threshold disqualifies both arms and discriminates
+nothing. Literally the treatment fails it (1 > 0); as intended (FPs must not rise) it
+passes, having halved them. Neither reading is used to rescue anything — the decision
+rests on the paired test and is identical under both. Lesson: state such a threshold
+as a change from the control arm of the same A/B, not as a constant copied from a
+prior baseline.
+
+**Deliberately not shipped on:** raw precision rose 4.79pp with the treatment arm at
+sd 0.34pp, and genuine FPs halved. That is the most consistent signal in the data and
+it is NOT a ship criterion — the rule was written about recall, and promoting a metric
+chosen after seeing the results is how a null becomes a "win". It needs its own
+pre-registration if it is worth pursuing.
+
+**One arm was re-run before any metric was computed.** `treatment-1` first recorded
+`engineDirtyFileCount: 10` from an unrelated in-flight commit, which would have put
+asymmetric contamination in the treatment arm alone. Re-running before scoring is
+what stops the discard decision from being influenced by the result; artefacts kept
+as `treatment-1-dirtytree*`.
+
 ## 2026-08-07 — Security corpus grows to 51 cases (DENOMINATOR CHANGE — do not pool)
 
 `timeout-redirect-target-taken-from-request-referrer` (heartcombo/devise,
