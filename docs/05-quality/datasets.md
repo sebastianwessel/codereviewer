@@ -1,6 +1,6 @@
 # Datasets
 
-Six corpora exist, and they measure genuinely different things. Quoting a number
+Seven corpora exist, and they measure genuinely different things. Quoting a number
 without naming its corpus is meaningless — recall on a curated-subset answer key
 and recall on an exhaustive one are not the same quantity.
 
@@ -10,15 +10,22 @@ and recall on an exhaustive one are not the same quantity.
 | Code Review Bench-style | `eval/benchmarks/code-review-bench-style/` | 59 | 133 | **required** | Recall/precision on real PRs, changed files only |
 | Proof-quality slices | `eval/fixtures/proof-quality-slices/` | 15 | 14 | none | Trustworthy recall on an exhaustive key |
 | Real-repository cross-file | `eval/corpora/real-repo-cross-file/manifest.json` | 37 | 87 | **required** | Cross-file recall on full checkouts, and review of multi-file diffs |
+| Security advisory 2026 | `eval/corpora/security-advisory-2026/manifest.json` | 25 | 26 | **required** | Security recall per mechanism and per context depth, on advisory-confirmed defects |
 | Change-impact dependents | `eval/corpora/change-impact-dependents/manifest.json` | 10 | 11 | **required** | Whether `impact check` names a dependent a change provably broke |
 | Fix-lane fixture | `eval/fixtures/typescript/fix-lane/repo/` | 1 (test-only) | — | none | Fix-lane judgment, via a hermetic test |
 
-> **The last two must never be pooled.** They are structural opposites: the
-> real-repository corpus reads a fix backwards and requires every expectation
-> **inside** the reviewed diff, while the change-impact corpus reads a change
-> forwards and requires every expectation **outside** it. Blending them is the
-> measurement error that made this project's headline recall uninterpretable for
-> months.
+> **The real-repository and change-impact corpora must never be pooled.** They are
+> structural opposites: the real-repository corpus reads a fix backwards and
+> requires every expectation **inside** the reviewed diff, while the change-impact
+> corpus reads a change forwards and requires every expectation **outside** it.
+> Blending them is the measurement error that made this project's headline recall
+> uninterpretable for months.
+>
+> The security-advisory corpus shares the real-repository corpus's orientation and
+> its manifest schema, and is still a separate corpus with a separate output root:
+> it asks whether the reviewer finds an **advisory-named security defect**, which
+> is a narrower question with a differently constructed answer key. Its recall is
+> not differenceable against the cross-file corpus's either.
 
 ---
 
@@ -364,6 +371,64 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
 
 ---
 
+## Security-advisory corpus
+
+**What it is.** `eval/corpora/security-advisory-2026/manifest.json` — 25 cases, 26
+expected findings, 24 upstream projects, every one of the seven supported languages
+and all ten security mechanisms. Same manifest schema, same hydration script and
+same orientation as the real-repository corpus above: the tree is checked out at the
+commit **before** an upstream security fix, and the fix is reviewed backwards so the
+reviewed diff adds the vulnerable code.
+
+**Where the ground truth comes from.** Each case is a security defect because a
+**reviewed GitHub Security Advisory published after the training cutoff** says so —
+never because a curator thought the code looked wrong, and never because a scanner
+flagged it. Selection was on weakness class, language, fix size and severity alone;
+whether any analyzer fires played no part, so recall measured here describes the
+reviewer rather than a scanner.
+
+**Its split is real, and it is the only one here that is.** Every fix is post-cutoff.
+Dev is every fix committed before 2026-06-01 (9 cases), held-out every fix on or
+after (16). That is the boundary `parseRealRepoCorpusManifest` actually verifies —
+the cross-file corpus is `single-split` and its figures are dev-set figures by its
+own admission. Once an A/B is decided on the dev half, only the held-out half backs
+an acceptance claim.
+
+**What it can measure.** Security recall **per mechanism** and **per context depth**,
+which no other corpus here can: the cross-file corpus's security expectations are
+incidental to what it was built for, and its XSS, SSRF and cryptography rows were
+empty or near-empty denominators.
+
+**What it cannot measure.**
+
+- **A per-mechanism rate.** The denominators are one to four expected findings each.
+  Publish the counts or publish nothing; a percentage over three expectations is a
+  direction. Repeating a run triples the denominator without adding information.
+- **Precision as a number.** The answer key is incomplete by construction — an
+  advisory names one defect and the file may hold others — so precision is a bracket
+  whose upper bound this corpus cannot narrow. In the first baseline every unmatched
+  finding was judged a real defect, and there were zero genuine false positives.
+- **Anything differenceable against another corpus's recall.**
+
+**Curation cost, recorded because it is not obvious.** Reviewing a fix backwards
+turns every explanatory comment the fix **added** into a removed line the reviewer
+reads, and fix authors comment security repairs precisely. The hydration disclosure
+gate flagged 15 of 38 curated candidates and 13 were dropped — a **34% loss**. Budget
+roughly three candidates for every two cases that survive. A clean `reviewIntent` is
+not sufficient: the manifest's answer-key check reads curator prose and cannot read
+the diff. Both gates are required.
+
+**A third channel, checked once and clean.** Neither gate reads the rest of the
+working tree, which the reviewer can reach through its read/list/grep tools. All 25
+checkouts were scanned for their own GHSA and CVE identifiers: zero hits. That is a
+property of the orientation — the tree predates the fix, so the advisory did not
+exist yet — but worth re-checking for any project that publishes advisories ahead of
+fixes.
+
+**Baseline.** See [Current results](current-results.md#security-headline).
+
+---
+
 ## Change-impact dependents corpus
 
 **What it is.** `eval/corpora/change-impact-dependents/manifest.json` — 10 real
@@ -491,7 +556,8 @@ this is a wiring test with one positive and one negative, not an evaluation.
 | Is line placement correct? | Proof-quality slices (**only** corpus with `path-line` keys) |
 | Does cross-file reasoning work? | Real-repository cross-file |
 | Does `impact check` name a dependent a change broke? | Change-impact dependents |
-| Are security mechanisms covered? | Real-repository cross-file, then Code Review Bench-style |
+| Are security mechanisms covered? | **Security advisory 2026** — the only corpus with a denominator in every mechanism |
+| Does the reviewer find a defect that needs another file? | Security advisory 2026 (per context depth), then Real-repository cross-file |
 
 ---
 
@@ -502,4 +568,5 @@ this is a wiring test with one positive and one negative, not an evaluation.
 - [Comparing runs](comparing-runs.md#eval-slice-manifest) — proving two local packs are identical.
 - Specs: `specs/06-evaluation-and-quality-gates.md` §Eval Dataset Contract,
   `specs/17-real-repository-eval-corpus.md`,
-  `specs/22-change-impact-review.md` §Evaluation.
+  `specs/22-change-impact-review.md` §Evaluation,
+  `specs/15-security-focused-review.md` §The Security Corpus.

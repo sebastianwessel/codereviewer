@@ -741,6 +741,22 @@ Three things follow:
   reads the curator's prose, and the curator writes it carefully. It cannot read
   the diff. The two checks are independent and both are required.
 
+### A third channel, checked once and clean
+
+Neither gate reads the rest of the working tree, and the reviewer can reach all of
+it through its read/list/grep tools. A repository whose `CHANGELOG` names the very
+advisory a case is built from would hand over the answer through a path no gate
+watches.
+
+Checked on 2026-08-07 across all 25 checkouts, for each case's own GHSA and CVE
+identifiers: **0 hits**. 29 of the checkouts do mention *some* advisory identifier
+— changelogs of large projects invariably do — but never their own, because the
+tree is pinned at the commit *before* the fix and the advisory did not exist yet.
+
+That is a property of the orientation rather than of the curation, so it holds for
+any future case captured the same way. It is worth re-checking anyway whenever a
+case is captured from a repository that publishes advisories ahead of fixes.
+
 Two operational facts from the same exercise, recorded because they are invisible
 until an artifact is real:
 

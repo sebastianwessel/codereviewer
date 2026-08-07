@@ -116,6 +116,48 @@ run second on a shared cache inherits the first arm's warm cache — quote the
 cold figure, or state which you're quoting. The three-run sweep cost **$3.62
 review + $0.81 scoring = $4.44** for 3 × 37 cases.
 
+## Security headline
+
+Measured **2026-08-07** on the **security-advisory corpus**: 25 cases, 26 expected
+findings, 24 upstream projects, all seven languages, all ten security mechanisms.
+Every case is a defect because a reviewed GitHub Security Advisory published after
+the training cutoff says so. Model `openai/gpt-5.3-codex`, engine pinned `9e410d2`,
+three seeds.
+
+| Metric | Value | Per run |
+| --- | ---: | --- |
+| Recall | **61.5%** (sd 3.85pp) | 65.4 / 57.7 / 61.5 |
+| Precision (raw to adjusted bracket) | **73.9% to 100%** | 73.9–100 / 75.0–100 / 72.7–100 |
+| Genuine false positives | **0**, all three seeds | 0 / 0 / 0 |
+| Cost per run | $0.86 | $1.34 cold, then $0.53 / $0.71 |
+
+Source: `reports/2026-08-07-security-corpus-baseline.md`.
+
+**This is not comparable to the in-diff figure above.** Different corpus, different
+question, different answer-key construction. Do not difference them.
+
+**What changed in the picture.** The classes previously recorded at 0% — XSS, SSRF,
+cryptography — are not at 0% once the material is chosen for them rather than
+incidentally containing them: pooled over three seeds, path-traversal 9/9,
+cryptography 12/12, xss 6/12, ssrf 5/9. The weakest are unsafe-config 0/3, injection
+1/3, concurrency-resource 3/9. Every one of those is a **direction, not a number** —
+the denominator is three seeds over one to four expectations, and repeating a run
+triples the denominator without adding information.
+
+**The gap is context depth, not mechanism.** Cross-file expectations score **9/24
+(38%)** against local 78% and cross-function 89%, stable across every seed. Cross-file
+retrieval has been on by default since 2026-08-01, so that 38% is what the reviewer
+achieves *with* the mediated read/list/grep tools in hand. This is the largest
+measured deficit here that instrument noise does not explain.
+
+**Analyzer ingestion (`security.signals`) stays off, now for a measured reason.** On
+132 advisory-confirmed vulnerabilities, a public analyzer flags a line the fix
+changed **3.0% of the time** (4/132; 2 of those 4 describe the advisory's weakness).
+That bounds the layer's possible recall lift at 3 points against a promotion bar of
+3, so no A/B was run — the bound answers the question. See
+`reports/2026-08-07-analyzer-firing-base-rate.md`. The 3.0% is a property of Semgrep
+OSS with public rules, not of the layer.
+
 ## Out-of-diff recall and `impact check`: two different jobs, not one scorecard
 
 `review` answers "does this change introduce a defect," and its attention is

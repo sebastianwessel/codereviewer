@@ -257,8 +257,8 @@ codereviewer eval run [flags]
 
 ### Flags that are actually parsed
 
-Every flag `runEval` declares in `src/cli/index.ts`. Anything else is rejected
-with exit `2` before the run starts.
+Every flag `runEval` declares in `src/cli/commands/eval-run.ts`. Anything else is
+rejected with exit `2` before the run starts.
 
 | Flag | Value | Effect |
 | --- | --- | --- |
@@ -314,7 +314,8 @@ serialize the cases themselves.
 ## The regression gate
 
 The gate resolves in one place (`resolveEvalRegressionGateThresholds` in
-`src/cli/index.ts`): a **profile**, then any **overrides** layered on top.
+`src/cli/eval-regression-gate-policy.ts`): a **profile**, then any **overrides**
+layered on top.
 
 ```
 profile (stable | strict)  ←  --gate-profile, or evaluation.regressionGate.profile

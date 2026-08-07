@@ -8,6 +8,26 @@ seeds.
 Every rate below is a property of that model on that corpus. It is not a property
 of the engine.
 
+## Provenance, including a wrinkle
+
+All three seeds ran the same pinned engine: `engineSha 9e410d2`, `dependencyDigest
+52d22c4858028742`, exit 0. Seeds 1 and 2 also record `engineDirtyFileCount: 0`;
+**seed 3 records 5**, because documentation was being edited in the main working
+tree while it ran.
+
+That dirty work provably did not participate — `engine-pin.sh` runs the engine from
+a detached `git worktree` at the SHA, and its own comment states that uncommitted
+work is not in it — but `engine-consistency.mjs` keys on
+`engineSha + engineDirtyDigest + deps` and would refuse to pool these three.
+
+The refusal is conservative and correct as a rule: the guard cannot know whether
+the five files were documentation or `src/`. Arguing around it by hand is exactly
+the failure this project already has on record. Seed 3 is therefore re-run from a
+clean tree at the same pinned SHA and the tainted artefacts are kept beside it as
+`run3-dirtytree*`. The figures below are unchanged by this — the re-run executes
+byte-identical engine source — but the sidecars now say so without an argument
+attached.
+
 ## Headline
 
 | | seeds | mean | sd |
