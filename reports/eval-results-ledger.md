@@ -2103,6 +2103,56 @@ extraction is measurably non-deterministic (±10% on any count). The 51.5% headl
 single run.
 
 
+## 2026-08-07 — Stale precision boundary: REVERTED, and an ARM-ORDER ARTIFACT found
+
+Control `15b4781` vs treatment `41157ab`, 3 seeds each, 51-case corpus, all six arms
+clean and differing only by engine SHA. Rule pre-registered in
+`reports/2026-08-07-stale-precision-boundary-prereg.md`; result in
+`reports/2026-08-07-boundary-result-and-order-artifact.md`.
+
+**Primary endpoint did not fall.** Empty-return rate 14/153 (9.15%) -> 15/153
+(9.80%), inside a control arm whose own seed spread is 2 runs. Rejected on the rule
+as written. Guards: recall -0.64pp, adjusted precision +0.03pp, genuine FPs 1 in both.
+By depth the target moved (`callee` 27.8% -> 16.7%) but `implementation` moved the
+other way (13.9% -> 25.0%) on 18 and 36 observations. Net wash.
+
+The clause contradiction is real and dated (`ac4451a` 2026-06-24 vs `46077ec`
+2026-07-31). Resolving it did not reduce silence, so the hypothesis is UNSUPPORTED
+rather than disproved — either silence has another cause or this wording is not the
+one that resolves it.
+
+### THE ARM-ORDER ARTIFACT — read before citing any precision delta
+
+Both A/Bs today ran `for each seed: control, then treatment`, so **treatment always
+ran second**. Raw precision:
+
+| A/B | arm | position | mean | sd |
+| --- | --- | --- | --- | --- |
+| authorization | control | 1st | .6941 | .0238 |
+| authorization | treatment | 2nd | **.7420** | **.0034** |
+| boundary | control | 1st | .6608 | .0227 |
+| boundary | treatment | 2nd | **.7232** | **.0052** |
+
+**Two unrelated interventions produced the same +5-6pp shift with an
+order-of-magnitude tighter sd, always in the arm that ran second.** A treatment
+effect does not replicate across unrelated treatments; position does. The cause is
+not established and is not guessed at.
+
+Consequences: **no precision delta between arms in this harness may be cited** until
+the cause is found — that includes both of today's. Recall appears unaffected (deltas
++0.65pp and -0.64pp, no shared direction) but that is weak evidence, not a clearance.
+Interleaving stopped the second arm inheriting a warm COST profile; it does not
+randomise POSITION, which this design left fixed.
+
+**Both verdicts stand and are strengthened by this.** The artifact inflates the
+treatment arm, so it could only have pushed toward shipping; both A/Bs rejected
+anyway, and the first explicitly refused to ship on its precision signal. Had it
+shipped on that, it would have shipped on an artifact.
+
+**Required of the next A/B:** randomise or alternate arm order per seed, and record
+arm position in the provenance sidecar so this is checkable rather than visible only
+when two A/Bs happen to run the same day.
+
 ## 2026-08-07 — Authorization-scope prompt clause: REVERTED (null)
 
 Control `b7456ac` vs treatment `b8ad0ec`, 3 seeds each, interleaved, all six arms
