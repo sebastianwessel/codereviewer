@@ -2149,10 +2149,19 @@ nothing: the design was underpowered for anything below ~11pp, which is nearly e
 realistic change. "Rejected" under their pre-registered rules is correct; "these
 ideas do not work" would not be.
 
-**Further prompt-level A/Bs on this corpus are not a productive use of spend.** What
-would change it, by expected value: more cases (60+ further adjudicated candidates
-exist); ~20 seeds per arm; or carrying claims on per-expectation paired outcomes,
-which remove between-run variance, rather than on run-level means.
+**Further prompt-level A/Bs on this corpus are not a productive use of spend**, and
+the way out is narrower than first written here. **More cases is NOT available at the
+scale required**: only 21 screened candidates remain unadjudicated (not the "60+"
+this entry originally claimed), yielding ~9 more cases and taking the resolvable
+difference from ~13.7pp to ~12.5pp. Reaching 8pp needs 149 expectations and 6pp needs
+264; the entire post-cutoff advisory harvest produced 132 structurally reviewable
+candidates and 111 are already used.
+
+The only affordable route is **more seeds carried by the paired test**. Extra seeds
+barely move the run-level mean's binomial noise — that is set by the number of
+expectations — but they sharpen each expectation's own outcome from 0-3 to 0-9, which
+is what separates a real shift from the seed noise currently making ~15 of 51 pairs
+read discordant in every A/B. Nine seeds x two arms x 51 cases is roughly $22 warm.
 
 The quotable position: this project can measure its LEVEL of security recall — about
 **61%** pooled over twelve runs — and cannot currently measure an IMPROVEMENT to it.

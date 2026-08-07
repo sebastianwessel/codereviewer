@@ -89,10 +89,22 @@ zero.
 
 What would change that, in order of expected value per unit of effort:
 
-1. **More cases.** Sampling variance falls with corpus size; 51 is small. The
-   screening pipeline that produced these has 60+ further adjudicated candidates.
-2. **More seeds on the arms that matter**, accepting the cost — 20 per arm to resolve
-   5 points.
+1. **More cases — but the pool is nearly exhausted, and this was overstated when
+   first written.** Only **21** screened candidates remain unadjudicated, not the
+   "60+" originally claimed here. At the observed ~45% keep rate they yield about
+   **9 more cases**, taking the corpus to ~60 expectations and the binomial sd from
+   6.8pp to 6.3pp — resolving ~12.5pp instead of ~13.7pp. Effectively nothing.
+   Reaching an 8pp resolution needs **149 expectations**, and 6pp needs **264**;
+   the whole post-cutoff advisory harvest yielded 132 structurally reviewable
+   candidates, of which 111 are already adjudicated. **More cases is not available
+   at the scale required.**
+2. **More seeds, carried by the paired test — the only affordable route.** Extra
+   seeds barely move the run-level mean's binomial noise, which is set by the
+   number of expectations. What they do change is the reliability of each
+   expectation's own outcome: at 3 seeds an expectation reads 0-3 and a 2-vs-1
+   difference between arms is mostly seed noise, which is why ~15 of 51 pairs read
+   discordant in every A/B. At 9 seeds it reads 0-9 and a real shift separates from
+   noise. 9 seeds x 2 arms x 51 cases is roughly $22 at warm-cache prices.
 3. **A lower-variance endpoint.** Per-expectation paired outcomes already remove
    between-run variance and are what should carry any future claim; run-level recall
    means should not.
