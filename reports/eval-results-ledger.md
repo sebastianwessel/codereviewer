@@ -2103,6 +2103,67 @@ extraction is measurably non-deterministic (±10% on any count). The 51.5% headl
 single run.
 
 
+## 2026-08-07 — Security recall on advisory-confirmed defects (first baseline)
+
+Provider `openai/gpt-5.3-codex`, engine pinned `9e410d2` (0 dirty), corpus
+`security-advisory-2026` (25 cases / 26 expectations), 3 seeds. Full report:
+`reports/2026-08-07-security-corpus-baseline.md`.
+
+| | seeds | mean | sd |
+| --- | --- | --- | --- |
+| recall | 65.4 / 57.7 / 61.5% | **61.5%** | 3.85pp |
+| precision raw (lower bound) | 73.9 / 75.0 / 72.7% | 73.9% | 1.14pp |
+| precision adjusted (upper bound) | 100 / 100 / 100% | 100% | 0 |
+| cost | $1.34 / $0.53 / $0.71 | $0.86 | cold then cache-warm |
+
+**Zero genuine false positives across all three seeds.** Every unmatched finding
+was judged a real defect the advisory did not name — expected, since an advisory
+names one defect and the file may hold others. Precision is a bracket and this
+corpus cannot narrow it.
+
+**What it overturns.** The classes previously recorded at 0% are not at 0% on
+material chosen for them: path-traversal 9/9 and cryptography 12/12 pooled, xss
+6/12, ssrf 5/9. Weakest: unsafe-config 0/3, injection 1/3, concurrency-resource
+3/9. Denominators are 3 seeds × 1–4 expectations, so every per-mechanism row is a
+DIRECTION; repeating a run triples the denominator without adding information.
+
+**The wall is cross-file: 9/24 = 38%**, against local 78% and cross-function 89%,
+stable across all three seeds. Cross-file retrieval has been ON by default since
+2026-08-01, so 38% is what the reviewer achieves WITH the mediated tools, not
+without. The lever meant to fix this class has already been pulled.
+
+**Do not quote the dev/held-out gap** (73.3% vs 54.2% pooled). The seeds are
+repeated measures on the same 26 expectations, so the real denominators are 10 and
+16. Even on the inflated counts, z ≈ 1.69, p ≈ 0.09.
+
+**Not comparable to any cross-file-corpus figure.** Different corpus, different
+question, different answer-key construction.
+
+## 2026-08-07 — Analyzer firing base rate (Mechanism 2 bounded, no A/B run)
+
+Deterministic, no provider calls, no cost. Full report:
+`reports/2026-08-07-analyzer-firing-base-rate.md`.
+
+132 advisory-confirmed vulnerabilities, each with a fix commit that deletes or
+modifies the vulnerable line, scanned at the vulnerable revision by Semgrep OSS
+1.172.0 under twelve public rulesets. An alert lands on a line the fix changed in
+**4 (3.0%, CI 0.8–7.6%)**; in **2** does the alert describe the advisory's
+weakness.
+
+Mechanism 2 can only act where attribution admits an alert, so its recall lift is
+bounded at 3.0pp with perfect conversion against a promotion bar of ≥3pp. The
+pre-registered rule's outcome is unchanged — keeps shipping disabled — and now
+rests on a measured bound rather than an absent measurement. Not removed: the gate
+never failed, and 3.0% is a property of Semgrep OSS, not of the mechanism.
+
+**No A/B was run and none should be.** Three seeds per arm to resolve an effect
+bounded at four cases spends money to decorate a conclusion the bound already
+fixes.
+
+**A first pass using `p/security-audit` alone returned 0/132 and was wrong** — that
+ruleset fired on 4 of 10 blatant sinks in a control file. Validate an analyzer
+configuration against a control before reporting a null.
+
 ## Standing caveats for reading anything here
 
 - **Variance.** sd ≈ 4.8pp on this corpus. An effect below roughly 10pp cannot be

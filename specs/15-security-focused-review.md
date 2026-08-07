@@ -677,6 +677,38 @@ The per-mechanism denominators are small — one to four expected findings each.
 per-mechanism rate from this corpus is a direction, not a number, and must be
 published with its counts.
 
+### Measured Baseline
+
+Provider `openai/gpt-5.3-codex`, engine pinned `9e410d2`, three seeds, 2026-08-07.
+Report: `reports/2026-08-07-security-corpus-baseline.md`.
+
+| | mean | sd |
+| --- | --- | --- |
+| recall | **61.5%** | 3.85pp |
+| precision, raw (lower bound) | 73.9% | 1.14pp |
+| precision, adjusted (upper bound) | 100% | 0 |
+
+**Zero genuine false positives across all three seeds.** Every unmatched finding
+was judged a real defect the advisory did not name, which is what an
+advisory-derived key predicts and why precision here is a bracket rather than a
+number.
+
+The classes this spec previously recorded at 0% are not at 0% on material chosen
+for them: path-traversal 9/9 and cryptography 12/12 pooled, xss 6/12, ssrf 5/9.
+Weakest are unsafe-config 0/3, injection 1/3, concurrency-resource 3/9.
+
+**The deficit is context depth, not mechanism.** Cross-file expectations score
+9/24 (38%) against local 78% and cross-function 89%, stable across every seed —
+and cross-file retrieval has been enabled by default since 2026-08-01, so that
+38% is what the reviewer achieves *with* the mediated read/list/grep tools. The
+lever intended for this class has already been pulled and the class is still the
+gap. That is the largest measured deficit in this spec that noise does not
+explain.
+
+sd 3.85pp at three seeds means this instrument cannot resolve a difference below
+roughly 8 percentage points. An intervention smaller than that needs more seeds or
+more cases, not a stronger claim.
+
 ### Reviewing a fix backwards contaminates a third of the candidates
 
 This is the methodological result, and it constrains every future corpus of this

@@ -21,8 +21,8 @@ nothing about review quality.
 
 ## Hydration
 
-Two corpora ship as metadata and must be materialized before they can be scored.
-Neither hydration script makes a model call, so neither costs provider spend.
+Four corpora ship as metadata and must be materialized before they can be scored.
+No hydration script makes a model call, so none of them costs provider spend.
 
 ### Code Review Bench-style pack
 
@@ -75,6 +75,34 @@ in effect**, because unselected cases are legitimately absent from that run.
 Hydration fails a case rather than proceeding when the manifest violates the
 temporal cutoff, the license allowlist, or answer-key exclusion (including
 answer-key wording found in the **generated diff**).
+
+### Security-advisory corpus
+
+The same script and the same manifest shape as the cross-file corpus above,
+pointed at different metadata:
+
+```bash
+node --import tsx scripts/hydrate-real-repo-corpus.ts \
+  --manifest eval/corpora/security-advisory-2026/manifest.json \
+  --output-slice-root .codereviewer/eval/security-cases/security-advisory-2026
+```
+
+25 cases, each a security defect confirmed by a reviewed GitHub Security Advisory
+published after the training cutoff, covering all ten security mechanisms and all
+seven supported languages. Score it with `eval run --slice-root` exactly like the
+cross-file corpus — it is the same command, because it is the same kind of
+question asked about different material.
+
+**Its output root is deliberately not a sibling of the cross-file corpus's.** The
+two answer different questions and must never be pooled; a shared parent directory
+is one `--slice-root` typo away from doing exactly that.
+
+It is the only corpus here with a **verified chronological split** — every fix is
+post-cutoff, dev is every fix before 2026-06-01 and held-out every fix on or after.
+Once an A/B has been decided on the dev half, only the held-out half may back an
+acceptance claim. Its per-mechanism denominators are one to four findings each, so
+a per-mechanism rate from it is a direction and not a number: publish it with its
+counts or not at all.
 
 ### Change-impact dependents corpus
 
