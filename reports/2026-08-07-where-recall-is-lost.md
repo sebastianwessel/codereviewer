@@ -124,13 +124,44 @@ population of "the engine found it and the judge said no", so the matcher is sou
 and the ~61% figure is not understating anything. This also removes the cheapest
 imaginable win: there was nothing to correct.
 
-What it leaves is sharper than what it closes. Three quarters of misses are *no
-finding in that file*, while discovery returns a completely empty array only ~9% of
-the time. So in most misses the engine is speaking — about a different file, or a
-distant part of the same one. Combined with the earlier result that the pipeline
-loses 1.6% and that discovery emits 1.24 findings against a key naming 1.02, the
-remaining lever is **which file inside a case gets the attention**, not how much is
-found or whether it survives.
+### The "which file" reading above was wrong, and the correction is the finding
 
-That is a hypothesis this analysis generates, not one it tests.
+The paragraph originally here concluded that three quarters of misses were "no
+finding in that file", and that the lever was therefore **which file inside a case
+gets the attention**. Testing that before acting on it killed it, for two reasons.
+
+**First, the corpus cannot support it.** 46 of 51 cases declare a *single* reviewed
+path. There is no file to choose between.
+
+**Second, the 75.6% was another incomplete bucket sum** — the same mistake as the
+26.7% corrected at the top of this report. It counted findings only from the
+unlisted-real, false-positive and duplicate buckets, so a case whose finding matched
+a *different* expectation read as "no finding in that file". Using discovery's own
+`rawFindingCount`, which is unambiguous, the picture inverts:
+
+| | share of the 406 missed expectation-observations |
+| --- | --- |
+| single-file case, engine spoke **in that same file** | **67.0%** |
+| single-file case, engine said nothing at all | 22.2% |
+| multi-file case, engine spoke elsewhere | 10.3% |
+| multi-file case, engine said nothing | 0.5% |
+
+**Two thirds of all misses are cases with one reviewed file, where the engine read
+that file, produced a finding, and the finding was not the advisory's defect.** It is
+looking in exactly the right place and reporting something else.
+
+### What is now established, three independent ways
+
+- The reviewer **trades** findings rather than adding them — the first paired test
+  showed 7 gained against 8 lost across unrelated mechanisms.
+- It emits **1.24 findings per case-run** against a key naming **1.02**, losing 1.6%
+  downstream. It is picking roughly one thing.
+- In **67%** of misses it picks that one thing from the correct file and picks
+  wrongly.
+
+The constraint is **selection within a file**: which of the defects visible in a file
+the reviewer judges most worth reporting. Not retrieval, not volume, not file
+choice — each of those is now closed by measurement rather than by argument.
+
+That is a target, not a solution, and this analysis does not test a fix for it.
 
