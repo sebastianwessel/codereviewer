@@ -227,7 +227,16 @@ Task limits:
   package/bare imports and anything resolving to a changed file are skipped. The
   injection is capped (at most six dependency files per task, a ~12KB section
   byte budget, and a per-file digest cap) and is gated off together with
-  deterministic support signals (`deterministicSignalMode: 'disabled'`).
+  deterministic support signals (`deterministicSignalMode: 'disabled'`). A digest
+  the per-file cap truncates is cut on a LINE boundary and discloses the cut in
+  the digest itself, naming how many of its lines were shown; a digest that fits
+  is emitted unchanged. That disclosure is a correctness requirement, not a
+  recall or budget preference: the digest format pushes a literal `...` between
+  every pair of non-contiguous kept lines, so within it an end with no marker
+  asserts that nothing follows, and a byte-wise cut is not line-aware and lands
+  mid-line — presenting a fragment of a line as real numbered source. Either way
+  the packet states something FALSE about the dependency file rather than merely
+  omitting part of it.
   Referenced-definition documents are context only: they are never added to the
   task's paths and findings remain restricted to the changed files. Each is
   recorded in the context ledger as `support-signal-output` with reason
@@ -1815,6 +1824,7 @@ provider messages, prompt text, source snippets, tool output, or secrets.
 | Packet overflow fails before provider call without trimming | workflow regression test |
 | A task within `maxFilesPerDiscoveryCall` produces exactly one partition and leaves the run unchanged | discovery partition unit tests |
 | A partitioned task narrows each partition's paths and routes referenced definitions, change intent, and support signals to every partition | discovery partition and sub-task unit tests |
+| A referenced-definition digest over the per-file cap is cut on a line boundary and discloses the cut; one that fits is unchanged | referenced-definition unit tests |
 | A provider `context_length_exceeded` halves the task and retries each half; an indivisible unit fails with `review_task_indivisible` | reactive split unit tests |
 | Split halves keep their absolute line origins so a finding reports the file's real line | source chunk numbering unit tests |
 | The child-agent call budget scales with `maxFilesPerDiscoveryCall` and never under-reserves | harness config unit tests |

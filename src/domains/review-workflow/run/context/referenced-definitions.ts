@@ -1,10 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { resolveExistingPathInsideRoot } from '../../../../platform/path-service.js'
-import {
-  sliceUtf8Bytes,
-  utf8ByteLength
-} from '../../../../shared/text/utf8-bytes.js'
+import { utf8ByteLength } from '../../../../shared/text/utf8-bytes.js'
 import {
   extractDeterministicSignals,
   type DeterministicSignalExtraction,
@@ -29,7 +26,8 @@ const MAX_REFERENCED_DEFINITION_FILES = 6
 const REFERENCED_DEFINITIONS_TOTAL_BYTE_BUDGET = 12 * 1024
 
 // Per-file digest cap so a single large dependency cannot consume the whole
-// section budget.
+// section budget. When it binds, the digest is cut on a LINE boundary and the cut
+// is disclosed in the digest itself (see `truncateDigestAtLineBoundary`).
 const REFERENCED_DEFINITION_FILE_BYTE_BUDGET = 4 * 1024
 
 // Filesystem-aware resolution candidates for a relative import specifier without
@@ -185,6 +183,57 @@ const resolveRelativeDependencyPath = async (
   return undefined
 }
 
+// Cut an over-budget digest at a line boundary and say so, instead of slicing it
+// by bytes.
+//
+// The per-file cap binds on a format that means something. Between every pair of
+// non-contiguous kept lines the digest pushes a literal '...', so within this
+// format an end with no marker ASSERTS that nothing follows it. And
+// `sliceUtf8Bytes` is code-point-aware but not line-aware, so a byte cut lands
+// mid-line and shows the model a fragment — `47: const token = resolveSecret(user`
+// — presented as real numbered source. Both are false statements about the
+// dependency file, not merely incomplete ones, which is the same shape as a
+// ranged read that contradicts its own summary.
+//
+// Modelled on the `repo_list` cap notice in `context-retrieval/index.ts`: the same
+// kind of cut (a list of items ended early) gets the same kind of disclosure.
+const truncateDigestAtLineBoundary = (
+  digestLines: readonly string[]
+): string => {
+  const truncationNotice = (keptLineCount: number): string =>
+    `[TRUNCATED: ${keptLineCount} of ${digestLines.length} digest lines shown, ` +
+    `cut at the per-file byte budget. Absence of a declaration below this point ` +
+    `is NOT evidence this file lacks it — read the file with the repository ` +
+    `tools rather than concluding from this digest.]`
+
+  // Reserved against the LONGEST notice this digest can produce: the kept count
+  // never exceeds the total, so the total's own digit width bounds it. The extra
+  // byte is the newline that joins the notice to the body.
+  const bodyBudget =
+    REFERENCED_DEFINITION_FILE_BYTE_BUDGET -
+    utf8ByteLength(truncationNotice(digestLines.length)) -
+    1
+  const keptLines: string[] = []
+  let usedBytes = 0
+
+  for (const line of digestLines) {
+    // Every line but the first also costs the newline that joins it.
+    const lineBytes = utf8ByteLength(line) + (keptLines.length === 0 ? 0 : 1)
+
+    if (usedBytes + lineBytes > bodyBudget) {
+      break
+    }
+
+    keptLines.push(line)
+    usedBytes += lineBytes
+  }
+
+  // A first line longer than the whole budget keeps nothing, and the disclosure
+  // is still emitted rather than a fragment of it: "none of this file was shown"
+  // is true, and the fragment would not be.
+  return [...keptLines, truncationNotice(keptLines.length)].join('\n')
+}
+
 // Build a bounded digest for one unchanged dependency file: prefer its exported/
 // public declaration lines (re-run the deterministic extractor on the file and
 // keep a small window around each export/public-symbol/declaration line). Falls
@@ -255,10 +304,12 @@ const buildDefinitionDigest = (
     previousIndex = index
   }
 
-  return sliceUtf8Bytes(
-    digestLines.join('\n'),
-    REFERENCED_DEFINITION_FILE_BYTE_BUDGET
-  )
+  const digest = digestLines.join('\n')
+
+  // A digest that fits is returned unchanged, byte for byte.
+  return utf8ByteLength(digest) <= REFERENCED_DEFINITION_FILE_BYTE_BUDGET
+    ? digest
+    : truncateDigestAtLineBoundary(digestLines)
 }
 
 export type CollectReferencedDefinitionsInput = {

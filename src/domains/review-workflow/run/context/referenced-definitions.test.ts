@@ -329,6 +329,106 @@ describe('collectReferencedDefinitions', () => {
     })
   })
 
+  // The per-file cap is the one bound whose binding CHANGES what the digest says
+  // rather than only how much of it there is. A digest is a line-numbered extract
+  // that pushes a literal '...' between every pair of non-contiguous kept lines,
+  // so within this format an end with no marker asserts that nothing follows; and
+  // the byte cut is code-point-aware but not line-aware, so it lands mid-line and
+  // presents a fragment of a line as if it were real numbered source. Both are
+  // false statements about the dependency file, which is why this is correctness
+  // and not a bet on recall.
+  describe('the per-file digest cap', () => {
+    // Every line is an export, so every line is an anchor and the digest keeps
+    // the whole file — well past the 4KB per-file cap.
+    const oversizedDependencyLines = Array.from(
+      { length: 120 },
+      (_unused, index) =>
+        `export const referencedSymbol${String(index).padStart(3, '0')} = 'value-${'x'.repeat(40)}'`
+    )
+
+    const digestOfOversizedDependency = async (): Promise<string> => {
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'changed.ts'),
+        "import { referencedSymbol000 } from './dep.js'\n",
+        'utf8'
+      )
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'dep.ts'),
+        `${oversizedDependencyLines.join('\n')}\n`,
+        'utf8'
+      )
+
+      const { digests } = await collectReferencedDefinitions({
+        repositoryRoot,
+        taskPaths: ['src/changed.ts'],
+        facts: [importFact('src/changed.ts', './dep.js')],
+        knownPaths: new Set(['src/changed.ts'])
+      })
+
+      const content = digests[0]?.content
+
+      if (content === undefined) {
+        throw new Error('expected a digest for the oversized dependency')
+      }
+
+      return content
+    }
+
+    test('never ends with a partial source line', async () => {
+      const content = await digestOfOversizedDependency()
+      const numberedLines = content
+        .split('\n')
+        .filter((line) => /^\d+: /u.test(line))
+
+      // Every numbered line the model is shown is the WHOLE line it claims to be.
+      // Before the fix the last one was a strict prefix of a real source line —
+      // code presented as line N that does not exist in that form in the file.
+      for (const numberedLine of numberedLines) {
+        const lineNumber = Number(/^(\d+): /u.exec(numberedLine)?.[1])
+
+        expect(numberedLine).toBe(
+          `${lineNumber}: ${oversizedDependencyLines[lineNumber - 1]}`
+        )
+      }
+    })
+
+    test('discloses the cut, and the disclosure fits inside the budget', async () => {
+      const content = await digestOfOversizedDependency()
+
+      // The format marks every internal gap with '...', so an end with no marker
+      // asserts that nothing follows. The notice is what makes that end true.
+      expect(content).toMatch(
+        /\n\[TRUNCATED: \d+ of \d+ digest lines shown, cut at the per-file byte budget\./u
+      )
+      expect(content.trimEnd().endsWith(']')).toBe(true)
+      expect(Buffer.byteLength(content)).toBeLessThanOrEqual(
+        referencedDefinitionBounds.perFileByteBudget
+      )
+    })
+
+    test('leaves a digest that fits byte-identical, with no notice', async () => {
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'changed.ts'),
+        "import { calc } from './dep.js'\n",
+        'utf8'
+      )
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'dep.ts'),
+        'export const calc = (value: number): number => value * 2\n',
+        'utf8'
+      )
+
+      const { digests } = await collectReferencedDefinitions({
+        repositoryRoot,
+        taskPaths: ['src/changed.ts'],
+        facts: [importFact('src/changed.ts', './dep.js')],
+        knownPaths: new Set(['src/changed.ts'])
+      })
+
+      expect(digests[0]?.content).not.toContain('TRUNCATED')
+    })
+  })
+
   // Assembly calls this once per task, and tasks legitimately import the same
   // dependencies, so a run-scoped memo carries the resolved paths and the digests
   // between them. Each probe is two `realpath` syscalls and each digest re-runs
