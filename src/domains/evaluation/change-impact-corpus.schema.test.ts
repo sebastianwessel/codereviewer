@@ -2,12 +2,14 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { describe, expect, test } from 'vitest'
+import { SeveritySchema } from '../../shared/contracts/index.js'
 import { CompatibilityClassSchema } from '../change-impact/index.js'
 import {
   countExpectedImpactByReachability,
   directlyReachableImpactClasses,
   evidenceDateOf,
   ExpectedCompatibilityClassSchema,
+  ExpectedImpactSchema,
   ImpactReachabilitySchema,
   isDirectlyReachable,
   parseChangeImpactCorpusManifest,
@@ -256,14 +258,18 @@ describe('reachability vocabulary', () => {
     )
   })
 
-  // The corpus asserts a class the engine also reports. Duplicating the literal
-  // union keeps the answer key independent of the lane's own types; this test is
-  // what stops the two from drifting apart while nobody is looking.
-  test('mirrors the reportable subset of the implemented compatibility class', () => {
-    expect([...ExpectedCompatibilityClassSchema.options].sort()).toEqual(
-      CompatibilityClassSchema.options
-        .filter((option) => option !== 'no-impact')
-        .sort()
+  // Both vocabularies are now NARROWED from their canonical enum rather than
+  // retyped, so membership cannot drift. What a test still has to hold is the
+  // EXCLUSION: each schema drops exactly one member, and it is the one whose
+  // meaning a corpus of proven breakage cannot carry.
+  test('excludes exactly the members proven breakage cannot express', () => {
+    expect(ExpectedCompatibilityClassSchema.options).not.toContain('no-impact')
+    expect(ExpectedCompatibilityClassSchema.options).toHaveLength(
+      CompatibilityClassSchema.options.length - 1
+    )
+    expect(ExpectedImpactSchema.shape.severity.options).not.toContain('info')
+    expect(ExpectedImpactSchema.shape.severity.options).toHaveLength(
+      SeveritySchema.options.length - 1
     )
   })
 })

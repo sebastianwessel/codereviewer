@@ -41,6 +41,7 @@ src/
     review-planning/
     context-retrieval/
     context-ingestion/
+    analyzer-ingestion/
     verification/
     change-impact/
     intent-fulfilment/
@@ -92,6 +93,7 @@ excludes it) because nothing at runtime may import it.
 | `review-planning` | Review tasks and dependency-aware task grouping (change-unit clustering). | Model provider loading or publication. |
 | `context-retrieval` | Read/list/grep-style repository context tools exposed through bounded mediation to refutation and (when skills are enabled) holistic review. | Shell execution, filesystem writes, network access, provider loading, or admission. |
 | `context-ingestion` | External change-intent context providers (inbox, changed-files), fragment redaction, and the digest/model summarizers producing one bounded change-intent brief. | Admission decisions, gate authority, network beyond the configured provider endpoint, or reading outside the repository root. |
+| `analyzer-ingestion` | Spec 15 Mechanism 2: reading SARIF 2.1.0 artifacts produced by an analyzer the operator already runs, normalizing them to a neutral alert shape (rule id, CWE, analyzer identity, locations), holding each alert against the run's changed ranges by changed-side attribution, and rendering the attributed remainder as evidence in a review task. Named apart from `context-ingestion` because the two ingest different things for different stages: `context-ingestion` brings in human intent, this brings in machine findings. | Detecting anything itself, seeding a candidate, admission or gate authority, provider calls, or writing to the repository. An alert is evidence a reviewer may weigh, never a finding. |
 | `verification` | The agentic investigation flow: claim/verdict contracts, claim providers (claims-file, prior-findings, current-findings), the bounded `investigate_claim` agent using mediated read/list/grep, the deterministic fix apply-check and advisory `fixProposal` enrichment, and corroboration matching. | Shell, network, filesystem writes, publishing, gate authority, or changing the general review's discovery path. |
 | `change-impact` | Change-impact review (spec 22): the changed-symbol seed derived from support-signal facts intersected with diff hunks, bounded dependent discovery over those symbols, and its own report contract, admission, and metrics. | Filesystem or git access of its own, the diff reviewer's admission gate, quality-gate authority, report rendering for the diff review, or provider package loading. |
 | `intent-fulfilment` | Intent-fulfilment review (spec 23): change-surface collection, obligation extraction from the stated intent, per-obligation judgement, judgement, the run explanation, and its own advisory report contract. | Filesystem or git access of its own, the diff reviewer's admission gate, quality-gate authority, report rendering for the diff review, or provider package loading. |

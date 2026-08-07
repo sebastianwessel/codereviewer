@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import type { AdmittedFinding, FindingProvenance } from '../../shared/contracts/index.js'
 import { parseEvalCases, type EvalCase } from './eval-fixture.schema.js'
 import {
+  createEvalPlausibilityRedactionCache,
   EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP,
   judgeUnmatchedFindingsPlausibility,
   prepareEvalPlausibilitySource,
@@ -173,6 +174,70 @@ describe('prepareEvalPlausibilitySource', () => {
     expect(Buffer.byteLength(prepared.text, 'utf8')).toBeLessThanOrEqual(
       EVAL_PLAUSIBILITY_SOURCE_BYTE_CAP
     )
+  })
+
+  // The redaction is the same 13-sweep pass for every finding in a file; the
+  // WINDOW is not — it is centred on each finding's own line. The cache holds the
+  // first and must never hold the second.
+  describe('the redaction cache', () => {
+    test('still centres a different window on each finding line', () => {
+      const content = wideFile(2000)
+      const redactionCache = createEvalPlausibilityRedactionCache()
+
+      const early = prepareEvalPlausibilitySource({
+        content,
+        line: 100,
+        redactionCache
+      })
+      const late = prepareEvalPlausibilitySource({
+        content,
+        line: 1900,
+        redactionCache
+      })
+
+      expect(early.text).toContain('line 100 ')
+      expect(early.text).not.toContain('line 1900 ')
+      expect(late.text).toContain('line 1900 ')
+      expect(late.text).not.toContain('line 100 ')
+      // ...and both are what an uncached call would have produced.
+      expect(early).toEqual(
+        prepareEvalPlausibilitySource({ content, line: 100 })
+      )
+      expect(late).toEqual(prepareEvalPlausibilitySource({ content, line: 1900 }))
+    })
+
+    test('serves redacted text on the cached path too', () => {
+      const content = 'const key = "sk-abcdefghijklmnop0123456789"\n'
+      const redactionCache = createEvalPlausibilityRedactionCache()
+
+      prepareEvalPlausibilitySource({ content, line: 1, redactionCache })
+      const second = prepareEvalPlausibilitySource({
+        content,
+        line: 1,
+        redactionCache
+      })
+
+      expect(second.text).not.toContain('sk-abcdefghijklmnop0123456789')
+      expect(second.text).toContain('[REDACTED]')
+    })
+
+    test('never answers for bytes it was not built from', () => {
+      const redactionCache = createEvalPlausibilityRedactionCache()
+
+      prepareEvalPlausibilitySource({
+        content: 'const clean = 1\n',
+        line: 1,
+        redactionCache
+      })
+      const other = prepareEvalPlausibilitySource({
+        content: 'const key = "sk-abcdefghijklmnop0123456789"\n',
+        line: 1,
+        redactionCache
+      })
+
+      expect(other.text).toContain('[REDACTED]')
+      expect(other.text).not.toContain('const clean')
+    })
   })
 })
 

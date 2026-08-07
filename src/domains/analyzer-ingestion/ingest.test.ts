@@ -342,3 +342,82 @@ describe('analyzer path resolution', () => {
     expect(scoped('other/a.ts')).toBeUndefined()
   })
 })
+
+// Every other fixture in this directory is hand-written, and hand-written SARIF
+// only ever exercises the shape its author already believed in. That is precisely
+// how Semgrep's id-first CWE tag went unnoticed until an artifact from a real tool
+// was ingested: the reader matched CodeQL's `external/cwe/cwe-89` convention only
+// and normalized a meticulously tagged rule to an empty CWE list, which is
+// indistinguishable from an analyzer that tags nothing.
+//
+// This fixture is unedited output from Semgrep OSS 1.172.0 scanning rclone at
+// 208d7df8 with the public rule `r/go.lang.security.filepath-clean-misuse`. The
+// alert it carries is the one real-world case (of 132 confirmed vulnerabilities
+// surveyed on 2026-08-07) where a public analyzer flagged the exact line an
+// upstream security fix later changed.
+describe('a real analyzer artifact', () => {
+  const changedRestic: readonly ChangedLineRange[] = [
+    {
+      path: 'cmd/serve/restic/restic.go',
+      startLine: 246,
+      endLine: 248,
+      changeKind: 'modified'
+    }
+  ]
+
+  test('normalizes Semgrep output and attributes the alert to the changed line', async () => {
+    await installFixture('semgrep-real-run.sarif.json')
+
+    const result = await ingestAnalyzerArtifacts({
+      repositoryRoot,
+      signals: signalsConfig(),
+      paths: {},
+      changedRanges: changedRestic,
+      redact
+    })
+
+    const attributed = result.alerts[0]
+
+    expect(result.alerts).toHaveLength(1)
+    expect(attributed?.alert.ruleId).toBe(
+      'go.lang.security.filepath-clean-misuse.filepath-clean-misuse'
+    )
+    expect(attributed?.attribution).toBe('changed-line')
+    expect(attributed?.attributedPath).toBe('cmd/serve/restic/restic.go')
+    expect(attributed?.attributedLine).toBe(248)
+
+    // The regression this fixture exists for: Semgrep writes the weakness id
+    // first and the name after it, so a reader anchored on the digits ending the
+    // token silently yields nothing.
+    expect(attributed?.alert.cwe).toEqual(['CWE-22'])
+
+    const metric = result.metrics[0]
+
+    expect(metric?.analyzer).toBe('Semgrep OSS')
+    expect(metric?.analyzerVersion).toBe('1.172.0')
+    expect(metric?.unusableCount).toBe(0)
+    expect(metric?.attributedCount).toBe(1)
+  })
+
+  test('holds the same alert back when the change lands elsewhere in the file', async () => {
+    await installFixture('semgrep-real-run.sarif.json')
+
+    const result = await ingestAnalyzerArtifacts({
+      repositoryRoot,
+      signals: signalsConfig(),
+      paths: {},
+      changedRanges: [
+        {
+          path: 'cmd/serve/restic/restic.go',
+          startLine: 10,
+          endLine: 20,
+          changeKind: 'modified'
+        }
+      ],
+      redact
+    })
+
+    expect(result.alerts).toHaveLength(0)
+    expect(result.metrics[0]?.preExistingCount).toBe(1)
+  })
+})

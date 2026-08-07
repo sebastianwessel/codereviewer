@@ -305,6 +305,20 @@ const partialContentClosingNotice = (
 ): string =>
   `[END OF PARTIAL FILE CONTENT: lines ${input.startLine}-${input.endLine} of ${input.totalLines}. The file continues outside this range; what is not shown here is NOT evidence against the finding.]`
 
+/**
+ * Redacted file bodies, keyed on the EXACT bytes they were redacted from.
+ *
+ * Redaction is 13 global regex sweeps over the whole file, and it is the same
+ * sweep for every finding in that file — only the window below legitimately
+ * differs per finding. Keying on the input content rather than on a path is what
+ * makes the cache impossible to misuse: nothing can be served for bytes it was
+ * not produced from, so a caller can never obtain unredacted text through it.
+ */
+export type EvalPlausibilityRedactionCache = Map<string, string>
+
+export const createEvalPlausibilityRedactionCache =
+  (): EvalPlausibilityRedactionCache => new Map()
+
 // Bound and redact new-side source before it is sent to the plausibility judge.
 // Redaction runs first so a secret can never survive by landing across the byte
 // boundary; the window is then cut from the redacted text. Reuses the shared
@@ -315,9 +329,18 @@ export const prepareEvalPlausibilitySource = (
     // The finding's location line, so a cut can be centred on the code that has
     // to be present rather than on the top of the file.
     readonly line: number
+    // Shared across the findings of one judging pass. Omitted, every call
+    // redacts from scratch.
+    readonly redactionCache?: EvalPlausibilityRedactionCache | undefined
   }
 ): EvalPlausibilitySource => {
-  const redacted = redactText(input.content)
+  const cached = input.redactionCache?.get(input.content)
+  const redacted = cached ?? redactText(input.content)
+
+  if (cached === undefined) {
+    input.redactionCache?.set(input.content, redacted)
+  }
+
   const lines = splitLines(redacted)
   const totalLines = lines.length
   const contentBudget =
@@ -575,6 +598,10 @@ export const judgeUnmatchedFindingsPlausibility = async (
     addCredited(creditedByPath, matched)
   }
 
+  // Several unmatched findings routinely sit in one file, and each of them would
+  // otherwise re-redact the whole body before cutting its own window from it.
+  const redactionCache = createEvalPlausibilityRedactionCache()
+
   for (const finding of input.unmatchedFindings) {
     const rawContent = await input.readFileContent({
       evalCase: input.evalCase,
@@ -604,7 +631,8 @@ export const judgeUnmatchedFindingsPlausibility = async (
 
     const source = prepareEvalPlausibilitySource({
       content: rawContent,
-      line: finding.location.startLine
+      line: finding.location.startLine,
+      redactionCache
     })
 
     if (source.findingLineOmittedByCap) {

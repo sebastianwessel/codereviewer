@@ -10,6 +10,10 @@ Amended: 2026-08-06 — the three evaluation-side gaps recorded under *Known
 Divergences* are closed (per-mechanism precision, the `prompt-injection`
 denominator, the vacuous split), and the precondition for measuring Mechanism 2 is
 measured and reported under *Why Mechanism 2 Is Still Unmeasured*
+Amended: 2026-08-07 — the analyzer firing base rate is measured on 132 confirmed
+vulnerabilities and bounds Mechanism 2's reach below its own promotion threshold;
+recorded under *The Analyzer Firing Base Rate*. The pre-registered rule is applied,
+not edited.
 
 ## Purpose
 
@@ -570,6 +574,141 @@ anti-contamination policy, and never mined from this engine's own output. Until
 such a set exists, no artifact-generation step is committed: infrastructure for a
 measurement that cannot run is infrastructure that rots.
 
+## The Analyzer Firing Base Rate
+
+Recorded 2026-08-07. **The pre-registered rule is applied here, not edited.**
+
+The section above named the missing ingredient: cases an analyzer flags. Before
+building that set it was worth asking how large it could be. The answer is the
+finding, and it is reported in full in
+`reports/2026-08-07-analyzer-firing-base-rate.md`.
+
+132 vulnerabilities were assembled from GitHub Security Advisories published after
+the training cutoff on permissively licensed repositories, each with a single fix
+commit that deletes or modifies the vulnerable line — the only shape that can
+produce an attributable alert, since the reviewed diff is the fix read backwards
+and the analyzer scans the parent tree. Semgrep OSS 1.172.0 then scanned every
+parent-side changed file under twelve public rulesets.
+
+| | |
+| --- | --- |
+| candidates | 132 |
+| **any alert on a line the fix removed or modified** | **4 (3.0%, 95% CI 0.8–7.6%)** |
+| …alerts that actually name the advisory's weakness | **2 (1.5%)** |
+
+Two of the four are on point (a `filepath.Clean` misuse on the exact traversal line;
+an `html_safe` bypass on the exact line the fix replaced with `safe_join`). The
+other two are wide-span alerts that *contain* a changed line while describing a
+different weakness entirely. Attribution admits them correctly by its own contract;
+their information content about the change is nil.
+
+**A first pass of this measurement used `p/security-audit` alone and produced 0/132.
+That number was wrong and is recorded here so it is not re-derived.** On a control
+file of ten blatant sinks that ruleset fired on four, missing path traversal, SSRF,
+reflected XSS and weak-hash. The union of twelve rulesets fires on all ten. Any
+future re-measurement must validate its analyzer configuration against a control
+before reporting a null.
+
+### What follows for the pre-registered rule
+
+Mechanism 2 is an ingestion layer: it can only change a review where attribution
+admits an alert. At a 3.0% admission rate, **the ceiling on its recall lift is 3.0
+percentage points even if every admitted alert converted a miss into a find**, and
+1.5 points counting only informative alerts. The rule's promotion bar is ≥3 points
+of *mean* lift across seeds. The bar sits at or above the ceiling.
+
+The rule's outcome is therefore unchanged and its basis is not:
+
+- **Keeps shipping disabled** — previously because the measurement had not been run,
+  now because a strict upper bound on the effect has been measured and does not
+  reach the bar.
+- **Not removed.** Removal is reserved for a gate that fails. The gate did not fail;
+  for the second time it was never supplied with anything to pass.
+- **No A/B is run, and none should be.** Three seeds per arm to resolve an effect
+  bounded at four cases would spend real money to decorate a conclusion the bound
+  already fixes. The bound is the measurement.
+
+### The bound is a property of the analyzer, not of the mechanism
+
+This is the reason the lane stays available. The 3.0% is Semgrep OSS with public
+rulesets. CodeQL's data-flow analysis and commercial rule sets have materially
+different recall, and an operator already running one may sit far above this rate —
+for that operator the mechanism's ceiling is correspondingly higher. Nothing here
+licenses describing Mechanism 2 as improving security recall, for any analyzer:
+conditional efficacy — whether the reviewer *uses* an alert once it is admitted —
+remains unmeasured, and the sample that could measure it is four cases.
+
+The 132 vulnerabilities are not discarded with this result. They are the source of
+the security corpus described under *The Security Corpus*, which measures the
+reviewer against defect classes the previous corpus barely contained.
+
+## The Security Corpus
+
+Added 2026-08-07. `eval/corpora/security-advisory-2026/`, 25 cases, hydrated by
+spec 17's machinery unchanged — same manifest schema, same orientation, same
+hydration gates. Nothing new was built for it, which is the point: a corpus that
+needs its own runner is a corpus whose numbers cannot be compared to anything.
+
+Every case is a security defect **because a reviewed GitHub Security Advisory
+published after the training cutoff says so**, never because a curator or an
+analyzer thought the code looked wrong. Selection is on ground truth alone —
+weakness class, language, fix size, severity. Whether any analyzer flags a case
+played no part, so recall measured here is a statement about the reviewer and not
+about a scanner.
+
+| | |
+| --- | --- |
+| cases | 25 (9 dev, 16 held-out) |
+| expected findings | 26 |
+| distinct repositories | 24 |
+| languages | all seven |
+| mechanisms | all ten |
+| context depth | mostly beyond `local` |
+
+**This corpus has a real chronological split, and it is the project's first.** Every
+fix is post-cutoff, dev is every fix before 2026-06-01, held-out is every fix on or
+after, and the boundary is the one `parseRealRepoCorpusManifest` actually verifies.
+The existing cross-file corpus is `single-split` and says so; its figures are
+dev-set figures. These are not, until an A/B is decided on them — at which point
+the dev half absorbs the iteration and the held-out half is what an acceptance
+claim may cite.
+
+The per-mechanism denominators are small — one to four expected findings each. A
+per-mechanism rate from this corpus is a direction, not a number, and must be
+published with its counts.
+
+### Reviewing a fix backwards contaminates a third of the candidates
+
+This is the methodological result, and it constrains every future corpus of this
+shape.
+
+The orientation that makes the defect appear as *added* code has a consequence
+nobody wrote down before it was measured: **every explanatory comment the fix ADDED
+becomes a removed line the reviewer reads.** Fix authors comment security fixes
+heavily and precisely, because they are explaining a subtle repair to the next
+maintainer. That prose is the answer key.
+
+Of 38 curated cases, the hydration disclosure gate flagged 15 and **13 were
+dropped** — a 34% loss. One javadoc enumerated exactly which address ranges must be
+refused. Another named the weakness class and the interpolation it enables. One
+diff contained the advisory identifier itself. Two survived: one by narrowing the
+reviewed paths to the file without the disclosure, one because its comments
+described ordering and a sibling code path without ever naming what made the input
+dangerous, recorded case-by-case under `removedCommentDisclosureReview`.
+
+Three things follow:
+
+- **The gate is load-bearing, not ceremonial.** Before this it had never rejected
+  anything at scale. Curating without it would have produced a corpus a third of
+  whose cases the reviewer could pass by reading a comment, and the resulting
+  security recall would have looked good and meant nothing.
+- **Budget for the loss.** Roughly three candidates must be curated for every two
+  cases that survive. A curator who plans for 1:1 will quietly relax the gate to
+  hit a target, which is the failure this whole section exists to prevent.
+- **`reviewIntent` being clean is not sufficient.** The manifest's answer-key check
+  reads the curator's prose, and the curator writes it carefully. It cannot read
+  the diff. The two checks are independent and both are required.
+
 Two operational facts from the same exercise, recorded because they are invisible
 until an artifact is real:
 
@@ -671,4 +810,4 @@ silent.
 | *Measurement First*: a contaminated `dev` set and a separate `held-out` set | **Narrowed 2026-08-06.** The vacuous pass is fixed: a manifest now declares what its split validation proves, the declaration is cross-checked, and a single-split corpus must state what its figures mean (see *A Corpus With One Split Must Say So*). The corpus still HAS one split, so the held-out acceptance criterion — and the pre-registered decision rule that depends on it — remains unsatisfied; what changed is that this is now declared and validated instead of silently passing. Owned by the evaluation corpus. |
 | *Observability, Safety, Privacy*: the security pass is no-content, reporting "mechanism, rule id, CWE, counts" | Mechanism 2 now records rule id, CWE, analyzer identity and per-artifact counts, so the fields exist. The **security pass** still records only counts and durations: its candidates carry no mechanism label at RUN time. The eval can now attribute a finding after the fact, but that is a scoring-time join against ground truth and a CWE table, not something the pass itself emits. |
 | *Mechanism 2*: measured before any promotion | Shipped and **unmeasured**, off by default. Its recall contribution has no figure anywhere. Its *precondition* was measured on 2026-08-06 (*Why Mechanism 2 Is Still Unmeasured*): changed-side attribution held perfectly on 924 real analyzer alerts and attributed zero of them, so the A/B has nothing to compare and was not run. Nothing here is evidence that the mechanism improves recall; the attribution result is evidence about the gate only. |
-| *Testing*: Mechanism 2 unit tests against committed SARIF fixtures | The committed fixtures are hand-written and cover the normalizer's contract; no fixture captured from a real analyzer is committed. That gap is what hid the Semgrep CWE-tag shape until an artifact from a real tool was ingested. One regression test now pins that shape, but the fixture set is still synthetic. |
+| *Testing*: Mechanism 2 unit tests against committed SARIF fixtures | **Closed 2026-08-07.** `fixtures/semgrep-real-run.sarif.json` is unedited Semgrep OSS 1.172.0 output — the artifact that carries the id-first CWE tag whose shape the hand-written fixtures could never have contained, since a hand-written fixture only exercises the shape its author already believed in. Two tests use it: one asserting the alert normalizes with `CWE-22` and attributes to the changed line, one asserting the same alert is held back when the change lands elsewhere in the file. The synthetic fixtures stay — they cover loss paths a single real artifact does not reach. |

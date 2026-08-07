@@ -185,9 +185,21 @@ export const EvalCaseSchema = z.strictObject({
 
 export const EvalCaseSetSchema = z.array(EvalCaseSchema)
 
+// A slice title's ceiling, exported because a corpus manifest's reviewed-intent
+// field BECOMES this title during hydration. Stated in one place the two cannot
+// disagree; stated in two, a manifest validates and then crashes the hydrator on
+// the case whose intent sits between the two limits — which is exactly what
+// happened, with a 300-character bound upstream of a 200-character one.
+//
+// 300 rather than the 200 this field used to carry: a reviewed change's stated
+// intent is a paragraph, not a headline, and `prTitle` two fields below has
+// allowed 300 all along. Tightening the manifest instead would have meant
+// rewriting curated intents to fit a limit nothing depended on.
+export const EVAL_SLICE_TITLE_MAX_LENGTH = 300
+
 const EvalSliceCaseRawSchema = z.strictObject({
   id: z.string().min(1),
-  title: z.string().min(1).max(200).optional(),
+  title: z.string().min(1).max(EVAL_SLICE_TITLE_MAX_LENGTH).optional(),
   description: z.string().min(1).max(1000).optional(),
   source: z.string().min(1).max(100).optional(),
   sourceUrl: z.url().optional(),

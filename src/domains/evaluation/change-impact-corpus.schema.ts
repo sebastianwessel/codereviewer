@@ -1,8 +1,13 @@
 import { z } from 'zod'
-import { RepositoryRelativePathSchema } from '../../shared/contracts/index.js'
+import {
+  RepositoryRelativePathSchema,
+  SeveritySchema
+} from '../../shared/contracts/index.js'
+import { CompatibilityClassSchema } from '../change-impact/index.js'
 import { EvalLineRangeSchema } from './eval-fixture.schema.js'
 import {
   containsAnswerKey,
+  CorpusScreeningSchema,
   CorpusSplitSchema,
   FullCommitShaSchema,
   PermissiveLicenseSchema,
@@ -69,17 +74,19 @@ export const isDirectlyReachable = (
   reachability: ImpactReachability
 ): boolean => directlyReachableImpactClasses.includes(reachability)
 
-// Spec 22's compatibility class, restricted to the three a FINDING can carry.
+// Spec 22's compatibility class, restricted to the classes a FINDING can carry.
 // `no-impact` is an adjudication outcome and is never a finding, so a corpus of
 // PROVEN breakage cannot express it: every case here is damage that happened.
 //
+// Narrowed from the implemented enum rather than retyped, so a class added to the
+// lane is a class this answer key can also assert. The exclusion is the invariant
+// worth stating by hand; the membership is not.
+//
 // The class is mechanism, not judgement, and it is what this corpus asserts in
 // place of a severity. See the note on `severity` below for why.
-export const ExpectedCompatibilityClassSchema = z.enum([
-  'breaks-on-build',
-  'breaks-at-runtime',
-  'may-break'
-])
+export const ExpectedCompatibilityClassSchema = CompatibilityClassSchema.exclude(
+  ['no-impact']
+)
 
 // The upstream artefact that PROVES the dependent broke. A required discriminated
 // union with no free-text-only variant, because that is how spec 22's "a curator's
@@ -161,9 +168,16 @@ export const ExpectedImpactSchema = z.strictObject({
   // Descriptive only. Spec 22 resolved the severity/threshold tension by giving
   // impact findings a compatibility class and NO severity, and the impact
   // admission gate applies no severity threshold, so nothing here is gated on
-  // this value and nothing may be relabelled to move it. It is retained because
-  // a reader comparing this corpus with spec 17's needs the same vocabulary.
-  severity: z.enum(['low', 'medium', 'high', 'critical']),
+  // this value and nothing may be relabelled to move it. It is retained so a
+  // reader can weigh this corpus beside spec 17's, which is why it is narrowed
+  // from the same canonical `SeveritySchema` rather than retyped.
+  //
+  // It is a SUBSET of that vocabulary, not a copy of it. `info` is excluded for
+  // the reason `no-impact` is excluded above: an entry here is a dependent PROVEN
+  // to have broken, and "informational" is not a thing that broke. That exclusion
+  // used to be implicit in a hand-written four-member list, under a comment
+  // claiming a parity the list did not have.
+  severity: SeveritySchema.exclude(['info']),
   severityRationale: z.string().min(20).max(700),
   notes: z.string().min(1).max(700).optional()
 })
@@ -233,27 +247,7 @@ export const ChangeImpactCorpusManifestSchema = z.strictObject({
     .regex(/^[a-z0-9][a-z0-9-]*$/u, 'Dataset id must be a lowercase slug'),
   modelTrainingCutoff: z.iso.date(),
   description: z.string().min(1).max(2000),
-  // What was screened to produce these cases, so the yield is auditable and a
-  // future curator does not re-derive the rejection patterns. Counts only; the
-  // narrative belongs in the spec.
-  screening: z
-    .strictObject({
-      commitBodiesScreened: z.number().int().nonnegative(),
-      repositoriesScreened: z.number().int().nonnegative(),
-      candidatesAdjudicated: z.number().int().nonnegative(),
-      // How the counts were produced, including any overlap between passes. A
-      // screening total quoted without that is a yield figure nobody can check.
-      note: z.string().min(20).max(1200).optional(),
-      rejections: z
-        .array(
-          z.strictObject({
-            candidate: z.string().min(1).max(300),
-            reason: z.string().min(20).max(1000)
-          })
-        )
-        .default([])
-    })
-    .optional(),
+  screening: CorpusScreeningSchema.optional(),
   cases: z.array(ChangeImpactCorpusCaseSchema).min(1)
 })
 

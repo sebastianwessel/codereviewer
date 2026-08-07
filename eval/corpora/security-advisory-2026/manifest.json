@@ -1,0 +1,1088 @@
+{
+  "schemaVersion": "1.0",
+  "datasetId": "security-advisory-2026",
+  "modelTrainingCutoff": "2026-01-01",
+  "splitIntegrity": {
+    "status": "chronological-split"
+  },
+  "description": "Publicly confirmed security defects, hydrated as FULL working trees at the commit before an upstream security fix landed, reviewed as the fix READ BACKWARDS so the reviewed diff adds the vulnerable code. Every case is a defect because a reviewed GitHub Security Advisory published after the training cutoff says so, never because a curator or an analyzer thought the code looked wrong. Selection is on ground truth only - weakness class, language, fix size, severity; whether any analyzer flags a case played no part, so recall measured here is a statement about the reviewer rather than about a scanner. The split is chronological and verified: every held-out fix is newer than every dev fix. modelTrainingCutoff is an operator setting: re-set it to the evaluated model's cutoff each model generation, which by design invalidates held-out cases captured before it.",
+  "screening": {
+    "commitBodiesScreened": 0,
+    "repositoriesScreened": 251,
+    "candidatesAdjudicated": 41,
+    "note": "Not a commit-body sweep, so commitBodiesScreened is 0 and the denominator is the advisory database instead. GitHub Security Advisories with published > 2026-01-01, type=reviewed, across npm/PyPI/Go/Maven/RubyGems/crates.io: 401 carried a fix-commit reference into their own source repository, 251 of those on permissively licensed repositories (repositoriesScreened counts these advisories, not distinct repositories - 29 distinct repositories survive in the cases). Structural screening kept 132 as single reviewable changes. 41 were adjudicated by hand for mechanism balance; 38 survived curation and the pre-cutoff fix-date check, and 13 more were dropped by the removed-comment disclosure gate. See reports/2026-08-07-analyzer-firing-base-rate.md.",
+    "rejections": [
+      {
+        "candidate": "52 advisories referencing more than one fix commit",
+        "reason": "The repair is spread over commits, so no single reviewable change contains the defect and its removal. Reviewing one of them backwards shows a partial fix."
+      },
+      {
+        "candidate": "33 advisories whose fix only ADDS lines",
+        "reason": "A fix that adds a guard without touching the sink leaves no parent-side changed line. Reviewed backwards the defect is an absence, and no analyzer alert can ever attribute to it. Recorded rather than silently filtered: these are real defects on which analyzer ingestion cannot help by construction."
+      },
+      {
+        "candidate": "12 advisories whose fix touches 9 to 34 source files",
+        "reason": "Too broad to review as one change; the expectation would compete with unrelated refactoring for the reviewer's attention and a miss would say nothing."
+      },
+      {
+        "candidate": "9 advisories whose fix touches no supported source file outside tests, docs or vendored code",
+        "reason": "Nothing for the engine's signal extraction to read, or the defect lives in a template or build descriptor rather than in reviewable code."
+      },
+      {
+        "candidate": "6 merge or root commits, and 1 abbreviated object name",
+        "reason": "A merge commit's diff is not the change its author wrote, and an abbreviated name cannot be resolved to a single object with certainty."
+      },
+      {
+        "candidate": "3 advisories published after the cutoff whose FIX predates it",
+        "reason": "The corpus's temporal guarantee is about the fix, not the advisory. A 2024 fix is in the evaluated model's training data whatever the advisory's publication date says; parking it in the dev split would keep known-memorized material under a label that merely permits tuning on it."
+      },
+      {
+        "candidate": "12 curated cases whose reviewed diff disclosed the defect in prose",
+        "reason": "Reviewing a fix backwards turns every explanatory comment the fix ADDED into a removed line the reviewer reads. Twelve stated the defect outright - one javadoc enumerated exactly which addresses must be refused, another named the weakness class and the interpolation it enables. The hydration gate flagged each; a case whose diff contains its own answer measures nothing."
+      },
+      {
+        "candidate": "camel-dns header namespace (GHSA-hcm8-x79p-wx2w)",
+        "reason": "Dropped on evidence strength rather than disclosure. The reviewed diff is a rename of six string literals; nothing is wrong on its face and the defect exists only given a filtering strategy in another class. A miss here would be weak evidence about the reviewer, and a hit only slightly stronger."
+      },
+      {
+        "candidate": "mermaid prototype pollution (GHSA-3rrr-jr9j-h3q3)",
+        "reason": "The fix is a 176-line mechanical Record-to-Map refactor and the defect recurs at six sibling sites repaired together. One expectation would mis-score a correct finding at another site; one per site would violate the one-expectation-per-defect rule."
+      },
+      {
+        "candidate": "uutils printenv non-UTF-8 environment variables (GHSA-p7h3-7q52-72w8)",
+        "reason": "The defect is confirmed in the parent code, but no value in the security-mechanism vocabulary honestly describes it and its impact is relative to an operator's audit workflow. Labelling it would have corrupted the per-mechanism denominator."
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "chmod-preserve-root-compares-uncanonicalized-path",
+      "language": "rust",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/uutils/coreutils.git",
+      "upstreamOwner": "uutils",
+      "upstreamRepo": "coreutils",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "413055b378fa6fe2299c5e5f538c8e6e841ab810",
+      "fixCommittedAt": "2026-01-07T09:49:54Z",
+      "parentCommit": "ea6d1148591ecd9948567269b9631f32ecc6ecac",
+      "reviewedPaths": [
+        "src/uu/chmod/src/chmod.rs"
+      ],
+      "reviewIntent": "Simplify the recursive --preserve-root check in chmod so it does not need a separate helper.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/uu/chmod/src/chmod.rs",
+          "lineRange": [
+            410,
+            412
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "The recursive --preserve-root guard compares the command-line operand to the literal path \"/\" with ==, without resolving it first. Any operand that reaches the root but is not spelled that way -- /.., /../, //., ./.., or a symlink pointing at / -- fails the comparison, so chmod -R --preserve-root walks the whole filesystem and rewrites the mode of every file it reaches, which is exactly the outcome the flag exists to refuse.",
+          "securityMechanism": "path-traversal",
+          "contextDepth": "local"
+        }
+      ],
+      "tags": [
+        "security",
+        "path-traversal",
+        "preserve-root"
+      ],
+      "notes": "Verified by printing src/uu/chmod/src/chmod.rs lines 380-430 from parent ea6d114: line 410 is `if self.recursive && self.preserve_root && file == Path::new(\"/\") {` and 411-412 are the PreserveRoot error and closing brace; `file` is the loop's operand and is never canonicalized anywhere above. The fix replaces the comparison with Self::is_root, which canonicalizes. Kept matchMode path-semantic rather than path-line because a reviewer may reasonably attach the comment to the recursion call two lines below."
+    },
+    {
+      "id": "mobiledoc-image-size-fetch-ssrf",
+      "language": "javascript",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/TryGhost/Ghost.git",
+      "upstreamOwner": "TryGhost",
+      "upstreamRepo": "Ghost",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "ba692df7f27162d0440d57487f16c530416a8eb2",
+      "fixCommittedAt": "2026-03-10T12:12:52Z",
+      "parentCommit": "9b7f2212970fade08ecbec543b405190471e38d4",
+      "reviewedPaths": [
+        "ghost/core/core/server/lib/mobiledoc.js"
+      ],
+      "reviewIntent": "Fill in width and height for image cards whose source is not stored locally by measuring the image at its own URL, so remotely hosted images get dimensions too.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "ghost/core/core/server/lib/mobiledoc.js",
+          "lineRange": [
+            137,
+            145
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "populateImageSizes falls through to imageSize.getImageSizeFromUrl(payload.src) for every image card src that is neither an Unsplash URL nor a locally stored path, with no check that the URL points anywhere the server should go. Anyone able to save post content can make the Ghost server issue an outbound request to an arbitrary URL - cloud metadata endpoints such as http://169.254.169.254/, internal hosts, or an attacker-controlled collector that receives the request.",
+          "securityMechanism": "ssrf",
+          "contextDepth": "callee"
+        }
+      ],
+      "tags": [
+        "security",
+        "ssrf",
+        "outbound-fetch"
+      ],
+      "notes": "Verified by printing lines 120-159 of ghost/core/core/server/lib/mobiledoc.js at parent 9b7f2212: line 141 handles relative/local images, line 143 is the bare `} else {` and line 144 `size = await imageSize.getImageSizeFromUrl(payload.src);`. The fix narrows that else to storageUtils.isInternalImage(payload.src); isInternalImage is not added by the fix commit, so it already exists at the parent. Advisory GHSA-g366-23fw-ggp6 (CWE-918). Range starts at the try/branch chain (137) so a reviewer flagging the branch selection rather than the fetch line still lands inside. Unit test excluded."
+    },
+    {
+      "id": "trix-stringpiece-unsanitized-href-from-json",
+      "language": "javascript",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/basecamp/trix.git",
+      "upstreamOwner": "basecamp",
+      "upstreamRepo": "trix",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "9c0a993d9fc2ffe9d56b013b030bc238f9c0557c",
+      "fixCommittedAt": "2026-03-26T22:08:38Z",
+      "parentCommit": "e62fcc3b5872a310a79cecb47472bd16bf6499ad",
+      "reviewedPaths": [
+        "src/trix/models/string_piece.js"
+      ],
+      "reviewIntent": "StringPiece.fromJSON: hand the deserialized attributes straight to the constructor instead of copying and reshaping them first. The DOMPurify import in the model layer was used only here and pulled the whole dependency into every bundle, so keep deserialization a plain data mapping.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "src/trix/models/string_piece.js",
+          "lineRange": [
+            6,
+            8
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "StringPiece.fromJSON copies pieceJSON.attributes into the piece with no validation of their values. The href attribute of a deserialized string piece is later emitted into the anchor element of the serialized HTML, so a javascript: URI carried in an untrusted application/x-trix-document payload (pasted or dropped into the editor) survives into the stored document and runs when another user clicks the link: stored XSS in any app that renders Trix output without its own server-side sanitizer.",
+          "securityMechanism": "xss",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "xss"
+      ],
+      "notes": "Curator: fetched parent src/trix/models/string_piece.js at e62fcc3 and PRINTED lines 1-25; lines 6-8 are exactly `static fromJSON(pieceJSON) { return new this(pieceJSON.string, pieceJSON.attributes) }` with no DOMPurify import in the file. contextDepth cross-file: the href only becomes dangerous in the view/serialization layer, which is elsewhere in src/trix. reviewedPaths excludes action_text-trix/app/assets/javascripts/trix.js, which is the generated Rails bundle carrying the same change at line 6865, and the two test files. GHSA-53g2-mvcc-q9x3 shares this fix with GHSA-53p3-c7vp-4mcc (paste vs drag-and-drop entry vector); one defect, one expectation."
+    },
+    {
+      "id": "codebuild-s3-log-encryption-flag-inverted",
+      "language": "typescript",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/aws/aws-cdk.git",
+      "upstreamOwner": "aws",
+      "upstreamRepo": "aws-cdk",
+      "license": "Apache-2.0",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "40319185dc645d2afc6acf1d25547a86250e97af",
+      "fixCommittedAt": "2026-05-05T16:33:24Z",
+      "parentCommit": "99d0a5ba83771e46aca9971d00af027f42078f4a",
+      "reviewedPaths": [
+        "packages/aws-cdk-lib/aws-codebuild/lib/project.ts"
+      ],
+      "reviewIntent": "Simplify how the CodeBuild S3 logging block is rendered by forwarding the configured value straight into the generated CloudFormation property instead of computing it conditionally.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "low",
+          "path": "packages/aws-cdk-lib/aws-codebuild/lib/project.ts",
+          "lineRange": [
+            1544,
+            1548
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "s3Logs.encrypted is assigned directly to the CloudFormation field encryptionDisabled, which carries the opposite polarity. A user who asks for encrypted: true renders EncryptionDisabled: true, so CodeBuild writes its build logs to S3 with encryption switched off; encrypted: false silently turns encryption on. Build logs routinely contain tokens and other build output, and the stack reads as if it were encrypted.",
+          "securityMechanism": "cryptography",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "cryptography",
+        "encryption-at-rest",
+        "aws-cdk"
+      ],
+      "notes": "Verified by printing lines 1533-1557 of packages/aws-cdk-lib/aws-codebuild/lib/project.ts at parent 99d0a5ba: line 1547 is exactly `encryptionDisabled: s3Logs.encrypted,` inside renderLoggingConfiguration. Grepped the same parent file: 'encrypted' occurs only on that line, so the S3LoggingOptions declaration is elsewhere - code search puts it in packages/aws-cdk-lib/aws-codebuild/lib/project-logs.ts, which is why contextDepth is cross-file and why project-logs.ts is not in reviewedPaths (the fix does not touch it). Advisory GHSA-464c-974j-9xm6 rates this low; kept at low. Test file excluded."
+    },
+    {
+      "id": "lettre-boring-tls-hostname-verification-inverted",
+      "language": "rust",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/lettre/lettre.git",
+      "upstreamOwner": "lettre",
+      "upstreamRepo": "lettre",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "f5efffc88360dbdbfcef80f465e42d5bce68ca35",
+      "fixCommittedAt": "2026-05-14T08:52:38Z",
+      "parentCommit": "f62f304f22d32e61403c7457a4aa90c2c99f3f2f",
+      "reviewedPaths": [
+        "src/transport/smtp/client/async_net.rs",
+        "src/transport/smtp/client/net.rs"
+      ],
+      "reviewIntent": "Wire the transport's accept_invalid_hostnames setting through to boring's hostname verification option in both the blocking and the async SMTP client stream upgrades.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "critical",
+          "path": "src/transport/smtp/client/net.rs",
+          "lineRange": [
+            199,
+            205
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "The blocking BoringTls upgrade calls .verify_hostname(*accept_invalid_hostnames). boring's verify_hostname takes a 'do verify' flag, so the value is inverted: the strict default (accept_invalid_hostnames = false) turns hostname verification off, and callers who opted into accepting invalid hostnames get it on. Any certificate chaining to a trusted CA is accepted for the SMTP server regardless of name, so an active network attacker can MITM the connection and capture SMTP credentials and mail.",
+          "securityMechanism": "cryptography",
+          "contextDepth": "implementation"
+        },
+        {
+          "category": "security",
+          "severity": "critical",
+          "path": "src/transport/smtp/client/async_net.rs",
+          "lineRange": [
+            374,
+            383
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "The tokio1-boring upgrade calls config.set_verify_hostname(accept_invalid_hostnames). boring's setter takes a 'do verify' flag, so the value is inverted: with the default accept_invalid_hostnames = false the async client performs no hostname verification, accepting any certificate that chains to a trusted CA whatever name it was issued for. An active network attacker can MITM the async SMTP connection and capture credentials and mail.",
+          "securityMechanism": "cryptography",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "cryptography",
+        "tls",
+        "certificate-validation"
+      ],
+      "notes": "Verified by printing parent f62f304f: src/transport/smtp/client/net.rs lines 188-212 (the .verify_hostname(*accept_invalid_hostnames) call is line 202, inside the InnerTlsParameters::BoringTls arm at 194-206) and src/transport/smtp/client/async_net.rs lines 365-390 (config.set_verify_hostname(accept_invalid_hostnames) is line 377, inside the boring-tls arm at 366-384). Two expectations rather than one: the same inversion is written independently in the blocking and the async transport, each independently reachable and independently fixable, and a path-scoped matcher cannot credit a finding on one file against an expectation on the other. Advisory: GHSA-4pj9-g833-qx53."
+    },
+    {
+      "id": "webdataset-default-decoder-deserializes-archive-members",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/ray-project/ray.git",
+      "upstreamOwner": "ray-project",
+      "upstreamRepo": "ray",
+      "license": "Apache-2.0",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "41443a18f9e6403a072de69098a279c23e2d943c",
+      "fixCommittedAt": "2026-05-19T01:37:27Z",
+      "parentCommit": "a6416a64596db70e3de2404342b7f51ebdb8b5a1",
+      "reviewedPaths": [
+        "python/ray/data/_internal/datasource/webdataset_datasource.py"
+      ],
+      "reviewIntent": "Restore direct decoding of .pkl/.pickle and .pt/.pth members in the WebDataset default decoder and remove the environment-variable switch that was threaded through the datasource for them.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "python/ray/data/_internal/datasource/webdataset_datasource.py",
+          "lineRange": [
+            213,
+            223
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "_default_decoder is the decoder read_webdataset uses by default and it runs on every member of the TAR the caller points at. Members whose key ends in .pt/.pth go through torch.load(io.BytesIO(value), weights_only=False) and .pickle/.pkl through pickle.loads(value), both on bytes taken straight from the archive with no validation. Anyone who can supply the archive (bucket, hub mirror, URL) gets arbitrary code execution in the Ray worker as soon as the dataset is read.",
+          "securityMechanism": "deserialization",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "deserialization",
+        "rce"
+      ],
+      "notes": "Verified by printing webdataset_datasource.py lines 170-235 and 340-375 from parent a6416a6: _default_decoder starts at 175, torch.load(weights_only=False) is at 219, pickle.loads(value) at 223, and _read_stream passes it as the default decoder at 367. CAVEAT for a later reader: the reversed diff removes the fix's own error strings, which contain the phrase 'arbitrary code execution risk' and the env var name ...ALLOW_UNSAFE_DESERIALIZATION. That prose is in the only source file, so it cannot be excluded by path selection. The ground truth is sound but this case is unusually easy; do not read a hit here as evidence of security reasoning."
+    },
+    {
+      "id": "allowed-sources-string-patterns-unescaped-in-regex",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/thumbor/thumbor.git",
+      "upstreamOwner": "thumbor",
+      "upstreamRepo": "thumbor",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "68876715350c6c8f49c324e5515e64908830aed7",
+      "fixCommittedAt": "2026-05-30T23:04:25Z",
+      "parentCommit": "8b6250998baaf807d7a912e2e23dc25248d64f16",
+      "reviewedPaths": [
+        "thumbor/loaders/http_loader.py"
+      ],
+      "reviewIntent": "Simplify ALLOWED_SOURCES matching in the HTTP loader: plain string entries go through a single branch again, so the extra helpers from thumbor.loaders are no longer imported here.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "thumbor/loaders/http_loader.py",
+          "lineRange": [
+            59,
+            69
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "validate() interpolates each plain-string ALLOWED_SOURCES entry straight into a pattern (f\"^{pattern}$\") and re.match()es it against res.hostname with no escaping. Every dot in a configured domain is a regex wildcard, so an entry like s.glbimg.com also matches attacker-registrable hosts such as sAglbimg.com. ALLOWED_SOURCES is the only restriction on which origins the HTTP loader will fetch, so the bypass lets a request URL steer the server at hosts the operator never allowed.",
+          "securityMechanism": "ssrf",
+          "contextDepth": "local"
+        }
+      ],
+      "tags": [
+        "security",
+        "ssrf",
+        "allowlist-bypass"
+      ],
+      "notes": "Verified by printing thumbor/loaders/http_loader.py lines 1-90 from parent 8b62509: validate() is at 49-71 and the unescaped branch is 64-66 (pattern = f\"^{pattern}$\"; match = res.hostname), matched at 68. Advisory GHSA-6x26-6r6f-m537 quotes the same branch and frames it as the SSRF defence, so securityMechanism is ssrf rather than the record's CWE-1333-derived 'concurrency-resource', which is an upstream mislabel. reviewedPaths is narrowed to http_loader.py: the fix's config.py docstring ('dots are NOT wildcards') and the loaders/__init__.py deprecation helpers would leak the answer in a reversed diff, and neither contains the defect."
+    },
+    {
+      "id": "thumbor-signature-strip-replaces-all-occurrences",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/thumbor/thumbor.git",
+      "upstreamOwner": "thumbor",
+      "upstreamRepo": "thumbor",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "e3ae3e2500537b4d735df4144129a649374bb70b",
+      "fixCommittedAt": "2026-05-30T23:05:18Z",
+      "parentCommit": "68876715350c6c8f49c324e5515e64908830aed7",
+      "reviewedPaths": [
+        "thumbor/handlers/imaging.py"
+      ],
+      "reviewIntent": "Simplify how the URL to validate is derived in ImagingHandler.check_image: strip the hash segment inline with str.replace for both the raw and the percent-encoded form, instead of routing it through a separate static helper on the handler.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "thumbor/handlers/imaging.py",
+          "lineRange": [
+            89,
+            91
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "url.replace() removes every occurrence of \"/{hash}/\" (and of the percent-encoded form) from the request path, not just the leading signature segment. An attacker who repeats the valid hash further inside the image path makes both occurrences disappear, so url_to_validate collapses back to the originally signed path and signer.validate() on line 93 succeeds while the request actually points at a different image URL: an HMAC signature bypass.",
+          "securityMechanism": "cryptography",
+          "contextDepth": "local"
+        }
+      ],
+      "tags": [
+        "security",
+        "cryptography"
+      ],
+      "notes": "Curator: fetched parent thumbor/handlers/imaging.py at 6887671 and PRINTED lines 60-104. Lines 89-91 are exactly the `url_to_validate = url.replace(f\"/{self.context.request.hash}/\", \"\").replace(f\"/{quoted_hash}/\", \"\")` chain, and signer.validate() consuming it is two lines below at 93-95, so the whole mechanism is visible in the changed region (contextDepth local). The fix's regression test spells out the attack URL /{hash}/sma/{hash}/rt/image.jpg; that test file is excluded from reviewedPaths. Mechanism labelled cryptography (signature validation bypass) rather than authorization, matching CWE-347."
+    },
+    {
+      "id": "convolution-filter-regex-exponential-backtracking",
+      "language": "python",
+      "split": "dev",
+      "repositoryUrl": "https://github.com/thumbor/thumbor.git",
+      "upstreamOwner": "thumbor",
+      "upstreamRepo": "thumbor",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "3f38fe1610d20168e91f76d432212de30727eb2e",
+      "fixCommittedAt": "2026-05-30T23:12:16Z",
+      "parentCommit": "447e192e3fb92e64c12e5354a56a4a7133f69d73",
+      "reviewedPaths": [
+        "thumbor/filters/convolution.py"
+      ],
+      "reviewIntent": "Express the convolution matrix argument as a repeated `item;` group followed by a trailing item, which mirrors how the value is split on `;` further down.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "thumbor/filters/convolution.py",
+          "lineRange": [
+            22,
+            26
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "The convolution matrix pattern repeats an ambiguous element `[-]?[\\d]+\\.?[\\d]*` inside a `(...;)*` group. A digit run can be divided between `[\\d]+` and `[\\d]*` in many ways, so on input that ultimately fails to match (e.g. 30 repeated `-11;` items with no trailing column count) Python's backtracking `re` engine explores exponentially many paths. Filter arguments come straight from the request URL, so one crafted URL stalls image processing.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "concurrency-resource"
+      ],
+      "notes": "Verified by printing the whole 39-line parent file thumbor/filters/convolution.py at 447e192e. Line 23 is exactly the pattern `r\"(?:[-]?[\\d]+\\.?[\\d]*[;])*(?:[-]?[\\d]+\\.?[\\d]*)\"`; the enclosing @filter_method decorator spans 22-26, which is the range recorded. Advisory GHSA-5vjc-7cxw-4w6j gives the PoC URL and reduces the subpattern to `(\\d+)*,\\d+`. contextDepth is `implementation` because catastrophic backtracking is a property of Python's `re` engine, not something visible in the line itself. The fix's unambiguous replacement is `-?\\d+(?:\\.\\d*)?(?:;-?\\d+(?:\\.\\d*)?)*` - note the commit message in the candidate record quotes `(?:\\.\\d+)?`, which is not what landed."
+    },
+    {
+      "id": "wings-sftp-subsystem-payload-slice-panic",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/pterodactyl/wings.git",
+      "upstreamOwner": "pterodactyl",
+      "upstreamRepo": "wings",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "8e49c7c0eda815d3ada171831876a1c14c493026",
+      "fixCommittedAt": "2026-06-02T19:04:46Z",
+      "parentCommit": "8929a7f854ce2f711953a55ffa5bc845f062ee93",
+      "reviewedPaths": [
+        "sftp/server.go"
+      ],
+      "reviewIntent": "Simplify the SFTP channel request handler: reply to incoming channel requests with a single inline expression instead of computing the result into a temporary variable first.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "sftp/server.go",
+          "lineRange": [
+            141,
+            148
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "In the goroutine draining channel requests, req.Payload[4:] slices an attacker-supplied SSH request payload without checking its length. A peer that opens a session channel and sends a request of type \"subsystem\" whose payload is shorter than 4 bytes triggers a slice-bounds-out-of-range panic. The panic happens in a bare goroutine with no recover, so it terminates the whole wings daemon: a one-packet remote denial of service against every game server the daemon hosts.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "local"
+        }
+      ],
+      "tags": [
+        "security",
+        "denial-of-service",
+        "input-validation"
+      ],
+      "notes": "Verified by printing lines 120-155 of sftp/server.go at parent 8929a7f8: line 146 is `_ = req.Reply(req.Type == \"subsystem\" && string(req.Payload[4:]) == \"sftp\", nil)`, inside the `go func(in <-chan *ssh.Request)` opened at 141 and closed at 148. && short-circuits, so the slice is only reached for req.Type == \"subsystem\"; a subsystem request with a payload of fewer than 4 bytes then panics, and an unrecovered panic in a goroutine kills the process. Range covers the whole goroutine body rather than the single line, since a reviewer may report the missing guard on the enclosing handler. Advisory: GHSA-ghrq-5wpp-hxx5."
+    },
+    {
+      "id": "excon-redirect-forwards-cookie-and-token-headers-cross-host",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/excon/excon.git",
+      "upstreamOwner": "excon",
+      "upstreamRepo": "excon",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "ea89a35308a12f4b791b6c50f2cbd33f94889fa3",
+      "fixCommittedAt": "2026-06-03T13:21:15Z",
+      "parentCommit": "74e175420e3163308ece5b4ded03077b9c6b715a",
+      "reviewedPaths": [
+        "lib/excon/middlewares/redirect_follower.rb"
+      ],
+      "reviewIntent": "Handle redirect header cleanup inline in RedirectFollower rather than looping over a module-level constant list when building the follow-up request.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "lib/excon/middlewares/redirect_follower.rb",
+          "lineRange": [
+            56,
+            68
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "When following a redirect the middleware copies the original request headers wholesale and deletes only Authorization, Proxy-Connection, Proxy-Authorization and Host before rewriting scheme/host/port to the redirect target. Every other credential-bearing header survives the hop: Cookie, Cookie2, X-API-Key, X-Auth-Token, X-CSRF-Token, X-Session-ID. A server that returns a 30x pointing at a host it controls thus gets the client to hand that host the caller's session cookies and API tokens.",
+          "securityMechanism": "secret-flow",
+          "contextDepth": "local"
+        }
+      ],
+      "tags": [
+        "security",
+        "secret-flow",
+        "credential-leak",
+        "redirect"
+      ],
+      "notes": "Verified by printing lines 40-75 of lib/excon/middlewares/redirect_follower.rb at parent 74e17542: line 56 is `params[:headers] = datum[:headers].dup`, the four deletes are lines 57-60, and params.merge! at 61-68 sets host/hostname/port from the redirect URI, so the cross-origin hop is visible in the same method (hence contextDepth local). reviewedPaths is narrowed to this one file on purpose: the same commit also deletes lib/excon/middlewares/capture_cookies.rb and its require in lib/excon.rb, which the commit message describes as removing a middleware that is 'too dangerous for universal usage' - that is a separate deprecation, and reversing it would re-add a whole 32-line file of unrelated code to the reviewed diff. Advisory: GHSA-48rx-c7pg-q66r."
+    },
+    {
+      "id": "view-component-around-render-html-safety-bypass",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/ViewComponent/view_component.git",
+      "upstreamOwner": "ViewComponent",
+      "upstreamRepo": "view_component",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "48e5fd2d602344c7d33019fbc5c8b087e315bb78",
+      "fixCommittedAt": "2026-06-04T15:56:56Z",
+      "parentCommit": "c35ec3f2b38344ed193cbc113546843a0fb613f4",
+      "reviewedPaths": [
+        "lib/view_component/collection.rb"
+      ],
+      "reviewIntent": "Streamline component rendering: Base#render_in uses the value returned by around_render as the rendered template directly, and Collection#render_in joins the per-item output with the spacer into a single string for the view.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "lib/view_component/collection.rb",
+          "lineRange": [
+            13,
+            17
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "Collection#render_in maps every component's render_in output, joins the results with String#join and calls .html_safe on the joined String. That launders each item's output into a SafeBuffer without escaping it, so any per-item result that was not already HTML-safe is emitted raw. The unconditional html_safe defeats the escaping the individual components would otherwise get and turns one unsafe component render into XSS across the whole collection.",
+          "securityMechanism": "xss",
+          "contextDepth": "callee"
+        }
+      ],
+      "tags": [
+        "security",
+        "xss",
+        "output-encoding"
+      ],
+      "notes": "Verified by printing parent c35ec3f2: lib/view_component/base.rb lines 130-165 - the @output_buffer.with_buffer block is 144-156 and `rendered_template = around_render do ... end` is 145-148, with no safety check; grep confirms __vc_maybe_escape_html exists at line 423 and is used only by __vc_safe_output_preamble (435) and __vc_safe_output_postamble (442). lib/view_component/collection.rb lines 1-25 - render_in is 13-17 and line 16 is `end.join(rendered_spacer(view_context)).html_safe`. Two expectations because the upstream changelog for this advisory names both code problems (the around_render gap and the Collection html_safe laundering) and the fix repairs each separately (__vc_safe_around_render_output vs safe_join). reviewedPaths excludes docs/CHANGELOG.md (it names the GHSA) and the three test/sandbox files. Advisory: GHSA-97jw-64cj-jc58."
+    },
+    {
+      "id": "datamodel-code-generator-extra-template-data-comment-injection",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/koxudaxi/datamodel-code-generator.git",
+      "upstreamOwner": "koxudaxi",
+      "upstreamRepo": "datamodel-code-generator",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "b73abb5cd703a50471b8950bbd3bd0b82ad71de7",
+      "fixCommittedAt": "2026-06-08T07:48:53Z",
+      "parentCommit": "bcfdf30660ac4a17ea54400351c9aa4f3391f60e",
+      "reviewedPaths": [
+        "src/datamodel_code_generator/model/base.py"
+      ],
+      "reviewIntent": "Pass extra template data through to the model renderer as-is. The two helpers that pre-processed the mapping before rendering are dropped so that built-in and custom templates both receive exactly the values the caller supplied.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/datamodel_code_generator/model/base.py",
+          "lineRange": [
+            990,
+            1005
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "DataModel.render splats **self.extra_template_data straight into the Jinja render context with no normalisation, though the same file already defines comment_safe() for this hazard. Built-in templates emit the value as a trailing inline comment (BaseModel.jinja2: `class X(Base):  # {{ comment }}`). A comment containing CR, LF, VT or FF ends the comment and the rest becomes top-level statements in the generated module, so whoever supplies --extra-template-data runs arbitrary Python on import.",
+          "securityMechanism": "injection",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "injection",
+        "code-generation"
+      ],
+      "notes": "Verified by printing parent bcfdf306: base.py lines 985-1015 show render() at 990 ending in `**self.extra_template_data,` at line 1004, and lines 118-130 show the existing comment_safe() helper that is never applied to extra_template_data. The sink was confirmed by fetching src/datamodel_code_generator/model/template/pydantic_v2/BaseModel.jinja2 at the same commit: line 4 is `class {{ class_name }}({{ base_class }}):{% if comment is defined %}  # {{ comment }}{% endif %}`. contextDepth is cross-file because the escape only makes sense once the template is read; the missing sanitisation itself is in the reviewed file. reviewedPaths excludes both test files. Advisory: GHSA-wjv6-jcfj-mf9r."
+    },
+    {
+      "id": "dns-block-response-null-address-reaches-localhost",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/tinfoil-factory/netfoil.git",
+      "upstreamOwner": "tinfoil-factory",
+      "upstreamRepo": "netfoil",
+      "license": "Apache-2.0",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "891d3513c77999a9deef9f23506807d9653ee448",
+      "fixCommittedAt": "2026-06-08T19:54:05Z",
+      "parentCommit": "b3aef666cfa913116eb5b75c29b041d80316c9fd",
+      "reviewedPaths": [
+        "dns/filter.go",
+        "dns/dns_proxy.go"
+      ],
+      "reviewIntent": "Answer blocked queries with a null-address record rather than NXDOMAIN: A and AAAA questions get 0.0.0.0 and ::, HTTPS questions get a record whose hints are those addresses, and any other type keeps the existing NODATA answer.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "dns/filter.go",
+          "lineRange": [
+            641,
+            692
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "generateBlockResponse answers a blocked query with RCODE NOERROR and an A/AAAA answer of ipv4Null (0.0.0.0) / ipv6Null (::), or an HTTPS record whose IPv4Hint/IPv6Hint are those same addresses. A client that follows the answer does not fail: on Linux a connection to 0.0.0.0 is delivered to the local host, so traffic aimed at a domain the policy blocked is instead sent to whatever services are listening on localhost.",
+          "securityMechanism": "unsafe-config",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "dns",
+        "filter-bypass",
+        "unsafe-config"
+      ],
+      "notes": "Verified by printing lines 636-695 of dns/filter.go at parent b3aef666 (generateBlockResponse starts at 641, RCODE ResponseCodeNoError at 648, ipv4Null/ipv6Null at 660-661, HTTPS hints at 670-671, closing brace 692) and lines 370-403 of dns/dns_proxy.go (the two call sites, 391 and 394). Grepped the same file: line 16 `var ipv4Null = net.IP{0,0,0,0}`, line 17 the all-zero IPv6. Advisory GHSA-xvg2-cgv6-6h7v states it directly: 0.0.0.0 was used instead of NXDOMAIN and on Linux that traffic goes to localhost. Expectation on filter.go only; dns_proxy.go is in reviewedPaths because the reversed diff changes the call signature there, but it holds no defect. No test files in this commit."
+    },
+    {
+      "id": "datamodel-code-generator-local-ref-arbitrary-file-read",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/koxudaxi/datamodel-code-generator.git",
+      "upstreamOwner": "koxudaxi",
+      "upstreamRepo": "datamodel-code-generator",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "2ff4a72b4550a2b2069754c5b075b1655067e5fb",
+      "fixCommittedAt": "2026-06-10T15:38:02Z",
+      "parentCommit": "2dbe5b5794472a4cad8e9286c942dffda7359816",
+      "reviewedPaths": [
+        "src/datamodel_code_generator/parser/jsonschema.py"
+      ],
+      "reviewIntent": "Simplify $ref resolution in the JSON Schema parser. Local file and file:// references are turned into paths directly, the remote-ref gate stays scoped to the HTTP(S) targets it was written for, and file:// bodies are cached under the reference string as given.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/datamodel_code_generator/parser/jsonschema.py",
+          "lineRange": [
+            4870,
+            4899
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "Local $ref targets become filesystem paths with no containment check against the input base path. _get_ref_body_from_url turns a file:// ref into Path(path) and loads it; _get_ref_body_from_remote loads self.base_path / resolved_ref. A ref of ../../../../etc/passwd or file:///etc/passwd therefore reads any file the process can open, and the gate in _get_ref_body fires only for non-file:// URLs so --no-allow-remote-refs blocks neither path. A hostile schema pulls local files into the models.",
+          "securityMechanism": "path-traversal",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "path-traversal",
+        "information-disclosure"
+      ],
+      "notes": "Verified by printing parent 2dbe5b57: jsonschema.py lines 4805-4900. Line 4815 is `if not resolved_ref.startswith(\"file://\") and self.http_local_ref_path is None:`, so the --no-allow-remote-refs check at 4816-4824 skips file:// entirely. Line 4881 is `file_path = Path(path)` in _get_ref_body_from_url (method starts 4870) and line 4893 is `full_path = self.base_path / resolved_ref` in _get_ref_body_from_remote (method starts 4891); neither resolves-and-contains. The chosen range 4870-4899 spans both sinks, since the fix introduces one helper called from both. Note the sibling _get_ref_body_from_local_http_path at 4838 DOES do an is_relative_to containment check, which makes the omission legible in-file. reviewedPaths excludes all three test files. Advisory: GHSA-8359-h9fx-j6v9."
+    },
+    {
+      "id": "xsd-schemalocation-arbitrary-file-read",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/koxudaxi/datamodel-code-generator.git",
+      "upstreamOwner": "koxudaxi",
+      "upstreamRepo": "datamodel-code-generator",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "d2d5cecd9fd3a2a6dbf148bf0740b83a11fc6820",
+      "fixCommittedAt": "2026-06-10T15:39:04Z",
+      "parentCommit": "2ff4a72b4550a2b2069754c5b075b1655067e5fb",
+      "reviewedPaths": [
+        "src/datamodel_code_generator/parser/xmlschema.py"
+      ],
+      "reviewIntent": "Resolve xs:include/xs:import schemaLocation values relative to the including document's directory directly at the two places that need them; the extra indirection through a helper was not earning its keep.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/datamodel_code_generator/parser/xmlschema.py",
+          "lineRange": [
+            604,
+            611
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "_collect_schema() takes schemaLocation straight out of the parsed input document, joins it onto the including file's directory and resolves it with no containment check against self.base_path, then reads it with _read_xml_text(). A supplied schema containing <xs:include schemaLocation=\"../../secret.xsd\"> or an absolute path makes the generator read a file anywhere the process can reach and fold its declarations into the generated models. The same unchecked resolve is repeated at line 513.",
+          "securityMechanism": "path-traversal",
+          "contextDepth": "cross-function"
+        }
+      ],
+      "tags": [
+        "security",
+        "path-traversal",
+        "file-disclosure",
+        "xml"
+      ],
+      "notes": "Verified by printing lines 495-524 and 590-619 of src/datamodel_code_generator/parser/xmlschema.py at parent 2ff4a72b: line 513 and line 608 are both `location = (source_dir / schema_location).resolve()` with only `is_file()` guarding them; self.base_path is already available (used as the fallback source_dir on lines 508 and 602), so the boundary the fix enforces exists in the parent. Advisory GHSA-442q-2j6p-642g. Only one expectation written even though the fix patches two call sites - the advisory describes one defect. Test file excluded."
+    },
+    {
+      "id": "apollo-raw-configfile-appid-parsed-as-raw",
+      "language": "java",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/apolloconfig/apollo.git",
+      "upstreamOwner": "apolloconfig",
+      "upstreamRepo": "apollo",
+      "license": "Apache-2.0",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "310809d557e01c6803051736cd525e333ffe00ec",
+      "fixCommittedAt": "2026-06-19T02:31:38Z",
+      "parentCommit": "17879a9dc9fa6546db6ae725341908a377e601cb",
+      "reviewedPaths": [
+        "apollo-configservice/src/main/java/com/ctrip/framework/apollo/configservice/util/AccessKeyUtil.java"
+      ],
+      "reviewIntent": "Tidy up AccessKeyUtil.extractAppIdFromRequest. The generic /configfiles/ prefix branch already handles every config file path, so the extra prefix constant and the branch above it are redundant, and the method now returns the extracted value directly instead of routing it through a private helper.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "apollo-configservice/src/main/java/com/ctrip/framework/apollo/configservice/util/AccessKeyUtil.java",
+          "lineRange": [
+            59,
+            65
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "extractAppIdFromRequest has a branch for /configfiles/json/ but none for /configfiles/raw/, so a request to /configfiles/raw/{appId}/{cluster}/{ns} falls into the generic /configfiles/ branch and substringBetween yields the literal 'raw' as the appId. ClientAuthenticationFilter looks up AccessKey secrets under that appId; no app is named 'raw', so the list is empty and the filter calls chain.doFilter with no signature check. Unauthenticated read of raw config for any access-key-protected app.",
+          "securityMechanism": "authorization",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "authorization",
+        "authentication-bypass"
+      ],
+      "notes": "Verified by printing lines 28-80 of AccessKeyUtil.java at parent 17879a9d: the if/else chain is at 57-65 and the /configfiles/raw/ branch is absent, with the generic URL_CONFIGFILES_PREFIX branch at 61-62. Also printed ClientAuthenticationFilter.java at the same parent, lines 61-87, confirming empty availableSecrets/observableSecrets falls through to chain.doFilter without verification. reviewedPaths deliberately excludes ConfigServiceAutoConfiguration.java (its added /notifications/v2 url-pattern is separate hardening) and both test files. The commit also adds validateAppId(); that is the separately tracked GHSA-4w3q-qpfq-v992, which the advisory itself says only bites under particular database collations, so it is deliberately NOT written as a second expectation (deployment-specific). Advisory: GHSA-h4pc-58cc-hc95."
+    },
+    {
+      "id": "sftp-password-handler-skipped-when-either-credential-empty",
+      "language": "go",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/goshs-labs/goshs.git",
+      "upstreamOwner": "goshs-labs",
+      "upstreamRepo": "goshs",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "32f4a0e1790a709f722d0f3b2341f139d003180a",
+      "fixCommittedAt": "2026-06-26T06:39:45Z",
+      "parentCommit": "ead99b9b5081d473c61743cfed5e8290702317d2",
+      "reviewedPaths": [
+        "sftpserver/sftpserver.go"
+      ],
+      "reviewIntent": "Tighten the SFTP credential check so the password handler is only registered when both a username and a password have been configured.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "critical",
+          "path": "sftpserver/sftpserver.go",
+          "lineRange": [
+            85,
+            89
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "The SFTP password handler is only installed when BOTH Username and Password are non-empty. Starting the server with a username but an empty password (or the reverse) leaves PasswordHandler nil, and with no key file PublicKeyHandler is nil too; gliderlabs/ssh then sets NoClientAuth and accepts any client. Anyone who can reach the port gets full SFTP access to the served directory with no credentials.",
+          "securityMechanism": "authorization",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "authorization"
+      ],
+      "notes": "Verified by printing lines 55-104 of sftpserver/sftpserver.go at parent ead99b9b. Line 85 is exactly `if s.Username != \"\" && s.Password != \"\" {`; the handler block runs 86-88 and closes at 89. Lines 92-100 in the same printed region confirm PublicKeyHandler is only set when KeyFile != \"\", so both handlers can be nil simultaneously. Fix flips && to ||. contextDepth is `implementation` because the impact only follows from gliderlabs/ssh's documented behaviour of enabling NoClientAuth when no auth handler is registered - that fact is not in this file. GHSA-rjrw-mjq6-hpmm is an incomplete-fix follow-up to CVE-2026-40884, whose sanity check only caught the empty-username half."
+    },
+    {
+      "id": "svg-local-href-restriction-misses-plain-href",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/flavorjones/loofah.git",
+      "upstreamOwner": "flavorjones",
+      "upstreamRepo": "loofah",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "20867b9be689521887364b74822c41ef830523c9",
+      "fixCommittedAt": "2026-07-15T19:13:39Z",
+      "parentCommit": "5f3bff46b610c1221c4bdb4e5b5b90e1178576cc",
+      "reviewedPaths": [
+        "lib/loofah/html5/safelist.rb",
+        "lib/loofah/html5/scrub.rb"
+      ],
+      "reviewIntent": "Compare the attribute name directly instead of going through a Set. The SVG local-reference rule applies to `xlink:href`, so SVG_HREF_ATTRIBUTES buys one member's worth of use and adds indirection to a hot loop.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "lib/loofah/html5/scrub.rb",
+          "lineRange": [
+            73,
+            78
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "The local-reference restriction for SVG_ALLOW_LOCAL_HREF elements matches only `attr_name == \"xlink:href\"`. SVG 2 also allows a plain `href`, which is in ALLOWED_ATTRIBUTES and so survives scrubbing untouched, letting `<use href=\"https://evil.example/x.svg#p\"/>` through with a remote reference intact. Content that `<use>` pulls in can carry script when same-origin, and `<feImage>` gives an attacker-controlled outbound fetch from the viewer.",
+          "securityMechanism": "xss",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "xss"
+      ],
+      "notes": "Verified by printing lines 40-89 of lib/loofah/html5/scrub.rb at parent 5f3bff46. The guard is the three-part `next unless` at 73-75 (`SVG_ALLOW_LOCAL_HREF.include?(node.name) && attr_name == \"xlink:href\" && attr_node.value =~ /^\\s*[^#\\s].*/m`) followed by `attr_node.remove` / `next` at 77-78 - recorded range 73-78. Also printed lines 600-640 of the parent safelist.rb: SVG_ALLOW_LOCAL_HREF is defined at 608 and includes `use`, `feImage`, `filter`, `pattern` etc.; there is no SVG_HREF_ATTRIBUTES set (the fix adds it). Both source files are in reviewedPaths, so contextDepth cross-file is right: whether plain `href` reaches this line depends on the safelist. test/html5/test_sanitizer.rb excluded."
+    },
+    {
+      "id": "svg-use-plain-href-not-restricted-to-local-refs",
+      "language": "ruby",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/rails/rails-html-sanitizer.git",
+      "upstreamOwner": "rails",
+      "upstreamRepo": "rails-html-sanitizer",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "74dcb8053e6da9921246ce71b06ad9fd65b19586",
+      "fixCommittedAt": "2026-07-16T02:45:33Z",
+      "parentCommit": "11ee44059551bef771503a5afd5914903914dd8a",
+      "reviewedPaths": [
+        "lib/rails/html/scrubbers.rb"
+      ],
+      "reviewIntent": "Compare the attribute name directly in PermitScrubber's SVG reference check instead of going through the SafeList constant, so this file does not depend on a newer loofah release.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "lib/rails/html/scrubbers.rb",
+          "lineRange": [
+            175,
+            177
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "PermitScrubber's SVG local-reference check only removes the attribute when attr_name == \"xlink:href\", so an element in SVG_ALLOW_LOCAL_HREF such as <use> keeps a plain SVG 2 href that points outside the document. Where href is on the permitted attribute list, sanitized output like <use href=\"http://attacker/x#p\"> survives and pulls remote SVG content into the page's origin, which is the cross-site scripting the local-reference restriction exists to stop.",
+          "securityMechanism": "xss",
+          "contextDepth": "implementation"
+        }
+      ],
+      "tags": [
+        "security",
+        "xss",
+        "sanitizer"
+      ],
+      "notes": "Verified by printing lib/rails/html/scrubbers.rb lines 150-190 from parent 11ee440: scrub_attribute is 162-182 and line 175 is the SVG_ALLOW_LOCAL_HREF check with the literal `attr_name == \"xlink:href\"`, 176-177 the removal and end. The fix swaps that literal for SafeList::SVG_HREF_ATTRIBUTES. The same commit also raises the loofah floor to 2.25.2 (which ships that constant) in the gemspec and Gemfile.lock; those are dependency/build files and are excluded from reviewedPaths, so the reviewed change is the one-line source regression only."
+    },
+    {
+      "id": "gitpython-remote-url-environment-expansion",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/gitpython-developers/GitPython.git",
+      "upstreamOwner": "gitpython-developers",
+      "upstreamRepo": "GitPython",
+      "license": "BSD-3-Clause",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "863417457a0633db7ea5aed4fd01e0b291a41162",
+      "fixCommittedAt": "2026-07-22T15:04:14Z",
+      "parentCommit": "e59d9bab02b095a97e179f47019afee95f4e3c18",
+      "reviewedPaths": [
+        "git/remote.py"
+      ],
+      "reviewIntent": "Remote.create: run the URL through Git.polish_url with its standard settings, so that shell-style paths such as ~/repos/x and $WORKTREES/x resolve the same way here as they do elsewhere in the library before the value is handed to `git remote add` and written to the config.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "git/remote.py",
+          "lineRange": [
+            809,
+            814
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "Remote.create passes the caller-supplied URL to Git.polish_url() with its default expand_vars=True, which runs os.path.expandvars() and expanduser() over it. A URL like https://attacker.example/${AWS_SECRET_ACCESS_KEY}/repo.git is expanded against the hosting process's environment, written into .git/config, and then sent to the attacker's host on the next fetch. check_unsafe_protocols() runs after expansion and does not stop an https URL carrying the expanded value.",
+          "securityMechanism": "secret-flow",
+          "contextDepth": "callee"
+        }
+      ],
+      "tags": [
+        "security",
+        "secret-flow"
+      ],
+      "notes": "Curator: fetched parent git/remote.py at e59d9ba and PRINTED lines 790-819; line 811 is exactly `url = Git.polish_url(url)`, followed by check_unsafe_protocols at 812-813 and `repo.git.remote(scmd, \"--\", name, url, **kwargs)` at 814. Separately fetched parent git/cmd.py and PRINTED polish_url at lines 906-935, confirming `expand_vars: bool = True` and the os.path.expandvars/expanduser branch - hence contextDepth callee. The same one-line defect also exists at git/objects/submodule/base.py:611 (PRINTED lines 596-623 to confirm) and is fixed in the same commit; I deliberately narrowed reviewedPaths to git/remote.py, the site the advisory names as primary, so the case has exactly one expected finding rather than two scoring slots for one primitive. GHSA-94p4-4cq8-9g67 is an incomplete-fix follow-up to GHSA-rwj8-pgh3-r573."
+    },
+    {
+      "id": "empty-qualified-private-directive-cached-in-shared-cache",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/nodejs/undici.git",
+      "upstreamOwner": "nodejs",
+      "upstreamRepo": "undici",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "4fe5bc5fefe5ac81a200fc8e1cf84b8bf8464451",
+      "fixCommittedAt": "2026-07-23T10:40:38Z",
+      "parentCommit": "10d93fc332f2c8c161982dec3833201de29891b5",
+      "reviewedPaths": [
+        "lib/util/cache.js"
+      ],
+      "reviewIntent": "Inline the qualified `no-cache`/`private` field-name handling back into the parser loop and drop the helper, keeping all of the cache-control directive parsing in one place.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "lib/util/cache.js",
+          "lineRange": [
+            273,
+            291
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "For a qualified `private`/`no-cache` value the parser trims the field names but never drops empty ones, so `private=\"\"`, `private=\",\"` or `private=\"   \"` produces `{ private: [''] }` rather than `{ private: true }`. The shared-cache guard in lib/handler/cache-handler.js refuses storage only when `private === true`, so a user-specific response - body plus Set-Cookie - is stored in the default shared cache and later served to a different caller matching the same cache key.",
+          "securityMechanism": "secret-flow",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "secret-flow"
+      ],
+      "notes": "Verified by printing lines 160-309 of lib/util/cache.js at parent 10d93fc3. Lines 273-291 are exactly the block the fix replaced with addFieldNameCacheControlDirective: the trim loop at 273-275, the concat/assign at 277-281, and the unquoted branch at 285-291. Confirmed the downstream guard by fetching lib/handler/cache-handler.js at the same parent: line 432 reads `if (cacheType === 'shared' && cacheControlDirectives.private === true)` - hence contextDepth cross-file. GHSA-4cwx-7wf7-3272 also describes a second bug in these lines (unqualified `private` sets output.private = true, then a later qualified `private=\"h\"` calls true.concat and throws). Deliberately NOT written as a second expectation: no securityMechanism enum value fits an uncaught-exception DoS, and mislabelling it would corrupt the mechanism breakdown."
+    },
+    {
+      "id": "ipv4-parse-accepts-leading-zero-octets",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/beaugunderson/ip-address.git",
+      "upstreamOwner": "beaugunderson",
+      "upstreamRepo": "ip-address",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "56368cb3d66c73ba0ee9b6b834fd31b22c2fd71e",
+      "fixCommittedAt": "2026-07-25T07:52:23Z",
+      "parentCommit": "9ed7949438f3f522ad95daebc0bccc8c20c07d6d",
+      "reviewedPaths": [
+        "src/ipv4.ts"
+      ],
+      "reviewIntent": "Simplify Address4.parse so the address pattern is the only validation step.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "high",
+          "path": "src/ipv4.ts",
+          "lineRange": [
+            70,
+            78
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "Address4.parse gates untrusted input on constants.RE_ADDRESS alone, whose per-octet alternative [01]?[0-9][0-9]? accepts a leading zero, and every downstream decode reads the octet with parseInt(part, 10). The URL host parser, inet_aton and getaddrinfo read a leading zero as octal, so new Address4('012.0.0.1') reports correctForm 12.0.0.1 and isPrivate() false while a fetch of http://012.0.0.1/ reaches 10.0.0.1. A trust boundary built on these checks passes an internal target.",
+          "securityMechanism": "ssrf",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "ssrf",
+        "parser-differential"
+      ],
+      "notes": "Verified by printing src/ipv4.ts lines 45-100 from parent 9ed7949 (parse() is 70-78: split on '.', then only `if (!address.match(constants.RE_ADDRESS))`, correctForm at 86 uses parseInt(part, 10)) and src/v4/constants.ts lines 1-7 from the same commit, where RE_ADDRESS on line 5 does carry the permissive [01]?[0-9][0-9]? octet. reviewedPaths is narrowed to src/ipv4.ts on purpose: the same commit also hardens a separate stacked-subnet-suffix defect in src/ipv6.ts that this advisory does not cover, and including constants.ts would split the plausible report site across two files under path-semantic matching. The permissive regex is still present in the parent checkout for cross-file reading.",
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-07",
+        "verdict": "non-disclosing",
+        "rationale": "Both comments describe ordering and a sibling code path without naming what makes the notation dangerous. Neither says which notation is at issue, that any notation is accepted that should not be, or what an attacker gains. A reviewer reading them learns that a check exists and runs early, which is visible from the code anyway; the expectation - that leading-zero octets are parsed as decimal and let an address be written to evade an allowlist - is nowhere stated or implied.",
+        "acknowledgedComments": [
+          "// Checked before the general match so the error names the actual problem.",
+          "// Address6 rejects the same notation on its v4-in-v6 path."
+        ]
+      }
+    },
+    {
+      "id": "admin-api-filter-exposes-password-hash",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/TryGhost/Ghost.git",
+      "upstreamOwner": "TryGhost",
+      "upstreamRepo": "Ghost",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "63c31fad7e473caa62d8fbb4651a04a2a62b5d00",
+      "fixCommittedAt": "2026-07-27T19:18:09Z",
+      "parentCommit": "04ecfa84a1ad541d0a0792568f43dab27f9f36b9",
+      "reviewedPaths": [
+        "ghost/core/core/server/api/endpoints/posts.js",
+        "ghost/core/core/server/api/endpoints/pages.js",
+        "ghost/core/core/server/services/posts/posts-service.js",
+        "ghost/core/core/server/services/posts/posts-exporter.js"
+      ],
+      "reviewIntent": "Simplify how post and page browse and CSV export requests reach the model layer: the request options are forwarded as they arrive instead of being rebuilt with an extra query transformer, and the posts service export helper takes the API frame again.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "ghost/core/core/server/api/endpoints/posts.js",
+          "lineRange": [
+            80,
+            82
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "browse hands frame.options - which carries the caller-supplied NQL filter - to postsService.browsePosts with no mongoTransformer, so no stage rejects filter statements that name restricted columns. A staff-level user can filter posts on authors.password and read whether each guess matched from which posts come back, extracting another staff user's password hash character by character. exportCSV on line 110 forwards the same unfiltered frame.",
+          "securityMechanism": "secret-flow",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "secret-flow",
+        "information-disclosure",
+        "nql-filter"
+      ],
+      "notes": "Verified by printing lines 55-119 of endpoints/posts.js (line 81 `return postsService.browsePosts(frame.options);`, line 110 `data: await postsService.export(frame)`) and lines 28-55 of endpoints/pages.js (line 47 `return models.Post.findPage(frame.options);`) at parent 04ecfa84. Fetched api/endpoints/utils/api-filter-utils.ts at the SAME parent sha: it exists and rejects any filter key whose dot-segments include 'password', which is what the fix wires in. Advisory GHSA-jm22-3w23-5q7w confirms staff-to-staff password-hash leak. ONE expectation although three call sites are patched (posts browse, posts exportCSV, pages browse): the advisory is one defect. A reviewer reporting it on pages.js is reporting the same thing and should be adjudicated as a match, not a false positive. Snapshots and e2e tests excluded."
+    },
+    {
+      "id": "cors-preflight-header-split-redos",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/honojs/hono.git",
+      "upstreamOwner": "honojs",
+      "upstreamRepo": "hono",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "93fc250d8b4df58ea542cb945171de8013d5e6d5",
+      "fixCommittedAt": "2026-08-03T01:36:35Z",
+      "parentCommit": "51db3131d5e97076327edaa0afdb60ebb77c264f",
+      "reviewedPaths": [
+        "src/middleware/cors/index.ts"
+      ],
+      "reviewIntent": "Parse the Access-Control-Request-Headers preflight value with a single regular expression that splits on commas together with any surrounding whitespace, replacing the split-then-trim pair.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "src/middleware/cors/index.ts",
+          "lineRange": [
+            128,
+            134
+          ],
+          "matchMode": "path-line",
+          "tier": "security",
+          "semanticSummary": "The preflight branch splits the client-supplied Access-Control-Request-Headers header with the regex /\\s*,\\s*/. On a long run of whitespace that is never followed by a comma the engine retries the \\s* alternatives from every offset, so cost grows quadratically with header length: a single request carrying a few hundred KB of spaces in that header pins the CPU and stalls the process for every other request.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "local"
+        }
+      ],
+      "tags": [
+        "security",
+        "redos",
+        "denial-of-service",
+        "cors"
+      ],
+      "notes": "Verified by printing lines 118-147 of src/middleware/cors/index.ts at parent 51db3131: line 130 reads the request header, line 132 is `headers = requestHeaders.split(/\\s*,\\s*/)`. The header is attacker-controlled on any preflight request, and the value is used before any allow-list check, so no configuration is needed to reach it. Advisory GHSA-8j4g-w8fx-2239 (CWE-1333); the fix's own regression test sends 'x' + 200000 spaces + 'x'. Test file src/middleware/cors/index.test.ts excluded from reviewedPaths."
+    }
+  ]
+}

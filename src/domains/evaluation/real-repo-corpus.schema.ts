@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 import { RepositoryRelativePathSchema } from '../../shared/contracts/index.js'
 import {
+  EVAL_SLICE_TITLE_MAX_LENGTH,
   ExpectedFindingSchema,
   ExpectedNoFindingZoneSchema
 } from './eval-fixture.schema.js'
@@ -183,7 +184,12 @@ export const RealRepoCorpusCaseSchema = z.strictObject({
   reviewedPaths: z.array(RepositoryRelativePathSchema).min(1),
   // Sanitized intent shown as slice metadata for humans. It describes the change
   // under review, never the fix that motivated the capture.
-  reviewIntent: answerKeyFreeText(300),
+  //
+  // Bounded by the SLICE TITLE's limit rather than a number of its own, because
+  // hydration copies this field into `title` verbatim. A looser bound here does
+  // not buy a longer intent; it buys a manifest that validates and then crashes
+  // the hydrator on the one case that used the extra room.
+  reviewIntent: answerKeyFreeText(EVAL_SLICE_TITLE_MAX_LENGTH),
   expectedFindings: z.array(ExpectedFindingSchema).min(1),
   expectedNoFindingZones: z.array(ExpectedNoFindingZoneSchema).default([]),
   // Present only for a case whose reviewed diff removes prose comments.
@@ -194,6 +200,34 @@ export const RealRepoCorpusCaseSchema = z.strictObject({
   // Curator notes. Never rendered into slice metadata, never model-visible.
   notes: z.string().min(1).max(1000).optional()
 })
+
+// What was screened to produce a corpus's cases, so the yield is auditable and a
+// future curator does not re-derive the rejection patterns. Counts only; the
+// narrative belongs in the spec.
+//
+// Optional, and the option is a real distinction rather than tolerance for older
+// manifests: a corpus assembled by screening a population MUST record what it
+// screened, because a case count without a denominator is a yield figure nobody
+// can check. A corpus assembled case by case has no population and so has nothing
+// to record.
+export const CorpusScreeningSchema = z.strictObject({
+  commitBodiesScreened: z.number().int().nonnegative(),
+  repositoriesScreened: z.number().int().nonnegative(),
+  candidatesAdjudicated: z.number().int().nonnegative(),
+  // How the counts were produced, including any overlap between passes. A
+  // screening total quoted without that is a yield figure nobody can check.
+  note: z.string().min(20).max(1200).optional(),
+  rejections: z
+    .array(
+      z.strictObject({
+        candidate: z.string().min(1).max(300),
+        reason: z.string().min(20).max(1000)
+      })
+    )
+    .default([])
+})
+
+export type CorpusScreening = z.infer<typeof CorpusScreeningSchema>
 
 export const RealRepoCorpusManifestSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),
@@ -210,6 +244,7 @@ export const RealRepoCorpusManifestSchema = z.strictObject({
   // with no dev set silently satisfied the chronological-split rule.
   splitIntegrity: CorpusSplitIntegritySchema,
   description: z.string().min(1).max(1000),
+  screening: CorpusScreeningSchema.optional(),
   cases: z.array(RealRepoCorpusCaseSchema).min(1)
 })
 
