@@ -101,3 +101,36 @@ It also disposes of two hypotheses without further spend:
 - **Not the missing-weakness-class hypothesis**, which was pre-registered, measured
   and rejected the same day (7 gained / 8 lost, p = 1.0000). The clause it added
   addressed targeting; the dominant failure on these cases is not targeting.
+
+## Addendum 2026-08-07: the matcher is not under-crediting
+
+Derived from the 20 confirmation runs, no new spend. If the semantic judge were
+rejecting correct findings, measured recall would understate the reviewer and there
+would be a cheap correction available. There is not.
+
+Across **406 missed expectation-observations**, where the engine's own findings fell
+relative to the expected lines:
+
+| | | |
+| --- | --- | --- |
+| no finding in that file at all | 307 | **75.6%** |
+| same file, more than 50 lines away | 82 | 20.2% |
+| same file, within 50 lines | 17 | 4.2% |
+| same file, within 10 lines | **0** | **0%** |
+| inside the expected range | **0** | **0%** |
+
+**Not one missed expectation had a finding on or near its lines.** There is no
+population of "the engine found it and the judge said no", so the matcher is sound
+and the ~61% figure is not understating anything. This also removes the cheapest
+imaginable win: there was nothing to correct.
+
+What it leaves is sharper than what it closes. Three quarters of misses are *no
+finding in that file*, while discovery returns a completely empty array only ~9% of
+the time. So in most misses the engine is speaking — about a different file, or a
+distant part of the same one. Combined with the earlier result that the pipeline
+loses 1.6% and that discovery emits 1.24 findings against a key naming 1.02, the
+remaining lever is **which file inside a case gets the attention**, not how much is
+found or whether it survives.
+
+That is a hypothesis this analysis generates, not one it tests.
+
