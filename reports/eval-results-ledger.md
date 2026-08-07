@@ -2103,6 +2103,56 @@ extraction is measurably non-deterministic (±10% on any count). The 51.5% headl
 single run.
 
 
+## 2026-08-07 — Correctness fixes CONFIRMATION: not reproduced (the +5.13pp was noise)
+
+Control `f2a6ee8` vs treatment `0504e49`, **ten seeds per arm**, alternating order.
+Provenance exact: 20 runs, 5/5 position balance in each arm, one dependency digest,
+one dirty digest, no contaminated run. Rule:
+`reports/2026-08-07-defect-fixes-confirmation-prereg.md`; result:
+`reports/2026-08-07-defect-fixes-confirmation-result.md`.
+
+| | control | treatment | delta |
+| --- | --- | --- | --- |
+| recall | 60.6% (sd 4.28pp) | 61.4% (sd 3.68pp) | **+0.77pp** |
+| adjusted precision | 98.5% | 97.6% | −0.84pp |
+| empty returns | 44 | 48 | +4 |
+| genuine false positives | 5 | 8 | +3 |
+
+Paired over 51 expectations: **12 gained, 12 lost, one-sided p = 0.5806.**
+
+**The exploratory +5.13pp / 14–6 was noise.** Every secondary measure that moved
+favourably in the exploratory study moved the other way here. Direction, magnitude and
+mechanism (D3) were all specified in advance and none appeared.
+
+**This is the day's most valuable result, because of what it prevented.** The
+exploratory study looked like a five-point win on every number at once. Claiming it
+would have put a false improvement into the published figures, where it would have
+become the baseline every later change was measured against.
+
+**It also proves refusing optional stopping was right.** Adding seeds to the original
+twelve until p crossed 0.05 — with a true effect near zero and a 14–6 starting point —
+would have crossed on some draw and stopped there, manufacturing exactly the false
+positive this study prevented.
+
+**The fixes stay** — they shipped on correctness with failing-first tests and were
+never contingent on this. They are correct AND they do not measurably improve recall;
+both hold at once. **The hypothesis is retired**, and per the pre-registration **no
+further seeds will be run on this question**.
+
+### The day's complete measurement record
+
+| change | design | paired result |
+| --- | --- | --- |
+| authorization-scope clause | 3 seeds/arm | 7 / 8, p = 1.0000 |
+| stale precision boundary | 3 seeds/arm | 7 / 8, p = 1.0000 |
+| intent-framing clause | 3 seeds/arm | 7 / 7, p = 1.0000 |
+| correctness fixes (exploratory) | 6 seeds/arm | 14 / 6, p = 0.1153 |
+| **correctness fixes (confirmation)** | **10 seeds/arm** | **12 / 12, p = 0.5806** |
+
+Five pre-registered measurements, five honest negatives, one of which had to survive
+looking like a win first. No accuracy improvement was demonstrated, and that now rests
+on a properly powered study rather than an underpowered one.
+
 ## 2026-08-07 — Correctness fixes re-baselined: favourable, NOT established
 
 Control `f2a6ee8` (before the fixes) vs treatment `0504e49` (three defect fixes, no
