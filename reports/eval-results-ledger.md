@@ -2103,6 +2103,45 @@ extraction is measurably non-deterministic (±10% on any count). The 51.5% headl
 single run.
 
 
+## 2026-08-07 — Correctness fixes re-baselined: favourable, NOT established
+
+Control `f2a6ee8` (before the fixes) vs treatment `0504e49` (three defect fixes, no
+prompt text differing). **Six seeds per arm**, alternating order, three runs in each
+position per arm, all twelve sharing dependency and dirty digests. Rule:
+`reports/2026-08-07-defect-fixes-prereg.md`; result:
+`reports/2026-08-07-defect-fixes-result.md`.
+
+| | control | treatment | delta |
+| --- | --- | --- | --- |
+| recall | 58.0% (sd 3.31pp) | 63.1% (sd 5.22pp) | **+5.13pp** |
+| adjusted precision | 97.3% | 98.6% | +1.26pp |
+| empty returns | 30 | 28 | −2 |
+| genuine false positives | 5 | 3 | −2 |
+
+Paired over 51 expectations: **14 gained, 6 lost, 32 unchanged, exact sign test
+p = 0.1153.**
+
+**The pre-registered threshold was p < 0.05, so "the fixes improved recall" is NOT
+claimed.** Every number points the same way and none of it clears the bar. Without a
+threshold fixed in advance this would have been written up as a five-point win
+resting on p = 0.12.
+
+One additional net gain would have crossed: at 20 discordant pairs 14–6 gives 0.115
+and 15–5 gives 0.041. That is how close it is, and why a threshold a single
+expectation can cross is not a formality.
+
+**Six more seeds were deliberately NOT run.** Adding data after seeing p = 0.115 is
+optional stopping and invalidates the test it appears to strengthen. Settling this
+needs a fresh, independently pre-registered confirmation treating today's result as
+the hypothesis — a different experiment.
+
+**What stands:** the fixes stay (shipped on correctness, retention was explicitly not
+contingent on this); no regression (the failure condition, a fall beyond the control's
+9.62pp spread, did not occur); and this is the strongest directional signal any change
+produced today, against 7–8, 7–7 and 7–7 for the three prompt interventions. Consistent
+with a real small improvement, most plausibly from D3 — and consistent with chance at
+about one time in nine.
+
 ## 2026-08-07 — Intent-framing clause REVERTED, and the real variance (CORRECTS AN EARLIER ENTRY)
 
 Control `f2a6ee8` vs treatment `9ac762e`, 3 seeds, 51-case corpus. **First A/B under
