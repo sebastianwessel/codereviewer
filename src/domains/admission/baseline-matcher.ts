@@ -1,5 +1,6 @@
 import {
   AdmittedFindingSchema,
+  fingerprintKey,
   type AdmittedFinding,
   type BaselineStatus,
   type FindingFingerprint
@@ -14,9 +15,6 @@ export type BaselineMatchResult = {
   readonly resolvedBaselineFingerprints: readonly FindingFingerprint[]
   readonly warnings: readonly string[]
 }
-
-const fingerprintKey = (fingerprint: FindingFingerprint): string =>
-  `${fingerprint.algorithm}:${fingerprint.value}`
 
 // Baseline entries whose fingerprints no longer appear among admitted findings.
 //

@@ -7,6 +7,7 @@
 // so the `Verdict.fingerprints` contract (at least one) always holds.
 
 import {
+  fingerprintKey,
   FindingFingerprintSchema,
   type FindingFingerprint
 } from '../../shared/contracts/findings/finding.schema.js'
@@ -32,10 +33,6 @@ export const fingerprintEvidenceRefs = (
     value: fingerprint.value
   }))
 
-/** Comparison key for fingerprint equality across findings, verdicts and claims. */
-export const fingerprintKey = (fingerprint: FindingFingerprint): string =>
-  `${fingerprint.algorithm}:${fingerprint.value}`
-
 const synthesizedFingerprint = (claim: Claim): FindingFingerprint => ({
   algorithm: 'v1-claim-id',
   value: sha256(`verification-claim:${claim.id}`).slice(0, 32)
@@ -56,3 +53,7 @@ export const fingerprintsForClaim = (claim: Claim): FindingFingerprint[] => {
 
   return carried.length > 0 ? carried : [synthesizedFingerprint(claim)]
 }
+
+// Re-exported so this module stays the verification domain's one import site for
+// fingerprint identity, while the definition lives beside the type it keys.
+export { fingerprintKey }

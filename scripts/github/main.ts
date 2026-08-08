@@ -10,6 +10,7 @@ import { spawn } from 'node:child_process'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
+import { resolveExistingPathInsideRoot } from '../../src/platform/path-service.js'
 import { createGithubApi } from './github-api.js'
 import { parsePullRequestEvent } from './pull-request-context.js'
 import { runPipeline } from './pipeline.js'
@@ -83,18 +84,25 @@ const runCli = (
     })
   })
 
-/** Reads a run artifact, refusing any path that escapes the repository root. */
+/**
+ * Reads a run artifact, refusing any path that escapes the repository root.
+ *
+ * Uses the repository's own containment helper rather than a local check. The
+ * previous version compared `path.relative` output only, which accepts a symlink
+ * inside the artifact directory that points outside the repository — the case
+ * `resolveExistingPathInsideRoot` exists to refuse, since it compares realpaths.
+ * A second, weaker copy of a security guard is worth less than no copy, because it
+ * reads as though the guard is in place.
+ */
 const readArtifact = async (
   relativePath: string
 ): Promise<string | undefined> => {
-  const resolved = path.resolve(repositoryRoot, relativePath)
-  const relative = path.relative(repositoryRoot, resolved)
-
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    return undefined
-  }
-
   try {
+    const resolved = await resolveExistingPathInsideRoot(
+      repositoryRoot,
+      relativePath
+    )
+
     return await readFile(resolved, 'utf8')
   } catch {
     return undefined

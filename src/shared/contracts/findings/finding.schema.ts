@@ -310,6 +310,19 @@ export type CodeLocation = z.infer<typeof CodeLocationSchema>
 export type RelatedLocation = z.infer<typeof RelatedLocationSchema>
 export type DataFlowPath = z.infer<typeof DataFlowPathSchema>
 export type FindingFingerprint = z.infer<typeof FindingFingerprintSchema>
+
+/**
+ * Comparison key for fingerprint equality, across findings, verdicts and claims.
+ *
+ * Lives beside the type because two domains each had their own copy: admission
+ * used it to decide whether a baselined finding still appears, verification to
+ * corroborate a claim. Identical today; a change to either — hashing the pair,
+ * ordering multi-algorithm fingerprints — would have made the two disagree about
+ * which findings are the same, and disagreement there is a wrong match rather
+ * than an error anyone would see.
+ */
+export const fingerprintKey = (fingerprint: FindingFingerprint): string =>
+  `${fingerprint.algorithm}:${fingerprint.value}`
 export type EvidenceRecord = z.infer<typeof EvidenceRecordSchema>
 export type DeterministicSignal = z.infer<typeof DeterministicSignalSchema>
 export type RefutationVerdict = z.infer<typeof RefutationVerdictSchema>
