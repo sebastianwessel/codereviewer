@@ -7,7 +7,7 @@
     "commitBodiesScreened": 101542,
     "repositoriesScreened": 27,
     "candidatesAdjudicated": 166,
-    "note": "Two passes. Pass one (2026-07-28) screened 66,685 commit bodies across 27 repositories in two sweeps - 46,073 for a resolvable full object name and 20,612 for a locally resolvable pull-request number - and produced 98 raw candidates. Pass two (2026-08-06) screened all 34,857 commit bodies of the django repository, which pass one had covered only partially, and produced 68 candidates whose production file sets are disjoint. The repository totals therefore overlap and the 101,542 figure is bodies screened, not distinct commits.",
+    "note": "Two passes. Pass one (2026-07-28) screened 66,685 commit bodies across 27 repositories in two sweeps - 46,073 for a resolvable full object name and 20,612 for a locally resolvable pull-request number - and produced 98 raw candidates. Pass two (2026-08-06) screened all 34,857 commit bodies of the django repository, which pass one had covered only partially, and produced 68 candidates whose production file sets are disjoint. The repository totals therefore overlap and the 101,542 figure is bodies screened, not distinct commits. Pass three (2026-08-08) searched GitHub globally rather than by curated repository list: 10,392 commit bodies over two runs yielded 14 candidates (1 per 742), of which 9 survived curation for 14 further proven dependents. The rate DECAYED 6.7x between the two runs (1 per 135 -> 1 per 907) as the best phrases were spent, and a wave scoped against 61 flagship projects returned zero hits on 233 of 244 queries: explicit regression attribution is a small- and mid-project commit convention, so the largest repositories are the worst place to look for this ground truth.",
     "rejections": [
       {
         "candidate": "django 7f66c3b41f0f 'Refs #36439 -- Added sync_to_async() to dummy password hasher path' <- 748ca0a146",
@@ -781,6 +781,781 @@
         "templates"
       ],
       "notes": "The hardest reachability class in the corpus: the dependent shares no import edge, no call and no identifier with the change. It is retained precisely so that recall on this class is reported rather than pooled with the reachable ones."
+    },
+    {
+      "id": "vscode-copilot-endpoint-family-rename-breaks-subagent-model-override",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/microsoft/vscode.git",
+      "upstreamOwner": "microsoft",
+      "upstreamRepo": "vscode",
+      "license": "MIT",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "ef061ccb0fc47d4a94b2c0fa1f2ba80a3231979a",
+      "introducingCommittedAt": "2026-05-14T17:37:23Z",
+      "parentCommit": "be263d4ccd2535c5271261789659e8bd10a913e3",
+      "reviewedPaths": [
+        "extensions/copilot/src/extension/conversation/vscode-node/chatParticipants.ts",
+        "extensions/copilot/src/extension/conversation/vscode-node/languageModelAccess.ts",
+        "extensions/copilot/src/extension/conversation/vscode-node/terminalFixGenerator.ts",
+        "extensions/copilot/src/extension/inlineChat2/node/progressMessages.ts",
+        "extensions/copilot/src/extension/intents/node/generateNewWorkspaceContent.ts",
+        "extensions/copilot/src/extension/intents/node/searchKeywordsIntent.ts",
+        "extensions/copilot/src/extension/intents/node/searchPanelIntent.ts",
+        "extensions/copilot/src/extension/intents/node/testIntent/userQueryParser.tsx",
+        "extensions/copilot/src/extension/mcp/vscode-node/mcpToolCallingLoop.tsx",
+        "extensions/copilot/src/extension/onboardDebug/node/commandToConfigConverter.tsx",
+        "extensions/copilot/src/extension/onboardDebug/node/languageToolsProvider.tsx",
+        "extensions/copilot/src/extension/prompt/node/codebaseToolCalling.ts",
+        "extensions/copilot/src/extension/prompt/node/devContainerConfigGenerator.ts",
+        "extensions/copilot/src/extension/prompt/node/feedbackGenerator.ts",
+        "extensions/copilot/src/extension/prompt/node/gitBranch.ts",
+        "extensions/copilot/src/extension/prompt/node/gitCommitMessageGenerator.ts",
+        "extensions/copilot/src/extension/prompt/node/githubPullRequestTitleAndDescriptionGenerator.ts",
+        "extensions/copilot/src/extension/prompt/node/intentDetector.tsx",
+        "extensions/copilot/src/extension/prompt/node/promptCategorizer.ts",
+        "extensions/copilot/src/extension/prompt/node/summarizer.ts",
+        "extensions/copilot/src/extension/prompt/node/title.ts",
+        "extensions/copilot/src/extension/prompt/vscode-node/endpointProviderImpl.ts",
+        "extensions/copilot/src/extension/prompt/vscode-node/scenarioAutomationEndpointProviderImpl.ts",
+        "extensions/copilot/src/extension/prompt/vscode-node/settingsEditorSearchServiceImpl.ts",
+        "extensions/copilot/src/extension/prompts/node/agent/backgroundTodoProcessor.ts",
+        "extensions/copilot/src/extension/prompts/node/base/promptRenderer.ts",
+        "extensions/copilot/src/extension/prompts/node/codeMapper/codeMapper.ts",
+        "extensions/copilot/src/extension/prompts/node/panel/chatVariables.tsx",
+        "extensions/copilot/src/extension/prompts/node/panel/newWorkspace/newWorkspace.tsx",
+        "extensions/copilot/src/extension/prompts/node/panel/startDebugging.tsx",
+        "extensions/copilot/src/extension/prompts/node/panel/vscode.tsx",
+        "extensions/copilot/src/extension/renameSuggestions/node/renameSuggestionsPrompt.tsx",
+        "extensions/copilot/src/extension/renameSuggestions/node/renameSuggestionsProvider.ts",
+        "extensions/copilot/src/extension/testing/node/aiEvaluationService.tsx",
+        "extensions/copilot/src/extension/testing/node/setupTestsFileManager.tsx",
+        "extensions/copilot/src/extension/tools/common/virtualTools/virtualToolGrouper.ts",
+        "extensions/copilot/src/extension/tools/node/abstractReplaceStringTool.tsx",
+        "extensions/copilot/src/extension/tools/node/applyPatchTool.tsx",
+        "extensions/copilot/src/extension/tools/node/newNotebookTool.tsx",
+        "extensions/copilot/src/extension/workspaceSemanticSearch/node/semanticSearchTextSearchProvider.ts",
+        "extensions/copilot/src/platform/configuration/common/configurationService.ts",
+        "extensions/copilot/src/platform/endpoint/common/endpointProvider.ts",
+        "extensions/copilot/src/platform/endpoint/common/modelAliasRegistry.ts",
+        "extensions/copilot/src/platform/endpoint/node/copilotChatEndpoint.ts",
+        "extensions/copilot/src/platform/endpoint/node/modelMetadataFetcher.ts",
+        "extensions/copilot/src/platform/networking/common/networking.ts",
+        "src/vs/workbench/contrib/chat/browser/chat.contribution.ts",
+        "src/vs/workbench/contrib/chat/browser/chatEditing/chatEditingExplanationModelManager.ts",
+        "src/vs/workbench/contrib/chat/browser/tools/chatToolRiskAssessmentService.ts",
+        "src/vs/workbench/contrib/chat/browser/widget/chatContentParts/chatThinkingContentPart.ts"
+      ],
+      "excludedPaths": [
+        "extensions/copilot/src/extension/conversation/vscode-node/test/languageModelAccess.test.ts",
+        "extensions/copilot/src/extension/prompts/node/panel/test/toolCalling.spec.ts",
+        "extensions/copilot/src/extension/test/vscode-node/endpoints.test.ts",
+        "extensions/copilot/src/extension/tools/node/test/findTextInFilesResult.spec.tsx",
+        "extensions/copilot/src/extension/tools/node/test/toolTestUtils.tsx",
+        "extensions/copilot/src/platform/endpoint/node/test/copilotChatEndpoint.spec.ts",
+        "extensions/copilot/src/platform/endpoint/test/node/testEndpointProvider.ts",
+        "extensions/copilot/test/e2e/vscode-metaprompt.stest.ts",
+        "extensions/copilot/test/prompts/newNotebookCell.stest.ts",
+        "extensions/copilot/test/prompts/settingsEditorSearchResultsSelector.stest.ts"
+      ],
+      "excludedPathsReason": "Tests and test-only utilities.",
+      "reviewIntent": "Rename two internal Copilot chat-endpoint family identifiers and narrow getChatEndpoint's string-family resolver to accept only the two new names.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "be3152e6218873a1b586c90d4144c78cfbf04b5f",
+          "committedAt": "2026-06-08",
+          "subject": "Regression: Fix execution subagent model setting being ignored (#320231) (#320479)",
+          "repairedPaths": [
+            "extensions/copilot/src/extension/prompt/node/executionSubagentToolCallingLoop.ts",
+            "extensions/copilot/src/extension/prompt/node/searchSubagentToolCallingLoop.ts",
+            "extensions/copilot/src/extension/prompt/vscode-node/endpointProviderImpl.ts",
+            "extensions/copilot/src/extension/test/vscode-node/endpoints.test.ts",
+            "extensions/copilot/src/platform/endpoint/common/endpointProvider.ts"
+          ],
+          "quotes": [
+            "getChatEndpoint(string) regressed in the copilot-utility rename (ef061ccb0fc): the string branch only resolved the two utility families and threw 'Unrecognized chat endpoint family' for anything else. The execution and search subagents pass their *.model override (e.g. gemini-3-flash) straight to getChatEndpoint(), so the throw was caught and they silently fell back to the parent model."
+          ],
+          "linkVerification": "The fix commit's message states verbatim 'getChatEndpoint(string) regressed in the copilot-utility rename (ef061ccb0fc)', an 11-char prefix of introducingCommit ef061ccb0fc47d4a94b2c0fa1f2ba80a3231979a, confirmed via gh api commits/ef061ccb0fc47d4a94b2c0fa1f2ba80a3231979a whose subject matches 'the copilot-utility rename' description exactly."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "extensions/copilot/src/extension/prompt/node/executionSubagentToolCallingLoop.ts",
+          "lineRange": [
+            115,
+            147
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "getChatEndpoint's string-family branch now only resolves the two new utility family ids and throws 'Unrecognized chat endpoint family' for anything else. executionSubagentToolCallingLoop's getEndpoint() passes an arbitrary user-configured model family straight to getChatEndpoint, catches the throw, and silently falls back to the parent agent's endpoint instead of the user's configured model.",
+          "severity": "medium",
+          "severityRationale": "Impact: Silently wrong - the subagent's model-override lookup throws, is caught, and falls back to the parent model with no signal to the user. Reachability: Conditional - only fires when the user has configured a non-utility model family override for that subagent. Matrix: Silently wrong x Conditional = medium."
+        },
+        {
+          "path": "extensions/copilot/src/extension/prompt/node/searchSubagentToolCallingLoop.ts",
+          "lineRange": [
+            93,
+            116
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "getChatEndpoint's string-family branch now only resolves the two new utility family ids and throws for anything else. searchSubagentToolCallingLoop's getEndpoint() passes an arbitrary user-configured model family to getChatEndpoint, catches the throw (logging only an internal warning), and falls back to the parent agent's endpoint instead of the user's configured model.",
+          "severity": "medium",
+          "severityRationale": "Impact: Silently wrong - the catch block logs only to an internal service log, not to the visible Chat UI, so from the end user's view the fallback is silent. Reachability: Conditional - only fires when the user has configured a non-utility model family override for the search subagent. Matrix: Silently wrong x Conditional = medium."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The introducing diff is a clean, self-contained rename: ChatEndpointFamily keeps the same two-member union shape, and the new _resolveUtilityFamily helper reads as a complete, deliberate replacement for the old permissive family resolver. Nothing in the diff touches or mentions the two subagent files, and the regression only manifests because those callers elsewhere in the codebase pass an arbitrary CAPI family string through an existing type cast at runtime, a fact invisible from this diff alone."
+      },
+      "tags": [
+        "typescript",
+        "copilot",
+        "model-routing"
+      ],
+      "notes": "Two dependents from one introducing commit: executionSubagentToolCallingLoop.ts and searchSubagentToolCallingLoop.ts both call getChatEndpoint with a user-configured model family and both silently fall back on the throw. The search subagent additionally logs an internal warning the execution subagent does not, but that log is not surfaced in the Chat UI, so both are scored as silently wrong from the end user's perspective."
+    },
+    {
+      "id": "djaopsp-newsfeed-consolidation-hides-available-questionnaires",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/djaodjin/djaopsp.git",
+      "upstreamOwner": "djaodjin",
+      "upstreamRepo": "djaopsp",
+      "license": "BSD-2-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "dab09662cfb499ce0ecbf976a306f89346b22288",
+      "introducingCommittedAt": "2026-06-04T19:58:56Z",
+      "parentCommit": "4b9eb840fd95e0c19e11f40e6b4fe88c3bcc83d5",
+      "reviewedPaths": [
+        "djaopsp/api/newsfeed.py",
+        "djaopsp/templates/app/_newsfeed.html",
+        "djaopsp/templates/app/assess/redirects.html",
+        "djaopsp/templates/app/index.html",
+        "djaopsp/views/assess.py"
+      ],
+      "excludedPaths": [
+        "requirements.txt"
+      ],
+      "excludedPathsReason": "Dependency manifest, not reviewable application code.",
+      "reviewIntent": "Reuse the same card layout and one shared assessment-lookup query for both the newsfeed and the assess-redirect pages instead of duplicating logic across views.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "cd18d87afbd8845704db57def95a100cda791c72",
+          "committedAt": "2026-07-04",
+          "subject": "restores all available questionnaires on /getstarted/ page",
+          "repairedPaths": [
+            "djaopsp/api/newsfeed.py",
+            "djaopsp/utils.py"
+          ],
+          "quotes": [
+            "restores all available questionnaires on /getstarted/ page\n\nregression introduced by commit dab09662"
+          ],
+          "linkVerification": "The fix commit's message states 'regression introduced by commit dab09662', an 8-char prefix of introducingCommit dab09662cfb499ce0ecbf976a306f89346b22288, confirmed via gh api commits/dab09662cfb499ce0ecbf976a306f89346b22288 whose subject and 6-file diff match the newsfeed/redirect-page consolidation the fix describes."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "djaopsp/utils.py",
+          "lineRange": [
+            283,
+            297
+          ],
+          "reachability": "callee-of-changed-code",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "get_latest_active_assessments never filtered out samples with zero answers or deduplicated multiple samples per campaign, which was harmless under its old caller. The rewritten get_pending_requests now uses its result, via a new show_all branch, to decide which campaigns to exclude from the /getstarted/ page's candidate list, so a stray empty or duplicate sample makes an available campaign silently disappear from the page.",
+          "severity": "medium",
+          "severityRationale": "Impact: Silently wrong - the /getstarted/ page silently omits available questionnaires with no error shown to the user. Reachability: Conditional - requires an existing loose-matching Sample (empty answers or a duplicate) for the account and campaign, not guaranteed on every visit. Matrix: Silently wrong x Conditional = medium."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff reads as a legitimate DRY consolidation: it removes a large duplicated candidate-building loop from assess.py in favour of reusing newsfeed.py's get_pending_requests, and none of the touched files contain anything that looks wrong on its own. The completeness guarantee that breaks is a property of a pre-existing, unchanged fallback in newsfeed.py interacting with a pre-existing looseness in a query defined in a file the diff never touches, so it is not visible from the diff."
+      },
+      "tags": [
+        "python",
+        "django",
+        "orm"
+      ]
+    },
+    {
+      "id": "simis-cms-get-to-post-migration-breaks-cart-widget-remove-item",
+      "language": "java",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/SimisRnD/simis-cms.git",
+      "upstreamOwner": "SimisRnD",
+      "upstreamRepo": "simis-cms",
+      "license": "Apache-2.0",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "023e2e01090d7bf77db5515a314749b5ec5c4ccf",
+      "introducingCommittedAt": "2026-07-26T14:31:28Z",
+      "parentCommit": "fca5af9075ead3e32387ef2aa05e18e790711bba",
+      "reviewedPaths": [
+        "src/main/java/com/simisinc/platform/presentation/controller/PageServlet.java",
+        "src/main/webapp/WEB-INF/jsp/admin/blocked-ip-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/blog-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/calendar-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/collection-categories-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/collection-details.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/collection-relationships-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/datasets-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/folder-details.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/folder-files-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/form-data-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/groups-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/mailing-lists.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/product-categories-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/product-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/sales-tax-nexus-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/shipping-rates-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/sitemap-editor.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/sitemap.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/sub-folder-details.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/theme-editor.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/user-details.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/web-page-form.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/web-page-list-editor.jsp",
+        "src/main/webapp/WEB-INF/jsp/admin/wiki-list.jsp",
+        "src/main/webapp/WEB-INF/jsp/calendar/full-calendar.jsp",
+        "src/main/webapp/WEB-INF/jsp/cms/blog-post-details.jsp",
+        "src/main/webapp/WEB-INF/jsp/cms/web-page-editor.jsp",
+        "src/main/webapp/WEB-INF/jsp/ecommerce/cart.jsp",
+        "src/main/webapp/WEB-INF/jsp/items/item-relationships.jsp",
+        "src/main/webapp/WEB-INF/jsp/main.jsp"
+      ],
+      "excludedPaths": [],
+      "reviewIntent": "Migrate several state-changing admin and storefront actions from GET query-string links to real POST form submissions, and add a Referrer-Policy header.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "2bf221545bc018badde7f9489a40db1ab46ecdce",
+          "committedAt": "2026-07-28",
+          "subject": "Merge pull request #575 from lizhsr/fix/post-action-dispatch-gap",
+          "repairedPaths": [
+            "src/main/java/com/simisinc/platform/presentation/widgets/ecommerce/CartWidget.java",
+            "src/main/java/com/simisinc/platform/presentation/widgets/admin/cms/FormDataListWidget.java",
+            "src/main/java/com/simisinc/platform/presentation/widgets/admin/cms/ThemeEditorWidget.java",
+            "src/main/java/com/simisinc/platform/presentation/widgets/admin/cms/WebPageFormWidget.java",
+            "src/main/java/com/simisinc/platform/presentation/widgets/cms/BlogPostWidget.java",
+            "src/main/java/com/simisinc/platform/presentation/widgets/items/ItemRelationshipsListWidget.java"
+          ],
+          "quotes": [
+            "Fix 6 widgets left silently broken by the GET-to-POST action migration (#377/#358)"
+          ],
+          "linkVerification": "The fix merge commit's PR #575 body states 'Fix 6 widgets left silently broken by the GET-to-POST action migration (#377/#358)'; PR #377's merge_commit_sha field, fetched via gh api pulls/377, equals introducingCommit 023e2e01090d7bf77db5515a314749b5ec5c4ccf exactly, an unambiguous PR-number resolution."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "src/main/java/com/simisinc/platform/presentation/widgets/ecommerce/CartWidget.java",
+          "lineRange": [
+            214,
+            289
+          ],
+          "reachability": "attribute-owner",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "PR #377 moved the cart's removeItem action from a GET link to a POST form; the widget dispatcher now routes any POST to CartWidget.post() instead of action(). post() was written under the old assumption that it only handles quantity/promo updates and never checks the action parameter, so a removeItem POST falls into the quantity-update logic, finds no item-*-quantity parameters, and returns a generic error instead of removing the item.",
+          "severity": "medium",
+          "severityRationale": "Impact: Signalled or bounded - post() returns a visible 'An error occurred' message before any cart mutation, rather than silently no-opping; the cart is left unchanged. Reachability: Routine - any logged-in user with a non-empty cart clicking Remove Item hits this, no extra condition. Matrix: Signalled or bounded x Routine = medium."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "PR #377's diff is a coherent, self-contained CSRF-hardening change: it swaps several JSP GET links for real POST form submissions and adds a Referrer-Policy header. It never touches CartWidget.java and never mentions widget dispatch semantics; the only visible clue is cart.jsp's link becoming a postAction() call, which reads as routine hardening, not as something that changes which Java method later handles the request."
+      },
+      "tags": [
+        "java",
+        "http-dispatch",
+        "widget-framework"
+      ],
+      "notes": "PR #377 also breaks 5 other widgets (FormDataListWidget, ThemeEditorWidget, WebPageFormWidget, BlogPostWidget, ItemRelationshipsListWidget), all repaired by the same fix commit; only CartWidget.java was verified with full rigor (line range, actual dispatch chain trace) within this harvest's scope, so only it is listed as expectedImpact."
+    },
+    {
+      "id": "dithermark-transform-image-param-drop-breaks-bw-error-prop-dither",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/allen-garvey/dithermark.git",
+      "upstreamOwner": "allen-garvey",
+      "upstreamRepo": "dithermark",
+      "license": "MIT",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "79f0c853d7fbe1523ea5ef8ba779f93fbac014c7",
+      "introducingCommittedAt": "2026-07-23T22:06:15Z",
+      "parentCommit": "9ca0f6a0fa9b6bb820b181539339b94001a440ac",
+      "reviewedPaths": [
+        "js/worker/dither/error-prop-color.js",
+        "js/worker/image.js"
+      ],
+      "excludedPaths": [
+        "changelog.md"
+      ],
+      "excludedPathsReason": "Documentation only.",
+      "reviewIntent": "Reduce closures allocated per pixel in the webworker color dithers by dropping an unused end-of-row callback parameter from the shared image-transform helper.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "a08bc36f46c1673e7cc06b49ea8379d80cb6b3fb",
+          "committedAt": "2026-08-01",
+          "subject": "Fix black and white error propagation dither regression caused by 79f0c853d7fbe1523ea5ef8ba779f93fbac014c7",
+          "repairedPaths": [
+            "js/worker/dither/error-prop.js"
+          ],
+          "quotes": [
+            "Fix black and white error propagation dither regression caused by 79f0c853d7fbe1523ea5ef8ba779f93fbac014c7"
+          ],
+          "linkVerification": "The fix commit's entire (body-less) message is its subject, 'Fix black and white error propagation dither regression caused by 79f0c853d7fbe1523ea5ef8ba779f93fbac014c7', which quotes introducingCommit's full 40-character SHA verbatim - an exact string match, not a short SHA requiring resolution."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "js/worker/dither/error-prop.js",
+          "lineRange": [
+            58,
+            121
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "transformImage() dropped its 5th endRowFunc parameter and callback invocation; the diff's own rewritten caller, error-prop-color.js, no longer needs it. error-prop.js, an untouched sibling caller, still passes a 5th argument that resets the error-diffusion matrix each row; JavaScript silently discards the extra argument, so the per-row reset never runs and the black-and-white dither's output is silently corrupted.",
+          "severity": "medium",
+          "severityRationale": "Impact: Silently wrong - the per-row error-matrix reset silently stops running, corrupting the black-and-white dither's pixel output with no exception or warning. Reachability: Conditional - requires the user to select the black-and-white error-propagation dither mode specifically. Matrix: Silently wrong x Conditional = medium."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible-with-caveat",
+        "rationale": "Read in isolation the diff is an ordinary, safe-looking parameter removal: it deletes an unused-looking 5th callback parameter from transformImage and updates the one call site the diff shows (error-prop-color.js) to match. Because plain JavaScript silently discards extra call arguments, nothing about removing a parameter that still-untouched callers pass raises any visible warning. The diff also adds a comment to error-prop-color.js claiming the removal 'speeds up everything else by ~15%', a generalising performance claim about other, unseen callers that turns out to be inaccurate for error-prop.js; it names no file and no failure, so it is a mild hint rather than a leak."
+      },
+      "tags": [
+        "javascript",
+        "image-processing",
+        "webworker"
+      ]
+    },
+    {
+      "id": "servicebus-browser-workspace-route-nesting-breaks-navigation",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/mligtenberg/ServicebusBrowser.git",
+      "upstreamOwner": "mligtenberg",
+      "upstreamRepo": "ServicebusBrowser",
+      "license": "MIT",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "b18964a1ce67a581916bc17077704ac929a3a962",
+      "introducingCommittedAt": "2026-07-19T19:59:07Z",
+      "parentCommit": "c57620b6dd3cb011a2c85142a98a94109ce51c73",
+      "reviewedPaths": [
+        "apps/servicebus-browser-app/src/app/app.ts",
+        "apps/servicebus-browser-frontend/src/app/app.config.ts",
+        "apps/servicebus-browser-frontend/src/app/app.routes.ts",
+        "apps/servicebus-browser-frontend/src/app/main-shell/main-shell.ts",
+        "apps/servicebus-browser-frontend/src/app/main-shell/workspace-switcher/workspace-switcher.ts",
+        "apps/servicebus-browser-frontend/src/app/workspace-route.guard.ts",
+        "apps/servicebus-browser-frontend/src/app/workspace-switch.service.ts",
+        "apps/servicebus-browser-web-frontend/src/app/app.routes.ts",
+        "apps/servicebus-browser-web-frontend/src/app/main-app/main-app.html",
+        "apps/servicebus-browser-web-frontend/src/app/main-app/main-app.ts",
+        "apps/servicebus-browser-web-frontend/src/app/workspace-route.guard.ts",
+        "apps/servicebus-browser-web-frontend/src/app/workspace-switch.service.ts",
+        "libs/main-ui/src/lib/home/home.component.ts",
+        "libs/main-ui/src/lib/ngrx/recent-pages.effects.ts",
+        "libs/main-ui/src/lib/ngrx/route.selectors.ts",
+        "libs/messages/flow/src/lib/messages-batch-resend/messages-batch-resend.component.ts",
+        "libs/messages/flow/src/lib/messages-page/messages-page.component.ts",
+        "libs/shared/services/src/lib/workspace.service.ts",
+        "libs/topology/components/src/lib/topology-tree/topology-tree.component.ts"
+      ],
+      "excludedPaths": [
+        "docs/adr/0009-workspace-id-in-url.md",
+        "docs/index.md",
+        "docs/multi-window-workspace-routing.md",
+        "libs/main-ui/src/lib/home/home.component.stories.ts",
+        "libs/main-ui/src/lib/ngrx/recent-pages.effects.spec.ts",
+        "libs/shared/services/src/lib/workspace.service.spec.ts"
+      ],
+      "excludedPathsReason": "Documentation, a Storybook story, and unit test specs only.",
+      "reviewIntent": "Nest the service-bus management and message routes under a new :workspaceId URL segment so multiple workspaces can be open in separate browser tabs.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "a1fda64555175009c3a88d002b3735101f725071",
+          "committedAt": "2026-07-19",
+          "subject": "fix: integrate workspace URLs for navigation",
+          "repairedPaths": [
+            "libs/main-ui/src/lib/ngrx/router.effects.ts",
+            "libs/message-brokers/service-bus/management-flow/src/lib/action-handlers/queue-handlers.ts",
+            "libs/message-brokers/service-bus/management-flow/src/lib/action-handlers/subscription-handlers.ts",
+            "libs/message-brokers/service-bus/management-flow/src/lib/action-handlers/subscription-rule-handlers.ts",
+            "libs/message-brokers/service-bus/management-flow/src/lib/action-handlers/topic-handlers.ts"
+          ],
+          "quotes": [
+            "fix regression caused by: b18964a1ce67a581916bc17077704ac929a3a962"
+          ],
+          "linkVerification": "The fix commit's message ends with the line 'fix regression caused by: b18964a1ce67a581916bc17077704ac929a3a962', introducingCommit's full 40-character SHA quoted verbatim, confirmed via gh api commits/b18964a1ce67a581916bc17077704ac929a3a962 which returns exactly that commit."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "libs/main-ui/src/lib/ngrx/router.effects.ts",
+          "lineRange": [
+            16,
+            25
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "The 'messages' route subtree was nested under a new ':workspaceId' path segment. router.effects.ts's navigateTo$ effect still calls this.router.navigate(['messages', 'page', pageId]) with the old, now-unmatched top-level path literal, so Angular silently fails to navigate when a message page is loaded or cancelled.",
+          "severity": "high",
+          "severityRationale": "Impact: Silently wrong - router.navigate() silently fails to match any route, so the effect that is supposed to land the user on a message page produces no visible effect. Reachability: Routine - triggered by ordinary use of the message-page navigation effect, no extra condition. Matrix: Silently wrong x Routine = high."
+        },
+        {
+          "path": "libs/message-brokers/service-bus/management-flow/src/lib/action-handlers/queue-handlers.ts",
+          "lineRange": [
+            8,
+            28
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "The 'manage-service-bus' route subtree was nested under a new ':workspaceId' path segment. queue-handlers.ts's add and edit action handlers still call router.navigate(['manage-service-bus', ...]) with the old top-level path literal, so Angular silently fails to navigate to the queue add/edit screens.",
+          "severity": "high",
+          "severityRationale": "Impact: Silently wrong - navigation to the queue add/edit screen silently fails with no signal to the user. Reachability: Routine - triggered by the ordinary admin action of adding or editing a queue, no extra condition. Matrix: Silently wrong x Routine = high."
+        },
+        {
+          "path": "libs/message-brokers/service-bus/management-flow/src/lib/action-handlers/topic-handlers.ts",
+          "lineRange": [
+            8,
+            28
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "The 'manage-service-bus' route subtree was nested under a new ':workspaceId' path segment. topic-handlers.ts's add and edit action handlers still call router.navigate(['manage-service-bus', ...]) with the old top-level path literal, so Angular silently fails to navigate to the topic add/edit screens.",
+          "severity": "high",
+          "severityRationale": "Impact: Silently wrong - navigation to the topic add/edit screen silently fails with no signal to the user. Reachability: Routine - triggered by the ordinary admin action of adding or editing a topic, no extra condition. Matrix: Silently wrong x Routine = high."
+        },
+        {
+          "path": "libs/message-brokers/service-bus/management-flow/src/lib/action-handlers/subscription-handlers.ts",
+          "lineRange": [
+            8,
+            33
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "The 'manage-service-bus' route subtree was nested under a new ':workspaceId' path segment. subscription-handlers.ts's add and edit action handlers still call router.navigate(['manage-service-bus', ...]) with the old top-level path literal, so Angular silently fails to navigate to the subscription add/edit screens.",
+          "severity": "high",
+          "severityRationale": "Impact: Silently wrong - navigation to the subscription add/edit screen silently fails with no signal to the user. Reachability: Routine - triggered by the ordinary admin action of adding or editing a subscription, no extra condition. Matrix: Silently wrong x Routine = high."
+        },
+        {
+          "path": "libs/message-brokers/service-bus/management-flow/src/lib/action-handlers/subscription-rule-handlers.ts",
+          "lineRange": [
+            8,
+            37
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "The 'manage-service-bus' route subtree was nested under a new ':workspaceId' path segment. subscription-rule-handlers.ts's add and edit action handlers still call router.navigate(['manage-service-bus', ...]) with the old top-level path literal, so Angular silently fails to navigate to the subscription-rule add/edit screens.",
+          "severity": "high",
+          "severityRationale": "Impact: Silently wrong - navigation to the subscription-rule add/edit screen silently fails with no signal to the user. Reachability: Routine - triggered by the ordinary admin action of adding or editing a subscription rule, no extra condition. Matrix: Silently wrong x Routine = high."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The introducing diff is a well-documented Angular route refactor, complete with a new ADR and an updated routing guide, and it reads as a coherent, deliberate design. Nothing in the diff, including its own documentation, mentions router.effects.ts or the service-bus action-handler files, or hints that other files still hard-code the relocated top-level route paths."
+      },
+      "tags": [
+        "typescript",
+        "angular",
+        "routing"
+      ],
+      "notes": "Five independently verified dependents from one route-nesting change, all sharing the identical stale-literal-path-in-router.navigate() mechanism; subscription-handlers.ts and subscription-rule-handlers.ts each contain two near-identical broken add/edit call sites within the cited line range."
+    },
+    {
+      "id": "phpantom-lsp-ast-resolver-removal-drops-docblock-var-completion",
+      "language": "rust",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/PHPantom-dev/phpantom_lsp.git",
+      "upstreamOwner": "PHPantom-dev",
+      "upstreamRepo": "phpantom_lsp",
+      "license": "MIT",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "500998f2c847853ada6a5d2787fcb17e7935517b",
+      "introducingCommittedAt": "2026-05-09T14:46:57Z",
+      "parentCommit": "3d341772bd2098c3c50da50d9fa11ceaddbbb779",
+      "reviewedPaths": [
+        "src/completion/handler.rs",
+        "src/completion/variable/completion.rs",
+        "src/definition/mod.rs",
+        "src/definition/resolve.rs",
+        "src/definition/variable/mod.rs",
+        "src/definition/variable/var_definition.rs",
+        "src/symbol_map/extraction.rs",
+        "src/symbol_map/mod.rs",
+        "src/virtual_members/phpdoc.rs"
+      ],
+      "excludedPaths": [
+        "docs/todo/refactor.md",
+        "src/definition/variable/tests.rs",
+        "tests/integration/completion_unset.rs",
+        "tests/integration/completion_variable_names.rs"
+      ],
+      "excludedPathsReason": "Documentation and tests only.",
+      "reviewIntent": "Delete the AST-based variable-definition resolver and its tests, and rebuild variable-name completion and go-to-definition from the precomputed symbol map instead.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "aae5193e7a598b351995aa5f1d1c1bbf8e942b8f",
+          "committedAt": "2026-05-09",
+          "subject": "Fix regression from 500998f",
+          "repairedPaths": [
+            "docs/CHANGELOG.md",
+            "docs/todo/refactor.md",
+            "src/completion/variable/completion.rs",
+            "src/symbol_map/docblock.rs",
+            "src/symbol_map/extraction.rs",
+            "src/symbol_map/mod.rs",
+            "tests/integration/completion_unset.rs",
+            "tests/integration/completion_variable_names.rs"
+          ],
+          "quotes": [
+            "Fix regression from 500998f"
+          ],
+          "linkVerification": "The fix commit's entire message is 'Fix regression from 500998f', a short SHA that gh api commits/500998f resolves unambiguously to introducingCommit 500998f2c847853ada6a5d2787fcb17e7935517b; the fix commit's own parent field is literally that same SHA, doubly confirming adjacency."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "src/symbol_map/docblock.rs",
+          "lineRange": [
+            197,
+            252
+          ],
+          "reachability": "callee-of-changed-code",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "The introducing commit deletes the AST-based variable-definition resolver and switches completion to a precomputed SymbolMap, but VarDefKind gains no DocblockVar variant and extract_inline_docblock discards extract_docblock_symbols's result. docblock.rs, which the diff's own extraction.rs calls into, exposes no function to turn an inline @var docblock tag into a variable-definition site, so such variables are silently omitted from completion.",
+          "severity": "medium",
+          "severityRationale": "Impact: Silently wrong - variable-name completion for a $var declared only via an inline @var docblock tag is silently omitted, with no error or signal. Reachability: Conditional - only affects variables whose sole definition site is a docblock @var annotation, an uncommon but supported pattern. Matrix: Silently wrong x Conditional = medium."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The introducing diff is a large, deliberate refactor that removes an expensive, roughly 1,500-line live AST-walking resolver in favour of a precomputed symbol map, and the change reads as a coherent performance and maintainability win. Nothing in the diff signals that two narrower behaviours the old resolver happened to also provide, treating @var docblock tags as definitions and suppressing unset() variables, were never ported to the replacement."
+      },
+      "tags": [
+        "rust",
+        "lsp",
+        "completion"
+      ]
+    },
+    {
+      "id": "homepage-react-user-team-transform-silently-drops-team-on-save",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/uqlibrary/homepage-react.git",
+      "upstreamOwner": "uqlibrary",
+      "upstreamRepo": "homepage-react",
+      "license": "MIT",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "0eb84f3ecfa4444b83302e06fb1498170ea1f236",
+      "introducingCommittedAt": "2026-04-29T08:03:38Z",
+      "parentCommit": "7dfe8c8616eb160321d52b1ec7d319e870ce365a",
+      "reviewedPaths": [
+        "src/modules/Pages/Admin/TestTag/SharedComponents/UpdateDialog/UpdateDialog.js",
+        "src/modules/Pages/Admin/TestTag/manage/Printers/Templates/PrinterTemplates.js",
+        "src/modules/Pages/Admin/TestTag/manage/Printers/Templates/configure.js",
+        "src/modules/Pages/Admin/TestTag/manage/Printers/Templates/utils.js",
+        "src/modules/Pages/Admin/TestTag/manage/Users/components/configure.js",
+        "src/modules/Pages/Admin/TestTag/manage/Users/components/utils.js",
+        "src/modules/Pages/Admin/TestTag/testTag.locale.js"
+      ],
+      "excludedPaths": [
+        "src/modules/Pages/Admin/TestTag/manage/Users/components/Users.test.js",
+        "src/modules/Pages/Admin/TestTag/manage/Users/components/utils.test.js"
+      ],
+      "excludedPathsReason": "Tests only.",
+      "reviewIntent": "Add CRUD editing for admin printer-template and user configuration pages, including a transform that reduces a selected team option to its slug for the update API.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "8bde84c289ce79be802669d119d835f6e743cd43",
+          "committedAt": "2026-06-22",
+          "subject": "- workaround for regression introduced by commit 0eb84f3ecfa4444b83302e06fb1498170ea1f236",
+          "repairedPaths": [
+            "src/modules/Pages/Admin/TestTag/manage/Users/components/Users.js"
+          ],
+          "quotes": [
+            "- workaround for regression introduced by commit 0eb84f3ecfa4444b83302e06fb1498170ea1f236"
+          ],
+          "linkVerification": "The fix commit's message is '- workaround for regression introduced by commit 0eb84f3ecfa4444b83302e06fb1498170ea1f236', introducingCommit's full 40-character SHA quoted verbatim, confirmed via gh api commits/0eb84f3ecfa4444b83302e06fb1498170ea1f236 which returns exactly that commit; per-path commit history for utils.js and Users.js between the two dates shows no intervening commit."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "src/modules/Pages/Admin/TestTag/manage/Users/components/Users.js",
+          "lineRange": [
+            90,
+            97
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "transformUpdateRequest now does request.user_team = request?.user_team?.team_slug, assuming user_team is always a selected team option object. Users.js's onRowEdit passes the edited row straight through this transform before calling actions.updateUser(); since the row's user_team is ordinarily still the plain team-slug string from the API, the optional chain silently evaluates to undefined and the team assignment is silently dropped from the save.",
+          "severity": "high",
+          "severityRationale": "Impact: Silently wrong - saving an edited user silently drops the persisted user_team value from the update request while the UI still reports success. Reachability: Routine - triggered by the ordinary admin action of editing and saving any user without re-picking their team. Matrix: Silently wrong x Routine = high."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible-with-caveat",
+        "rationale": "The specific line added to transformUpdateRequest, request.user_team = request?.user_team?.team_slug, reads as a deliberate and correct piece of new functionality: converting a selected team option object into the slug string the update API expects, mirroring an identical line added to transformAddRequest in the same commit. Nothing in this diff names Users.js or hints that an existing caller still supplies a plain string. The caveat: the introducing commit's own subject line is '[AD-870] WIP implementing template editing page, with crud functionality. Code is breaking, needs cleaning up too' - a blanket self-admission of brokenness that names no specific file or mechanism, but would be visible to a reviewer if commit subjects are shown alongside the diff."
+      },
+      "tags": [
+        "javascript",
+        "react",
+        "forms"
+      ]
+    },
+    {
+      "id": "ebean-query-label-redesign-leaves-sql-comment-builder-stale",
+      "language": "java",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/ebean-orm/ebean.git",
+      "upstreamOwner": "ebean-orm",
+      "upstreamRepo": "ebean",
+      "license": "Apache-2.0",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "140869691228f4d995c3ec7e4efec6eb1cc2786e",
+      "introducingCommittedAt": "2026-06-08T07:03:43Z",
+      "parentCommit": "e0531a63153cd8eab4d619606f8dfe298fd4fe05",
+      "reviewedPaths": [
+        "ebean-core/src/main/java/io/ebeaninternal/api/SpiQuery.java",
+        "ebean-core/src/main/java/io/ebeaninternal/server/loadcontext/DLoadBaseContext.java",
+        "ebean-core/src/main/java/io/ebeaninternal/server/loadcontext/DLoadContext.java",
+        "ebean-core/src/main/java/io/ebeaninternal/server/query/CQueryPlan.java",
+        "ebean-core/src/main/java/io/ebeaninternal/server/querydefn/DefaultOrmQuery.java"
+      ],
+      "excludedPaths": [
+        "docs/guides/AGENTS.md",
+        "docs/guides/README.md",
+        "docs/guides/ebean-query-metrics.md",
+        "docs/guides/ebean-query-plan-capture.md",
+        "ebean-core/src/test/java/io/ebeaninternal/server/query/CQueryPlanNameTest.java",
+        "ebean-querybean/src/test/java/org/querytest/QOrderTest.java"
+      ],
+      "excludedPathsReason": "Documentation and tests only.",
+      "reviewIntent": "Redesign how secondary (lazy/query) load metric labels are derived so they extend the parent query's already-computed plan name instead of being built from scratch.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "1545e68c3ecfb36d79de5df98dd70bd76ee11f6b",
+          "committedAt": "2026-06-18",
+          "subject": "Merge pull request #3790 from ebean-orm/feature/regression-inline-query-comment",
+          "repairedPaths": [
+            "ebean-core/src/main/java/io/ebeaninternal/server/query/CQueryBuilder.java",
+            "ebean-core/src/test/java/io/ebeaninternal/server/query/CQueryBuilderTest.java",
+            "ebean-querybean/src/test/java/org/querytest/QCustomerAndOrTest.java",
+            "ebean-test/src/test/java/io/ebean/xtest/base/DtoQueryFromOrmTest.java",
+            "ebean-test/src/test/java/io/ebean/xtest/base/FetchGroupTest.java"
+          ],
+          "quotes": [
+            "Regression introduced by #3779 in sql inline comment for label (missing bean type prefix)"
+          ],
+          "linkVerification": "The fix merge commit's PR #3790 body states 'Regression introduced by #3779 in sql inline comment for label (missing bean type prefix)'; PR #3779's merge commit, fetched via gh api commits/140869691228f4d995c3ec7e4efec6eb1cc2786e, is exactly introducingCommit, an unambiguous PR-number resolution."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "ebean-core/src/main/java/io/ebeaninternal/server/query/CQueryBuilder.java",
+          "lineRange": [
+            640,
+            657
+          ],
+          "reachability": "whole-repo-search",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "PR #3779 restructured CQueryPlan's label derivation into a new public planLabelWithType(label, simpleName) helper with a changed bean-type-prefix convention. CQueryBuilder.inlineSqlComment(), an unrelated, untouched piece of code, builds its own inline SQL comment label directly from query.label() without ever calling into CQueryPlan's logic, so its comment silently stopped matching the new prefix convention for explicitly labelled queries.",
+          "severity": "medium",
+          "severityRationale": "Impact: Silently wrong - the generated SQL inline comment silently loses its disambiguating bean-type prefix for explicitly labelled queries, misleading anyone reading query logs or APM traces. Reachability: Conditional - includeLabelInSql defaults to true (verified in DatabaseConfig.java), so the one remaining condition is an explicit setLabel() call, which most queries do not make. Matrix: Silently wrong x Conditional = medium."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff is a coherent, self-contained redesign of how CQueryPlan derives a query's metric/plan name, complete with new doc comments explaining the secondary-query and explicit-label cases. It never touches CQueryBuilder.java and gives no indication that a second, independent piece of code elsewhere in the server package formats the same kind of label for a different purpose using the old convention."
+      },
+      "tags": [
+        "java",
+        "orm",
+        "query-metrics"
+      ]
+    },
+    {
+      "id": "rsigma-deprecation-warning-never-reaches-daemon-hot-reload",
+      "language": "rust",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/timescale/rsigma.git",
+      "upstreamOwner": "timescale",
+      "upstreamRepo": "rsigma",
+      "license": "MIT",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "bdb4e52c5327adb6b2dd15b4f89055d47e71ea28",
+      "introducingCommittedAt": "2026-05-26T21:37:15Z",
+      "parentCommit": "c0df66a11ea131dfa9ad304f455e32154fe70e22",
+      "reviewedPaths": [
+        "crates/rsigma-cli/src/commands/daemon.rs",
+        "crates/rsigma-cli/src/commands/resolve.rs",
+        "crates/rsigma-cli/src/main.rs"
+      ],
+      "excludedPaths": [
+        "crates/rsigma-cli/tests/cli_sources_deprecation.rs"
+      ],
+      "excludedPathsReason": "Tests only.",
+      "reviewIntent": "Make the pipeline-embedded inline sources deprecation warning louder (also print to stderr) and route every CLI pipeline-loading entry point through one shared, deduplicated helper.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "0e1b80cc762749084fa625b9416b3cb1951c9365",
+          "committedAt": "2026-05-26",
+          "subject": "refactor(runtime): plug daemon hot-reload into pipeline-sources deprecation",
+          "repairedPaths": [
+            "crates/rsigma-cli/src/commands/resolve.rs",
+            "crates/rsigma-cli/src/main.rs",
+            "crates/rsigma-runtime/src/engine.rs",
+            "crates/rsigma-runtime/src/lib.rs",
+            "crates/rsigma-runtime/src/pipeline_deprecation.rs"
+          ],
+          "quotes": [
+            "The Phase 1 louder-warning commit (bdb4e52) kept the helper in rsigma-cli's main.rs, which meant only the CLI startup path (load_pipelines + pipeline resolve) ever called it. Daemon hot-reloads go through RuntimeEngine::load_rules -> reload_pipelines in rsigma-runtime, which never re-entered the helper, so a pipeline that acquired an inline sources: block between reloads ... was silently swallowed."
+          ],
+          "linkVerification": "The fix commit's body states 'The Phase 1 louder-warning commit (bdb4e52) kept the helper in rsigma-cli's main.rs...', a short SHA that gh api commits/bdb4e52 resolves unambiguously to introducingCommit bdb4e52c5327adb6b2dd15b4f89055d47e71ea28, confirmed by matching subject text."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "crates/rsigma-runtime/src/engine.rs",
+          "lineRange": [
+            403,
+            412
+          ],
+          "reachability": "whole-repo-search",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "warn_pipeline_inline_sources's own doc comment states, in the present tense, that its dedup set already covers daemon hot-reloads. In fact the helper lives only in rsigma-cli's main.rs and is called only from one-shot CLI startup paths; rsigma-runtime's reload_pipelines(), the actual daemon hot-reload path, never calls it, so a pipeline using the deprecated inline sources syntax is silently never warned about it if only ever loaded via daemon reload.",
+          "severity": "low",
+          "severityRationale": "Impact: Silently wrong - the deprecation warning never fires on the daemon hot-reload path, silently denying operators advance notice before a later phase turns the same syntax into a hard parse error. Reachability: Remote - requires using the deprecated inline sources syntax and loading it only via daemon hot-reload, never via a one-shot CLI command first. Matrix: Silently wrong x Remote = low."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The introducing diff reads as a complete, working feature: warn_pipeline_inline_sources is fully implemented, its doc comment states in the present tense that the process-wide dedup set already covers daemon hot-reloads, and the new integration test suite passes. Nothing in the diff hints that the daemon's actual hot-reload code path, which lives in a different crate, never calls the new helper at all."
+      },
+      "tags": [
+        "rust",
+        "cli",
+        "deprecation"
+      ],
+      "notes": "The introducing commit's own doc comment on warn_pipeline_inline_sources states in the present tense that its dedup set already covers daemon hot-reloads; this is what makes the diff read as complete rather than as a known-incomplete migration step, and is why this case is admitted despite being phase 3 of a longer, explicitly tracked deprecation cycle referenced in the commit body as issue #136."
     }
   ]
 }

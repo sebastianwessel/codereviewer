@@ -2993,3 +2993,30 @@ truth — the opposite of where a harvest instinctively starts.
 
 **Wave 1.2's target is not met.** 14 candidates at ~45% curation is ~6 cases, taking
 11 proven dependents to ~19 against a bar needing ~50.
+
+### Curation: 9 of 14 candidates kept — corpus 10 -> 19 cases, 11 -> 25 dependents
+
+Every kept case independently re-verified against live GitHub: each `lineRange`
+printed from the introducing commit's own tree, each fix-commit quote resolved to the
+exact introducing SHA, and `Q ⊄ P` disjointness confirmed from paginated file lists.
+Merged manifest passes `parseChangeImpactCorpusManifestJson` — 19 cases.
+
+Reachability spread: caller-of-changed-symbol 9, callee-of-changed-code 2,
+whole-repo-search 2, attribute-owner 1. Languages: typescript 2, java 2, javascript
+2, rust 2, python 1 — **go and ruby yielded no survivors**.
+
+**Five dropped, and the reasons are the useful part:**
+
+- **3 out of scope by language** — bevy (`.wgsl`), cilium (BPF `.c`), and
+  ostsee-tiere, which curation disqualified on its own re-check when its only two
+  traced dependents turned out to be `.svelte`.
+- **1 with no honest `compatibilityClass`** — rust-lang/rust, which the harvest
+  called its strongest find. Mechanically solid, but the damage is a compile-time
+  performance regression caught by perf-CI within hours, not a functional break;
+  forcing it into `breaks-at-runtime` would have manufactured a category fit.
+- **1 with no admissible dependent** — codehydra: all six claimed dependent files
+  return 404 at the introducing commit's own tree (created later by a file split),
+  and the pre-split equivalent is itself inside `reviewedPaths`.
+
+**Wave 2.1 remains blocked.** 25 dependents against a bar needing ~50: better than
+the ~19 projected, still not resolvable.
