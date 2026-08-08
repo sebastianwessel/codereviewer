@@ -54,6 +54,7 @@ Capabilities and measured variants:
 - [28-targeted-reads.md](28-targeted-reads.md)
 - [29-test-adequacy-signal.md](29-test-adequacy-signal.md)
 - [30-review-conversation.md](30-review-conversation.md)
+- [31-design-judgment.md](31-design-judgment.md)
 
 Numbers 14 and 18 through 21 are unused. 19 was withdrawn on 2026-07-27 after the
 un-anchored discovery pass failed its pre-committed decision rule. 18 was withdrawn
