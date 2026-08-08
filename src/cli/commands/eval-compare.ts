@@ -50,12 +50,44 @@ export const runEvalCompare = async (
         }))
       )
 
+    const base = await readArm(basePaths)
+    const head = await readArm(headPaths)
+
+    // Arms scored by DIFFERENT judges are refused, for the same reason unequal
+    // arm sizes are: the comparison would have two explanations and no way to
+    // separate them. If the judge model moved between arms, a recall difference
+    // is either a better reviewer or a more generous scorer.
+    //
+    // A report written before the judge became pinnable records no
+    // `judgeModelName`, and on those runs the judge WAS the reviewer's model --
+    // so `modelName` is the right fallback identity. That keeps two archived
+    // reports comparable with each other, and keeps an archived report
+    // comparable with a pinned one that names the same model.
+    const judgeIdentity = (report: EvalComparisonReport): string =>
+      report.provenance?.judgeModelName ??
+      report.provenance?.modelName ??
+      '(unrecorded)'
+    const judges = new Map<string, string[]>()
+
+    for (const { label, report } of [...base, ...head]) {
+      const identity = judgeIdentity(report)
+      judges.set(identity, [...(judges.get(identity) ?? []), label])
+    }
+
+    if (judges.size > 1) {
+      return usageError(
+        'eval compare refuses arms scored by different judge models, because a ' +
+          'difference between them would be either a better reviewer or a more ' +
+          'generous scorer with no way to tell which. Judges found: ' +
+          [...judges.entries()]
+            .map(([identity, labels]) => `${identity} (${labels.join(', ')})`)
+            .join('; ')
+      )
+    }
+
     return {
       exitCode: 0,
-      stdout: `${renderEvalComparison({
-        base: await readArm(basePaths),
-        head: await readArm(headPaths)
-      })}\n`,
+      stdout: `${renderEvalComparison({ base, head })}\n`,
       stderr: ''
     }
   } catch (error) {

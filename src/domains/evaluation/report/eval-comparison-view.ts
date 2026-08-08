@@ -150,7 +150,16 @@ export const EvalComparisonReportSchema = z.object({
   provenance: z
     .object({
       answerKeyDigest: z.string().min(1).optional(),
-      answerKeyDigestByCase: z.record(z.string(), z.string()).optional()
+      answerKeyDigestByCase: z.record(z.string(), z.string()).optional(),
+      // The reviewer's model, and the model the JUDGES ran on. Read here so a
+      // comparison can refuse arms scored by different judges: a difference
+      // between two arms whose scorer also moved has two explanations and no way
+      // to tell them apart. `judgeModelName` is absent on every report written
+      // before the judge became pinnable, and on those the judge WAS the
+      // reviewer's model -- so `modelName` is the correct fallback identity, not
+      // an unknown.
+      modelName: z.string().min(1).optional(),
+      judgeModelName: z.string().min(1).optional()
     })
     .optional(),
   scoring: z

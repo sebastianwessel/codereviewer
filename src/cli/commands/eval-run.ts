@@ -174,17 +174,41 @@ export const runEval = async (
       }))
     )
 
+    // The reviewer's own provider config. Every case's review resolves its model
+    // from this, inside `runEvalCase`, and nothing below changes that: pinning
+    // the judge moves the SCORER only.
+    const providerConfig = loadedConfig.config.provider
+    // The judge model, pinnable independently of the reviewer's
+    // (`evaluation.judgeModel`, `CODEREVIEWER_JUDGE_MODEL`). Unset resolves to
+    // `providerConfig` UNCHANGED -- the same object, so an unpinned run performs
+    // exactly the resolution it always did.
+    //
+    // Why it exists: the judges used to be built from the reviewer's model, so
+    // varying `CODEREVIEWER_PROVIDER_MODEL` to compare two reviewers swapped the
+    // ruler along with the thing being measured, and a recall difference could
+    // no longer be attributed to either. See "The Judge Must Be Pinnable
+    // Independently Of The Reviewer" in
+    // specs/06-evaluation-and-quality-gates.md.
+    //
+    // Only `model` is overridden. Provider id, credentials, base URL, retry and
+    // timeout stay the run's own, because the setting names a model and a second
+    // provider account is not what it promises.
+    const judgeModelOverride = loadedConfig.config.evaluation.judgeModel
+    const judgeProviderConfig =
+      providerConfig === undefined || judgeModelOverride === undefined
+        ? providerConfig
+        : { ...providerConfig, model: judgeModelOverride }
     // The semantic judge is the only matcher, and the plausibility judge is the
     // independent second opinion on unmatched findings. Both are constructed
-    // whenever a provider is available, from the same resolved model alias;
-    // scoring a case with expected findings without the match judge fails loudly
-    // inside the eval runner instead of falling back to a heuristic.
+    // whenever a provider is available, from the same resolved judge model
+    // alias; scoring a case with expected findings without the match judge fails
+    // loudly inside the eval runner instead of falling back to a heuristic.
     const modelAlias =
-      loadedConfig.config.provider === undefined
+      judgeProviderConfig === undefined
         ? undefined
         : (
             await resolveProviderModelAlias({
-              provider: loadedConfig.config.provider,
+              provider: judgeProviderConfig,
               environment: loadedConfig.environment,
               logger,
               ...(options.providerImport === undefined
@@ -192,11 +216,6 @@ export const runEval = async (
                 : { importProvider: options.providerImport })
             })
           ).modelAlias
-    // Same resolved provider config the judge model alias above came from;
-    // kept alongside it (rather than re-reading `loadedConfig.config.provider`
-    // later) so the cost reader below can price judge usage without a
-    // redundant undefined check.
-    const providerConfig = loadedConfig.config.provider
     // Wraps the judge model alias in the SAME usage-recorder mechanism the
     // review path uses (`createProviderUsageRecorder`; see
     // `run/provider/provider-workflow.ts`), so every provider call the
@@ -226,14 +245,18 @@ export const runEval = async (
     // here) because the recorder keeps accumulating until `runEvaluation`
     // finishes matching and calibration; `runEvaluation` calls this only once,
     // at the very end.
+    // Priced against the JUDGE's model, not the reviewer's: these tokens were
+    // spent by the judges, and a pinned judge on a differently-priced model
+    // would otherwise be billed at the reviewer's rate. Identical to the
+    // reviewer's model whenever the judge is unpinned.
     const evaluationScoringCost =
-      scoringUsageRecorder === undefined || providerConfig === undefined
+      scoringUsageRecorder === undefined || judgeProviderConfig === undefined
         ? undefined
         : () =>
             summarizeRunCost({
               providerConfigured: true,
-              providerId: providerConfig.id,
-              modelName: providerConfig.model,
+              providerId: judgeProviderConfig.id,
+              modelName: judgeProviderConfig.model,
               prices: loadedConfig.config.costs,
               usage: scoringUsageRecorder.usage()
             })
@@ -287,7 +310,8 @@ export const runEval = async (
       fixture_source: sliceRoot === undefined ? 'default' : 'slice-root',
       selected_case_count: evalCases.length,
       semantic_judge_available: semanticJudge !== undefined,
-      plausibility_judge_available: plausibilityJudge !== undefined
+      plausibility_judge_available: plausibilityJudge !== undefined,
+      judge_model_pinned: judgeModelOverride !== undefined
     })
 
     const evalArtifactRoot = path.posix.join('.codereviewer', 'eval')
@@ -354,7 +378,14 @@ export const runEval = async (
         ...(providerConfig === undefined
           ? {}
           : { providerId: providerConfig.id, modelName: providerConfig.model }
-        )
+        ),
+        // Recorded next to the reviewer's model, and equal to it on an unpinned
+        // run. A saved report that cannot name the judge that scored it leaves a
+        // model comparison unreadable after the fact, which is the whole point
+        // of making the judge pinnable.
+        ...(judgeProviderConfig === undefined
+          ? {}
+          : { judgeModelName: judgeProviderConfig.model })
       }
     }
     const result = await runEvaluation(evaluationInput)

@@ -9,9 +9,12 @@ nothing about review quality.
 ## Prerequisites
 
 - **A configured provider.** Both judges are constructed from the resolved
-  provider alias. Without a provider, a case that declares expected findings
-  fails the run with `eval_semantic_judge_missing` — the matcher never falls back
-  to a heuristic. Only fully negative case sets score offline.
+  provider alias, on the reviewer's model unless `evaluation.judgeModel` pins
+  another one (see [Which model judges](judges-and-calibration.md#which-model-judges)
+  — pin it whenever the run's purpose is comparing reviewer models). Without a
+  provider, a case that declares expected findings fails the run with
+  `eval_semantic_judge_missing` — the matcher never falls back to a heuristic.
+  Only fully negative case sets score offline.
 - **`.env` is not loaded by the CLI.** `eval run` deliberately does not read the
   repository `.env`, so programmatic eval calls stay reproducible. The npm
   scripts opt in via Node's `--env-file-if-exists=.env`. If you invoke the CLI
@@ -302,7 +305,9 @@ serialize the cases themselves.
 3. **Hydration guard.** Any positive slice still carrying the
    `Minimal source exists` placeholder aborts the run with
    *"Benchmark slices are not hydrated"*, rather than silently scoring 0% recall.
-4. Resolve the provider alias; construct the semantic and plausibility judges.
+4. Resolve the provider alias — the judges' model, which is the reviewer's unless
+   `evaluation.judgeModel` pins it — and construct the semantic and plausibility
+   judges.
 5. Run every selected case (real reviews).
 6. Score: deterministic gates → semantic judge → plausibility judge on unmatched
    findings.

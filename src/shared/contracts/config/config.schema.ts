@@ -749,6 +749,21 @@ export const EvaluationConfigSchema = z.strictObject({
   // `eval run` CLI flags, not config, so an `enabled` flag would be accepted and
   // then silently ignored (see specs/06-evaluation-and-quality-gates.md).
   minJudgeAgreement: z.number().min(0).max(1).default(0.9),
+  // Model the eval's two judges (semantic match + plausibility) run on, pinnable
+  // INDEPENDENTLY of `provider.model`, which the reviewer under test uses.
+  //
+  // Unset means the judges use the reviewer's model, which is what they always
+  // did. Set it whenever a measurement varies the reviewer's model: with one
+  // shared setting, `CODEREVIEWER_PROVIDER_MODEL` swapped the scorer along with
+  // the subject, so a recall difference had two indistinguishable explanations
+  // (a weaker reviewer, or a weaker judge crediting fewer correct findings) and
+  // the comparison could not be interpreted at all. Only `provider.model` is
+  // overridden -- provider id, credentials, retry and timeout stay the run's, so
+  // this pins WHICH model scores, not a second provider account.
+  //
+  // See "The Judge Must Be Pinnable Independently Of The Reviewer" in
+  // specs/06-evaluation-and-quality-gates.md.
+  judgeModel: z.string().min(1).optional(),
   regressionGate: EvalRegressionGateConfigSchema.prefault({})
 })
 

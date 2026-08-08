@@ -143,6 +143,83 @@ describe('configuration loader', () => {
     }
   })
 
+  // `CODEREVIEWER_JUDGE_MODEL` exists so a model comparison can hold the eval's
+  // scorer FIXED while `CODEREVIEWER_PROVIDER_MODEL` varies the reviewer under
+  // test. It is therefore mapped exactly like the provider model -- same closed
+  // list, same precedence -- and this proves the two move independently.
+  test('maps the judge model override with the same precedence as the provider model', async () => {
+    const root = await createTempDir()
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer/config.json'),
+        JSON.stringify({
+          evaluation: {
+            judgeModel: 'file-judge-model'
+          }
+        })
+      )
+
+      const fromFile = await loadCodeReviewerConfig({
+        repositoryRoot: root,
+        environment: {},
+        loadDotEnv: false
+      })
+
+      expect(fromFile.config.evaluation.judgeModel).toBe('file-judge-model')
+
+      const fromProcessEnv = await loadCodeReviewerConfig({
+        repositoryRoot: root,
+        environment: {
+          CODEREVIEWER_JUDGE_MODEL: 'env-judge-model',
+          CODEREVIEWER_PROVIDER_ID: 'openai',
+          CODEREVIEWER_PROVIDER_MODEL: 'env-reviewer-model'
+        },
+        loadDotEnv: false
+      })
+
+      expect(fromProcessEnv.config.evaluation.judgeModel).toBe('env-judge-model')
+      // The reviewer's model moved and the judge's did not follow it.
+      expect(fromProcessEnv.config.provider?.model).toBe('env-reviewer-model')
+
+      await writeFile(
+        join(root, '.env'),
+        'CODEREVIEWER_JUDGE_MODEL=dotenv-judge-model'
+      )
+
+      const fromDotEnv = await loadCodeReviewerConfig({
+        repositoryRoot: root,
+        environment: {
+          CODEREVIEWER_JUDGE_MODEL: 'env-judge-model'
+        }
+      })
+
+      expect(fromDotEnv.config.evaluation.judgeModel).toBe('dotenv-judge-model')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('unset judge model leaves the eval judges on the reviewer model', async () => {
+    const root = await createTempDir()
+
+    try {
+      const result = await loadCodeReviewerConfig({
+        repositoryRoot: root,
+        environment: {},
+        loadDotEnv: false
+      })
+
+      // Absent, not defaulted to a model name: the eval CLI reads the absence
+      // as "use the reviewer's alias unchanged", which is the historical
+      // behaviour it must reproduce byte for byte.
+      expect(result.config.evaluation.judgeModel).toBeUndefined()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('maps AI review environment overrides into typed config', async () => {
     const root = await createTempDir()
 

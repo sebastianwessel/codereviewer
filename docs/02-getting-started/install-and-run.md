@@ -151,6 +151,7 @@ config):
 | `CODEREVIEWER_PROVIDER_MODEL` | `provider.model` |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `provider.baseUrl` (required for `openai-compatible`) |
 | `CODEREVIEWER_PROVIDER_REASONING_EFFORT` | `provider.reasoningEffort` |
+| `CODEREVIEWER_JUDGE_MODEL` | `evaluation.judgeModel` — model the `eval run` judges score with, independent of the reviewer's |
 | `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `aiReview.deterministicSignalMode` — `support` \| `disabled` |
 | `CODEREVIEWER_CONFIG_PATH` | Config file location |
 | `CODEREVIEWER_ARTIFACT_DIR` | `paths.artifactDir` |

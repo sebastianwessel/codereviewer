@@ -280,11 +280,43 @@ wrong.
 
 ---
 
+## Which model judges
+
+Both judges resolve from the run's provider. Which **model** they run on is
+configurable, and that matters exactly once — when the thing being measured is
+the model itself.
+
+| `evaluation.judgeModel` | Semantic-match + plausibility judge | Reviewer under test |
+| --- | --- | --- |
+| unset (default) | `provider.model` | `provider.model` |
+| set | `evaluation.judgeModel` | `provider.model` — unchanged |
+
+Set it (config, or `CODEREVIEWER_JUDGE_MODEL`) whenever a measurement varies the
+reviewer's model. The judges used to be built from the reviewer's resolved alias
+with no way to separate them, so setting `CODEREVIEWER_PROVIDER_MODEL` to compare
+two reviewers swapped the scorer too: a recall difference then means either a
+weaker reviewer or a weaker judge crediting fewer of its correct findings, and
+nothing in the run distinguishes those. Seeds do not help — both arms moved
+together by construction.
+
+The override reaches the model and nothing else. Provider id, credentials, base
+URL, retry and timeout stay the run's own, and every call in the review workflow
+still resolves `provider.model`. Judge spend (`scoringCostUsd`) is priced against
+the judge's model, because those are the tokens it spent.
+
+Every report records **both** models in provenance — `modelName` (the reviewer's)
+and `judgeModelName` (the judge's, equal to the reviewer's when unpinned) — so an
+archived run can name the judge that scored it. A published model comparison must
+state the judge model it was scored with, and must hold that judge fixed across
+its arms.
+
+---
+
 ## Honest limitations
 
-- **The judges use the same provider and model alias as the review under test.**
-  Both are constructed from the resolved provider alias; there is no separate
-  judge provider. A systematic blind spot shared by reviewer and judge would not
+- **By default the judges use the same model as the review under test**, and
+  always the same provider — `evaluation.judgeModel` pins the model, not a second
+  provider account. A systematic blind spot shared by reviewer and judge would not
   show up in agreement, because the calibration set is fixed and human-labeled
   rather than adversarially generated against the current model.
 - **The calibration sets are small** — 12 and 11 pairs. At that size, agreement

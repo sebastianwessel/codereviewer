@@ -265,6 +265,11 @@ const configFromEnvironment = (environment: EnvironmentSource): JsonObject => {
     ['CODEREVIEWER_PROVIDER_MODEL', ['provider', 'model']],
     ['CODEREVIEWER_PROVIDER_BASE_URL', ['provider', 'baseUrl']],
     ['CODEREVIEWER_PROVIDER_REASONING_EFFORT', ['provider', 'reasoningEffort']],
+    // Pins the eval judges' model apart from the reviewer's. Deliberately its
+    // own variable rather than a suffix on the provider one: a model comparison
+    // sets `CODEREVIEWER_PROVIDER_MODEL` per arm and must be able to hold this
+    // one FIXED across those arms.
+    ['CODEREVIEWER_JUDGE_MODEL', ['evaluation', 'judgeModel']],
     ['CODEREVIEWER_ARTIFACT_DIR', ['paths', 'artifactDir']],
     [
       'CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE',

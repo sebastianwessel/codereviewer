@@ -380,6 +380,31 @@ class SemanticJudgeCliProvider implements ModelProvider {
   }
 }
 
+// Records the model each call was made against, split by whether the call is a
+// judge call (semantic match / plausibility) or a review call. That split is the
+// only way to prove the scorer moved WITHOUT the subject moving with it, which
+// is the entire point of pinning the judge model. Scripted answers are inherited
+// unchanged so this class asserts nothing about review behaviour.
+class ModelRecordingJudgeProvider extends SemanticJudgeCliProvider {
+  readonly judgeModels: string[] = []
+  readonly reviewModels: string[] = []
+
+  override async object<T extends JsonValue = JsonValue>(
+    request: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    if (
+      request.schemaName === 'eval_semantic_match' ||
+      request.schemaName === 'eval_plausibility'
+    ) {
+      this.judgeModels.push(request.model)
+    } else {
+      this.reviewModels.push(request.model)
+    }
+
+    return super.object(request)
+  }
+}
+
 // Like `SemanticJudgeCliProvider`, but the match and plausibility verdicts are
 // script-controlled per test so a case can be driven to a specific, non-perfect
 // recall/false-positive outcome (`SemanticJudgeCliProvider` always answers
@@ -944,6 +969,110 @@ describe('eval CLI', () => {
       expect(report.scoring.judgeTrustworthy).toBe(false)
       expect(report.scoring.judgeAgreement).toBeLessThan(0.9)
       expect(report.metrics.judgeAgreementPairCount).toBeGreaterThan(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The judge model is pinnable independently of the reviewer's, and UNSET must
+  // stay exactly what it always was: both judges scored by the reviewer's own
+  // model. This is the "nothing changed" half of that contract.
+  test('scores with the reviewer model when no judge model is pinned', async () => {
+    const root = await createTempDir()
+    const provider = new ModelRecordingJudgeProvider()
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'reviewer-model',
+            maxRetries: 0
+          },
+          review: { depth: 'fast' },
+          drift: { enabled: false }
+        })
+      )
+      await writeSemanticJudgeSliceEvalCase(root)
+
+      const result = await runCli(
+        ['eval', 'run', '--slice-root', 'eval/benchmarks/semantic'],
+        {
+          cwd: root,
+          environment: { OPENAI_API_KEY: 'sk-test' },
+          providerImport: async () => ({ openai: () => provider })
+        }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(provider.judgeModels.length).toBeGreaterThan(0)
+      expect(provider.reviewModels.length).toBeGreaterThan(0)
+      expect([...new Set(provider.judgeModels)]).toEqual(['reviewer-model'])
+      expect([...new Set(provider.reviewModels)]).toEqual(['reviewer-model'])
+
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+
+      expect(report.provenance.modelName).toBe('reviewer-model')
+      // Recorded even when it was never pinned: a report must be able to name
+      // its judge, and "same as the reviewer" is an answer, not an absence.
+      expect(report.provenance.judgeModelName).toBe('reviewer-model')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Without this, setting `CODEREVIEWER_PROVIDER_MODEL` to compare two reviewer
+  // models also swapped the scorer, so a recall difference had two
+  // indistinguishable explanations and no model comparison was interpretable.
+  test('pins the judges to their own model while the reviewer keeps its own', async () => {
+    const root = await createTempDir()
+    const provider = new ModelRecordingJudgeProvider()
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: {
+            id: 'openai',
+            model: 'reviewer-model',
+            maxRetries: 0
+          },
+          evaluation: {
+            judgeModel: 'pinned-judge-model'
+          },
+          review: { depth: 'fast' },
+          drift: { enabled: false }
+        })
+      )
+      await writeSemanticJudgeSliceEvalCase(root)
+
+      const result = await runCli(
+        ['eval', 'run', '--slice-root', 'eval/benchmarks/semantic'],
+        {
+          cwd: root,
+          environment: { OPENAI_API_KEY: 'sk-test' },
+          providerImport: async () => ({ openai: () => provider })
+        }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(provider.judgeModels.length).toBeGreaterThan(0)
+      expect(provider.reviewModels.length).toBeGreaterThan(0)
+      expect([...new Set(provider.judgeModels)]).toEqual(['pinned-judge-model'])
+      // The review under test is untouched: only the scorer moved.
+      expect([...new Set(provider.reviewModels)]).toEqual(['reviewer-model'])
+
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+
+      expect(report.provenance.modelName).toBe('reviewer-model')
+      expect(report.provenance.judgeModelName).toBe('pinned-judge-model')
     } finally {
       await rm(root, { recursive: true, force: true })
     }
@@ -1917,6 +2046,61 @@ describe('eval CLI', () => {
       expect(result.stderr).toContain(
         'eval compare requires the same number of --base and --head reports; got 2 base and 1 head'
       )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('refuses arms scored by different judge models', async () => {
+    const root = await createTempDir()
+
+    try {
+      const withJudge = (judge: string) => ({
+        ...evalReport(),
+        provenance: { modelName: 'reviewer-model', judgeModelName: judge }
+      })
+      await writeFile(join(root, 'base-1.json'), JSON.stringify(withJudge('judge-a')))
+      await writeFile(join(root, 'head-1.json'), JSON.stringify(withJudge('judge-b')))
+
+      const result = await runCli(
+        ['eval', 'compare', '--base', 'base-1.json', '--head', 'head-1.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('different judge models')
+      expect(result.stderr).toContain('judge-a')
+      expect(result.stderr).toContain('judge-b')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // An archived report records no judge model, and on those runs the judge WAS
+  // the reviewer's model. Treating that as "unknown" would refuse every
+  // historical comparison; treating it as the reviewer's model is what it is.
+  test('compares an archived report against a pinned one naming the same judge', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeFile(
+        join(root, 'base-1.json'),
+        JSON.stringify({ ...evalReport(), provenance: { modelName: 'shared-model' } })
+      )
+      await writeFile(
+        join(root, 'head-1.json'),
+        JSON.stringify({
+          ...evalReport(),
+          provenance: { modelName: 'shared-model', judgeModelName: 'shared-model' }
+        })
+      )
+
+      const result = await runCli(
+        ['eval', 'compare', '--base', 'base-1.json', '--head', 'head-1.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(0)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

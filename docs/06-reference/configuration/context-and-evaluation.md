@@ -84,12 +84,41 @@ reported the same counts as one that read all of it.
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
 | `evaluation.minJudgeAgreement` | number 0–1 | `0.9` | Minimum semantic-judge agreement against the committed calibration set. The judge is the sole authority for every eval quality metric, so a run below this bar reports `scoring.judgeTrustworthy = false`. It marks metrics untrustworthy — **it does not fail the regression gate**. |
+| `evaluation.judgeModel` | string | *unset* | Model the two `eval run` judges (semantic match + plausibility) score with. Unset, they use `provider.model` — the reviewer's own. Environment: `CODEREVIEWER_JUDGE_MODEL`. |
 | `evaluation.regressionGate.profile` | `"stable"` \| `"strict"` | `"stable"` | Which threshold set `eval run` gates on. Overridable per run with `eval run --gate-profile`. |
 | `evaluation.regressionGate.overrides` | object | `{}` | Per-threshold values layered on top of the resolved profile. Any key set here wins over the profile's value for the same key. |
 
 There is deliberately no `evaluation.enabled` key: case selection is driven by
 `eval run` CLI flags, not config, so an `enabled` flag would have been accepted
 and then silently ignored.
+
+### Pin the judge when you compare models
+
+`evaluation.judgeModel` exists for one job: comparing two reviewer models without
+the scorer moving with them. Both judges used to be built from the reviewer's
+resolved model, so setting `CODEREVIEWER_PROVIDER_MODEL` per arm swapped the ruler
+too, and a recall difference could mean either a weaker reviewer or a weaker judge
+crediting fewer of its correct findings. That comparison cannot be read, and no
+number of seeds fixes it.
+
+```json
+{
+  "evaluation": { "judgeModel": "a-fixed-judge-model" }
+}
+```
+
+Vary `CODEREVIEWER_PROVIDER_MODEL` per arm; keep `evaluation.judgeModel` (or
+`CODEREVIEWER_JUDGE_MODEL`) at one value across both. It overrides the model only
+— provider id, credentials, base URL, retry and timeout stay the run's own — and
+it changes nothing in the review workflow itself. `scoringCostUsd` is then priced
+against the judge's model, since those are the tokens it spent; review cost is
+untouched.
+
+Every report records `provenance.judgeModelName` next to `provenance.modelName`
+(the reviewer's), whether or not the judge was pinned, so an archived run can name
+the judge that scored it. **Publish the judge model with any model comparison** —
+see `specs/06-evaluation-and-quality-gates.md`, *The Judge Must Be Pinnable
+Independently Of The Reviewer*.
 
 ### The `eval run` regression gate
 

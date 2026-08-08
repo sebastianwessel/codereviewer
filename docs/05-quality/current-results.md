@@ -9,6 +9,13 @@ Every number here — recall, precision, cost, every table below — was measure
 the corpus is: a rate is a property of the model that produced it, and none of
 this is evidence about another provider or model.
 
+Every figure here was also **scored by a judge running that same model**: all of
+them predate `evaluation.judgeModel`, which pins the judge independently, so on
+each of these runs the reviewer's model and the judges' model were necessarily
+one and the same. That is stated rather than assumed because it constrains what
+these numbers can be compared against — see [Hold the judge fixed when the
+reviewer's model varies](comparing-runs.md#hold-the-judge-fixed-when-the-reviewers-model-varies).
+
 Read [Metrics](metrics.md) first if the terms are unfamiliar, and
 [Datasets](datasets.md) for what each corpus can and cannot show.
 

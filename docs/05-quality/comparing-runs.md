@@ -88,6 +88,24 @@ to *rise*: had discovery raised 56% more candidates while the gate killed the
 same fraction, the extra candidates would have been reaching reports rather than
 being filtered, and the change would have failed regardless of what recall did.
 
+### Hold the judge fixed when the reviewer's model varies
+
+A comparison whose scorer moves with its subject cannot be interpreted. Both eval
+judges resolve from `provider.model` by default, so setting
+`CODEREVIEWER_PROVIDER_MODEL` per arm to compare two reviewer models swaps the
+judge as well — and a recall difference then means either a weaker reviewer or a
+weaker judge crediting fewer of its correct findings, with nothing in the run
+telling them apart. Adjusted precision has the same problem, because the
+plausibility judge moves too. More seeds do not resolve it: both arms moved
+together by construction.
+
+Pin the judge to one model across both arms with `evaluation.judgeModel` (or
+`CODEREVIEWER_JUDGE_MODEL`) and vary only `CODEREVIEWER_PROVIDER_MODEL`. Each
+report records `provenance.judgeModelName` alongside `provenance.modelName`, so
+check the two arms' judge models match before reading any delta, and **state the
+judge model whenever a model comparison is published**. See
+[Judges and calibration](judges-and-calibration.md#which-model-judges).
+
 ### Compare paired expectations, not run means
 
 **This is the primary verdict `eval compare` prints**, not a manual follow-up

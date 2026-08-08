@@ -1497,7 +1497,12 @@ type RunEvaluationInput = {
   readonly provenance?: {
     readonly configHash?: string
     readonly providerId?: string
+    // The REVIEWER's model: the subject of the measurement.
     readonly modelName?: string
+    // The model the judges scored with, which `evaluation.judgeModel` can pin
+    // apart from the reviewer's. Supplied by the CLI for the same reason as the
+    // two above.
+    readonly judgeModelName?: string
   }
 }
 
@@ -1766,7 +1771,10 @@ export const runEvaluation = async (
         : { providerId: input.provenance.providerId }),
       ...(input.provenance?.modelName === undefined
         ? {}
-        : { modelName: input.provenance.modelName })
+        : { modelName: input.provenance.modelName }),
+      ...(input.provenance?.judgeModelName === undefined
+        ? {}
+        : { judgeModelName: input.provenance.judgeModelName })
     }
   })
 }

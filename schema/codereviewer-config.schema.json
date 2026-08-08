@@ -842,6 +842,10 @@
           "minimum": 0,
           "maximum": 1
         },
+        "judgeModel": {
+          "type": "string",
+          "minLength": 1
+        },
         "regressionGate": {
           "default": {},
           "type": "object",

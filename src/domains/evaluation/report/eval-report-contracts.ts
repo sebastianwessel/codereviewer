@@ -333,9 +333,18 @@ export const EvalReportProvenanceSchema = z.strictObject({
   configHash: z.string().min(1),
   // Provider/model identity, present only when a provider was configured for
   // the run (an offline run scoring only cases with no expected findings needs
-  // neither).
+  // neither). `modelName` is the REVIEWER's model -- the subject of the
+  // measurement.
   providerId: z.string().min(1).optional(),
-  modelName: z.string().min(1).optional()
+  modelName: z.string().min(1).optional(),
+  // The model the two judges (semantic match + plausibility) actually scored
+  // with. Equal to `modelName` unless `evaluation.judgeModel` pinned it, and
+  // recorded either way: a report that cannot name its own judge leaves every
+  // number in it ambiguous between a reviewer difference and a scorer
+  // difference, which is exactly the failure the pinning exists to remove.
+  // Optional for the same reason as the two above (an offline run has no
+  // judge), and so a report archived before the field existed still parses.
+  judgeModelName: z.string().min(1).optional()
 })
 
 export const EvalMetricGroupSchema = z.strictObject({

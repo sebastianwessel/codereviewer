@@ -23,6 +23,7 @@ Precedence: config file < process environment < `.env` < CLI flags. See
 | `CODEREVIEWER_PROVIDER_MODEL` | `provider.model` | string |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `provider.baseUrl` | URL |
 | `CODEREVIEWER_PROVIDER_REASONING_EFFORT` | `provider.reasoningEffort` | `minimal` \| `low` \| `medium` \| `high` |
+| `CODEREVIEWER_JUDGE_MODEL` | `evaluation.judgeModel` | string. Pins the model the `eval run` judges score with, independently of `CODEREVIEWER_PROVIDER_MODEL`. Unset, they use the reviewer's model. |
 | `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `aiReview.deterministicSignalMode` | `support` \| `disabled` |
 | `CODEREVIEWER_ARTIFACT_DIR` | `paths.artifactDir` | repository-relative path |
 | `CODEREVIEWER_SKILLS_DIR` | `skills.directories` | repository-relative path. **Replaces the whole array** with this single entry. |

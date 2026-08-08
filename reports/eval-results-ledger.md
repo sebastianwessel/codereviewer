@@ -2744,3 +2744,44 @@ remains on the default.
 The commit message for `be06e1d` says 45 repositories; that is wrong — re-admitting
 the mermaid case added a repository and the count was not re-derived. 46 is the
 figure, recomputed from the manifest.
+
+## 2026-08-08 — The eval could not compare models at all ($0)
+
+Found while setting up a model comparison, and it stopped the run before any spend.
+
+`eval run` resolved the semantic match judge AND the plausibility judge from **the same
+model alias as the reviewer under test**, with no separate judge configuration. So
+setting `CODEREVIEWER_PROVIDER_MODEL` to compare two reviewer models also swapped the
+scorer. A recall difference then had two indistinguishable explanations — a weaker
+reviewer, or a weaker judge crediting fewer correct findings — and adjusted precision
+had the same problem because the plausibility judge moved too.
+
+**Every model comparison this project has run was uninterpretable on its recall side.**
+That includes the 2026-07-25 codex-vs-terra comparison, whose "codex finds MORE total
+real defects" conclusion is therefore SUSPECT. Its harness is no longer on disk, so it
+cannot be confirmed either way; it must not be cited as evidence about reviewer quality
+until re-run against a pinned judge. Its COST comparison is unaffected — spend is
+measured, not judged.
+
+Fixed at the root:
+
+- `evaluation.judgeModel` (env `CODEREVIEWER_JUDGE_MODEL`) pins the judges independently
+  of the reviewer. Unset resolves the *same object* as today, so the default path is
+  byte-identical and no metric moves.
+- `provenance.judgeModelName` is recorded on every provider-backed run, so a saved
+  report can say which judge scored it.
+- `scoringCostUsd` is now priced with the judge's model, since those tokens are spent by
+  the judges.
+- **`eval compare` refuses arms scored by different judge models** and names them. An
+  archived report carries no `judgeModelName`, and on those runs the judge WAS the
+  reviewer's model, so `modelName` is the fallback identity — archived reports stay
+  comparable with each other and with a pinned run naming the same model, while a
+  genuine mismatch is refused.
+
+`EVAL_METRICS_VERSION` deliberately NOT bumped: an unpinned run resolves the identical
+alias it always did, so no metric changes for identical review output.
+
+**Also recorded: there is no better model available on this key.** The engine already
+runs `gpt-5.3-codex`, the newest codex tier reachable. The open accuracy question is
+therefore "how much of the 64% is the model", which needs the pinned judge to answer,
+not "switch to something better".

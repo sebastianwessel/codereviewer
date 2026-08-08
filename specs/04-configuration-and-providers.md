@@ -53,6 +53,7 @@ R1 supports only these configuration environment variables:
 | `CODEREVIEWER_PROVIDER_MODEL` | `provider.model` | string |
 | `CODEREVIEWER_PROVIDER_REASONING_EFFORT` | `provider.reasoningEffort` | reasoning effort enum |
 | `CODEREVIEWER_PROVIDER_BASE_URL` | `provider.baseUrl` | URL |
+| `CODEREVIEWER_JUDGE_MODEL` | `evaluation.judgeModel` | string |
 | `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `aiReview.deterministicSignalMode` | signal mode enum |
 | `CODEREVIEWER_ARTIFACT_DIR` | `paths.artifactDir` | repository-relative path |
 | `CODEREVIEWER_CONFIG_PATH` | CLI/config loader default path override | repository-relative path |
@@ -832,6 +833,7 @@ of input tokens.
 | Key | Type | Default |
 | --- | --- | --- |
 | `minJudgeAgreement` | number 0..1 | `0.9` |
+| `judgeModel` | string or unset | unset (the judges use `provider.model`) |
 | `regressionGate.profile` | `"stable" \| "strict"` | `"stable"` |
 | `regressionGate.overrides` | per-threshold override object | `{}` |
 
@@ -846,6 +848,17 @@ judge is the sole authority for every eval quality metric, so a run whose
 measured agreement falls below this value reports
 `scoring.judgeTrustworthy = false`. It marks the run's metrics as untrustworthy;
 it does not by itself fail the regression gate.
+
+`judgeModel` pins the model the eval's semantic-match judge and plausibility
+judge run on, independently of `provider.model`, which the reviewer under test
+keeps using. It overrides the model only — provider id, credentials, base URL,
+retry and timeout stay the run's own — and it moves nothing in the review
+workflow. Unset, the judges resolve from the reviewer's provider config
+unchanged, which is the historical behaviour. A model comparison must set it to
+one value across both arms; the rationale, and the requirement that a published
+comparison state the judge it was scored with, are in
+`06-evaluation-and-quality-gates.md`, section *The Judge Must Be Pinnable
+Independently Of The Reviewer*.
 
 ## Security Config
 

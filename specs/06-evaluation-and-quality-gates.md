@@ -229,6 +229,60 @@ an assumption:
 - A run that scored no calibration pair at all reports `judgeTrustworthy = false`.
   Absence of a reliability measurement is not evidence of reliability.
 
+### The Judge Must Be Pinnable Independently Of The Reviewer
+
+Added 2026-08-08, from a defect rather than from principle.
+
+Both judges were built from the SAME resolved model alias as the reviewer under
+test, and there was no way to configure otherwise. Setting
+`CODEREVIEWER_PROVIDER_MODEL` to compare two reviewer models therefore swapped the
+SCORER along with the subject. A recall difference measured that way has two
+indistinguishable explanations — a weaker reviewer, or a weaker judge crediting
+fewer of the reviewer's correct findings as matches — and adjusted precision has
+the same problem, because the plausibility judge moved too. **Every model
+comparison run under that arrangement is uninterpretable**, not merely noisy: no
+amount of seeds separates the two explanations, because both arms moved together
+by construction.
+
+`evaluation.judgeModel` (environment: `CODEREVIEWER_JUDGE_MODEL`) pins the model
+the semantic-match judge and the plausibility judge run on, independently of
+`provider.model`:
+
+- **Unset is the historical behaviour, exactly.** The judges resolve from the
+  reviewer's provider config unchanged — the same alias, the same single provider
+  resolution, no extra call. An unpinned run must be indistinguishable from a run
+  of the engine before this setting existed.
+- **Set, it overrides the model only.** Provider id, credentials, base URL, retry
+  and timeout stay the run's own. The setting names a model to score with, not a
+  second provider account.
+- **It moves the two eval judges and nothing else.** The review workflow — every
+  discovery, refutation, fix and summarization call — keeps resolving its own
+  model from `provider.model`. Scoring changes; what is being scored does not.
+- Judge/plausibility spend (`scoringCostUsd`) is priced against the judge's model,
+  since those are the tokens that were spent. Review cost is unaffected.
+
+Two requirements follow, and the second is the load-bearing one:
+
+- **A model comparison must hold the judge fixed.** Vary `provider.model` per arm
+  and pin `evaluation.judgeModel` to one value across both arms. An arm pair whose
+  judge model differs is not a reviewer comparison and its recall delta must not
+  be published as one.
+- **Any published model comparison MUST state the judge model it was scored
+  with**, alongside the reviewer models it compares — the same discipline that
+  requires a rate to name its provider and model. `provenance.judgeModelName`
+  records it on every report so the claim is checkable after the fact rather than
+  recalled.
+
+This carries **no `metricsVersion` bump**, and the reason is the rule rather than
+an exemption from it: a bump is owed when a change alters what a metric would
+report for identical review output, and an unpinned run resolves the identical
+judge alias it always did, so every metric is byte-identical. A run that DOES pin
+a different judge model of course scores differently — but that is a
+configuration difference, carried by `provenance.configHash` and now named
+outright by `provenance.judgeModelName`, not a change in the scoring rules.
+`provenance.judgeModelName` is itself provenance, not a metric, and its absence in
+an older report reads as unknown rather than as a value.
+
 ### Provider Requirement
 
 Semantic matching runs only for cases that declare expected findings. A case with
@@ -242,6 +296,22 @@ Removing lexical scoring changes every quality metric. Eval reports produced
 before this change are not comparable to reports produced after it, and any
 recorded baseline from the lexical matcher is void. A new baseline must be
 recorded deliberately after this change.
+
+### The Refusal, Not Just The Setting
+
+Pinning the judge is necessary and not sufficient: nothing stops someone comparing two
+reports that were scored by different judges. That is the same silent-invalid
+comparison the setting exists to prevent, one level up, so it is refused rather than
+documented.
+
+- `eval compare` MUST refuse arms whose judge models differ, and name the judges it
+  found. A difference between such arms is either a better reviewer or a more generous
+  scorer, with nothing in the reports to separate them.
+- A report written before the judge became pinnable records no `judgeModelName`, and on
+  those runs the judge WAS the reviewer's model. `modelName` is therefore the correct
+  fallback identity — not "unknown". That keeps two archived reports comparable with
+  each other, and keeps an archived report comparable with a pinned one naming the same
+  model, while still refusing a genuine mismatch.
 
 ## Unmatched-Finding Plausibility
 
@@ -437,8 +507,9 @@ artifact revealing that. Every report also records `provenance`:
 | `provenance.answerKeyDigest` | sha256-family digest string | A stable digest over the expected-finding CONTENT (category, severity, path, effective match mode, declared `lineRange`, semantic summary) of every case in `selection.selectedCaseIds`. Deliberately scoped to expected-finding content only — it excludes `expectedNoFindingZones`, `changedFiles`, `tags`, and other case metadata, none of which change what recall or precision are scored against. Computed by the eval domain itself from the cases it actually scored; a caller cannot supply or override it. Cases are sorted by id before hashing (order-insensitive across cases, since selection order carries no meaning), but expected findings keep their original order WITHIN a case (order-sensitive, since `expectedIndex` is part of the matching contract). Reports saved before this field existed default to a fixed sentinel digest, mirroring how `metricsVersion` itself defaults for old reports. |
 | `provenance.answerKeyDigestByCase` | map of case id to digest string | The same expected-finding content digest, computed per case rather than pooled, so a comparison can name exactly which shared cases moved underneath it. Computed by the eval domain from the cases it scored; a caller cannot supply or override it. Empty for reports saved before the field existed. |
 | `provenance.configHash` | digest string | A digest over the effective (file + environment + CLI-override merged) configuration the run used, supplied by the CLI. Comparison does NOT refuse across a `configHash` mismatch: a maintainer legitimately compares two runs under different configurations to measure the effect of changing one. The hash exists so an archived run can be read back and its configuration identity checked, not to gate diffing. Defaults to `"unspecified"` when the caller does not supply one (e.g. a direct unit-test call to the eval runner). |
-| `provenance.providerId` | string, omitted when no provider | The provider identity (`ProviderConfig.id`) the run's semantic judge was built from. Omitted for a fully offline run (no expected findings, no judge needed). |
-| `provenance.modelName` | string, omitted when no provider | The model name (`ProviderConfig.model`) the run's semantic judge was built from. Omitted under the same condition as `providerId`. |
+| `provenance.providerId` | string, omitted when no provider | The provider identity (`ProviderConfig.id`) the run resolved. One provider serves both the reviewer and the judges; only the MODEL is separately pinnable. Omitted for a fully offline run (no expected findings, no judge needed). |
+| `provenance.modelName` | string, omitted when no provider | The REVIEWER's model name (`ProviderConfig.model`) — the subject of the measurement. Omitted under the same condition as `providerId`. |
+| `provenance.judgeModelName` | string, omitted when no provider | The model the two judges actually scored with: `evaluation.judgeModel` when pinned, otherwise `provenance.modelName`. **Recorded either way, including when it equals the reviewer's model** — "same as the reviewer" is an answer, and a report that cannot name its own judge leaves every number in it ambiguous between a reviewer difference and a scorer difference (see "The Judge Must Be Pinnable Independently Of The Reviewer"). Empty for reports saved before the field existed, which is exactly the era whose model comparisons cannot be checked. |
 
 `eval compare` refuses to diff two reports when any case they BOTH scored was
 scored against different expectations, named individually in the error. It uses
