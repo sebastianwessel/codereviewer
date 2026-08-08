@@ -163,6 +163,54 @@ reconstruct.
 
 Deleted paths appear in none of these fields, including the unknown counts.
 
+## Measured, 2026-08-08 — And Why It Stays Off The Summary
+
+Measured for the first time against a budget pre-registered before the numbers
+existed (`reports/2026-08-08-test-adequacy-prereg.md`), over 200 self-repo commits,
+deterministically and at zero cost.
+
+| metric | measured | budget | |
+| --- | --- | --- | --- |
+| firing rate | **56.5%** (113/200) | ≤ 40% | fails |
+| median unpaired when fired | 2 | ≤ 5 | passes |
+| usefulness (objective proxy) | **≤ 16%** | ≥ 50% | fails |
+
+**The signal is NOT promoted to the pull-request summary.** Two of three criteria
+fail. Its placement below — `report.json` and `report.md` only — is now confirmed by
+measurement rather than assumed.
+
+### Pairing is by STEM, and that is the dominant firing mode
+
+**95 of 113 firings (84.1%) are on commits that changed a test file.** The change was
+tested; the test simply does not share the source file's stem.
+
+Both relations require a shared normalized stem: `direct` maps a test to itself, and
+`same-directory` requires same directory **and** same stem. Nothing pairs a source
+file with a differently-named test beside it. So `intake-service.ts` does not pair
+with `repository-intake.test.ts`, which sits next to it and tests it.
+
+That is this spec working as written — pairing follows "each language's own
+convention", and naming a test after its module is that convention. The measurement
+establishes that **the convention does not hold in this repository**, and probably
+not in others where tests are named for the subject rather than the file.
+
+`same-directory` is therefore a misleading name for the relation: it reads as "a test
+in the same directory" and means "same directory and same stem", which is a looser
+spelling of `direct` rather than a different relation.
+
+**Loosening pairing to any test in the directory is explicitly NOT the fix.** It
+would convert a failed pre-registered bar into a pass, go near-silent in any
+repository with a top-level `tests/` tree, and is unmeasured. Revisiting the pairing
+model requires its own measurement.
+
+### Nearly half of changed files cannot be asked about
+
+**703 of 1541 changed files (45.6%) land in `unknown`** — docs, specs, reports, JSON,
+YAML — and 70 of 200 commits contain no considered file at all. The schema keeps
+`unknown` apart from `unpaired`, so nothing is misreported, but the signal's scope is
+much narrower than "changed files" and any reading of its firing rate carries that
+denominator.
+
 ## Where It Surfaces
 
 Two places, and deliberately only two.

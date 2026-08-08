@@ -2836,3 +2836,33 @@ neither model tier, nor attention, nor wording moves.**
 Caveats: 3 seeds resolve ~11pp, so recall is UNRESOLVED rather than equal; position
 balance is 2/1 not 5/5; and `gpt-5.1-codex-max` is unusable on this key (listed by
 `/v1/models`, 404 on chat-completions), so the STRONGER-tier question remains open.
+
+## 2026-08-08 — Test-adequacy signal measured for the first time ($0, deterministic)
+
+Against `reports/2026-08-08-test-adequacy-prereg.md`, budget registered before the
+numbers existed. 200 self-repo commits. Detail:
+`reports/2026-08-08-test-adequacy-result.md`.
+
+| metric | measured | budget | |
+|---|---|---|---|
+| firing rate | **56.5%** (113/200) | ≤ 40% | fails |
+| median unpaired when fired | 2 | ≤ 5 | passes |
+| usefulness (objective proxy) | **≤ 16%** | ≥ 50% | fails |
+
+**NOT promoted to the pull-request summary.** Stays in `report.json` / `report.md`,
+never a finding — the placement spec 29 already had, now confirmed by measurement
+instead of assumed. Removal clause (firing > 80%) not met.
+
+**The finding that matters: 95 of 113 firings (84.1%) are on commits that changed a
+test file.** Both pairing relations require a shared normalized stem, so a source
+file never pairs with a differently-named test beside it — `intake-service.ts` does
+not pair with `repository-intake.test.ts`. Three commits from this session's own
+work are among the firings, and all three shipped tests.
+
+Loosening pairing to any-test-in-directory was refused: it would convert a failed
+pre-registered bar into a pass, go near-silent in repositories with a top-level
+`tests/` tree, and is unmeasured.
+
+Separately, **45.6% of changed files (703/1541) land in `unknown`** and 70 of 200
+commits contain no considered file at all — the signal's real scope is far narrower
+than "changed files", and its firing rate must always be read against that.
