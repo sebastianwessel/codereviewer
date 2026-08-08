@@ -48,6 +48,29 @@ summary, finding id:
   report. An evidence id with no record in the report MUST be named as such
   rather than dropped — a hole a reader can see beats one they cannot.
 
+### Findings An Earlier Push Carried
+
+The pull request's own inline comments hold each finding's fingerprint in a hidden
+marker, so what the previous push reported is readable from the pull request itself.
+A run compares that set against its own findings and states how many are **no longer
+reported**.
+
+Three requirements, and the first two are the reason this is worth stating at all:
+
+- **The comparison MUST be made even when the run has nothing to post.** The case it
+  exists for is precisely the run with no findings — the author fixed everything —
+  and fetching prior comments only when there is something to write would skip it.
+- **It MUST NOT be called resolved, fixed, or addressed.** Nothing here separates a
+  repair from a miss: in-diff recall is about two thirds and two runs over one commit
+  do not agree, so a finding can drop out with the code unchanged. The sentence says
+  so, in the reader's own line of sight, not in a footnote.
+- **An uncomputed comparison MUST be absent, never zero.** No API access and no
+  inline posting means the question was not asked, which is a different fact from
+  asking it and finding nothing.
+
+This requires the fingerprint to survive a push, which it did not until
+`v3-category-path-anchor` — see `specs/03-contracts/finding-evidence-report.md`.
+
 ### What the body must NOT carry
 
 **The run-level reliability rates.** They are stated once per review, in the

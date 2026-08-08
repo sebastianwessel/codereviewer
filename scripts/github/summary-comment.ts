@@ -65,6 +65,16 @@ export type SummaryCommentInput = {
   /** Number of inline review comments posted, when inline posting ran. */
   readonly inlineCommentCount?: number
   /**
+   * Findings this pull request's own inline comments carry from earlier pushes
+   * that this run did not report again.
+   *
+   * Read from the comments already on the pull request, so it needs no stored
+   * state and survives a re-run on a fresh checkout. `undefined` — never 0 —
+   * when the comparison could not be made at all (no API, inline posting off):
+   * a computed zero is a fact, an uncomputed one is not.
+   */
+  readonly noLongerReportedCount?: number
+  /**
    * Operational notes: a fork that could not be reviewed, inline comments that
    * could not be posted, a stage that was skipped. Rendered verbatim (after
    * sanitizing) because each one explains why the reader is seeing less than
@@ -369,6 +379,25 @@ const impactSection = (impact: ImpactDigest): string | undefined => {
   ].join('\n')
 }
 
+// Wording follows the same rule as the baseline count: this cannot separate a
+// repair from a miss, so it never says "fixed". A reader who wants to know whether
+// a defect is gone has to look, and the sentence says so.
+const noLongerReportedSection = (
+  input: SummaryCommentInput
+): string | undefined => {
+  const count = input.noLongerReportedCount
+
+  if (count === undefined || count === 0) {
+    return undefined
+  }
+
+  return [
+    `### No longer reported (${count})`,
+    '',
+    `${count} finding${count === 1 ? '' : 's'} commented on an earlier push ${count === 1 ? 'was' : 'were'} not reported again by this run. That is not the same as fixed: this search finds roughly ${inDiffRecallInTen} in 10 in-diff defects and does not repeat itself exactly, so a finding can drop out without the code changing. The earlier comments are still on this pull request.`
+  ].join('\n')
+}
+
 const detailsSection = (input: SummaryCommentInput): string => {
   const rows: string[] = [
     `- Head commit: \`${sanitizeLine(input.headSha, 64)}\``
@@ -478,6 +507,7 @@ export const renderSummaryComment = (input: SummaryCommentInput): string => {
     input.review === undefined ? undefined : unresolvedSection(input.review),
     input.intent === undefined ? undefined : intentSection(input.intent),
     input.impact === undefined ? undefined : impactSection(input.impact),
+    noLongerReportedSection(input),
     stageTable(input),
     detailsSection(input)
   ]

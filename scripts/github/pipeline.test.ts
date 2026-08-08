@@ -215,6 +215,40 @@ describe('runPipeline: the ordinary path', () => {
     expect(result.inlineCommentCount).toBe(0)
   })
 
+  // The case this feature exists for: an earlier push was commented on, the author
+  // fixed it, and this run has nothing to say. The comparison must still happen.
+  it('reports a finding an earlier push carried that this run did not', async () => {
+    const { api, calls } = createFakeApi({
+      existingReviewComments: [
+        { body: 'from an earlier push\n\n<!-- codereviewer:finding:gone-now -->' }
+      ]
+    })
+    const { dependencies } = createDependencies({ api })
+
+    await runPipeline(dependencies)
+
+    const body = [...calls.created, ...calls.updated.map((entry) => entry.body)].join('\n')
+
+    expect(body).toContain('No longer reported (1)')
+    // Never presented as a repair — this cannot tell a fix from a miss.
+    expect(body).toContain('not the same as fixed')
+  })
+
+  it('says nothing when every earlier finding is still reported', async () => {
+    const { api, calls } = createFakeApi({
+      existingReviewComments: [
+        { body: 'from an earlier push\n\n<!-- codereviewer:finding:fp1 -->' }
+      ]
+    })
+    const { dependencies } = createDependencies({ api })
+
+    await runPipeline(dependencies)
+
+    const body = [...calls.created, ...calls.updated.map((entry) => entry.body)].join('\n')
+
+    expect(body).not.toContain('No longer reported')
+  })
+
   it('exits 0 when the review passed', async () => {
     const { api } = createFakeApi()
     const { dependencies } = createDependencies({ api })

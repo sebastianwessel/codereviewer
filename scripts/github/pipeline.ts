@@ -285,23 +285,34 @@ export const runPipeline = async (
   // a summary comment that arrived is worth more than a review that did not, so
   // a failure here degrades to the summary rather than failing the job.
   let inlineCommentCount = 0
+  // Findings an earlier push commented on that this run did not report again.
+  // Undefined until the comparison is actually made, so it can never be rendered
+  // as a computed zero it is not.
+  let noLongerReportedCount: number | undefined
 
-  if (
-    dependencies.api !== undefined &&
-    review !== undefined &&
-    renderedComments.length > 0
-  ) {
+  if (dependencies.api !== undefined && review !== undefined) {
     const rendered = parseRenderedComments(renderedComments)
 
-    if (rendered.length > 0) {
-      try {
-        const existing = await dependencies.api.listReviewComments(context.number)
+    try {
+      // Fetched whether or not there is anything to post. The case this exists
+      // for is a run with NOTHING to say — the author fixed everything — and
+      // fetching only when there are comments to write would skip exactly that.
+      const existing = await dependencies.api.listReviewComments(context.number)
+      const existingMarkers = extractFindingMarkers(
+        existing.map((comment) => comment.body)
+      )
+      const current = new Set(
+        fingerprintsByFindingId(review.findings).values()
+      )
+      noLongerReportedCount = [...existingMarkers].filter(
+        (marker) => !current.has(marker)
+      ).length
+
+      if (rendered.length > 0) {
         const plan = buildInlineComments({
           rendered,
           fingerprints: fingerprintsByFindingId(review.findings),
-          existingMarkers: extractFindingMarkers(
-            existing.map((comment) => comment.body)
-          ),
+          existingMarkers,
           maxComments: options.maxInlineComments
         })
 
@@ -319,17 +330,20 @@ export const runPipeline = async (
             `${plan.overCap} inline comments were not posted because the per-run limit of ${options.maxInlineComments} was reached; they are listed below and in the artifacts.`
           )
         }
-      } catch (error) {
-        notes.push(
-          `Inline comments could not be posted (${error instanceof Error ? error.message : 'unknown error'}). Every finding is listed in this comment instead.`
-        )
       }
+    } catch (error) {
+      notes.push(
+        `Inline comments could not be posted (${error instanceof Error ? error.message : 'unknown error'}). Every finding is listed in this comment instead.`
+      )
     }
   }
 
   const body = renderSummaryComment({
     markerKey: options.markerKey,
     outcomes,
+    ...(noLongerReportedCount === undefined
+      ? {}
+      : { noLongerReportedCount }),
     headSha: context.headSha,
     ...(review === undefined ? {} : { review }),
     ...(intent === undefined ? {} : { intent }),
