@@ -1,3 +1,4 @@
+import { uniqueSorted } from '../../../../shared/text/unique-sorted.js'
 import { casesWithDivergedAnswerKeys } from '../../report/eval-report-provenance.js'
 import { appendMarkdownTable } from '../eval-report-markdown-formatting.js'
 import {
@@ -158,9 +159,7 @@ const appendRunLevelContext = (
 ): void => {
   const baseStatus = caseStatusById(input.base)
   const headStatus = caseStatusById(input.head)
-  const caseIds = [...new Set([...baseStatus.keys(), ...headStatus.keys()])].sort(
-    (left, right) => left.localeCompare(right)
-  )
+  const caseIds = uniqueSorted([...baseStatus.keys(), ...headStatus.keys()])
 
   appendEvalComparisonGate(lines, input)
   appendEvalComparisonSelection(

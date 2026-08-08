@@ -22,6 +22,7 @@ import {
 } from '../../shared/contracts/index.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
 import { sha256 } from '../../shared/hash/hash.js'
+import { lineRangesOverlap } from '../../shared/text/line-ranges.js'
 import {
   truncateToFieldBound,
   type BoundedStringField
@@ -243,11 +244,6 @@ const locationChunkRangeIsValid = (
       candidate.location.startLine >= range.startLine && endLine <= range.endLine
   )
 }
-
-const lineRangesOverlap = (
-  left: { readonly startLine: number; readonly endLine: number },
-  right: { readonly startLine: number; readonly endLine: number }
-): boolean => left.startLine <= right.endLine && right.startLine <= left.endLine
 
 // Whether the candidate's location can be anchored as an inline review comment.
 // This is presentation policy only: it never decides whether a candidate is

@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto'
 import { readFile, readdir, stat } from 'node:fs/promises'
 import path from 'node:path'
+import { sha256 } from '../../../shared/hash/hash.js'
 import { z } from 'zod'
 import { resolveExistingPathInsideRoot } from '../../../platform/path-service.js'
 import {
@@ -59,9 +59,6 @@ type EvalSliceManifestDigestPayload = {
   readonly cases: readonly unknown[]
 }
 
-const hashBytes = (bytes: Buffer | string): string =>
-  createHash('sha256').update(bytes).digest('hex')
-
 const toPortableRelativePath = (rootPath: string, filePath: string): string =>
   path.relative(rootPath, filePath).split(path.sep).join(path.posix.sep)
 
@@ -97,7 +94,7 @@ const collectRepositoryFiles = async (
           {
             relativePath: toPortableRelativePath(repositoryRoot, entryPath),
             sizeBytes: entryStat.size,
-            sha256: hashBytes(content)
+            sha256: sha256(content)
           }
         ]
       })
@@ -187,7 +184,7 @@ const createManifestCase = async (
     noFindingZoneCount: slice.expectedNoFindingZones.length,
     repositoryFileCount: repositoryFiles.length,
     repositoryBytes,
-    sliceJsonSha256: hashBytes(sliceJson),
+    sliceJsonSha256: sha256(sliceJson),
     repositoryTreeSha256: repositoryTreeDigest(repositoryFiles)
   })
 }

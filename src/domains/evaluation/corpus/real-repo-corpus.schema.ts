@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto'
 import { z } from 'zod'
+import { sha256 } from '../../../shared/hash/hash.js'
 import { RepositoryRelativePathSchema } from '../../../shared/contracts/index.js'
 import {
   EVAL_SLICE_TITLE_MAX_LENGTH,
@@ -395,7 +395,7 @@ export const tokenNormalizedDiffFingerprint = (diff: string): string => {
     .filter((line) => line.length > 0)
     .join('\n')
 
-  return createHash('sha256').update(normalized).digest('hex')
+  return sha256(normalized)
 }
 
 // Shared by every corpus whose cases are identified by a slug, so a second

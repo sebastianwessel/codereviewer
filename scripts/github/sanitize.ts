@@ -1,3 +1,5 @@
+import { truncateForContract } from '../../src/shared/text/truncate.js'
+
 // Text guards shared by every surface of the GitHub integration.
 //
 // Two classes of untrusted text pass through this integration, and both end up
@@ -35,9 +37,11 @@ const controlCharacters = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu
 export const sanitizeText = (value: string, maxLength: number): string => {
   const cleaned = value.replace(controlCharacters, '').replaceAll('<', '&lt;')
 
-  return cleaned.length <= maxLength
-    ? cleaned
-    : `${cleaned.slice(0, Math.max(0, maxLength - 1))}…`
+  // Truncation is delegated rather than repeated: this file used to hardcode both
+  // the mark and its length, so a change to TRUNCATION_MARK would have left the
+  // pull-request comment reading differently from every other surface. The shared
+  // helper also handles a cap too small to hold the mark, which this did not.
+  return truncateForContract(cleaned, maxLength)
 }
 
 /**

@@ -1,3 +1,4 @@
+import { lineRangesOverlap } from '../../../shared/text/line-ranges.js'
 import { z } from 'zod'
 import { parseGitDiffMaps } from '../../repository-intake/index.js'
 
@@ -87,7 +88,11 @@ export const classifyExpectedFindingDiffScope = (
   const [expectedStart, expectedEnd] = expected.lineRange
   const pathSpans = hunkSpans.get(expected.path) ?? []
   const intersectsHunk = pathSpans.some(
-    ([hunkStart, hunkEnd]) => expectedStart <= hunkEnd && expectedEnd >= hunkStart
+    ([hunkStart, hunkEnd]) =>
+      lineRangesOverlap(
+        { startLine: expectedStart, endLine: expectedEnd },
+        { startLine: hunkStart, endLine: hunkEnd }
+      )
   )
 
   // A path the diff never mentions is genuinely outside it: the file is

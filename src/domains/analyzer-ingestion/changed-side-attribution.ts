@@ -27,6 +27,7 @@
 // is the flood this gate exists to prevent. The count of alerts held back is
 // reported so the omission is visible rather than assumed.
 
+import { lineRangesOverlap } from '../../shared/text/line-ranges.js'
 import type { RepositoryRelativePath } from '../../shared/contracts/index.js'
 import type {
   AnalyzerAlert,
@@ -103,7 +104,12 @@ const intersectingChangedLine = (
   const locationEnd = Math.max(location.startLine, location.endLine ?? location.startLine)
 
   for (const range of ranges) {
-    if (location.startLine <= range.endLine && locationEnd >= range.startLine) {
+    if (
+      lineRangesOverlap(
+        { startLine: location.startLine, endLine: locationEnd },
+        range
+      )
+    ) {
       // The changed line the attribution rests on, so a reader can check it.
       return Math.max(location.startLine, range.startLine)
     }
