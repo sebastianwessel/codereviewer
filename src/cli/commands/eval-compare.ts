@@ -85,6 +85,28 @@ export const runEvalCompare = async (
       )
     }
 
+    // A run in which cases errored has metrics describing cases that never ran:
+    // a 100%-provider-error run reports recall 0.0%, which is an absence of
+    // evidence rendered as a number. Its regression gate already fails; refusing
+    // it here stops it being pooled into an arm where the gate is not consulted.
+    const errored = [...base, ...head].filter(
+      ({ report }) => (report.metrics?.providerErrorRate ?? 0) > 0
+    )
+
+    if (errored.length > 0) {
+      return usageError(
+        'eval compare refuses reports with provider errors, because their metrics ' +
+          'describe cases that never ran — a fully errored run reports recall 0.0%, ' +
+          'which is an absence of evidence, not a measurement. Affected: ' +
+          errored
+            .map(
+              ({ label, report }) =>
+                `${label} (${((report.metrics?.providerErrorRate ?? 0) * 100).toFixed(0)}% errored)`
+            )
+            .join(', ')
+      )
+    }
+
     return {
       exitCode: 0,
       stdout: `${renderEvalComparison({ base, head })}\n`,

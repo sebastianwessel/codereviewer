@@ -2051,6 +2051,32 @@ describe('eval CLI', () => {
     }
   })
 
+  test('refuses a report whose cases errored, rather than pooling recall 0.0%', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeFile(join(root, 'base-1.json'), JSON.stringify(evalReport()))
+      await writeFile(
+        join(root, 'head-1.json'),
+        JSON.stringify({
+          ...evalReport(),
+          metrics: { ...evalReport().metrics, recall: 0, providerErrorRate: 1 }
+        })
+      )
+
+      const result = await runCli(
+        ['eval', 'compare', '--base', 'base-1.json', '--head', 'head-1.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('refuses reports with provider errors')
+      expect(result.stderr).toContain('100% errored')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('refuses arms scored by different judge models', async () => {
     const root = await createTempDir()
 

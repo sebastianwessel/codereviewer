@@ -63,3 +63,30 @@ by more than the control's spread AND the treatment's measured cost per run is w
 
 Whatever happens, both model names and the judge model are published with every figure
 — a rate is a property of a model, and now of two.
+
+---
+
+## Amendment (before any result existed): the candidate model is unusable
+
+The probe ran and **failed completely**: 72 of 72 cases `providerErrored` with
+`HTTP 404 invalid_request_error: Model not found gpt-5.1-codex-max`, **$0 spent**.
+
+`gpt-5.1-codex-max` is listed by `/v1/models` on this key but is not reachable through
+the provider adapter's chat-completions path. **A model listing is not a capability
+listing** — that is the lesson, and it is why the probe stage existed.
+
+No result was observed, so changing the candidate is not a response to data. The
+amended candidate is **`gpt-5-mini`**, and the question it answers changes with it:
+
+- was: *is a stronger tier better than the current model?*
+- now: **how much of the measured recall is the model tier doing?**
+
+`gpt-5-mini` is cheaper than the control, so the cost gate cannot bind against it; the
+gate stands for any future candidate. Everything else in this pre-registration — judge
+pinned to `gpt-5.3-codex` in both arms, three seeds, two-sided paired test, unresolved
+if inside the band — is unchanged.
+
+The recall figure from the failed probe (0.0%) is **not a measurement of anything**.
+Its regression gate failed with "provider error present", and `eval compare` now
+refuses reports carrying provider errors outright, so it cannot be pooled by accident.
+
