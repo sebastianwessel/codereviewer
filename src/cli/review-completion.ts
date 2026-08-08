@@ -35,8 +35,6 @@ export const qualityGateOfCompletedRun = (
       message:
         `Run ${report.run.runId} completed without a quality gate result. Every completed run evaluates its gate, so this is an internal inconsistency; the run cannot be reported as passing one.`,
       category: 'internal',
-      recoverable: false,
-      exitCode: 5,
       details: { runId: report.run.runId }
     })
   }

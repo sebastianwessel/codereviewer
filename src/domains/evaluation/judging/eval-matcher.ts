@@ -104,8 +104,6 @@ export const missingSemanticJudgeError = (caseId: string): StructuredError =>
     code: 'eval_semantic_judge_missing',
     message: `Eval case "${caseId}" declares expected findings but no semantic judge is available. Configure a provider; the matcher never falls back to a heuristic.`,
     category: 'config',
-    recoverable: true,
-    exitCode: 2,
     details: { case_id: caseId }
   })
 

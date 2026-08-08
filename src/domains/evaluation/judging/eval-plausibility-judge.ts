@@ -404,8 +404,6 @@ export const createModelPlausibilityJudge = (
       message:
         'Plausibility judge requires a provider with object output support.',
       category: 'config',
-      recoverable: true,
-      exitCode: 2
     })
   }
 

@@ -120,8 +120,6 @@ const readConfigFile = async (
           code: 'config_error',
           message: `The configuration file "${configPath}" does not exist. It was requested explicitly, so the run stops here rather than continuing on default settings.`,
           category: 'config',
-          recoverable: false,
-          exitCode: 2,
           details: { configPath }
         })
       }

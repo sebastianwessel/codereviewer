@@ -73,8 +73,6 @@ export const createModelSemanticJudge = (
       code: 'provider_capability_missing',
       message: 'Semantic judge requires a provider with object output support.',
       category: 'config',
-      recoverable: true,
-      exitCode: 2
     })
   }
 

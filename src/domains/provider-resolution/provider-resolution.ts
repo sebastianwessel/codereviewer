@@ -85,8 +85,6 @@ const assertCredentialSources = (
         code: 'provider_credentials_missing',
         message: `Provider credential source "${credentialSource}" is required.`,
         category: 'config',
-        recoverable: true,
-        exitCode: 2,
         details: {
           provider: definition.providerId,
           credentialSource
@@ -102,8 +100,6 @@ const assertProviderConfig = (provider: ProviderConfig): void => {
       code: 'provider_base_url_missing',
       message: 'Provider "openai-compatible" requires provider.baseUrl.',
       category: 'config',
-      recoverable: true,
-      exitCode: 2,
       details: {
         provider: provider.id
       }
@@ -131,8 +127,6 @@ const getFactory = (
     code: 'provider_adapter_invalid',
     message: `Provider adapter "${definition.packageName}" does not export "${definition.factoryName}".`,
     category: 'config',
-    recoverable: true,
-    exitCode: 2,
     details: {
       provider: definition.providerId,
       packageName: definition.packageName,
@@ -262,8 +256,6 @@ export const resolveProviderModelAlias = async (
         code: 'provider_adapter_missing',
         message: `Provider adapter "${definition.packageName}" is not installed. Install it with: npm install ${definition.packageName}`,
         category: 'config',
-        recoverable: true,
-        exitCode: 2,
         details: {
           provider: definition.providerId,
           packageName: definition.packageName

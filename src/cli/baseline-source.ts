@@ -51,8 +51,6 @@ const readSourceContent = async (
       code: 'baseline_source_unavailable',
       message: 'The review report to build a baseline from could not be read.',
       category: 'repository',
-      recoverable: true,
-      exitCode: 3,
       details: { reportPath }
     })
   }
@@ -71,8 +69,6 @@ const reportFromSourceContent = (
       code: 'baseline_source_invalid',
       message: `The file at "${reportPath}" is not valid JSON, so it cannot be a review report. Point --report at a run's report.json.`,
       category: 'repository',
-      recoverable: true,
-      exitCode: 3,
       details: { reportPath }
     })
   }
@@ -84,8 +80,6 @@ const reportFromSourceContent = (
       code: 'baseline_source_invalid',
       message: `The file at "${reportPath}" is valid JSON but is not a review report, so no baseline can be built from it. Point --report at a run's report.json.`,
       category: 'repository',
-      recoverable: true,
-      exitCode: 3,
       details: {
         reportPath,
         // The first issue names the field that decided it — enough to tell a
@@ -120,8 +114,6 @@ export const resolveBaselineSourceReport = async (
       message:
         'No completed review report was found to build a baseline from. Run a review first, or pass --report <path>.',
       category: 'repository',
-      recoverable: true,
-      exitCode: 3,
       details: { artifactDir: input.artifactDir }
     })
   }

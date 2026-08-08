@@ -154,7 +154,10 @@ describe('recovery advice is possible to follow', () => {
     })
     for (const error of [change, intent, obligations]) {
       expect(error.exitCode).toBe(4)
-      expect(error.category).toBe('config')
+      // Its own category, not 'config': spec 23 requires these refusals to exit 4,
+      // and the exit code is derived from the category rather than hand-typed
+      // beside it.
+      expect(error.category).toBe('input-limit')
     }
   })
 })

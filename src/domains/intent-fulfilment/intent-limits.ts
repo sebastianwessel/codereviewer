@@ -108,9 +108,7 @@ export const intentChangeTooLargeError = (input: {
           'check a smaller change: narrow the base/head range to fewer commits, ' +
           'or split the change into separately reviewable ones'
       }),
-    category: 'config',
-    recoverable: true,
-    exitCode: 4,
+    category: 'input-limit',
     details: {
       changedLineCount: input.changedLineCount,
       maxChangeLines: input.maxChangeLines
@@ -148,9 +146,7 @@ export const intentTooLargeError = (input: {
           'hand in less stated intent: point contextSources at fewer providers, ' +
           'or at the section under review rather than the whole document'
       }),
-    category: 'config',
-    recoverable: true,
-    exitCode: 4,
+    category: 'input-limit',
     details: {
       intentBytes: input.intentBytes,
       intentBytesIsLowerBound: input.intentBytesIsLowerBound === true,
@@ -179,9 +175,7 @@ export const tooManyObligationsError = (input: {
           'contextSources at the section under review rather than the whole ' +
           'document, and run the remaining sections separately'
       }),
-    category: 'config',
-    recoverable: true,
-    exitCode: 4,
+    category: 'input-limit',
     details: {
       obligationCount: input.obligationCount,
       maxObligations: input.maxObligations

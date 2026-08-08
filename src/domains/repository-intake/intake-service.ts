@@ -184,8 +184,6 @@ const assertSafeGitRef = (ref: string | undefined, fieldName: string): string =>
       code: 'invalid_git_ref',
       message: 'Git refs must be non-empty and must not start with "-".',
       category: 'config',
-      recoverable: true,
-      exitCode: 2,
       details: { field: fieldName }
     })
   }
@@ -463,8 +461,6 @@ const resolveMergeBase = async (
       message:
         'No merge base exists for the configured base and head refs. Fetch enough history for both refs (for example a full-depth checkout) and retry.',
       category: 'repository',
-      recoverable: true,
-      exitCode: 3,
       details: { baseRef, headRef }
     })
   }
@@ -622,8 +618,6 @@ export const collectRepositoryIntake = async (
         message:
           'The base and head refs differ by no files, so there is nothing to review. This usually means the two refs are the wrong way round, or the head is already contained in the base. Refused rather than reported as a passing review over zero files.',
         category: 'repository',
-        recoverable: true,
-        exitCode: 3,
         details: {
           baseRef: options.baseRef,
           headRef: options.headRef,

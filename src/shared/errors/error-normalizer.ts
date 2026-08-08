@@ -72,6 +72,13 @@ export type StructuredErrorCategory =
   | 'config'
   | 'repository'
   | 'provider'
+  // Input exceeded a runaway guard — the intent lane's line/obligation/byte
+  // ceilings. Its own category because spec 23 requires the refusal to exit 4,
+  // "distinct from configuration/usage (2) and repository failure (3)", and the
+  // exit code is derived from the category. Before this existed the three call
+  // sites declared `category: 'config'` and then overrode `exitCode: 4` by hand,
+  // which is the disagreement the derivation exists to make unrepresentable.
+  | 'input-limit'
   | 'admission'
   | 'report'
   | 'quality-gate'
@@ -82,7 +89,10 @@ export type StructuredErrorCategory =
 // silently forgotten in the other. `quality-gate` is excluded because it is a
 // completion signal a gate constructs deliberately, never a classification
 // `normalizeError` infers from an arbitrary thrown value.
-export type ErrorSource = Exclude<StructuredErrorCategory, 'quality-gate'>
+export type ErrorSource = Exclude<
+  StructuredErrorCategory,
+  'quality-gate' | 'input-limit'
+>
 
 export type StructuredErrorDetailValue = string | number | boolean | null
 
@@ -107,28 +117,12 @@ export type NormalizeErrorOptions = RedactorOptions & {
 
 // Construct a StructuredError, defaulting `details` to an empty object. Shared
 // so domains do not each redefine the same helper.
-export const createStructuredError = (
-  error: Omit<StructuredError, 'details'> & {
-    readonly details?: StructuredError['details']
-  }
-): StructuredError => ({
-  ...error,
-  details: error.details ?? {}
-})
-
-const defaultMessagesBySource: Readonly<Record<ErrorSource, string>> = {
-  config: 'Configuration failed.',
-  repository: 'Repository operation failed.',
-  provider: 'Provider operation failed.',
-  admission: 'Admission failed.',
-  report: 'Report operation failed.',
-  internal: 'Unexpected internal error.'
-}
-
 const exitCodeByCategory: Readonly<Record<StructuredErrorCategory, number>> = {
   config: 2,
   repository: 3,
   provider: 4,
+  // Spec 23: a runaway-guard refusal exits 4, deliberately not 2.
+  'input-limit': 4,
   // A failed quality/drift gate is a meaningful completion signal, not a crash.
   'quality-gate': 1,
   admission: 5,
@@ -140,10 +134,43 @@ const recoverableByCategory: Readonly<Record<StructuredErrorCategory, boolean>> 
   config: true,
   repository: true,
   provider: true,
+  'input-limit': true,
   'quality-gate': true,
   admission: false,
   report: false,
   internal: false
+}
+
+// `exitCode` and `recoverable` are DERIVED from the category, never passed in.
+//
+// They used to be parameters, and every one of ~26 call sites re-typed the pairing
+// this module already encoded in the two tables above. Nothing checked the two
+// against each other, and they had already drifted: the explicitly-requested-config
+// -missing error declared `category: 'config'` with `recoverable: false`, while
+// every other config error — and the table — says config errors are recoverable.
+// The author appears to have meant "this run stops", which is a different statement
+// from the one `recoverable` makes.
+//
+// A wrong exit code is invisible in tests and visible in CI, so the pairing is now
+// impossible to get wrong: pick the category, get its contract.
+export const createStructuredError = (
+  error: Omit<StructuredError, 'details' | 'exitCode' | 'recoverable'> & {
+    readonly details?: StructuredError['details']
+  }
+): StructuredError => ({
+  ...error,
+  exitCode: exitCodeByCategory[error.category],
+  recoverable: recoverableByCategory[error.category],
+  details: error.details ?? {}
+})
+
+const defaultMessagesBySource: Readonly<Record<ErrorSource, string>> = {
+  config: 'Configuration failed.',
+  repository: 'Repository operation failed.',
+  provider: 'Provider operation failed.',
+  admission: 'Admission failed.',
+  report: 'Report operation failed.',
+  internal: 'Unexpected internal error.'
 }
 
 const isErrorWithMessage = (value: unknown): value is { readonly message: string } =>

@@ -25,7 +25,5 @@ export const analyzerArtifactError = (input: {
     code: input.code,
     message: input.message,
     category: 'config',
-    recoverable: true,
-    exitCode: 2,
     ...(input.details === undefined ? {} : { details: input.details })
   })

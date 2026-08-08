@@ -120,6 +120,10 @@ shown. Nothing is truncated in any of the three.
 | Code | Exit | When |
 | --- | --- | --- |
 | `intent_change_too_large` | `4` | The change has more citable lines than `intentFulfilment.maxChangeLines` allows. |
+
+> The three `intent_*` refusals above carry category `input-limit`, whose exit
+> code is `4` by definition. The category determines the exit code — it is never
+> written beside it, so the two cannot disagree.
 | `intent_text_too_large` | `4` | The stated intent is larger than `intentFulfilment.maxIntentBytes` allows. |
 | `intent_too_many_obligations` | `4` | The stated intent yielded at least as many obligations as `intentFulfilment.maxObligations` allows. |
 

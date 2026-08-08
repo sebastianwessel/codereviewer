@@ -36,8 +36,6 @@ export const configureOpenTelemetry = async (options: {
       code: 'opentelemetry_endpoint_missing',
       message: 'OpenTelemetry endpoint is required when telemetry is enabled.',
       category: 'config',
-      recoverable: true,
-      exitCode: 2
     })
   }
 
@@ -55,8 +53,6 @@ export const configureOpenTelemetry = async (options: {
         message:
           'OpenTelemetry dependencies are not installed. Install @opentelemetry/sdk-trace-node and @opentelemetry/exporter-trace-otlp-http to enable telemetry.',
         category: 'config',
-        recoverable: true,
-        exitCode: 2,
         details: {
           cause: error instanceof Error ? error.message : String(error)
         }

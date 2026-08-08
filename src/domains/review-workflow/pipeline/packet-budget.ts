@@ -19,8 +19,6 @@ export const createTaskPacketBudgetExceededError = (
     message:
       'Review task packet exceeds the configured provider input budget. The packet was not truncated; split the review scope further or increase the provider task budget.',
     category: 'provider',
-    recoverable: true,
-    exitCode: 4,
     details: {
       taskId: input.taskId,
       maxTaskInputBytes: input.maxTaskInputBytes,
@@ -51,8 +49,6 @@ export const createIndivisibleTaskError = (
     message:
       'The provider refused this review task as exceeding its context length, and the task cannot be split further. Nothing was truncated. Review a smaller change, or configure a model with a larger context window.',
     category: 'provider',
-    recoverable: true,
-    exitCode: 4,
     details: {
       taskId: input.taskId,
       splitDepth: input.splitDepth,

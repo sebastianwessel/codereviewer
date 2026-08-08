@@ -73,8 +73,6 @@ const hashAllowedInstructionContent = (
         code: 'instruction_read_denied',
         message: `Instruction file "${instruction.path}" is not allowed for this review run.`,
         category: 'config',
-        recoverable: true,
-        exitCode: 2,
         details: {
           path: instruction.path
         }
@@ -93,8 +91,6 @@ const hashAllowedSkillContent = (
         code: 'skill_read_denied',
         message: `Skill "${skill.name}" is not allowed for this review run.`,
         category: 'config',
-        recoverable: true,
-        exitCode: 2,
         details: {
           name: skill.name,
           path: skill.path
