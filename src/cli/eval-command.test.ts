@@ -2058,10 +2058,9 @@ describe('eval CLI', () => {
       await writeFile(join(root, 'base-1.json'), JSON.stringify(evalReport()))
       await writeFile(
         join(root, 'head-1.json'),
-        JSON.stringify({
-          ...evalReport(),
-          metrics: { ...evalReport().metrics, recall: 0, providerErrorRate: 1 }
-        })
+        JSON.stringify(
+          evalReport({ metrics: { recall: 0, providerErrorRate: 1 } })
+        )
       )
 
       const result = await runCli(

@@ -174,3 +174,22 @@ const numberWords = [
  */
 export const numberWord = (value: number): string =>
   numberWords[value] ?? String(value)
+
+/**
+ * What an empty findings list means, in one sentence, for EVERY surface that
+ * renders one.
+ *
+ * The numbers in this module were made data because prose cannot import a number.
+ * This sentence is here for the same reason one step further out: the number was
+ * shared and the SENTENCE around it was not, so `markdown-reporter.ts` and
+ * `scripts/github/summary-comment.ts` each carried their own copy. They had
+ * already diverged — "not looked for at all" against "not searched for at all",
+ * "Read it as" against "read this as" — while the reporter's own comment claimed
+ * the text was reused so the two could not drift apart. It was not, and they had.
+ *
+ * A reader meeting an empty list is the one reader most likely to take it as a
+ * clearance, so the wording that refuses that reading is the last thing that
+ * should exist in two editable copies.
+ */
+export const NOTHING_PROVED = `This run proved no defect it could act on. That is a statement about this search and not about the change: roughly ${numberWord(inDiffMissesInTen)} in ten defects inside the diff are missed on the measured corpus, and defects outside the diff are not looked for at all. Read it as "this search found nothing", never as "there is nothing to find".`
+

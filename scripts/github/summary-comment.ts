@@ -13,10 +13,9 @@
 // escapes every `<`.
 import {
   adjustedPrecisionInTwenty,
-  inDiffMissesInTen,
+  NOTHING_PROVED,
   inDiffRecallInTen,
   measuredReliability,
-  numberWord,
   MEASURED_ON_MODEL,
   MEASURED_ON_PROVIDER
 } from '../../src/domains/reporting/measured-reliability.js'
@@ -183,10 +182,9 @@ const findingsSection = (review: ReviewDigest): string => {
     return [
       '### Findings (0)',
       '',
-      // Derived from the same measurement as everything else on this comment.
-      // Written as prose here it said "two in five missed", the complement of the
-      // superseded 61% recall, and survived the re-baseline unnoticed.
-      `This run proved no defect it could act on. Roughly ${numberWord(inDiffMissesInTen)} in ten defects inside the diff are missed on the measured corpus, and defects outside the diff are not searched for at all, so read this as "the search found nothing" rather than "there is nothing to find".`
+      // The one shared sentence. It lived here as a second copy that had already
+      // drifted from the reporter's wording; it is imported now so it cannot again.
+      NOTHING_PROVED
     ].join('\n')
   }
 

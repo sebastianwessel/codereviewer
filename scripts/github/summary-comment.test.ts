@@ -4,7 +4,8 @@ import {
   inDiffRecallInTen,
   measuredReliability,
   MEASURED_ON_MODEL,
-  MEASURED_ON_PROVIDER
+  MEASURED_ON_PROVIDER,
+  NOTHING_PROVED
 } from '../../src/domains/reporting/measured-reliability.js'
 import {
   renderSummaryComment,
@@ -111,7 +112,8 @@ describe('renderSummaryComment', () => {
     )
 
     expect(body).toContain('### Findings (0)')
-    expect(body).toContain('rather than "there is nothing to find"')
+    // The shared sentence itself, so this test cannot pin a private variant of it.
+    expect(body).toContain(NOTHING_PROVED)
   })
 
   // The figures themselves are checked against the ledger, for this renderer AND

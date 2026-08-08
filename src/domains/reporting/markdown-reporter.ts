@@ -25,9 +25,9 @@ import type {
 } from '../../shared/contracts/index.js'
 import {
   adjustedPrecisionInTwenty,
-  inDiffMissesInTen,
   inDiffRecallInTen,
   measuredReliability,
+  NOTHING_PROVED,
   numberWord
 } from './measured-reliability.js'
 import {
@@ -80,11 +80,6 @@ const WHAT_THIS_IS =
 // measured 2026-08-02 on that command's deterministic core), so it is named here
 // rather than left as an unexplained hole.
 const MEASURED_RELIABILITY = `Measured reliability, so these findings can be weighed rather than trusted. On a ${measuredReliability.corpusCaseCount}-case real-repository corpus with the engine pinned: about **${inDiffRecallInTen} in 10** defects sitting INSIDE the diff were found (in-diff recall mean ${measuredReliability.inDiffRecallPercent}% over ${numberWord(measuredReliability.runCount)} runs, standard deviation ${measuredReliability.inDiffRecallStandardDeviationPp}pp), and **${measuredReliability.outOfDiffRecallFound} of ${measuredReliability.outOfDiffRecallTotal}** defects sitting outside the diff in the very same changed files were found — a measured zero over a full denominator, and by design, since this stage is diff-scoped and \`impact check\` is the stage that covers that population. Of what it does report, roughly **${adjustedPrecisionInTwenty} in 20** stand up under review (adjusted precision mean ${measuredReliability.adjustedPrecisionPercent}%). Two runs over the same commit do not produce the same report.`
-
-// The sentence that has to be right when the list is short, and the one most
-// easily replaced by a congratulation. Reused wherever an empty findings list is
-// rendered so the two cannot drift apart.
-const NOTHING_PROVED = `This run proved no defect it could act on. That is a statement about this search and not about the change: roughly ${numberWord(inDiffMissesInTen)} in ten defects inside the diff are missed on the measured corpus, and defects outside the diff are not looked for at all. Read it as "this search found nothing", never as "there is nothing to find".`
 
 const countBy = <T extends string>(
   values: readonly T[]

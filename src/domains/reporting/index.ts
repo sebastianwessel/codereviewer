@@ -43,7 +43,7 @@ export {
 export {
   adjustedPrecisionInTwenty,
   falseSatisfiedOneIn,
-  inDiffMissesInTen,
+  NOTHING_PROVED,
   inDiffRecallInTen,
   measuredIntentReliability,
   measuredReliability,

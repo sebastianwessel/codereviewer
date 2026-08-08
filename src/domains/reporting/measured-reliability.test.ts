@@ -15,7 +15,7 @@ import {
 } from '../../../scripts/github/summary-comment.js'
 import {
   adjustedPrecisionInTwenty,
-  inDiffMissesInTen,
+  NOTHING_PROVED,
   inDiffRecallInTen,
   measuredReliability,
   MEASURED_ON_MODEL,
@@ -205,10 +205,10 @@ describe('published reliability figures', () => {
     })
     const comment = summaryComment({ review: emptyReviewDigest() })
 
-    const missed = ['zero', 'one', 'two', 'three', 'four'][inDiffMissesInTen]
-
-    expect(report).toContain(`roughly ${missed} in ten defects inside the diff`)
-    expect(comment).toContain(`Roughly ${missed} in ten defects inside the diff`)
+    // Asserted against the exported sentence, not a literal: a test holding its own
+    // copy is a third place to update and is how the previous drift survived CI.
+    expect(report).toContain(NOTHING_PROVED)
+    expect(comment).toContain(NOTHING_PROVED)
   })
 
   test('no surface still carries a rate from a superseded sweep', () => {
@@ -221,6 +221,34 @@ describe('published reliability figures', () => {
       expect(surface).not.toContain('two in five')
       expect(surface).not.toContain('61.1%')
       expect(surface).not.toContain('99.1%')
+    }
+  })
+
+  // The numbers were centralised here after a re-baseline moved one renderer and
+  // not the other. The SENTENCE around them stayed duplicated and diverged the same
+  // way, so it is pinned to one source too.
+  test('both empty-findings surfaces render the one shared sentence', async () => {
+    const reporter = await readFile(
+      'src/domains/reporting/markdown-reporter.ts',
+      'utf8'
+    )
+    const summary = await readFile(
+      'scripts/github/summary-comment.ts',
+      'utf8'
+    )
+
+    for (const [name, source] of [
+      ['markdown-reporter.ts', reporter],
+      ['summary-comment.ts', summary]
+    ] as const) {
+      expect(
+        source.includes('NOTHING_PROVED'),
+        `${name} must import the shared sentence`
+      ).toBe(true)
+      expect(
+        source.includes('This run proved no defect it could act on.'),
+        `${name} must not carry its own copy of the sentence`
+      ).toBe(false)
     }
   })
 })
