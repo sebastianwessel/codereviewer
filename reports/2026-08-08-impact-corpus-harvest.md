@@ -68,3 +68,55 @@ single expectation moves a rate by ~20 points, so the bar is currently unreachab
 in either direction — the measurement cannot fail it either.
 
 Two candidates take that to ~13. That is not the fix; continuing the harvest is.
+
+---
+
+## Continuation run, and the projection missed by 6.7x
+
+**11 new candidates from 9,987 further commit bodies** across ~8,493 repositories.
+Running total **14 from 10,392 bodies**.
+
+| run | bodies | candidates | rate |
+| --- | --- | --- | --- |
+| prior (targeted, curated repo list) | 405 | 3 | 1 per 135 |
+| continuation (global search) | 9,987 | 11 | **1 per 907** |
+| combined | 10,392 | 14 | 1 per 742 |
+
+**The rate decayed 6.7x, and my projection was wrong.** I wrote that ~40 more
+candidates needed "roughly 5,400 bodies". At the rate actually observed it needs
+**~36,000**. The projection assumed the 1-per-135 rate would roughly hold; it did not,
+because the first run had spent the best phrases against a hand-picked repository
+list and the continuation had to search globally and filter afterwards.
+
+What saved that from being a false claim is the caveat attached to it at the time —
+"5,400 is a floor on the effort, not an estimate of it" — which was written precisely
+because a targeted search spends its best material first. The caveat was right and the
+headline number was optimistic; both should be read together, and the number alone
+should not be quoted.
+
+## The finding that changes future harvests
+
+A dedicated wave scoped the best-performing phrases against **61 large, well-known
+projects** — vite, fastapi, tokio, ripgrep, helm, tauri, etcd and similar — and
+returned **zero hits on 233 of 244 queries**.
+
+Explicit regression attribution ("fixes a regression introduced in #NNNN") is a
+**small-and-mid-project commit-message convention**, not one flagship OSS projects
+use much. That inverts the intuition a harvest starts from: the biggest, most active
+repositories are the *worst* place to look for this ground truth, and the yield lives
+in smaller projects whose maintainers write more explanatory commit messages.
+
+It also sharpens what spec 22 already says. The binding constraint is commit-message
+convention — and this run locates that convention socially, in a particular size of
+project, rather than treating it as uniform background noise.
+
+## Status against the Wave 1.2 target
+
+14 candidates at the historical ~45% curation rate is roughly **6 cases**, taking the
+corpus from 11 proven dependents to about **19**. Spec 22's promote bar needs ~50.
+
+**Wave 1.2's target is not met and is not close.** Reaching it needs roughly 36,000
+more bodies at the observed rate — feasible, but it is days of harvesting rather than
+an afternoon, and the honest position is that the impact lane's bar stays out of reach
+until someone spends that.
+

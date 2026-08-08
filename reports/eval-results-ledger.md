@@ -2970,3 +2970,26 @@ self-agreement ceiling puts a further 13% of run-to-run noise under a 6.5pp targ
 **Thresholds recorded so nobody re-derives them:** 2.1 needs ~40 more proven
 dependents; 2.2 needs ~240 statements (roughly double today's ~126) to resolve 6.5pp.
 Both are curation, not research.
+
+### Continuation harvest (same day): 11 more candidates, rate 6.7x worse, projection missed
+
+**11 new from 9,987 bodies** (~8,493 repositories); running total **14 from 10,392**.
+
+| run | bodies | candidates | rate |
+|---|---|---|---|
+| targeted, curated repo list | 405 | 3 | 1 per 135 |
+| global search | 9,987 | 11 | **1 per 907** |
+
+**The "~5,400 bodies for 40 candidates" projection above was optimistic by 6.7x**; at
+the observed rate it is ~36,000. It held only because it was published as "a floor on
+effort, not an estimate" — the caveat was right, the headline was not, and the number
+must not be quoted alone.
+
+**The reusable finding:** the best phrases scoped against **61 flagship projects**
+(vite, fastapi, tokio, ripgrep, helm, tauri, etcd, …) returned **zero hits on 233 of
+244 queries**. Explicit regression attribution is a small-and-mid-project commit
+convention. The largest repositories are the WORST place to look for this ground
+truth — the opposite of where a harvest instinctively starts.
+
+**Wave 1.2's target is not met.** 14 candidates at ~45% curation is ~6 cases, taking
+11 proven dependents to ~19 against a bar needing ~50.
