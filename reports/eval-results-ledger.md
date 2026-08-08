@@ -3055,3 +3055,38 @@ Two curators are now answering all 30 independently, each blind to the other and
 the maintainer's words, which are withheld from their input by construction. The
 pre-registered thresholds (>= 70% build a corpus, 50-70% record and stop, < 50% the
 lane is not built) were fixed in spec 31 before any of this existed.
+
+### The first agreement run was INVALID, and a curator caught it
+
+**My defect.** I built the curators' input by stripping `reviewerObjectionVerbatim`
+and `whatChangedVerbatim` from the candidate records — and left the `id`, which the
+harvest had written as a descriptive slug:
+
+```
+postgrest-postgrest-5125-loggerstate-encapsulation
+harttle-liquidjs-863-token-template-layering-violation
+leanprover-community-physlib-1425-distribution-folder-misplaced
+juliamolsim-dftk-jl-1099-avoid-special-casing-gpu
+```
+
+Those **are** the objections. Both curators saw them as the primary key of their own
+input, so any agreement between them is inflated by a shared hint and says nothing
+about whether design objections are independently identifiable. **Run 1 is discarded,
+not adjusted** — a contaminated agreement rate cannot be corrected downward by
+argument.
+
+Curator B reported it unprompted, as a threat to the study it was participating in,
+having independently verified each case against the code anyway. Curator A separately
+self-reported one case where the maintainer's text reached it through an unfiltered
+`pulls/reviews` fetch. **Both disclosures came from the instruction that a labelled
+contamination is usable and an unlabelled one is poison** — without it, the study
+would have produced a clean-looking number built on a leak I introduced.
+
+Re-run under way with neutral `case-01`…`case-30` identifiers and an explicit
+do-not-open list covering the answer key, the old leaky input, and the other
+curators' files. Spec 31's thresholds are unchanged and were fixed before any of
+this existed.
+
+**The generalisable lesson: redaction must be verified by reading what the subject
+actually sees, not by listing the fields you removed.** I checked my own redaction
+against my intent rather than against the artefact.
