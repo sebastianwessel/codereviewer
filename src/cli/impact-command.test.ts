@@ -411,15 +411,21 @@ describe('impact CLI', { timeout: 20_000 }, () => {
         ['impact', 'check', '--base-ref', 'main~1', '--head-ref', 'HEAD'],
         { cwd: root, environment: {} }
       )
-      // An empty range: no changed file, therefore no symbol and no reference.
+      // A REAL change that nothing references. Previously this case was reached with
+      // `--base-ref HEAD --head-ref HEAD`, an empty range — but an empty range is now
+      // refused, because a report saying "nothing is impacted" over zero changed
+      // files reads as safety when it means the refs were degenerate.
+      await writeFile(join(root, 'unreferenced.ts'), 'export const orphan = 1\n')
+      git(root, ['add', 'unreferenced.ts'])
+      git(root, ['commit', '-m', 'add an unreferenced symbol'])
+
       const withoutReferences = await runCli(
-        ['impact', 'check', '--base-ref', 'HEAD', '--head-ref', 'HEAD'],
+        ['impact', 'check', '--base-ref', 'HEAD~1', '--head-ref', 'HEAD'],
         { cwd: root, environment: {} }
       )
 
       expect(parseReport(withReferences.stdout).summary.referenceCount).toBe(4)
       expect(withReferences.exitCode).toBe(0)
-      expect(parseReport(withoutReferences.stdout).changedSymbols).toEqual([])
       expect(parseReport(withoutReferences.stdout).impactedFiles).toEqual([])
       expect(withoutReferences.exitCode).toBe(0)
     } finally {

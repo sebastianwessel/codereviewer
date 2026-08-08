@@ -605,6 +605,32 @@ export const collectRepositoryIntake = async (
       pathFlavor,
       mergeBase
     )
+
+    // A git-derived review that finds NOTHING to diff must not proceed. Every later
+    // stage treats an empty change set exactly as it treats a clean one: zero files
+    // read, zero findings, quality gate PASSED, exit 0 — a green review that
+    // examined nothing. The common causes are `--base-ref` and `--head-ref` the
+    // wrong way round, and a head branch already contained in the base; both are
+    // silent today.
+    //
+    // Checked here rather than at the merge base so it covers every cause of an
+    // empty diff, and costs no extra git call. Exclusion by config is NOT this
+    // case: those paths are filtered later, from a non-empty diff.
+    if (usesGitDiff && changedPaths.length === 0) {
+      throw createStructuredError({
+        code: 'no_reviewable_change',
+        message:
+          'The base and head refs differ by no files, so there is nothing to review. This usually means the two refs are the wrong way round, or the head is already contained in the base. Refused rather than reported as a passing review over zero files.',
+        category: 'repository',
+        recoverable: true,
+        exitCode: 3,
+        details: {
+          baseRef: options.baseRef,
+          headRef: options.headRef,
+          ...(mergeBase === undefined ? {} : { mergeBase })
+        }
+      })
+    }
     const inspectedRecords = await inspectChangedPathsWithinLimit({
       repositoryRoot: options.repositoryRoot,
       changedPaths,

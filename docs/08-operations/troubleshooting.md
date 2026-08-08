@@ -112,6 +112,22 @@ directories fail the run.
 
 ## Repository and git
 
+### `no_reviewable_change` — exit 3
+
+The base and head refs differ by **no files**, so there was nothing to review.
+
+Almost always one of two things:
+
+- `--base-ref` and `--head-ref` are the wrong way round;
+- the head branch is already contained in the base (behind it, or already merged).
+
+This is refused rather than reported, deliberately. An empty change set otherwise
+travels through every later stage looking exactly like a clean one — zero files read,
+zero findings, **quality gate passed, exit 0** — so a swapped pair of refs produced a
+green CI gate on a review that examined nothing.
+
+Fix the ref order, or rebase the head onto the base, and re-run.
+
 ### `merge_base_unavailable` — exit 3
 
 > No merge base exists for the configured base and head refs. Fetch enough

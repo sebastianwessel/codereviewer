@@ -352,6 +352,50 @@ describe('repository intake', () => {
     expect(intake.skippedFiles).toEqual([])
   })
 
+  // A head already contained in base has NOTHING for the diff to report, so every
+  // downstream stage sees an empty change set and the run reports a PASSING quality
+  // gate over zero files. That is the dangerous shape: swapping --base-ref and
+  // --head-ref, or pointing at a branch that is behind, produced a green CI gate on
+  // a review that examined nothing.
+  test('refuses a git-derived review whose refs differ by no files', async () => {
+    const repositoryRoot = await createFixtureRepository()
+    const runGit = scriptedGitRunner({
+      'merge-base main HEAD': `${mergeBaseSha}\n`,
+      [`diff --name-status ${mergeBaseSha} HEAD`]: ''
+    })
+
+    await expect(
+      collectRepositoryIntake({
+        repositoryRoot,
+        baseRef: 'main',
+        headRef: 'HEAD',
+        runGit
+      })
+    ).rejects.toMatchObject({
+      code: 'no_reviewable_change',
+      category: 'repository',
+      exitCode: 3
+    })
+  })
+
+  test('still reviews when the head has its own commits', async () => {
+    const repositoryRoot = await createFixtureRepository()
+    const runGit = scriptedGitRunner({
+      'merge-base main HEAD': `${mergeBaseSha}\n`,
+      [`diff --name-status ${mergeBaseSha} HEAD`]: 'M\tsrc/app.ts\n',
+      [`diff --unified=0 ${mergeBaseSha} HEAD -- src/app.ts`]: ''
+    })
+
+    const intake = await collectRepositoryIntake({
+      repositoryRoot,
+      baseRef: 'main',
+      headRef: 'HEAD',
+      runGit
+    })
+
+    expect(intake.changedFiles.map((file) => file.path)).toEqual(['src/app.ts'])
+  })
+
   test('fails with merge_base_unavailable when the refs share no history', async () => {
     await expect(
       collectRepositoryIntake({

@@ -125,7 +125,7 @@ disk:
 | Invalid configuration | `config_error` | `2` |
 | Provider setup problem | `provider_adapter_missing`, `provider_credentials_missing`, `provider_base_url_missing`, `provider_adapter_invalid` | `2` |
 | Hard drift findings block the run | `drift_gate_failed` | `1` |
-| Git or filesystem intake failure | `merge_base_unavailable`, `repository_error`, `repository_timeout` | `3` |
+| Git or filesystem intake failure | `merge_base_unavailable`, `no_reviewable_change`, `repository_error`, `repository_timeout` | `3` |
 | Instruction or skill path denied | `instruction_read_denied`, `skill_read_denied` | `2` |
 
 The drift gate runs as the **first** preflight step, before intake, so a
