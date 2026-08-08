@@ -104,6 +104,53 @@ describe('change impact run', () => {
     ])
   })
 
+  // A seeded symbol nobody references and a symbol that was never seeded look
+  // identical in the report: both end at zero reference files. They call for
+  // opposite work — the first is a reachability limit this engine documents, the
+  // second is a seeding defect — and conflating them sent this project's own
+  // ledger to the wrong diagnosis for three corpus cases.
+  test('distinguishes a symbol nobody references from a symbol never seeded', async () => {
+    const root = join(tmpdir(), `codereviewer-impact-unreferenced-${crypto.randomUUID()}`)
+
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(
+      join(root, 'src', 'orphan.ts'),
+      'export const orphan = (id: string) => id\n'
+    )
+
+    try {
+      const report = await runChangeImpact({
+        repositoryRoot: root,
+        config: enabledConfig,
+        baseRef: 'main',
+        headRef: 'HEAD',
+        generatedAt,
+        readChangedFile: readChangedFile(root),
+        runGit: scriptedGit({
+          'merge-base main HEAD': `${mergeBaseSha}\n`,
+          [`diff --name-status ${mergeBaseSha} HEAD`]: 'M\tsrc/orphan.ts\n',
+          [`diff --unified=0 ${mergeBaseSha} HEAD -- src/orphan.ts`]:
+            'diff --git a/src/orphan.ts b/src/orphan.ts\n' +
+            '--- a/src/orphan.ts\n+++ b/src/orphan.ts\n@@ -1,1 +1,1 @@\n' +
+            '-export const orphan = () => null\n' +
+            '+export const orphan = (id: string) => id\n'
+        })
+      })
+
+      expect(report.summary.changedSymbolCount).toBeGreaterThan(0)
+      expect(report.summary.referenceCount).toBe(0)
+      expect(
+        report.warnings.some((warning) => warning.includes('no reference to any of them'))
+      ).toBe(true)
+      // The seeding warning must NOT fire: symbols were seeded.
+      expect(
+        report.warnings.some((warning) => warning.includes('No changed symbols were seeded'))
+      ).toBe(false)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('seeds from the diff, including a deleted file, and reports every reference site', async () => {
     const root = await createRepo()
     const issued: string[][] = []

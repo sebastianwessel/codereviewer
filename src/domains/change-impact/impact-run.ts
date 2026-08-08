@@ -90,6 +90,20 @@ export type ChangeImpactAgents = {
 const NO_SYMBOLS_SEEDED_WARNING =
   'No changed symbols were seeded from the changed files. Either the files are in a language the deterministic signal extractors do not cover, or none of the changed lines fall inside a symbol this engine can name.'
 
+// The other way to reach zero reference files, and it calls for the opposite work.
+//
+// A run that seeds symbols and finds nothing referencing them has done its job: the
+// dependent may be reached by a relation no name-based search can follow (an
+// attribute owner, a dynamic dispatch), which spec 22 documents as this lane's
+// reachability ceiling. A run that seeds NOTHING has not looked at all.
+//
+// Both end at `referenceCount: 0`, so without this line a reader — and this
+// project's own ledger, which recorded three corpus cases as seeding defects when
+// two of them were correctly seeded and structurally unreachable — cannot tell a
+// limit from a defect.
+const NO_REFERENCES_FOUND_WARNING =
+  'Changed symbols were seeded, but the search found no reference to any of them. This is a limit of name-based search, not a failure to seed: a dependent linked by a relation no textual search can follow is invisible here. It is NOT evidence that nothing depends on the change.'
+
 // Skip reasons that mean a changed file's head side was NOT seen. `deleted` and
 // `excluded` are absent on purpose: a deleted file has no head side to miss, and
 // an excluded one is a deliberate scope decision rather than a failure to look.
@@ -491,6 +505,8 @@ export const runChangeImpact = async (
 
   if (files.length > 0 && changed.symbols.length === 0) {
     warnings.push(NO_SYMBOLS_SEEDED_WARNING)
+  } else if (changed.symbols.length > 0 && siteCount(grouped.impactedFiles) === 0) {
+    warnings.push(NO_REFERENCES_FOUND_WARNING)
   }
 
   if (unreadableFileCount > 0) {

@@ -145,6 +145,31 @@ claim in user-facing documentation.
   or the diff review.
 - The capability is **disabled by default** until measured.
 
+## Zero References Has Two Causes And They Must Be Told Apart
+
+A run can end at `referenceCount: 0` two ways, and they call for opposite work:
+
+- **Nothing was seeded.** No changed line fell inside a symbol this engine can
+  name, or the files are in a language the extractors do not cover. The lane did
+  not look. This is a defect to fix.
+- **Symbols were seeded and nothing references them.** The lane looked and the
+  dependent is linked by a relation no name-based search can follow — an attribute
+  owner, a dynamic dispatch. This is the reachability ceiling this spec already
+  documents, not a defect.
+
+The report MUST distinguish them. Both produce identical counts, so a reader with
+only the counts cannot tell a limit from a defect — and did not: this project's own
+ledger recorded **three** corpus cases as seeding defects when only **one** was.
+The other two seeded correctly (`_combinator_query`; `build_lookup`/`build_filter`)
+and were unreachable by construction, which is a different and much weaker claim
+than the one that was published. That misdiagnosis then framed "seeding is the
+binding constraint" as the lane's headline problem for two days.
+
+Neither warning may assert a cause it did not check. The seeded-nothing wording
+already carries that scar — it once asserted "a language the extractors do not
+cover" whenever zero symbols were seeded, sending an investigation after Ruby and
+TypeScript files that were fully covered.
+
 ## Output Is Evidence, Not Verdict
 
 The useful output is *"this function has six callers; two rely on the return value

@@ -162,9 +162,28 @@ what discovery never found, so this is the denominator spec 22 pre-registered.
 
 **The binding constraint has moved, and that is the most useful finding.** Five of
 ten cases spent **zero** model calls, and three of those enumerate **no reference
-files at all** — the deterministic tier seeded no changed symbol. Adjudication is no
-longer what limits this capability; seeding and contract-delta detection are. The
-next work here is deterministic, not model work.
+files at all**. Adjudication is no longer what limits this capability; the
+deterministic tier is. The next work here is deterministic, not model work.
+
+**CORRECTION (2026-08-08): "the deterministic tier seeded no changed symbol" was
+wrong for two of those three cases.** Verified by running `collectChangedSymbols`
+against the fixtures rather than inferring from the zero:
+
+| case | seeded | why zero references |
+|---|---|---|
+| `django-messages-package-import-pulls-in-level-tag-initialisation` | **none** | genuine seeding defect: import-only diff, and `changedSymbolFactKinds` excludes `import`/`module` |
+| `django-union-default-ordering-not-cleared-for-combined-queries` | `_combinator_query` | seeded fine — `attribute-owner`, no textual link to the changed name |
+| `django-relation-transform-guards-removed-from-lookup-resolution` | `build_lookup`, `build_filter` | seeded fine — `whole-repo-search`, no textual link |
+
+So **one** seeding defect, not three; the other two are this lane's documented
+reachability ceiling. Likewise two of the five zero-model-call cases are the
+deterministic `no-impact` branch working as designed (symbols seeded, references
+found, no contract-delta dimension matched inside the changed lines) rather than
+anything failing.
+
+The misdiagnosis was possible because a seeded-but-unreferenced run and a
+never-seeded run published identical counts. Spec 22 now requires them to be
+distinguishable and the lane emits a separate warning for each.
 
 **Limits.** 11 dependents, 3 cases with any model involvement, and the largest cell
 is 5 expectations — a single expectation moves a rate by 20 points. 8 of 10 cases
