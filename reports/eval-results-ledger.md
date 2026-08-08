@@ -2739,3 +2739,8 @@ check itself, not merely told a check existed. The line therefore falls between
 
 All three conservative contamination drops are now individually adjudicated; none
 remains on the default.
+
+**Corpus is 72 cases / 74 expectations / 46 REPOSITORIES**, dev 18 / held-out 54.
+The commit message for `be06e1d` says 45 repositories; that is wrong — re-admitting
+the mermaid case added a repository and the count was not re-derived. 46 is the
+figure, recomputed from the manifest.
