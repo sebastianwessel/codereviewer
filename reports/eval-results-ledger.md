@@ -2716,3 +2716,26 @@ at 96% — is **not a defect**. Two hypotheses tested:
 
 **Cache tuning is not a lever** and **per-case cost attribution is misleading whenever
 cases share a reviewed file**. Do not re-investigate without new evidence.
+
+### Corpus amendment 2026-08-08: 72 cases / 74 expectations
+
+`radar-tick-count-accepted-without-upper-bound` (mermaid) re-admitted with a
+`removedCommentDisclosureReview`, after adjudicating it against the real diff rather
+than the quoted fragment. The flagged comment —
+`// Can't see people using more than this, since the gradient makes the diagram
+unreadable.` — sits above `const MAX_TICKS = 32` and explains why the bound is 32, an
+aesthetic rationale about legibility. It says nothing about the defect (an unbounded
+caller-supplied tick count driving unbounded work). That a bound is removed at all is
+visible in the reviewed diff, which is true of every reverse-reviewed case and is the
+signal the corpus is built on, not contamination.
+
+**The undici cookie case stays dropped, and the boundary is worth recording.** Its
+added prose is a full RFC-1034 grammar docblock specifying the domain syntax the fix
+validates. A reviewer reading a removed `validateCookieDomain` docblock is handed the
+check itself, not merely told a check existed. The line therefore falls between
+*prose about unrelated mechanics* (etcd: nil-vs-`[]byte{}` semantics — admitted),
+*prose giving a magic number's rationale* (mermaid: readability — admitted), and
+*prose specifying the removed validation* (undici — dropped).
+
+All three conservative contamination drops are now individually adjudicated; none
+remains on the default.

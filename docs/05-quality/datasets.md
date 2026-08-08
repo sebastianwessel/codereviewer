@@ -10,7 +10,7 @@ and recall on an exhaustive one are not the same quantity.
 | Code Review Bench-style | `eval/benchmarks/code-review-bench-style/` | 59 | 133 | **required** | Recall/precision on real PRs, changed files only |
 | Proof-quality slices | `eval/fixtures/proof-quality-slices/` | 15 | 14 | none | Trustworthy recall on an exhaustive key |
 | Real-repository cross-file | `eval/corpora/real-repo-cross-file/manifest.json` | 37 | 87 | **required** | Cross-file recall on full checkouts, and review of multi-file diffs |
-| Security advisory 2026 | `eval/corpora/security-advisory-2026/manifest.json` | 71 | 73 | **required** | Security recall per mechanism and per context depth, on advisory-confirmed defects |
+| Security advisory 2026 | `eval/corpora/security-advisory-2026/manifest.json` | 72 | 74 | **required** | Security recall per mechanism and per context depth, on advisory-confirmed defects |
 | Change-impact dependents | `eval/corpora/change-impact-dependents/manifest.json` | 10 | 11 | **required** | Whether `impact check` names a dependent a change provably broke |
 | Fix-lane fixture | `eval/fixtures/typescript/fix-lane/repo/` | 1 (test-only) | — | none | Fix-lane judgment, via a hermetic test |
 
@@ -373,7 +373,7 @@ stopping behaviour described in [Metrics](metrics.md#3-recall-on-an-incomplete-a
 
 ## Security-advisory corpus
 
-**What it is.** `eval/corpora/security-advisory-2026/manifest.json` — 71 cases, 73
+**What it is.** `eval/corpora/security-advisory-2026/manifest.json` — 72 cases, 74
 expected findings, 34 upstream projects, every one of the seven supported languages
 and all ten security mechanisms. Same manifest schema, same hydration script and
 same orientation as the real-repository corpus above: the tree is checked out at the

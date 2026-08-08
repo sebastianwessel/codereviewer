@@ -3029,6 +3029,54 @@
           "// between nil and []byte{} for single key / >="
         ]
       }
+    },
+    {
+      "id": "radar-tick-count-accepted-without-upper-bound",
+      "language": "typescript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/mermaid-js/mermaid.git",
+      "upstreamOwner": "mermaid-js",
+      "upstreamRepo": "mermaid",
+      "license": "MIT",
+      "source": "github-security-advisory",
+      "capturedAt": "2026-08-07",
+      "fixCommit": "59b22fad2b3bb04f87a476c84a8a2b24679e607e",
+      "fixCommittedAt": "2026-08-04T13:34:35Z",
+      "parentCommit": "99af3fc35ef0a9a9c8c6314521344d67523ddccf",
+      "reviewedPaths": [
+        "packages/mermaid/src/diagrams/radar/db.ts"
+      ],
+      "reviewIntent": "Render radar diagrams with exactly the tick count the diagram author specifies, dropping the cosmetic cap that had been applied for gradient readability. The logger import is no longer needed in the radar db.",
+      "expectedFindings": [
+        {
+          "category": "security",
+          "severity": "medium",
+          "path": "packages/mermaid/src/diagrams/radar/db.ts",
+          "lineRange": [
+            99,
+            106
+          ],
+          "matchMode": "path-semantic",
+          "tier": "security",
+          "semanticSummary": "setOptions copies the diagram author's ticks value into data.options with no upper bound and no clamp anywhere before render. The radar renderer then loops 'for (let i = 0; i < ticks; i++)' building one graticule path per tick, so diagram source such as 'ticks 1000000000' pins the JavaScript thread and grows the DOM until the tab dies of OOM. Diagram text is untrusted input wherever mermaid renders user-submitted markdown.",
+          "securityMechanism": "concurrency-resource",
+          "contextDepth": "cross-file"
+        }
+      ],
+      "tags": [
+        "security",
+        "resource-exhaustion",
+        "unchecked-loop-bound"
+      ],
+      "notes": "Curator: printed parent 99af3fc3 packages/mermaid/src/diagrams/radar/db.ts lines 99-106 and verified they are the 'data.options = { ... };' assignment inside setOptions, with 'ticks: (optionMap.ticks?.value as number) ?? defaultOptions.ticks' at line 101 and the block closing at 105-106. The fix inserts its clamp immediately after line 105, so the range names the parent code that accepts the value unbounded. Cross-file depth confirmed by printing parent renderer.ts: drawGraticule takes ticks (line 68) and loops 'for (let i = 0; i < ticks; i++)' at lines 73 and 80. Disclosure screen: the only English the fix adds to db.ts is '// Can't see people using more than this, since the gradient makes the diagram unreadable.' (a readability rationale, no security content) and a log.warn message that restates the clamp. The spec file, which does say 'causes DoS', and the .changeset file are both excluded from reviewedPaths.",
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-08",
+        "verdict": "non-disclosing",
+        "rationale": "The flagged comment is '// Can't see people using more than this, since the gradient makes the diagram unreadable.', sitting above const MAX_TICKS = 32. It explains why the bound is 32 - an aesthetic rationale about readability - and says nothing about the defect, which is that an unbounded caller-supplied tick count drives unbounded work. Rule 7's test: a reader who saw only this comment and not the code would not know what the bug is; they would learn only that someone picked 32 for legibility. That a bound is removed at all is visible in the reviewed diff itself, which is true of every reverse-reviewed case and is the signal the corpus is built on, not contamination. Verified against the real diff of 59b22fad2b3bb04f87a476c84a8a2b24679e607e.",
+        "acknowledgedComments": [
+          "// Can't see people using more than this, since the gradient makes the diagram unreadable."
+        ]
+      }
     }
   ]
 }
