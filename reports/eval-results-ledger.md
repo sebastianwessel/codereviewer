@@ -2785,3 +2785,35 @@ alias it always did, so no metric changes for identical review output.
 runs `gpt-5.3-codex`, the newest codex tier reachable. The open accuracy question is
 therefore "how much of the 64% is the model", which needs the pinned judge to answer,
 not "switch to something better".
+
+## 2026-08-08 — Reviewer model comparison, JUDGE PINNED ($10.62)
+
+The first model comparison this project could interpret. Engine `10f08d4`, 3 seeds/arm,
+alternating order, `dirty=0`, 0 provider errors, 72 cases / 74 expectations.
+**Judge pinned to `gpt-5.3-codex` in BOTH arms** (verified per report in
+`provenance.judgeModelName`). Detail:
+`reports/2026-08-08-model-comparison-result.md`.
+
+| | `gpt-5.3-codex` | `gpt-5-mini` |
+|---|---|---|
+| recall | 63.1% (sd 3.40pp) | 65.8% (sd 0.78pp) |
+| adjusted precision | **97.9%** (sd 2.04pp) | **91.9%** (sd 2.60pp) |
+| raw precision | 73.7% | 45.7% |
+| genuine false positives | **3** | **13** |
+| raw findings | 260 | 506 |
+| spend | $2.38/run | **$1.16/run (0.49x)** |
+
+**20 gained / 18 lost, two-sided exact p = 0.8714.** Fails criterion 1 (p) and criterion
+2 (adjusted precision fell 6.0pp against a 2.04pp control spread); passes the cost gate
+at 0.49x. **Not recommended as the default** — but a real operating point for cheap,
+high-recall, noisy triage, and worth documenting as a supported configuration.
+
+**The finding that matters most:** the corpus's 63–66% recall is **not a property of the
+top-tier model**. A model roughly an order of magnitude cheaper reaches the same recall
+with the same prompts, the same corpus and the same judge. With attention (4 mechanisms)
+and prompt instruction (5 clauses) already closed, **recall here is bounded by something
+neither model tier, nor attention, nor wording moves.**
+
+Caveats: 3 seeds resolve ~11pp, so recall is UNRESOLVED rather than equal; position
+balance is 2/1 not 5/5; and `gpt-5.1-codex-max` is unusable on this key (listed by
+`/v1/models`, 404 on chat-completions), so the STRONGER-tier question remains open.
