@@ -11,7 +11,7 @@ import { CHANGE_IMPACT_METRICS_VERSION } from './change-impact-metrics-versions.
 import {
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME
-} from '../rendering/eval-summary-report-rendering.js'
+} from '../rendering/summary/eval-summary-report-rendering.js'
 import { EVAL_METRICS_VERSION } from '../report/versions/eval-metrics-versions.js'
 import { EvalReportSchema } from '../report/eval-report-contracts.js'
 import {

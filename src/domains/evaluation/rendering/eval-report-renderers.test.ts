@@ -4,7 +4,7 @@ import {
   EVAL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
   renderEvalSummary
-} from './eval-summary-report-rendering.js'
+} from './summary/eval-summary-report-rendering.js'
 import { renderEvalComparison } from './comparison/eval-comparison-report-rendering.js'
 import { renderEvalRecallReport } from './eval-recall-report-rendering.js'
 import {

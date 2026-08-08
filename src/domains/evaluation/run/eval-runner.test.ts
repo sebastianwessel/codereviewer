@@ -18,7 +18,7 @@ import type {
 import type { EvalSemanticJudge } from '../judging/eval-matcher.js'
 import { renderEvalComparison } from '../rendering/comparison/eval-comparison-report-rendering.js'
 import { renderEvalRecallReport } from '../rendering/eval-recall-report-rendering.js'
-import { renderEvalSummary } from '../rendering/eval-summary-report-rendering.js'
+import { renderEvalSummary } from '../rendering/summary/eval-summary-report-rendering.js'
 import { runEvaluation } from './eval-runner.js'
 
 // Hermetic judge: answers the committed calibration set exactly as a human

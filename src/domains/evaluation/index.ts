@@ -217,7 +217,7 @@ export {
   EVAL_RECALL_REPORT_ARTIFACT_NAME,
   EVAL_SUMMARY_ARTIFACT_NAME,
   renderEvalSummary
-} from './rendering/eval-summary-report-rendering.js'
+} from './rendering/summary/eval-summary-report-rendering.js'
 export { renderEvalComparison } from './rendering/comparison/eval-comparison-report-rendering.js'
 export {
   EvalComparisonReportSchema,

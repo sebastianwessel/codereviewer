@@ -82,7 +82,7 @@ import {
   computeAnswerKeyDigest,
   computeAnswerKeyDigestByCase
 } from '../report/eval-report-provenance.js'
-import { EVAL_REPORT_ARTIFACT_NAME } from '../rendering/eval-summary-report-rendering.js'
+import { EVAL_REPORT_ARTIFACT_NAME } from '../rendering/summary/eval-summary-report-rendering.js'
 
 type EvalCaseComputation = {
   readonly reportCase: z.infer<typeof EvalCaseReportSchema>
