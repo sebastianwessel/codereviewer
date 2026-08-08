@@ -2906,3 +2906,41 @@ which carries no `category` or `title` field, and returned a clean **0% instabil
 — it had compared `(None, path, '')` tuples. The real fields live on
 `unlistedRealFindings`. A measurement that returns a suspiciously perfect answer is
 worth re-reading before it is believed.
+
+## 2026-08-08 — Impact corpus harvest: 3 candidates, and a rate 75x better than the bulk sweep ($0)
+
+Targeted `gh search commits` over 405 commit bodies / 59 repositories; ~92 resolved
+against the corpus invariant (repaired file OUTSIDE the introducing commit's diff).
+Detail: `reports/2026-08-08-impact-corpus-harvest.md`.
+
+**3 candidates** — rust-lang/rust (whole-repo-search, silently wrong codegen-unit
+estimate), microsoft/vscode (caller-of-changed-symbol, two untouched callers falling
+back to the wrong model), and a bevyengine/bevy case flagged rather than dropped
+because `.wgsl` is outside the 7 supported languages.
+
+**The efficiency comparison is the finding:**
+
+| | bodies | yield | rate |
+|---|---|---|---|
+| original corpus (bulk sweep) | 101,542 | 10 cases | 1 per 10,154 |
+| this harvest (targeted) | 405 | 3 candidates | **1 per 135** |
+
+~40 more candidates needs roughly **5,400 bodies**, not 406,000. **Wave 1.2 is
+unfinished, not blocked** — 13x more of a method already proven to run. The rate will
+decay as the best phrases and repositories are spent, so 5,400 is a floor on effort
+rather than an estimate of it.
+
+Recorded because the first reading was "poor yield, method exhausted" — the same
+error as the corrected "pool is exhausted" claim of 2026-08-07, caught this time by
+doing the division before writing the conclusion.
+
+**Structural: ~55 of ~92 resolved candidates are same-file self-corrections** — the
+fix repairs a file already inside the introducing commit's diff. Correctly rejected
+(stage 1 covers in-diff), and the single biggest reason this ground truth is scarce.
+It does NOT show cross-file breakage is rare; it is equally consistent with such
+breakage rarely being ATTRIBUTED in a commit message, which is the reading spec 22
+already records. **Java produced zero hits across 30 Apache-2.0 repositories.**
+
+**Wave 2.1 stays gated.** At 11 proven dependents one expectation moves a rate ~20
+points, so spec 22's promote bar (precision >= 50%, recall >= 40%) cannot be reached
+OR failed. Two candidates take it to ~13; continuing the harvest is the fix.
