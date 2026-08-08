@@ -312,7 +312,10 @@ describe('renderSummaryComment', () => {
         })
       )
 
-      expect(body).toContain('Resolved since baseline: 2')
+      expect(body).toContain('No longer reported: 2')
+      // The count must never be presented as a repair: nothing here separates a
+      // fixed defect from one this run simply did not report.
+      expect(body).toContain('not the same as fixed')
     })
 
     it('omits the line entirely when the run never computed it, rather than implying zero', () => {

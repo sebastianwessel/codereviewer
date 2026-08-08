@@ -399,7 +399,7 @@ const detailsSection = (input: SummaryCommentInput): string => {
       const count = input.review.resolvedBaselineEntryCount
 
       rows.push(
-        `- Resolved since baseline: ${count} previously-flagged finding${count === 1 ? '' : 's'} no longer match (baseline stores fingerprints only; no further detail is available).`
+        `- No longer reported: ${count} previously-flagged finding${count === 1 ? '' : 's'} did not come back this run. That is not the same as fixed — this search finds roughly ${inDiffRecallInTen} in 10 in-diff defects and does not repeat itself exactly, so a finding can drop out without the code changing. The baseline stores fingerprints only, so no further detail is available.`
       )
     }
 

@@ -160,8 +160,14 @@ export type ReviewDigest = {
    */
   readonly mergedAwayCount?: number
   /**
-   * Baseline fingerprints resolved since the baseline was recorded (fixed since
-   * then). Undefined — not 0 — when the run never computed this at all
+   * Baseline fingerprints that are no longer reported.
+   *
+   * NOT "fixed", though this field once said so: nothing here can separate a
+   * repair from a miss, and with in-diff recall around two thirds and no two runs
+   * over one commit agreeing, a fingerprint that disappears may simply not have
+   * been found this time. See `baseline-matcher.ts`.
+   *
+   * Undefined — not 0 — when the run never computed this at all
    * (`baseline.includeResolvedInReport` was off); a computed zero is a fact
    * worth stating, an uncomputed one is not. The baseline stores fingerprints
    * only, so a count is genuinely everything this can say — never which defect
