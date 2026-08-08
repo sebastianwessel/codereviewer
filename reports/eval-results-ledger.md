@@ -3020,3 +3020,38 @@ whole-repo-search 2, attribute-owner 1. Languages: typescript 2, java 2, javascr
 
 **Wave 2.1 remains blocked.** 25 dependents against a bar needing ~50: better than
 the ~19 projected, still not resolvable.
+
+## 2026-08-08 — Spec 31 feasibility gate: population built, agreement study running ($0 provider)
+
+Population for the design-judgment gate: **30 candidates** where a maintainer objected
+to the APPROACH and the author's follow-up push changed the design accordingly.
+
+Screening: 1,371 PR search hits → 322 in repositories passing a
+licence/star/fork/archived filter → **all 322 read in full, not sampled** → 41
+qualified → 30 kept (11 held in a disclosed reserve, trimmed for provenance, weak
+objection→fix causality, and a per-repo diversity cap).
+
+21 repositories, 13 languages (TypeScript 8, Python 4, Ruby 3, Go 3, Rust 2, Lean 2,
+JavaScript 2, and one each of Swift, Kotlin, Julia, Haskell, C++, Nextflow). MIT,
+Apache-2.0 and BSD-3-Clause only.
+
+Rejections: false-hit-no-real-objection 111, bot-reviewer 39, inaccessible 34,
+objection-not-accepted 28, no-followup-push 16, **bug-report 12**, style-only 7,
+question-only 5, other 30. That bug-report count is the population's main validity
+threat and it was screened for explicitly.
+
+**A methodological trap caught before the sweep:** the obvious query qualifier
+`review:changes_requested` reflects a reviewer's CURRENT state, so a maintainer who
+objected and then approved once the design was fixed — which is exactly this
+population — would have been excluded. Corrected before nearly all queries ran.
+
+**Five candidates recorded as genuinely ambiguous** between design objection and
+defect report, counted nowhere. One is a design objection whose review body
+self-attributes it to an AI model posted under a human account: it passed the
+mechanical bot filter but is not organic human judgement, and is flagged as a limit
+of that filter rather than as a false negative.
+
+Two curators are now answering all 30 independently, each blind to the other and to
+the maintainer's words, which are withheld from their input by construction. The
+pre-registered thresholds (>= 70% build a corpus, 50-70% record and stop, < 50% the
+lane is not built) were fixed in spec 31 before any of this existed.
