@@ -68,7 +68,7 @@ more.
 
 An admitted finding's fingerprint is
 `sha256(category : path : normalized title : normalized anchor text)`, truncated,
-under the algorithm id `v2-category-path-title-anchor`.
+under the algorithm id `v3-category-path-anchor`.
 
 The **anchor text** is the content of the reported line, not its number. That is
 what lets a finding keep its identity across pushes: edits above it shift the

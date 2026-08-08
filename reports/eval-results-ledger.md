@@ -2866,3 +2866,43 @@ pre-registered bar into a pass, go near-silent in repositories with a top-level
 Separately, **45.6% of changed files (703/1541) land in `unknown`** and 70 of 200
 commits contain no considered file at all — the signal's real scope is far narrower
 than "changed files", and its firing rate must always be read against that.
+
+## 2026-08-08 — The finding fingerprint could not survive a re-review ($0, from data on disk)
+
+Measured from the ten control runs of the sub-file A/B — same engine, same corpus,
+same cases, no new spend.
+
+The `v2-category-path-title-anchor` fingerprint hashed the model-written **title**.
+Titles are rewritten almost every run:
+
+| | |
+|---|---|
+| cases with findings in ≥2 of 10 identical runs | 23 |
+| identical `(category, path, title)` set every run | **1 (4%)** |
+| set VARIES across runs | **22 (96%)** |
+
+On every example inspected the intersection was **zero** — not one title recurred
+across ten runs of the same commit. Sample: *"preflight header parsing can emit an
+empty allow-header token"* / *"…can emit empty header tokens"* / *"…can emit invalid
+empty allow-header entries"* / *"…can emit invalid empty allow-header token"*.
+
+**Two shipped features depended on that fingerprint being stable and therefore did
+not work:**
+
+- **Baseline resolved-detection** — an untouched, unfixed finding took a new
+  fingerprint on the next push, so the baseline reported it **resolved** and the same
+  defect **new**, in the same run.
+- **Inline-comment dedup across pushes** — the marker fingerprint changed, so the
+  same comment re-posted on every push instead of deduplicating.
+
+Fixed by removing the title: `v3-category-path-anchor`. That restores the behaviour
+the module's own comment always claimed — *"editing the anchored line itself does
+change the fingerprint, which is the intended signal that the finding was
+addressed."* Two findings sharing category, path and anchored line now collapse to
+one; the semantic merge upstream exists for exactly that case.
+
+**Method note.** The first attempt at this measurement compared `matchedFindings`,
+which carries no `category` or `title` field, and returned a clean **0% instability**
+— it had compared `(None, path, '')` tuples. The real fields live on
+`unlistedRealFindings`. A measurement that returns a suspiciously perfect answer is
+worth re-reading before it is believed.

@@ -129,11 +129,26 @@ primary finding location.
 | `value` | yes | string | Lowercase base32/hex hash. |
 
 Every admitted finding carries exactly one fingerprint, produced by the
-`v2-category-path-title-anchor` algorithm. Its input is the normalized finding
-category, the repository-relative path, the normalized title, and a normalized
-**anchor text**: the source line at the finding's `startLine`, lowercased with
-runs of non-alphanumeric characters collapsed to single spaces and trimmed. When
-the source line cannot be resolved the anchor contributes the empty string.
+`v3-category-path-anchor` algorithm. Its input is the normalized finding
+category, the repository-relative path, and a normalized **anchor text**: the
+source line at the finding's `startLine`, lowercased with runs of non-alphanumeric
+characters collapsed to single spaces and trimmed. When the source line cannot be
+resolved the anchor contributes the empty string.
+
+**The finding's title is NOT an input, and v2 — which included it — was measured
+unfit for the purpose the fingerprint exists for.** A title is model prose,
+rewritten almost every run: across ten identical runs of one pinned engine, 96% of
+cases produced a different `(category, path, title)` set, and on the cases inspected
+not one title recurred. A fingerprint carrying it therefore changed on every push
+even when nothing changed, so the baseline reported an untouched finding as
+**resolved** and the very same defect as **new** in one run, and inline comments
+re-posted rather than deduplicating. Identity across pushes is the whole contract of
+this field, and prose cannot carry it.
+
+The consequence is deliberate: two findings sharing a category, a path and an
+anchored line collapse to one. The semantic merge upstream exists to collapse
+exactly that case, so the fingerprint does not need a tiebreaker that costs it
+stability.
 
 Anchor sources are indexed by head-side content. A location with `side` of `old`
 resolves to no anchor, because line N of the head file is not the line such a

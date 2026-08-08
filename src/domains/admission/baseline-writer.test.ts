@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { buildBaselineEntries, renderBaselineJson } from './baseline-writer.js'
 
 const fingerprint = {
-  algorithm: 'v2-category-path-title-anchor',
+  algorithm: 'v3-category-path-anchor',
   value: 'abc123'
 }
 

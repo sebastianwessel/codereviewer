@@ -94,7 +94,7 @@ describe('runVerificationFlow', () => {
     const claim = makeClaim({
       evidenceRefs: [
         {
-          key: 'fingerprint:v2-category-path-title-anchor',
+          key: 'fingerprint:v3-category-path-anchor',
           value: 'deadbeefcafe'
         }
       ]
@@ -125,7 +125,7 @@ describe('runVerificationFlow', () => {
     // The verdict reuses the claim's carried finding fingerprint so it lines up
     // with the general-review finding it came from.
     expect(verdict?.fingerprints).toContainEqual({
-      algorithm: 'v2-category-path-title-anchor',
+      algorithm: 'v3-category-path-anchor',
       value: 'deadbeefcafe'
     })
     expect(verdict?.citedEvidenceIds.length).toBeGreaterThan(0)

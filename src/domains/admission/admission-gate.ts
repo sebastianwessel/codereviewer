@@ -324,16 +324,27 @@ const allEvidenceRedacted = (evidence: readonly EvidenceRecord[]): boolean =>
 // but not the anchor. Editing the anchored line itself does change the
 // fingerprint, which is the intended signal that the finding was addressed.
 // The emitted value is a truncated hash, so no source text is disclosed.
+//
+// THE TITLE IS DELIBERATELY NOT IN HERE, and v2 -- which included it -- could not
+// do the job described above. The title is model prose and is rewritten almost
+// every run: over ten identical runs of one pinned engine, 96% of cases produced a
+// different (category, path, title) set, and on the cases inspected not one title
+// repeated. So an unchanged, unfixed finding took a new fingerprint on every push,
+// which made the baseline report it as RESOLVED and the same defect as NEW in the
+// same run, and made inline comments re-post instead of dedupe.
+//
+// What remains is what the comment above always claimed: the line's own text. Two
+// findings sharing a category, a path AND an anchored line are treated as one, and
+// the semantic merge upstream exists to collapse exactly that case.
 const createFingerprint = (
   candidate: CandidateFinding,
   resolveAnchorText: AnchorTextResolver | undefined
 ): FindingFingerprint => ({
-  algorithm: 'v2-category-path-title-anchor',
+  algorithm: 'v3-category-path-anchor',
   value: sha256(
     [
       candidate.category,
       candidate.location.path,
-      normalizeText(candidate.title),
       normalizeText(resolveAnchorText?.(candidate.location) ?? '')
     ].join(':')
   ).slice(0, 32)

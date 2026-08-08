@@ -117,8 +117,38 @@ describe('admission gate', () => {
       })
     })
     expect(result.admittedFinding?.fingerprints[0]?.algorithm).toBe(
-      'v2-category-path-title-anchor'
+      'v3-category-path-anchor'
     )
+  })
+
+  // The title is written by the model and is different almost every run: across ten
+  // identical runs of one pinned engine, 96% of cases produced a different
+  // (category, path, title) set, with zero overlap on the cases inspected. A
+  // fingerprint carrying it cannot survive a re-review, which is the one thing it
+  // exists to do -- an unfixed finding reads as resolved AND newly introduced on
+  // every push, and inline comments re-post instead of deduping.
+  test('keeps the fingerprint stable when only the model wording changes', () => {
+    const source = 'const a = 1\nconst b = 2\nconst c = 3\nreturn wrongValue\n'
+
+    const fingerprintForTitle = (title: string): string | undefined => {
+      const result = admitCandidate({
+        candidate: { ...candidate, title },
+        evidence: [diffEvidence],
+        existingAdmittedFindings: [],
+        resolveAnchorText: createSourceAnchorResolver([
+          { path: 'src/app.ts', content: source }
+        ]),
+        policy
+      })
+
+      return result.admittedFinding?.fingerprints[0]?.value
+    }
+
+    const first = fingerprintForTitle('Returns the wrong value on the error path')
+    const reworded = fingerprintForTitle('Wrong value returned when the guard fails')
+
+    expect(first).toBeDefined()
+    expect(reworded).toBe(first)
   })
 
   test('keeps the fingerprint stable when edits above shift the finding', () => {
