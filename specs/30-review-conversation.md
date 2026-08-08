@@ -1,7 +1,23 @@
 # Spec 30 — Review Conversation
 
-Status: approved, unimplemented. Written before any code so the threat model is
-settled by decision rather than by whatever the first implementation happens to do.
+Status: approved, **unimplemented**, and deliberately not part-built. Written before
+any code so the threat model is settled by decision rather than by whatever the first
+implementation happens to do.
+
+**Why it is not part-built.** The obvious first slice — detect which findings a reply
+nominates, without performing the re-adjudication — is tempting because it is the
+piece the threat model is about, it is pure, and it is fully testable. It is also
+dead code until re-adjudication exists, and a lane that reports "3 findings were
+nominated for re-check" and then does not re-check them is worse than nothing: it
+tells an author their objection was received and changes no outcome. The lane ships
+whole or not at all.
+
+**What implementing it requires**, so the next attempt does not rediscover it: the
+detection side lives in the GitHub integration (`in_reply_to_id` on a review comment,
+matched against the finding markers the integration already reads for deduplication),
+but re-adjudication lives in the engine, behind the refutation machinery. Those are on
+opposite sides of the CLI boundary, and the crossing has to carry a finding id and
+nothing else — which is the requirement below, not an implementation detail.
 
 ## Purpose
 
