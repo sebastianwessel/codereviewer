@@ -2944,3 +2944,29 @@ already records. **Java produced zero hits across 30 Apache-2.0 repositories.**
 **Wave 2.1 stays gated.** At 11 proven dependents one expectation moves a rate ~20
 points, so spec 22's promote bar (precision >= 50%, recall >= 40%) cannot be reached
 OR failed. Two candidates take it to ~13; continuing the harvest is the fix.
+
+## 2026-08-08 — Wave 2 is instrument-limited on both halves ($0 precheck)
+
+Arithmetic over figures already in this ledger, run BEFORE designing either study.
+Detail: `reports/2026-08-08-wave-2-measurability.md`.
+
+**2.1 impact adjudication** — spec 22's bar is precision >= 50%, recall >= 40%. At
+**11 proven dependents** one expectation moves a rate ~20 points, so the bar can be
+neither reached nor failed. Gated on the harvest.
+
+**2.2 intent calibration** — the precheck splits this into two endpoints:
+
+| endpoint | change under test | N | sd | resolvable |
+|---|---|---|---|---|
+| `not-contradicted` firing rate | ~2% -> ~40% (38pp) | 436 obligations | <= 2.34pp | **yes** |
+| LIST precision | 53.5% -> 60% (6.5pp) | ~126 statements | 4.44pp | **no** (~9.0pp) |
+
+A study can show whether the clause makes the verdict FIRE; it cannot show whether
+firing improves PRECISION, which is what the 60% bar is about. Reporting the firing
+rate against that bar would answer the easy question and quote it against the hard
+one — the denominator-substitution error corrected twice in two days. Intent's 87%
+self-agreement ceiling puts a further 13% of run-to-run noise under a 6.5pp target.
+
+**Thresholds recorded so nobody re-derives them:** 2.1 needs ~40 more proven
+dependents; 2.2 needs ~240 statements (roughly double today's ~126) to resolve 6.5pp.
+Both are curation, not research.
