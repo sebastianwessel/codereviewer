@@ -25,7 +25,6 @@ export const FullCommitShaSchema = z
   .string()
   .regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u, 'Commit must be a full lowercase git object name')
 
-export type FullCommitSha = z.infer<typeof FullCommitShaSchema>
 
 export const isFullCommitSha = (value: string): boolean =>
   FullCommitShaSchema.safeParse(value).success
@@ -77,7 +76,6 @@ export const CorpusSplitIntegritySchema = z.discriminatedUnion('status', [
   })
 ])
 
-export type CorpusSplitIntegrity = z.infer<typeof CorpusSplitIntegritySchema>
 
 // The reviewed input must never contain the answer key. Advisory identifiers and
 // "this fixes a vulnerability" phrasing name the defect outright, so they are
@@ -227,7 +225,6 @@ export const CorpusScreeningSchema = z.strictObject({
     .default([])
 })
 
-export type CorpusScreening = z.infer<typeof CorpusScreeningSchema>
 
 export const RealRepoCorpusManifestSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),

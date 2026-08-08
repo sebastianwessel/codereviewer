@@ -114,14 +114,17 @@ export const gitHeadArgs = (): readonly string[] => [
   'HEAD'
 ]
 
-export const gitCheckoutArgs = (parentCommit: string): readonly string[] => [
+// Takes any commit: spec 17 checks out the fix's PARENT and reads the fix
+// backwards, spec 22 checks out the commit that INTRODUCED the change. The
+// argument list is the same either way, which is why one helper serves both.
+export const gitCheckoutArgs = (commit: string): readonly string[] => [
   '-c',
   'advice.detachedHead=false',
   'checkout',
   '--quiet',
   '--detach',
   '--force',
-  parentCommit
+  commit
 ]
 
 // The reviewed change is the fix READ BACKWARDS: base is the repaired tree, head

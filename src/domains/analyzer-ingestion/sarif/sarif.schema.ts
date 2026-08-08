@@ -125,4 +125,3 @@ export type SarifLocation = z.infer<typeof SarifLocationSchema>
 export type SarifReportingDescriptor = z.infer<
   typeof SarifReportingDescriptorSchema
 >
-export type SarifToolComponent = z.infer<typeof SarifToolComponentSchema>

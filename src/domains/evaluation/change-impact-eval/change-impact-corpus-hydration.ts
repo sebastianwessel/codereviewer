@@ -25,6 +25,7 @@ import {
 import {
   gitDisableAutoCrlfArgs,
   gitFetchArgs,
+  gitCheckoutArgs,
   gitInitArgs,
   gitParentOfArgs,
   gitRemoteArgs,
@@ -67,16 +68,6 @@ const defaultGitRunner: CorpusGitCommandRunner = async ({ args, cwd }) => {
 
   return stdout
 }
-
-export const gitCheckoutArgs = (commit: string): readonly string[] => [
-  '-c',
-  'advice.detachedHead=false',
-  'checkout',
-  '--quiet',
-  '--detach',
-  '--force',
-  commit
-]
 
 // FORWARD: base is the parent, head is the introducing commit. That direction is
 // required, not stylistic — the new side of the diff must be the tree that was
