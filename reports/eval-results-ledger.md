@@ -3090,3 +3090,43 @@ this existed.
 **The generalisable lesson: redaction must be verified by reading what the subject
 actually sees, not by listing the fields you removed.** I checked my own redaction
 against my intent rather than against the artefact.
+
+## 2026-08-08 — Spec 31 gate FAILED: the design-review lane is not built ($0)
+
+24 scorable cases of 30. Thresholds fixed in spec 31 before the population existed.
+
+| measure | result | band |
+|---|---|---|
+| curator vs curator (strict `same`) | 54.2% (13/24) | 50–70% |
+| curator One vs maintainer (`match`) | **41.7%** (10/24) | **< 50%** |
+| curator Two vs maintainer (`match`) | **41.7%** (10/24) | **< 50%** |
+
+The maintainer comparison is the binding threshold and it fails the FLOOR, so the
+rule applies in its strongest form: **not built, now or later, without new evidence.**
+Not advisory-only, not behind a flag — spec 31 refused the "advisory is harmless"
+argument in advance, because output wrong at this rate trains readers to ignore a
+surface it shares with findings that hold up ~96% of the time.
+
+**The population was not the problem.** The key judge marked **0 of 24** cases
+`not-a-design-objection`: every maintainer comment was a genuine design objection.
+Two blind curators, independently, recovered the maintainer's actual objection at
+*exactly* the same rate — and failed differently. Curator Two skewed `partial` (right
+area, different mechanism); Curator One skewed `miss` (a genuinely unrelated defect in
+the same diff). **A design objection is one of several defensible readings of a diff;
+the maintainer's is authoritative only because they are the maintainer.**
+
+`case-08` is the result in miniature: the maintainer wrote *"I also have a few issues
+with the proposed code structure … will review more later"*. The ground truth is
+partly unstated in the source it comes from.
+
+**Looser definitions clear the bar and were not used:** curator-curator
+`same`+`related` = 83.3%; curator Two `match`+`partial` = 75.0%. Both were available
+before the strict numbers were known, which is exactly why the strict definitions were
+written into the judges' briefs in advance. Choosing afterwards is the error corrected
+three times in the preceding two days.
+
+**Two by-products.** Design ground truth DECAYS — 3 of 30 pre-review commits were
+garbage-collected, one going from fetchable to 404 within a single session, which
+advisory ground truth never does. And blind curators say "nothing to object to"
+while hinted ones do not: the invalidated leaky run had 0 `NO_OBJECTION_FOUND` and
+19/30 high confidence; blind, that became 3 and 8/30.

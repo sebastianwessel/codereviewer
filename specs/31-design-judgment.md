@@ -1,8 +1,32 @@
 # Spec 31 — Design Judgment
 
-Status: approved as a **gate**, not as a capability. Nothing here authorises building
-a design-review lane. It authorises finding out whether one can be measured, and
-records in advance what answer would stop the work.
+Status: **GATE RUN, GATE FAILED — the lane is not built.** Measured 2026-08-08; see
+`reports/2026-08-08-design-judgment-gate-result.md`.
+
+| measure | result | band |
+| --- | --- | --- |
+| curator vs curator (strict) | 54.2% (13/24) | 50–70% |
+| each curator vs maintainer | **41.7%** (10/24, both) | **< 50%** |
+
+The binding threshold is the maintainer comparison and it fails the floor, so the
+rule below applies in its strongest form: **not built, now or later, without new
+evidence.** Not advisory-only, not behind a flag.
+
+The population was not the problem: **0 of 24** cases were `not-a-design-objection`
+— every maintainer comment was a genuine design objection. Two blind curators
+recovered the maintainer's actual objection two times in five, and failed
+*differently* (one found a different flaw in the same diff, the other a different
+framing of the same flaw). A design objection is one of several defensible readings
+of a diff; the maintainer's is authoritative only because they are the maintainer.
+
+The rest of this spec is preserved as written, because what it refused in advance is
+what makes the result trustworthy.
+
+---
+
+Original status: approved as a **gate**, not as a capability. Nothing here authorises
+building a design-review lane. It authorises finding out whether one can be measured,
+and records in advance what answer would stop the work.
 
 ## Purpose
 
