@@ -467,12 +467,7 @@ similarity-to-our-own-engine.
 
 ### Composition
 
-- **19 cases, 25 expected dependents.** The original 10 came from django (9,
-  BSD-3-Clause) and grpc-go; a 2026-08-08 global harvest added 9 more across
-  vscode, ebean, djaopsp, dithermark, ServicebusBrowser, phpantom_lsp,
-  homepage-react, simis-cms and rsigma — typescript, java, javascript, rust and
-  python. Still short of the ~50 dependents spec 22's promote bar needs to be
-  reachable; see reports/2026-08-08-impact-corpus-harvest.md for the cost.
+- **12 cases, 13 expected dependents** (a 2026-08-08 harvest added 9 cases, but 7 failed the hydrator's contamination gate and were dropped; only 2 survived).
 - Original composition: from django (9, BSD-3-Clause) and grpc-go
   (1, Apache-2.0). Languages: Python 9, Go 1.
 - Reachability: 3 `caller-of-changed-symbol`, 2 `callee-of-changed-code`,

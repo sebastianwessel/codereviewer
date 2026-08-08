@@ -2994,7 +2994,22 @@ truth — the opposite of where a harvest instinctively starts.
 **Wave 1.2's target is not met.** 14 candidates at ~45% curation is ~6 cases, taking
 11 proven dependents to ~19 against a bar needing ~50.
 
-### Curation: 9 of 14 candidates kept — corpus 10 -> 19 cases, 11 -> 25 dependents
+### Curation: 9 of 14 candidates kept — but only 2 SURVIVED HYDRATION
+
+**CORRECTION, same day.** The heading below and the "10 -> 19 cases, 11 -> 25
+dependents" figure are WRONG and were published before the corpus was hydrated. The
+hydrator's contamination gate then rejected **7 of the 9 new cases**, because none of
+them recorded a `removedCommentDisclosureReview` judgement for the prose comments
+their reviewed diffs remove.
+
+**The real hydratable corpus is 12 cases / 13 dependents**, not 19 / 25. The schema
+accepted the manifest; only hydration catches this, and I merged and published on the
+schema check alone.
+
+The 9 cases are real and verified — they are unfinished, not wrong. Finishing them
+means a curator adjudicating each removed comment. The root cause is my curation
+brief, which specified the output shape and the disclosure rule but never said that
+field is mandatory.
 
 Every kept case independently re-verified against live GitHub: each `lineRange`
 printed from the introducing commit's own tree, each fix-commit quote resolved to the
