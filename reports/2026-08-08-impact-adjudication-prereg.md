@@ -1,3 +1,29 @@
+# VOID — the premise of this pre-registration was falsified before the run
+
+**Do not treat anything below as a live study.** It was written on the premise that
+the corpus had grown to **19 cases / 25 proven dependents**. It had not: 7 of the 9
+new cases failed the hydrator's contamination gate and were dropped, leaving
+**12 cases / 13 dependents** — barely above the 11 at which I had called this study
+blocked the first time.
+
+At 13 dependents a true precision near 22.2% has a 95% interval reaching ~44.8%,
+which is close enough to the 50% bar that a modestly higher observed value would
+overlap it. The pre-registration's own clause applies: *report unresolved rather
+than squeeze a verdict*. Rather than run a study that would almost certainly report
+unresolved, it is voided.
+
+**Wave 2.1 returns to blocked**, at essentially the size it was blocked at before.
+
+**Root cause, and it is mine.** My curation brief specified the output shape and the
+disclosure rule but never told the curator that `removedCommentDisclosureReview` is
+MANDATORY — every case must record a judgement on each prose comment its reviewed
+diff removes, or the hydrator refuses it. The 9 new cases are real and verified; they
+are simply unfinished, and finishing them means a curator adjudicating each removed
+comment. Same defect class as the id-slug leak earlier today: I specified the
+artefact and assumed the process constraints would follow.
+
+---
+
 # Pre-registration: impact adjudication on the grown corpus
 
 **Written before the run, and before the corpus was hydrated.** This supersedes the
