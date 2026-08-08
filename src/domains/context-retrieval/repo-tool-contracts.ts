@@ -10,7 +10,7 @@
 // mediated, ledgered, eligibility-gated handlers.
 
 import { z } from 'zod'
-import type { ContextRetrievalResult } from './index.js'
+import type { ContextRetrievalResult } from './context-retriever.js'
 
 export const RepoReadToolInputSchema = z.strictObject({
   path: z.string().min(1).describe('Repository-relative path of the file to read.'),

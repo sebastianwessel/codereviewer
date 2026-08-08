@@ -14,11 +14,8 @@
 // symbols, and each search is capped independently. That is what makes the cost
 // predictable without a tool-call budget.
 
-import {
-  createContextRetriever,
-  type ContextRetrievalEligibilityConfig,
-  type ContextRetrievalMatch
-} from './index.js'
+import { createContextRetriever, type ContextRetrievalMatch } from './context-retriever.js'
+import type { ContextRetrievalEligibilityConfig } from './eligibility.js'
 
 // A symbol to locate, plus where it is defined. The definition path is carried
 // through (not used to filter) so the CALLER decides whether a reference in the

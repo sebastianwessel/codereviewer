@@ -8,7 +8,7 @@
 // are enforced by the underlying retriever and surface to the model as recoverable,
 // actionable errors.
 
-import type { ContextRetrievalResult, ContextRetriever } from './index.js'
+import type { ContextRetrievalResult, ContextRetriever } from './context-retriever.js'
 
 // Thrown when a scope's tool-call budget is exhausted (a claim's
 // `verification.maxToolCallsPerClaim`, or a task's
