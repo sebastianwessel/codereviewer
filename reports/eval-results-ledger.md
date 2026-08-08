@@ -2696,3 +2696,23 @@ against pre-registered rules — weakness-class, precision-boundary, intent-fram
 correctness-fix confirmation, impact-framing — with paired splits **7/8, 7/8, 7/7,
 12/12, 16/16**. Five coin flips from five different angles. Do not run another
 prompt-level A/B on this corpus without evidence that overturns that table.
+
+## 2026-08-08 — Token/speed audit: no cheap win ($0, from the control runs)
+
+Warm run structure, 71 cases: **$1.47/run**, input:output **~70:1**, cache median
+**81%** (min 34%, max 98%), uncached tokens per case median **3,142**. 23% of cases
+carry 50% of spend. Detail: `reports/2026-08-08-token-and-speed-audit.md`.
+
+The apparent outlier — one case at $0.229/run with 41% cache against a LARGER sibling
+at 96% — is **not a defect**. Two hypotheses tested:
+
+- **refutation packets poison the cache: DISPROVED.** correlation(refutation calls,
+  cache) = −0.272; correlation(raw findings, cache) = −0.206. Too weak.
+- **arithmetic + shared-file ordering: CONFIRMED.** correlation(log input size, cache)
+  = +0.518, and five corpus paths are reviewed by more than one case.
+  `jsonschema.py` is reviewed by four, whose cache rates in run order are **41.3%,
+  94.0%, 95.8%, 92.7%**. The first case over a shared file absorbs the cold cost its
+  siblings ride for free.
+
+**Cache tuning is not a lever** and **per-case cost attribution is misleading whenever
+cases share a reviewed file**. Do not re-investigate without new evidence.
