@@ -1,3 +1,4 @@
+import { resolveBaselineFingerprints } from './baseline-matcher.js'
 import { describe, expect, test } from 'vitest'
 import type { EvidenceRecord } from '../../shared/contracts/index.js'
 import {
@@ -127,6 +128,56 @@ describe('admission gate', () => {
   // fingerprint carrying it cannot survive a re-review, which is the one thing it
   // exists to do -- an unfixed finding reads as resolved AND newly introduced on
   // every push, and inline comments re-post instead of deduping.
+  // The whole cross-push contract, end to end and deterministically: a finding is
+  // admitted, its fingerprint is baselined, the author edits the anchored line, and
+  // the next run must report the baselined finding as resolved while the untouched
+  // one stays existing. Every step is a pure function, so this needs no provider.
+  test('a fixed line resolves its baseline entry while an untouched one does not', () => {
+    const before = 'const a = 1\nconst b = 2\nreturn wrongValue\nconst d = 4\n'
+    const after = 'const a = 1\nconst b = 2\nreturn correctValue\nconst d = 4\n'
+
+    const admitAt = (content: string, title: string) =>
+      admitCandidate({
+        candidate: { ...candidate, title, location: { ...candidate.location, startLine: 3 } },
+        evidence: [
+          {
+            ...diffEvidence,
+            location: { ...diffEvidence.location, path: 'src/app.ts', startLine: 3, side: 'new' }
+          }
+        ],
+        existingAdmittedFindings: [],
+        resolveAnchorText: createSourceAnchorResolver([
+          { path: 'src/app.ts', content }
+        ]),
+        policy: {
+          ...policy,
+          reviewedDiffRanges: [{ path: 'src/app.ts', startLine: 3, endLine: 3 }]
+        }
+      }).admittedFinding
+
+    const first = admitAt(before, 'Returns the wrong value')
+    expect(first).toBeDefined()
+
+    const baseline = [
+      { fingerprints: first?.fingerprints ?? [] }
+    ]
+
+    // The author fixes the line. The model also rewords the title, as it does on
+    // nearly every run — that must not affect the verdict either way.
+    const afterFix = admitAt(after, 'Wrong value returned from the guard')
+    expect(afterFix).toBeDefined()
+
+    const resolved = resolveBaselineFingerprints(baseline, afterFix ? [afterFix] : [])
+    expect(resolved).toHaveLength(1)
+    expect(resolved[0]?.value).toBe(first?.fingerprints[0]?.value)
+
+    // And the converse: an unchanged line resolves nothing, however the title moves.
+    const unchanged = admitAt(before, 'Completely different wording for the same defect')
+    expect(
+      resolveBaselineFingerprints(baseline, unchanged ? [unchanged] : [])
+    ).toEqual([])
+  })
+
   test('keeps the fingerprint stable when only the model wording changes', () => {
     const source = 'const a = 1\nconst b = 2\nconst c = 3\nreturn wrongValue\n'
 
