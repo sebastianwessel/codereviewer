@@ -941,6 +941,308 @@
         "deprecation"
       ],
       "notes": "The introducing commit's own doc comment on warn_pipeline_inline_sources states in the present tense that its dedup set already covers daemon hot-reloads; this is what makes the diff read as complete rather than as a known-incomplete migration step, and is why this case is admitted despite being phase 3 of a longer, explicitly tracked deprecation cycle referenced in the commit body as issue #136."
+    },
+    {
+      "id": "djaopsp-newsfeed-consolidation-hides-available-questionnaires",
+      "language": "python",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/djaodjin/djaopsp.git",
+      "upstreamOwner": "djaodjin",
+      "upstreamRepo": "djaopsp",
+      "license": "BSD-2-Clause",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "dab09662cfb499ce0ecbf976a306f89346b22288",
+      "introducingCommittedAt": "2026-06-04T19:58:56Z",
+      "parentCommit": "4b9eb840fd95e0c19e11f40e6b4fe88c3bcc83d5",
+      "reviewedPaths": [
+        "djaopsp/api/newsfeed.py",
+        "djaopsp/templates/app/_newsfeed.html",
+        "djaopsp/templates/app/assess/redirects.html",
+        "djaopsp/templates/app/index.html",
+        "djaopsp/views/assess.py"
+      ],
+      "excludedPaths": [
+        "requirements.txt"
+      ],
+      "excludedPathsReason": "Dependency manifest, not reviewable application code.",
+      "reviewIntent": "Reuse the same card layout and one shared assessment-lookup query for both the newsfeed and the assess-redirect pages instead of duplicating logic across views.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "cd18d87afbd8845704db57def95a100cda791c72",
+          "committedAt": "2026-07-04",
+          "subject": "restores all available questionnaires on /getstarted/ page",
+          "repairedPaths": [
+            "djaopsp/api/newsfeed.py",
+            "djaopsp/utils.py"
+          ],
+          "quotes": [
+            "restores all available questionnaires on /getstarted/ page\n\nregression introduced by commit dab09662"
+          ],
+          "linkVerification": "The fix commit's message states 'regression introduced by commit dab09662', an 8-char prefix of introducingCommit dab09662cfb499ce0ecbf976a306f89346b22288, confirmed via gh api commits/dab09662cfb499ce0ecbf976a306f89346b22288 whose subject and 6-file diff match the newsfeed/redirect-page consolidation the fix describes."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "djaopsp/utils.py",
+          "lineRange": [
+            283,
+            297
+          ],
+          "reachability": "callee-of-changed-code",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "get_latest_active_assessments never filtered out samples with zero answers or deduplicated multiple samples per campaign, which was harmless under its old caller. The rewritten get_pending_requests now uses its result, via a new show_all branch, to decide which campaigns to exclude from the /getstarted/ page's candidate list, so a stray empty or duplicate sample makes an available campaign silently disappear from the page.",
+          "severity": "medium",
+          "severityRationale": "Impact: Silently wrong - the /getstarted/ page silently omits available questionnaires with no error shown to the user. Reachability: Conditional - requires an existing loose-matching Sample (empty answers or a duplicate) for the account and campaign, not guaranteed on every visit. Matrix: Silently wrong x Conditional = medium."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff reads as a legitimate DRY consolidation: it removes a large duplicated candidate-building loop from assess.py in favour of reusing newsfeed.py's get_pending_requests, and none of the touched files contain anything that looks wrong on its own. The completeness guarantee that breaks is a property of a pre-existing, unchanged fallback in newsfeed.py interacting with a pre-existing looseness in a query defined in a file the diff never touches, so it is not visible from the diff."
+      },
+      "tags": [
+        "python",
+        "django",
+        "orm"
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-09",
+        "verdict": "non-disclosing",
+        "rationale": "Three XXX notes about pending grants and request limits. The defect is that consolidation hides AVAILABLE questionnaires; grants pending acceptance are a different concern and naming them gives the reader nothing about the hidden list.",
+        "acknowledgedComments": [
+          "# XXX `pending_for` will also include grants pending acceptance.",
+          "# XXX It is possible the request isn't limited",
+          "# We have a data structure here that looks like"
+        ]
+      }
+    },
+    {
+      "id": "dithermark-transform-image-param-drop-breaks-bw-error-prop-dither",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/allen-garvey/dithermark.git",
+      "upstreamOwner": "allen-garvey",
+      "upstreamRepo": "dithermark",
+      "license": "MIT",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "79f0c853d7fbe1523ea5ef8ba779f93fbac014c7",
+      "introducingCommittedAt": "2026-07-23T22:06:15Z",
+      "parentCommit": "9ca0f6a0fa9b6bb820b181539339b94001a440ac",
+      "reviewedPaths": [
+        "js/worker/dither/error-prop-color.js",
+        "js/worker/image.js"
+      ],
+      "excludedPaths": [
+        "changelog.md"
+      ],
+      "excludedPathsReason": "Documentation only.",
+      "reviewIntent": "Reduce closures allocated per pixel in the webworker color dithers by dropping an unused end-of-row callback parameter from the shared image-transform helper.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "a08bc36f46c1673e7cc06b49ea8379d80cb6b3fb",
+          "committedAt": "2026-08-01",
+          "subject": "Fix black and white error propagation dither regression caused by 79f0c853d7fbe1523ea5ef8ba779f93fbac014c7",
+          "repairedPaths": [
+            "js/worker/dither/error-prop.js"
+          ],
+          "quotes": [
+            "Fix black and white error propagation dither regression caused by 79f0c853d7fbe1523ea5ef8ba779f93fbac014c7"
+          ],
+          "linkVerification": "The fix commit's entire (body-less) message is its subject, 'Fix black and white error propagation dither regression caused by 79f0c853d7fbe1523ea5ef8ba779f93fbac014c7', which quotes introducingCommit's full 40-character SHA verbatim - an exact string match, not a short SHA requiring resolution."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "js/worker/dither/error-prop.js",
+          "lineRange": [
+            58,
+            121
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "transformImage() dropped its 5th endRowFunc parameter and callback invocation; the diff's own rewritten caller, error-prop-color.js, no longer needs it. error-prop.js, an untouched sibling caller, still passes a 5th argument that resets the error-diffusion matrix each row; JavaScript silently discards the extra argument, so the per-row reset never runs and the black-and-white dither's output is silently corrupted.",
+          "severity": "medium",
+          "severityRationale": "Impact: Silently wrong - the per-row error-matrix reset silently stops running, corrupting the black-and-white dither's pixel output with no exception or warning. Reachability: Conditional - requires the user to select the black-and-white error-propagation dither mode specifically. Matrix: Silently wrong x Conditional = medium."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible-with-caveat",
+        "rationale": "Read in isolation the diff is an ordinary, safe-looking parameter removal: it deletes an unused-looking 5th callback parameter from transformImage and updates the one call site the diff shows (error-prop-color.js) to match. Because plain JavaScript silently discards extra call arguments, nothing about removing a parameter that still-untouched callers pass raises any visible warning. The diff also adds a comment to error-prop-color.js claiming the removal 'speeds up everything else by ~15%', a generalising performance claim about other, unseen callers that turns out to be inaccurate for error-prop.js; it names no file and no failure, so it is a mild hint rather than a leak."
+      },
+      "tags": [
+        "javascript",
+        "image-processing",
+        "webworker"
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-09",
+        "verdict": "non-disclosing",
+        "rationale": "Two comments describing the error-propagation buffer mechanics (zero the first row, rotate rows). They explain how the algorithm works, not that a transform parameter stopped being passed, which is the defect.",
+        "acknowledgedComments": [
+          "// fill first row of error prop model with zero,",
+          "//move it to the end and move all other rows up one"
+        ]
+      }
+    },
+    {
+      "id": "homepage-react-user-team-transform-silently-drops-team-on-save",
+      "language": "javascript",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/uqlibrary/homepage-react.git",
+      "upstreamOwner": "uqlibrary",
+      "upstreamRepo": "homepage-react",
+      "license": "MIT",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "0eb84f3ecfa4444b83302e06fb1498170ea1f236",
+      "introducingCommittedAt": "2026-04-29T08:03:38Z",
+      "parentCommit": "7dfe8c8616eb160321d52b1ec7d319e870ce365a",
+      "reviewedPaths": [
+        "src/modules/Pages/Admin/TestTag/SharedComponents/UpdateDialog/UpdateDialog.js",
+        "src/modules/Pages/Admin/TestTag/manage/Printers/Templates/PrinterTemplates.js",
+        "src/modules/Pages/Admin/TestTag/manage/Printers/Templates/configure.js",
+        "src/modules/Pages/Admin/TestTag/manage/Printers/Templates/utils.js",
+        "src/modules/Pages/Admin/TestTag/manage/Users/components/configure.js",
+        "src/modules/Pages/Admin/TestTag/manage/Users/components/utils.js",
+        "src/modules/Pages/Admin/TestTag/testTag.locale.js"
+      ],
+      "excludedPaths": [
+        "src/modules/Pages/Admin/TestTag/manage/Users/components/Users.test.js",
+        "src/modules/Pages/Admin/TestTag/manage/Users/components/utils.test.js"
+      ],
+      "excludedPathsReason": "Tests only.",
+      "reviewIntent": "Add CRUD editing for admin printer-template and user configuration pages, including a transform that reduces a selected team option to its slug for the update API.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "8bde84c289ce79be802669d119d835f6e743cd43",
+          "committedAt": "2026-06-22",
+          "subject": "- workaround for regression introduced by commit 0eb84f3ecfa4444b83302e06fb1498170ea1f236",
+          "repairedPaths": [
+            "src/modules/Pages/Admin/TestTag/manage/Users/components/Users.js"
+          ],
+          "quotes": [
+            "- workaround for regression introduced by commit 0eb84f3ecfa4444b83302e06fb1498170ea1f236"
+          ],
+          "linkVerification": "The fix commit's message is '- workaround for regression introduced by commit 0eb84f3ecfa4444b83302e06fb1498170ea1f236', introducingCommit's full 40-character SHA quoted verbatim, confirmed via gh api commits/0eb84f3ecfa4444b83302e06fb1498170ea1f236 which returns exactly that commit; per-path commit history for utils.js and Users.js between the two dates shows no intervening commit."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "src/modules/Pages/Admin/TestTag/manage/Users/components/Users.js",
+          "lineRange": [
+            90,
+            97
+          ],
+          "reachability": "caller-of-changed-symbol",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "transformUpdateRequest now does request.user_team = request?.user_team?.team_slug, assuming user_team is always a selected team option object. Users.js's onRowEdit passes the edited row straight through this transform before calling actions.updateUser(); since the row's user_team is ordinarily still the plain team-slug string from the API, the optional chain silently evaluates to undefined and the team assignment is silently dropped from the save.",
+          "severity": "high",
+          "severityRationale": "Impact: Silently wrong - saving an edited user silently drops the persisted user_team value from the update request while the UI still reports success. Reachability: Routine - triggered by the ordinary admin action of editing and saving any user without re-picking their team. Matrix: Silently wrong x Routine = high."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible-with-caveat",
+        "rationale": "The specific line added to transformUpdateRequest, request.user_team = request?.user_team?.team_slug, reads as a deliberate and correct piece of new functionality: converting a selected team option object into the slug string the update API expects, mirroring an identical line added to transformAddRequest in the same commit. Nothing in this diff names Users.js or hints that an existing caller still supplies a plain string. The caveat: the introducing commit's own subject line is '[AD-870] WIP implementing template editing page, with crud functionality. Code is breaking, needs cleaning up too' - a blanket self-admission of brokenness that names no specific file or mechanism, but would be visible to a reviewer if commit subjects are shown alongside the diff."
+      },
+      "tags": [
+        "javascript",
+        "react",
+        "forms"
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-09",
+        "verdict": "non-disclosing",
+        "rationale": "One commented-out import of team slug/display-name VALIDATION helpers. The defect is that the transform silently DROPS the team on save, which is a different thing from validating its name; a reader seeing only this comment would not know a field is lost.",
+        "acknowledgedComments": [
+          "// import { isInvalidTeamSlug, isInvalidTeamDisplayName } from '../../../helpers/helpers';"
+        ]
+      }
+    },
+    {
+      "id": "ebean-query-label-redesign-leaves-sql-comment-builder-stale",
+      "language": "java",
+      "split": "held-out",
+      "repositoryUrl": "https://github.com/ebean-orm/ebean.git",
+      "upstreamOwner": "ebean-orm",
+      "upstreamRepo": "ebean",
+      "license": "Apache-2.0",
+      "source": "upstream-regression-mining",
+      "capturedAt": "2026-08-08",
+      "introducingCommit": "140869691228f4d995c3ec7e4efec6eb1cc2786e",
+      "introducingCommittedAt": "2026-06-08T07:03:43Z",
+      "parentCommit": "e0531a63153cd8eab4d619606f8dfe298fd4fe05",
+      "reviewedPaths": [
+        "ebean-core/src/main/java/io/ebeaninternal/api/SpiQuery.java",
+        "ebean-core/src/main/java/io/ebeaninternal/server/loadcontext/DLoadBaseContext.java",
+        "ebean-core/src/main/java/io/ebeaninternal/server/loadcontext/DLoadContext.java",
+        "ebean-core/src/main/java/io/ebeaninternal/server/query/CQueryPlan.java",
+        "ebean-core/src/main/java/io/ebeaninternal/server/querydefn/DefaultOrmQuery.java"
+      ],
+      "excludedPaths": [
+        "docs/guides/AGENTS.md",
+        "docs/guides/README.md",
+        "docs/guides/ebean-query-metrics.md",
+        "docs/guides/ebean-query-plan-capture.md",
+        "ebean-core/src/test/java/io/ebeaninternal/server/query/CQueryPlanNameTest.java",
+        "ebean-querybean/src/test/java/org/querytest/QOrderTest.java"
+      ],
+      "excludedPathsReason": "Documentation and tests only.",
+      "reviewIntent": "Redesign how secondary (lazy/query) load metric labels are derived so they extend the parent query's already-computed plan name instead of being built from scratch.",
+      "evidenceOfBreakage": [
+        {
+          "kind": "upstream-fix",
+          "commit": "1545e68c3ecfb36d79de5df98dd70bd76ee11f6b",
+          "committedAt": "2026-06-18",
+          "subject": "Merge pull request #3790 from ebean-orm/feature/regression-inline-query-comment",
+          "repairedPaths": [
+            "ebean-core/src/main/java/io/ebeaninternal/server/query/CQueryBuilder.java",
+            "ebean-core/src/test/java/io/ebeaninternal/server/query/CQueryBuilderTest.java",
+            "ebean-querybean/src/test/java/org/querytest/QCustomerAndOrTest.java",
+            "ebean-test/src/test/java/io/ebean/xtest/base/DtoQueryFromOrmTest.java",
+            "ebean-test/src/test/java/io/ebean/xtest/base/FetchGroupTest.java"
+          ],
+          "quotes": [
+            "Regression introduced by #3779 in sql inline comment for label (missing bean type prefix)"
+          ],
+          "linkVerification": "The fix merge commit's PR #3790 body states 'Regression introduced by #3779 in sql inline comment for label (missing bean type prefix)'; PR #3779's merge commit, fetched via gh api commits/140869691228f4d995c3ec7e4efec6eb1cc2786e, is exactly introducingCommit, an unambiguous PR-number resolution."
+        }
+      ],
+      "expectedImpact": [
+        {
+          "path": "ebean-core/src/main/java/io/ebeaninternal/server/query/CQueryBuilder.java",
+          "lineRange": [
+            640,
+            657
+          ],
+          "reachability": "whole-repo-search",
+          "compatibilityClass": "breaks-at-runtime",
+          "semanticSummary": "PR #3779 restructured CQueryPlan's label derivation into a new public planLabelWithType(label, simpleName) helper with a changed bean-type-prefix convention. CQueryBuilder.inlineSqlComment(), an unrelated, untouched piece of code, builds its own inline SQL comment label directly from query.label() without ever calling into CQueryPlan's logic, so its comment silently stopped matching the new prefix convention for explicitly labelled queries.",
+          "severity": "medium",
+          "severityRationale": "Impact: Silently wrong - the generated SQL inline comment silently loses its disambiguating bean-type prefix for explicitly labelled queries, misleading anyone reading query logs or APM traces. Reachability: Conditional - includeLabelInSql defaults to true (verified in DatabaseConfig.java), so the one remaining condition is an explicit setLabel() call, which most queries do not make. Matrix: Silently wrong x Conditional = medium."
+        }
+      ],
+      "localPlausibility": {
+        "verdict": "plausible",
+        "rationale": "The diff is a coherent, self-contained redesign of how CQueryPlan derives a query's metric/plan name, complete with new doc comments explaining the secondary-query and explicit-label cases. It never touches CQueryBuilder.java and gives no indication that a second, independent piece of code elsewhere in the server package formats the same kind of label for a different purpose using the old convention."
+      },
+      "tags": [
+        "java",
+        "orm",
+        "query-metrics"
+      ],
+      "removedCommentDisclosureReview": {
+        "reviewedAt": "2026-08-09",
+        "verdict": "non-disclosing",
+        "rationale": "Two javadoc lines on the query-label API the change itself removes. They describe the removed API, which is the change a reviewer sees; they do not say that the SQL comment builder still reads the old label, which is the consequence under test.",
+        "acknowledgedComments": [
+          "* Set the on a secondary query given the label, relativePath and profile location of the parent query.",
+          "* Return the query plan label of the origin query."
+        ]
+      }
     }
   ]
 }
