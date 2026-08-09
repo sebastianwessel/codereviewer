@@ -3180,3 +3180,26 @@ the deterministic tier found 5 of 10. That is not the recall-for-precision trade
 13.3%), and 8 of 16 cases spent zero model calls with 28 pairs never adjudicated, so a
 0% reading is not clean evidence about the judge. No re-run — the prereg committed to
 one, and re-running cannot bound a metric that is unbounded by construction.
+
+## 2026-08-09 — Wave 2.2 closed by disclosure, not by a study ($0)
+
+The plan offered two routes: one pre-registered fix attempt at the 60% LIST-precision
+bar, or *"label the lane's measured confidence in its output instead of chasing the
+bar"*. The precheck had already shown the bar unreachable at ~126 statements (resolves
+~9.0pp against a 6.5pp target), so the second route is the one that could be honestly
+taken.
+
+The intent report already disclosed two measured error rates. It did **not** disclose
+its **87.0% self-agreement** — while the review report has said for months that two
+runs over one commit disagree. Intent is the *less* reproducible of the two lanes and
+was the one staying quiet about it.
+
+Now stated where the reader is: two runs over the same change agree on about **87%** of
+verdicts, and that figure **caps every other rate in the report** — a stage cannot be
+more accurate against a change than against itself. Transcribed into
+`measuredIntentReliability` with the counts (40/46) and derived for prose, so a
+re-measurement moves both or neither.
+
+No provider call. A prompt A/B here would have joined the five already-null clauses and
+could not have resolved its own endpoint.
+

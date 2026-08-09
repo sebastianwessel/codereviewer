@@ -91,7 +91,17 @@ export const measuredIntentReliability = {
    * complement is what never reaches a reader at all.
    */
   outstandingDetected: 161,
-  outstandingTotal: 179
+  outstandingTotal: 179,
+  /**
+   * Verdict agreement of the stage against ITSELF, same engine, same inputs:
+   * 40 of 46 statements. Ledger, 2026-08-02.
+   *
+   * This is the ceiling on every other figure here — a stage that agrees with
+   * itself 87% of the time cannot be more accurate than that against anything
+   * else. It is transcribed rather than derived, like every field above.
+   */
+  selfAgreementMatched: 40,
+  selfAgreementTotal: 46
 } as const
 
 // The provider and model every published accuracy rate in this repository was
@@ -192,4 +202,15 @@ export const numberWord = (value: number): string =>
  * should exist in two editable copies.
  */
 export const NOTHING_PROVED = `This run proved no defect it could act on. That is a statement about this search and not about the change: roughly ${numberWord(inDiffMissesInTen)} in ten defects inside the diff are missed on the measured corpus, and defects outside the diff are not looked for at all. Read it as "this search found nothing", never as "there is nothing to find".`
+
+/**
+ * How often two runs of the intent stage over the SAME input reach the same
+ * verdict, as a percentage. Derived so a re-measurement moves the prose with the
+ * counts.
+ */
+export const intentSelfAgreementPercent = Math.round(
+  (measuredIntentReliability.selfAgreementMatched /
+    measuredIntentReliability.selfAgreementTotal) *
+    1000
+) / 10
 

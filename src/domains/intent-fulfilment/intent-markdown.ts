@@ -27,6 +27,7 @@
 import {
   falseSatisfiedOneIn,
   inlineCode,
+  intentSelfAgreementPercent,
   measuredIntentReliability,
   missedOutstandingOneIn,
   numberWord,
@@ -70,7 +71,7 @@ const WHAT_THIS_IS =
 // Deliberately qualitative in the prose and exact in the numbers. Rounding the rate
 // to "rarely" would let a reader supply their own optimistic figure, which is the
 // failure this paragraph exists to prevent.
-const MEASURED_RELIABILITY = `Measured reliability, so these rows can be weighed rather than trusted: about **1 in ${falseSatisfiedOneIn}** obligations this stage calls evidenced is in fact still outstanding at head, and about **1 in ${missedOutstandingOneIn}** genuinely outstanding obligations never appear on this list at all. Those rates come from a pre-registered round over ${measuredIntentReliability.corpusCaseCount} real changes, with ${numberWord(measuredIntentReliability.runCount)} runs of each against one pinned engine. They are why this report is read alongside the diff and never in place of it.`
+const MEASURED_RELIABILITY = `Measured reliability, so these rows can be weighed rather than trusted: about **1 in ${falseSatisfiedOneIn}** obligations this stage calls evidenced is in fact still outstanding at head, and about **1 in ${missedOutstandingOneIn}** genuinely outstanding obligations never appear on this list at all. Those rates come from a pre-registered round over ${measuredIntentReliability.corpusCaseCount} real changes, with ${numberWord(measuredIntentReliability.runCount)} runs of each against one pinned engine. They are why this report is read alongside the diff and never in place of it. Two runs of this stage over the SAME change agree on about **${intentSelfAgreementPercent}%** of verdicts, so a row here is not reproducible and that figure caps every rate above: this stage cannot be more accurate against a change than it is against itself.`
 
 // The sentence a reader most needs when the outstanding list is empty, and the one
 // most easily replaced by a congratulation. Spec 23 forbids certifying completion,

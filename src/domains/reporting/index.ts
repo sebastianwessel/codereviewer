@@ -45,6 +45,7 @@ export {
   falseSatisfiedOneIn,
   NOTHING_PROVED,
   inDiffRecallInTen,
+  intentSelfAgreementPercent,
   measuredIntentReliability,
   measuredReliability,
   missedOutstandingOneIn,

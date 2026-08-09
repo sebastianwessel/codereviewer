@@ -9,6 +9,7 @@
 // forbid completion language and require the search framing are protecting the
 // reason the document exists, not its style.
 
+import { intentSelfAgreementPercent } from '../reporting/measured-reliability.js'
 import { describe, expect, test } from 'vitest'
 import {
   falseSatisfiedOneIn,
@@ -489,5 +490,17 @@ describe('untrusted text cannot break the document', () => {
     // Four backticks, and one space of padding on each side because the text ends
     // with a backtick. CommonMark strips the padding again when rendering.
     expect(markdown).toContain('```` const md = ```x``` ````')
+  })
+
+  // The review report says two runs over one commit disagree; this one did not,
+  // and intent's own self-agreement is LOWER than the review lane's stability.
+  // A reader weighing a verdict has to know it is not reproducible.
+  test('discloses that two runs over the same change disagree', () => {
+    const markdown = renderIntentFulfilmentMarkdown(
+      report([obligation({ id: 'obl_1' })])
+    )
+
+    expect(markdown).toContain(`${intentSelfAgreementPercent}%`)
+    expect(markdown.toLowerCase()).toContain('same change')
   })
 })
