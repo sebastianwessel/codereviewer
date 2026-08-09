@@ -145,6 +145,29 @@ claim in user-facing documentation.
   or the diff review.
 - The capability is **disabled by default** until measured.
 
+## The Precision Bar Is Unfalsifiable On This Corpus
+
+Measured twice, 2026-08-06 and 2026-08-09, and it is a property of the answer key
+rather than of its size:
+
+**The key lists the dependents an upstream fix REPAIRED, not every file a change
+affected.** A predicted file absent from the key is therefore not wrong — it may be a
+real dependent nobody had to repair. Only a **lower bound** on precision is
+computable; the upper bound is not measurable at any corpus size.
+
+So the `precision >= 50%` promote criterion **cannot be confirmed or refused here**.
+It is not a hard bar; it is an undecidable one, and no amount of harvesting changes
+that. A confidence interval computed on it is meaningless — that mistake was made in
+`reports/2026-08-09-impact-adjudication-prereg.md`, which argued from sample size that
+the bar had become reachable, and cost 118 model calls to disprove against a ledger
+entry that already said so.
+
+**What remains decidable:** recall against the proven dependents (a real rate, since
+the key enumerates them), and whether the model tier beats the deterministic arm.
+Those two carry every adjudication decision until a corpus exists whose key
+enumerates *every* affected file per change — a different and far more expensive
+curation problem.
+
 ## Zero References Has Two Causes And They Must Be Told Apart
 
 A run can end at `referenceCount: 0` two ways, and they call for opposite work:

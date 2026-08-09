@@ -3145,3 +3145,38 @@ garbage-collected, one going from fetchable to 404 within a single session, whic
 advisory ground truth never does. And blind curators say "nothing to object to"
 while hinted ones do not: the invalidated leaky run had 0 `NO_OBJECTION_FOUND` and
 19/30 high confidence; blind, that became 3 and 8/30.
+
+## 2026-08-09 — Impact adjudication measured; NOT promoted; my prereg's premise was wrong
+
+Engine `8f54399`, clean tree, `openai/gpt-5.3-codex`, 16 cases / 17 proven dependents,
+**118 model calls** — the session's only provider spend. Detail:
+`reports/2026-08-09-impact-adjudication-result.md`.
+
+| | deterministic | adjudicated |
+|---|---|---|
+| destination files predicted | 154 | **15** |
+| of those, proven dependents | 8 | **2** |
+| precision | lower bound 5.2% | lower bound 13.3% |
+| **directly-reachable recall** | **50.0%** (5/10) | **0.0%** (0/7) |
+| whole-repo-search recall | 42.9% (3/7) | 50.0% (2/4) |
+
+**NOT promoted; stays disabled.** Recall on the promote population is 0 of 7, against
+a 40% bar.
+
+**The precision bar is undecidable here and I should not have run this to find out.**
+The key lists dependents an upstream fix REPAIRED, not every affected file, so only a
+lower bound is computable at any size. My pre-registration argued from a confidence
+interval that 17 dependents made the bar reachable — meaningless arithmetic on an
+unbounded-above metric, contradicting the 2026-08-06 entry that says exactly this,
+which I had quoted the same day. Spec 22 now records the bar as unfalsifiable on this
+corpus.
+
+**The real finding:** adjudication cut 154 predictions to 15 and both survivors are
+`whole-repo-search`, the weakest class. It scored **0 of 7 directly reachable**, where
+the deterministic tier found 5 of 10. That is not the recall-for-precision trade spec
+22 anticipates; it is discarding the class the capability exists to report.
+
+**Model tier NOT removed:** it beats the deterministic arm on precision (5.2% ->
+13.3%), and 8 of 16 cases spent zero model calls with 28 pairs never adjudicated, so a
+0% reading is not clean evidence about the judge. No re-run — the prereg committed to
+one, and re-running cannot bound a metric that is unbounded by construction.
