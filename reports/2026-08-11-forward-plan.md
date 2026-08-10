@@ -54,37 +54,41 @@ the ceiling is not moved.
 → pre-registration with all four cells → 3 seeds/arm on the security corpus if and
 only if the precheck moved the 5.
 
-## Priority 2 — Work that needs no further measurement
+## Priority 2 — CLOSED 2026-08-11
 
-These are product and hygiene decisions, not experiments. None should wait on
-Priority 1.
+Every item here is decided and shipped. Kept as a record of what was decided and
+why, because three of the five were decisions rather than fixes.
 
-**2.1 Decide citations on readability.** Built, tested, off. It makes every finding
-show the exact source line it rests on instead of the verifier's prose. Costs +5.6%
-input tokens, no recall effect, no precision harm. This is a product call about
-comment quality and should be made as one — the recall study neither measured nor
-was designed to measure it.
+**2.1 Citations — DECIDED ON.** Default flipped to `true` (bceda3a). A product call
+about comment quality, made as one: it costs +5.6% input tokens, has no measured
+recall effect and no precision harm, and it makes every finding show the source line
+it rests on instead of the verifier's prose.
 
-**2.2 Surface what is computed and hidden.** From the flow audit: discovery
-diagnostics (`rawFindingCount`, the suppression counters) reach `report.json` and
-no human surface, though they are exactly what explains an under-reporting run; and
-the fix lane's verdict that an admitted finding is a *false positive* reaches only
-`fix-report.json`, which nothing reads — so a human sees a finding presented as
-real while the fix lane privately disagreed. Both are small changes with no
-measurement risk.
+**2.2 Surface what is computed and hidden — DONE.** Discovery diagnostics render as
+a "What Discovery Produced" section in `report.md`, which is what separates "the
+reviewer proposed little" from "it proposed plenty and later stages removed it".
+The fix lane's false-positive judgement surfaces as a run warning (3ff7c71). The
+verification lane's corroborations reach the review report and the finding itself.
 
-**2.3 Decide the `proposedBy` cluster.** Four mechanisms branch on a value only
-ever set to one thing: `supportSignalCandidates`, `isModelProposedCandidate`, the
-"support signals skip refutation" cost optimisation, and an entire admission
-branch. Either wire a deterministic-signal candidate producer or delete all four
-and their specs. This is a design decision and must not be taken as a side effect
-of something else — but it should be taken.
+**2.3 The `proposedBy` cluster — DECIDED KEEP.** Removing it was wrong: the analysis
+traced the CLI and concluded no producer exists, but `ReviewWorkflowInput.candidates`
+is a published API surface with deliberately tested behaviour. The producer is the
+caller. See item A of the flow audit.
 
-**2.4 Close the remaining audit items.** Analyzer CWE/ruleId cannot reach a finding
-(SARIF degrades for analyzer-corroborated findings); OpenTelemetry logs success
-while exporting nothing and has no packages installed; the reactive split
-double-sends one file's diff while ledgering it once; the change-intent refutation
-exclusion is a blocklist with no exhaustiveness guard.
+**2.4 Remaining audit items — ALL CLOSED.**
+- *Analyzer metadata:* the six classification and trace fields are now declared on
+  `CandidateFinding`, so a finding can carry them at all, and SARIF maps
+  `relatedLocations`/`dataFlow` into locations and code flows. The analyzer join the
+  audit implied was REJECTED — spec 15 keeps an ingested alert's metadata on its own
+  evidence record, because joining by shared location gives one defect's CWE to
+  another defect on the same line.
+- *OpenTelemetry:* kept, and the log made honest. Preflight now warns that the
+  engine emits no spans rather than claiming setup succeeded. Removing it was tried
+  and reverted — it spans 17 doc and spec files.
+- *Reactive split:* a half is shown only the hunks inside its own chunk. The split
+  now halves the diff as well as the source.
+- *Change-intent blocklist:* the exhaustiveness guard is a test enumerating the kind
+  enum against the filter, which fails when a kind is added.
 
 ## Priority 3 — Curation, which unblocks the last open question
 
