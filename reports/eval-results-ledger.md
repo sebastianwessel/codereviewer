@@ -3292,3 +3292,58 @@ after first exposure.
 through a channel structurally empty since inception. The pre-registration argued
 that was a mechanism no prior null covered. It was, and it landed in the same
 place. What discovery is SHOWN is not the binding constraint on what it finds.
+
+## 2026-08-10 — Citation spine: the channel is fillable, and filling it changes nothing
+
+`openai/gpt-5.3-codex`, engine `e61bfdb` (all six runs, dirty=0),
+`security-advisory-2026` (72 cases), 3 seeds/arm, order alternated (control 1/2/1,
+treatment 2/1/2). **$4.47 + $4.69 = $9.16, plus $6.34 lost to an aborted first
+sweep = $15.50.** Write-up: `reports/2026-08-10-citations-result.md`,
+pre-registered in `reports/2026-08-10-citations-prereg.md`.
+
+**THE MECHANISM ENGAGED, and this is the first time that has been demonstrable
+rather than assumed:**
+
+| | control | treatment |
+| --- | ---: | ---: |
+| findings with >1 evidence record | **0 / 231 (0%)** | **191 / 212 (90%)** |
+| evidence-count distribution | `{1: 231}` | `{1:21,2:26,3:59,4:51,5:46,6:9}` |
+
+`evidenceCount` was 1 for every finding this engine has ever produced, and that 1
+was the refuter's own rationale. It is now 2-6 on 90% of findings — deterministically
+verified quotes of real source lines.
+
+**And nothing it was meant to move, moved:**
+
+| | control | treatment |
+| --- | ---: | ---: |
+| in-diff recall | 60.8/60.8/67.6 → **63.1%** | 60.8/64.9/60.8 → **62.2%** |
+| adjusted precision | 98.6% | 99.3% |
+| `needs-more-evidence` / `refuted` | 18% / 5% | **20% / 7%** |
+| reviews posting nothing | 27% | **30%** |
+
+Paired sign test on the 73 expectations of the 71 cases that ran in all six runs:
+**3 gained / 7 lost, p = 0.3438** (any seed); 4 gained / 3 lost, p = 1.0000 (>=2 of
+3). The two thresholds disagree in direction.
+
+**KEEP, DISABLED** — the pre-registered table's third cell (flat-or-worse, not
+significant). The kill rule (adjusted precision falls) did not fire: precision rose.
+All four cells were enumerated in advance this time, so no cell needed
+interpretation after the fact.
+
+**Raw precision 75.7% -> 83.5% is NOT CITED.** The arm-order artifact is present
+again (position 1 mean 76.5%, position 2 mean 82.6%) and three seeds put treatment
+in position 2 twice against control's once. Within matched positions treatment
+still leads, but on one run per cell, and adjusted precision moved only 0.7pp.
+
+**What this closes.** Six prior nulls said what discovery is SHOWN is not the
+constraint. This says what the REFUTER HOLDS is not the constraint either — and
+unlike those six, the mechanism is PROVEN to have engaged. The refuter was handed
+verified code on 90% of findings and became slightly less decisive, not more.
+
+**Process.** The first sweep aborted at four of six: one provider error failed the
+eval regression gate, `eval run` exits non-zero on that, and `set -e` killed the
+sweep. Harness now records status and keeps reports, letting scoring decide what is
+poolable. Partial data deleted unread. The completed sweep's one provider error
+(treatment seed 3) depresses the treatment arm, so the paired test drops that case
+from all six runs symmetrically — favourable to treatment, which still lost 3-7.
