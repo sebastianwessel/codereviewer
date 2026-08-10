@@ -567,6 +567,45 @@ const renderTestAdequacy = (report: ReviewReport): readonly string[] => {
 //
 // Duration is this section's own, and stays here: it is timing rather than spend,
 // and the other surface has no equivalent.
+// What DISCOVERY produced, before refutation and admission decided what survived.
+//
+// This reached `report.json` and no human surface at all: the markdown reporter
+// never read `report.discovery`. It is the section that answers "why is this
+// report quiet" -- whether the reviewer proposed little, or proposed plenty and
+// the later stages removed it -- and those two have completely different fixes.
+// A reader who cannot tell them apart cannot act on either.
+//
+// Absent when the run recorded none (a provider-errored run), and stated as
+// absent rather than rendered as zeros, because "discovery proposed 0" and
+// "discovery was never asked" are different facts.
+const renderDiscovery = (report: ReviewReport): readonly string[] => {
+  const discovery = report.discovery
+
+  if (discovery === undefined) {
+    return []
+  }
+
+  const { totals } = discovery
+  const suppressed =
+    totals.suppressedByIdCount +
+    totals.suppressedByLocationCount +
+    totals.cappedByLimitCount +
+    totals.mergedAwayCount
+
+  return [
+    '## What Discovery Produced',
+    '',
+    `The reviewer made ${totals.callCount} discovery call(s) and proposed ${totals.rawFindingCount} finding(s), of which ${totals.candidateCount} became candidates for adjudication.`,
+    '',
+    `- Dropped before adjudication: ${totals.droppedCount}`,
+    `- Suppressed as duplicates or over a cap: ${suppressed} (${totals.suppressedByIdCount} by id, ${totals.suppressedByLocationCount} by location, ${totals.cappedByLimitCount} over the per-call cap, ${totals.mergedAwayCount} merged as the same defect)`,
+    `- Packets split because the provider refused the input: ${totals.contextOverflowSplitCount}`,
+    '',
+    'Read this next to the rejected-candidate count above. A quiet report with a low proposed count is a discovery problem; a quiet report with a high one is an adjudication problem.',
+    ''
+  ]
+}
+
 const renderCost = (report: ReviewReport): readonly string[] => {
   const { run } = report
 
@@ -655,6 +694,7 @@ export const renderMarkdownReport = (input: unknown): string => {
 
   lines.push(
     ...renderRejected(report.rejectedFindings, refutationsByCandidate),
+    ...renderDiscovery(report),
     ...renderRefutations(report.refutationResults),
     ...renderProviderIssues(report),
     ...renderSkippedFiles(report),

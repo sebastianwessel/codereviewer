@@ -289,6 +289,30 @@ nothing was proposed, which is not the same as everything proposed being sound.
 
 ---
 
+## What Discovery Produced
+
+```text
+## What Discovery Produced
+
+The reviewer made 3 discovery call(s) and proposed 11 finding(s), of which 7 became candidates for adjudication.
+
+- Dropped before adjudication: 1
+- Suppressed as duplicates or over a cap: 3 (1 by id, 0 by location, 0 over the per-call cap, 2 merged as the same defect)
+- Packets split because the provider refused the input: 2
+```
+
+The counts from before adjudication ran. Read this section together with the
+rejected-candidate count above: a quiet report with a low proposed count is a
+discovery problem, and a quiet report with a high one is an adjudication problem.
+Those two have completely different fixes, and nothing else in the report tells
+them apart.
+
+The section is absent — not shown as zeros — when the run recorded no discovery
+at all, because "discovery proposed nothing" and "discovery was never asked" are
+different facts.
+
+---
+
 ## Refutation Results
 
 ```text

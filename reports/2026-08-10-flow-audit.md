@@ -124,11 +124,12 @@ fails preflight with a missing-dependency error or succeeds while exporting
 nothing. This is the repository's own silent-optimism class inside its own
 observability subsystem.
 
-**E. Computed and never surfaced to a human.** Discovery diagnostics
-(`rawFindingCount`, `droppedCount`, the suppression counters) reach `report.json`
-and nothing else — the markdown reporter never reads `report.discovery` at all,
-though these are exactly the numbers that explain WHY a run under-reported. The
-fix lane's judgment that an admitted finding is a false positive reaches only
+**E. Computed and never surfaced to a human.** PARTIALLY FIXED 2026-08-11: the
+discovery diagnostics (`rawFindingCount`, `droppedCount`, the suppression
+counters) now render as a "What Discovery Produced" section in `report.md`, which
+is what separates "the reviewer proposed little" from "it proposed plenty and the
+later stages removed it". The section is omitted, not zeroed, when a run recorded
+no discovery. Still open: the fix lane's judgment that an admitted finding is a false positive reaches only
 `fix-report.json`, which no production code reads back; a human sees the finding
 presented as real while the fix lane privately disagreed. `verification-report.json`
 is likewise write-only apart from its warnings.

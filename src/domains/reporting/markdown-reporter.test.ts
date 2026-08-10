@@ -423,3 +423,48 @@ describe('Markdown reporter', () => {
     expect(rendered).toContain('- Output tokens: 2,351')
   })
 })
+
+// `report.discovery` reached `report.json` and no human surface — the markdown
+// reporter never read it. It is the section that separates "the reviewer proposed
+// little" from "it proposed plenty and later stages removed it", and those have
+// completely different fixes.
+describe('what discovery produced', () => {
+  test('reports the proposal counts and what removed them', () => {
+    const report = createReportFixture()
+    const markdown = renderMarkdownReport({
+      ...report,
+      discovery: {
+        totals: {
+          callCount: 3,
+          rawFindingCount: 11,
+          rawFindingsPerCall: [5, 4, 2],
+          candidateCount: 7,
+          droppedCount: 1,
+          suppressedByIdCount: 1,
+          suppressedByLocationCount: 0,
+          cappedByLimitCount: 0,
+          contextOverflowSplitCount: 2,
+          mergeCallCount: 1,
+          mergeGroupCount: 1,
+          mergedAwayCount: 2
+        },
+        tasks: []
+      }
+    })
+
+    expect(markdown).toContain('## What Discovery Produced')
+    expect(markdown).toContain('3 discovery call(s)')
+    expect(markdown).toContain('11 finding(s)')
+    expect(markdown).toContain('7 became candidates')
+    expect(markdown).toContain('Packets split because the provider refused the input: 2')
+  })
+
+  // A provider-errored run recorded nothing. Rendering zeros would state a
+  // measurement nobody took — "discovery proposed 0" is a different claim from
+  // "discovery was never asked".
+  test('says nothing at all when the run recorded no discovery', () => {
+    const markdown = renderMarkdownReport(createReportFixture())
+
+    expect(markdown).not.toContain('## What Discovery Produced')
+  })
+})
