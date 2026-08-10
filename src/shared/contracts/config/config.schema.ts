@@ -151,6 +151,28 @@ export const SignalFactContextConfigSchema = z.strictObject({
   enabled: z.boolean().default(false)
 })
 
+// Whether discovery is ASKED to cite the source line that grounds each finding
+// (spec 05's `citation` evidence kind — finding.schema.ts). Off by default for
+// the same reason `signalFacts` is: it changes what every discovery prompt asks
+// the model to output, and this project promotes a prompt-shaped change on
+// measurement, never on the argument that it ought to help.
+//
+// This is NOT the same risk shape as most switches in this file. A citation that
+// is absent, malformed, or fails deterministic verification costs nothing — the
+// candidate proceeds exactly as it does today (see `citationEvidenceFor` in
+// discovery/citation-evidence.ts, which can only ADD verified evidence, never
+// drop or downgrade a candidate for a bad one). So this key can move recall or
+// precision only through what a non-empty `evidence` field does to the refuter
+// that reads it, never by rejecting anything itself.
+//
+// It inherits its kill rule from spec 05's withdrawn refutation retrieval
+// (*Measured Outcome Of The Withdrawn Refutation Retrieval*): removed entirely —
+// key, prompt segment, and wiring — on ANY adjusted-precision drop or rise in
+// genuine false positives, with no recall gain required to justify keeping it off.
+export const CitationConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false)
+})
+
 export const ReviewConfigSchema = z.strictObject({
   mode: ReviewModeSchema.default('local'),
   depth: ReviewDepthSchema.default('balanced'),
@@ -167,7 +189,8 @@ export const ReviewConfigSchema = z.strictObject({
   inlineSeverityThreshold: SeveritySchema.default('high'),
   maxCostUsd: z.number().min(0).optional(),
   crossFileRetrieval: CrossFileRetrievalConfigSchema.prefault({}),
-  signalFacts: SignalFactContextConfigSchema.prefault({})
+  signalFacts: SignalFactContextConfigSchema.prefault({}),
+  citations: CitationConfigSchema.prefault({})
 })
 
 export const ProviderConfigSchema = z
@@ -940,6 +963,7 @@ export type CostConfig = z.infer<typeof CostConfigSchema>
 export type SignalFactContextConfig = z.infer<
   typeof SignalFactContextConfigSchema
 >
+export type CitationConfig = z.infer<typeof CitationConfigSchema>
 export type ReviewConversationConfig = z.infer<
   typeof ReviewConversationConfigSchema
 >

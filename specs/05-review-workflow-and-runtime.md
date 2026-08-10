@@ -1876,3 +1876,51 @@ provider messages, prompt text, source snippets, tool output, or secrets.
 | No raw source in default logs | log snapshot/redaction test |
 | Provider task failure writes artifact-ready partial state | runner partial-failure regression test |
 | Model candidate cannot become actionable without passing refutation | refutation workflow test |
+
+## Discovery Citations (`review.citations`)
+
+**The gap this closes, stated as measured.** Discovery built every candidate with
+`evidenceIds: []` hardcoded. The refutation packet selects its `evidence` by
+intersecting candidate evidence ids with the run's records, so that array was
+**always empty, for every candidate, since inception** — as was
+`supportSignalCandidates`, whose filter requires `proposedBy !== 'review-agent'`
+while the sole candidate producer hardcodes `'review-agent'`. Measured on the
+72-case security corpus: `evidenceCount` is 1 for 78/78 admitted findings, and
+that 1 is the refuter's OWN rationale, written afterwards. The refuter was
+instructed to prove a claim while holding nothing, and `needs-more-evidence`
+outnumbered `refuted` 5:1.
+
+**What the lane does.** When `review.citations.enabled` is true, discovery is
+asked to quote the source line that shows the defect, with its line number. A
+**deterministic** verifier checks the quote appears at that line in the same
+numbered content discovery itself was shown, searching a window of ±2 lines. A
+verified citation becomes an `EvidenceRecord` of kind `citation`, redacted, and
+the candidate references it — so refutation's evidence array carries the code the
+finding rests on.
+
+**Requirements.**
+
+- Verification MUST be deterministic. No model call decides whether a citation
+  holds; a quote either appears at the cited location or it does not.
+- The window MUST be bounded. A whole-file search would only establish that the
+  quote exists somewhere, which the file content already establishes and the
+  finding already implies.
+- Matching MUST be whitespace-tolerant and MUST NOT be semantic. A model
+  re-indenting a line is not a fabrication; a model paraphrasing one is not a
+  citation.
+- **A failed, malformed, or absent citation MUST leave the candidate exactly as
+  it would have been without the lane.** No candidate may be dropped, downgraded,
+  rejected, or re-ordered because its citation did not verify. Absence is the
+  only failure mode this lane is permitted to have — which is what makes it
+  incapable of costing recall, by construction rather than by measurement.
+  Rejecting unverified candidates is a separate and riskier lever; it is NOT part
+  of this lane and MUST NOT be added to it without its own pre-registration.
+- With the lane disabled, the discovery packet MUST be byte-for-byte what it was
+  before the lane existed, and candidates MUST carry no evidence ids.
+
+**Off by default, and the kill rule is inherited rather than invented.** This
+changes what discovery is ASKED to output, so it is promoted on measurement. The
+nearest prior attempt at this stage — the withdrawn refutation retrieval, above —
+made adjusted precision fall and false positives rise; that record's rule applies
+here verbatim: remove on ANY adjusted-precision drop or false-positive rise
+against the control arm.

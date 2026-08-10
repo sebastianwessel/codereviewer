@@ -235,6 +235,33 @@ When on, the section is framed as facts rather than findings and states plainly
 that the list is incomplete: a symbol's absence means no extractor emitted a fact
 for it, not that the symbol does not exist.
 
+### `review.citations`
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Ask discovery to quote the line that shows the defect, and verify it. |
+
+Discovery built every candidate with no evidence attached. The refutation packet
+picks its evidence by matching candidate evidence ids, so the reviewer that
+decides whether a finding is real was handed an **empty** evidence array for every
+candidate, always — measured at 78 of 78 findings, where the single record each
+one carried was the refuter's own rationale written afterwards. That is why
+"could not prove it" outnumbers "disproved" five to one.
+
+With this on, discovery quotes the source line and its number, and a
+**deterministic** check re-reads that line in the same numbered content discovery
+was shown. A quote that is really there becomes a `citation` evidence record the
+refuter can check against. A quote that is not is simply not recorded.
+
+**A failed citation never costs you a finding.** An absent, malformed, or
+unverifiable citation leaves the candidate exactly as it would have been with the
+key off. Rejecting candidates for bad citations is a different and riskier idea;
+it is deliberately not part of this.
+
+Off by default because it changes what discovery is asked to produce, and the
+nearest previous attempt at this stage made precision worse — so it ships
+disabled, with that attempt's removal rule attached.
+
 ## Related
 
 - [provider.md](./provider.md) — model, retries, budgets

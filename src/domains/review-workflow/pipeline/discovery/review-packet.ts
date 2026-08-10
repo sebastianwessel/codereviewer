@@ -225,6 +225,31 @@ const renderSignalFactsSection = (content: string): string =>
       `exist. Never conclude from an absence that something is not declared or ` +
       `not called.\n${content}`
 
+// Discovery citations (finding.schema.ts's `citation` evidence kind), only when
+// `review.citations.enabled`. This is engine-authored instruction text, not
+// repository content, so — unlike the sections above — it needs no content guard:
+// it is either present whole or absent whole, spread into the packet the same way
+// every other flag-gated section is (see the return statement below), so a run
+// with the capability disabled sends byte-for-byte the packet it always has.
+//
+// The ask is narrow and mechanical on purpose. A quote that fails to verify costs
+// the finding nothing (`discovery/citation-evidence.ts` mints evidence for
+// verified citations only and never penalizes a candidate for an unverified one),
+// so this instruction does not need to make the model self-police accuracy — a
+// deterministic re-read of the actual source does that. It only needs to ask for
+// the quote, in a shape that check can parse.
+export const citationInstructionsSection = [
+  '\n## Citing your evidence',
+  'For each finding, when you can point to the exact source line that shows the',
+  'defect, include a short verbatim quote of that line (a few words up to one',
+  'line, copied exactly, not paraphrased or reformatted) together with its line',
+  'number, in a `citations` field: an array of objects with `startLine` (the',
+  'number shown to the left of that line in the numbering above) and `quote`.',
+  'A quote that cannot be found at the line you name is simply not recorded as',
+  'proof of the finding — it costs nothing to try, so include a citation whenever',
+  'you can name the exact line, and omit `citations` when you cannot.'
+].join('\n')
+
 // Assemble the shared context sections (diff, changed files, referenced definitions,
 // change intent) presented to every discovery call.
 //
@@ -235,7 +260,8 @@ const renderSignalFactsSection = (content: string): string =>
 export const buildContextSections = (
   taskInput: TaskReviewInput,
   rawDiff: string,
-  signalFactsEnabled = false
+  signalFactsEnabled = false,
+  citationsEnabled = false
 ): readonly string[] => {
   const files = numberedChangedFiles(taskInput)
     .map((file) => `### FILE: ${file.path}\n${file.numbered}`)
@@ -350,7 +376,8 @@ export const buildContextSections = (
     // off, this packet is byte-for-byte what it was before the section existed.
     ...(signalFactsSection.length === 0 ? [] : [signalFactsSection]),
     ...(analyzerSignalsSection.length === 0 ? [] : [analyzerSignalsSection]),
-    changeIntentSection
+    changeIntentSection,
+    ...(citationsEnabled ? [citationInstructionsSection] : [])
   ]
 }
 
@@ -382,9 +409,10 @@ export const holisticReviewInputFor = (
 export const buildReviewText = (
   taskInput: TaskReviewInput,
   rawDiff: string,
-  signalFactsEnabled = false
+  signalFactsEnabled = false,
+  citationsEnabled = false
 ): string =>
   [
     `Review task ${taskInput.task.id}.`,
-    ...buildContextSections(taskInput, rawDiff, signalFactsEnabled)
+    ...buildContextSections(taskInput, rawDiff, signalFactsEnabled, citationsEnabled)
   ].join('\n')

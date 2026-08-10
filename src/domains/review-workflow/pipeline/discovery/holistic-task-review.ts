@@ -4,7 +4,10 @@ import {
 } from '../../../admission/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
 import { truncateForContract } from '../../../../shared/text/truncate.js'
-import { TaskDiscoveryTelemetrySchema } from '../../../../shared/contracts/index.js'
+import {
+  TaskDiscoveryTelemetrySchema,
+  type EvidenceRecord
+} from '../../../../shared/contracts/index.js'
 import {
   ModelHolisticFindingSchema,
   type HolisticReviewRunner,
@@ -14,6 +17,7 @@ import {
 } from '../agent-contracts.js'
 import { type DebugLogger } from '../debug-logger.js'
 import { type ProviderIssue } from '../provider-issues.js'
+import { citationEvidenceFor } from './citation-evidence.js'
 import { hasActiveCrossFileDiscoveryScope } from './cross-file-tools.js'
 import { runDiscoveryCall, type DiscoveryCallResult } from './discovery-call.js'
 import { partitionTaskForDiscovery } from './discovery-partition.js'
@@ -122,12 +126,13 @@ export const securityReviewInstruction = [
 export const buildSecurityReviewText = (
   taskInput: TaskReviewInput,
   rawDiff: string,
-  signalFactsEnabled = false
+  signalFactsEnabled = false,
+  citationsEnabled = false
 ): string =>
   [
     `Security review task ${taskInput.task.id}.`,
     securityReviewInstruction,
-    ...buildContextSections(taskInput, rawDiff, signalFactsEnabled),
+    ...buildContextSections(taskInput, rawDiff, signalFactsEnabled, citationsEnabled),
     `\n${securityReviewChecklist}`
   ].join('\n')
 
@@ -182,6 +187,18 @@ const collectCandidates = (params: {
   readonly into: Map<string, CandidateFinding>
   readonly maxToAdd: number
   readonly excludeLocations?: ReadonlySet<string>
+  // Spec 05's `citation` evidence kind. Off by default (`review.citations.enabled`
+  // is false), in which case `candidateFromFinding` never calls `citationEvidenceFor`
+  // and no record is produced — the disabled path is unchanged from before this
+  // capability existed.
+  readonly citationsEnabled: boolean
+  readonly numberedFileContentFor: (path: string) => string | undefined
+  // Verified citation evidence accumulates here, across every candidate this call
+  // (and every other call in the same pass) contributes — a candidate's own
+  // `evidenceIds` only ever reference records that also landed in this list, which
+  // is what lets `TaskReviewResult.evidenceRecords` carry exactly what the
+  // candidates it returns actually cite.
+  readonly evidenceRecordsInto: EvidenceRecord[]
 }): CollectedCandidates => {
   let dropped = 0
   let suppressedByLocation = 0
@@ -196,11 +213,17 @@ const collectCandidates = (params: {
       cappedByLimit += 1
       continue
     }
-    const candidate = candidateFromFinding(params.task, raw)
-    if (candidate === undefined) {
+    const built = candidateFromFinding({
+      task: params.task,
+      raw,
+      citationsEnabled: params.citationsEnabled,
+      numberedFileContentFor: params.numberedFileContentFor
+    })
+    if (built === undefined) {
       dropped += 1
       continue
     }
+    const { candidate, evidenceRecords } = built
     if (params.excludeLocations?.has(locationKey(candidate))) {
       suppressedByLocation += 1
       continue
@@ -210,6 +233,7 @@ const collectCandidates = (params: {
       continue
     }
     params.into.set(candidate.id, candidate)
+    params.evidenceRecordsInto.push(...evidenceRecords)
     added += 1
   }
 
@@ -289,6 +313,9 @@ const collectDiscoveryPass = (params: {
   readonly into: Map<string, CandidateFinding>
   readonly maxCandidatesPerCall: number
   readonly excludeLocations?: ReadonlySet<string>
+  readonly citationsEnabled: boolean
+  readonly numberedFileContentFor: (path: string) => string | undefined
+  readonly evidenceRecordsInto: EvidenceRecord[]
 }): DiscoveryPassResult => {
   const providerIssues: ProviderIssue[] = []
   const reviewedTasks: WorkflowReviewTask[] = []
@@ -315,6 +342,9 @@ const collectDiscoveryPass = (params: {
       task: partition,
       into: params.into,
       maxToAdd: params.maxCandidatesPerCall,
+      citationsEnabled: params.citationsEnabled,
+      numberedFileContentFor: params.numberedFileContentFor,
+      evidenceRecordsInto: params.evidenceRecordsInto,
       ...(params.excludeLocations === undefined
         ? {}
         : { excludeLocations: params.excludeLocations })
@@ -372,16 +402,24 @@ const issueBothPasses = async (
 }
 
 const candidateFromFinding = (
-  task: WorkflowReviewTask,
-  raw: unknown
-): CandidateFinding | undefined => {
-  const parsed = ModelHolisticFindingSchema.safeParse(raw)
+  input: {
+    readonly task: WorkflowReviewTask
+    readonly raw: unknown
+    readonly citationsEnabled: boolean
+    readonly numberedFileContentFor: (path: string) => string | undefined
+  }
+): {
+  readonly candidate: CandidateFinding
+  readonly evidenceRecords: readonly EvidenceRecord[]
+} | undefined => {
+  const parsed = ModelHolisticFindingSchema.safeParse(input.raw)
 
   if (!parsed.success) {
     return undefined
   }
 
   const finding = parsed.data
+  const { task } = input
 
   if (
     finding.category === undefined ||
@@ -399,25 +437,49 @@ const candidateFromFinding = (
     `${task.id}:${finding.path}:${finding.startLine}:${finding.title}`
   ).slice(0, 16)}`
 
-  return CandidateFindingSchema.parse({
-    id,
-    taskId: task.id,
-    category: finding.category,
-    severity: finding.severity,
-    // Marked, not bare-sliced. The refuter adjudicates this description and a
-    // human reads it in the report; a sentence that stops mid-clause with no mark
-    // reads as the model's complete thought, so a reader weighs an argument whose
-    // ending was removed here. The mark costs three characters of the cap.
-    title: truncateForContract(finding.title, 120),
-    description: truncateForContract(finding.description, 1200),
-    location: {
-      path: finding.path,
-      startLine: finding.startLine,
-      side: 'file'
-    },
-    evidenceIds: [],
-    proposedBy: 'review-agent'
-  })
+  // Spec 05's `citation` evidence kind: verified only, and only when the flag is
+  // on — `finding.citations` is never even read otherwise, so a run with the flag
+  // off cannot be influenced by a model that sent citations unprompted. A
+  // citation that fails verification simply is not in this list (see
+  // `citationEvidenceFor`); it never removes or downgrades anything below.
+  const evidenceRecords = input.citationsEnabled
+    ? citationEvidenceFor({
+        candidateId: id,
+        path: finding.path,
+        citations: finding.citations ?? [],
+        lookup: input.numberedFileContentFor
+      })
+    : []
+
+  return {
+    candidate: CandidateFindingSchema.parse({
+      id,
+      taskId: task.id,
+      category: finding.category,
+      severity: finding.severity,
+      // Marked, not bare-sliced. The refuter adjudicates this description and a
+      // human reads it in the report; a sentence that stops mid-clause with no
+      // mark reads as the model's complete thought, so a reader weighs an
+      // argument whose ending was removed here. The mark costs three characters
+      // of the cap.
+      title: truncateForContract(finding.title, 120),
+      description: truncateForContract(finding.description, 1200),
+      location: {
+        path: finding.path,
+        startLine: finding.startLine,
+        side: 'file'
+      },
+      // Verified citation ids only — the hard no-loss constraint is that a
+      // missing, malformed, or unverified citation must leave this candidate
+      // EXACTLY as it always was. `evidenceRecords` above is already only the
+      // verified ones, so mapping it straight to ids can never drop, downgrade,
+      // or otherwise penalize a candidate for a bad citation: the worst case is
+      // simply the empty array this field has always held.
+      evidenceIds: evidenceRecords.map((record) => record.id),
+      proposedBy: 'review-agent'
+    }),
+    evidenceRecords
+  }
 }
 
 // Holistic discovery: a recall-first whole-change review per task. It reads the full
@@ -451,6 +513,13 @@ export const runModelBackedHolisticTaskReview = async (
   const candidatesById = new Map<string, CandidateFinding>()
   const rawDiff = input.workflowInput.reviewedDiffText
   const signalFactsEnabled = input.workflowInput.signalFactsEnabled
+  const citationsEnabled = input.workflowInput.citationsEnabled
+  // Built once and shared by every candidate across both passes: it is a lazy
+  // path->content lookup (see `numberedFileContentLookupFor`), so a task whose
+  // findings carry no citations at all — the common case with the flag off —
+  // never pays to build it.
+  const numberedFileContentFor = numberedFileContentLookupFor(input.taskInput)
+  const citationEvidenceRecords: EvidenceRecord[] = []
 
   // Spec 27: yield tracks CALL COUNT, not defect count. A file that gets any
   // attention yields ~1.2 findings regardless of how much the call was shown, so
@@ -469,7 +538,7 @@ export const runModelBackedHolisticTaskReview = async (
       // Rebuilt per task rather than prebuilt, so a task the provider refuses can be
       // halved and each half prompted from its OWN context (spec 26).
       buildText: (taskInput) =>
-        buildReviewText(taskInput, rawDiff, signalFactsEnabled),
+        buildReviewText(taskInput, rawDiff, signalFactsEnabled, citationsEnabled),
       stage: 'holistic_review',
       signal: input.signal
     })
@@ -483,7 +552,12 @@ export const runModelBackedHolisticTaskReview = async (
       taskInput: input.taskInput,
       partitions,
       buildText: (taskInput) =>
-        buildSecurityReviewText(taskInput, rawDiff, signalFactsEnabled),
+        buildSecurityReviewText(
+          taskInput,
+          rawDiff,
+          signalFactsEnabled,
+          citationsEnabled
+        ),
       stage: 'holistic_review_security',
       signal: input.signal
     })
@@ -513,7 +587,10 @@ export const runModelBackedHolisticTaskReview = async (
   const general = collectDiscoveryPass({
     issued: generalIssued,
     into: candidatesById,
-    maxCandidatesPerCall: HOLISTIC_MAX_CANDIDATES
+    maxCandidatesPerCall: HOLISTIC_MAX_CANDIDATES,
+    citationsEnabled,
+    numberedFileContentFor,
+    evidenceRecordsInto: citationEvidenceRecords
   })
 
   const generalCandidateCount = candidatesById.size
@@ -529,7 +606,10 @@ export const runModelBackedHolisticTaskReview = async (
           // is exactly the set the sequential arrangement derived it from.
           excludeLocations: new Set(
             [...candidatesById.values()].map(locationKey)
-          )
+          ),
+          citationsEnabled,
+          numberedFileContentFor,
+          evidenceRecordsInto: citationEvidenceRecords
         })
 
   const providerIssues: ProviderIssue[] = [
@@ -564,7 +644,9 @@ export const runModelBackedHolisticTaskReview = async (
       : await runSemanticFindingMerge({
           task: input.task,
           candidates: discovered,
-          fileTextFor: numberedFileContentLookupFor(input.taskInput),
+          // Shares the SAME lazy lookup citation evidence uses above, rather than
+          // building a second closure over an identical map.
+          fileTextFor: numberedFileContentFor,
           runMerge: input.runners.semanticMerge,
           ...(input.signal === undefined ? {} : { signal: input.signal })
         })
@@ -637,7 +719,11 @@ export const runModelBackedHolisticTaskReview = async (
     // instead of vanishing. Downstream holds the rejected ones out of refutation
     // and admission, so a group still yields exactly one admitted finding.
     candidates: discovered,
-    evidenceRecords: [],
+    // Empty unless `review.citations.enabled` — see `citationsEnabled` above.
+    // These reach `handler.ts`'s `taskEvidenceRecords`, which flows into
+    // refutation's `reviewEvidence` (see refutation/packet.ts): the first
+    // producer this field has ever had.
+    evidenceRecords: citationEvidenceRecords,
     providerIssues,
     rejectedFindings: [...(merge?.rejectedFindings ?? [])],
     reviewedTasks,

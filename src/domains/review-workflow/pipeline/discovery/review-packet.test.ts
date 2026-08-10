@@ -165,3 +165,27 @@ describe('the deterministic signal facts section', () => {
     ).not.toContain('Declared symbols in the changed files')
   })
 })
+
+// Spec 05's `citation` evidence kind. Off by default: the disabled path must be
+// byte-for-byte what it was before this section existed, the same guarantee the
+// signal-facts and security-pass sections carry.
+describe('the citation instructions section', () => {
+  const input = taskInputFor(['src/plain.ts'])
+
+  test('is absent, byte for byte, when the flag is off', () => {
+    expect(buildContextSections(input, rawDiff)).toEqual(
+      buildContextSections(input, rawDiff, false, false)
+    )
+    expect(buildContextSections(input, rawDiff).join('\n')).not.toContain(
+      '## Citing your evidence'
+    )
+  })
+
+  test('is present when the flag is on, and asks for a line number and a quote', () => {
+    const text = buildContextSections(input, rawDiff, false, true).join('\n')
+
+    expect(text).toContain('## Citing your evidence')
+    expect(text).toContain('startLine')
+    expect(text).toContain('quote')
+  })
+})

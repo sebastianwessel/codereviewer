@@ -44,7 +44,7 @@ const config = CodeReviewerConfigSchema.parse({
 
 const evidence: EvidenceRecord = {
   id: 'ev_providerstate',
-  kind: 'deterministic-signal',
+  kind: 'diagnostic',
   summary: 'Provider state evidence.',
   location: { path: 'src/a.ts', startLine: 1, side: 'file' },
   source: 'deterministic-support-signal',

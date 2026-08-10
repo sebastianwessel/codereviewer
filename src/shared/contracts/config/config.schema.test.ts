@@ -210,6 +210,24 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
+  test('discovery citations default to disabled', () => {
+    const disabled = CodeReviewerConfigSchema.parse({})
+    expect(disabled.review.citations.enabled).toBe(false)
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      review: { citations: { enabled: true } }
+    })
+    expect(enabled.review.citations.enabled).toBe(true)
+  })
+
+  test('review.citations rejects an unknown nested key', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        review: { citations: { on: true } }
+      })
+    ).toThrow()
+  })
+
   test('verification is disabled by default and accepts configured claim providers', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.verification.enabled).toBe(false)

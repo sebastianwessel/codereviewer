@@ -150,7 +150,7 @@ describe('review runner context assembly', () => {
       const sourceContent = 'export const alpha = 1\n'
       const evidence = EvidenceRecordSchema.parse({
         id: 'ev_alpha',
-        kind: 'deterministic-signal',
+        kind: 'diagnostic',
         summary: 'alpha declaration detected',
         location: { path: 'src/a.ts', startLine: 1, side: 'file' },
         source: 'deterministic-support-signal',
@@ -290,7 +290,7 @@ describe('review runner context assembly', () => {
       const sourceContent = 'export const alpha = 1\n'
       const evidence = EvidenceRecordSchema.parse({
         id: 'ev_alpha',
-        kind: 'deterministic-signal',
+        kind: 'diagnostic',
         summary: 'alpha declaration detected',
         location: { path: 'src/a.ts', startLine: 1, side: 'file' },
         source: 'deterministic-support-signal',

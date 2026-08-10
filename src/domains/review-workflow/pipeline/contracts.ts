@@ -46,6 +46,12 @@ export const ReviewWorkflowInputSchema = z.strictObject({
   // default, and the disabled path renders the packet byte-for-byte as it was
   // before the section existed — the same guarantee the security pass carries.
   signalFactsEnabled: z.boolean().default(false),
+  // Spec 05's `citation` evidence kind: whether discovery is ASKED to cite the
+  // source line that grounds each finding. Off by default, and the disabled path
+  // renders the packet byte-for-byte as it was before the section existed — the
+  // same guarantee `signalFactsEnabled` and the security pass carry. See
+  // `review.citations` (config.schema.ts) for the full rationale.
+  citationsEnabled: z.boolean().default(false),
   // Spec 27. Absent means unlimited, which is today's behaviour.
   maxFilesPerDiscoveryCall: z.int().min(1).optional(),
   evidence: z.array(EvidenceRecordSchema),

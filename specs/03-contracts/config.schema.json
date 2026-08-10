@@ -105,6 +105,17 @@
             }
           },
           "additionalProperties": false
+        },
+        "citations": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

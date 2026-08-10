@@ -112,6 +112,7 @@ export const createWorkflowInput = (
   reviewedDiffText: input.reviewedDiffText,
   securityPassEnabled: input.config.security.dedicatedPass.enabled,
   signalFactsEnabled: input.config.review.signalFacts.enabled,
+  citationsEnabled: input.config.review.citations.enabled,
   ...(input.config.aiReview.maxFilesPerDiscoveryCall === undefined
     ? {}
     : {

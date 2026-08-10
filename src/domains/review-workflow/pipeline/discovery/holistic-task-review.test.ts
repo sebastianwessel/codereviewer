@@ -1266,3 +1266,195 @@ describe('discovery partitioning end to end (spec 27)', () => {
     expect(result.candidates[0]?.location.path).toBe('src/c.ts')
   })
 })
+
+// Spec 05's `citation` evidence kind, end to end through discovery. The hard
+// constraint under test throughout is the no-loss guarantee: an absent,
+// malformed, or unverified citation must leave the candidate EXACTLY as it is
+// with the capability off — never dropped, downgraded, or rejected for it.
+describe('discovery citation evidence (spec 05)', () => {
+  const citationTask: WorkflowReviewTask = {
+    ...task,
+    id: 'task_citation',
+    reviewContext: [
+      {
+        kind: 'file',
+        path: 'src/app.ts',
+        content: [
+          'export const getRate = (id: string) => {',
+          '  const record = cache.get(id)',
+          '  return record.rate',
+          '}'
+        ].join('\n'),
+        ledgerEntryId: 'ctx_cccccccccccccccccccccccc'
+      }
+    ]
+  }
+  const citationTaskInput = TaskReviewInputSchema.parse({
+    ...taskInput,
+    task: citationTask
+  })
+  const workflowInputWithCitations = ReviewWorkflowInputSchema.parse({
+    runId: 'run-holistic',
+    reviewedPaths: ['src/app.ts'],
+    citationsEnabled: true,
+    evidence: [],
+    candidates: [],
+    skills: [],
+    provenance: {
+      reviewer: 'review-agent',
+      modelProvider: 'openai',
+      modelName: 'holistic-test',
+      signalVersions: { typescript: '6.0.3' },
+      configHash
+    }
+  })
+  const findingAt = (startLine: number, citations?: unknown) => ({
+    category: 'bug',
+    severity: 'high',
+    title: 'Dereferences record without a null guard',
+    description: 'record may be undefined when the cache misses the id.',
+    path: 'src/app.ts',
+    startLine,
+    ...(citations === undefined ? {} : { citations })
+  })
+
+  test('the flag off: citations are never read, evidenceIds stays empty, and no records are produced', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput, // default-parsed: citationsEnabled is false
+      taskInput: citationTaskInput,
+      task: citationTask,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([
+            findingAt(3, [{ startLine: 3, quote: 'return record.rate' }])
+          ])
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0]?.evidenceIds).toEqual([])
+    expect(result.evidenceRecords).toEqual([])
+  })
+
+  test('a quote that matches at the cited line verifies, and whitespace differences still verify', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithCitations,
+      taskInput: citationTaskInput,
+      task: citationTask,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([
+            findingAt(3, [
+              // Extra internal whitespace and outer padding: still verifies.
+              { startLine: 3, quote: '  return   record.rate  ' }
+            ])
+          ])
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(1)
+    const candidate = result.candidates[0]!
+    // Verified citations produce records whose ids the candidate references.
+    expect(result.evidenceRecords).toHaveLength(1)
+    const record = result.evidenceRecords[0]!
+    expect(candidate.evidenceIds).toEqual([record.id])
+    expect(record.kind).toBe('citation')
+    expect(record.location).toEqual({
+      path: 'src/app.ts',
+      startLine: 3,
+      side: 'file'
+    })
+  })
+
+  test('a quote that does not appear near the cited line does not verify, and the candidate is returned unchanged', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithCitations,
+      taskInput: citationTaskInput,
+      task: citationTask,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([
+            findingAt(3, [
+              { startLine: 3, quote: 'this text is nowhere in the file' }
+            ])
+          ])
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0]?.evidenceIds).toEqual([])
+    expect(result.evidenceRecords).toEqual([])
+  })
+
+  test('a quote that appears elsewhere in the file but outside the window does not verify', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithCitations,
+      taskInput: citationTaskInput,
+      task: citationTask,
+      runners: {
+        holisticReview: async () =>
+          holisticResultWith([
+            // "export const getRate" is on line 1; cited three lines away
+            // (line 4), past the +/-2 window.
+            findingAt(4, [{ startLine: 4, quote: 'export const getRate' }])
+          ])
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0]?.evidenceIds).toEqual([])
+    expect(result.evidenceRecords).toEqual([])
+  })
+
+  test('a finding with no citations still verifies and returns fine with the flag on', async () => {
+    const result = await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithCitations,
+      taskInput: citationTaskInput,
+      task: citationTask,
+      runners: {
+        holisticReview: async () => holisticResultWith([findingAt(3)])
+      },
+      logger: { debug: () => {} }
+    })
+
+    expect(result.candidates).toHaveLength(1)
+    expect(result.candidates[0]?.evidenceIds).toEqual([])
+    expect(result.evidenceRecords).toEqual([])
+  })
+
+  test('the citation instruction reaches the prompt only when the flag is on', async () => {
+    let disabledText: string | undefined
+    await runModelBackedHolisticTaskReview({
+      workflowInput, // default: citationsEnabled false
+      taskInput: citationTaskInput,
+      task: citationTask,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          disabledText = holisticInput.reviewText
+          return holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+    expect(disabledText).not.toContain('## Citing your evidence')
+
+    let enabledText: string | undefined
+    await runModelBackedHolisticTaskReview({
+      workflowInput: workflowInputWithCitations,
+      taskInput: citationTaskInput,
+      task: citationTask,
+      runners: {
+        holisticReview: async (holisticInput) => {
+          enabledText = holisticInput.reviewText
+          return holisticResultWith([])
+        }
+      },
+      logger: { debug: () => {} }
+    })
+    expect(enabledText).toContain('## Citing your evidence')
+  })
+})

@@ -35,7 +35,7 @@ const driftFindings: readonly DriftFinding[] = [
 
 const evidence = EvidenceRecordSchema.parse({
   id: 'ev_alpha',
-  kind: 'deterministic-signal',
+  kind: 'diagnostic',
   summary: 'Symbol alpha was detected.',
   location: { path: 'src/a.ts', startLine: 1, side: 'file' },
   source: 'deterministic-support-signal',

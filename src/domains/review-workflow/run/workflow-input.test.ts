@@ -149,7 +149,7 @@ describe('review runner workflow input', () => {
   test('creates provider workflow input with budgets, context evidence, and cloned baseline', () => {
     const evidence = EvidenceRecordSchema.parse({
       id: 'ev_alpha',
-      kind: 'deterministic-signal',
+      kind: 'diagnostic',
       summary: 'alpha signal',
       location: { path: 'src/a.ts', startLine: 1, side: 'file' },
       source: 'deterministic-support-signal',

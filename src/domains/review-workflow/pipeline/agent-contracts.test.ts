@@ -175,6 +175,85 @@ describe('ModelHolisticFindingSchema fix fields', () => {
   })
 })
 
+describe('ModelHolisticFindingSchema citations', () => {
+  const base = {
+    category: 'bug',
+    severity: 'high',
+    title: 'Dereferences without a guard',
+    description: 'A value may be undefined on this path.',
+    path: 'src/a.ts',
+    startLine: 12
+  }
+
+  test('accepts a well-formed citation', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      citations: [{ startLine: 12, quote: 'value.field' }]
+    })
+
+    expect(parsed.citations).toEqual([{ startLine: 12, quote: 'value.field' }])
+  })
+
+  test('accepts the snake_case start_line alias, and the citation/singular alias', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      citation: [{ start_line: '12', quote: 'value.field' }]
+    })
+
+    expect(parsed.citations).toEqual([{ startLine: 12, quote: 'value.field' }])
+  })
+
+  test('truncates an over-long quote instead of dropping the citation', () => {
+    const longQuote = 'x'.repeat(400)
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      citations: [{ startLine: 12, quote: longQuote }]
+    })
+
+    expect(parsed.citations?.[0]?.quote).toHaveLength(300)
+  })
+
+  // Loose, tolerant, and degrades to absent rather than killing the finding:
+  // the candidate fields still parse fine even when `citations` cannot.
+  test('a malformed citations field degrades to absent, not a parse failure', () => {
+    const parsed = ModelHolisticFindingSchema.safeParse({
+      ...base,
+      citations: 'not an array'
+    })
+
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.citations).toBeUndefined()
+    expect(parsed.success && parsed.data.severity).toBe('high')
+  })
+
+  test('a citation missing its required quote degrades the whole field to absent', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      citations: [{ startLine: 12 }]
+    })
+
+    expect(parsed.citations).toBeUndefined()
+  })
+
+  test('more than the cap degrades the whole field to absent rather than truncating the list', () => {
+    const parsed = ModelHolisticFindingSchema.parse({
+      ...base,
+      citations: Array.from({ length: 6 }, (_unused, index) => ({
+        startLine: index + 1,
+        quote: `line ${index + 1}`
+      }))
+    })
+
+    expect(parsed.citations).toBeUndefined()
+  })
+
+  test('an absent citations field parses as absent, not an empty array', () => {
+    const parsed = ModelHolisticFindingSchema.parse(base)
+
+    expect(parsed.citations).toBeUndefined()
+  })
+})
+
 describe('semanticMergeGroups', () => {
   const known = ['cand_1111111111111111', 'cand_2222222222222222', 'cand_3333333333333333']
 

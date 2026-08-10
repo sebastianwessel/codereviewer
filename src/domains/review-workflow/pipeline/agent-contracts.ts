@@ -419,6 +419,48 @@ const modelLocationValue = (
   modelNestedLocationValue(record, 'primaryLocation', key) ??
   modelNestedLocationValue(record, 'location', key)
 
+// One source-line citation discovery may attach to a finding, ONLY read when
+// `review.citations.enabled` (see holistic-task-review.ts's `candidateFromFinding`
+// and discovery/citation-evidence.ts, which verifies it deterministically before it
+// ever becomes evidence). `path` is optional: a citation overwhelmingly names a
+// line in the finding's own file, so requiring the model to repeat a path it
+// already stated elsewhere on the same object would only be one more place for it
+// to disagree with itself. An absent `path` is resolved against the finding's own
+// `path` at the point the citation is actually verified, not here.
+const normalizeModelCitationEntry = (value: unknown): unknown => {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return value
+  }
+
+  const record = value as Record<string, unknown>
+
+  return {
+    path: record.path ?? record.filePath ?? record.file,
+    startLine: normalizeModelLineValue(
+      record.startLine ?? record.start_line ?? record.line
+    ),
+    quote: record.quote ?? record.text ?? record.snippet
+  }
+}
+
+export const ModelFindingCitationSchema = z.preprocess(
+  normalizeModelCitationEntry,
+  z.object({
+    path: RepositoryRelativePathSchema.optional(),
+    startLine: z.int().min(1),
+    // Truncated, not rejected, for the same reason title/description are below: a
+    // quote one character over the cap is still a real quote, and a citation must
+    // fail toward "absent" only when it cannot be trusted at all, never on a
+    // length technicality.
+    quote: z.preprocess(
+      (value) => truncateModelString(value, 300),
+      z.string().min(1).max(300)
+    )
+  })
+)
+
+export type ModelFindingCitation = z.infer<typeof ModelFindingCitationSchema>
+
 // Holistic discovery emits loosely structured raw findings. This schema
 // normalizes the category/severity/path/startLine fields that holistic needs to
 // build a CandidateFinding, tolerating common model-output drift (aliases,
@@ -465,6 +507,7 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
       modelLocationValue(record, 'lineNumber') ??
       modelLocationValue(record, 'line'),
     evidenceIds: record.evidenceIds ?? record.evidence_ids,
+    citations: record.citations ?? record.citation,
     contextRequests: record.contextRequests ?? record.context_requests,
     requestedContext: record.requestedContext ?? record.requested_context
   }
@@ -510,6 +553,11 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
   evidenceIds: z
     .preprocess(normalizeModelEvidenceIds, z.array(z.string()).optional())
     .catch(undefined),
+  // Same tolerance idiom as `contextRequests` below: a structured array that
+  // fails to parse degrades to absent rather than killing the whole finding, and
+  // an over-long array is capped rather than trimmed, because a model that sent
+  // too many citations is not a reason to guess which ones it meant.
+  citations: z.array(ModelFindingCitationSchema).max(5).optional().catch(undefined),
   contextRequests: z.array(ContextRequestSchema).max(10).optional().catch(undefined),
   requestedContext: z
     .preprocess(

@@ -67,13 +67,19 @@ const largestDiscoveryPacketBytes = (
   for (const partition of partitions) {
     const partitionInput: TaskReviewInput = { ...taskInput, task: partition }
     const reviewTexts = [
-      buildReviewText(partitionInput, rawDiff, input.signalFactsEnabled),
+      buildReviewText(
+        partitionInput,
+        rawDiff,
+        input.signalFactsEnabled,
+        input.citationsEnabled
+      ),
       ...(input.securityPassEnabled
         ? [
             buildSecurityReviewText(
               partitionInput,
               rawDiff,
-              input.signalFactsEnabled
+              input.signalFactsEnabled,
+              input.citationsEnabled
             )
           ]
         : [])

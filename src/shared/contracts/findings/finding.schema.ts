@@ -11,7 +11,7 @@ export const FindingCategorySchema = z.enum([
   'test'
 ])
 
-// Eleven values were removed here, each for a stated reason rather than for
+// Twelve values were removed here, each for a stated reason rather than for
 // having no producer — an unproduced value can equally mean a capability nobody
 // wired, and those get wired, not deleted.
 //
@@ -21,7 +21,9 @@ export const FindingCategorySchema = z.enum([
 //     representations of one fact is the thing that drifts.
 //   - `refutation` was a second name for what `createRefutationEvidence` already
 //     mints as `model-rationale`.
-//   - `symbol` is subsumed by `deterministic-signal`: a symbol span IS one.
+//   - `symbol` named a declared-symbol span. Any located evidence record already
+//     carries a `location`, and no producer ever needed to tell a symbol span
+//     apart from any other one.
 //   - `command`, `config`, `policy` describe subsystems this engine does not have
 //     and is not gaining — it executes nothing, and policy outcomes are recorded
 //     as `RejectedFinding.reason`, not as evidence.
@@ -29,16 +31,23 @@ export const FindingCategorySchema = z.enum([
 //   - `diff` claimed a finding rests on a hunk; the diff travels as
 //     `reviewedDiffRanges` metadata, and a citation into changed code is a
 //     citation into a FILE.
+//   - `deterministic-signal` was KEPT once, deliberately, as the sole exception to
+//     the rule this file otherwise follows: add a value in the SAME CHANGE that
+//     produces it, never before. The signal-facts context section reaches
+//     discovery (`review.signalFacts.enabled`), but nothing ever let a finding
+//     cite one of those facts, and the measurement that would have added that
+//     citation path came back null (reports/2026-08-10-signal-facts-result.md).
+//     The exception did not pay off, so it goes now.
 //
-// `deterministic-signal` is KEPT deliberately though nothing mints it yet. Signal
-// facts are really extracted and really reach the model, today as an opaque JSON
-// blob no finding can cite; giving them a citable identity is wiring a real
-// capability, not inventing one. If that wiring does not land, remove it then.
+// `citation` does not repeat that mistake: it lands in the SAME CHANGE as its
+// producer, `citationEvidenceFor` (discovery/citation-evidence.ts), which mints it
+// only for a discovery-cited source line that a deterministic check re-read and
+// confirmed.
 export const EvidenceKindSchema = z.enum([
   'file',
   'diagnostic',
   'model-rationale',
-  'deterministic-signal',
+  'citation',
   'tool-read',
   'tool-search'
 ])

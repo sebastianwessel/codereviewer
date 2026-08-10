@@ -29,7 +29,7 @@ ReviewMode = "local" | "ci" | "pr" | "full"
 ReviewDepth = "fast" | "balanced" | "thorough"
 Severity = "critical" | "high" | "medium" | "low" | "info"
 FindingCategory = "bug" | "security" | "performance" | "maintainability" | "compatibility" | "policy" | "test"
-EvidenceKind = "file" | "diagnostic" | "model-rationale" | "deterministic-signal" | "tool-read" | "tool-search"
+EvidenceKind = "file" | "diagnostic" | "model-rationale" | "citation" | "tool-read" | "tool-search"
 AdmissionStatus = "admitted" | "rejected" | "needs-more-evidence"
 RejectReason = "schema-invalid" | "location-invalid" | "not-in-scope" | "insufficient-evidence" | "duplicate" | "below-threshold" | "unsafe-content" | "provider-error" | "refuted" | "deterministic-contradiction" | "weak-evidence" | "static-analysis-duplicate"
 ReporterEligibility = "inline" | "summary-only" | "artifact-only"
@@ -39,21 +39,35 @@ RefutationVerdict = "proved" | "refuted" | "needs-more-evidence" | "provider-err
 ```
 
 
-**On the size of `EvidenceKind`.** It carried seventeen values; eleven had no
-producer and were removed on 2026-08-10, each for a stated reason rather than for
-the absence itself — an unproduced value can equally mean a capability nobody
-wired, and those get wired instead. `data-flow`, `related-location`, `rule` and
-`baseline` duplicated first-class `AdmittedFinding` fields that analyzer ingestion
-already populates; `refutation` renamed what refutation mints as
-`model-rationale`; `symbol` is subsumed by `deterministic-signal`; `command`,
-`config` and `policy` name subsystems this engine does not have; `proof`
-duplicated the verification domain's `Verdict`/`Claim`; `diff` claimed a finding
-rests on a hunk, but the diff travels as `reviewedDiffRanges` and a citation into
-changed code is a citation into a file.
+**On the size of `EvidenceKind`.** It carried seventeen values; twelve had no
+producer and were removed, each for a stated reason rather than for the absence
+itself — an unproduced value can equally mean a capability nobody wired, and
+those get wired instead. `data-flow`, `related-location`, `rule` and `baseline`
+duplicated first-class `AdmittedFinding` fields that analyzer ingestion already
+populates; `refutation` renamed what refutation mints as `model-rationale`;
+`symbol` named a declared-symbol span, which any located evidence record's
+`location` already covers; `command`, `config` and `policy` name subsystems this
+engine does not have; `proof` duplicated the verification domain's
+`Verdict`/`Claim`; `diff` claimed a finding rests on a hunk, but the diff travels
+as `reviewedDiffRanges` and a citation into changed code is a citation into a
+file. All six removed on 2026-08-10.
 
-`deterministic-signal` was KEPT with no producer, deliberately: signal facts are
-extracted and do reach the model, today as an opaque blob no finding can cite.
-Add a value in the same change that produces it, never before.
+`deterministic-signal` was KEPT once, on 2026-08-10, as the sole exception to the
+rule this contract otherwise enforces — add a value in the same change that
+produces it, never before — on the argument that signal facts are extracted and
+do reach the model, today as an opaque blob no finding can cite. The measurement
+that would have wired a citation path for it came back null
+(reports/2026-08-10-signal-facts-result.md), so it was removed in its turn.
+
+`citation` (added the same day) does not repeat that exception: it landed in the
+same change as its producer, `citationEvidenceFor`
+(`src/domains/review-workflow/pipeline/discovery/citation-evidence.ts`), which
+mints it only for a discovery-cited source line a deterministic check re-read and
+confirmed against the reviewed file. Gated by `review.citations.enabled`
+(off by default, unmeasured); disabled, a finding's `evidenceIds` stays `[]`
+exactly as before this kind existed, and a citation that is absent, malformed, or
+fails verification can never drop, downgrade, or reject the candidate that sent
+it.
 
 **`AdmittedFinding.cwe`, `securitySeverity`, `relatedLocations` and `dataFlow`
 stay**, and are not evidence of dead code even when a whole eval corpus shows them
