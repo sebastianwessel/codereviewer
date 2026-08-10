@@ -32,7 +32,6 @@ import {
   renderChangeImpactMarkdown,
   runChangeImpact
 } from '../../domains/change-impact/index.js'
-import { createContextRetriever } from '../../domains/context-retrieval/index.js'
 import {
   checkOutputFormats,
   runCheckCommand,
@@ -42,7 +41,6 @@ import { parseEnumOption } from '../args.js'
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
 import { mapErrorResult } from '../cli-error-results.js'
 import { createCliLogger } from '../command-logging.js'
-import { mediatedFileReader } from '../mediated-file-reader.js'
 import {
   IMPACT_MARKDOWN_ARTIFACT_NAME,
   jsonResult,
@@ -66,22 +64,7 @@ export const runImpact = async (
     args,
     options,
     commandOptions: ['--format'],
-    report: async ({ loadedConfig, baseRef, headRef }) => {
-      // The read budget is sized to the review file cap, which is the same bound
-      // intake applies to how many files can be changed in one run.
-      const retriever = createContextRetriever({
-        repositoryRoot: options.cwd,
-        budget: {
-          maxReads: loadedConfig.config.review.maxFiles,
-          maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
-          maxSearches: 0
-        },
-        paths: {
-          include: loadedConfig.config.paths.include,
-          exclude: loadedConfig.config.paths.exclude
-        }
-      })
-
+    report: async ({ loadedConfig, baseRef, headRef, runContext }) => {
       const logger = createCliLogger({
         config: loadedConfig.config,
         command: 'impact',
@@ -112,7 +95,8 @@ export const runImpact = async (
                 agents: { judgeReliance: lane.judgeReliance },
                 usage: lane.usage
               }),
-          readChangedFile: mediatedFileReader(retriever)
+          readChangedFile: runContext.readChangedFile,
+          runGit: runContext.runGit
         })
       } finally {
         await lane?.shutdown()

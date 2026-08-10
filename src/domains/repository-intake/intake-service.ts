@@ -124,7 +124,10 @@ const defaultFileSystem: RepositoryIntakeFileSystem = {
   readFile
 }
 
-const defaultGitRunner: GitCommandRunner = async (args, options) => {
+// Exported so a run context can WRAP it (memoizing identical commands across the
+// stages of one run) rather than reimplementing how this repository shells out to
+// git. The intake service still falls back to it when no runner is injected.
+export const defaultGitRunner: GitCommandRunner = async (args, options) => {
   assertReadOnlyGitArgs(args)
   const { stdout } = await execFileAsync('git', [...args], {
     cwd: options.cwd,

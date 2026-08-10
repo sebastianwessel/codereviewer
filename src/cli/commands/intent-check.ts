@@ -24,7 +24,6 @@
 // `intent-markdown.ts`.
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { createContextRetriever } from '../../domains/context-retrieval/index.js'
 import {
   createIntentFulfilmentLane,
   renderIntentFulfilmentMarkdown,
@@ -39,7 +38,6 @@ import { parseEnumOption } from '../args.js'
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
 import { mapErrorResult } from '../cli-error-results.js'
 import { createCliLogger } from '../command-logging.js'
-import { mediatedFileReader } from '../mediated-file-reader.js'
 import {
   INTENT_MARKDOWN_ARTIFACT_NAME,
   jsonResult,
@@ -63,21 +61,9 @@ export const runIntent = async (
     args,
     options,
     commandOptions: ['--format'],
-    report: async ({ loadedConfig, baseRef, headRef }) => {
-      // Change-intent sources are read by spec 11's ingestion instead of through
-      // this retriever, which owns its own bounds and its own redaction.
-      const retriever = createContextRetriever({
-        repositoryRoot: options.cwd,
-        budget: {
-          maxReads: loadedConfig.config.review.maxFiles,
-          maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
-          maxSearches: 0
-        },
-        paths: {
-          include: loadedConfig.config.paths.include,
-          exclude: loadedConfig.config.paths.exclude
-        }
-      })
+    report: async ({ loadedConfig, baseRef, headRef, runContext }) => {
+      // Change-intent sources are read by spec 11's ingestion, not through the
+      // run context's mediated reader, which owns its own bounds and redaction.
       const logger = createCliLogger({
         config: loadedConfig.config,
         command: 'intent',
@@ -111,7 +97,8 @@ export const runIntent = async (
                 },
                 usage: lane.usage
               }),
-          readChangedFile: mediatedFileReader(retriever)
+          readChangedFile: runContext.readChangedFile,
+          runGit: runContext.runGit
         })
       } finally {
         await lane?.shutdown()
