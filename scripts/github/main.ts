@@ -11,9 +11,11 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import { resolveExistingPathInsideRoot } from '../../src/platform/path-service.js'
+import { loadCodeReviewerConfig } from '../../src/domains/configuration/config-loader.js'
 import { createGithubApi } from './github-api.js'
 import { parsePullRequestEvent } from './pull-request-context.js'
-import { runPipeline } from './pipeline.js'
+import { parseReviewConversationTrigger } from './review-conversation.js'
+import { runPipeline, type PipelineDependencies } from './pipeline.js'
 import type { StageResult } from './stage-outcomes.js'
 
 const repositoryRoot = process.cwd()
@@ -124,9 +126,45 @@ const parsePositiveInteger = (
 
 const main = async (): Promise<void> => {
   const eventPath = requireEnvironment('GITHUB_EVENT_PATH')
+  const eventPayloadRaw = await readFile(eventPath, 'utf8')
+  const eventName = process.env.GITHUB_EVENT_NAME ?? 'pull_request'
+  const repository = requireEnvironment('GITHUB_REPOSITORY')
+
+  // Spec 30 (review conversation): `pull_request_review_comment` fires for
+  // every new review comment, not only replies that nominate a finding, and
+  // the lane ships disabled by default. Both are resolved here, before a
+  // pull-request context is even built, so an ordinary comment or a disabled
+  // lane costs nothing beyond this check — no CLI invocation, no comment
+  // write, no config the rest of this file has to know about.
+  let reviewConversation: PipelineDependencies['reviewConversation']
+
+  if (eventName === 'pull_request_review_comment') {
+    const githubConfigPath = process.env.CODEREVIEWER_GITHUB_CONFIG
+    const { config } = await loadCodeReviewerConfig({
+      repositoryRoot,
+      ...(githubConfigPath === undefined ? {} : { configPath: githubConfigPath }),
+      environment: process.env
+    })
+
+    reviewConversation = config.reviewConversation.enabled
+      ? parseReviewConversationTrigger({
+          eventName,
+          eventPayload: eventPayloadRaw
+        })
+      : undefined
+
+    if (reviewConversation === undefined) {
+      process.stdout.write(
+        'This review-comment event is not a reply this lane acts on (the reviewConversation lane is disabled, or the comment is not a reply to a finding this engine reported); nothing to do.\n'
+      )
+      process.exitCode = 0
+      return
+    }
+  }
+
   const context = parsePullRequestEvent({
-    eventPayload: await readFile(eventPath, 'utf8'),
-    repository: requireEnvironment('GITHUB_REPOSITORY')
+    eventPayload: eventPayloadRaw,
+    repository
   })
   const token = process.env.GITHUB_TOKEN ?? ''
   const contextDirectory =
@@ -178,7 +216,8 @@ const main = async (): Promise<void> => {
         }),
     log: (message) => {
       process.stdout.write(`${message}\n`)
-    }
+    },
+    ...(reviewConversation === undefined ? {} : { reviewConversation })
   })
 
   const summaryPath = process.env.GITHUB_STEP_SUMMARY

@@ -42,6 +42,7 @@ export class GithubApiError extends Error {
 }
 
 export type ReviewCommentSummary = {
+  readonly id: number
   readonly body?: string | null
 }
 

@@ -413,6 +413,33 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
+  // Spec 30: the lane ships disabled until the hold-rate-under-pushback
+  // measurement clears. Off by default, exactly like `changeImpact` and
+  // `intentFulfilment` above.
+  test('review conversation is disabled by default and carries no other key', () => {
+    const disabled = CodeReviewerConfigSchema.parse({})
+    expect(disabled.reviewConversation).toEqual({ enabled: false })
+
+    const enabled = CodeReviewerConfigSchema.parse({
+      reviewConversation: { enabled: true }
+    })
+    expect(enabled.reviewConversation).toEqual({ enabled: true })
+  })
+
+  // Spec 30 requirement 6: the lane "MUST be non-blocking and MUST NOT be
+  // configurable to block". A `blocking` key would be accepted and silently
+  // ignored — the failure `SecurityConfigSchema` already records once — so the
+  // schema rejects it outright.
+  test('review conversation rejects a blocking key it must never honour', () => {
+    expect(() =>
+      CodeReviewerConfigSchema.parse({ reviewConversation: { blocking: true } })
+    ).toThrow()
+    expect(() =>
+      CodeReviewerConfigSchema.parse({
+        reviewConversation: { maxReplies: 10 }
+      })
+    ).toThrow()
+  })
 
   test('verification rejects an unknown claim provider type', () => {
     expect(() =>

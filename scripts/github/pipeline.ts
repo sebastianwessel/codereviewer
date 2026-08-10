@@ -44,6 +44,11 @@ import {
   type StageOutcome,
   type StageResult
 } from './stage-outcomes.js'
+import {
+  resolveNominatedFingerprints,
+  resolveReviewConversationOutcomes,
+  type ReviewConversationTrigger
+} from './review-conversation.js'
 
 export type PipelineOptions = {
   /** Identifies the comment this workflow owns. One key, one comment. */
@@ -81,6 +86,17 @@ export type PipelineDependencies = {
    */
   readonly api?: GithubApi
   readonly log: (message: string) => void
+  /**
+   * Present when this run was triggered by a reply to a review comment (spec
+   * 30), carrying only the id of the comment being replied to. `undefined` for
+   * the ordinary push-triggered path, which behaves exactly as before.
+   *
+   * Nothing about the reply beyond this one number ever reaches here: not its
+   * text, not its author, not its existence past this run. Resolving it
+   * (`review-conversation.ts`) already parses only that field out of the
+   * triggering event.
+   */
+  readonly reviewConversation?: ReviewConversationTrigger
 }
 
 export type PipelineResult = {
@@ -141,6 +157,15 @@ export const runPipeline = async (
   const { context, options } = dependencies
   const notes: string[] = []
 
+  // Spec 30 requirement 6: a review-conversation-triggered run "MUST be
+  // non-blocking and MUST NOT be configurable to block". Applied at every exit
+  // below rather than only the last one, so a re-adjudication can never fail the
+  // job through any path the ordinary push-triggered run can — including a
+  // missing provider or a failed gate, neither of which the original finding
+  // failed on either.
+  const exitCodeFor = (exitCode: number): number =>
+    dependencies.reviewConversation === undefined ? exitCode : 0
+
   // A fork pull request on a `pull_request` trigger gets no secrets and a
   // read-only token, so neither the provider call nor the comment write can
   // succeed. `pull_request_target` would supply both — and would run the fork's
@@ -153,7 +178,7 @@ export const runPipeline = async (
     dependencies.log(message)
 
     return {
-      exitCode: 0,
+      exitCode: exitCodeFor(0),
       commentBody: renderSummaryComment({
         markerKey: options.markerKey,
         outcomes: stageDefinitions.map((stage) =>
@@ -202,12 +227,63 @@ export const runPipeline = async (
     }
 
     return {
-      exitCode: CONFIGURATION_EXIT_CODE,
+      exitCode: exitCodeFor(CONFIGURATION_EXIT_CODE),
       commentBody: body,
       outcomes,
       notes: [message],
       posted: dependencies.api !== undefined,
       inlineCommentCount: 0
+    }
+  }
+
+  // Spec 30: resolve what a reply nominated before this run does anything that
+  // spends. A reply that does not target a finding this engine reported — no API
+  // access to check it with, a deleted or unrelated comment, no finding marker on
+  // the parent — nominates nothing, and this run has nothing to do. Checked here,
+  // before the change-intent write and before any stage runs, so "nominates
+  // nothing" costs one read of the pull request's existing comments and not a
+  // review.
+  let nominatedFingerprints: ReadonlySet<string> | undefined
+
+  if (dependencies.reviewConversation !== undefined) {
+    if (dependencies.api === undefined) {
+      const message =
+        'This run has no access to the pull request, so the reply that triggered it could not be resolved.'
+      dependencies.log(message)
+
+      return {
+        exitCode: exitCodeFor(0),
+        commentBody: '',
+        outcomes: [],
+        notes: [message],
+        posted: false,
+        inlineCommentCount: 0
+      }
+    }
+
+    const { parentCommentId } = dependencies.reviewConversation
+    const existingComments = await dependencies.api.listReviewComments(
+      context.number
+    )
+    const parent = existingComments.find(
+      (comment) => comment.id === parentCommentId
+    )
+
+    nominatedFingerprints = resolveNominatedFingerprints(parent?.body)
+
+    if (nominatedFingerprints.size === 0) {
+      const message =
+        'This reply does not target a finding this engine reported, so nothing was re-checked.'
+      dependencies.log(message)
+
+      return {
+        exitCode: exitCodeFor(0),
+        commentBody: '',
+        outcomes: [],
+        notes: [message],
+        posted: false,
+        inlineCommentCount: 0
+      }
     }
   }
 
@@ -338,6 +414,28 @@ export const runPipeline = async (
     }
   }
 
+  // Spec 30 requirement 3/4: state the outcome for each nominated finding as its
+  // own statement. `nominatedFingerprints` is only ever set once it is already
+  // non-empty (the early-return above sends the empty case home before this
+  // point), so the sole remaining "nothing to report" case is a review that did
+  // not complete at all — noted rather than guessed at, since there is no
+  // finding data to compare against.
+  const reviewConversationOutcomes =
+    nominatedFingerprints === undefined
+      ? undefined
+      : review === undefined
+        ? []
+        : resolveReviewConversationOutcomes({
+            nominatedFingerprints,
+            findings: review.findings
+          })
+
+  if (nominatedFingerprints !== undefined && review === undefined) {
+    notes.push(
+      `${nominatedFingerprints.size} nominated finding${nominatedFingerprints.size === 1 ? '' : 's'} could not be re-checked because the review did not complete.`
+    )
+  }
+
   const body = renderSummaryComment({
     markerKey: options.markerKey,
     outcomes,
@@ -349,6 +447,10 @@ export const runPipeline = async (
     ...(intent === undefined ? {} : { intent }),
     ...(impact === undefined ? {} : { impact }),
     ...(options.runUrl === undefined ? {} : { runUrl: options.runUrl }),
+    ...(reviewConversationOutcomes === undefined ||
+    reviewConversationOutcomes.length === 0
+      ? {}
+      : { reviewConversation: reviewConversationOutcomes }),
     inlineCommentCount,
     notes
   })
@@ -365,7 +467,7 @@ export const runPipeline = async (
   }
 
   return {
-    exitCode: jobExitCode(outcomes),
+    exitCode: exitCodeFor(jobExitCode(outcomes)),
     commentBody: body,
     outcomes,
     notes,

@@ -34,7 +34,11 @@ flowchart TD
 1. **Triggers** on `opened`, `synchronize` (every push to the branch),
    `reopened` and `ready_for_review`. Draft pull requests are skipped — they
    cannot be merged and every run costs money; marking one ready fires
-   `ready_for_review` and reviews it.
+   `ready_for_review` and reviews it. It also triggers on
+   `pull_request_review_comment` (`created`) — see
+   [Review conversation](#review-conversation-spec-30) below; that trigger does
+   nothing unless `reviewConversation.enabled` is set, which it is not by
+   default.
 2. **Feeds the pull-request title and description in as change intent.** They
    are written as a frontmatter-markdown file into the inbox directory the
    [change-intent capability](../03-concepts/optional-capabilities/change-intent-context.md)
@@ -46,7 +50,8 @@ flowchart TD
 5. **Posts inline review comments** for the findings the engine anchored to a
    diff line, deduplicated so a re-run does not repeat itself.
 6. **Fails the job** only when the review's quality gate failed or the review
-   could not run.
+   could not run — never on a `pull_request_review_comment`-triggered run,
+   which cannot fail the job at all (see below).
 
 ---
 
@@ -252,6 +257,60 @@ volume, and `CODEREVIEWER_MAX_INLINE_COMMENTS` to change the per-run cap.
 
 ---
 
+## Review conversation (spec 30)
+
+**Off by default** — set `reviewConversation.enabled` to `true` to turn it on.
+See [the configuration reference](../06-reference/configuration/review-conversation.md)
+and [spec 30](../../specs/30-review-conversation.md) for the full design and
+threat model; this section covers what it changes about the workflow.
+
+A reply to one of this engine's own inline finding comments re-runs the review
+and reports whether that finding came back:
+
+```mermaid
+flowchart TD
+  A["pull_request_review_comment: created"] --> B{"reviewConversation.enabled?<br/>Reply, not a top-level comment?"}
+  B -- no --> C["Exit. Nothing spawned, nothing posted."]
+  B -- yes --> D{"Parent comment carries<br/>a finding marker?"}
+  D -- no --> C
+  D -- yes --> E["Run the SAME review stage<br/>a push would run — unchanged"]
+  E --> F["Add a Review conversation section<br/>to the SAME summary comment"]
+  F --> G["Exit 0, always"]
+```
+
+- **No new re-adjudication code path.** The `review` stage that runs is the
+  exact command, config, and prompt a push already runs; nothing tells it a
+  human replied. That is not an implementation shortcut, it is spec 30
+  requirement 2: giving the re-check "a distinct prompt, a softer threshold, or
+  any knowledge that a human objected" is the rejected design.
+- **The reply's text never reaches anything.** Not the diff, not the prompt,
+  not a log line, not storage. What crosses from the triggering event into the
+  run is the numeric id of the comment being replied to
+  (`scripts/github/review-conversation.ts`); what nominates a finding is the
+  fingerprint marker already sitting on the engine's own earlier comment, read
+  by that id — the same marker `extractFindingMarkers` already parses for
+  inline-comment deduplication, reused rather than reimplemented.
+- **The outcome is its own statement, in the same summary comment.** A
+  **Review conversation** section names each nominated finding as `held`
+  ("Re-checked against the same evidence; it still holds"), `no longer
+  reported` (never "fixed" or "withdrawn" — this comparison cannot tell a
+  repair from a finding this run did not reproduce), or `undecided`
+  (refutation still could neither prove nor disprove it). The original finding
+  comment is never edited.
+- **Never blocks.** A `pull_request_review_comment`-triggered run always exits
+  `0`, whatever the re-checked finding's quality-gate status would otherwise
+  be. If this workflow is a required check, a reply cannot regress it.
+- **Bounded by the same `concurrency` group** the push-triggered path already
+  uses: one run in flight per pull request, a later trigger cancels an
+  earlier one. A burst of replies cannot turn into unbounded spend.
+- **Most `pull_request_review_comment` events cost nothing.** The entry point
+  checks the config switch and whether the comment is genuinely a reply to a
+  finding-bearing comment before it spawns the CLI at all — a reply to an
+  unrelated comment, or any event while the lane is disabled, exits after one
+  read of the pull request's existing comments.
+
+---
+
 ## Permission model
 
 ```yaml
@@ -275,10 +334,12 @@ That is the whole grant. Not requested, deliberately:
 
 Other properties worth stating:
 
-- **The trigger is `pull_request`, never `pull_request_target`.**
-  `pull_request_target` runs with repository secrets and write access; combined
-  with checking out the pull request's head it executes untrusted code with both.
-  This workflow does not use it, and does not offer an option to.
+- **The triggers are `pull_request` and `pull_request_review_comment`, never
+  their `_target` counterparts.** `pull_request_target` runs with repository
+  secrets and write access; combined with checking out the pull request's
+  head it executes untrusted code with both. This workflow does not use it,
+  and does not offer an option to. (`pull_request_review_comment` has no
+  `_target` variant — GitHub does not define one.)
 - **No pull-request text is interpolated into shell.** The title and body are
   attacker-controlled, and `${{ github.event.pull_request.title }}` inside a
   `run:` block is a remote-code-execution primitive. The entry point reads the
@@ -376,6 +437,7 @@ inline-comment fallback are all exercised against fixtures.
 | `report-digest.ts` | Reduces the three report shapes to what the comment renders |
 | `summary-comment.ts` | Renders the body; owns the marker and comment selection |
 | `inline-review.ts` | Maps rendered comments to review payloads; deduplicates by fingerprint |
+| `review-conversation.ts` | Spec 30: reads a reply's target off the triggering event (id only, never the body); compares nominated fingerprints against this run's findings |
 | `github-api.ts` | The only module that performs network IO |
 | `sanitize.ts` | The guards untrusted text passes through |
 
@@ -395,7 +457,11 @@ inline-comment fallback are all exercised against fixtures.
 - All three actions are pinned by **commit SHA** with the tag in a trailing
   comment, matching the other workflows and what `specs/08` requires. A moving
   tag is a live write path into your repository from a third party.
-- Keep `pull_request` as the trigger. Do not switch to `pull_request_target`.
+- Keep `pull_request` and `pull_request_review_comment` as the triggers. Do
+  not switch either to a `_target` variant.
+- Leave `reviewConversation.enabled` at its default (`false`) until you have
+  run spec 30's hold-rate-under-pushback measurement on your own reviewer
+  configuration; see [review-conversation.md](../06-reference/configuration/review-conversation.md#measurement).
 - Keep the provider credential as a repository (or environment) secret, and
   prefer OIDC over long-lived cloud keys for Bedrock.
 - Keep `CODEREVIEWER_LOG_LEVEL` at `silent` for public repositories.

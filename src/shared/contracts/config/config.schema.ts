@@ -804,6 +804,30 @@ export const CostConfigSchema = z.strictObject({
   outputPerMillion: z.number().min(0).optional()
 })
 
+// The review-conversation lane (spec 30). Off by default until measured, exactly
+// like `changeImpact` and `intentFulfilment` above — and for the sharpest version
+// of their reason: spec 30's own "Measurement, before promotion" section requires
+// the hold rate under a plausible-but-wrong pushback reply to be indistinguishable
+// from the no-reply baseline before this may ship on. Nothing here is a knob to
+// tune; the single key exists so an operator can turn the whole lane on once that
+// is true and off again without redeploying the workflow.
+//
+// THERE IS NO OTHER KEY, AND THAT IS THE POINT. Spec 30's threat model is that a
+// reply is written after the finding exists, by anyone with comment access, in the
+// ideal position to compose a sentence that reads as evidence — so the lane's only
+// job is recognising that a reply happened and re-running the SAME `review` stage
+// every push already runs, unchanged. A prompt override, a softer threshold, or a
+// distinct re-adjudication path would all be exactly the "knowledge that a human
+// objected" requirement 2 forbids giving it; there is nothing here to configure
+// because configuring it would be the defect.
+//
+// It is also, like `changeImpact`, structurally unable to block: spec 30
+// requirement 6 states the lane "MUST be non-blocking and MUST NOT be configurable
+// to block", so there is no `blocking` key here either, and there will not be one.
+export const ReviewConversationConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false)
+})
+
 // EVERY nested block below uses `.prefault({})`, never `.default({...})`.
 //
 // Zod's `.default(value)` returns that value VERBATIM without parsing it, so a
@@ -836,7 +860,8 @@ export const CodeReviewerConfigSchema = z.strictObject({
   evaluation: EvaluationConfigSchema.prefault({}),
   drift: DriftConfigSchema.prefault({}),
   observability: ObservabilityConfigSchema.prefault({}),
-  costs: CostConfigSchema.prefault({})
+  costs: CostConfigSchema.prefault({}),
+  reviewConversation: ReviewConversationConfigSchema.prefault({})
 })
 
 export type Severity = z.infer<typeof SeveritySchema>
@@ -893,4 +918,7 @@ export type OpenTelemetryConfig = z.infer<typeof OpenTelemetryConfigSchema>
 export type LoggingConfig = z.infer<typeof LoggingConfigSchema>
 export type ObservabilityConfig = z.infer<typeof ObservabilityConfigSchema>
 export type CostConfig = z.infer<typeof CostConfigSchema>
+export type ReviewConversationConfig = z.infer<
+  typeof ReviewConversationConfigSchema
+>
 export type CodeReviewerConfig = z.infer<typeof CodeReviewerConfigSchema>

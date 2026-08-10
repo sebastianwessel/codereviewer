@@ -4,6 +4,7 @@ import type { PullRequestContext } from './pull-request-context.js'
 import type { GithubApi } from './github-api.js'
 import type { StageResult } from './stage-outcomes.js'
 import { summaryCommentMarker } from './summary-comment.js'
+import { findingCommentMarker } from './inline-review.js'
 import {
   impactReportFixture,
   intentReportFixture,
@@ -42,7 +43,10 @@ type ApiCalls = {
 const createFakeApi = (
   overrides: Partial<GithubApi> & {
     existingComments?: readonly { id: number; body: string; user: { login: string; type: string } }[]
-    existingReviewComments?: readonly { body: string }[]
+    // `id` is optional here and defaulted below: most tests only care about the
+    // body a marker is parsed out of, and only the review-conversation tests
+    // need a specific id to match a reply's `in_reply_to_id` against.
+    existingReviewComments?: readonly { id?: number; body: string }[]
   } = {}
 ): { api: GithubApi; calls: ApiCalls } => {
   const calls: ApiCalls = { created: [], updated: [], reviews: [] }
@@ -54,7 +58,11 @@ const createFakeApi = (
     updateIssueComment: async (id, body) => {
       calls.updated.push({ id, body })
     },
-    listReviewComments: async () => overrides.existingReviewComments ?? [],
+    listReviewComments: async () =>
+      (overrides.existingReviewComments ?? []).map((comment, index) => ({
+        id: comment.id ?? index + 1,
+        body: comment.body
+      })),
     createReview: async ({ commitId, comments }) => {
       calls.reviews.push({ commitId, count: comments.length })
     },
@@ -252,6 +260,145 @@ describe('runPipeline: the ordinary path', () => {
   it('exits 0 when the review passed', async () => {
     const { api } = createFakeApi()
     const { dependencies } = createDependencies({ api })
+
+    expect((await runPipeline(dependencies)).exitCode).toBe(0)
+  })
+})
+
+// Spec 30: a reply on a review comment nominates the finding that comment
+// carries for re-adjudication. The re-run is the SAME `review`/`intent`/`impact`
+// pipeline above, unchanged — these tests cover only what spec 30 adds: reading
+// the nomination off the parent comment, reporting each outcome, and never
+// letting the run block.
+describe('runPipeline: review conversation (spec 30)', () => {
+  it('reports a nominated finding that still reports as held', async () => {
+    const { api, calls } = createFakeApi({
+      existingReviewComments: [
+        { id: 500, body: `earlier\n\n${findingCommentMarker('fp1')}` }
+      ]
+    })
+    const { dependencies, stageArgs } = createDependencies({
+      api,
+      reviewConversation: { parentCommentId: 500 }
+    })
+
+    const result = await runPipeline(dependencies)
+    const body = [...calls.created, ...calls.updated.map((entry) => entry.body)].join('\n')
+
+    // The same three stages run — byte-identical to the push-triggered path,
+    // which is what makes the re-adjudication trustworthy in the first place.
+    expect(stageArgs.map((args) => args[0])).toEqual(['review', 'intent', 'impact'])
+    expect(body).toContain('Review conversation (1)')
+    expect(body).toContain('fp1')
+    expect(body).toContain('held')
+    expect(body).toContain('Re-checked against the same evidence; it still holds.')
+    expect(result.exitCode).toBe(0)
+  })
+
+  it('reports a nominated finding that did not come back, never as fixed or withdrawn', async () => {
+    const { api, calls } = createFakeApi({
+      existingReviewComments: [
+        { id: 500, body: `earlier\n\n${findingCommentMarker('gone-now')}` }
+      ]
+    })
+    const { dependencies } = createDependencies({
+      api,
+      reviewConversation: { parentCommentId: 500 }
+    })
+
+    const result = await runPipeline(dependencies)
+    const body = [...calls.created, ...calls.updated.map((entry) => entry.body)].join('\n')
+
+    expect(body).toContain('Review conversation (1)')
+    expect(body).toContain('no longer reported')
+    expect(body).toContain('not the same as fixed')
+    expect(body).not.toMatch(/withdrawn|resolved|fixed\./iu)
+    expect(result.exitCode).toBe(0)
+  })
+
+  it('does nothing when the reply targets a comment with no finding marker', async () => {
+    const { api, calls } = createFakeApi({
+      existingReviewComments: [{ id: 500, body: 'just a reply, no marker here' }]
+    })
+    const { dependencies, stageArgs } = createDependencies({
+      api,
+      reviewConversation: { parentCommentId: 500 }
+    })
+
+    const result = await runPipeline(dependencies)
+
+    expect(stageArgs).toHaveLength(0)
+    expect(calls.created).toHaveLength(0)
+    expect(calls.updated).toHaveLength(0)
+    expect(result.posted).toBe(false)
+    expect(result.exitCode).toBe(0)
+  })
+
+  it('does nothing when the reply targets a comment id this run cannot find', async () => {
+    const { api, calls } = createFakeApi({ existingReviewComments: [] })
+    const { dependencies, stageArgs } = createDependencies({
+      api,
+      reviewConversation: { parentCommentId: 999 }
+    })
+
+    await runPipeline(dependencies)
+
+    expect(stageArgs).toHaveLength(0)
+    expect(calls.created).toHaveLength(0)
+  })
+
+  it('does nothing when this run has no access to look up the reply', async () => {
+    // No `api` override: `dependencies.api` stays undefined, as it does for a
+    // token-less run or a fork pull request.
+    const { dependencies, stageArgs } = createDependencies({
+      reviewConversation: { parentCommentId: 500 }
+    })
+
+    const result = await runPipeline(dependencies)
+
+    expect(stageArgs).toHaveLength(0)
+    expect(result.posted).toBe(false)
+    expect(result.exitCode).toBe(0)
+  })
+
+  // The hard constraint: a re-adjudication cannot fail a gate the original
+  // finding did not. Same failing-gate stage result as the ordinary-path test
+  // above, which exits 1 — the only difference here is `reviewConversation`.
+  it('never fails the job, even when the quality gate fails', async () => {
+    const { api } = createFakeApi({
+      existingReviewComments: [
+        { id: 500, body: `earlier\n\n${findingCommentMarker('fp1')}` }
+      ]
+    })
+    const { dependencies } = createDependencies(
+      { api, reviewConversation: { parentCommentId: 500 } },
+      {
+        review: {
+          exitCode: 1,
+          stdout: JSON.stringify({
+            runId: 'run_abc123',
+            qualityGatePassed: false,
+            artifactDir: ARTIFACT_DIR
+          }),
+          stderr: ''
+        }
+      }
+    )
+
+    expect((await runPipeline(dependencies)).exitCode).toBe(0)
+  })
+
+  it('never fails the job when no provider is configured either', async () => {
+    const { api } = createFakeApi({
+      existingReviewComments: [
+        { id: 500, body: `earlier\n\n${findingCommentMarker('fp1')}` }
+      ]
+    })
+    const { dependencies } = createDependencies({
+      api,
+      reviewConversation: { parentCommentId: 500 },
+      environment: {}
+    })
 
     expect((await runPipeline(dependencies)).exitCode).toBe(0)
   })

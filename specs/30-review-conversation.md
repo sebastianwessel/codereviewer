@@ -1,23 +1,27 @@
 # Spec 30 — Review Conversation
 
-Status: approved, **unimplemented**, and deliberately not part-built. Written before
-any code so the threat model is settled by decision rather than by whatever the first
-implementation happens to do.
+Status: approved; **being implemented** (2026-08-09). Written before any code so the
+threat model is settled by decision rather than by whatever the first implementation
+happens to do.
 
-**Why it is not part-built.** The obvious first slice — detect which findings a reply
-nominates, without performing the re-adjudication — is tempting because it is the
-piece the threat model is about, it is pure, and it is fully testable. It is also
-dead code until re-adjudication exists, and a lane that reports "3 findings were
-nominated for re-check" and then does not re-check them is worse than nothing: it
-tells an author their objection was received and changes no outcome. The lane ships
-whole or not at all.
+**Implementation, and a mis-scoping worth recording.** I first judged this unbuildable
+without new engine plumbing, on the reasoning that detection lives in the GitHub
+integration while re-adjudication lives behind the engine's refutation machinery, on
+the far side of the CLI boundary.
 
-**What implementing it requires**, so the next attempt does not rediscover it: the
-detection side lives in the GitHub integration (`in_reply_to_id` on a review comment,
-matched against the finding markers the integration already reads for deduplication),
-but re-adjudication lives in the engine, behind the refutation machinery. Those are on
-opposite sides of the CLI boundary, and the crossing has to carry a finding id and
-nothing else — which is the requirement below, not an implementation detail.
+That was wrong, and the thing it missed is the point of the design: **the engine
+already re-reviews statelessly on every push**, re-discovering and re-refuting the
+whole diff from scratch. Re-adjudication therefore needs no new machinery at all. What
+was actually missing is narrower:
+
+- a reply does not currently cause a run — CI triggers on `synchronize`, not on a
+  comment;
+- and nothing reports, per nominated finding, whether it came back.
+
+Both are in the GitHub integration. And the accidental result is *stronger* than a
+targeted re-adjudication would have been: because the re-review is byte-identical to
+what the engine does on any push, it **cannot** be given knowledge that a human
+objected. Requirement 2 below is satisfied by construction rather than by discipline.
 
 ## Purpose
 

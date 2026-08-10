@@ -20,6 +20,16 @@ on:
     # `synchronize` is what re-runs the review on every push to the branch, and
     # it is the reason the summary comment has to be edited rather than added.
     types: [opened, synchronize, reopened, ready_for_review]
+  # Spec 30 (review conversation): a reply on an inline finding comment
+  # nominates that finding for re-adjudication. `created` only — never
+  # `edited` or `deleted`, which this lane has no business acting on. The
+  # entry point (`scripts/github/main.ts`) still checks the action, the
+  # `reviewConversation.enabled` config switch, and whether the comment is
+  # actually a reply to one of this engine's own finding comments before it
+  # runs anything; most events this trigger fires for cost nothing beyond that
+  # check.
+  pull_request_review_comment:
+    types: [created]
 
 # Least privilege at the top; the one job that needs to write widens it.
 permissions:
@@ -28,6 +38,12 @@ permissions:
 # One review in flight per pull request. A push that lands while an earlier
 # review is running cancels it, so two runs can never race to create the
 # summary comment.
+#
+# This is also spec 30 requirement 5's flood bound: a burst of replies queues
+# up runs that each cancel the one before it, so reply volume — which is
+# attacker-controlled — cannot turn into unbounded model spend. The number in
+# flight per pull request is the same one this group has always enforced; a
+# reply is not a special case.
 concurrency:
   group: code-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true

@@ -98,6 +98,18 @@ already-frozen mapping. The one output it must never produce is a confident
 verdict whose cited lines are not lines the change touched is downgraded and
 counted.
 
+**Review conversation** (`reviewConversation.enabled`) is not a capability
+inside `review` either — it is read only by the
+[GitHub integration](../../04-guides/github-integration.md)'s entry point, and
+turns on a `pull_request_review_comment` trigger: a reply to one of the
+engine's own finding comments re-runs the exact same `review` stage a push
+already runs, unchanged, and reports whether the finding came back. See
+[review-conversation.md](../../06-reference/configuration/review-conversation.md)
+and [spec 30](../../../specs/30-review-conversation.md). **Ships disabled.**
+The measurement spec 30 requires — that the hold rate under a
+plausible-but-wrong pushback reply is indistinguishable from the no-reply
+baseline — has not been run.
+
 **Invariant-conformance review** was removed on 2026-08-02, and its
 `invariantConformance` key with it. It reported where a changed declaration did
 not hold a pattern a majority of its siblings hold, with the peers cited. Its own

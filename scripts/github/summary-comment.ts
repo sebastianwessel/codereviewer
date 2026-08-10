@@ -34,6 +34,7 @@ import type {
 import { severityOrder } from './report-digest.js'
 import type { StageOutcome } from './stage-outcomes.js'
 import { stageDefinitions } from './stage-outcomes.js'
+import type { ReviewConversationOutcome } from './review-conversation.js'
 
 const MARKER_PREFIX = 'codereviewer:review-summary'
 
@@ -74,6 +75,13 @@ export type SummaryCommentInput = {
    * a computed zero is a fact, an uncomputed one is not.
    */
   readonly noLongerReportedCount?: number
+  /**
+   * Spec 30: present only on a run triggered by a reply that nominated at least
+   * one finding for re-adjudication. This run's own verdict on each one — held,
+   * no longer reported, or still undecided — so a reader can see that a second
+   * look happened without opening the run artifacts.
+   */
+  readonly reviewConversation?: readonly ReviewConversationOutcome[]
   /**
    * Operational notes: a fork that could not be reviewed, inline comments that
    * could not be posted, a stage that was skipped. Rendered verbatim (after
@@ -124,6 +132,13 @@ const unresolvedFindings = (review: ReviewDigest): readonly FindingDigest[] =>
 //
 // The model is named because a rate is a property of the model that produced it.
 const MEASURED_RELIABILITY = `_Diff-scoped search, measured on \`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}\`. On a ${measuredReliability.corpusCaseCount}-case real-repository corpus it finds about **${inDiffRecallInTen} in 10** defects inside the diff and **${measuredReliability.outOfDiffRecallFound} of ${measuredReliability.outOfDiffRecallTotal}** of those outside it, and about **${adjustedPrecisionInTwenty} in 20** of what it does report holds up. An empty list means this search found nothing, not that there is nothing to find._`
+
+// Shared by every surface that reports a finding dropping out between runs
+// (`noLongerReportedSection`, `detailsSection`'s baseline line, and
+// `reviewConversationSection` below): none of them can tell a genuine repair
+// from a finding this run simply did not reproduce, and this is the one place
+// that sentence is written down.
+const NOT_SAME_AS_FIXED_EXPLANATION = `this search finds roughly ${inDiffRecallInTen} in 10 in-diff defects and does not repeat itself exactly, so a finding can drop out without the code changing`
 
 const statusLabels: Readonly<Record<string, string>> = {
   passed: 'ok',
@@ -379,6 +394,53 @@ const impactSection = (impact: ImpactDigest): string | undefined => {
   ].join('\n')
 }
 
+// Spec 30 requirement 3/4: state each nominated finding's outcome as its own
+// statement, never as a silent edit of the original comment. The wording per
+// status:
+//
+//   - `held` says so PLAINLY, in the exact words requirement 4 gives as the
+//     useful, honest answer;
+//   - `undecided` mirrors `unresolvedSection`'s framing — an open question, not
+//     a verdict, because refutation could still neither prove nor disprove it;
+//   - `no-longer-reported` follows the SAME rule as `noLongerReportedSection`
+//     below, on purpose: this comparison cannot separate a genuine withdrawal
+//     from a finding this run simply did not reproduce, so it never says
+//     "withdrawn", "resolved" or "fixed".
+const reviewConversationLine = (outcome: ReviewConversationOutcome): string => {
+  const fingerprint = `\`${sanitizeLine(outcome.fingerprint, 120)}\``
+  const location =
+    outcome.finding === undefined
+      ? undefined
+      : `\`${sanitizeLine(outcome.finding.path, 200)}:${outcome.finding.startLine}\` — ${sanitizeLine(outcome.finding.title, MAX_TITLE)}`
+  const named = location === undefined ? fingerprint : `${fingerprint} (${location})`
+
+  if (outcome.status === 'held') {
+    return `- ${named}: **held.** Re-checked against the same evidence; it still holds.`
+  }
+
+  if (outcome.status === 'undecided') {
+    return `- ${named}: **still undecided.** Re-checked; refutation could still neither prove nor disprove it — an open question, not a verdict.`
+  }
+
+  return `- ${fingerprint}: **no longer reported** by this run. That is not the same as fixed: ${NOT_SAME_AS_FIXED_EXPLANATION}.`
+}
+
+const reviewConversationSection = (
+  outcomes: readonly ReviewConversationOutcome[]
+): string | undefined => {
+  if (outcomes.length === 0) {
+    return undefined
+  }
+
+  return [
+    `### Review conversation (${outcomes.length})`,
+    '',
+    'A reply nominated the finding(s) below for a second look. Re-adjudication reruns the same review from scratch against the current code — it is not told a human replied, and it never sees what was said.',
+    '',
+    ...outcomes.map(reviewConversationLine)
+  ].join('\n')
+}
+
 // Wording follows the same rule as the baseline count: this cannot separate a
 // repair from a miss, so it never says "fixed". A reader who wants to know whether
 // a defect is gone has to look, and the sentence says so.
@@ -394,7 +456,7 @@ const noLongerReportedSection = (
   return [
     `### No longer reported (${count})`,
     '',
-    `${count} finding${count === 1 ? '' : 's'} commented on an earlier push ${count === 1 ? 'was' : 'were'} not reported again by this run. That is not the same as fixed: this search finds roughly ${inDiffRecallInTen} in 10 in-diff defects and does not repeat itself exactly, so a finding can drop out without the code changing. The earlier comments are still on this pull request.`
+    `${count} finding${count === 1 ? '' : 's'} commented on an earlier push ${count === 1 ? 'was' : 'were'} not reported again by this run. That is not the same as fixed: ${NOT_SAME_AS_FIXED_EXPLANATION}. The earlier comments are still on this pull request.`
   ].join('\n')
 }
 
@@ -428,7 +490,7 @@ const detailsSection = (input: SummaryCommentInput): string => {
       const count = input.review.resolvedBaselineEntryCount
 
       rows.push(
-        `- No longer reported: ${count} previously-flagged finding${count === 1 ? '' : 's'} did not come back this run. That is not the same as fixed — this search finds roughly ${inDiffRecallInTen} in 10 in-diff defects and does not repeat itself exactly, so a finding can drop out without the code changing. The baseline stores fingerprints only, so no further detail is available.`
+        `- No longer reported: ${count} previously-flagged finding${count === 1 ? '' : 's'} did not come back this run. That is not the same as fixed — ${NOT_SAME_AS_FIXED_EXPLANATION}. The baseline stores fingerprints only, so no further detail is available.`
       )
     }
 
@@ -503,6 +565,9 @@ export const renderSummaryComment = (input: SummaryCommentInput): string => {
     `## ${verdictHeadline(input)}`,
     MEASURED_RELIABILITY,
     notes.length === 0 ? undefined : notes.join('\n>\n'),
+    input.reviewConversation === undefined
+      ? undefined
+      : reviewConversationSection(input.reviewConversation),
     input.review === undefined ? undefined : findingsSection(input.review),
     input.review === undefined ? undefined : unresolvedSection(input.review),
     input.intent === undefined ? undefined : intentSection(input.intent),
