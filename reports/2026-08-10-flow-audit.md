@@ -154,18 +154,28 @@ fails preflight with a missing-dependency error or succeeds while exporting
 nothing. This is the repository's own silent-optimism class inside its own
 observability subsystem.
 
-**E. Computed and never surfaced to a human.** PARTIALLY FIXED 2026-08-11: the
+**E. FIXED 2026-08-11.** the
 discovery diagnostics (`rawFindingCount`, `droppedCount`, the suppression
 counters) now render as a "What Discovery Produced" section in `report.md`, which
 is what separates "the reviewer proposed little" from "it proposed plenty and the
 later stages removed it". The section is omitted, not zeroed, when a run recorded
-no discovery. Still open: the fix lane's judgment that an admitted finding is a false positive reaches only
-`fix-report.json`, which no production code reads back; a human sees the finding
-presented as real while the fix lane privately disagreed. `verification-report.json`
-is likewise write-only apart from its warnings.
+no discovery. The fix lane's false-positive judgement was surfaced as a run warning in 3ff7c71,
+and the verification lane's CORROBORATIONS now reach the review report and the
+finding itself in `report.md`, naming whether the match was the same defect or only
+an overlap. `verification-report.json`'s remaining contents — the claim verdicts and
+observations — are that lane's own deliverable and belong on its own artifact; they
+are not statements about a review finding.
 
-**F. The change-intent refutation exclusion is a blocklist with no exhaustiveness
-guard.** `kind !== 'change-intent'` compiles unchanged however many kinds exist,
+**F. FIXED 2026-08-11.** The guard is a test — "every reviewContext kind is a
+decision, not a default" in `refutation/packet.test.ts` — which enumerates
+`ReviewContextDocumentSchema`'s kind enum against the filter and fails when a kind
+is added, forcing someone to rule on it. TypeScript cannot help here, so the
+enumeration has to live in a test.
+
+---
+
+**F (original). The change-intent refutation exclusion is a blocklist with no
+exhaustiveness guard.** `kind !== 'change-intent'` compiles unchanged however many kinds exist,
 and no test enumerates the enum against the filter. Not a live bug — only that one
 kind needs excluding today — but the next untrusted-but-fact-shaped kind will
 default to INCLUDED in refutation, which is the fail-open direction.

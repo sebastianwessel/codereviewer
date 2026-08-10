@@ -5,6 +5,11 @@
 
 import { z } from 'zod'
 import { FixEditSchema } from '../../shared/contracts/findings/finding.schema.js'
+import {
+  FindingCorroborationSchema,
+  type CorroborationMatchKind,
+  type FindingCorroboration
+} from '../../shared/contracts/report/review-report.schema.js'
 import { LaneUsageSchema } from '../costs/index.js'
 import { ContextLedgerEntrySchema } from '../review-planning/index.js'
 import { MAX_CLAIMS_PER_PROVIDER } from './contracts.js'
@@ -94,22 +99,9 @@ export const ClaimObservationSchema = z.strictObject({
 
 export type ClaimObservation = z.infer<typeof ClaimObservationSchema>
 
-const CorroborationMatchKindSchema = z.enum(['fingerprint', 'fuzzy'])
-
-export type CorroborationMatchKind = z.infer<typeof CorroborationMatchKindSchema>
-
-// Links a general-review admitted finding to the confirming verification
-// verdict(s) that independently support it (spec 12 "Corroboration"). It raises
-// a CONFIDENCE signal only — there is deliberately no severity field, and the
-// admitted finding contract is left untouched.
-const FindingCorroborationSchema = z.strictObject({
-  findingId: z.string().min(1),
-  confidence: z.literal('corroborated'),
-  matchKinds: z.array(CorroborationMatchKindSchema),
-  witnessClaimIds: z.array(z.string().min(1))
-})
-
-export type FindingCorroboration = z.infer<typeof FindingCorroborationSchema>
+// Corroboration records are defined in the REPORT contract and imported here.
+// The review report and this one carry the same records, and one shape for one
+// fact is what keeps them from drifting.
 
 // Per-finding advisory result of the fix lane (spec 12 "Effect On Findings").
 // `findingJudgment` is the boolean precision signal (absent when the agent
@@ -157,6 +149,8 @@ export const VerificationReportSchema = z.strictObject({
 })
 
 export type VerificationReport = z.infer<typeof VerificationReportSchema>
+
+export type { CorroborationMatchKind, FindingCorroboration }
 
 export const emptyVerificationReport = (): VerificationReport =>
   VerificationReportSchema.parse({})

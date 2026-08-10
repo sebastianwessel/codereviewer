@@ -234,6 +234,22 @@ export const TestAdequacySignalSchema = z
     }
   )
 
+// Links an admitted finding to the confirming verification verdict(s) that
+// independently support it (spec 12 "Corroboration"). A CONFIDENCE signal only:
+// there is deliberately no severity field, and admission never reads it.
+//
+// Defined here, in the report contract, rather than inside the verification
+// domain, because both artifacts carry the same records and a second shape for
+// one fact is how the two drift.
+export const CorroborationMatchKindSchema = z.enum(['fingerprint', 'fuzzy'])
+
+export const FindingCorroborationSchema = z.strictObject({
+  findingId: z.string().min(1),
+  confidence: z.literal('corroborated'),
+  matchKinds: z.array(CorroborationMatchKindSchema),
+  witnessClaimIds: z.array(z.string().min(1))
+})
+
 export const ReviewReportSchema = z.strictObject({
   schemaVersion: z.literal('1.0'),
   run: RunSummarySchema,
@@ -265,6 +281,12 @@ export const ReviewReportSchema = z.strictObject({
   // counts are zero. A completed run always records it, so a reader who finds it
   // missing is looking at a report some other producer wrote.
   testAdequacy: TestAdequacySignalSchema.optional(),
+  // Spec 12. Findings a verification verdict independently confirmed. Optional
+  // for the same reason `discovery` is: the lane is off by default, and absent
+  // means IT DID NOT RUN, which is a different claim from "it ran and confirmed
+  // nothing". These reached `verification-report.json` and no human surface —
+  // the one signal the lane exists to produce landed where nobody reads it.
+  corroborations: z.array(FindingCorroborationSchema).optional(),
   artifacts: z.array(ReportArtifactSchema)
 })
 
@@ -278,4 +300,6 @@ export type DiscoveryTelemetry = z.infer<typeof DiscoveryTelemetrySchema>
 export type TaskDiscoveryTelemetry = z.infer<typeof TaskDiscoveryTelemetrySchema>
 export type ReviewDiscoveryReport = z.infer<typeof ReviewDiscoveryReportSchema>
 export type TestAdequacySignal = z.infer<typeof TestAdequacySignalSchema>
+export type CorroborationMatchKind = z.infer<typeof CorroborationMatchKindSchema>
+export type FindingCorroboration = z.infer<typeof FindingCorroborationSchema>
 export type ReviewReport = z.infer<typeof ReviewReportSchema>

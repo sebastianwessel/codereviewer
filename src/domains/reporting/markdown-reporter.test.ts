@@ -468,3 +468,49 @@ describe('what discovery produced', () => {
     expect(markdown).not.toContain('## What Discovery Produced')
   })
 })
+
+// The verification lane's corroborations reached `verification-report.json` and no
+// human surface — the one signal that lane exists to produce landed where nobody
+// reads it, while the reader deciding what to act on reads `report.md`.
+describe('corroboration on a finding', () => {
+  const reportWithCorroboration = (
+    matchKinds: readonly ('fingerprint' | 'fuzzy')[]
+  ) => {
+    const report = createReportFixture()
+
+    return {
+      ...report,
+      corroborations: [
+        {
+          findingId: report.admittedFindings[0]!.id,
+          confidence: 'corroborated' as const,
+          matchKinds: [...matchKinds],
+          witnessClaimIds: ['claim_a', 'claim_b']
+        }
+      ]
+    }
+  }
+
+  test('names the witness count and calls it confidence, not severity', () => {
+    const markdown = renderMarkdownReport(reportWithCorroboration(['fingerprint']))
+
+    expect(markdown).toContain(
+      '- Corroborated: independently confirmed by 2 verification claim(s) (same defect)'
+    )
+    expect(markdown).toContain('severity and the quality gate are unchanged')
+  })
+
+  // An overlap is weaker evidence than an identity, so the two must not read the
+  // same to a person deciding whether to act.
+  test('distinguishes a fuzzy overlap from a fingerprint match', () => {
+    expect(renderMarkdownReport(reportWithCorroboration(['fuzzy']))).toContain(
+      'same file and overlapping lines'
+    )
+  })
+
+  test('says nothing when the verification lane did not run', () => {
+    expect(renderMarkdownReport(createReportFixture())).not.toContain(
+      '- Corroborated:'
+    )
+  })
+})

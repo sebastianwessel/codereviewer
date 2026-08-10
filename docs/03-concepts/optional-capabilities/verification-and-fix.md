@@ -113,7 +113,10 @@ guess**.
 Each `confirmed` verdict is matched against the admitted findings by shared
 fingerprint or by fuzzy match (same file, overlapping line ranges). A match yields
 a `FindingCorroboration` — finding id, `confidence: corroborated`, match kinds, and
-the witnessing claim ids, surfaced in the flow's own report.
+the witnessing claim ids. It is surfaced on the flow's own report, on the review
+report (`corroborations`), and on the finding itself in `report.md`, which names
+whether the match was the same defect or only a file-and-line overlap — an overlap
+is weaker evidence and must not read like an identity.
 
 **Corroboration raises confidence only; it never raises severity.** Only
 `confirmed` verdicts corroborate — `refuted` and `uncertain` never do.

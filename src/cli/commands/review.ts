@@ -153,14 +153,29 @@ export const runReview = async (
       ...verificationRunWarnings,
       ...advisory.warnings
     ]
-    const report =
-      extraRunWarnings.length === 0
+    // Corroborations belong on the review report, not only on the verification
+    // lane's own artifact: they are statements ABOUT admitted findings, and the
+    // reader deciding what to act on is reading the review report. Absent when
+    // the lane did not run, which is a different claim from "ran and confirmed
+    // nothing".
+    const reportWithCorroborations =
+      verificationReport === undefined
         ? reportAfterFix
         : {
             ...reportAfterFix,
+            corroborations: [...verificationReport.corroborations]
+          }
+    const report =
+      extraRunWarnings.length === 0
+        ? reportWithCorroborations
+        : {
+            ...reportWithCorroborations,
             run: {
-              ...reportAfterFix.run,
-              warnings: [...reportAfterFix.run.warnings, ...extraRunWarnings]
+              ...reportWithCorroborations.run,
+              warnings: [
+                ...reportWithCorroborations.run.warnings,
+                ...extraRunWarnings
+              ]
             }
           }
 

@@ -19,6 +19,7 @@
 import type {
   AdmittedFinding,
   EvidenceRecord,
+  FindingCorroboration,
   RefutationResult,
   RejectedFinding,
   ReviewReport
@@ -198,12 +199,37 @@ const renderFixProposal = (finding: AdmittedFinding): readonly string[] => {
   ]
 }
 
+// The verification lane (spec 12) independently confirmed this finding through a
+// claim it investigated on its own. It reached `verification-report.json` and no
+// human surface, so the one signal that lane exists to produce landed where nobody
+// reads it.
+//
+// Stated as confidence, never as severity: `fingerprint` means the verdict and the
+// finding resolved to the same defect, `fuzzy` means they only overlap in file and
+// lines, and the reader is told which — an overlap is weaker evidence than an
+// identity and must not read as the same claim.
+const renderCorroboration = (
+  corroboration: FindingCorroboration | undefined
+): readonly string[] =>
+  corroboration === undefined
+    ? []
+    : [
+        `- Corroborated: independently confirmed by ${corroboration.witnessClaimIds.length} verification claim(s) (${corroboration.matchKinds
+          .map((kind) =>
+            kind === 'fingerprint'
+              ? 'same defect'
+              : 'same file and overlapping lines'
+          )
+          .join(', ')}). Confidence only - severity and the quality gate are unchanged.`
+      ]
+
 const renderActionableFinding = (
   finding: AdmittedFinding,
   input: {
     readonly blocking: ReadonlySet<string>
     readonly evidenceById: ReadonlyMap<string, EvidenceRecord>
     readonly refutationById: ReadonlyMap<string, RefutationResult>
+    readonly corroborationById: ReadonlyMap<string, FindingCorroboration>
   }
 ): readonly string[] => [
   `### ${safeText(finding.severity.toUpperCase())}: ${safeText(finding.title)}`,
@@ -222,6 +248,7 @@ const renderActionableFinding = (
         '- Baseline: existing - this defect predates the change and is reported for context.'
       ]
     : [`- Baseline: ${safeText(finding.baselineStatus)}`]),
+  ...renderCorroboration(input.corroborationById.get(finding.id)),
   ...renderProof(finding, input.evidenceById, input.refutationById),
   ...renderFixProposal(finding),
   '',
@@ -643,6 +670,10 @@ export const renderMarkdownReport = (input: unknown): string => {
     report.refutationResults,
     (refutation) => refutation.candidateId
   )
+  const corroborationById = indexById(
+    report.corroborations ?? [],
+    (corroboration) => corroboration.findingId
+  )
   const blocking = new Set(report.qualityGate?.failingFindingIds ?? [])
 
   const lines: string[] = [
@@ -673,7 +704,8 @@ export const renderMarkdownReport = (input: unknown): string => {
         ...renderActionableFinding(finding, {
           blocking,
           evidenceById,
-          refutationById
+          refutationById,
+          corroborationById
         })
       )
     }

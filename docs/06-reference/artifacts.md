@@ -102,6 +102,7 @@ listed there (it is the document carrying the list).
 | `resolvedBaselineEntries` | array, optional | Present when `baseline.includeResolvedInReport` is enabled. |
 | `discovery` | object, optional | What **discovery** produced, before refutation and admission — `totals` plus a per-task row in `tasks`. Absent means *not recorded* (a run with no discovery call, or a report predating the field), which is not the same claim as a recorded zero. See below. |
 | `testAdequacy` | object, optional | Which changed source files no changed test file pairs with. Deterministic, free, advisory — never a finding, never gated. Absent means *this run did not compute it*, which is not the same claim as a computed zero. See below. |
+| `corroborations` | array, optional | Admitted findings a verification verdict independently confirmed (spec 12). Confidence only — it never moves severity or the gate. Absent means the verification lane *did not run*, which is not the same claim as a lane that ran and confirmed nothing. |
 | `artifacts` | array | The non-JSON artifacts written for this run. |
 
 String values in `report.json` pass through redaction before writing.
@@ -187,7 +188,7 @@ Both use the same schema; each lane fills the parts it owns.
 | `observations` | array | both — per-claim `toolCalls`, `bytesRead`, `durationMs`, optional `boundReason` |
 | `warnings` | string[] | both — redacted, no content (e.g. a claim provider that failed) |
 | `claimCount` | integer | both |
-| `corroborations` | array | verification — `findingId`, `confidence: "corroborated"`, `matchKinds` (`fingerprint`\|`fuzzy`), `witnessClaimIds`. Confidence signal only; never a severity change. |
+| `corroborations` | array | verification — `findingId`, `confidence: "corroborated"`, `matchKinds` (`fingerprint`\|`fuzzy`), `witnessClaimIds`. Confidence signal only; never a severity change. The same records also appear on `report.json`'s own `corroborations` and on the finding in `report.md`. |
 | `fixOutcomes` | array | fix — `findingId`, optional `findingJudgment`, `fixProduced`, `applyCheck`, and `fixDeclinedReason` when a proposed fix was refused before the apply-check. The only reason today is `edits-outside-finding-file`: a fix stays in the finding's own file, and its absence means there was nothing to refuse. |
 | `usage` | object, optional | both — `inputTokens`, `outputTokens`, optional `cachedInputTokens`, `reasoningTokens`, `costUsd`. Accounted in its own lane, not folded into the review's run cost. |
 

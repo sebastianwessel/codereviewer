@@ -236,8 +236,15 @@ quality gate. Two distinct outputs:
   `confidence: corroborated` signal, the match kinds, and the witnessing claim
   ids. This is a separate structure; the admitted finding contract is untouched.
 - Corroboration raises confidence only; it never raises severity.
-- Corroborations are surfaced in this flow's report (`corroborations`). Only
-  `confirmed` verdicts corroborate; `refuted` and `uncertain` verdicts never
+- Corroborations are surfaced on BOTH this flow's report and the review report
+  (`corroborations` on each, one shared record shape), and the Markdown report
+  states them on the finding itself, naming whether the match was the same defect
+  or only an overlap — an overlap is weaker evidence and must not read as an
+  identity. Surfacing them only on this flow's own JSON artifact put the one signal
+  this section exists to produce where the reader deciding what to act on does not
+  look. The field is ABSENT on a review report when the flow did not run, which is
+  a different claim from a flow that ran and confirmed nothing.
+- Only `confirmed` verdicts corroborate; `refuted` and `uncertain` verdicts never
   raise confidence.
 
 ## Platform Neutrality

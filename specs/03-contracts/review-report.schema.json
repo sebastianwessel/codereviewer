@@ -1484,6 +1484,46 @@
       ],
       "additionalProperties": false
     },
+    "corroborations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "findingId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "confidence": {
+            "type": "string",
+            "const": "corroborated"
+          },
+          "matchKinds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "fingerprint",
+                "fuzzy"
+              ]
+            }
+          },
+          "witnessClaimIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "findingId",
+          "confidence",
+          "matchKinds",
+          "witnessClaimIds"
+        ],
+        "additionalProperties": false
+      }
+    },
     "artifacts": {
       "type": "array",
       "items": {
