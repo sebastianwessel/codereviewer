@@ -3347,3 +3347,42 @@ sweep. Harness now records status and keeps reports, letting scoring decide what
 poolable. Partial data deleted unread. The completed sweep's one provider error
 (treatment seed 3) depresses the treatment arm, so the paired test drops that case
 from all six runs symmetrically — favourable to treatment, which still lost 3-7.
+
+## 2026-08-10 — The out-of-diff wall, proved with defects the engine is known to find
+
+`openai/gpt-5.3-codex`, engine `ee31bc9`, corpus `multi-defect-2026` (5 cases, 11
+expectations), zero provider errors, **$0.20**. Write-up:
+`reports/2026-08-10-multi-defect-result.md`.
+
+**in-diff 3/6 found; out-of-diff 0/5 found.**
+
+The 0 replicates the standing 0/27. What is new is WHICH defects were missed. Each
+is a curated case in its own right, so its findability is measurable — and when the
+same defect IS the diff, the engine finds it:
+
+| defect scored as its own case | matched, 3 control runs |
+| --- | --- |
+| `datamodel-code-generator-local-ref-arbitrary-file-read` | 1/1/1 |
+| `gitpython-checkout-index-forwards-unscreened-git-options` | 1/1/1 |
+| `ipv4-classifiers-suppressed-by-cidr-suffix` | 1/1/1 |
+| `redirect-copies-credentials-to-cross-origin-location` | 1/1/1 |
+| `x-python-type-extension-emitted-into-generated-annotation` | 0/0/1 |
+
+**13 of 15 case-runs find these when they are the diff; 0 of 5 when the identical
+defect is in the same file outside the changed lines.** Same engine, same model,
+same file, same defect — only the hunk boundary differs. Every prior statement of
+this wall was open to "those expectations were just hard". This one is not, and it
+retires retrieval, context size and difficulty as explanations. It is attention.
+
+**The multi-finding question is NOT answered.** Only the traefik case has both
+defects in-diff; it produced one finding and matched one of two. n=1, and its two
+expectations overlap in line range, which is the hardest possible version — a
+single reported defect covering that region is what a model emits whether or not
+the limit is real. Data point, not result. The other four contribute nothing here
+by construction, as documented before the run.
+
+**Consequence for what to try next.** Four attention mechanisms were already
+measured flat against this wall — but all of them predate this evidence and were
+scored against expectations of unknown findability. A mechanism aimed at it now has
+five defects with a proven in-diff hit rate, in files already in the packet, and a
+known ceiling of 5/5 to score against.
