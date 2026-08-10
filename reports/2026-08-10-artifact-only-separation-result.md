@@ -37,9 +37,13 @@ It is, and the code says so directly rather than by inference:
 
 - **`holistic-task-review.ts:422` constructs every candidate with `evidenceIds: []`,
   hardcoded**, and `proposedBy: 'review-agent'` on the next line.
-- **`ModelHolisticFindingSchema` has no evidence field at all.** The discovery model
-  is never asked which record supports its claim, so the empty array is not dropped
-  data — there is no data to drop.
+- **`ModelHolisticFindingSchema` DOES parse an `evidenceIds` field from the model
+  (`agent-contracts.ts:507`) — and `candidateFromFinding` discards it.**
+  (Correction 2026-08-10: this report originally said the schema had no evidence
+  field at all. The mechanism conclusion is unchanged — the constructed candidate
+  always gets `evidenceIds: []` — but the discard happens at construction, not in
+  the schema. Note also the holistic packet is a single rendered `reviewText` with
+  no evidence IDs in it, so the model has nothing it could cite by ID anyway.)
 - **`packet.ts:121`** builds the refuter's evidence as
   `reviewEvidence.filter(e => candidateEvidenceIds.has(e.id))`. With an empty
   candidate set that filter yields **the empty array, for every candidate**.
