@@ -130,7 +130,17 @@ of that alert. `securitySeverity`'s non-propagation is deliberate and documented
 (third-party data must not set severity); the other five look like incomplete
 wiring. Needs its own change with its own tests.
 
-**C. Reactive-split diff duplication.** When a single large file overflows the
+**C. FIXED 2026-08-11.** `diffSegmentsForPaths` now takes optional per-path
+new-side line ranges, and the discovery packet passes the span each review target
+actually covers. A split half is shown only the hunks inside its own chunk, so the
+split halves the diff as well as the source, and a half is no longer told about
+changes at lines it was not given — which is what invited a finding outside the
+chunk that admission then rejects as out of range. An unsplit task's document spans
+the whole file, so every hunk overlaps and nothing changes for it.
+
+---
+
+**C (original). Reactive-split diff duplication.** When a single large file overflows the
 provider, `splitContentInHalf` produces two halves that keep the SAME path, and
 `diffSegmentsForPaths` selects by path only — so both halves render that file's
 entire diff, while the ledger recorded it once, under the pre-split task id that

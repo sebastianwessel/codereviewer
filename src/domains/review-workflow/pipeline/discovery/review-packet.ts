@@ -6,7 +6,10 @@
 // numbered it. Two copies of the numbering rule would eventually disagree about
 // which line a candidate names.
 
-import { diffSegmentsForPaths } from '../../../../shared/diff/git-diff-header.js'
+import {
+  diffSegmentsForPaths,
+  type DiffLineRange
+} from '../../../../shared/diff/git-diff-header.js'
 import {
   type ContextDocument,
   type HolisticReviewInput,
@@ -136,6 +139,41 @@ type NumberedFile = {
 // model reads back the file's real line; numbering every chunk from 1 produced
 // locations that were plausible but wrong, and the finding then anchored its
 // fingerprint on the wrong source line.
+// The absolute line span each review target actually covers in this task, so the
+// diff can be clipped to it.
+//
+// A whole-file document spans the file and clips nothing. A HALF, produced when the
+// provider refused the packet and the task was split (spec 26), covers only its own
+// lines — and used to be shown the file's entire diff anyway, along with the other
+// half. The split then halved the source and not the diff, and each half was told
+// about changes it could not see.
+const taskChunkLineRanges = (
+  taskInput: TaskReviewInput
+): ReadonlyMap<string, DiffLineRange> => {
+  const ranges = new Map<string, DiffLineRange>()
+
+  for (const entry of taskInput.task.reviewContext) {
+    if (
+      entry.kind !== 'file' ||
+      entry.path === undefined ||
+      entry.startLine === undefined ||
+      entry.endLine === undefined
+    ) {
+      continue
+    }
+
+    // A path split across several documents covers the union of their spans.
+    const existing = ranges.get(entry.path)
+
+    ranges.set(entry.path, {
+      startLine: Math.min(existing?.startLine ?? entry.startLine, entry.startLine),
+      endLine: Math.max(existing?.endLine ?? entry.endLine, entry.endLine)
+    })
+  }
+
+  return ranges
+}
+
 const numberedChangedFiles = (
   taskInput: TaskReviewInput
 ): readonly NumberedFile[] =>
@@ -269,7 +307,11 @@ export const buildContextSections = (
 
   // Prefer the actual unified diff (before/after); fall back to line ranges when
   // the raw diff is unavailable (e.g. explicit-file runs with no diff).
-  const diffText = diffSegmentsForPaths(rawDiff, taskInput.task.paths)
+  const diffText = diffSegmentsForPaths(
+    rawDiff,
+    taskInput.task.paths,
+    taskChunkLineRanges(taskInput)
+  )
   const diffRanges = taskInput.reviewedDiffRanges
     .map(
       (range) =>

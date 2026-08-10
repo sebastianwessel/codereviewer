@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  diffSegmentsForPaths,
   parseGitDiffHunkHeader,
   parseGitDiffNewPath
 } from './git-diff-header.js'
@@ -77,5 +78,86 @@ describe('parseGitDiffHunkHeader', () => {
       newStartLine: 3,
       newLineCount: 0
     })
+  })
+})
+
+// A reactive split (spec 26) halves a file into two tasks that keep the SAME path.
+// Selection was by path alone, so both halves rendered the file's whole diff: the
+// split halved the source and not the diff, and each half was shown hunks for lines
+// it could not see — which invites a finding outside its own chunk that admission
+// then rejects.
+describe('diffSegmentsForPaths line-range clipping', () => {
+  const rawDiff = [
+    'diff --git a/src/app.ts b/src/app.ts',
+    'index 1111111..2222222 100644',
+    '--- a/src/app.ts',
+    '+++ b/src/app.ts',
+    '@@ -10,3 +10,3 @@',
+    '-const early = 1',
+    '+const early = 2',
+    ' const untouched = 0',
+    '@@ -600,2 +600,2 @@',
+    '-const late = 1',
+    '+const late = 2'
+  ].join('\n')
+
+  it('emits the whole diff when the path has no range', () => {
+    const segments = diffSegmentsForPaths(rawDiff, ['src/app.ts'])
+
+    expect(segments).toContain('const early = 2')
+    expect(segments).toContain('const late = 2')
+  })
+
+  it('keeps only the hunks a chunk covers', () => {
+    const firstHalf = diffSegmentsForPaths(
+      rawDiff,
+      ['src/app.ts'],
+      new Map([['src/app.ts', { startLine: 1, endLine: 500 }]])
+    )
+    const secondHalf = diffSegmentsForPaths(
+      rawDiff,
+      ['src/app.ts'],
+      new Map([['src/app.ts', { startLine: 501, endLine: 1000 }]])
+    )
+
+    expect(firstHalf).toContain('const early = 2')
+    expect(firstHalf).not.toContain('const late = 2')
+    expect(secondHalf).toContain('const late = 2')
+    expect(secondHalf).not.toContain('const early = 2')
+
+    // The header preamble survives on both, so each half still reads as a diff.
+    expect(firstHalf).toContain('+++ b/src/app.ts')
+    expect(secondHalf).toContain('+++ b/src/app.ts')
+  })
+
+  // A header with no hunks under it reads as "this file changed, and here is the
+  // change" while showing none.
+  it('emits nothing for a path whose range no hunk touches', () => {
+    expect(
+      diffSegmentsForPaths(
+        rawDiff,
+        ['src/app.ts'],
+        new Map([['src/app.ts', { startLine: 200, endLine: 300 }]])
+      )
+    ).toBe('')
+  })
+
+  // A pure deletion has a zero-length new side. Treating that as an empty span
+  // would match no range at all and drop the hunk from every chunk.
+  it('anchors a zero-count new side at its start line', () => {
+    const deletion = [
+      'diff --git a/src/app.ts b/src/app.ts',
+      '+++ b/src/app.ts',
+      '@@ -40,2 +39,0 @@',
+      '-const removed = 1'
+    ].join('\n')
+
+    expect(
+      diffSegmentsForPaths(
+        deletion,
+        ['src/app.ts'],
+        new Map([['src/app.ts', { startLine: 30, endLine: 50 }]])
+      )
+    ).toContain('const removed = 1')
   })
 })

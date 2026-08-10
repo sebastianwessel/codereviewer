@@ -149,9 +149,76 @@ export const parseGitDiffHunkHeader = (
  * path, and had its entire hunk dropped from a section headed "What this change
  * modified". Nothing said so: an unmatched segment is simply not emitted.
  */
+export type DiffLineRange = {
+  readonly startLine: number
+  readonly endLine: number
+}
+
+// Keep only the hunks that touch `range` on the new side, preserving the segment's
+// header preamble (`diff --git`, `index`, `---`, `+++`) so what is emitted is still
+// a readable diff for that file.
+//
+// Why this exists: a task whose file context is a CHUNK of a file — the halves a
+// reactive split produces (spec 26) — used to be shown that file's ENTIRE diff.
+// Both halves carried every hunk, so the split halved the source and not the diff,
+// and each half was shown hunks for lines it could not see. A reviewer that acts on
+// one raises a finding outside its own chunk, which admission then rejects as out of
+// range: work paid for and thrown away.
+//
+// An unsplit task's file document spans the whole file, so every hunk overlaps and
+// this is a no-op — the only shape it changes is the split one.
+const hunksWithinRange = (
+  segmentLines: readonly string[],
+  range: DiffLineRange
+): readonly string[] | undefined => {
+  const preamble: string[] = []
+  const kept: string[] = []
+  let currentHunk: string[] | undefined
+  let currentHunkOverlaps = false
+
+  const flushHunk = (): void => {
+    if (currentHunk !== undefined && currentHunkOverlaps) {
+      kept.push(...currentHunk)
+    }
+  }
+
+  for (const line of segmentLines) {
+    const header = parseGitDiffHunkHeader(line)
+
+    if (header !== undefined) {
+      flushHunk()
+      currentHunk = [line]
+      // A zero-count hunk (a pure deletion) has no new-side line to overlap, so
+      // anchor it at its start line rather than treating it as an empty span that
+      // matches nothing.
+      const hunkEndLine =
+        header.newStartLine + Math.max(1, header.newLineCount) - 1
+      currentHunkOverlaps =
+        header.newStartLine <= range.endLine && hunkEndLine >= range.startLine
+      continue
+    }
+
+    if (currentHunk === undefined) {
+      preamble.push(line)
+      continue
+    }
+
+    currentHunk.push(line)
+  }
+
+  flushHunk()
+
+  // No hunk touches the range: emit nothing rather than a header with no content,
+  // which would read as "this file changed and here is the change" and show none.
+  return kept.length === 0 ? undefined : [...preamble, ...kept]
+}
+
 export const diffSegmentsForPaths = (
   rawDiff: string,
-  paths: readonly string[]
+  paths: readonly string[],
+  // Per-path new-side line ranges to clip hunks to. A path with no entry is
+  // emitted whole, which is what every caller wants for an unsplit task.
+  lineRanges?: ReadonlyMap<string, DiffLineRange>
 ): string => {
   if (rawDiff.trim().length === 0) {
     return ''
@@ -164,11 +231,19 @@ export const diffSegmentsForPaths = (
 
   const flush = (): void => {
     if (
-      current !== undefined &&
-      currentPath !== undefined &&
-      pathSet.has(currentPath)
+      current === undefined ||
+      currentPath === undefined ||
+      !pathSet.has(currentPath)
     ) {
-      segments.push(current.join('\n'))
+      return
+    }
+
+    const range = lineRanges?.get(currentPath)
+    const lines =
+      range === undefined ? current : hunksWithinRange(current, range)
+
+    if (lines !== undefined) {
+      segments.push(lines.join('\n'))
     }
   }
 

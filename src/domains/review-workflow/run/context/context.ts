@@ -185,6 +185,12 @@ export const assembleContext = async (
     // shared splitter — but they ARE bytes this task sends to the model, and the
     // ledger's one job is to know that. Recorded per task because that is how
     // many times they are sent.
+    //
+    // Recorded for the task as PLANNED. A reactive split (spec 26) happens later,
+    // at discovery, when the provider refuses the packet; the halves it produces
+    // are shown the hunks inside their own chunk and nothing else, so the two
+    // together send about what is recorded here rather than twice it. A hunk
+    // straddling the split point is the one thing counted once and sent twice.
     const taskDiffText = diffSegmentsForPaths(input.reviewedDiffText, paths)
 
     if (taskDiffText.length > 0) {

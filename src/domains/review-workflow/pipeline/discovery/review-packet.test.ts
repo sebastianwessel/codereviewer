@@ -189,3 +189,66 @@ describe('the citation instructions section', () => {
     expect(text).toContain('quote')
   })
 })
+
+// A reactive split (spec 26) halves ONE file into two tasks that keep the same
+// path. Diff selection was by path alone, so each half rendered the file's whole
+// diff — the split halved the source and not the diff, and each half was told
+// about changes at lines it was not given.
+describe('the change section of a split task', () => {
+  const splitDiff = [
+    'diff --git a/src/big.ts b/src/big.ts',
+    'index 1111111..2222222 100644',
+    '--- a/src/big.ts',
+    '+++ b/src/big.ts',
+    '@@ -5,1 +5,1 @@',
+    '-export const nearTheTop = 0',
+    '+export const nearTheTop = 1',
+    '@@ -900,1 +900,1 @@',
+    '-export const nearTheBottom = 0',
+    '+export const nearTheBottom = 1'
+  ].join('\n')
+
+  const halfSection = (startLine: number, endLine: number): string => {
+    const taskInput = TaskReviewInputSchema.parse({
+      ...taskInputFor(['src/big.ts']),
+      task: {
+        ...taskInputFor(['src/big.ts']).task,
+        reviewContext: [
+          {
+            kind: 'file',
+            path: 'src/big.ts',
+            content: 'export const unrelated = 1\n',
+            startLine,
+            endLine,
+            ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+          }
+        ]
+      }
+    })
+
+    return (
+      buildContextSections(taskInput, splitDiff).find((section) =>
+        section.includes('## What this change modified')
+      ) ?? ''
+    )
+  }
+
+  test('shows each half only the hunks inside its own chunk', () => {
+    const first = halfSection(1, 500)
+    const second = halfSection(501, 1000)
+
+    expect(first).toContain('nearTheTop = 1')
+    expect(first).not.toContain('nearTheBottom = 1')
+    expect(second).toContain('nearTheBottom = 1')
+    expect(second).not.toContain('nearTheTop = 1')
+  })
+
+  // The whole-file case is the one every unsplit run takes, and it must be
+  // untouched: a document spanning the file overlaps every hunk.
+  test('leaves an unsplit whole-file task with the complete diff', () => {
+    const whole = halfSection(1, 1000)
+
+    expect(whole).toContain('nearTheTop = 1')
+    expect(whole).toContain('nearTheBottom = 1')
+  })
+})

@@ -61,6 +61,11 @@ better than the alternative, which is a silently degraded review.
   cannot be split further and is still refused MUST fail loudly and actionably.
 - The split count MUST be reported, and MUST be distinguishable from transient retry:
   the two have different causes and different meanings.
+- A half MUST be shown only the diff hunks that fall inside its own chunk. Selecting
+  the diff by path alone gave every half the whole file's diff — the split then
+  halved the source and not the diff, and each half was told about changes at lines
+  it was not given, which invites a finding outside the chunk that admission rejects
+  as out of range. A task that was not split spans its whole file and is unaffected.
 - Split halves MUST keep their absolute line origins. A finding's reported line must
   be the file's real line — the fingerprint anchors on it, so a wrong line silently
   gives the finding a wrong identity. This was a fixed defect once already.
