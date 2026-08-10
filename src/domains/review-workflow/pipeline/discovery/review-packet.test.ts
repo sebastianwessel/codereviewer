@@ -110,3 +110,58 @@ describe('the change section of the discovery packet', () => {
     expect(section).not.toContain('export const accented = 1')
   })
 })
+
+// The deterministic signal facts are extracted on EVERY run and were shown only
+// to refutation: the holistic packet is one rendered `reviewText`, and nothing
+// rendered this document into it. Closing that gap is a prompt change, so it is
+// off by default and the disabled path must be byte-for-byte what it was before
+// the section existed — the same guarantee the security pass carries.
+describe('the deterministic signal facts section', () => {
+  const withFacts = TaskReviewInputSchema.parse({
+    ...taskInputFor(['src/plain.ts']),
+    task: {
+      ...taskInputFor(['src/plain.ts']).task,
+      reviewContext: [
+        {
+          kind: 'file',
+          path: 'src/plain.ts',
+          content: 'export const unrelated = 1\n',
+          ledgerEntryId: 'ctx_aaaaaaaaaaaaaaaaaaaaaaaa'
+        },
+        {
+          kind: 'support-signal-output',
+          content: '{"facts":[{"name":"plain","line":1}],"testMappings":[]}',
+          ledgerEntryId: 'ctx_bbbbbbbbbbbbbbbbbbbbbbbb'
+        }
+      ]
+    }
+  })
+
+  test('is absent, byte for byte, when the flag is off', () => {
+    expect(buildContextSections(withFacts, rawDiff)).toEqual(
+      buildContextSections(withFacts, rawDiff, false)
+    )
+    expect(buildContextSections(withFacts, rawDiff).join('\n')).not.toContain(
+      'Declared symbols in the changed files'
+    )
+  })
+
+  test('carries the facts, and says they are incomplete, when the flag is on', () => {
+    const section = buildContextSections(withFacts, rawDiff, true)
+      .find((entry) => entry.includes('Declared symbols in the changed files'))
+
+    expect(section).toBeDefined()
+    expect(section).toContain('"name":"plain"')
+    // A reviewer that reads an extractor's output as exhaustive concludes a
+    // symbol has no caller. The framing has to say otherwise.
+    expect(section).toContain('INCOMPLETE by construction')
+  })
+
+  // Nothing to frame means no heading: an empty section would spend prompt on a
+  // promise of facts that are not there.
+  test('renders nothing when the task carries no facts', () => {
+    expect(
+      buildContextSections(taskInputFor(['src/plain.ts']), rawDiff, true).join('\n')
+    ).not.toContain('Declared symbols in the changed files')
+  })
+})

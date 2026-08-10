@@ -211,6 +211,30 @@ Default `paths.exclude` (18 patterns):
 `paths.artifactDir` does **not** contain the baseline file or eval artifacts —
 see [artifacts.md](../artifacts.md).
 
+### `review.signalFacts`
+
+| Key | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Show discovery the deterministic signal facts. |
+
+The facts are what the parser extracted from the changed files: what each one
+declares, exports and imports, with line spans, plus the source-to-test mappings.
+Every run computes them and every run accounts for their bytes — and until this
+key existed only the refutation stage was shown them. The discovery packet is one
+rendered document, and nothing rendered the facts into it, so the engine paid for
+the map and showed it only to the stage that checks a route rather than the stage
+that picks one.
+
+**Off by default, and not because the gap is in doubt.** Closing it adds a section
+to every discovery prompt, and this project promotes a prompt-shaped change on
+measurement rather than on the argument that it ought to help — four attention
+mechanisms and five prompt clauses have already measured flat here. With the key
+off, the packet is byte-for-byte what it was before the section existed.
+
+When on, the section is framed as facts rather than findings and states plainly
+that the list is incomplete: a symbol's absence means no extractor emitted a fact
+for it, not that the symbol does not exist.
+
 ## Related
 
 - [provider.md](./provider.md) — model, retries, budgets

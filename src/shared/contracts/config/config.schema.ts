@@ -133,6 +133,24 @@ export const CrossFileRetrievalConfigSchema = z.strictObject({
 // parser and then rejected by config validation.
 export const maxConcurrentTasksBounds = { min: 1, max: 32 } as const
 
+// Whether discovery is SHOWN the deterministic signal facts (spec 05).
+//
+// The facts are extracted on every run, byte-accounted, and shipped in the task's
+// reviewContext — where REFUTATION reads them and DISCOVERY never did: the
+// holistic packet is `taskId`, `paths` and one rendered `reviewText`, and nothing
+// rendered this document into it. So the engine paid for the extraction and then
+// showed the result only to the stage that adjudicates, not the stage that looks.
+//
+// Off by default because closing that gap adds a section to every discovery
+// prompt, and this project promotes a prompt-shaped change on measurement, never
+// on the argument that it ought to help. Four attention mechanisms and five
+// prompt clauses have already been measured flat here; the difference this time
+// is that the change ships data the run already computed rather than new wording,
+// which is a different mechanism but not yet a different result.
+export const SignalFactContextConfigSchema = z.strictObject({
+  enabled: z.boolean().default(false)
+})
+
 export const ReviewConfigSchema = z.strictObject({
   mode: ReviewModeSchema.default('local'),
   depth: ReviewDepthSchema.default('balanced'),
@@ -148,7 +166,8 @@ export const ReviewConfigSchema = z.strictObject({
   contextMaxBytes: z.int().min(10000).max(10000000).optional(),
   inlineSeverityThreshold: SeveritySchema.default('high'),
   maxCostUsd: z.number().min(0).optional(),
-  crossFileRetrieval: CrossFileRetrievalConfigSchema.prefault({})
+  crossFileRetrieval: CrossFileRetrievalConfigSchema.prefault({}),
+  signalFacts: SignalFactContextConfigSchema.prefault({})
 })
 
 export const ProviderConfigSchema = z
@@ -918,6 +937,9 @@ export type OpenTelemetryConfig = z.infer<typeof OpenTelemetryConfigSchema>
 export type LoggingConfig = z.infer<typeof LoggingConfigSchema>
 export type ObservabilityConfig = z.infer<typeof ObservabilityConfigSchema>
 export type CostConfig = z.infer<typeof CostConfigSchema>
+export type SignalFactContextConfig = z.infer<
+  typeof SignalFactContextConfigSchema
+>
 export type ReviewConversationConfig = z.infer<
   typeof ReviewConversationConfigSchema
 >

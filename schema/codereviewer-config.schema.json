@@ -94,6 +94,17 @@
             }
           },
           "additionalProperties": false
+        },
+        "signalFacts": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

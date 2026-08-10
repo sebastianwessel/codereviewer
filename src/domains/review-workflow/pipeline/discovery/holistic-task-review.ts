@@ -121,12 +121,13 @@ export const securityReviewInstruction = [
 // pass is enabled: it is the general packet plus two static blocks.
 export const buildSecurityReviewText = (
   taskInput: TaskReviewInput,
-  rawDiff: string
+  rawDiff: string,
+  signalFactsEnabled = false
 ): string =>
   [
     `Security review task ${taskInput.task.id}.`,
     securityReviewInstruction,
-    ...buildContextSections(taskInput, rawDiff),
+    ...buildContextSections(taskInput, rawDiff, signalFactsEnabled),
     `\n${securityReviewChecklist}`
   ].join('\n')
 
@@ -449,6 +450,7 @@ export const runModelBackedHolisticTaskReview = async (
 ): Promise<TaskReviewResult> => {
   const candidatesById = new Map<string, CandidateFinding>()
   const rawDiff = input.workflowInput.reviewedDiffText
+  const signalFactsEnabled = input.workflowInput.signalFactsEnabled
 
   // Spec 27: yield tracks CALL COUNT, not defect count. A file that gets any
   // attention yields ~1.2 findings regardless of how much the call was shown, so
@@ -466,7 +468,8 @@ export const runModelBackedHolisticTaskReview = async (
       partitions,
       // Rebuilt per task rather than prebuilt, so a task the provider refuses can be
       // halved and each half prompted from its OWN context (spec 26).
-      buildText: (taskInput) => buildReviewText(taskInput, rawDiff),
+      buildText: (taskInput) =>
+        buildReviewText(taskInput, rawDiff, signalFactsEnabled),
       stage: 'holistic_review',
       signal: input.signal
     })
@@ -479,7 +482,8 @@ export const runModelBackedHolisticTaskReview = async (
       runner: input.runners.holisticReview,
       taskInput: input.taskInput,
       partitions,
-      buildText: (taskInput) => buildSecurityReviewText(taskInput, rawDiff),
+      buildText: (taskInput) =>
+        buildSecurityReviewText(taskInput, rawDiff, signalFactsEnabled),
       stage: 'holistic_review_security',
       signal: input.signal
     })

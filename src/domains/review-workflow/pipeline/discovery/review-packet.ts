@@ -196,6 +196,35 @@ export const numberedFileContentLookupFor = (
   }
 }
 
+
+// The deterministic signal facts, when `review.signalFacts.enabled`.
+//
+// These are ast-grep's own output for the changed files: what each file declares,
+// exports and imports, with line spans, plus the source-to-test mappings. Every
+// run extracts them and every run ledgers their bytes, and until this branch
+// existed only REFUTATION ever saw them — the holistic discovery packet is one
+// rendered `reviewText`, and nothing rendered this document into it. The engine
+// was paying to compute a map and showing it only to the stage that checks the
+// route, never to the stage that picks one.
+//
+// Framed as facts rather than as findings, and explicitly as INCOMPLETE. They
+// describe declarations, not behaviour: a symbol's absence here means no
+// extractor emitted a fact for it, which is not the same as the symbol not
+// existing, and a reviewer that reads this list as exhaustive will conclude a
+// caller has none.
+const renderSignalFactsSection = (content: string): string =>
+  content.length === 0
+    ? ''
+    : `\n## Declared symbols in the changed files (deterministic, from the parser)\n` +
+      `These are parser-extracted FACTS about what the changed files declare, ` +
+      `export and import, with the lines each declaration occupies, and which ` +
+      `test files map to which sources. They are orientation, not findings, and ` +
+      `they say nothing about whether any of it is correct.\n` +
+      `This list is INCOMPLETE by construction: it holds what the extractors ` +
+      `emit for the supported languages, so a symbol missing here may still ` +
+      `exist. Never conclude from an absence that something is not declared or ` +
+      `not called.\n${content}`
+
 // Assemble the shared context sections (diff, changed files, referenced definitions,
 // change intent) presented to every discovery call.
 //
@@ -205,7 +234,8 @@ export const numberedFileContentLookupFor = (
 // the reviewer a diff.
 export const buildContextSections = (
   taskInput: TaskReviewInput,
-  rawDiff: string
+  rawDiff: string,
+  signalFactsEnabled = false
 ): readonly string[] => {
   const files = numberedChangedFiles(taskInput)
     .map((file) => `### FILE: ${file.path}\n${file.numbered}`)
@@ -266,6 +296,17 @@ export const buildContextSections = (
         `definition you need is absent, read it with the repository tools ` +
         `instead of assuming it does not exist.\n${referencedDefinitions}`
 
+  const signalFacts = taskInput.task.reviewContext
+    .filter(
+      (entry) =>
+        entry.kind === 'support-signal-output' && entry.content.length > 0
+    )
+    .map((entry) => entry.content)
+    .join('\n\n')
+  const signalFactsSection = signalFactsEnabled
+    ? renderSignalFactsSection(signalFacts)
+    : ''
+
   // Spec 15, Mechanism 2: results this project's own analyzers produced, already
   // ingested, redacted, and attributed to the change. The document arrives
   // pre-rendered (framing included) from the analyzer-ingestion domain, which owns
@@ -304,7 +345,10 @@ export const buildContextSections = (
     referencedDefinitionsSection,
     // Spread rather than listed: an unconditional '' entry would add one newline to
     // EVERY prompt this engine sends, and spec 15 requires a run with the security
-    // block disabled to be byte-for-byte what it was before the block existed.
+    // block disabled to be byte-for-byte what it was before the block existed. The
+    // signal-facts section is spread for exactly the same reason: with the flag
+    // off, this packet is byte-for-byte what it was before the section existed.
+    ...(signalFactsSection.length === 0 ? [] : [signalFactsSection]),
     ...(analyzerSignalsSection.length === 0 ? [] : [analyzerSignalsSection]),
     changeIntentSection
   ]
@@ -337,9 +381,10 @@ export const holisticReviewInputFor = (
 // whole-change review. Byte-for-byte identical to the pre-security-pass prompt.
 export const buildReviewText = (
   taskInput: TaskReviewInput,
-  rawDiff: string
+  rawDiff: string,
+  signalFactsEnabled = false
 ): string =>
   [
     `Review task ${taskInput.task.id}.`,
-    ...buildContextSections(taskInput, rawDiff)
+    ...buildContextSections(taskInput, rawDiff, signalFactsEnabled)
   ].join('\n')
