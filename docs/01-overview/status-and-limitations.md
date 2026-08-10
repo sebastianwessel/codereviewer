@@ -169,32 +169,32 @@ adjudication layer (`changeImpact.adjudication.enabled`, off by default) does ca
 a model and is **unmeasured** — no figure for it exists or may be quoted.
 
 - **The current headline, and the only figure that should be quoted for the review
-  stage:** **68.3% in-diff recall (sd 2.89pp)**, measured 2026-08-05 on
-  `openai/gpt-5.3-codex` with the engine pinned at `db78900`, on a 37-case
-  real-repository corpus over three runs. It supersedes every earlier figure,
-  including the 2026-08-02 baseline's 61.1%. **The recall gain is measured, not
-  attributed** — the eval configures no reviewer instructions, so the
-  2026-08-05 instruction work is inert on this corpus, and the delta belongs to
-  a wider span of changes with no single one established as the cause.
-  Adjusted precision is **96.2%**, but this is **not comparable** to the prior
-  99.1%: the eval metrics version changed between the two measurements in a way
-  that alters which findings are credited unlisted-real, for identical review
-  output. Raw precision, which that change does not touch, **rose** — 74.9% to
-  77.8%. Cost is two figures, not one: **$1.97 cold-cache**, **$0.82–0.83**
-  warm-cache, more than 2x apart.
+  stage:** **66.1% in-diff recall**, measured 2026-08-06 on
+  `openai/gpt-5.3-codex` with the engine pinned at `c3c0c3d`, on a 37-case
+  real-repository corpus over three runs (the control arm of a
+  `refutationRetrieval` A/B, run at shipped defaults). No sd is restated for
+  this pin; do not carry the earlier 2.89pp onto it. It supersedes the
+  2026-08-05 baseline's 68.3% — the difference is small and the run cannot
+  separate it from noise, since the two engine pins differ by a large,
+  unisolated span of work — and, further back, the 2026-08-02 baseline's
+  61.1%. Adjusted precision is **96.1%**, comparable to the 2026-08-05 pin's
+  96.2% under the same metrics version; raw precision is **74.5%**. Cost per
+  run at this pin is **$1.15**; the earlier **$1.97 cold-cache** / **$0.82–0.83
+  warm-cache** figures predate a since-landed change that runs review as a
+  single process and a dependency bump, and should not be quoted as current.
   → [Current results](../05-quality/current-results.md)
 - **Out-of-diff recall is a scope boundary, not an unqualified deficiency, and
   it now has a measured split.** `review` answers "does this change introduce a
   defect", and its attention is scoped to the reviewed diff by design — a
   different job from a full repository audit ("does this codebase contain a
   defect, changed or not"), which is not built. Of 87 expected findings, the 60
-  inside the diff were found at **68.3%** (2026-08-05) and the 27 sitting
+  inside the diff were found at **66.1%** (2026-08-06) and the 27 sitting
   elsewhere in a changed file were found at **0 of 27** — unchanged from the
-  2026-08-02 baseline, and previously replicated as **0 of 81** against an
-  independently labeled answer key. Not "low" — a measured zero, repeatedly.
-  Every one of those 27 misses was in a file the reviewer had been shown **in
-  full**, so it needed no retrieval, no larger context window and no bigger
-  model: this is diff-scoped attention holding exactly as designed, not a
+  2026-08-05 and 2026-08-02 baselines, and previously replicated as **0 of 81**
+  against an independently labeled answer key. Not "low" — a measured zero,
+  repeatedly. Every one of those 27 misses was in a file the reviewer had been
+  shown **in full**, so it needed no retrieval, no larger context window and no
+  bigger model: this is diff-scoped attention holding exactly as designed, not a
   context or retrieval gap that more budget would close. A latent, pre-existing
   defect in the untouched part of a changed file is therefore out of scope
   today — it is a real defect a reader may still want surfaced, and this
@@ -206,9 +206,9 @@ a model and is **unmeasured** — no figure for it exists or may be quoted.
 - **`impact check` now has one measurement.** Scored against the 27 out-of-diff
   expectations — the population it exists for — it localises **20 of 27 (74.1%)**
   inside a symbol it flagged as changed (measured 2026-08-02; not re-measured at
-  the 2026-08-05 pin). That is COVERAGE, not detection: it reports risk and
-  never claims a defect, so the figure is not comparable to the review stage's
-  recall.
+  the 2026-08-05 or 2026-08-06 pins). That is COVERAGE, not detection: it reports
+  risk and never claims a defect, so the figure is not comparable to the review
+  stage's recall.
 - **Every `intent check` figure below predates 2026-08-06**, when the lane gained a
   fourth status, `not-contradicted`, for obligations asking that something *not* be
   done — 33 of the 83 classified false positives (39.8%) were of that shape, and
@@ -259,12 +259,16 @@ a model and is **unmeasured** — no figure for it exists or may be quoted.
   one pinned engine on 2026-08-02 at **sd 0.96pp** on in-diff recall and 0.66pp
   blended, over three runs — but the 2026-08-05 re-baseline, same corpus and
   run count, measured **sd 2.89pp** on in-diff recall instead, three times
-  wider, cause not yet understood. **Use 2.89pp, not 0.96pp, as the current
-  band.** Both supersede the **±4.8pp** figure this project used for months,
-  which was estimated from too few samples and made single-run comparisons
-  unreadable in both directions. Read any experiment recorded against the old
-  band as what it was: several are smaller than the instrument that measured
-  them, and the wider band also hid real effects.
+  wider, cause not yet understood. The 2026-08-06 pin that now supersedes
+  2026-08-05's headline recall figure did not restate an sd of its own (its
+  three per-run values span 60.0–70.0%). **Use 2.89pp, from the 2026-08-05
+  pin, as the most recently stated band** until a fresh one is published —
+  but do not read it as the 2026-08-06 figure's measured variance. Both
+  supersede the **±4.8pp** figure this project used for months, which was
+  estimated from too few samples and made single-run comparisons unreadable in
+  both directions. Read any experiment recorded against the old band as what
+  it was: several are smaller than the instrument that measured them, and the
+  wider band also hid real effects.
 - **Every run recorded before 2026-08-01 was produced by an unpinned engine.** The
   harnesses pinned the repository under test but invoked the engine from the live
   working tree, and nothing in a scored artefact recorded which engine produced

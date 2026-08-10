@@ -67,7 +67,25 @@ All three now route through the one constant.
 
 ## Recorded, NOT fixed — with the reason
 
-**A. The `proposedBy` cluster is dead code, and it is not small.** Exactly one
+**A. DECIDED 2026-08-11 — the `proposedBy` cluster is NOT dead, and it is KEPT.**
+
+I removed all four mechanisms, then reverted. The audit below traced production
+write sites and found only `proposedBy: 'review-agent'`, concluding no producer
+exists. **That conclusion was wrong, and the way it was wrong is worth keeping.**
+It traced the CLI path only. `ReviewWorkflowInput.candidates` is a published API
+surface: a library consumer can seed a candidate with any `proposedBy`, and
+`review-workflow.test.ts` asserts the resulting behaviour deliberately ("keeps
+support-signal seed candidates artifact-only when the model returns none"). The
+producer is not missing — it is the caller. Removing the cluster would have
+silently deleted a tested capability and forced every seeded candidate through
+refutation, changing behaviour for anyone using the engine as a library.
+
+The original analysis is left below, unedited, because "no production write path"
+was a true statement about the CLI and a false one about the product.
+
+---
+
+**A (original, superseded). The `proposedBy` cluster is dead code, and it is not small.** Exactly one
 production site constructs a `CandidateFinding`, and it hardcodes
 `proposedBy: 'review-agent'`. Four separate mechanisms branch on that value being
 something else — `supportSignalCandidates` (refutation packet),

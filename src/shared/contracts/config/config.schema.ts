@@ -73,7 +73,10 @@ const gitRefSchema = z
   .min(1)
   .refine((value) => !value.startsWith('-'), 'Git refs must not start with "-"')
 
-// Agentic cross-file discovery (spec 16). Off by default. When enabled, the
+// Agentic cross-file discovery (spec 16). ON by default since 2026-08-01, when the
+// measurement that had withdrawn it was found to be reading a truncated file (see
+// `enabled` below, which carries the figures). This header said "off by default"
+// long after the default flipped. When enabled, the
 // holistic discovery agent may call the mediated repo read/list/grep tools to
 // inspect code in files outside the changed set — the callee body, interface, or
 // permission definition a suspected defect depends on — bounded by a per-task
@@ -564,8 +567,11 @@ const ChangeImpactAdjudicationConfigSchema = z.strictObject({
   maxCalls: z.int().min(1).max(500).default(40)
 })
 
-// Change-impact review (spec 22). Off by default until measured, and reached
-// only by the separate `impact check` command — never by `review`.
+// Change-impact review (spec 22). Off by default until measured. When enabled it
+// is reached BOTH ways: `review` runs the lane in-process after the review, over
+// the same run context (`src/cli/advisory-lanes.ts`), and `impact check` still
+// runs it alone. This comment said "never by `review`" until 2026-08-11, which was
+// true when written and false the moment the lane moved in-process.
 //
 // The bounds below are the whole cost model. The deterministic core makes no
 // provider call and its only resource is repository traversal; the adjudication
@@ -611,8 +617,9 @@ export const ChangeImpactConfigSchema = z.strictObject({
   adjudication: ChangeImpactAdjudicationConfigSchema.prefault({})
 })
 
-// Intent-fulfilment review (spec 23). Off by default until measured, and reached
-// only by the separate `intent check` command — never by `review`.
+// Intent-fulfilment review (spec 23). Off by default until measured. Reached both
+// ways, exactly as `changeImpact` above: in-process from `review`, and alone from
+// `intent check`.
 //
 // The bounds here are the whole cost model, and unlike change-impact this
 // capability does spend: one extraction call, one judgement call per obligation,

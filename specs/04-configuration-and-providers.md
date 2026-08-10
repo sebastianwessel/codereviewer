@@ -133,8 +133,31 @@ This is why the generated JSON Schema carries no `default` object on `review`.
 | `inlineSeverityThreshold` | severity | `"high"` | Only affects reporter eligibility. |
 | `maxCostUsd` | number >= 0 | *unset* | Checked once, after the run's work completes and before the success result is built: the run fails when the computed run cost exceeds it. It is not a mid-run stop, and it is skipped entirely when cost is unavailable. |
 
-`review.crossFileRetrieval` is a nested review block and is inventoried in its own
-section below.
+`review.crossFileRetrieval`, `review.signalFacts` and `review.citations` are nested
+review blocks and are inventoried in their own sections below.
+
+### `review.signalFacts`
+
+| Key | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Show discovery the deterministic signal facts. |
+
+The facts are extracted, byte-accounted and shipped to refutation on every run; the
+discovery packet is one rendered document and nothing rendered them into it, so
+until this key existed only the adjudicating stage saw them. Off by default because
+enabling it adds a section to every discovery prompt, and the A/B measured it null
+(spec 05 §Discovery Citations records the same promotion discipline). With the key
+off, the packet is byte-for-byte what it was before the section existed.
+
+### `review.citations`
+
+| Key | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `enabled` | boolean | `false` | Ask discovery to quote the line that shows the defect, and verify it deterministically. |
+
+Specified in full in spec 05 §Discovery Citations, including the MUST that an
+absent, malformed or unverifiable citation leaves the candidate exactly as it would
+have been — the lane cannot cost a finding, by construction.
 
 ## AI Review Config
 
@@ -657,6 +680,22 @@ Rules:
 - outputs are advisory: a `false-positive` judgment or a fix never changes
   admission, severity, or the gate;
 - per-claim bounds are shared with `verification`.
+
+## Review Conversation Config
+
+| Key | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `reviewConversation.enabled` | boolean | `false` | Whether a reply on a review comment can nominate that finding for a second, independent look. |
+
+**This is the whole block, and that is the design** (spec 30). There is
+deliberately no prompt override, no threshold, and no `blocking` key: spec 30
+requirement 2 forbids giving the re-run any knowledge that a human objected, and
+requirement 6 forbids the lane blocking — so anything else to configure would be
+the defect rather than a feature. The config object is strict, so setting a key
+that is not `enabled` is a configuration error rather than a silent no-op.
+
+It is a TOP-LEVEL key, not nested under `review`, because the lane is a property of
+the platform integration rather than of the review itself.
 
 ## Cross-File Retrieval
 

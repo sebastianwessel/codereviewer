@@ -235,6 +235,16 @@ When on, the section is framed as facts rather than findings and states plainly
 that the list is incomplete: a symbol's absence means no extractor emitted a fact
 for it, not that the symbol does not exist.
 
+**Measured 2026-08-10, and not promoted.** On the security-advisory corpus (72
+cases — not comparable to the real-repository figures elsewhere in this
+documentation), turning this on moved in-diff recall from 64.9% to 61.7%
+(pooled per-expectation sign test: 3 gained, 3 lost, p = 1.0000 — indistinguishable
+from noise) at **+10.1% input tokens**. Adjusted precision rose (96.7% →
+100.0%), but that alone does not clear the promotion bar. The key stays off by
+default. See [the decision
+table](../../03-concepts/optional-capabilities/README.md#decision-table) and
+`reports/2026-08-10-signal-facts-result.md`.
+
 ### `review.citations`
 
 | Key | Type | Default | Meaning |
@@ -261,6 +271,18 @@ it is deliberately not part of this.
 Off by default because it changes what discovery is asked to produce, and the
 nearest previous attempt at this stage made precision worse — so it ships
 disabled, with that attempt's removal rule attached.
+
+**Measured 2026-08-10, and not promoted.** On the security-advisory corpus (72
+cases — not comparable to the real-repository figures elsewhere in this
+documentation), turning this on moved in-diff recall from 63.1% to 62.2%
+(pooled per-expectation sign test: 3 gained, 7 lost, p = 0.3438) while adjusted
+precision rose 98.6% → 99.3%; neither movement clears the promotion bar. **The
+mechanism did engage** — findings carrying an evidence record went from 0% to
+90%, closing the empty-evidence gap described above at scale — but that
+engagement did not move recall or precision far enough to promote. The key
+stays off by default. See [the decision
+table](../../03-concepts/optional-capabilities/README.md#decision-table) and
+`reports/2026-08-10-citations-result.md`.
 
 ## Related
 

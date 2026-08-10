@@ -188,11 +188,38 @@ and writes it to disk, so it owns the credentials and the engine holds none.
 Frontmatter is optional; `id`, `title` and `source` are read. Enable it with
 `contextSources` (see config-recipes.md).
 
-## Adding the two advisory stages (optional, and only after `review` is trusted)
+## Adding the two advisory lanes (optional, and only after `review` is trusted)
 
-Run them as their own steps. Both always exit `0`, so no `continue-on-error` is
-needed and none should be added — a step that reads their JSON and exits non-zero
-would reintroduce a gate the measurement says is not accurate enough to gate on.
+**The recommended path is two config flags, not two more CI steps.** `review`
+runs both advisory lanes itself — in the same process, over the same run
+context it already built — whenever `changeImpact.enabled` /
+`intentFulfilment.enabled` are `true` (see `config-recipes.md`). Turning them
+on is enough: no extra job, no extra checkout, no extra provider round-trip
+for context the review step already gathered. A lane that throws is caught and
+turned into a warning on the review report, never a failed pipeline (specs 22
+and 23's advisory guarantee holds inside `review` too). Output lands as
+`impact-report.json` / `intent-report.json` — JSON only, no `.md` — inside
+`review`'s own run directory under `paths.artifactDir`, alongside
+`report.json` and the rest.
+
+```jsonc
+// codereviewer.config.json
+{
+  "changeImpact": { "enabled": true },
+  "intentFulfilment": { "enabled": true }
+}
+```
+
+Neither flag has an environment-variable mapping — set them in the config
+file (see `config-recipes.md` for what does and does not have an env var).
+
+**Separate `impact check` / `intent check` steps are still valid, but only for
+running a lane WITHOUT a review** — a standalone gate, a schedule that maps
+intent on its own cadence, or a job that should not pay for a full review to
+get one lane's report. Run them as their own steps in that case. Both always
+exit `0`, so no `continue-on-error` is needed and none should be added — a step
+that reads their JSON and exits non-zero would reintroduce a gate the
+measurement says is not accurate enough to gate on.
 
 ```yaml
       - name: Impact (deterministic and free unless adjudication is enabled)
@@ -210,21 +237,25 @@ Both accept only `--config`, `--base-ref`, `--head-ref` and
 `--format json|markdown` beyond the global options, and both require the literal
 subcommand `check`. Default stdout is one JSON document, so an existing script
 that parses it keeps working; `--format markdown` puts the rendered report there
-instead. A **completed** run also writes `impact-report.{md,json}` /
-`intent-report.{md,json}` into an `impact-<uuid>` / `intent-<uuid>` directory
-under `paths.artifactDir`, and prints that path to **stderr**. Those directories
-are not in the run index, so `baseline write` never picks one up.
+instead. A **completed standalone** run also writes `impact-report.{md,json}` /
+`intent-report.{md,json}` into its own `impact-<uuid>` / `intent-<uuid>`
+directory under `paths.artifactDir`, and prints that path to **stderr** — a
+different location from the in-process `review` case above, and the only one
+of the two that writes a `.md` report. Those directories are not in the run
+index, so `baseline write` never picks one up.
 
 A run that mapped nothing writes nothing at all — `disabled` for impact;
 `disabled`, `no-intent`, `unusable-intent` or `provider-unavailable` for intent.
 `no-intent` is the ordinary outcome when the pipeline supplied no change intent.
+This applies whether the lane ran standalone or inside `review`.
 
 `impact check` needs no credential and makes no provider call **unless
 `changeImpact.adjudication.enabled` is set** — a separate switch from
 `changeImpact.enabled`, deliberately, so turning the stage on cannot silently
 start spending. Leave it off: the layer is unmeasured. If you do enable it, the
-step needs the provider credential in its `env:` like the review step, and
-`changeImpact.adjudication.maxCalls` (default `40`) is what bounds the spend.
+step (or the `review` job, if run in-process) needs the provider credential in
+its `env:`, and `changeImpact.adjudication.maxCalls` (default `40`) is what
+bounds the spend.
 
 ## What to keep from a run
 

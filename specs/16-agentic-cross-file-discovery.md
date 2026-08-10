@@ -150,7 +150,10 @@ That promise now holds. So:
 
 - The conditions a caller is EXPECTED to hit are a CLOSED, typed set: path not
   eligible, path not found, retriever read budget exhausted, retriever search budget
-  exhausted, plus the scope's own tool-call bound. Each is disclosed as ordinary
+  exhausted, an empty search query, plus the scope's own tool-call bound. The empty
+  query is a real member and was missing from this list until 2026-08-11 while
+  `condition-disclosure.ts` had implemented it all along — a set described as CLOSED
+  has to actually enumerate its members, or the word does no work. Each is disclosed as ordinary
   tool-result content that names the specific reason, in ONE shape shared by every
   lane exposing these tools, so a model never learns two vocabularies for "your
   lookup did not happen".

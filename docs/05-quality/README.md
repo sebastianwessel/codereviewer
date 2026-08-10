@@ -56,8 +56,9 @@ alternative produces a number that looks fine and means nothing.
    a tighter **0.96pp** standard deviation (2026-08-02), then a second
    pinned-engine re-baseline on the same corpus and run count measured
    **2.89pp** instead (2026-08-05) — three times wider, cause not yet
-   understood. **2.89pp is the current band** — see
-   [Current results](current-results.md#current-headline).
+   understood. The pin that now supersedes 2026-08-05 (2026-08-06) does not
+   restate an sd of its own. **2.89pp remains the most recently stated band** —
+   see [Current results](current-results.md#current-headline).
    → [Comparing runs](comparing-runs.md#the-variance-band)
 
    Those figures, and every measured figure published in these quality docs, came

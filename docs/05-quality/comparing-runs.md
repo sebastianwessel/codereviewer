@@ -37,11 +37,14 @@ Three corollaries worth internalising:
   deviation at 0.96pp for in-diff recall and 0.66pp for blended recall, then a
   second pinned-engine measurement (`db78900`, 2026-08-05, same corpus and run
   count) put it at **2.89pp** for in-diff recall instead — three times wider,
-  cause not yet understood. **Use 2.89pp, not 0.96pp**, as the current figure for
-  a comparison against the current baseline — see [Current
-  results](current-results.md#current-headline). Both figures describe only
-  their own engine pin; the 4.4pp figure above describes only the older
-  16-finding configuration it was measured on.
+  cause not yet understood. The pin that supersedes 2026-08-05 (`c3c0c3d`,
+  2026-08-06) does not restate an sd of its own; its three per-run values span
+  60.0–70.0%. **Use 2.89pp, from the 2026-08-05 pin, as the most recently
+  stated figure** for a comparison against the current baseline — but do not
+  read it as the current pin's own measured variance — see [Current
+  results](current-results.md#current-headline). Each of these figures
+  describes only its own engine pin; the 4.4pp figure above describes only the
+  older 16-finding configuration it was measured on.
 - **Denominator size sets the resolution.** One finding is worth ~6.3 points on a
   16-finding corpus, ~1.1 points on the current 87-finding one, and ~7.1 points
   on the 14-finding proof-quality slices. A smaller corpus quantises recall more
@@ -115,7 +118,8 @@ to reach for.
 
 A difference of arm means throws away the information that matters, and the
 run-level standard deviation is a weak instrument on top of that: estimated from
-three seeds, the two most recent figures on this corpus (0.96pp and 2.89pp) carry
+three seeds, the two most recently *stated* figures on this corpus (0.96pp and
+2.89pp — the current pin does not restate one of its own) carry
 95% intervals of roughly [0.50, 6.04] and [1.50, 18.17] — they overlap almost
 entirely, so the spread itself is barely measured. Score each **individual
 expected finding**, keyed by `caseId` + `expectedIndex`, across every seed of both

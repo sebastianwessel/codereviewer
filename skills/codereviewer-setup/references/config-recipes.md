@@ -297,6 +297,7 @@ named `CODEREVIEWER_*` is ignored.
 | `CODEREVIEWER_ARTIFACT_DIR` | `paths.artifactDir` |
 | `CODEREVIEWER_SKILLS_DIR` | `skills.directories` |
 | `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE` | `aiReview.deterministicSignalMode` |
+| `CODEREVIEWER_JUDGE_MODEL` | `evaluation.judgeModel` — pins the model `eval run` judges score with, independently of `CODEREVIEWER_PROVIDER_MODEL`. Unset, they use the reviewer's model. |
 | `CODEREVIEWER_LOG_LEVEL` | `observability.logging.level` |
 | `CODEREVIEWER_OPENTELEMETRY_ENABLED` / `_ENDPOINT` / `_HEADERS` | OpenTelemetry export |
 | `CODEREVIEWER_COST_INPUT_PER_MILLION` / `_CACHED_INPUT_PER_MILLION` / `_OUTPUT_PER_MILLION` | `costs.*` pricing overrides |

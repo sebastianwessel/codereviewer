@@ -107,6 +107,14 @@ Redactor must run before:
 - traces;
 - report rendering;
 - model-bound context assembly where configured secret patterns are available;
+- **the reviewed diff, at intake** — the single point it enters a run
+  (`run/intake/repository-input.ts`), not at each consumer. Named explicitly
+  because it was the one path that did NOT redact until 2026-08-11: every changed
+  file's content was redacted before it could reach a packet and the diff was not,
+  so a credential committed inside a changed hunk went to the provider verbatim
+  while the identical string in the surrounding file body came out `[REDACTED]`.
+  Redacting at the source also keeps the context ledger honest, since the ledger
+  measures that same string;
 - ingestion of external change-intent context, before it enters the summarizer
   call, the prompt, or the context ledger.
 

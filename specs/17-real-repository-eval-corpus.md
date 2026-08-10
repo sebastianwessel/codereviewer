@@ -44,19 +44,36 @@ callee body, an interface, or a constructor in an unchanged file is reachable.
 
 ### One Machinery, More Than One Manifest
 
-Added 2026-08-07. Everything above describes a **shape**, not a single dataset. Two
-manifests are validated by this schema and hydrated by this script:
+Added 2026-08-07, extended 2026-08-11. Everything above describes a **shape**, not a
+single dataset. Three manifests are validated by this schema and hydrated by this
+script:
 
 | Manifest | Output root | Asks |
 | --- | --- | --- |
 | `eval/corpora/real-repo-cross-file/` | `.codereviewer/eval/corpus-slices/real-repo-cross-file` | Does the reviewer find a defect that needs another file? |
 | `eval/corpora/security-advisory-2026/` (72 cases) | `.codereviewer/eval/security-cases/security-advisory-2026` | Does it find a defect a published advisory confirms? (spec 15 §The Security Corpus) |
+| `eval/corpora/multi-defect-2026/` (5 cases, 11 expectations) | `.codereviewer/eval/multi-defect-cases/multi-defect-2026` | Does one reviewed FILE yield more than one finding? |
 
 They share this orientation, this schema and this hydrator deliberately: a corpus
 that needs its own runner produces figures comparable to nothing. What they do not
 share is a question or an answer key — the second's key is an advisory naming one
 defect, so its precision is a bracket for a different reason than the first's, and
 **their recalls must not be differenced.**
+
+The third is narrower still, and the section above requires saying in writing why
+its figures compare to nothing. Each case unions the expectations of two or three
+`security-advisory-2026` cases that carry separately-advisory'd defects in the SAME
+file, at a commit verified to contain all of them. It exists because 97% of cases
+in the other two corpora contain exactly one planted defect, so an engine reporting
+one finding is behaving CORRECTLY and a multi-finding limit cannot be told apart
+from correct behaviour there.
+
+Its recall is not comparable to anything: 5 cases is not a rate, and — measured
+2026-08-10 — only ONE of the five has both defects inside the diff hunks. In the
+other four the second defect is in the same changed file but outside the hunks, so
+a miss there is the separately measured out-of-diff gap and not a
+one-finding-per-file limit. Read the per-case in-diff split in
+`docs/05-quality/datasets.md` before quoting any number from this corpus.
 
 Their output roots are not siblings, for the same reason spec 22's is not: an
 evaluation loads a slice root by directory, and a shared parent is one typo away

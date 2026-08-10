@@ -15,7 +15,15 @@ wrong thing, in someone else's pull request, on a Friday.
 
 ## What you are setting up
 
-Three independently runnable stages. They share no context and no output.
+Three stages. `impact check` and `intent check` are still independently
+runnable, standalone commands with their own isolated run — but when
+`changeImpact.enabled` / `intentFulfilment.enabled` are on, `review` also runs
+both lanes itself, **in-process, over its own shared run context**, and writes
+their output (`impact-report.json` / `intent-report.json`, JSON only, no `.md`)
+into `review`'s own run directory rather than a separate `impact-<uuid>` /
+`intent-<uuid>` one. Turning on the config flags is enough to get both lanes
+out of one `review` run; a separate CI step is only needed to run a lane
+*without* a review.
 
 | Stage | Command | Blocks a pipeline? | Costs money? |
 | --- | --- | --- | --- |
@@ -84,30 +92,35 @@ them.
 Say this before the user invests in the setup. The report says it too, in its
 own opening paragraph.
 
-On a 37-case real-repository corpus with the engine pinned (`db78900`):
+On a 37-case real-repository corpus with the engine pinned (`c3c0c3d`), the
+control arm of a `refutationRetrieval` A/B run at shipped defaults:
 
-- **In-diff recall mean 68.3%** over three runs — 66.7 / 66.7 / 71.7, sd 2.89pp —
-  about 7 in 10 defects sitting inside the diff.
+- **In-diff recall mean 66.1%** over three runs — 60.0 / 68.3 / 70.0, no sd
+  restated at this pin — about 2 in 3 defects sitting inside the diff.
 - **0 of 27** for defects sitting elsewhere in a changed file. A measured zero
   over a full denominator, and by design: this stage is diff-scoped.
-- **Adjusted precision mean 96.2%** — roughly 19 in 20 of what it reports stands
-  up. Raw precision 77.8%.
-- **$1.97 for a cold-cache run, $0.82 warm.** Quote both: the spread is more
-  than 2x, and an A/B whose second arm inherits the first's warm cache is
-  measuring the cache.
+- **Adjusted precision mean 96.1%** — roughly 19 in 20 of what it reports stands
+  up. Raw precision 74.5%.
+- **$1.15 per run.** The earlier $1.97 cold-cache / $0.82 warm-cache pair
+  predates a since-landed change that runs review as a single process and a
+  dependency bump, and should not be quoted as current; this pin's ledger
+  entry does not give a cold/warm breakdown of its own.
 - Two runs over the same commit do not produce the same report.
 
-The adjusted-precision figure is **not** comparable to the 99.1% an earlier
-baseline recorded. The eval's scoring version changed in a way that alters which
-findings are credited for identical review output, so the two numbers answer
-slightly different questions. Publish 96.2% as the current rate; never present it
-as a fall from 99.1%.
+The adjusted-precision figure **is** comparable to the immediately prior pin's
+96.2% — same metrics version — but neither is comparable to the 99.1% an
+earlier baseline recorded, whose scoring version changed in a way that alters
+which findings are credited for identical review output. Publish 96.1% as the
+current rate; never present it as a fall from 99.1%.
 
-Judge any change to this stage against the **wider** of the two spreads on
-record — 2.89pp, not the earlier 0.96pp — because under-stating the band is what
-manufactures false positives. That is caution about a three-run estimate, not a
-claim that stability regressed; the ledger explicitly declines to call the
-difference established.
+Judge any change to this stage against the **widest stated** spread on
+record — 2.89pp, from the immediately prior pin, not the earlier 0.96pp —
+because under-stating the band is what manufactures false positives. The
+current pin's ledger entry does not restate an sd of its own (its three runs
+span 60.0–70.0%), so 2.89pp is carried forward as the operating figure, not as
+this pin's own measured variance. That is caution about a three-run estimate,
+not a claim that stability regressed; the ledger explicitly declines to call
+either difference established.
 
 **Every one of those rates was measured on `openai/gpt-5.3-codex`.** A rate is a
 property of a model, not of the engine. If the user configures a different

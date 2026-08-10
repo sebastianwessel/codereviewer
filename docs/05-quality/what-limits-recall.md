@@ -22,8 +22,8 @@ the engine alone — on another model the enumeration gap has not been measured 
 all, and none of these rates would carry over.
 
 > **Every number on this page predates the current pinned-engine baseline** on
-> [Current results](current-results.md#current-headline) (2026-08-05, 68.3% in-diff
-> recall, sd 2.89pp) and most of it predates the 2026-07-27 harness change
+> [Current results](current-results.md#current-headline) (2026-08-06, 66.1% in-diff
+> recall; no sd restated at that pin) and most of it predates the 2026-07-27 harness change
 > described in [A caveat that applies to every number
 > here](#a-caveat-that-applies-to-every-number-here) at the end — read it before
 > quoting anything from this page. It is diagnosis of *why* recall was limited, not

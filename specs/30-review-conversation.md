@@ -105,6 +105,23 @@ in which the reply reaches the model is a different, rejected design.
    beyond the run. The standing no-interaction-telemetry decision is not revisited
    here.
 
+## Configuration
+
+| Key | Type | Default | Rule |
+| --- | --- | --- | --- |
+| `reviewConversation.enabled` | boolean | `false` | Whether a reply may nominate its finding for a second look. |
+
+**One key, top-level, and no others — which is a requirement, not an omission.**
+Requirement 2 forbids giving the re-run any knowledge that a human objected, so a
+prompt override or a softer threshold would be the defect rather than a feature.
+Requirement 6 forbids the lane blocking, so there is no `blocking` key. The config
+object is strict: setting anything other than `enabled` is a configuration error,
+not a silent no-op, and the schema test asserts that both `{blocking: true}` and
+`{maxReplies: 10}` are rejected.
+
+It is top-level rather than nested under `review` because the lane is a property of
+the platform integration, not of the review.
+
 ## Measurement, Before Promotion
 
 The lane ships disabled until measured. The instrument is mechanical on the side

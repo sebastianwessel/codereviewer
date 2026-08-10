@@ -18,8 +18,6 @@
 //   2. A disabled stage runs NOTHING. The flags are the operator's statement
 //      about which questions to ask; being invoked from `review` does not turn a
 //      stage on.
-import { randomUUID } from 'node:crypto'
-import path from 'node:path'
 import {
   createChangeImpactLane,
   runChangeImpact,
@@ -205,18 +203,3 @@ export const runAdvisoryStagesForReview = async (
     warnings: [...impact.warnings, ...intent.warnings]
   }
 }
-
-/**
- * Where an advisory stage's artifacts go when it ran as part of a review.
- *
- * Inside the REVIEW's run directory, not a sibling `impact-<uuid>` of its own.
- * One push produced up to three unrelated directories that nothing linked; a
- * reader holding a review run id could not find the impact report that ran
- * beside it. Standalone `impact check` keeps minting its own directory, because
- * there is no review run for it to belong to.
- */
-export const advisoryArtifactRoot = (
-  artifactDir: string,
-  runId: string | undefined
-): string =>
-  path.posix.join(artifactDir, runId ?? `advisory-${randomUUID()}`)

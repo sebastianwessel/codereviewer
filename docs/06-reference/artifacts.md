@@ -38,11 +38,13 @@ Two important artifact groups live **outside** it:
     │   ├── observability.json
     │   ├── fix-report.json
     │   ├── verification-report.json
+    │   ├── impact-report.json  # changeImpact.enabled — in-process lane, JSON only, no .md
+    │   ├── intent-report.json  # intentFulfilment.enabled — in-process lane, JSON only, no .md
     │   └── error.json
-    ├── impact-<uuid>/          # one completed `impact check`
+    ├── impact-<uuid>/          # one completed STANDALONE `impact check`
     │   ├── impact-report.md
     │   └── impact-report.json
-    └── intent-<uuid>/          # one completed `intent check`
+    └── intent-<uuid>/          # one completed STANDALONE `intent check`
         ├── intent-report.md
         └── intent-report.json
 ```
@@ -65,7 +67,19 @@ so artifacts are never fed back into a review.
 | `observability.json` | always | No-content run events (`{ "events": [...] }`): step/task/error records with no source, prompt, or model output. Includes one `context_ingestion_provider` step per configured change-intent provider, and a `review_comments` step when review-comment drafting ran. An attribute the no-content guard refuses keeps its name and reports `[dropped: …]` in place of its value, so a filtered field is never mistaken for one the step had nothing to say about. |
 | `fix-report.json` | `fix.enabled` **and** the lane produced a report | Advisory fix-lane outcomes. |
 | `verification-report.json` | `verification.enabled` | Claim verdicts, observations, corroborations. |
+| `impact-report.json` | `changeImpact.enabled` **and** the lane produced a report | The change-impact reference report, run in-process by `review` over its own run context ([`src/cli/advisory-lanes.ts`](../../src/cli/advisory-lanes.ts)). JSON only — no `.md` sibling, unlike a standalone `impact check` run. |
+| `intent-report.json` | `intentFulfilment.enabled` **and** the lane produced a report | The intent-fulfilment mapping report, run in-process by `review` the same way. JSON only — no `.md` sibling. |
 | `error.json` | only on a failed run | `code`, `message`, `category`, `recoverable`. |
+
+**Two different homes for the same two reports.** `review` running the two
+advisory lanes in-process (`changeImpact.enabled` / `intentFulfilment.enabled`)
+writes `impact-report.json` / `intent-report.json` straight into its own
+`<runId>/` directory, JSON only. A standalone `impact check` / `intent check`
+run writes both `impact-report.{md,json}` / `intent-report.{md,json}` into its
+own separate `impact-<uuid>` / `intent-<uuid>` directory instead. The two paths
+are independent — running `review` with both flags on does not create an
+`impact-<uuid>` directory, and running standalone `impact check` does not
+touch any `<runId>/` directory.
 
 Artifacts listed in `report.json`'s `artifacts[]` array carry `format`, `path`,
 `sha256`, and `containsSensitiveContent: false`. `report.json` itself is not

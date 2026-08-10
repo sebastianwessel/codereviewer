@@ -33,12 +33,20 @@ eval compare, eval recall-report, eval slice-manifest, drift check, impact
 check, or intent check`.
 
 `review` is the only command that can fail a pipeline on what it found.
-`impact check` and `intent check` are advisory: they run independently of each
-other and of `review`, share none of each other's context or output, and neither
-can exit non-zero on what it reported. `intent check` does refuse to run on an
-input it cannot see whole — three input limits fail the command with exit `4`
-rather than judging a partial input, which is a different thing from a verdict.
-See [its exit codes](#exit-codes-and-the-three-input-limits).
+`impact check` and `intent check` are advisory: neither can exit non-zero on
+what it reported. Run standalone, they are independent of each other and of
+`review`, each with its own isolated run and context. But when
+`changeImpact.enabled` / `intentFulfilment.enabled` are on, `review` also runs
+both lanes itself, **in the same process, over the same run context it built
+for the review**, wrapping each so a lane failure becomes a warning on the
+review report rather than a failed pipeline — see
+[`src/cli/advisory-lanes.ts`](../../src/cli/advisory-lanes.ts). Their output
+in that case is written as `impact-report.json` / `intent-report.json` (JSON
+only) into `review`'s own run directory, not a separate `impact-<uuid>` /
+`intent-<uuid>` one. `intent check` does refuse to run on an input it cannot
+see whole — three input limits fail the command with exit `4` rather than
+judging a partial input, which is a different thing from a verdict. See [its
+exit codes](#exit-codes-and-the-three-input-limits).
 
 See [exit-codes-and-error-codes.md](./exit-codes-and-error-codes.md) for the
 full mapping.

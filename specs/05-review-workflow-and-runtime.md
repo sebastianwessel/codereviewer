@@ -47,9 +47,19 @@ Date: 2026-07-21
 20. Run the optional fix lane and the optional verification flow when configured
     (`12-verification-flow.md`). Both run in the CLI on the completed report, and
     both are advisory: neither changes admission, severity, or the gate.
-21. Create the run directory, render reports and run artifacts, and record the run
-    in the run index.
-22. Exit with mapped code.
+21. Run the enabled ADVISORY REFERENCE LANES in-process — change-impact
+    (`22-change-impact-review.md`) and intent-fulfilment
+    (`23-intent-fulfilment-review.md`) — over the same run context this review
+    already used, so one push issues one set of git subprocesses and reads each
+    changed file once. Each is guarded (`src/cli/advisory-lanes.ts`): a throw
+    becomes a warning on this report and an absent stage report, never a non-zero
+    exit; a disabled lane runs nothing at all. Both remain separately runnable as
+    `impact check` / `intent check`.
+22. Create the run directory, render reports and run artifacts, and record the run
+    in the run index. The advisory lanes' reports are written HERE, beside the
+    review they ran with, rather than in unlinked directories of their own — a
+    reader holding a run id can find every stage's answer for that push.
+23. Exit with mapped code.
 
 Runtime artifacts and logs must remain redacted. Source snippets, prompt text,
 secrets, tokens, and raw provider payloads must not be logged by default.
@@ -1876,6 +1886,34 @@ provider messages, prompt text, source snippets, tool output, or secrets.
 | No raw source in default logs | log snapshot/redaction test |
 | Provider task failure writes artifact-ready partial state | runner partial-failure regression test |
 | Model candidate cannot become actionable without passing refutation | refutation workflow test |
+
+## Deterministic Signal Facts In Discovery (`review.signalFacts`)
+
+The signal facts are extracted on every run, byte-accounted in the context ledger,
+and shipped in each task's `reviewContext` — where REFUTATION reads them and
+DISCOVERY did not. The holistic packet is `taskId`, `paths` and one rendered
+`reviewText`, and nothing rendered this document into it, so the engine paid for
+the extraction and showed the result only to the stage that adjudicates a
+candidate, never to the stage that produces one.
+
+`review.signalFacts.enabled` closes that. Off by default.
+
+- With the key off, the discovery packet MUST be byte-for-byte what it was before
+  the section existed, and candidates MUST be unaffected.
+- The section MUST be framed as parser-extracted FACTS, not findings, and MUST
+  state that the list is incomplete: a symbol's absence means no extractor emitted
+  a fact for it, not that the symbol does not exist. A reviewer that reads an
+  extractor's output as exhaustive concludes a symbol has no caller.
+- The discovery packet budget guard MUST measure the section when the key is on.
+  The guard exists to size the LARGEST packet a task can send, so a guard blind to
+  a conditional section under-measures the thing it guards.
+
+**Measured 2026-08-10 and NOT promoted** (`reports/2026-08-10-signal-facts-result.md`):
+recall 64.9% → 61.7%, paired sign test 3 gained / 3 lost, p = 1.0000, +10.1% input
+tokens, on `openai/gpt-5.3-codex`. It stays shipped and disabled. This was the sixth
+measured null on what discovery is SHOWN, and the first that shipped real data
+through a channel that had been structurally empty since inception rather than new
+wording.
 
 ## Discovery Citations (`review.citations`)
 

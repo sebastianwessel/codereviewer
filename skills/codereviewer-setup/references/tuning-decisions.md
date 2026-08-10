@@ -8,13 +8,15 @@ own evaluation corpus is several percentage points of recall, so two runs that
 differ slightly have told you nothing. If you want to claim a change helped, you
 need repeated runs on a fixed corpus — see the project's `docs/05-quality/`.
 
-The most recent three-run baseline puts the standard deviation of in-diff recall
-at **2.89pp**; the previous one put it at 0.96pp. Judge a change against the
-**wider** band, because under-stating it is the error that manufactures false
-positives. Do not read the difference between the two as stability having
-regressed: at three runs per arm an sd is barely an estimate, the two intervals
-overlap heavily, and the project's own ledger declines to call the difference
-established.
+The most recently *stated* three-run standard deviation of in-diff recall is
+**2.89pp**, from the 2026-08-05 pin; the pin before that put it at 0.96pp, and
+the current pin (2026-08-06, engine `c3c0c3d`) does not restate an sd of its
+own — only three per-run values spanning 60.0–70.0%. Judge a change against the
+**wider stated** band, 2.89pp, because under-stating it is the error that
+manufactures false positives. Do not read the difference between the two
+stated figures as stability having regressed: at three runs per arm an sd is
+barely an estimate, the two intervals overlap heavily, and the project's own
+ledger declines to call the difference established.
 
 ## "There is too much noise"
 
@@ -58,8 +60,8 @@ In this order:
 Be honest with the user about what is and is not fixable by configuration.
 
 **Measured, on the 37-case real-repository corpus with the engine pinned
-(`db78900`): in-diff recall is a mean 68.3% over three runs — 66.7 / 66.7 / 71.7,
-sd 2.89pp — and recall on defects outside the diff is 0
+(`c3c0c3d`): in-diff recall is a mean 66.1% over three runs — 60.0 / 68.3 / 70.0,
+no sd restated at this pin — and recall on defects outside the diff is 0
 of 27 — and every one of those 27 sat in a file the reviewer had already been
 shown in full.** None of them needed extra context or retrieval. That is an
 attention problem, not an information problem, and no configuration key addresses
@@ -221,7 +223,7 @@ loaded".
 
 `aiReview.requireRefutation` accepts the literal `true` only. Every model-origin
 candidate is independently adjudicated before it can be admitted. That is the
-mechanism the measured **96.2% mean adjusted precision** rests on; there is no
+mechanism the measured **96.1% mean adjusted precision** rests on; there is no
 fast path around it.
 
 `security.allowShell`, `security.allowNetwork`, `security.allowFilesystemWrite`

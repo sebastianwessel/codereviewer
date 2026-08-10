@@ -76,19 +76,20 @@ The default report formats are `json`, `markdown`, and `sarif`
 ## What it measures at
 
 `review` answers one question: does this change introduce a defect? On a
-37-case corpus of real repositories, engine pinned `db78900`, it finds
-**68.3%** (sd 2.89pp) of the defects sitting inside the reviewed diff. Adjusted
-precision is **96.2%** — not comparable to an earlier 99.1% figure, because the
-eval's scoring version changed between the two measurements in a way that
-changes what gets credited, independent of review quality; raw precision, which
-that change does not touch, is **77.8%**. A 37-case run costs **$1.97** cold-cache
-or **$0.82–0.83** with a warm cache — more than 2x apart, so neither stands in
-for the other. Of the defects sitting elsewhere in a changed file — code the
-reviewer was shown in full but the diff did not touch — it finds **0 of 27**,
-unchanged from the prior baseline. That split is a scope boundary, not a
-blended average: `review` is built to answer "does this change introduce a
-defect", not "does this codebase contain a defect, changed or not". See
-[Status and limitations](status-and-limitations.md) for the full split and its
+37-case corpus of real repositories, engine pinned `c3c0c3d`, it finds
+**66.1%** of the defects sitting inside the reviewed diff (no sd is restated
+for this pin — see [Current results](../05-quality/current-results.md)).
+Adjusted precision is **96.1%** — comparable to the prior pin's 96.2% under
+the same scoring version; raw precision is **74.5%**. A 37-case run at this
+pin costs **$1.15**; the earlier **$1.97** cold-cache / **$0.82–0.83**
+warm-cache figures predate a since-landed change that runs review as a single
+process and a dependency bump, and should not be quoted as current. Of the
+defects sitting elsewhere in a changed file — code the reviewer was shown in
+full but the diff did not touch — it finds **0 of 27**, unchanged from the
+prior baseline. That split is a scope boundary, not a blended average:
+`review` is built to answer "does this change introduce a defect", not "does
+this codebase contain a defect, changed or not". See [Status and
+limitations](status-and-limitations.md) for the full split and its
 replication.
 
 Measured on `openai/gpt-5.3-codex`. Those rates and that cost are properties of
@@ -103,9 +104,14 @@ inside it, and none outside it — even in a file it was shown in full. →
 
 ## Two advisory commands alongside the review
 
-`review` is the only command that can block. Two others run independently, share
-no context with it and with each other, and **nothing either of them reports can
-set a non-zero exit code**:
+`review` is the only command that can block, and **nothing either advisory
+stage reports can set a non-zero exit code**. Run standalone, `intent check`
+and `impact check` are independent of `review` and of each other, each with its
+own isolated run and context. But when `changeImpact.enabled` /
+`intentFulfilment.enabled` are on, `review` also runs both lanes itself —
+**in the same process, over the run context it already built for the
+review** — and writes their reports into its own run directory rather than a
+separate one. Either way, neither can fail the pipeline:
 
 | Command | What it produces |
 | --- | --- |

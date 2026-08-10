@@ -61,7 +61,7 @@ barrel is not published by being there (spec 01, *Public Surface*).
 | `command-logging.ts` | The `--log-file` sink and the logger bound to a command name |
 | `advisory-check-command.ts` | The skeleton `impact check` and `intent check` share, including the rule that presentation can never fail an advisory stage |
 | `investigation-lanes.ts` | The two post-review lanes `review` drives (`runVerificationForReview`, `runFixForReview`) |
-| `mediated-file-reader.ts` | Reading one repository file through the mediated retriever, skipping what it may not read |
+| `advisory-lanes.ts` | The two advisory reference stages (specs 22, 23) `review` drives in-process, over its own run context — wraps each so a lane failure becomes a review-report warning, never a non-zero exit |
 | `args.ts` | Pure argument parsers — no IO, no runtime state |
 | `run-artifacts.ts` | Writing run artifacts and maintaining the run index |
 | `baseline-source.ts` | Resolving and validating the report `baseline write` builds from — the source of `baseline_source_unavailable` and `baseline_source_invalid` |

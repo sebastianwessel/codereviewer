@@ -235,7 +235,7 @@ discloses no source content.
 | `id` | yes | `evidenceId` | Stable within run. |
 | `kind` | yes | `EvidenceKind` | Closed enum. |
 | `summary` | yes | string 1..500 | Redacted, safe for logs/reports. |
-| `location` | conditional | `CodeLocation` | Required for `diff`, `file`, `symbol`, and `diagnostic`; forbidden for `config` and `policy`; optional for `command` and `model-rationale`. |
+| `location` | no | `CodeLocation` | Optional for every kind, uniformly. This row previously stated a per-kind required/forbidden rule naming `diff`, `symbol`, `config`, `policy` and `command` — five values removed from `EvidenceKind` on 2026-08-10 (see above) — and no such rule was ever enforced: `EvidenceRecordSchema.location` is and was `CodeLocationSchema.optional()`. A conditional stated here and absent from the schema is a rule readers believe and code does not apply, so the row now says what the contract actually is. |
 | `source` | yes | string | Support signal extractor, agent, tool, or config source name. |
 | `sourceVersion` | no | string | Version/hash when known. |
 | `contentHash` | no | string | SHA-256 hash of raw content when raw content is withheld. |
@@ -251,19 +251,28 @@ Raw source snippets must not be stored in `summary`. If raw content is needed
 for debugging, `rawContentRef` points to an artifact excluded from default
 publishing and marked sensitive.
 
-## DeterministicSignal
+## Deterministic Support Signals
 
 Deterministic signals are support data for model context, refutation, and
 admission safety. They are not the primary production issue-discovery product.
 
-| Field | Required | Type | Rule |
-| --- | --- | --- | --- |
-| `id` | yes | string | Stable within run. |
-| `kind` | yes | `"line-anchor" | "symbol-span" | "import-edge" | "test-hint" | "config-hint" | "scope-check" | "duplicate-key" | "contradiction" | "external-tool-summary"` | Closed enum. |
-| `path` | conditional | repositoryRelativePath | Required for file-backed signals. |
-| `location` | no | `CodeLocation` | Must resolve when present. |
-| `summary` | yes | string 1..500 | Redacted and report-safe. |
-| `evidenceIds` | yes | evidence ID array | May be empty for scope-only signals. |
+**This section previously specified a `DeterministicSignal` contract** — `id`,
+`kind` from a nine-value enum (`line-anchor`, `symbol-span`, `import-edge`,
+`test-hint`, `config-hint`, `scope-check`, `duplicate-key`, `contradiction`,
+`external-tool-summary`), `path`, `location`, `summary`, `evidenceIds`. **No such
+shape was ever produced.** `DeterministicSignalSchema` existed in
+`shared/contracts`, was exported publicly, and had no producer and no consumer;
+it was deleted on 2026-08-10. Not one of those nine `kind` values appears
+anywhere in the codebase.
+
+What the extractors actually emit is `SupportSignalFact`
+(`src/domains/deterministic-signals/shared/deterministic-signal-types.ts`):
+`id`, `language`, `kind` from `import | export | declaration | public-symbol |
+module`, `path`, `name`, optional `moduleSpecifier`, `line`, `endLine`,
+`summary`, `contentHash` — carried alongside `EvidenceRecord[]` in a
+`DeterministicSignalExtraction`. That type is the contract, and it lives with the
+domain that produces it rather than being restated here, so the two cannot
+disagree again.
 
 Signals may corroborate or contradict a model-origin candidate, but signals from
 CodeQL/linter/build/test-equivalent categories should be de-prioritized unless

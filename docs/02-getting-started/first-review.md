@@ -70,10 +70,9 @@ codereviewer review --base-ref origin/main --head-ref HEAD \
 
 Calibrate before you read it, or you will misread a working install as a broken
 one. On a 37-case corpus of real repositories, against `openai/gpt-5.3-codex`
-with the engine pinned `db78900`, the engine finds **68.3%** of the in-diff
-known defects at **96.2% adjusted precision** (not comparable to earlier
-adjusted-precision figures — the eval's scoring version changed between
-measurements; see [Current results](../05-quality/current-results.md#current-headline)).
+with the engine pinned `c3c0c3d`, the engine finds **66.1%** of the in-diff
+known defects at **96.1% adjusted precision** (see [Current
+results](../05-quality/current-results.md#current-headline)).
 A short report is the normal case — a long one would be the surprise. Both
 rates here were measured on that model at that engine pin; on a different one
 they are not a calibration.
