@@ -23,7 +23,8 @@
 // review. A memo cannot change what a stage computes, only how often the work
 // happens underneath it.
 import type { CodeReviewerConfig } from '../../shared/contracts/index.js'
-import type { GitCommandRunner } from '../repository-intake/index.js'
+import { createContextRetriever } from '../context-retrieval/index.js'
+import { defaultGitRunner, type GitCommandRunner } from '../repository-intake/index.js'
 
 export type ChangedFileReader = (path: string) => Promise<string | undefined>
 
@@ -98,6 +99,45 @@ export const createSharedChangedFileReader = (
 }
 
 /**
+ * Reads one repository file through the mediated retriever, which is the only
+ * filesystem seam a stage gets: path containment, symlink-realpath re-checking,
+ * the eligibility gate and redaction all apply. An ineligible, missing, or
+ * over-budget file is skipped and counted; one unreadable file must not fail a
+ * whole report.
+ *
+ * The retriever is built HERE from config rather than handed in. Three call sites
+ * were constructing an identical one — `review`, the advisory check harness, and
+ * the impact eval runner — each deriving the same bounds from the same two config
+ * keys, each correct, which is why nobody noticed there were three.
+ *
+ * The budget is sized to the review file cap because that is the same bound
+ * intake applies to how many files one run may change, and no searches are
+ * granted: this seam reads changed files, it does not go looking.
+ */
+const changedFileReaderFor = (
+  repositoryRoot: string,
+  config: CodeReviewerConfig
+): ChangedFileReader => {
+  const retriever = createContextRetriever({
+    repositoryRoot,
+    budget: {
+      maxReads: config.review.maxFiles,
+      maxBytesPerRead: config.review.maxFileBytes,
+      maxSearches: 0
+    },
+    paths: { include: config.paths.include, exclude: config.paths.exclude }
+  })
+
+  return async (filePath) => {
+    try {
+      return (await retriever.readRepositoryFile({ path: filePath })).content
+    } catch {
+      return undefined
+    }
+  }
+}
+
+/**
  * The shared foundation for one invocation. Stages take this instead of building
  * their own; the CLI builds exactly one, whether it is running a single stage or
  * all of them.
@@ -113,13 +153,19 @@ export type RunContext = {
 export const createRunContext = (input: {
   readonly repositoryRoot: string
   readonly config: CodeReviewerConfig
-  readonly runGit: GitCommandRunner
-  readonly readChangedFile: ChangedFileReader
+  // Both default to the real implementations. They are injectable because tests
+  // need to count calls and drive failures, not because production has a second
+  // way to shell out to git or read a file.
+  readonly runGit?: GitCommandRunner
+  readonly readChangedFile?: ChangedFileReader
   readonly signal?: AbortSignal
 }): RunContext => ({
   repositoryRoot: input.repositoryRoot,
   config: input.config,
-  runGit: createSharedGitRunner(input.runGit),
-  readChangedFile: createSharedChangedFileReader(input.readChangedFile),
+  runGit: createSharedGitRunner(input.runGit ?? defaultGitRunner),
+  readChangedFile: createSharedChangedFileReader(
+    input.readChangedFile ??
+      changedFileReaderFor(input.repositoryRoot, input.config)
+  ),
   ...(input.signal === undefined ? {} : { signal: input.signal })
 })

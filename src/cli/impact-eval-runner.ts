@@ -12,7 +12,6 @@
 
 import path from 'node:path'
 import { readFile } from 'node:fs/promises'
-import { createContextRetriever } from '../domains/context-retrieval/index.js'
 import { stableJsonDigest } from '../shared/json/stable-json-digest.js'
 import {
   runChangeImpact,
@@ -24,6 +23,7 @@ import {
   type ChangeImpactCorpusCase
 } from '../domains/evaluation/index.js'
 import { resolveExistingPathInsideRoot } from '../platform/path-service.js'
+import { createRunContext } from '../domains/run-context/index.js'
 import { normalizeError } from '../shared/errors/error-normalizer.js'
 import type { Logger } from '../domains/observability/index.js'
 import type { CodeReviewerConfig } from '../shared/contracts/index.js'
@@ -182,17 +182,12 @@ export const runChangeImpactEvalCase = async (
     config: input.config,
     corpusCase: input.corpusCase
   })
-  // The same mediated seam `impact check` supplies: containment, the eligibility
-  // gate and redaction all apply, and the change-impact domain still opens no file
-  // of its own.
-  const retriever = createContextRetriever({
+  // The same mediated seam `impact check` supplies, from the same builder:
+  // containment, the eligibility gate and redaction all apply, and the
+  // change-impact domain still opens no file of its own.
+  const runContext = createRunContext({
     repositoryRoot: workTreeDirectory,
-    budget: {
-      maxReads: config.review.maxFiles,
-      maxBytesPerRead: config.review.maxFileBytes,
-      maxSearches: 0
-    },
-    paths: { include: config.paths.include, exclude: config.paths.exclude }
+    config
   })
 
   try {
@@ -205,13 +200,7 @@ export const runChangeImpactEvalCase = async (
       baseRef: input.corpusCase.parentCommit,
       headRef: input.corpusCase.introducingCommit,
       ...(input.agents === undefined ? {} : { agents: input.agents }),
-      readChangedFile: async (filePath: string) => {
-        try {
-          return (await retriever.readRepositoryFile({ path: filePath })).content
-        } catch {
-          return undefined
-        }
-      }
+      readChangedFile: runContext.readChangedFile
     })
 
     return withOutcome({ status: 'scored', report })

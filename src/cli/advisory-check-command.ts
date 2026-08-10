@@ -10,10 +10,7 @@ import {
   type LoadedCodeReviewerConfig
 } from './command-config.js'
 import { jsonResult } from './run-artifacts.js'
-import { createContextRetriever } from '../domains/context-retrieval/index.js'
-import { defaultGitRunner } from '../domains/repository-intake/index.js'
 import { createRunContext, type RunContext } from '../domains/run-context/index.js'
-import { mediatedFileReader } from './mediated-file-reader.js'
 
 // JSON is the default because it was the only output these commands ever had, and a
 // script reading stdout must keep working unchanged.
@@ -57,38 +54,6 @@ const presentCheckReport = async <TReport>(
     }
   }
 }
-
-// The mediated retriever is the ONLY filesystem seam an advisory stage gets:
-// path containment, symlink-realpath re-checking, the eligibility gate and
-// redaction all apply to every read. Both commands built one of these, with
-// byte-identical bounds, and each then read the same changed files through its
-// own copy — correct twice, done twice. Built once here instead.
-//
-// The read budget is sized to the review file cap, which is the same bound intake
-// applies to how many files one run may change.
-const createAdvisoryRunContext = (
-  loadedConfig: LoadedCodeReviewerConfig,
-  options: CliRunOptions
-): RunContext =>
-  createRunContext({
-    repositoryRoot: options.cwd,
-    config: loadedConfig.config,
-    runGit: defaultGitRunner,
-    readChangedFile: mediatedFileReader(
-      createContextRetriever({
-        repositoryRoot: options.cwd,
-        budget: {
-          maxReads: loadedConfig.config.review.maxFiles,
-          maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
-          maxSearches: 0
-        },
-        paths: {
-          include: loadedConfig.config.paths.include,
-          exclude: loadedConfig.config.paths.exclude
-        }
-      })
-    )
-  })
 
 // `impact check` and `intent check` are two independently runnable ADVISORY
 // stages that share one shape: they accept the two git refs, require the `check`
@@ -153,7 +118,12 @@ export const runCheckCommand = async <TReport>(
       loadedConfig,
       baseRef: parseOptionValue(checkArgs, '--base-ref'),
       headRef: parseOptionValue(checkArgs, '--head-ref'),
-      runContext: createAdvisoryRunContext(loadedConfig, input.options)
+      // One context for the whole invocation. Both advisory commands used to
+      // build their own identical mediated retriever; the context owns that now.
+      runContext: createRunContext({
+        repositoryRoot: input.options.cwd,
+        config: loadedConfig.config
+      })
     })
     const present = input.present
     const presentation = await presentCheckReport(

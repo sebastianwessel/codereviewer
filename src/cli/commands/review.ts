@@ -18,10 +18,7 @@ import {
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
 import { mapErrorResult, usageError } from '../cli-error-results.js'
 import { loadConfigForCommand } from '../command-config.js'
-import { createContextRetriever } from '../../domains/context-retrieval/index.js'
-import { defaultGitRunner } from '../../domains/repository-intake/index.js'
 import { createRunContext } from '../../domains/run-context/index.js'
-import { mediatedFileReader } from '../mediated-file-reader.js'
 import { runAdvisoryStagesForReview } from '../advisory-lanes.js'
 import { createCliLogger, resolveLogSink } from '../command-logging.js'
 import {
@@ -84,22 +81,7 @@ export const runReview = async (
     // instead of once per stage.
     const runContext = createRunContext({
       repositoryRoot: options.cwd,
-      config: loadedConfig.config,
-      runGit: defaultGitRunner,
-      readChangedFile: mediatedFileReader(
-        createContextRetriever({
-          repositoryRoot: options.cwd,
-          budget: {
-            maxReads: loadedConfig.config.review.maxFiles,
-            maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
-            maxSearches: 0
-          },
-          paths: {
-            include: loadedConfig.config.paths.include,
-            exclude: loadedConfig.config.paths.exclude
-          }
-        })
-      )
+      config: loadedConfig.config
     })
     const result = await runReviewPipeline({
       repositoryRoot: options.cwd,
