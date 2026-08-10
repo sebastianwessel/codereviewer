@@ -210,14 +210,18 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
-  test('discovery citations default to disabled', () => {
-    const disabled = CodeReviewerConfigSchema.parse({})
-    expect(disabled.review.citations.enabled).toBe(false)
+  // ON by default since 2026-08-11, on a readability judgement rather than a
+  // quality one: the A/B was null for recall and precision, and what changed is
+  // that a finding shows the source line it rests on. The opt-OUT is the part
+  // worth pinning — it is what returns the +5.6% input tokens to zero.
+  test('discovery citations default to enabled, and can be turned off', () => {
+    const byDefault = CodeReviewerConfigSchema.parse({})
+    expect(byDefault.review.citations.enabled).toBe(true)
 
-    const enabled = CodeReviewerConfigSchema.parse({
-      review: { citations: { enabled: true } }
+    const disabled = CodeReviewerConfigSchema.parse({
+      review: { citations: { enabled: false } }
     })
-    expect(enabled.review.citations.enabled).toBe(true)
+    expect(disabled.review.citations.enabled).toBe(false)
   })
 
   test('review.citations rejects an unknown nested key', () => {

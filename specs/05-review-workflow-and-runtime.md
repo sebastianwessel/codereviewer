@@ -1962,3 +1962,16 @@ nearest prior attempt at this stage — the withdrawn refutation retrieval, abov
 made adjusted precision fall and false positives rise; that record's rule applies
 here verbatim: remove on ANY adjusted-precision drop or false-positive rise
 against the control arm.
+
+**Promoted to ON by default, 2026-08-11, on readability and explicitly not on
+quality.** The A/B was null both ways — recall 63.1% → 62.2%, paired sign test 3
+gained / 7 lost p = 0.3438, adjusted precision 98.6% → 99.3%
+(`reports/2026-08-10-citations-result.md`) — so nothing claims the reviewer got
+better. What changed is what a finding SHOWS: the mechanism engaged on 90% of
+findings, so a comment's "Rests on:" names the source line the claim stands on
+instead of the refuter's prose about it. Cost is +5.6% input tokens per discovery
+call, and `enabled: false` returns it to zero with a byte-identical packet.
+
+The kill rule above still binds as a STANDING rule, not a one-time gate: a future
+measurement showing adjusted precision falling removes the key whatever its
+readability value.

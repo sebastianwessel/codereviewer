@@ -172,8 +172,24 @@ export const SignalFactContextConfigSchema = z.strictObject({
 // (*Measured Outcome Of The Withdrawn Refutation Retrieval*): removed entirely —
 // key, prompt segment, and wiring — on ANY adjusted-precision drop or rise in
 // genuine false positives, with no recall gain required to justify keeping it off.
+// PROMOTED TO ON, 2026-08-11, on a READABILITY judgement and explicitly not on a
+// quality one. The A/B is null for recall and precision alike (recall 63.1% ->
+// 62.2%, sign test 3 gained / 7 lost p = 0.3438, adjusted precision 98.6% ->
+// 99.3%), so nothing here claims the reviewer got better. What changed is what a
+// finding SHOWS: the mechanism engaged on 90% of findings, so a comment's "Rests
+// on:" line names the actual source line the claim stands on instead of the
+// refuter's prose about it. For a product whose whole premise is evidence-backed
+// review, showing the evidence is the default worth having.
+//
+// The cost is real and measured: +5.6% input tokens on every discovery call. An
+// operator who wants it back at zero sets `enabled: false`, and the disabled path
+// is byte-for-byte the pre-citation packet.
+//
+// The kill rule below still binds. It fired on neither arm — precision rose — but
+// it is a standing rule, not a one-time gate, and a future measurement that shows
+// adjusted precision falling removes this key whatever its readability value.
 export const CitationConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false)
+  enabled: z.boolean().default(true)
 })
 
 export const ReviewConfigSchema = z.strictObject({

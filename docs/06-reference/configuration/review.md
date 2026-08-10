@@ -249,7 +249,7 @@ table](../../03-concepts/optional-capabilities/README.md#decision-table) and
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `enabled` | boolean | `false` | Ask discovery to quote the line that shows the defect, and verify it. |
+| `enabled` | boolean | `true` | Ask discovery to quote the line that shows the defect, and verify it. |
 
 Discovery built every candidate with no evidence attached. The refutation packet
 picks its evidence by matching candidate evidence ids, so the reviewer that
@@ -268,9 +268,15 @@ unverifiable citation leaves the candidate exactly as it would have been with th
 key off. Rejecting candidates for bad citations is a different and riskier idea;
 it is deliberately not part of this.
 
-Off by default because it changes what discovery is asked to produce, and the
-nearest previous attempt at this stage made precision worse — so it ships
-disabled, with that attempt's removal rule attached.
+**On by default since 2026-08-11 — for readability, not for accuracy.** The
+measurement was null both ways: recall 63.1% → 62.2% (sign test 3 gained / 7 lost,
+p = 0.3438) and adjusted precision 98.6% → 99.3%, on `openai/gpt-5.3-codex`. So
+this does not make the reviewer better at finding things. It makes each finding
+show the line it rests on.
+
+It costs **+5.6% input tokens** per discovery call. Set `enabled: false` to return
+that to zero; the disabled path is byte-for-byte the packet from before this
+existed.
 
 **Measured 2026-08-10, and not promoted.** On the security-advisory corpus (72
 cases — not comparable to the real-repository figures elsewhere in this

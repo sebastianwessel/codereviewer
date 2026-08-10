@@ -111,7 +111,7 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "default": false,
+              "default": true,
               "type": "boolean"
             }
           },
