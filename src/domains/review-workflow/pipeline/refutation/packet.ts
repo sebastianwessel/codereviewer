@@ -104,6 +104,13 @@ const createFindingRefutationBatchInput = (
   // The accepted cost, recorded rather than assumed away: this may raise
   // refutation false positives for genuinely deliberate changes. That is
   // unmeasured.
+  //
+  // This is a BLOCKLIST, so every other kind reaches refutation by DEFAULT, and
+  // TypeScript cannot help: `kind !== 'change-intent'` compiles unchanged however
+  // many members the enum gains. The guard is a test — see "every reviewContext
+  // kind is a decision, not a default" in packet.test.ts — which fails when a kind
+  // is added, forcing someone to rule on it. The next untrusted-but-fact-shaped
+  // kind inherits this exact risk.
   const reviewContext = taskOrWorkflowContext.filter(
     (context) => context.kind !== 'change-intent'
   )

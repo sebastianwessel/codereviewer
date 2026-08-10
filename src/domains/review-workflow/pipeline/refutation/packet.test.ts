@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { type EvidenceRecord } from '../../../../shared/contracts/index.js'
 import { type CandidateFinding } from '../../../admission/index.js'
+import { ReviewContextDocumentSchema } from '../agent-contracts.js'
 import {
   type ReviewContextDocument,
   type WorkflowReviewTask
@@ -367,5 +368,58 @@ describe('finding refutation packet', () => {
     expect(packet.reviewContext).toEqual([])
     expect(packet.budgetNotice).toContain('the review context')
     expect(packet.budgetNotice).toContain('artefact of the budget')
+  })
+})
+
+// The change-intent exclusion is a BLOCKLIST — `kind !== 'change-intent'` — so
+// every other reviewContext kind reaches refutation by default. That is fail-open,
+// and TypeScript cannot catch it: the comparison compiles unchanged however many
+// kinds the enum gains.
+//
+// This test is the guard the filter does not have. It fails when a kind is added,
+// forcing a deliberate decision about whether refutation may see it — which is the
+// point, because the next untrusted-but-fact-shaped kind (a PR description, an
+// external ticket body) inherits change-intent's exact risk: refutation treats
+// reviewContext as evidentiary, and a suppressed finding leaves no trace.
+describe('every reviewContext kind is a decision, not a default', () => {
+  const kindsRefutationMaySee = [
+    'file',
+    'support-signal-output',
+    'referenced-definition',
+    'analyzer-signal'
+  ] as const
+  const kindsWithheldFromRefutation = ['change-intent'] as const
+
+  test('the enum holds exactly the kinds this test has ruled on', () => {
+    expect([...ReviewContextDocumentSchema.shape.kind.options].sort()).toEqual(
+      [...kindsRefutationMaySee, ...kindsWithheldFromRefutation].sort()
+    )
+  })
+
+  test('a withheld kind never reaches the refuter', () => {
+    for (const kind of kindsWithheldFromRefutation) {
+      const packet = findingRefutationBatchInput({
+        workflowInput: workflowInput(),
+        task: task([{ ...reviewContext(), kind }]),
+        candidates: [modelCandidate],
+        allCandidates: [modelCandidate]
+      })
+
+      expect(packet.reviewContext).toEqual([])
+    }
+  })
+
+  test('an allowed kind does reach the refuter', () => {
+    for (const kind of kindsRefutationMaySee) {
+      const document = { ...reviewContext(), kind }
+      const packet = findingRefutationBatchInput({
+        workflowInput: workflowInput(),
+        task: task([document]),
+        candidates: [modelCandidate],
+        allCandidates: [modelCandidate]
+      })
+
+      expect(packet.reviewContext).toEqual([document])
+    }
   })
 })
