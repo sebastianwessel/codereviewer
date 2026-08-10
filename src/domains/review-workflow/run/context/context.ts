@@ -4,6 +4,7 @@ import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
 import { redactText } from '../../../../shared/redaction/redactor.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
 import { utf8ByteLength } from '../../../../shared/text/utf8-bytes.js'
+import { diffSegmentsForPaths } from '../../../../shared/diff/git-diff-header.js'
 import { uniqueSorted } from '../../../../shared/text/unique-sorted.js'
 import {
   reviewedLineRangeForContent,
@@ -149,6 +150,13 @@ export const assembleContext = async (
     readonly sourceFiles: readonly SupportSignalSourceFile[]
     readonly analysis: DeterministicSignalExtraction
     readonly tasks: readonly ReviewTask[]
+    // The reviewed diff, for ACCOUNTING only. Every discovery packet carries the
+    // task's own segments of it, and the ledger recorded none of them — so "how
+    // much context did this run send" answered low by the size of the diff, which
+    // on a large change is the biggest single input there is. The packet still
+    // builds its own copy from this same text through the same shared splitter;
+    // this does not put the diff into the task documents.
+    readonly reviewedDiffText: string
   }
 ): Promise<ContextAssemblyResult> => {
   const staticContext = await loadStaticReviewContext({
@@ -172,20 +180,42 @@ export const assembleContext = async (
     const contextEntryIds: string[] = []
     const pathSet = new Set(paths)
 
+    // The task's own diff segments, accounted for before the documents are. They
+    // are not a reviewContext document — the packet renders them from the same
+    // shared splitter — but they ARE bytes this task sends to the model, and the
+    // ledger's one job is to know that. Recorded per task because that is how
+    // many times they are sent.
+    const taskDiffText = diffSegmentsForPaths(input.reviewedDiffText, paths)
+
+    if (taskDiffText.length > 0) {
+      const diffBytes = utf8ByteLength(taskDiffText)
+
+      contextLedger.push(
+        createContextLedgerEntry({
+          kind: 'diff',
+          taskId,
+          reason: 'task-context-diff-segments',
+          decision: 'included',
+          bytesConsidered: diffBytes,
+          bytesIncluded: diffBytes,
+          content: taskDiffText
+        })
+      )
+    }
+
     for (const inputContext of [
       ...inputContexts,
       ...referencedDefinitionContexts
     ]) {
       const contentBytes = utf8ByteLength(inputContext.content)
       const ledgerEntry = createContextLedgerEntry({
-        // The context ledger has no dedicated kinds for 'test-mapping',
-        // 'referenced-definition', 'change-intent', or 'analyzer-signal'; all are
-        // recorded as support-signal-output (derived context, not a reviewed
-        // changed file). 'change-intent' and 'analyzer-signal' are injected by
-        // separate stages and never reach this assembly loop, but the mapping keeps
-        // the kind union exhaustive.
+        // The context ledger has no dedicated kinds for 'referenced-definition',
+        // 'change-intent', or 'analyzer-signal'; all are recorded as
+        // support-signal-output (derived context, not a reviewed changed file).
+        // 'change-intent' and 'analyzer-signal' are injected by separate stages and
+        // never reach this assembly loop, but the mapping keeps the kind union
+        // exhaustive.
         kind:
-          inputContext.kind === 'test-mapping' ||
           inputContext.kind === 'referenced-definition' ||
           inputContext.kind === 'change-intent' ||
           inputContext.kind === 'analyzer-signal'

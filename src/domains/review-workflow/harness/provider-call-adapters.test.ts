@@ -30,7 +30,7 @@ const candidate: CandidateFinding = {
 
 const evidence: EvidenceRecord = {
   id: 'ev_provider',
-  kind: 'diff',
+  kind: 'file',
   summary: 'The changed provider path loses data.',
   location: {
     path: 'src/provider.ts',

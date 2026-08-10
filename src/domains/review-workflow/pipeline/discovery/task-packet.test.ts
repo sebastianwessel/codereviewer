@@ -17,7 +17,7 @@ const configHash =
 
 const evidence: EvidenceRecord = {
   id: 'ev_diff1',
-  kind: 'diff',
+  kind: 'file',
   summary: 'Changed line evidence.',
   location: {
     path: 'src/app.ts',

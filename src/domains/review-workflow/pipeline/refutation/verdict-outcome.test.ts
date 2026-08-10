@@ -30,7 +30,7 @@ const candidate = (): CandidateFinding => ({
 
 const refutationEvidence: EvidenceRecord = {
   id: 'ev_refutation1',
-  kind: 'refutation',
+  kind: 'model-rationale',
   summary: 'The proof was checked.',
   source: 'review-agent',
   redactionApplied: true

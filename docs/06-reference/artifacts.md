@@ -151,8 +151,8 @@ file with a test named after it, not a file with a test for this change.
 
 ### `context-ledger.json`
 
-Array of entries: `id`, `kind` (`file`, `diff`, `symbol`, `instruction`,
-`skill`, `support-signal-output`, `tool-result`, `prior-artifact`), optional
+Array of entries: `id`, `kind` (`file`, `diff`, `instruction`, `skill`,
+`support-signal-output`, `tool-result`), optional
 `path` / `taskId` / `sourceLedgerEntryId` / `contentHash`, `decision`
 (`included`, `skipped`, `truncated`, `summarized`), `reason`,
 `bytesConsidered`, `bytesIncluded`.

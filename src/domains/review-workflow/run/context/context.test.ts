@@ -121,6 +121,7 @@ describe('review runner context assembly', () => {
         config,
         sourceFiles: [{ path: 'src/a.ts', content: 'export const a = 1\n' }],
         analysis: { facts: [], evidence: [] },
+        reviewedDiffText: '',
         tasks: [taskFor('src/a.ts')]
       })
       const instruction = result.assembledContext.instructions[0]
@@ -183,6 +184,7 @@ describe('review runner context assembly', () => {
           ],
           evidence: [evidence]
         },
+        reviewedDiffText: '',
         tasks: [taskFor('src/a.ts')]
       })
 
@@ -263,6 +265,7 @@ describe('review runner context assembly', () => {
           ],
           evidence: []
         },
+        reviewedDiffText: '',
         tasks: [taskFor('src/a.ts')]
       })
 
@@ -320,6 +323,7 @@ describe('review runner context assembly', () => {
           ],
           evidence: [evidence]
         },
+        reviewedDiffText: '',
         tasks: [taskFor('src/a.ts')]
       })
 
@@ -360,6 +364,7 @@ describe('review runner context assembly', () => {
       config,
       sourceFiles: [{ path: 'src/large.ts', content: largeSource }],
       analysis: { facts: [], evidence: [] },
+      reviewedDiffText: '',
       tasks: [taskFor('src/large.ts')]
     })
 
@@ -395,6 +400,7 @@ describe('review runner context assembly', () => {
       config,
       sourceFiles: [{ path: 'src/large.ts', content: sourceContent }],
       analysis: { facts: [], evidence: [] },
+      reviewedDiffText: '',
       tasks: [taskFor('src/large.ts')]
     })
 

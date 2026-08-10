@@ -97,6 +97,7 @@ const assembleScopedRun = async (
       { path: UNSCOPED_PATH, content: 'export const report = 1\n' }
     ],
     analysis: { facts: [], evidence: [] },
+    reviewedDiffText: '',
     tasks: [
       plannedTask('task_scoped', SCOPED_PATH),
       plannedTask('task_unscoped', UNSCOPED_PATH)

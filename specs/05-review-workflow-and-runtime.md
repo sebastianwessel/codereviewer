@@ -1091,7 +1091,7 @@ result, and previous-run artifact.
 | Field | Type |
 | --- | --- |
 | `id` | stable string |
-| `kind` | `file | diff | symbol | instruction | skill | support-signal-output | tool-result | prior-artifact` |
+| `kind` | `file | diff | instruction | skill | support-signal-output | tool-result` |
 | `path` | repository-relative path for repository-backed context; omitted for external metadata |
 | `taskId` | optional task ID when the ledger entry describes a task-local decision |
 | `sourceLedgerEntryId` | optional original context ledger entry ID for derived decisions |

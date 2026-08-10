@@ -143,6 +143,7 @@ export const runReview = async (
       sourceFiles,
       analysis,
       tasks: reviewTasks,
+      reviewedDiffText: effectiveRawDiff,
       observability,
       logger
     })

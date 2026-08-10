@@ -15,7 +15,7 @@ const configHash =
 
 const evidence: EvidenceRecord = {
   id: 'ev_handler1',
-  kind: 'diff',
+  kind: 'file',
   summary: 'Changed branch returns stale state.',
   location: {
     path: 'src/handler.ts',

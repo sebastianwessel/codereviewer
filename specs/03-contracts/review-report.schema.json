@@ -772,23 +772,12 @@
           "kind": {
             "type": "string",
             "enum": [
-              "diff",
               "file",
-              "symbol",
               "diagnostic",
-              "command",
               "model-rationale",
-              "config",
-              "policy",
-              "data-flow",
-              "related-location",
-              "rule",
-              "baseline",
               "deterministic-signal",
               "tool-read",
-              "tool-search",
-              "proof",
-              "refutation"
+              "tool-search"
             ]
           },
           "summary": {

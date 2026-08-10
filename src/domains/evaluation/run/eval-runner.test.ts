@@ -122,7 +122,7 @@ const provenance: FindingProvenance = {
 
 const evidence: EvidenceRecord = {
   id: 'ev_eval1',
-  kind: 'diff',
+  kind: 'file',
   summary: 'Changed branch can return an incorrect value.',
   location: {
     path: 'src/app.ts',

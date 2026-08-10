@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { sha256 } from '../hash/hash.js'
 
 // CANONICAL-JSON DIGESTS, DEFINED ONCE.
 //
@@ -61,4 +61,4 @@ const stableStringify = (value: unknown): string => {
 }
 
 export const stableJsonDigest = (value: unknown): string =>
-  createHash('sha256').update(stableStringify(value)).digest('hex')
+  sha256(stableStringify(value))

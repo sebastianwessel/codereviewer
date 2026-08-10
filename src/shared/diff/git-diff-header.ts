@@ -125,3 +125,69 @@ export const parseGitDiffHunkHeader = (
     newLineCount: parseHunkLineCount(match[4])
   }
 }
+
+/**
+ * The segments of a unified diff that belong to the given paths, joined into one
+ * text — a per-task view of a whole-run diff.
+ *
+ * Lives here, beside the header parser it is built on, because it has two
+ * consumers that must agree: the discovery packet builder, which decides what the
+ * model actually sees for a task, and the context ledger, which accounts for what
+ * was sent. Accounting computed a different way from presentation is accounting
+ * that can be wrong without anything failing.
+ *
+ * Truncation is not this function's job. A segment whose header path does not
+ * match is simply not emitted; a diff with no matching segment yields ''.
+ *
+ * The header is read with `parseGitDiffNewPath` — the shared parser, which is
+ * authoritative for a reason this function is a live example of. The `paths` it
+ * is given were produced by intake from the same header text through that same
+ * parser, so the two strings compared here are only comparable if ONE parser
+ * produced both. A private copy of the pattern kept the header bytes verbatim,
+ * and git C-quotes and octal-escapes any path with a non-ASCII byte — so a
+ * changed `café.ts` was captured as `src/caf\303\251.ts`, matched no reviewed
+ * path, and had its entire hunk dropped from a section headed "What this change
+ * modified". Nothing said so: an unmatched segment is simply not emitted.
+ */
+export const diffSegmentsForPaths = (
+  rawDiff: string,
+  paths: readonly string[]
+): string => {
+  if (rawDiff.trim().length === 0) {
+    return ''
+  }
+
+  const pathSet = new Set(paths)
+  const segments: string[] = []
+  let current: string[] | undefined
+  let currentPath: string | undefined
+
+  const flush = (): void => {
+    if (
+      current !== undefined &&
+      currentPath !== undefined &&
+      pathSet.has(currentPath)
+    ) {
+      segments.push(current.join('\n'))
+    }
+  }
+
+  for (const line of rawDiff.split('\n')) {
+    const headerPath = parseGitDiffNewPath(line)
+
+    if (headerPath !== undefined) {
+      flush()
+      current = [line]
+      currentPath = headerPath
+      continue
+    }
+
+    if (current !== undefined) {
+      current.push(line)
+    }
+  }
+
+  flush()
+
+  return segments.join('\n\n')
+}

@@ -14,11 +14,16 @@
 //
 // So each digest reads the fields it renders, tolerates their absence, and
 // returns `undefined` only when the document is not the report it claims to be.
+// The ONE exception to the looseness above, and it is not an exception to the
+// reasoning. Severity is a CLOSED five-value vocabulary, not a field that gains
+// members the way a report object gains keys, and both this file and the engine
+// pin it at their own source version — so a local copy tracked exactly what the
+// import tracks while being a second place to edit. The loose object schemas
+// below stay loose; only the vocabulary is shared.
 import { z } from 'zod'
+import { SeveritySchema, type Severity } from '../../src/shared/contracts/index.js'
 
-const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low', 'info'])
-
-export type Severity = z.infer<typeof SeveritySchema>
+export type { Severity }
 
 /** Most severe first. Shared by the counters and the comment's ordering. */
 export const severityOrder: readonly Severity[] = [

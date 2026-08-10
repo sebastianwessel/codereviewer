@@ -68,7 +68,7 @@ const evidence = (
   path = 'src/app.ts'
 ): EvidenceRecord => ({
   id,
-  kind: 'diff',
+  kind: 'file',
   summary: `Evidence for ${path}.`,
   location: {
     path,

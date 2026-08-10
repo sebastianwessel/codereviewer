@@ -118,7 +118,7 @@ export const createReportFixture = (): ReviewReport =>
     evidence: [
       {
         id: 'ev_diff1',
-        kind: 'diff',
+        kind: 'file',
         summary: 'Changed branch can return an incorrect value.',
         location: {
           path: 'src/app.ts',

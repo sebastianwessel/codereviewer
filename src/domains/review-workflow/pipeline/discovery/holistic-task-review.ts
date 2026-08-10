@@ -3,6 +3,7 @@ import {
   type CandidateFinding
 } from '../../../admission/index.js'
 import { sha256 } from '../../../../shared/hash/hash.js'
+import { truncateForContract } from '../../../../shared/text/truncate.js'
 import { TaskDiscoveryTelemetrySchema } from '../../../../shared/contracts/index.js'
 import {
   ModelHolisticFindingSchema,
@@ -369,12 +370,6 @@ const issueBothPasses = async (
   }
 }
 
-// Cut to a contract bound, leaving a visible mark inside the bound so the result
-// still satisfies the schema. `…` rather than three dots: one character buys the
-// most room back.
-const markCut = (value: string, max: number): string =>
-  value.length <= max ? value : `${value.slice(0, max - 1).trimEnd()}…`
-
 const candidateFromFinding = (
   task: WorkflowReviewTask,
   raw: unknown
@@ -412,8 +407,8 @@ const candidateFromFinding = (
     // human reads it in the report; a sentence that stops mid-clause with no mark
     // reads as the model's complete thought, so a reader weighs an argument whose
     // ending was removed here. The mark costs three characters of the cap.
-    title: markCut(finding.title, 120),
-    description: markCut(finding.description, 1200),
+    title: truncateForContract(finding.title, 120),
+    description: truncateForContract(finding.description, 1200),
     location: {
       path: finding.path,
       startLine: finding.startLine,

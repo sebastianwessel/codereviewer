@@ -263,7 +263,7 @@ describe('runFixRun', () => {
       evidence: [
         {
           id: 'ev_defect1',
-          kind: 'diff',
+          kind: 'file',
           summary: 'Changed branch returns an incorrect value.',
           location: { path: 'src/app.ts', startLine: 4, side: 'new' },
           source: 'typescript-support-signal',

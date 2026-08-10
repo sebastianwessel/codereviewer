@@ -88,6 +88,7 @@ const assembleScopedRun = async (
       { path: 'frontend/app.ts', content: 'export const app = 1\n' }
     ],
     analysis: { facts: [], evidence: [] },
+    reviewedDiffText: '',
     tasks: [
       plannedTask('task_backend', 'backend/api.ts'),
       plannedTask('task_frontend', 'frontend/app.ts')
@@ -308,6 +309,7 @@ describe('path-scoped reviewer instructions in the model packets', () => {
           { path: 'frontend/app.ts', content: 'export const app = 1\n' }
         ],
         analysis: { facts: [], evidence: [] },
+        reviewedDiffText: '',
         tasks: [
           plannedTask('task_backend', 'backend/api.ts'),
           plannedTask('task_frontend', 'frontend/app.ts')
@@ -357,6 +359,7 @@ describe('path-scoped reviewer instructions in the model packets', () => {
           { path: 'frontend/app.ts', content: 'export const app = 1\n' }
         ],
         analysis: { facts: [], evidence: [] },
+        reviewedDiffText: '',
         tasks: [
           {
             ...plannedTask('task_mixed', 'backend/api.ts'),

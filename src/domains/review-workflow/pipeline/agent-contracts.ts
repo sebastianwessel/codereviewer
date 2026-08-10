@@ -41,10 +41,13 @@ export const ReviewContextDocumentSchema = z.strictObject({
   // remain restricted to task.paths, these entries are not review targets, and an
   // analyzer result in particular is evidence for the model to judge, never a
   // finding and never a route around refutation or admission.
+  // 'test-mapping' was removed: nothing ever constructed one. The source-to-test
+  // mappings it named are real and DO reach the model — serialized inside the
+  // 'support-signal-output' document alongside the signal facts — so a second
+  // kind for them was a second way to say one thing, not a missing capability.
   kind: z.enum([
     'file',
     'support-signal-output',
-    'test-mapping',
     'referenced-definition',
     'change-intent',
     'analyzer-signal'

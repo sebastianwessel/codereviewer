@@ -44,7 +44,7 @@ const sourceFiles: readonly SupportSignalSourceFile[] = [
 
 const evidence: EvidenceRecord = {
   id: 'ev_app',
-  kind: 'symbol',
+  kind: 'file',
   summary: 'app export is available.',
   location: {
     path: 'src/app.ts',
@@ -117,6 +117,7 @@ describe('review runner context assembly state', () => {
           readonly sourceFiles: typeof sourceFiles
           readonly analysis: typeof analysis
           readonly tasks: readonly ReviewTask[]
+          readonly reviewedDiffText: string
         }
       | undefined
 
@@ -126,6 +127,7 @@ describe('review runner context assembly state', () => {
       sourceFiles,
       analysis,
       tasks: [task],
+      reviewedDiffText: '',
       observability,
       logger,
       prepareContextState: async (input) => {
@@ -140,7 +142,8 @@ describe('review runner context assembly state', () => {
       config,
       sourceFiles,
       analysis,
-      tasks: [task]
+      tasks: [task],
+      reviewedDiffText: ''
     })
     expect(
       observability

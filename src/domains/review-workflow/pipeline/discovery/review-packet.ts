@@ -6,7 +6,7 @@
 // numbered it. Two copies of the numbering rule would eventually disagree about
 // which line a candidate names.
 
-import { parseGitDiffNewPath } from '../../../../shared/diff/git-diff-header.js'
+import { diffSegmentsForPaths } from '../../../../shared/diff/git-diff-header.js'
 import {
   type ContextDocument,
   type HolisticReviewInput,
@@ -17,61 +17,9 @@ import {
 // Present the changed source to the holistic reviewer as a clean, line-numbered
 // document (plus the diff ranges). This is the input shape that let whole-file
 // holistic review out-recall the gauntlet in probes; burying the source inside a
-// structured packet dilutes whole-file reasoning. Extract the unified-diff
-// segments for the task's paths from the raw diff blob (the blob covers all
-// changed files; split on `diff --git` file headers).
-//
-// The header is read with the SHARED parser, which is authoritative for a reason
-// this function is a live example of: `task.paths` is produced by intake from the
-// same header text through that same parser, so the two strings compared below
-// are only comparable if one parser produced both. A private copy of the pattern
-// kept the header bytes verbatim, and git C-quotes and octal-escapes any path
-// with a non-ASCII byte — so a changed `café.ts` was captured as
-// `src/caf\303\251.ts`, matched no reviewed path, and had its entire hunk dropped
-// from a section headed "What this change modified". Nothing said so: an
-// unmatched segment is simply not emitted, and the reviewed-diff-ranges fallback
-// only fires when there is no diff text at all.
-const diffSegmentsForPaths = (
-  rawDiff: string,
-  paths: readonly string[]
-): string => {
-  if (rawDiff.trim().length === 0) {
-    return ''
-  }
-
-  const segments: string[] = []
-  let current: string[] | undefined
-  let currentPath: string | undefined
-
-  const flush = (): void => {
-    if (
-      current !== undefined &&
-      currentPath !== undefined &&
-      paths.includes(currentPath)
-    ) {
-      segments.push(current.join('\n'))
-    }
-  }
-
-  for (const line of rawDiff.split('\n')) {
-    const headerPath = parseGitDiffNewPath(line)
-
-    if (headerPath !== undefined) {
-      flush()
-      current = [line]
-      currentPath = headerPath
-      continue
-    }
-
-    if (current !== undefined) {
-      current.push(line)
-    }
-  }
-
-  flush()
-
-  return segments.join('\n\n')
-}
+// structured packet dilutes whole-file reasoning. The task's own unified-diff
+// segments come from the shared `diffSegmentsForPaths`, which the context ledger
+// also uses, so what is accounted for is what was sent.
 
 // Spec 11: change intent is orientation, NOT authorization. The header keeps the
 // reviewer from rubber-stamping a defect that happens to satisfy a vague or

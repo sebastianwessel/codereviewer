@@ -11,24 +11,36 @@ export const FindingCategorySchema = z.enum([
   'test'
 ])
 
+// Eleven values were removed here, each for a stated reason rather than for
+// having no producer — an unproduced value can equally mean a capability nobody
+// wired, and those get wired, not deleted.
+//
+//   - `data-flow`, `related-location`, `rule`, `baseline` duplicated first-class
+//     fields the finding already carries (`dataFlow`, `relatedLocations`,
+//     `ruleId`, `baselineStatus`, all populated by analyzer ingestion). Two
+//     representations of one fact is the thing that drifts.
+//   - `refutation` was a second name for what `createRefutationEvidence` already
+//     mints as `model-rationale`.
+//   - `symbol` is subsumed by `deterministic-signal`: a symbol span IS one.
+//   - `command`, `config`, `policy` describe subsystems this engine does not have
+//     and is not gaining — it executes nothing, and policy outcomes are recorded
+//     as `RejectedFinding.reason`, not as evidence.
+//   - `proof` duplicated the verification domain's own `Verdict`/`Claim` contract.
+//   - `diff` claimed a finding rests on a hunk; the diff travels as
+//     `reviewedDiffRanges` metadata, and a citation into changed code is a
+//     citation into a FILE.
+//
+// `deterministic-signal` is KEPT deliberately though nothing mints it yet. Signal
+// facts are really extracted and really reach the model, today as an opaque JSON
+// blob no finding can cite; giving them a citable identity is wiring a real
+// capability, not inventing one. If that wiring does not land, remove it then.
 export const EvidenceKindSchema = z.enum([
-  'diff',
   'file',
-  'symbol',
   'diagnostic',
-  'command',
   'model-rationale',
-  'config',
-  'policy',
-  'data-flow',
-  'related-location',
-  'rule',
-  'baseline',
   'deterministic-signal',
   'tool-read',
-  'tool-search',
-  'proof',
-  'refutation'
+  'tool-search'
 ])
 
 export const RejectReasonSchema = z.enum([
@@ -138,24 +150,6 @@ export const EvidenceRecordSchema = z.strictObject({
   dataFlow: z.array(DataFlowPathSchema).optional()
 })
 
-export const DeterministicSignalSchema = z.strictObject({
-  id: ContractIdSchema,
-  kind: z.enum([
-    'line-anchor',
-    'symbol-span',
-    'import-edge',
-    'test-hint',
-    'config-hint',
-    'scope-check',
-    'duplicate-key',
-    'contradiction',
-    'external-tool-summary'
-  ]),
-  path: RepositoryRelativePathSchema.optional(),
-  location: CodeLocationSchema.optional(),
-  summary: z.string().min(1).max(500),
-  evidenceIds: z.array(ContractIdSchema)
-})
 
 export const ContextRequestSchema = z
   .strictObject({
@@ -324,7 +318,6 @@ export type FindingFingerprint = z.infer<typeof FindingFingerprintSchema>
 export const fingerprintKey = (fingerprint: FindingFingerprint): string =>
   `${fingerprint.algorithm}:${fingerprint.value}`
 export type EvidenceRecord = z.infer<typeof EvidenceRecordSchema>
-export type DeterministicSignal = z.infer<typeof DeterministicSignalSchema>
 export type RefutationVerdict = z.infer<typeof RefutationVerdictSchema>
 export type VerificationCheck = z.infer<typeof VerificationCheckSchema>
 export type ContextRequest = z.infer<typeof ContextRequestSchema>

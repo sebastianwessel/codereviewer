@@ -29,7 +29,7 @@ ReviewMode = "local" | "ci" | "pr" | "full"
 ReviewDepth = "fast" | "balanced" | "thorough"
 Severity = "critical" | "high" | "medium" | "low" | "info"
 FindingCategory = "bug" | "security" | "performance" | "maintainability" | "compatibility" | "policy" | "test"
-EvidenceKind = "diff" | "file" | "symbol" | "diagnostic" | "command" | "model-rationale" | "config" | "policy" | "data-flow" | "related-location" | "rule" | "baseline" | "deterministic-signal" | "tool-read" | "tool-search" | "refutation"
+EvidenceKind = "file" | "diagnostic" | "model-rationale" | "deterministic-signal" | "tool-read" | "tool-search"
 AdmissionStatus = "admitted" | "rejected" | "needs-more-evidence"
 RejectReason = "schema-invalid" | "location-invalid" | "not-in-scope" | "insufficient-evidence" | "duplicate" | "below-threshold" | "unsafe-content" | "provider-error" | "refuted" | "deterministic-contradiction" | "weak-evidence" | "static-analysis-duplicate"
 ReporterEligibility = "inline" | "summary-only" | "artifact-only"
@@ -37,6 +37,28 @@ ReportFormat = "json" | "markdown" | "sarif"
 BaselineStatus = "new" | "existing" | "resolved" | "unknown"
 RefutationVerdict = "proved" | "refuted" | "needs-more-evidence" | "provider-error"
 ```
+
+
+**On the size of `EvidenceKind`.** It carried seventeen values; eleven had no
+producer and were removed on 2026-08-10, each for a stated reason rather than for
+the absence itself — an unproduced value can equally mean a capability nobody
+wired, and those get wired instead. `data-flow`, `related-location`, `rule` and
+`baseline` duplicated first-class `AdmittedFinding` fields that analyzer ingestion
+already populates; `refutation` renamed what refutation mints as
+`model-rationale`; `symbol` is subsumed by `deterministic-signal`; `command`,
+`config` and `policy` name subsystems this engine does not have; `proof`
+duplicated the verification domain's `Verdict`/`Claim`; `diff` claimed a finding
+rests on a hunk, but the diff travels as `reviewedDiffRanges` and a citation into
+changed code is a citation into a file.
+
+`deterministic-signal` was KEPT with no producer, deliberately: signal facts are
+extracted and do reach the model, today as an opaque blob no finding can cite.
+Add a value in the same change that produces it, never before.
+
+**`AdmittedFinding.cwe`, `securitySeverity`, `relatedLocations` and `dataFlow`
+stay**, and are not evidence of dead code even when a whole eval corpus shows them
+empty. They are populated from ingested analyzer artifacts; a corpus that supplies
+none leaves them absent, which is the contract working, not a field nobody fills.
 
 The last three `RejectReason` members were already in `RejectReasonSchema` and in
 the generated `review-report.schema.json`; this alias had simply not been updated,

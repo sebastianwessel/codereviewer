@@ -108,8 +108,6 @@ export {
   type DataFlowPath,
   DataFlowPathSchema,
   defaultReviewExcludePatterns,
-  type DeterministicSignal,
-  DeterministicSignalSchema,
   type DiscoveryTelemetry,
   DiscoveryTelemetrySchema,
   type DriftCategory,

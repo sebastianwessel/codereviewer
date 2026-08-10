@@ -53,7 +53,7 @@ const fact: SupportSignalFact = {
 
 const evidence: EvidenceRecord = {
   id: 'ev_export',
-  kind: 'symbol',
+  kind: 'file',
   summary: 'The handler export is visible to reviewers.',
   location: {
     path: 'src/app.ts',

@@ -13,7 +13,7 @@ const configHash =
 
 const evidence: EvidenceRecord = {
   id: 'ev_completion1',
-  kind: 'diff',
+  kind: 'file',
   summary: 'Changed line can lose data.',
   location: {
     path: 'src/completion.ts',

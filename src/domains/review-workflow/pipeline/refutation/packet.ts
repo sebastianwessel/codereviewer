@@ -10,17 +10,11 @@ import {
   serializedBytes
 } from '../packet-budget.js'
 import { type ReviewWorkflowInput } from '../contracts.js'
-
-const locationEndLine =(candidate: CandidateFinding): number =>
-  candidate.location.endLine ?? candidate.location.startLine
-
-const candidateLocationsOverlap = (
-  left: CandidateFinding,
-  right: CandidateFinding
-): boolean =>
-  left.location.path === right.location.path &&
-  left.location.startLine <= locationEndLine(right) &&
-  right.location.startLine <= locationEndLine(left)
+import {
+  locationEndLine,
+  sameRepositoryPath
+} from '../../../../platform/repository-path.js'
+import { lineRangesOverlap } from '../../../../shared/text/line-ranges.js'
 
 const candidatesShareEvidence = (
   left: CandidateFinding,
@@ -32,14 +26,31 @@ const candidatesShareEvidence = (
 }
 
 // A deterministic support signal corroborates a model candidate when it sits at an
-// overlapping location in the same file or cites the same evidence.
+// overlapping location in the same file or cites the same evidence. Same-file is
+// required for BOTH arms, not just the location one -- shared evidence across two
+// different files is not corroboration of this candidate.
+//
+// The path comparison is `sameRepositoryPath`, not `===`. It used to be `===`, so
+// two locations in one file spelled differently failed to match and the
+// corroboration was lost silently; the verification domain's copy of this same
+// predicate normalized and did not have the hole. One definition now, in
+// `platform/repository-path`, and it is the normalizing one.
 const supportSignalCandidateSupports = (
   candidate: CandidateFinding,
   supportCandidate: CandidateFinding
 ): boolean =>
   supportCandidate.proposedBy !== 'review-agent' &&
-  supportCandidate.location.path === candidate.location.path &&
-  (candidateLocationsOverlap(candidate, supportCandidate) ||
+  sameRepositoryPath(candidate.location.path, supportCandidate.location.path) &&
+  (lineRangesOverlap(
+    {
+      startLine: candidate.location.startLine,
+      endLine: locationEndLine(candidate.location)
+    },
+    {
+      startLine: supportCandidate.location.startLine,
+      endLine: locationEndLine(supportCandidate.location)
+    }
+  ) ||
     candidatesShareEvidence(candidate, supportCandidate))
 
 const createFindingRefutationBatchInput = (

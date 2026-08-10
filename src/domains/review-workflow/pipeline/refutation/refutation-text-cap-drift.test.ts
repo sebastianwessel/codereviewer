@@ -54,7 +54,7 @@ describe('contract text cap drift guard', () => {
     }
     const refutationEvidence = {
       id: 'ev_refutation0a1b2c3d',
-      kind: 'refutation' as const,
+      kind: 'model-rationale' as const,
       summary: 'Refutation evidence.',
       source: 'refutation',
       redactionApplied: true

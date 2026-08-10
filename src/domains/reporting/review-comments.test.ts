@@ -366,7 +366,7 @@ describe('the proof an inline comment carries', () => {
       '- **Survived refutation** (proved): Looked for a caller-side guard; none exists.'
     )
     // The evidence ADDRESS, not the bare id the body never resolved.
-    expect(body).toContain('- **Rests on:** diff at `src/app.ts:4`')
+    expect(body).toContain('- **Rests on:** file at `src/app.ts:4`')
   })
 
   // The failure this surface is being fixed for: with no verdict line at all, a
@@ -412,7 +412,7 @@ describe('the proof an inline comment carries', () => {
     })
 
     expect(body).toContain(
-      '- **Rests on:** diff at `src/app.ts:1`; diff at `src/app.ts:2`; diff at `src/app.ts:3`; and 2 more in the run report'
+      '- **Rests on:** file at `src/app.ts:1`; file at `src/app.ts:2`; file at `src/app.ts:3`; and 2 more in the run report'
     )
     expect(body).not.toContain('src/app.ts:4')
   })
@@ -439,7 +439,7 @@ describe('the proof an inline comment carries', () => {
 
     expect(body.length).toBeLessThanOrEqual(3000)
     expect(body).toContain('- **Survived refutation** (proved):')
-    expect(body).toContain('- **Rests on:** diff at `src/app.ts:4`')
+    expect(body).toContain('- **Rests on:** file at `src/app.ts:4`')
     expect(body).toContain(`Finding: ${finding.id}`)
     // Cut short, and cut where a reader can see it — never mid-entity, which
     // would render as a literal `&amp`.

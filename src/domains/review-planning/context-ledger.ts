@@ -3,15 +3,27 @@ import { normalizeRepositoryRelativePath } from '../../platform/repository-path.
 import { ContextLedgerIdSchema } from '../../shared/contracts/index.js'
 import { sha256 } from '../../shared/hash/hash.js'
 
+// The ledger answers one question: which bytes reached the model, and which were
+// held back. A kind that nothing writes therefore means one of two things, and
+// they get opposite treatment.
+//
+// `symbol` and `prior-artifact` were removed. Symbol facts are ledgered, inside
+// the `support-signal-output` entry that carries them, so a second kind for the
+// same bytes would double-count them. `prior-artifact` described reading a
+// previous invocation's artifacts back in — a persistence layer this engine
+// deliberately does not have; each run reads the repository, not its own history.
+//
+// `diff` was NOT removed, because its absence was a DEFECT and is now fixed. The
+// reviewed diff text goes into every discovery packet and was never ledgered, so
+// the accounting silently omitted one of the largest inputs the model sees and
+// any "how much context did this run send" answer read low.
 export const ContextLedgerKindSchema = z.enum([
   'file',
   'diff',
-  'symbol',
   'instruction',
   'skill',
   'support-signal-output',
-  'tool-result',
-  'prior-artifact'
+  'tool-result'
 ])
 
 export type ContextLedgerKind = z.infer<typeof ContextLedgerKindSchema>

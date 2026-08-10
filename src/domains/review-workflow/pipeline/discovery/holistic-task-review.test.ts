@@ -633,6 +633,7 @@ describe('discovery telemetry', () => {
       config,
       sourceFiles: [{ path: 'src/large.ts', content: multiByteSource(200) }],
       analysis: { facts: [], evidence: [] },
+      reviewedDiffText: '',
       tasks: [
         {
           id: 'task_large',
@@ -898,6 +899,7 @@ describe('reactive splitting when the provider refuses a packet', () => {
       config,
       sourceFiles: [{ path: 'src/large.ts', content: sourceContent }],
       analysis: { facts: [], evidence: [] },
+      reviewedDiffText: '',
       tasks: [
         {
           id: 'task_large',
@@ -1008,6 +1010,7 @@ describe('reactive splitting when the provider refuses a packet', () => {
       config,
       sourceFiles: [{ path: 'src/large.ts', content: sourceContent }],
       analysis: { facts: [], evidence: [] },
+      reviewedDiffText: '',
       tasks: [
         {
           id: 'task_large',

@@ -1418,7 +1418,7 @@ describe('review workflow', () => {
     try {
       const evidence = Array.from({ length: 120 }, (_, index) => ({
         id: `ev_${index}`,
-        kind: 'diff' as const,
+        kind: 'file' as const,
         summary: `Evidence summary ${index} ${'x'.repeat(120)}`,
         location: {
           path: 'src/large.ts',
@@ -1572,7 +1572,7 @@ describe('review workflow', () => {
         evidence: [
           {
             id: 'ev_diff1',
-            kind: 'diff',
+            kind: 'file',
             summary: 'Changed branch can return an incorrect value.',
             location: {
               path: 'src/app.ts',
@@ -2429,7 +2429,7 @@ describe('review workflow', () => {
         evidence: [
           {
             id: 'ev_diff1',
-            kind: 'diff',
+            kind: 'file',
             summary: 'Changed branch can return an incorrect value.',
             location: {
               path: 'src/app.ts',
@@ -2506,7 +2506,7 @@ describe('review workflow', () => {
         evidence: [
           {
             id: 'ev_diff1',
-            kind: 'diff',
+            kind: 'file',
             summary: 'Changed branch can return an incorrect value.',
             location: {
               path: 'src/app.ts',
@@ -2595,7 +2595,7 @@ describe('review workflow', () => {
         evidence: [
           {
             id: 'ev_diff1',
-            kind: 'diff',
+            kind: 'file',
             summary: 'Changed branch can return an incorrect value.',
             location: {
               path: 'src/app.ts',
@@ -2705,7 +2705,7 @@ describe('review workflow', () => {
         evidence: [
           {
             id: 'ev_diff1',
-            kind: 'diff',
+            kind: 'file',
             summary: 'Changed branch can return an incorrect value.',
             location: {
               path: 'src/app.ts',

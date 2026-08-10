@@ -259,7 +259,7 @@ describe('fix-lane fixture', () => {
               evidence: [
                 {
                   id: 'ev_discount',
-                  kind: 'diff',
+                  kind: 'file',
                   summary: 'Discount subtracted as an absolute amount.',
                   location: { path: 'src/discount.ts', startLine: 7, side: 'new' },
                   source: 'typescript-support-signal',
@@ -267,7 +267,7 @@ describe('fix-lane fixture', () => {
                 },
                 {
                   id: 'ev_validate',
-                  kind: 'diff',
+                  kind: 'file',
                   summary: 'Comparison uses == null.',
                   location: { path: 'src/validate.ts', startLine: 7, side: 'new' },
                   source: 'typescript-support-signal',

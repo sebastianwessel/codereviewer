@@ -6,11 +6,8 @@
 // separate structure rather than mutated onto the finding, keeping the admitted
 // finding contract (and its severity) untouched.
 
-import { normalizeRepositoryRelativePath } from '../../platform/repository-path.js'
-import type {
-  AdmittedFinding,
-  CodeLocation
-} from '../../shared/contracts/index.js'
+import { locationsOverlap } from '../../platform/repository-path.js'
+import type { AdmittedFinding } from '../../shared/contracts/index.js'
 import type {
   Claim,
   Verdict
@@ -42,14 +39,6 @@ const shareFingerprint = (
     findingKeys.has(fingerprintKey(fingerprint))
   )
 }
-
-const endLineOf = (location: CodeLocation): number =>
-  location.endLine ?? location.startLine
-
-const overlaps = (a: CodeLocation, b: CodeLocation): boolean =>
-  normalizeRepositoryRelativePath(a.path) ===
-    normalizeRepositoryRelativePath(b.path) &&
-  Math.max(a.startLine, b.startLine) <= Math.min(endLineOf(a), endLineOf(b))
 
 /**
  * Marks each finding corroborated by at least one `confirmed` verdict. A verdict
@@ -85,7 +74,7 @@ export const corroborateFindings = (
 
         if (
           claimLocation !== undefined &&
-          overlaps(finding.location, claimLocation)
+          locationsOverlap(finding.location, claimLocation)
         ) {
           matchKinds.add('fuzzy')
           matched = true

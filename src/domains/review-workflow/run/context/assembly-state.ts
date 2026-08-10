@@ -16,6 +16,7 @@ export const prepareReviewRunnerContextAssemblyState = async (input: {
   readonly sourceFiles: readonly SupportSignalSourceFile[]
   readonly analysis: DeterministicSignalExtraction
   readonly tasks: readonly ReviewTask[]
+  readonly reviewedDiffText: string
   readonly observability: NoContentEventRecorder
   readonly logger: Logger
   readonly prepareContextState?: PrepareContextState
@@ -30,7 +31,8 @@ export const prepareReviewRunnerContextAssemblyState = async (input: {
     config: input.config,
     sourceFiles: input.sourceFiles,
     analysis: input.analysis,
-    tasks: input.tasks
+    tasks: input.tasks,
+    reviewedDiffText: input.reviewedDiffText
   })
   contextAssemblyStep.end({
     ledgerEntryCount: contextState.metrics.ledgerEntryCount,
