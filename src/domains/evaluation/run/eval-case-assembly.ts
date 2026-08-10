@@ -42,7 +42,7 @@ import {
   caseSpend,
   diffScopeCountsForCase,
   expectedFindingSummaries,
-  falsePositiveFindingSummaries,
+  findingSummaries,
   isActionableFinding,
   isKnownProviderErrorStage,
   fixLaneCaseTallies,
@@ -281,6 +281,14 @@ const buildReportCase = (
     ? {}
     : { discovery: input.reviewReport.discovery }),
   fixOutcomes: [...input.output.fixOutcomes],
+  // Both populations in one array, in one shape: the actionable findings that
+  // could be posted and the artifact-only ones that could not. Recording them
+  // together is what lets an analysis compare a finding that matched against one
+  // that did not without re-running the case.
+  producedFindings: [
+    ...findingSummaries(input.actionableFindings),
+    ...findingSummaries(input.artifactOnlyFindings)
+  ],
   expectedFindings: [...expectedFindingSummaries(input.evalCase)],
   matchedFindings: [...input.matchResult.matches],
   unmatchedExpectedIndexes: [...input.matchResult.unmatchedExpectedIndexes],
@@ -296,26 +304,8 @@ const buildReportCase = (
     ...input.artifactOnlyMatchResult.inconclusiveMatches
   ],
   duplicateFindingIds: [...input.matchResult.duplicateFindingIds],
-  duplicateFindings: [
-    ...falsePositiveFindingSummaries(
-      input.actionableFindings,
-      input.matchResult.duplicateFindingIds
-    )
-  ],
   falsePositiveFindingIds: [...input.matchResult.falsePositiveFindingIds],
-  falsePositiveFindings: [
-    ...falsePositiveFindingSummaries(
-      input.actionableFindings,
-      input.matchResult.falsePositiveFindingIds
-    )
-  ],
   unlistedRealFindingIds: [...input.plausibility.unlistedRealFindingIds],
-  unlistedRealFindings: [
-    ...falsePositiveFindingSummaries(
-      input.actionableFindings,
-      input.plausibility.unlistedRealFindingIds
-    )
-  ],
   genuineFalsePositiveFindingIds: input.matchResult.falsePositiveFindingIds.filter(
     (findingId) => !input.plausibility.unlistedRealFindingIds.includes(findingId)
   ),
@@ -326,12 +316,6 @@ const buildReportCase = (
   artifactOnlyMatchedFindings: [...input.artifactOnlyMatchResult.matches],
   artifactOnlyFalsePositiveFindingIds: [
     ...input.artifactOnlyMatchResult.falsePositiveFindingIds
-  ],
-  artifactOnlyFalsePositiveFindings: [
-    ...falsePositiveFindingSummaries(
-      input.artifactOnlyFindings,
-      input.artifactOnlyMatchResult.falsePositiveFindingIds
-    )
   ],
   refutationResults: [...refutationResultSummaries(input.reviewReport)],
   inlineFindingCount: input.inlineFindingCount,
@@ -398,6 +382,7 @@ export const computeCaseResult = async (
         ],
         fixOutcomes: [],
         contextLedger: [...output.contextLedger],
+        producedFindings: [],
         expectedFindings: [...expectedFindingSummaries(evalCase)],
         matchedFindings: [],
         unmatchedExpectedIndexes: [...matchResult.unmatchedExpectedIndexes],
@@ -405,17 +390,13 @@ export const computeCaseResult = async (
         inconclusiveFindingIds: [],
         inconclusiveMatches: [],
         duplicateFindingIds: [],
-        duplicateFindings: [],
         falsePositiveFindingIds: [],
-        falsePositiveFindings: [],
         unlistedRealFindingIds: [],
-        unlistedRealFindings: [],
         genuineFalsePositiveFindingIds: [],
         noFindingZoneFalsePositiveIds: [],
         artifactOnlyFindingIds: [],
         artifactOnlyMatchedFindings: [],
         artifactOnlyFalsePositiveFindingIds: [],
-        artifactOnlyFalsePositiveFindings: [],
         refutationResults: [],
         inlineFindingCount: 0,
         warnings: [],

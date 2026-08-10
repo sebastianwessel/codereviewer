@@ -25,7 +25,7 @@ import {
 import {
   EvalAgenticStageReportSchema,
   EvalExpectedFindingReportSchema,
-  EvalFalsePositiveFindingReportSchema,
+  EvalFindingSummaryReportSchema,
   EvalProviderIssueReportSchema,
   EvalRefutationResultReportSchema,
   type EvalCaseOutput
@@ -113,25 +113,25 @@ export const rejectionSeverityTallies = (
   return { rejectionSeverityCounts, rejectionReasonBySeverityCounts }
 }
 
-export const falsePositiveFindingSummaries = (
-  findings: readonly AdmittedFinding[],
-  findingIds: readonly string[]
-): readonly z.infer<typeof EvalFalsePositiveFindingReportSchema>[] => {
-  const findingIdSet = new Set(findingIds)
-
-  return findings
-    .filter((finding) => findingIdSet.has(finding.id))
-    .map((finding) =>
-      EvalFalsePositiveFindingReportSchema.parse({
-        findingId: finding.id,
-        severity: finding.severity,
-        category: finding.category,
-        path: finding.location.path,
-        line: finding.location.startLine,
-        title: finding.title
-      })
-    )
-}
+// Attributes for EVERY produced finding, unfiltered. It takes no ID list on
+// purpose: the classifications are recorded as ID lists into this one array, so
+// a helper that summarized a subset would reintroduce the per-classification
+// copies this replaced -- and would keep the matched findings attribute-less,
+// which is what made the matched and unmatched halves of a population
+// incomparable in saved reports.
+export const findingSummaries = (
+  findings: readonly AdmittedFinding[]
+): readonly z.infer<typeof EvalFindingSummaryReportSchema>[] =>
+  findings.map((finding) =>
+    EvalFindingSummaryReportSchema.parse({
+      findingId: finding.id,
+      severity: finding.severity,
+      category: finding.category,
+      path: finding.location.path,
+      line: finding.location.startLine,
+      title: finding.title
+    })
+  )
 
 export const providerIssuesFromReport = (
   report: ReviewReport

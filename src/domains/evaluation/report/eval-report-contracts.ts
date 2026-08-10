@@ -99,7 +99,15 @@ export const EvalInconclusiveMatchReportSchema = z.strictObject({
   message: z.string().min(1).max(500).optional()
 })
 
-export const EvalFalsePositiveFindingReportSchema = z.strictObject({
+// The attributes of ONE produced finding, independent of how it was later
+// classified. Every classification below is a list of IDs into
+// `producedFindings`, so a finding that lands in two of them -- an unlisted-real
+// finding is by construction also a false positive -- has its attributes stored
+// once. The four per-classification copies this replaced could disagree with
+// each other, and the matched half of every population carried no attributes at
+// all, which made "what distinguishes the findings that matched from the ones
+// that did not" unanswerable from a saved report.
+export const EvalFindingSummaryReportSchema = z.strictObject({
   findingId: z.string().min(1),
   severity: z.string().min(1),
   category: z.string().min(1),
@@ -165,6 +173,11 @@ export const EvalCaseReportSchema = z.strictObject({
   // none (a provider-errored case, or a report written before the field existed).
   discovery: ReviewReportSchema.shape.discovery,
   contextLedger: z.array(EvalContextLedgerEntrySchema).default([]),
+  // EVERY finding the review produced for this case -- actionable and
+  // artifact-only alike -- recorded once, in one shape. The classification
+  // fields below are ID lists into this array; resolve a finding's severity,
+  // category, path or title from here regardless of which bucket it fell in.
+  producedFindings: z.array(EvalFindingSummaryReportSchema).default([]),
   expectedFindings: z.array(EvalExpectedFindingReportSchema),
   matchedFindings: z.array(EvalFindingMatchReportSchema),
   unmatchedExpectedIndexes: z.array(z.int().min(0)),
@@ -174,14 +187,11 @@ export const EvalCaseReportSchema = z.strictObject({
     .array(EvalInconclusiveMatchReportSchema)
     .default([]),
   duplicateFindingIds: z.array(z.string().min(1)).default([]),
-  duplicateFindings: z.array(EvalFalsePositiveFindingReportSchema).default([]),
   falsePositiveFindingIds: z.array(z.string().min(1)),
-  falsePositiveFindings: z.array(EvalFalsePositiveFindingReportSchema),
   // Unmatched findings the plausibility judge deemed genuine but unlisted
   // defects; excluded from genuineFalsePositiveCount and adjustedPrecision's
   // denominator. A subset of falsePositiveFindingIds.
   unlistedRealFindingIds: z.array(z.string().min(1)).default([]),
-  unlistedRealFindings: z.array(EvalFalsePositiveFindingReportSchema).default([]),
   // Unmatched findings that count against adjustedPrecision: judged spurious or
   // fail-closed (unjudged). The complement of unlistedRealFindingIds within the
   // raw false-positive set.
@@ -190,9 +200,6 @@ export const EvalCaseReportSchema = z.strictObject({
   artifactOnlyFindingIds: z.array(z.string().min(1)).default([]),
   artifactOnlyMatchedFindings: z.array(EvalFindingMatchReportSchema).default([]),
   artifactOnlyFalsePositiveFindingIds: z.array(z.string().min(1)).default([]),
-  artifactOnlyFalsePositiveFindings: z
-    .array(EvalFalsePositiveFindingReportSchema)
-    .default([]),
   refutationResults: z.array(EvalRefutationResultReportSchema).default([]),
   // Per-finding fix-lane outcomes for this case (spec 12), preserved so saved
   // reports are self-contained for fix-lane analysis.

@@ -1148,16 +1148,32 @@ analysis:
 | `expectedFindings[].semanticSummary` | string | Human-readable expected issue summary, without source snippets. |
 
 Each `caseResults[]` entry must also preserve scoring diagnostics and usage
-availability from the review report:
+availability from the review report.
+
+**One finding array, many ID lists.** A case records every produced finding once
+in `producedFindings`, and each classification — matched, duplicate, false
+positive, unlisted-real, artifact-only — as a list of IDs into it. Two properties
+follow, and both are the reason for the shape:
+
+- **A finding in two classifications has one set of attributes.** Every
+  unlisted-real finding is by construction also a false positive, so
+  per-classification copies stored the same severity, category, path and title
+  twice and could disagree.
+- **Matched and unmatched findings are comparable.** Storing attributes only on
+  the classifications that "failed" left every matched finding attribute-less, so
+  a saved report could not answer *what distinguishes the findings that matched
+  from the ones that did not* — within the artifact-only population, that is the
+  question of whether the unprovable candidates were real. Answering it must never
+  require re-running a case; a scored run is expensive and non-deterministic, and
+  re-running to recover a field is how a comparison silently becomes a comparison
+  of two different runs.
 
 | Field | Type | Notes |
 | --- | --- | --- |
+| `producedFindings` | object[] | **Every finding the review produced for the case** — actionable and artifact-only alike — as a sanitized summary with ID, severity, category, path, line, and title. Every classification below is a list of IDs into this array; resolve a finding's attributes from here whichever bucket it fell in. |
 | `duplicateFindingIds` | string[] | Admitted findings at the same path and exact overlapping line range as a matched finding. These are review noise, but not separate false positives. |
-| `duplicateFindings` | object[] | Sanitized duplicate summaries with ID, severity, category, path, line, and title. |
 | `falsePositiveFindingIds` | string[] | Admitted findings that neither match an expected finding nor duplicate a matched finding. |
-| `falsePositiveFindings` | object[] | Sanitized false-positive summaries with ID, severity, category, path, line, and title. |
 | `unlistedRealFindingIds` | string[] | Unmatched findings the plausibility judge deemed genuine defects the fixture omitted. |
-| `unlistedRealFindings` | object[] | Sanitized summaries for the same findings. |
 | `genuineFalsePositiveFindingIds` | string[] | Unmatched findings the plausibility judge deemed spurious, plus any whose judgment could not be completed. |
 | `noFindingZoneFalsePositiveIds` | string[] | Findings inside an `ExpectedNoFindingZone` that match no expected finding. |
 | `agenticStages` | object[] | One entry per optional agentic stage (`refutation`, `fix`, `provider-recovery`) with `status` (`active`, `skipped`, `recovered`, `error`) and a count, so "the stage was off" stays distinguishable from "the stage ran and found nothing". |
@@ -1169,7 +1185,6 @@ availability from the review report:
 | `artifactOnlyFindingIds` | string[] | Admitted findings with `reporterEligibility = "artifact-only"`; these are diagnostic and excluded from main recall/precision gates. |
 | `artifactOnlyMatchedFindings` | object[] | Match records for artifact-only findings that overlap expected findings. |
 | `artifactOnlyFalsePositiveFindingIds` | string[] | Artifact-only findings that neither match an expected finding nor duplicate a matched artifact-only finding. |
-| `artifactOnlyFalsePositiveFindings` | object[] | Sanitized artifact-only noise summaries with ID, severity, category, path, line, and title. |
 | `matchedFindings[].semanticReason` | string | Concise report-safe rationale from the semantic judge that accepted the match. |
 | `artifactOnlyMatchedFindings[].semanticReason` | string | Same rationale field for artifact-only semantic judge matches. Every match is a judge decision, so the reason is always present. |
 | `inconclusiveExpectedIndexes` | integer[] | Expected findings whose verdict is unknown because a judge call failed. Excluded from the recall denominator and from `unmatchedExpectedIndexes`. |

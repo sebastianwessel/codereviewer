@@ -16,8 +16,8 @@ const attentionCasesForSummary = (
       caseStatus(caseResult) !== 'PASS' ||
       caseResult.inconclusiveMatches.length > 0 ||
       caseResult.artifactOnlyMatchedFindings.length > 0 ||
-      caseResult.artifactOnlyFalsePositiveFindings.length > 0 ||
-      caseResult.unlistedRealFindings.length > 0 ||
+      caseResult.artifactOnlyFalsePositiveFindingIds.length > 0 ||
+      caseResult.unlistedRealFindingIds.length > 0 ||
       caseResult.refutationResults.length > 0 ||
       caseResult.providerIssues.length > 0
   )
@@ -37,19 +37,33 @@ const appendAttentionBulletSection = (
   lines.push(...input.rows)
 }
 
-type EvalSummaryAttentionFinding = {
-  readonly findingId: string
-  readonly severity: string
-  readonly category: string
-  readonly path: string
-  readonly line: number
-  readonly title: string
-}
+type EvalSummaryAttentionFinding = z.infer<
+  typeof EvalCaseReportSchema
+>['producedFindings'][number]
 
 const formatAttentionFindingBullet = (
   finding: EvalSummaryAttentionFinding
 ): string =>
   `- ${finding.findingId} ${finding.severity} ${finding.category} ${finding.path}:${finding.line} - ${finding.title}`
+
+// Resolve a classification's ID list against the case's one finding array. An ID
+// with no entry is skipped rather than rendered as a placeholder: the arrays are
+// written together in `eval-case-assembly`, so a dangling ID means a malformed
+// report, and inventing a row for it would hide that.
+const attentionFindingRows = (
+  caseResult: z.infer<typeof EvalCaseReportSchema>,
+  findingIds: readonly string[]
+): readonly string[] => {
+  const summaryById = new Map(
+    caseResult.producedFindings.map((finding) => [finding.findingId, finding])
+  )
+
+  return findingIds.flatMap((findingId) => {
+    const finding = summaryById.get(findingId)
+
+    return finding === undefined ? [] : [formatAttentionFindingBullet(finding)]
+  })
+}
 
 type EvalSummaryAttentionMatch = {
   readonly findingId: string
@@ -158,26 +172,27 @@ export const appendEvalSummaryAttentionNeeded = (
 
     appendAttentionBulletSection(lines, {
       heading: 'Artifact-only findings:',
-      rows: caseResult.artifactOnlyFalsePositiveFindings.map(
-        formatAttentionFindingBullet
+      rows: attentionFindingRows(
+        caseResult,
+        caseResult.artifactOnlyFalsePositiveFindingIds
       )
     })
 
     appendAttentionBulletSection(lines, {
       heading: 'False positive findings:',
-      rows: caseResult.falsePositiveFindings.map(formatAttentionFindingBullet)
+      rows: attentionFindingRows(caseResult, caseResult.falsePositiveFindingIds)
     })
 
     // Real-but-unlisted defects: unmatched findings the plausibility judge
     // credited as genuine. They do not count against adjusted precision.
     appendAttentionBulletSection(lines, {
       heading: 'Real but unlisted findings (credited by plausibility judge):',
-      rows: caseResult.unlistedRealFindings.map(formatAttentionFindingBullet)
+      rows: attentionFindingRows(caseResult, caseResult.unlistedRealFindingIds)
     })
 
     appendAttentionBulletSection(lines, {
       heading: 'Duplicate findings:',
-      rows: caseResult.duplicateFindings.map(formatAttentionFindingBullet)
+      rows: attentionFindingRows(caseResult, caseResult.duplicateFindingIds)
     })
 
     if (caseResult.noFindingZoneFalsePositiveIds.length > 0) {

@@ -597,7 +597,7 @@ future recall figure:
 
 - **Every expectation is justified from the code at the parent commit.** An
   expectation must never be promoted from a finding the engine produced, including
-  the `unlistedRealFindings` recorded in archived runs. Doing so converts recall
+  the findings archived runs list under `unlistedRealFindingIds`. Doing so converts recall
   into similarity-to-the-engine-that-wrote-it and destroys the corpus's
   independence. Checking after the fact whether an independently justified
   expectation happens to coincide with an engine finding is fine; sourcing it from

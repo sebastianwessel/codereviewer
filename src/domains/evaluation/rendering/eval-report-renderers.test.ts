@@ -87,6 +87,16 @@ const summaryInput = {
             truncated: true
           }
         ],
+        producedFindings: [
+          {
+            findingId: 'find_semantic1',
+            severity: 'high',
+            category: 'bug',
+            path: 'src/app.ts',
+            line: 12,
+            title: 'Descriptor is never closed'
+          }
+        ],
         expectedFindings: [
           {
             expectedIndex: 0,
@@ -113,17 +123,13 @@ const summaryInput = {
         inconclusiveFindingIds: [],
         inconclusiveMatches: [],
         duplicateFindingIds: [],
-        duplicateFindings: [],
         falsePositiveFindingIds: [],
-        falsePositiveFindings: [],
         unlistedRealFindingIds: [],
-        unlistedRealFindings: [],
         genuineFalsePositiveFindingIds: [],
         noFindingZoneFalsePositiveIds: [],
         artifactOnlyFindingIds: [],
         artifactOnlyMatchedFindings: [],
         artifactOnlyFalsePositiveFindingIds: [],
-        artifactOnlyFalsePositiveFindings: [],
         refutationResults: [],
         fixOutcomes: [],
         inlineFindingCount: 0,
