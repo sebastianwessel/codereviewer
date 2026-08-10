@@ -94,7 +94,13 @@ const summaryInput = {
             category: 'bug',
             path: 'src/app.ts',
             line: 12,
-            title: 'Descriptor is never closed'
+            title: 'Descriptor is never closed',
+            proposedBy: 'review-agent',
+            evidenceCount: 1,
+            hasFixProposal: false,
+            relatedLocationCount: 0,
+            dataFlowCount: 0,
+            cweCount: 0
           }
         ],
         expectedFindings: [

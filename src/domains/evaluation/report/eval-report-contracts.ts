@@ -113,7 +113,23 @@ export const EvalFindingSummaryReportSchema = z.strictObject({
   category: z.string().min(1),
   path: z.string().min(1),
   line: z.int().min(1),
-  title: z.string().min(1)
+  title: z.string().min(1),
+  // How well GROUNDED the finding is, as structure rather than prose. Severity
+  // and category describe what a finding CLAIMS; these describe what it brought
+  // to support the claim, which is the axis a "could not prove it" population
+  // varies along. Each is a plain scalar the producer already holds -- none costs
+  // a call, and none is free text that would need a judge to interpret.
+  //
+  // Descriptions are omitted deliberately: the summary is report-safe, and
+  // widening it to model prose would put reviewed source into artifacts that are
+  // shared and archived.
+  proposedBy: z.string().min(1),
+  evidenceCount: z.int().min(0),
+  hasFixProposal: z.boolean(),
+  relatedLocationCount: z.int().min(0),
+  dataFlowCount: z.int().min(0),
+  cweCount: z.int().min(0),
+  securitySeverity: z.number().min(0).max(10).optional()
 })
 
 export const EvalProviderIssueReportSchema = z.strictObject({

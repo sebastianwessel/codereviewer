@@ -1171,6 +1171,7 @@ follow, and both are the reason for the shape:
 | Field | Type | Notes |
 | --- | --- | --- |
 | `producedFindings` | object[] | **Every finding the review produced for the case** — actionable and artifact-only alike — as a sanitized summary with ID, severity, category, path, line, and title. Every classification below is a list of IDs into this array; resolve a finding's attributes from here whichever bucket it fell in. |
+| `producedFindings[]` groundedness | `proposedBy`, `evidenceCount`, `hasFixProposal`, `relatedLocationCount`, `dataFlowCount`, `cweCount`, `securitySeverity` (optional) | What the finding brought to SUPPORT its claim, as scalars rather than prose. Severity and category describe what a finding claims; these describe how grounded it is, which is the axis a "could not prove it" population varies along. Descriptions are deliberately excluded — the summary is report-safe and must not carry model prose over reviewed source into shared artifacts. |
 | `duplicateFindingIds` | string[] | Admitted findings at the same path and exact overlapping line range as a matched finding. These are review noise, but not separate false positives. |
 | `falsePositiveFindingIds` | string[] | Admitted findings that neither match an expected finding nor duplicate a matched finding. |
 | `unlistedRealFindingIds` | string[] | Unmatched findings the plausibility judge deemed genuine defects the fixture omitted. |

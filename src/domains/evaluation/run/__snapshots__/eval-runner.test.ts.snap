@@ -77,9 +77,15 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "producedFindings": [
         {
           "category": "bug",
+          "cweCount": 0,
+          "dataFlowCount": 0,
+          "evidenceCount": 1,
           "findingId": "find_eval1",
+          "hasFixProposal": true,
           "line": 4,
           "path": "src/app.ts",
+          "proposedBy": "scripted-reviewer",
+          "relatedLocationCount": 0,
           "severity": "high",
           "title": "Incorrect return value",
         },
@@ -142,9 +148,15 @@ exports[`eval runner > validates fixture samples and returns a deterministic eva
       "producedFindings": [
         {
           "category": "bug",
+          "cweCount": 0,
+          "dataFlowCount": 0,
+          "evidenceCount": 1,
           "findingId": "find_noise1",
+          "hasFixProposal": true,
           "line": 3,
           "path": "src/format.ts",
+          "proposedBy": "scripted-reviewer",
+          "relatedLocationCount": 0,
           "severity": "high",
           "title": "Style-only note",
         },

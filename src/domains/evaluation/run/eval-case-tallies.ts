@@ -129,7 +129,16 @@ export const findingSummaries = (
       category: finding.category,
       path: finding.location.path,
       line: finding.location.startLine,
-      title: finding.title
+      title: finding.title,
+      proposedBy: finding.proposedBy,
+      evidenceCount: finding.evidenceIds.length,
+      hasFixProposal: finding.fixProposal !== undefined,
+      relatedLocationCount: finding.relatedLocations?.length ?? 0,
+      dataFlowCount: finding.dataFlow?.length ?? 0,
+      cweCount: finding.cwe?.length ?? 0,
+      ...(finding.securitySeverity === undefined
+        ? {}
+        : { securitySeverity: finding.securitySeverity })
     })
   )
 

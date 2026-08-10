@@ -1901,7 +1901,13 @@ describe('eval CLI', () => {
                     category: 'bug',
                     path: 'src/app.ts',
                     line: 1,
-                    title: 'Noise'
+                    title: 'Noise',
+                    proposedBy: 'review-agent',
+                    evidenceCount: 1,
+                    hasFixProposal: false,
+                    relatedLocationCount: 0,
+                    dataFlowCount: 0,
+                    cweCount: 0
                   }
                 ],
                 noFindingZoneFalsePositiveIds: [],
