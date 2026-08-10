@@ -159,32 +159,6 @@ export const EvidenceRecordSchema = z.strictObject({
   dataFlow: z.array(DataFlowPathSchema).optional()
 })
 
-
-export const ContextRequestSchema = z
-  .strictObject({
-    tool: z.enum(['read', 'list', 'grep']),
-    path: RepositoryRelativePathSchema.optional(),
-    query: z.string().min(1).max(120).optional(),
-    reason: z.string().min(1).max(300)
-  })
-  .superRefine((value, context) => {
-    if ((value.tool === 'read' || value.tool === 'list') && value.path === undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['path'],
-        message: 'path is required for read and list context requests'
-      })
-    }
-
-    if (value.tool === 'grep' && value.query === undefined) {
-      context.addIssue({
-        code: 'custom',
-        path: ['query'],
-        message: 'query is required for grep context requests'
-      })
-    }
-  })
-
 export const RefutationVerdictSchema = z.enum([
   'proved',
   'refuted',
@@ -329,7 +303,6 @@ export const fingerprintKey = (fingerprint: FindingFingerprint): string =>
 export type EvidenceRecord = z.infer<typeof EvidenceRecordSchema>
 export type RefutationVerdict = z.infer<typeof RefutationVerdictSchema>
 export type VerificationCheck = z.infer<typeof VerificationCheckSchema>
-export type ContextRequest = z.infer<typeof ContextRequestSchema>
 export type RefutationResult = z.infer<typeof RefutationResultSchema>
 export type FindingProvenance = z.infer<typeof FindingProvenanceSchema>
 export type FixEdit = z.infer<typeof FixEditSchema>

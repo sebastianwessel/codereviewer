@@ -27,6 +27,8 @@ import {
 } from '../investigation-lanes.js'
 import { qualityGateOfCompletedRun } from '../review-completion.js'
 import {
+  IMPACT_JSON_ARTIFACT_NAME,
+  INTENT_JSON_ARTIFACT_NAME,
   jsonResult,
   recordRunInIndex,
   writePartialReviewArtifacts,
@@ -192,7 +194,7 @@ export const runReview = async (
       await writeRunArtifact(
         options.cwd,
         runArtifactRoot,
-        'impact-report.json',
+        IMPACT_JSON_ARTIFACT_NAME,
         jsonResult(advisory.impact)
       )
     }
@@ -200,7 +202,7 @@ export const runReview = async (
       await writeRunArtifact(
         options.cwd,
         runArtifactRoot,
-        'intent-report.json',
+        INTENT_JSON_ARTIFACT_NAME,
         jsonResult(advisory.intent)
       )
     }

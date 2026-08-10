@@ -5,6 +5,7 @@ import type {
   RepositoryIntake
 } from '../../../repository-intake/index.js'
 import { collectRepositoryIntake } from '../../../repository-intake/index.js'
+import { redactText } from '../../../../shared/redaction/redactor.js'
 import type { SupportSignalSourceFile } from '../../../deterministic-signals/index.js'
 import type { ReviewedDiffRange } from '../../../admission/index.js'
 import {
@@ -71,7 +72,19 @@ export const collectReviewRunnerRepositoryIntake = async (
     ...(options.runGit === undefined ? {} : { runGit: options.runGit })
   })
   const effectiveDiffMaps = options.reviewDiffMaps ?? intake.diffMaps
-  const effectiveRawDiff = options.reviewRawDiff ?? intake.rawDiff
+  // REDACTED HERE, once, at the single point the reviewed diff enters the run.
+  //
+  // Every changed FILE's content is redacted before it reaches a packet
+  // (`assembleContext`), and the diff was not — so a credential committed inside a
+  // changed hunk was sent to the provider verbatim in the "What this change
+  // modified" section, while the identical string in the surrounding file body
+  // came out `[REDACTED]`. Two paths carrying the same bytes to the same model,
+  // one of them redacting, is exactly the shape this repository keeps finding.
+  //
+  // Redacting at the source rather than at each consumer is what keeps the
+  // context ledger honest too: the ledger measures this same string, so what is
+  // accounted for stays what is sent.
+  const effectiveRawDiff = redactText(options.reviewRawDiff ?? intake.rawDiff)
 
   return {
     intake,

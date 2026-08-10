@@ -10,6 +10,13 @@
 // lives in inline shell cannot be tested at all, and the failure modes this
 // integration has to get right — a fork PR, an unset secret, a provider outage,
 // a failing gate — are exactly the ones nobody exercises by hand.
+// The artifact filenames are the CLI's, imported rather than re-typed: the review
+// command writes them and this pipeline reads them, and a third copy of the string
+// would break the Impact/Intent sections silently and permanently.
+import {
+  IMPACT_JSON_ARTIFACT_NAME,
+  INTENT_JSON_ARTIFACT_NAME
+} from '../../src/cli/run-artifacts.js'
 import type { GithubApi } from './github-api.js'
 import type { PullRequestContext } from './pull-request-context.js'
 import {
@@ -345,12 +352,12 @@ export const runPipeline = async (
     // digest to `undefined` here and render no section below, exactly like a
     // stage that produced nothing.
     const impactJson = await dependencies.readArtifact(
-      `${artifactDirectory}/impact-report.json`
+      `${artifactDirectory}/${IMPACT_JSON_ARTIFACT_NAME}`
     )
     impact = impactJson === undefined ? undefined : digestImpactReport(impactJson)
 
     const intentJson = await dependencies.readArtifact(
-      `${artifactDirectory}/intent-report.json`
+      `${artifactDirectory}/${INTENT_JSON_ARTIFACT_NAME}`
     )
     intent = intentJson === undefined ? undefined : digestIntentReport(intentJson)
   }

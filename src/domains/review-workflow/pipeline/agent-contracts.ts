@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import {
   ContextLedgerIdSchema,
-  ContextRequestSchema,
   EvidenceRecordSchema,
   FindingProvenanceSchema,
   FixEditSchema,
@@ -383,9 +382,6 @@ const normalizeModelLineValue = (value: unknown): unknown => {
 const normalizeModelEvidenceIds = (value: unknown): unknown =>
   typeof value === 'string' ? [value] : value
 
-const normalizeModelStringArray = (value: unknown): unknown =>
-  typeof value === 'string' ? [value] : value
-
 const truncateModelString = (value: unknown, maxLength: number): unknown =>
   typeof value === 'string' && value.length > maxLength
     ? value.slice(0, maxLength)
@@ -508,8 +504,6 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
       modelLocationValue(record, 'line'),
     evidenceIds: record.evidenceIds ?? record.evidence_ids,
     citations: record.citations ?? record.citation,
-    contextRequests: record.contextRequests ?? record.context_requests,
-    requestedContext: record.requestedContext ?? record.requested_context
   }
 }, z.object({
   // Already resolved to a valid category (or left `undefined`) by
@@ -553,18 +547,17 @@ export const ModelHolisticFindingSchema = z.preprocess((value) => {
   evidenceIds: z
     .preprocess(normalizeModelEvidenceIds, z.array(z.string()).optional())
     .catch(undefined),
-  // Same tolerance idiom as `contextRequests` below: a structured array that
-  // fails to parse degrades to absent rather than killing the whole finding, and
-  // an over-long array is capped rather than trimmed, because a model that sent
-  // too many citations is not a reason to guess which ones it meant.
-  citations: z.array(ModelFindingCitationSchema).max(5).optional().catch(undefined),
-  contextRequests: z.array(ContextRequestSchema).max(10).optional().catch(undefined),
-  requestedContext: z
-    .preprocess(
-      normalizeModelStringArray,
-      z.array(z.string().min(1).max(300)).max(10).optional()
-    )
-    .catch(undefined)
+  // A structured array that fails to parse degrades to absent rather than killing
+  // the whole finding, and an over-long array is capped rather than trimmed,
+  // because a model that sent too many citations is not a reason to guess which
+  // ones it meant.
+  //
+  // `contextRequests` and `requestedContext` used to sit here. Both were parsed,
+  // validated and capped, and read by NOTHING: there is no on-demand-context
+  // consumer anywhere, so a model asking for more context was answered by
+  // silence. Cross-file retrieval (spec 16) is how a discovery call actually gets
+  // more context, and it is a tool the model calls, not a field it fills.
+  citations: z.array(ModelFindingCitationSchema).max(5).optional().catch(undefined)
 }))
 
 // Dedicated holistic discovery input. Holistic review gets a single clean,

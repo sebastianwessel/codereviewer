@@ -91,8 +91,6 @@ export {
   ContextLedgerIdSchema,
   type ContextProviderConfig,
   ContextProviderConfigSchema,
-  type ContextRequest,
-  ContextRequestSchema,
   type ContextSourcesConfig,
   ContextSourcesConfigSchema,
   ContextSummaryConfigSchema,

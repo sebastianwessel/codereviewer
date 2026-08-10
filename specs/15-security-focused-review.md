@@ -442,8 +442,13 @@ exactly like a repository that has none.
 
 For hard classes that need reachability confirmation (interprocedural taint,
 cross-file authorization), a bounded agentic follow-up — reusing the spec-12
-`investigate_claim` tool seam (mediated read/list/grep, budgeted) — MAY execute a
-finding's parsed `contextRequests` or one demand-driven evidence request. This is
+`investigate_claim` tool seam (mediated read/list/grep, budgeted) — MAY execute
+one demand-driven evidence request. (An earlier draft routed this through a
+`contextRequests` field on the discovery output. That field was parsed, validated
+and capped for its whole life and read by nothing, so a model that filled it was
+answered with silence; it was removed on 2026-08-10. A follow-up here must be a
+TOOL the reviewer calls, which is what spec 16's cross-file retrieval already is,
+not a field it fills and hopes someone reads.) This is
 deferred: it is the highest-plumbing, highest-cost, non-deterministic lever, and it
 is only justified after the security pass and deterministic-evidence levers are
 measured. It
