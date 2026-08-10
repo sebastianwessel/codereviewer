@@ -234,3 +234,48 @@ surviving Wave 1 — measured, not speculative.
 | 2.1/2.2 | first-ever data into two structurally-dead channels; targets the two worst recall bands (cross-file 35–48%, implementation 55%) | open — priors mixed, cost of knowing ~$12–25 per item |
 | 2.3 | the 10.3pp parked-recall headroom plus refuter FP reduction via free deterministic citation checks | open — the largest prize and the most guarded |
 | 2.4 | correctly-priced decision on the last open lever (ranking) | gated |
+
+---
+
+## Addendum, 2026-08-10 — what implementation and measurement changed
+
+Waves C0 and 1 shipped as written. Wave 2.1 shipped and was **measured null**, and
+that result rewrites the rest of this plan's priorities.
+
+**2.1 — done, not promoted.** Signal-facts context: recall 64.9% → 61.7%, paired
+sign test 3 gained / 3 lost / p = 1.0000, +10.1% input tokens, $10.37 measured.
+Shipped behind `review.signalFacts.enabled`, default off. Full result in
+`2026-08-10-signal-facts-result.md`.
+
+**2.2 — DEPRIORITIZED, and the reason is the 2.1 result, not budget.** This plan
+argued that impact dependents would reach "discovery AND refutation for free". The
+discovery half is now the SIXTH measured null on that surface — five prompt
+clauses, four attention mechanisms, and 2.1's real data through a channel that had
+been structurally empty since inception. The pre-registration for 2.1 argued
+precisely that data-through-a-dead-channel was a mechanism no prior null covered;
+it was, and it landed in the same place. Proposing another "show discovery more"
+intervention now would be re-running a closed family with a new payload.
+
+The refutation half of 2.2 remains untested and is worth keeping — but it belongs
+with 2.3, whose mechanism it shares, rather than as a discovery-context change
+that happens to also reach refutation.
+
+**2.3 — now the primary, and the only one still aimed at a live constraint.**
+Everything measured this session points downstream of discovery:
+`evidenceCount` is 1 for 78/78 findings and `proposedBy` is `review-agent` for
+78/78, so the refutation packet's `evidence` and `supportSignalCandidates` filters
+both yield empty for every candidate, always. The refuter is told to prove a claim
+while holding two empty arrays, and `needs-more-evidence` outnumbers `refuted`
+5:1. That is not a framing problem and it is not addressed by showing anyone more.
+
+What 2.3 needs, unchanged from above: discovery cites the lines that ground each
+finding; a DETERMINISTIC verifier checks the quote appears at the cited location
+and mints a `citation` evidence record; hallucinated citations are downgraded
+before any refuter call is paid for. Spec 05's withdrawn-retrieval kill rule
+applies verbatim — kill on ANY adjusted-precision drop or false-positive rise.
+
+**One process correction for whatever runs next.** 2.1's pre-registered rule
+under-specified the unfavourable-and-not-significant cell: "keep disabled" was
+written for favourable-and-not-significant, and the removal clause's rationale
+described the run while its literal trigger did not. Enumerate all four
+recall × significance cells before the run, not after.
