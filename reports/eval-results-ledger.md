@@ -3386,3 +3386,65 @@ measured flat against this wall — but all of them predate this evidence and we
 scored against expectations of unknown findability. A mechanism aimed at it now has
 five defects with a proven in-diff hit rate, in files already in the packet, and a
 known ceiling of 5/5 to score against.
+
+---
+
+## 2026-08-11 — The out-of-diff mechanism was already built and removed ($0)
+
+The forward plan's Priority 1 named one mechanism — a second additive discovery
+call with the diff withheld — and made a ledger search the mandatory first step.
+The search found it: **spec 19's un-anchored discovery pass**, built and measured
+on 2026-07-27 and removed.
+
+Every design row matches (additive, diff withheld entirely, same generic
+instructions, semantic merge, same refutation and admission, off by default) except
+one: the plan said whole file, spec 19 said bounded windows.
+
+| | base (n=6) | pass enabled (n=3) |
+| --- | ---: | ---: |
+| recall | 46.25% | 47.08% |
+| candidates / run | 74.7 | 117.0 (+56%) |
+| cost / run | $1.92 | **$4.53 (+136%)** |
+
+Paired over 80 expectations: **+0.83pp, CI [−3.13, +4.79], 10 gained / 9 lost,
+p = 0.82** — on a corpus recorded IN ADVANCE as close to best case.
+
+**The differing row makes it weaker, not different.** The windowed version's
+candidate volume came from the windows; discovery yield is call-bound, so a
+whole-file pass buys ~1 extra candidate per file where the windowed one bought 42
+per run — and 42 per run yielded ~0 net expectations. Against the 5/5 ceiling it
+was to be scored on, one extra candidate cannot find five specific defects.
+
+**Dead on arrival. No prereg, no precheck, no spend.** Detail:
+`reports/2026-08-11-unanchored-pass-restatement.md`.
+
+Second time the ledger-search rule has paid. $0 against $0.20 + ~$11, and against a
+second null on an answered question.
+
+**Six structural interventions have now failed against later-in-file recall**
+(enumeration sweep, diverse-lens pass, cross-file retrieval, context scout,
+un-anchored pass, sub-file partitioning) and five pre-registered prompt clauses have
+failed on framing. Neither family has an untried member.
+
+### Free finding from the same session: the artifact-only population can grow 12 → 135
+
+The separator question ("are the parked artifact-only findings distinguishable from
+noise?") was left unanswerable at n=12. Pooling the **10 control runs of the
+sub-file A/B** — one engine, one corpus, one metrics version
+(`2026-08-07.open-redirect-mechanism`) — gives:
+
+| | n |
+| --- | ---: |
+| artifact-only findings, pooled | **135** |
+| distinct finding ids | 115 |
+| distinct (case, path, line, title) defects | **69** |
+| label disagreements across seeds | **0** |
+| matched an expectation (known real) | **82** |
+| unadjudicated false positives | **53** |
+
+The 53 are the blocker and the reason this is not yet an answer: in these runs
+`unlistedRealFindingIds ∩ artifactOnlyFindingIds = 0` for all ten, i.e. the
+plausibility judge never adjudicated an artifact-only false positive. Answering the
+separator question means judging those 53 — a small, bounded spend on findings that
+already exist, with no review run required.
+
