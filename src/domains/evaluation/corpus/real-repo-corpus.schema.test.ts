@@ -337,6 +337,7 @@ describe('token normalized diff fingerprint', () => {
 const parserByCorpus: Readonly<Record<string, (json: string) => unknown>> = {
   'real-repo-cross-file': parseRealRepoCorpusManifestJson,
   'security-advisory-2026': parseRealRepoCorpusManifestJson,
+  'multi-defect-2026': parseRealRepoCorpusManifestJson,
   'change-impact-dependents': parseChangeImpactCorpusManifestJson
 }
 

@@ -107,6 +107,31 @@ acceptance claim. Its per-mechanism denominators are one to eight findings each,
 a per-mechanism rate from it is a direction and not a number: publish it with its
 counts or not at all.
 
+### Multi-defect corpus
+
+Same script, same manifest shape, again pointed at different metadata:
+
+```bash
+node --import tsx scripts/hydrate-real-repo-corpus.ts \
+  --manifest eval/corpora/multi-defect-2026/manifest.json \
+  --output-slice-root .codereviewer/eval/multi-defect-cases/multi-defect-2026
+```
+
+5 composite cases, each unioning two or three `security-advisory-2026` cases whose
+defects were verified co-present in one real commit (see
+[Datasets](datasets.md#multi-defect-corpus)). Score it with `eval run --slice-root`
+exactly like the corpora above:
+
+```bash
+node --env-file-if-exists=.env --import tsx src/cli/main.ts eval run \
+  --slice-root .codereviewer/eval/multi-defect-cases/multi-defect-2026 \
+  --review-mode pr --review-depth thorough --max-concurrent-tasks 1
+```
+
+**Its output root is deliberately not a sibling of the other two.** Five cases is
+too small to pool with either corpus above or to report a recall rate from; read
+per-case which of the unioned defects were reported, not an aggregate percentage.
+
 ### Change-impact dependents corpus
 
 ```bash

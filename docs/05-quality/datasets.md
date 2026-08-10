@@ -1,6 +1,6 @@
 # Datasets
 
-Seven corpora exist, and they measure genuinely different things. Quoting a number
+Eight corpora exist, and they measure genuinely different things. Quoting a number
 without naming its corpus is meaningless — recall on a curated-subset answer key
 and recall on an exhaustive one are not the same quantity.
 
@@ -11,6 +11,7 @@ and recall on an exhaustive one are not the same quantity.
 | Proof-quality slices | `eval/fixtures/proof-quality-slices/` | 15 | 14 | none | Trustworthy recall on an exhaustive key |
 | Real-repository cross-file | `eval/corpora/real-repo-cross-file/manifest.json` | 37 | 87 | **required** | Cross-file recall on full checkouts, and review of multi-file diffs |
 | Security advisory 2026 | `eval/corpora/security-advisory-2026/manifest.json` | 72 | 74 | **required** | Security recall per mechanism and per context depth, on advisory-confirmed defects |
+| Multi-defect 2026 | `eval/corpora/multi-defect-2026/manifest.json` | 5 | 11 | **required** | Whether the engine reports more than one defect in a single reviewed file |
 | Change-impact dependents | `eval/corpora/change-impact-dependents/manifest.json` | 10 | 11 | **required** | Whether `impact check` names a dependent a change provably broke |
 | Fix-lane fixture | `eval/fixtures/typescript/fix-lane/repo/` | 1 (test-only) | — | none | Fix-lane judgment, via a hermetic test |
 
@@ -430,6 +431,94 @@ fixes.
 
 ---
 
+## Multi-defect corpus
+
+**Read the in-diff split before reading any result from this corpus.** Measured
+2026-08-10 by intersecting each expectation's `lineRange` with the case's own diff
+hunks:
+
+| case | defects in the diff |
+| --- | --- |
+| `traefik-gateway-httproute-multi-defect` | **both** |
+| `datamodel-code-generator-jsonschema-multi-defect` | 1 of 3 |
+| `gitpython-index-base-multi-defect` | 1 of 2 |
+| `ipv4-parse-and-classifiers-multi-defect` | 1 of 2 |
+| `micronaut-http-client-redirect-multi-defect` | 1 of 2 |
+
+Only the traefik case asks the question this corpus was built for — *does the
+engine report two defects that are both in the changed lines*. In the other four
+the second defect sits in the same changed file but outside the hunks, so a miss
+there is the separately measured out-of-diff gap (0/27), not a one-finding-per-file
+limit. **Reporting those four as evidence about multi-finding capability would be
+a confound, and the pure question has n = 1 here.**
+
+Those four are still worth running: they are the best out-of-diff instrument this
+project has, because each defect is KNOWN findable — it is a curated case in its
+own right that the engine finds when scored alone. That was never true of the
+earlier out-of-diff expectations.
+
+**What it is.** `eval/corpora/multi-defect-2026/manifest.json` — 5 cases, 11
+expected findings. Same manifest schema, same hydration script and same
+fix-read-backwards orientation as the two corpora above, but each case is a
+**composite**: the union of two or three `security-advisory-2026` cases that
+independently name a defect in the same file of the same upstream repository.
+
+**Why it exists.** In `security-advisory-2026`, 97% of cases carry exactly one
+planted defect, so the engine emitting roughly one finding per case is the
+correct response there — nothing in that corpus can tell a genuine
+one-finding-per-file limit apart from correct behaviour on single-defect
+material. This corpus exists to ask that question directly: given a file that
+truly holds more than one independently curated real defect, does the engine
+report more than one?
+
+**How co-presence was verified, and why that was the hard part.** A case's
+`fixCommit`/`parentCommit` pair must be a real, adjacent parent/child pair in
+upstream history (hydration asserts `fixCommit^ === parentCommit`), so a
+composite case cannot show a diff that introduces two unrelated defects at
+once. Instead, each group's source cases were checked pairwise with
+`git merge-base --is-ancestor` for a commit common to both defect windows, and
+the candidate commit's file content was read directly and compared against
+each source case's own `semanticSummary` and `lineRange` before being trusted.
+Every one of the five candidate groups had such a commit — always one source
+case's own `parentCommit`, reused unchanged as the composite case's
+`fixCommit`/`parentCommit` pair. A sixth candidate defect in the
+`datamodel-code-generator` group (`schema-import-extension-injected-into-generated-imports`)
+was checked and **excluded**: the feature it depends on did not exist yet at
+the verified commit, so it was genuinely not co-present rather than merely
+inconvenient. No group was dropped outright; had one failed verification, it
+would have been, rather than built from a hand-reverted or cherry-picked tree.
+
+**The reviewed diff shows only one defect; the checkout holds all of them.**
+Because the composite `fixCommit`/`parentCommit` pair is reused from a single
+source case, the generated diff — what hydration renders into `slice.json`'s
+`diff` field — touches only that source case's own change. The other unioned
+defect(s) are unchanged code in the same file, present in the full working
+tree under the case's `repo/` directory and reachable through the reviewer's
+cross-file read tools, but outside the diff hunk shown as "the PR". A miss on
+the second defect in a case is therefore not automatically a one-finding
+limit — it may instead be the out-of-diff attention gap already tracked
+against the cross-file corpus. Read this corpus's results together with which
+defect in each case sat inside vs. outside the diff hunk, not as a single
+undifferentiated recall number.
+
+**`expectedFindings` are copied verbatim from `security-advisory-2026`.**
+Never rewritten, merged, re-summarised, or sourced from engine output. Each
+composite case's `notes` field records which source cases it unions and the
+exact commit the union was verified against.
+
+**What it can measure.** Whether a second (or third) real, independently
+curated defect in an already-flagged file gets reported at all — the
+finding-count ceiling the rest of the corpora cannot isolate.
+
+**What it cannot measure.** A recall rate. Five cases is a demonstration, not
+a distribution; publish which cases found which defects, not a percentage.
+It also is not a controlled test of in-diff vs. out-of-diff attention — every
+non-primary defect here happens to sit outside the diff hunk, so it cannot by
+itself separate "the engine caps findings per file" from "the engine already
+under-reads unchanged regions of a changed file", only detect a miss.
+
+---
+
 ## Change-impact dependents corpus
 
 **What it is.** `eval/corpora/change-impact-dependents/manifest.json` — 10 real
@@ -560,6 +649,7 @@ this is a wiring test with one positive and one negative, not an evaluation.
 | Does `impact check` name a dependent a change broke? | Change-impact dependents |
 | Are security mechanisms covered? | **Security advisory 2026** — the only corpus with a denominator in every mechanism |
 | Does the reviewer find a defect that needs another file? | Security advisory 2026 (per context depth), then Real-repository cross-file |
+| Does the engine report more than one defect in one file? | **Multi-defect 2026** — the only corpus with more than one verified-co-present defect per case |
 
 ---
 
