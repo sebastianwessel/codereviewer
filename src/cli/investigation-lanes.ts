@@ -73,14 +73,48 @@ export const runVerificationForReview = async (
 // provider) it returns the findings unchanged and no report. It is advisory: it
 // only enriches advisory `fixProposal` metadata on `real` findings whose
 // apply-check passes, and never changes category, severity, admission, or the gate.
+/**
+ * Findings the fix lane judged NOT REAL, as run warnings.
+ *
+ * The fix lane forms a `findingJudgment` per finding and declines to write a fix
+ * when it is `false-positive`. That judgement reached `fix-report.json` and
+ * nothing else — no report, no markdown, no pull-request comment — so a human
+ * read a finding presented as real while a second stage of this engine had
+ * privately disagreed with it and said so in writing.
+ *
+ * Surfaced as a warning rather than by withdrawing the finding, deliberately.
+ * The fix lane is advisory (spec 12) and does not decide admission; letting it
+ * silently delete findings would give an advisory stage the authority the spec
+ * denies it. The reader gets both claims and decides — which is the only honest
+ * shape when two stages disagree.
+ */
+export const falsePositiveJudgementWarnings = (
+  report: VerificationReport | undefined
+): readonly string[] => {
+  const disputed = (report?.fixOutcomes ?? [])
+    .filter((outcome) => outcome.findingJudgment === 'false-positive')
+    .map((outcome) => outcome.findingId)
+
+  return disputed.length === 0
+    ? []
+    : [
+        `The fix lane judged ${disputed.length} admitted finding(s) NOT real and wrote no fix for them: ${disputed.join(', ')}. They remain in this report because the fix lane is advisory and does not decide admission — weigh both before acting.`
+      ]
+}
+
 export const runFixForReview = async (
   input: InvestigationLaneInput
 ): Promise<{
   readonly report: VerificationReport | undefined
   readonly findings: readonly AdmittedFinding[]
+  readonly warnings: readonly string[]
 }> => {
   if (!input.config.fix.enabled) {
-    return { report: undefined, findings: input.admittedFindings }
+    return {
+      report: undefined,
+      findings: input.admittedFindings,
+      warnings: []
+    }
   }
 
   const { report, findings } = await runFixRun({
@@ -88,5 +122,5 @@ export const runFixForReview = async (
     admittedFindings: input.admittedFindings
   })
 
-  return { report, findings }
+  return { report, findings, warnings: falsePositiveJudgementWarnings(report) }
 }

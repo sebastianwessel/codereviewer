@@ -367,3 +367,20 @@ directions:
   rather than importing it: that mirror carries `applyCheck` and not the new
   reason, so an eval artifact still cannot tell a refused fix from an unproposed
   one. The mirror is owned there, and widening it is that lane's call.
+
+## A False-Positive Judgement Must Reach The Reader
+
+The fix lane forms a `findingJudgment` per finding and declines to write a fix when
+it is `false-positive`. Until 2026-08-11 that judgement reached `fix-report.json`
+and nothing else — no report, no markdown, no pull-request comment — so a human
+read a finding presented as real while a second stage of this engine had disagreed
+with it in writing, and no surface said so.
+
+- Every finding the fix lane judges `false-positive` MUST be named on the review
+  report as a run warning.
+- The finding MUST remain admitted. The fix lane is advisory and does not decide
+  admission; letting it silently withdraw findings would hand an advisory stage the
+  authority this spec denies it. The reader is given both claims and decides.
+- An ABSENT judgement MUST NOT be read as `false-positive`. A judgement the lane
+  never formed is not a disagreement, and treating absence as a verdict is the
+  silent-optimism inversion this project keeps finding.

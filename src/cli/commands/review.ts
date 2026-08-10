@@ -149,6 +149,7 @@ export const runReview = async (
       logger
     })
     const extraRunWarnings = [
+      ...fixLane.warnings,
       ...verificationRunWarnings,
       ...advisory.warnings
     ]
