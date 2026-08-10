@@ -3203,3 +3203,48 @@ re-measurement moves both or neither.
 No provider call. A prompt A/B here would have joined the five already-null clauses and
 could not have resolved its own endpoint.
 
+
+## 2026-08-10 — Candidates carry no evidence, so "prove it" has nothing to check
+
+`openai/gpt-5.3-codex`, engine `a9a13fb`, `security-advisory-2026` (72 cases, 0
+provider errors), one seed. **$3.93 seed + $0.24 smoke = $4.17 measured.** Full
+write-up: `reports/2026-08-10-artifact-only-separation-result.md`, pre-registered in
+`reports/2026-08-10-artifact-only-separation-prereg.md`.
+
+Replicates the archived baseline — recall 63.5% (archived 63.1%), artifact-only
+recall 10.8% (archived 10.4%), adjusted precision 97.9% — so it measured the same
+thing.
+
+**No separator claimed.** The artifact-only population is 8 real / 4 noise at n=12.
+Severity and category split proportionally, `hasFixProposal` is false for all twelve.
+Per the pre-registration nothing is concluded in either direction.
+
+**The mechanism, measured across all 78 produced findings and verified in code:**
+`evidenceCount` is 1 for 78/78 and `proposedBy` is `review-agent` for 78/78.
+`enrichProvedCandidate` unions the refutation's evidence id into the candidate's own,
+so a union that always yields one member means the candidate side was empty — and it
+is, by construction. `holistic-task-review.ts:422` hardcodes `evidenceIds: []`, and
+`ModelHolisticFindingSchema` has no evidence field for the model to populate. The
+consequence is that the refutation packet's `evidence` filter (`packet.ts:121`) and
+its `supportSignalCandidates` filter (`packet.ts:40`) both yield the empty array for
+every candidate, always. The one evidence record an admitted finding carries is the
+refuter's own rationale, written afterwards.
+
+The refuter is told to prove a claim "only when the provided context proves the
+finding", holding two empty arrays. `needs-more-evidence` outnumbering `refuted` 5:1
+(45 vs 9 over three archived seeds) is what that arrangement should produce.
+
+This gives the withdrawn refutation-retrieval A/B (spec 05) the explanation that
+record says it lacks: a refuter with no evidence slot does not use tools to CHECK a
+cited claim, it uses them to go looking for support.
+
+**Nothing is fixed by this entry.** Whether binding evidence to candidates raises the
+proved rate is untested, and the nearest prior attempt at this stage made precision
+worse. It earns a pre-registered A/B, not a change.
+
+**Three pre-spend checks each changed the design**, and are the reason this cost
+$4.17 rather than $4.50 for an uninterpretable result: the capture was too thin
+(fixed first); the familywise false-alarm rate across nine separators at n=44 is
+29-60%, so the planned three-seed test would have produced a chance positive about
+half the time; and a $0.24 six-case smoke found five of seven new fields constant,
+collapsing the hypothesis space before the full spend.
