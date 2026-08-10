@@ -39,8 +39,8 @@ import {
 import {
   classifyStageOutcome,
   jobExitCode,
+  reviewStageDefinition,
   skippedStage,
-  stageDefinitions,
   type StageOutcome,
   type StageResult
 } from './stage-outcomes.js'
@@ -181,9 +181,7 @@ export const runPipeline = async (
       exitCode: exitCodeFor(0),
       commentBody: renderSummaryComment({
         markerKey: options.markerKey,
-        outcomes: stageDefinitions.map((stage) =>
-          skippedStage(stage, 'fork pull request')
-        ),
+        outcomes: [skippedStage(reviewStageDefinition, 'fork pull request')],
         headSha: context.headSha,
         ...(options.runUrl === undefined ? {} : { runUrl: options.runUrl }),
         notes: [message]
@@ -202,9 +200,9 @@ export const runPipeline = async (
     // nothing, so a workflow wired as a required check would go green forever
     // while reviewing nothing at all.
     const message = `The review engine has no usable model provider, so nothing was reviewed. Set: ${credentials.missing.join(', ')}. See docs/04-guides/github-integration.md.`
-    const outcomes = stageDefinitions.map((stage) =>
-      skippedStage(stage, 'provider not configured')
-    )
+    const outcomes = [
+      skippedStage(reviewStageDefinition, 'provider not configured')
+    ]
     const body = renderSummaryComment({
       markerKey: options.markerKey,
       outcomes,
@@ -310,25 +308,24 @@ export const runPipeline = async (
     )
   }
 
-  const outcomes: StageOutcome[] = []
-
-  for (const stage of stageDefinitions) {
-    const result = await dependencies.runStage(
-      stageArguments(stage.command, context, options)
-    )
-    const outcome = classifyStageOutcome(stage, result)
-    outcomes.push(outcome)
-    dependencies.log(`stage ${stage.id}: ${outcome.status}`)
-  }
+  // One process for the whole push. `review` now runs the two advisory
+  // reference lanes itself, in-process (`src/cli/advisory-lanes.ts`), so there
+  // is only ever this one stage left to spawn and classify here.
+  const reviewResult = await dependencies.runStage(
+    stageArguments(reviewStageDefinition.command, context, options)
+  )
+  const reviewOutcome = classifyStageOutcome(reviewStageDefinition, reviewResult)
+  const outcomes: readonly StageOutcome[] = [reviewOutcome]
+  dependencies.log(`stage ${reviewOutcome.id}: ${reviewOutcome.status}`)
 
   // Present on a successful run (stdout) and on a run that failed after writing
   // partial artifacts (stderr), so a failed review is still summarized from its
   // report rather than reduced to an error code.
-  const artifactDirectory = outcomes.find(
-    (outcome) => outcome.id === 'review'
-  )?.artifactDir
+  const artifactDirectory = reviewOutcome.artifactDir
 
   let review: ReviewDigest | undefined
+  let intent: IntentDigest | undefined
+  let impact: ImpactDigest | undefined
   let renderedComments = ''
 
   if (artifactDirectory !== undefined) {
@@ -340,21 +337,23 @@ export const runPipeline = async (
       (await dependencies.readArtifact(
         `${artifactDirectory}/review-comments.github.json`
       )) ?? ''
+
+    // Absent exactly when the lane did not run — disabled by config, or
+    // guarded off after throwing. Either way `src/cli/advisory-lanes.ts` writes
+    // no file, and the throwing case instead leaves a warning on
+    // `review.warnings` (rendered from `report.json`, read above). Both cases
+    // digest to `undefined` here and render no section below, exactly like a
+    // stage that produced nothing.
+    const impactJson = await dependencies.readArtifact(
+      `${artifactDirectory}/impact-report.json`
+    )
+    impact = impactJson === undefined ? undefined : digestImpactReport(impactJson)
+
+    const intentJson = await dependencies.readArtifact(
+      `${artifactDirectory}/intent-report.json`
+    )
+    intent = intentJson === undefined ? undefined : digestIntentReport(intentJson)
   }
-
-  const digestOf = <T>(
-    id: string,
-    digest: (raw: string) => T | undefined
-  ): T | undefined => {
-    const outcome = outcomes.find((entry) => entry.id === id)
-
-    return outcome === undefined || outcome.stdout === undefined
-      ? undefined
-      : digest(JSON.stringify(outcome.stdout))
-  }
-
-  const intent = digestOf<IntentDigest>('intent', digestIntentReport)
-  const impact = digestOf<ImpactDigest>('impact', digestImpactReport)
 
   // Inline comments are best-effort by construction. GitHub rejects a whole
   // review when any one comment does not land on a diff line it recognises, and

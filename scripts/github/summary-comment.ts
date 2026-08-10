@@ -33,7 +33,7 @@ import type {
 } from './report-digest.js'
 import { severityOrder } from './report-digest.js'
 import type { StageOutcome } from './stage-outcomes.js'
-import { stageDefinitions } from './stage-outcomes.js'
+import { reviewStageDefinition } from './stage-outcomes.js'
 import type { ReviewConversationOutcome } from './review-conversation.js'
 
 const MARKER_PREFIX = 'codereviewer:review-summary'
@@ -178,23 +178,24 @@ const verdictHeadline = (input: SummaryCommentInput): string => {
     : `Code review: no threshold crossed, ${reported}`
 }
 
+// One row, because one process runs. The advisory lanes report through their own
+// sections below rather than as stages here: they run INSIDE the review now, and
+// a table row claiming they were separately executed would describe a pipeline
+// shape that no longer exists.
 const stageTable = (input: SummaryCommentInput): string => {
-  const rows = stageDefinitions.map((stage) => {
-    const outcome = input.outcomes.find((entry) => entry.id === stage.id)
-    const status = outcome === undefined ? 'skipped' : outcome.status
-    const label = statusLabels[status] ?? status
-    const detail =
-      outcome?.message === undefined
-        ? stage.contribution
-        : `${stage.contribution} — ${outcome.message}`
-
-    return `| ${stage.label} | ${stage.kind} | ${label} | ${sanitizeLine(detail, 240)} |`
-  })
+  const stage = reviewStageDefinition
+  const outcome = input.outcomes.find((entry) => entry.id === stage.id)
+  const status = outcome === undefined ? 'skipped' : outcome.status
+  const label = statusLabels[status] ?? status
+  const detail =
+    outcome?.message === undefined
+      ? stage.contribution
+      : `${stage.contribution} — ${outcome.message}`
 
   return [
     '| Stage | Role | Result | What it contributes |',
     '| --- | --- | --- | --- |',
-    ...rows
+    `| ${stage.label} | ${stage.kind} | ${label} | ${sanitizeLine(detail, 240)} |`
   ].join('\n')
 }
 

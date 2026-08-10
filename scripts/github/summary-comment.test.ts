@@ -21,8 +21,7 @@ import {
 } from './report-digest.js'
 import {
   classifyStageOutcome,
-  stageDefinitions,
-  type StageDefinition
+  reviewStageDefinition
 } from './stage-outcomes.js'
 import {
   impactReportFixture,
@@ -31,12 +30,13 @@ import {
   reviewReportWithFullAccountingFixture
 } from './fixtures.js'
 
-const stage = (id: string): StageDefinition =>
-  stageDefinitions.find((definition) => definition.id === id) as StageDefinition
-
-const passingOutcomes = stageDefinitions.map((definition) =>
-  classifyStageOutcome(definition, { exitCode: 0, stdout: '{}', stderr: '' })
-)
+const passingOutcomes = [
+  classifyStageOutcome(reviewStageDefinition, {
+    exitCode: 0,
+    stdout: '{}',
+    stderr: ''
+  })
+]
 
 const baseInput = (
   overrides: Partial<SummaryCommentInput> = {}
@@ -71,7 +71,7 @@ describe('renderSummaryComment', () => {
     const body = renderSummaryComment(
       baseInput({
         outcomes: [
-          classifyStageOutcome(stage('review'), {
+          classifyStageOutcome(reviewStageDefinition, {
             exitCode: 1,
             stdout: '{}',
             stderr: ''
@@ -161,12 +161,10 @@ describe('renderSummaryComment', () => {
     )
   })
 
-  it('renders every stage with its role, so an advisory result cannot read as a gate', () => {
+  it('renders the review stage with its role, so it cannot read as anything but the gate', () => {
     const body = renderSummaryComment(baseInput())
 
     expect(body).toContain('| Review | blocking |')
-    expect(body).toContain('| Intent | advisory |')
-    expect(body).toContain('| Impact | advisory |')
   })
 
   it('renders findings, obligations and callers from real report shapes', () => {

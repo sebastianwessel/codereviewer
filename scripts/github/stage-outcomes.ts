@@ -1,23 +1,35 @@
-// The three stages this workflow runs, and the exit-code contract that decides
-// what each one is allowed to do to the job.
+// The one CLI stage this workflow spawns, and the exit-code contract that
+// decides what it is allowed to do to the job.
 //
-// ONE stage can fail the job: `review`. The other two are advisory by
-// specification, not by configuration — spec 23 states outright that `intent
-// check` "MUST NOT be able to fail a pipeline on fulfilment grounds. This is not
-// configurable", and spec 22 says the same of `impact check`. Those commands
-// already exit 0 whatever they report, so the only way this integration could
-// break that guarantee is by inventing a failure of its own. `jobExitCode` below
-// is where that is prevented: it reads the blocking stage and nothing else.
+// A push used to spawn three subprocesses — `review`, `intent check`, `impact
+// check` — one per stage. `review` now runs the two advisory reference lanes
+// itself, in-process, over the run context it already built for its own intake
+// (`src/cli/advisory-lanes.ts`), and writes their reports beside its own inside
+// the one run directory it names on stdout. There is only one process left to
+// spawn and classify, so this file now describes one stage rather than three.
 //
-// An advisory stage CAN still exit non-zero, for reasons that have nothing to do
-// with what it found: a malformed config file (2) or an unresolvable merge base
-// (3). That is reported in the comment as a stage that could not run, and it
-// still does not fail the job — the review is the gate, and a broken advisory
-// lane must not be able to block a merge.
+// `review` is the only stage that can fail the job. Specs 22 and 23 require the
+// advisory lanes to never fail a pipeline on what they find — spec 23 states
+// outright that `intent check` "MUST NOT be able to fail a pipeline on
+// fulfilment grounds. This is not configurable", and spec 22 says the same of
+// `impact check`. `src/cli/advisory-lanes.ts` enforces that guarantee at the
+// source now: a lane that throws becomes a warning on the review report and an
+// absent report file, never a non-zero exit from `review` itself. `jobExitCode`
+// below still reads only the blocking stage's status rather than assuming the
+// one outcome it is ever handed is that stage — kept structural, not collapsed
+// to a single comparison, so the guarantee does not have to be remembered by
+// habit if a second spawned stage is ever reintroduced.
+//
+// `review` CAN still exit non-zero for reasons that have nothing to do with
+// what it found: a malformed config file (2) or an unresolvable merge base
+// (3). That is reported in the comment as a stage that could not run.
 
-export type StageId = 'review' | 'intent' | 'impact'
+export type StageId = 'review'
 
-export type StageKind = 'blocking' | 'advisory'
+// Only one member survives the move above: nothing constructs an 'advisory'
+// StageDefinition or StageOutcome any more, because the advisory lanes no
+// longer produce a stage result of their own to classify.
+export type StageKind = 'blocking'
 
 export type StageDefinition = {
   readonly id: StageId
@@ -30,30 +42,14 @@ export type StageDefinition = {
   readonly command: readonly string[]
 }
 
-export const stageDefinitions: readonly StageDefinition[] = [
-  {
-    id: 'review',
-    kind: 'blocking',
-    label: 'Review',
-    contribution: 'Evidence-backed defects in the changed code. Blocks on the quality gate.',
-    command: ['review']
-  },
-  {
-    id: 'intent',
-    kind: 'advisory',
-    label: 'Intent',
-    contribution:
-      'Maps obligations stated in the pull-request description to the lines that evidence them.',
-    command: ['intent', 'check']
-  },
-  {
-    id: 'impact',
-    kind: 'advisory',
-    label: 'Impact',
-    contribution: 'Lists the callers of every symbol this change touched.',
-    command: ['impact', 'check']
-  }
-]
+export const reviewStageDefinition: StageDefinition = {
+  id: 'review',
+  kind: 'blocking',
+  label: 'Review',
+  contribution:
+    'Evidence-backed defects in the changed code. Blocks on the quality gate.',
+  command: ['review']
+}
 
 export type StageStatus =
   // Ran, and reported nothing that blocks.

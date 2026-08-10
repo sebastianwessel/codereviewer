@@ -18,6 +18,11 @@ import {
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
 import { mapErrorResult, usageError } from '../cli-error-results.js'
 import { loadConfigForCommand } from '../command-config.js'
+import { createContextRetriever } from '../../domains/context-retrieval/index.js'
+import { defaultGitRunner } from '../../domains/repository-intake/index.js'
+import { createRunContext } from '../../domains/run-context/index.js'
+import { mediatedFileReader } from '../mediated-file-reader.js'
+import { runAdvisoryStagesForReview } from '../advisory-lanes.js'
 import { createCliLogger, resolveLogSink } from '../command-logging.js'
 import {
   runFixForReview,
@@ -73,9 +78,33 @@ export const runReview = async (
       command: 'review',
       sink: await resolveLogSink(options, logFileOverride.logFile)
     })
+    // ONE run context for the whole invocation. The review's own intake, and
+    // every advisory stage that runs after it, share these primitives — so a
+    // push issues one set of git subprocesses and reads each changed file once,
+    // instead of once per stage.
+    const runContext = createRunContext({
+      repositoryRoot: options.cwd,
+      config: loadedConfig.config,
+      runGit: defaultGitRunner,
+      readChangedFile: mediatedFileReader(
+        createContextRetriever({
+          repositoryRoot: options.cwd,
+          budget: {
+            maxReads: loadedConfig.config.review.maxFiles,
+            maxBytesPerRead: loadedConfig.config.review.maxFileBytes,
+            maxSearches: 0
+          },
+          paths: {
+            include: loadedConfig.config.paths.include,
+            exclude: loadedConfig.config.paths.exclude
+          }
+        })
+      )
+    })
     const result = await runReviewPipeline({
       repositoryRoot: options.cwd,
       config: loadedConfig.config,
+      runGit: runContext.runGit,
       configWarnings: loadedConfig.warnings,
       baselineExplicitlyConfigured: loadedConfig.baselineExplicitlyConfigured,
       ...(explicitFiles === undefined ? {} : { explicitFiles }),
@@ -123,17 +152,30 @@ export const runReview = async (
       verificationReport === undefined
         ? []
         : runWarningsForVerificationReport(verificationReport)
+    // Specs 22 and 23: both advisory stages run here, in this process, over the
+    // run context the review already used — and neither can fail this command.
+    // A disabled stage runs nothing; a stage that throws leaves a warning and no
+    // report.
+    const advisory = await runAdvisoryStagesForReview({
+      options,
+      runContext,
+      environment: loadedConfig.environment,
+      baseRef,
+      headRef,
+      logger
+    })
+    const extraRunWarnings = [
+      ...verificationRunWarnings,
+      ...advisory.warnings
+    ]
     const report =
-      verificationRunWarnings.length === 0
+      extraRunWarnings.length === 0
         ? reportAfterFix
         : {
             ...reportAfterFix,
             run: {
               ...reportAfterFix.run,
-              warnings: [
-                ...reportAfterFix.run.warnings,
-                ...verificationRunWarnings
-              ]
+              warnings: [...reportAfterFix.run.warnings, ...extraRunWarnings]
             }
           }
 
@@ -160,6 +202,24 @@ export const runReview = async (
         runArtifactRoot,
         'verification-report.json',
         jsonResult(verificationReport)
+      )
+    }
+    // Beside the review they ran with, not in an unlinked directory of their own.
+    // A reader holding a run id can now find every stage's answer for that push.
+    if (advisory.impact !== undefined) {
+      await writeRunArtifact(
+        options.cwd,
+        runArtifactRoot,
+        'impact-report.json',
+        jsonResult(advisory.impact)
+      )
+    }
+    if (advisory.intent !== undefined) {
+      await writeRunArtifact(
+        options.cwd,
+        runArtifactRoot,
+        'intent-report.json',
+        jsonResult(advisory.intent)
       )
     }
     await recordRunInIndex({

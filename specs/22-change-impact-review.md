@@ -1420,3 +1420,24 @@ it describes is built.
 | Non-blocking, and not configurable to block | config schema test (asserts the absence of a `blocking` key on the block and on `adjudication`) |
 | Failure leaves the diff review unaffected | import-boundary test (no shared code path with `review-workflow`), `adjudication.test.ts` and `impact-run.test.ts` (a throwing provider costs one pair), CLI test (an unresolvable provider still reports and exits 0) |
 | Instructions stay generic and language-neutral | `instructions.test.ts` — the shared prompt genericity guard, plus a test that the guard can still fail this prompt |
+
+## How The Lane Is Invoked
+
+The lane runs in **one of two places**, and the guarantees above hold identically
+in both.
+
+`review` runs it in-process after the review when `changeImpact.enabled` is true,
+over the same run context — so one push issues one set of git subprocesses and
+reads each changed file once, instead of once per stage, and the lane's report is
+written into the REVIEW's own run directory rather than an unlinked directory of
+its own. A reader holding a run id can find every stage's answer for that push.
+
+`impact check` still runs it alone, for anyone who wants this question answered
+without a review.
+
+Running beside a stage that CAN fail the command is exactly where the
+non-blocking guarantee would be lost by accident, so it is enforced structurally
+in `src/cli/advisory-lanes.ts`: a throw from this lane becomes a warning on the
+review report and an absent stage report, never a non-zero exit and never a lost
+review. A disabled lane still runs nothing at all — being invoked from `review`
+does not turn a stage on.

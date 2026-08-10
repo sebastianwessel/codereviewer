@@ -22,9 +22,8 @@ flowchart TD
   B -- no --> D{"Provider configured?"}
   D -- no --> E["Fail the job.<br/>Name the missing variables."]
   D -- yes --> F["Write the PR description<br/>into .codereviewer/context/"]
-  F --> G["review — blocking"]
-  G --> H["intent / impact — advisory"]
-  H --> I["Post or edit ONE summary comment"]
+  F --> G["review — blocking<br/>(runs intent / impact — advisory — in-process)"]
+  G --> I["Post or edit ONE summary comment"]
   I --> J["Post inline comments the engine anchored"]
   J --> K{"Review result"}
   K -- "gate passed" --> L["Job succeeds"]
@@ -44,7 +43,9 @@ flowchart TD
    [change-intent capability](../03-concepts/optional-capabilities/change-intent-context.md)
    reads, so the reviewer knows what the change was *supposed* to do and
    `intent check` has something to check the diff against.
-3. **Runs three stages**: `review`, then `intent check` and `impact check`.
+3. **Runs one CLI invocation**: `review`, which runs the two advisory
+   reference lanes itself, in-process, over the same run context — see
+   [What each stage contributes](#what-each-stage-contributes).
 4. **Writes one summary comment**, created on the first run and edited in place
    on every run after that.
 5. **Posts inline review comments** for the findings the engine anchored to a
@@ -86,7 +87,7 @@ protection rules for your default branch.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `CODEREVIEWER_GITHUB_CONFIG` | `scripts/github/codereviewer.github.json` | Which config file every stage runs with |
+| `CODEREVIEWER_GITHUB_CONFIG` | `scripts/github/codereviewer.github.json` | Which config file `review` — and the advisory lanes it runs — use |
 | `CODEREVIEWER_COMMENT_KEY` | `default` | Identity of the comment this workflow owns; give a second workflow a second key |
 | `CODEREVIEWER_MAX_INLINE_COMMENTS` | `25` | Per-run cap on inline comments |
 | `CODEREVIEWER_CONTEXT_DIR` | `.codereviewer/context` | Where the pull-request description is written; must match the `inbox` provider's `dir` |
@@ -101,26 +102,34 @@ protection rules for your default branch.
 
 ## What each stage contributes
 
-The stage table at the top of the comment names each stage's **role**, because
-only one of them is allowed to block.
+The workflow spawns **one** process, `review`. It runs the two advisory
+reference lanes itself, in the same process and over the same run context
+(see [`src/cli/advisory-lanes.ts`](../../src/cli/advisory-lanes.ts)), and
+writes all three reports — `report.json`, and, when their lane is enabled,
+`impact-report.json` and `intent-report.json` — into the one run directory
+`review` names on its stdout. Nothing here spawns a second or third
+subprocess any more.
 
 | Stage | Role | Spec | What it adds |
 | --- | --- | --- | --- |
-| `review` | **blocking** | 05 | Evidence-backed defects in the changed code, filtered by refutation and a deterministic admission gate. Exit code `1` means the quality gate failed. |
-| `intent check` | advisory | [23](../../specs/23-intent-fulfilment-review.md) | Reads obligations out of the pull-request description and maps each to the changed lines that evidence it — or to nothing. |
-| `impact check` | advisory | [22](../../specs/22-change-impact-review.md) | Lists the callers of every symbol the change touched, and — behind `changeImpact.adjudication.enabled` — which of them rely on what changed. Makes no model call with that switch off. |
+| `review` | **blocking** | 05 | Evidence-backed defects in the changed code, filtered by refutation and a deterministic admission gate. Exit code `1` means the quality gate failed. This is the only row in the comment's stage table — it is the only stage with a process of its own to report a status for. |
+| Intent (`intentFulfilment.enabled`) | advisory | [23](../../specs/23-intent-fulfilment-review.md) | Reads obligations out of the pull-request description and maps each to the changed lines that evidence it — or to nothing. Rendered as its own `### Intent` section in the comment when its report is present; absent (not an error) when the lane is disabled. |
+| Impact (`changeImpact.enabled`) | advisory | [22](../../specs/22-change-impact-review.md) | Lists the callers of every symbol the change touched, and — behind `changeImpact.adjudication.enabled` — which of them rely on what changed. Makes no model call with that switch off. Rendered as its own `### Impact` section under the same rule. |
 
-**The two advisory stages can never fail the job.** That is a specification
+**The two advisory lanes can never fail the job.** That is a specification
 requirement, not a configuration default — spec 23 states it outright: the
-command "MUST NOT be able to fail a pipeline on fulfilment grounds. This is not
-configurable", because the measured spurious-rejection rate of model
+capability "MUST NOT be able to fail a pipeline on fulfilment grounds. This is
+not configurable", because the measured spurious-rejection rate of model
 requirement-conformance judgement is 26–36% and is not accurate enough to gate
-on. Nothing either command reports can set a non-zero exit code — `intent check`
-exits `4` only when an input limit binds and it declines to judge a partial
-input, which is a refusal to answer rather than an answer — and
-`jobExitCode` in [`stage-outcomes.ts`](../../scripts/github/stage-outcomes.ts)
-reads the blocking stage and nothing else, so an advisory outcome has no way to
-reach the job's exit code even if one of them errors.
+on. A lane that throws is caught inside `review` itself
+(`guardAdvisoryStage` in
+[`src/cli/advisory-lanes.ts`](../../src/cli/advisory-lanes.ts)) and turned into
+a warning on the review report — visible in the comment's run-details section —
+rather than a process exit code of its own. `review`'s exit code is untouched
+by either lane, and `jobExitCode` in
+[`stage-outcomes.ts`](../../scripts/github/stage-outcomes.ts) reads only the
+one stage this workflow still spawns, so an advisory failure has no way to
+reach the job's exit code.
 
 ### How intent is read
 
@@ -433,8 +442,8 @@ inline-comment fallback are all exercised against fixtures.
 | `pull-request-context.ts` | Parses the event payload; decides `fromFork` |
 | `change-intent-inbox.ts` | Renders the description into a spec 11 inbox file |
 | `provider-credentials.ts` | Pre-flight check; reports missing variables by name |
-| `stage-outcomes.ts` | The three stages and the exit-code contract |
-| `report-digest.ts` | Reduces the three report shapes to what the comment renders |
+| `stage-outcomes.ts` | The one spawned stage and the exit-code contract |
+| `report-digest.ts` | Reduces the three report shapes (review, impact, intent) to what the comment renders |
 | `summary-comment.ts` | Renders the body; owns the marker and comment selection |
 | `inline-review.ts` | Maps rendered comments to review payloads; deduplicates by fingerprint |
 | `review-conversation.ts` | Spec 30: reads a reply's target off the triggering event (id only, never the body); compares nominated fingerprints against this run's findings |

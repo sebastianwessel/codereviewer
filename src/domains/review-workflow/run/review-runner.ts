@@ -11,7 +11,10 @@ import {
 import {
   type ProviderImport
 } from '../../provider-resolution/index.js'
-import { type DiffMap } from '../../repository-intake/index.js'
+import {
+  type DiffMap,
+  type GitCommandRunner
+} from '../../repository-intake/index.js'
 import type { ReviewSharedContextSnapshot } from '../../shared-context/index.js'
 import { aiReviewBudgetFor } from './support/budgets.js'
 import { reviewedLineRangesForSourceFiles } from './context/context.js'
@@ -54,6 +57,9 @@ export type RunReviewOptions = {
   readonly runId?: string
   readonly now?: () => Date
   readonly signal?: AbortSignal
+  // The run's shared git runner and changed-file reader, when the review is one
+  // stage of a run that already has them. Absent for a review on its own.
+  readonly runGit?: GitCommandRunner
   readonly observability?: NoContentEventRecorder
   readonly logger?: Logger
 }
@@ -121,6 +127,7 @@ export const runReview = async (
       ...(options.reviewRawDiff === undefined
         ? {}
         : { reviewRawDiff: options.reviewRawDiff }),
+      ...(options.runGit === undefined ? {} : { runGit: options.runGit }),
       ...(options.explicitFiles === undefined
         ? {}
         : { explicitFiles: options.explicitFiles }),

@@ -1,6 +1,7 @@
 import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
 import type {
   DiffMap,
+  GitCommandRunner,
   RepositoryIntake
 } from '../../../repository-intake/index.js'
 import { collectRepositoryIntake } from '../../../repository-intake/index.js'
@@ -22,6 +23,9 @@ export type ReviewRunnerRepositoryInputOptions = {
   readonly baseRef?: string | undefined
   readonly headRef?: string | undefined
   readonly signal?: AbortSignal | undefined
+  // The run's shared git runner, when the review is one stage of a run that has
+  // one. Absent for a review run on its own, where intake's default applies.
+  readonly runGit?: GitCommandRunner | undefined
 }
 
 export type ReviewRunnerRepositoryIntakeMetrics = {
@@ -63,7 +67,8 @@ export const collectReviewRunnerRepositoryIntake = async (
     ...(options.explicitFiles === undefined
       ? {}
       : { explicitFiles: options.explicitFiles }),
-    ...(options.signal === undefined ? {} : { signal: options.signal })
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.runGit === undefined ? {} : { runGit: options.runGit })
   })
   const effectiveDiffMaps = options.reviewDiffMaps ?? intake.diffMaps
   const effectiveRawDiff = options.reviewRawDiff ?? intake.rawDiff

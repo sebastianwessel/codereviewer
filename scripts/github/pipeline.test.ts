@@ -72,33 +72,19 @@ const createFakeApi = (
   return { api, calls }
 }
 
-const stageResults = (
-  results: Partial<Record<string, StageResult>>
-): ((args: readonly string[]) => Promise<StageResult>) => {
-  const defaults: Record<string, StageResult> = {
-    review: {
-      exitCode: 0,
-      stdout: JSON.stringify({
-        runId: 'run_abc123',
-        qualityGatePassed: true,
-        artifactDir: ARTIFACT_DIR
-      }),
-      stderr: ''
-    },
-    intent: { exitCode: 0, stdout: JSON.stringify(intentReportFixture), stderr: '' },
-    impact: { exitCode: 0, stdout: JSON.stringify(impactReportFixture), stderr: '' }
-  }
-
-  return async (args) => {
-    const key = args[0] === 'review' ? 'review' : (args[0] as string)
-
-    return results[key] ?? (defaults[key] as StageResult)
-  }
+const defaultReviewStageResult: StageResult = {
+  exitCode: 0,
+  stdout: JSON.stringify({
+    runId: 'run_abc123',
+    qualityGatePassed: true,
+    artifactDir: ARTIFACT_DIR
+  }),
+  stderr: ''
 }
 
 const createDependencies = (
   overrides: Partial<PipelineDependencies> = {},
-  stages: Partial<Record<string, StageResult>> = {}
+  reviewResult: StageResult = defaultReviewStageResult
 ): {
   dependencies: PipelineDependencies
   written: { fileName: string; content: string }[]
@@ -106,7 +92,6 @@ const createDependencies = (
 } => {
   const written: { fileName: string; content: string }[] = []
   const stageArgs: string[][] = []
-  const run = stageResults(stages)
   const dependencies: PipelineDependencies = {
     context,
     environment: configuredEnvironment,
@@ -118,7 +103,7 @@ const createDependencies = (
     },
     runStage: async (args) => {
       stageArgs.push([...args])
-      return run(args)
+      return reviewResult
     },
     readArtifact: async (artifactPath) => {
       if (artifactPath === `${ARTIFACT_DIR}/report.json`) {
@@ -129,6 +114,9 @@ const createDependencies = (
         return JSON.stringify(renderedGithubCommentsFixture)
       }
 
+      // impact-report.json and intent-report.json are absent by default: the
+      // ordinary case, matching both advisory lanes disabled. Tests that care
+      // about a present report override `readArtifact` directly.
       return undefined
     },
     writeChangeIntent: async (fileName, content) => {
@@ -155,21 +143,67 @@ describe('runPipeline: the ordinary path', () => {
     )
   })
 
-  it('runs all three stages against the pull request’s base branch', async () => {
+  // The workflow used to spawn three subprocesses per push — one for `review`,
+  // one each for the two advisory lanes. `review` now runs both lanes itself,
+  // in-process (`src/cli/advisory-lanes.ts`), so a push must cost exactly one.
+  it('spawns exactly one stage process per push, against the pull request’s base branch', async () => {
     const { api } = createFakeApi()
     const { dependencies, stageArgs } = createDependencies({ api })
 
     await runPipeline(dependencies)
 
-    expect(stageArgs.map((args) => args.slice(0, 2))).toEqual([
-      ['review', '--base-ref'],
-      ['intent', 'check'],
-      ['impact', 'check']
-    ])
-    for (const args of stageArgs) {
-      expect(args).toContain('origin/main')
-      expect(args).toContain('--config')
-    }
+    expect(stageArgs).toHaveLength(1)
+    expect(stageArgs[0]?.slice(0, 2)).toEqual(['review', '--base-ref'])
+    expect(stageArgs[0]).toContain('origin/main')
+    expect(stageArgs[0]).toContain('--config')
+  })
+
+  // The review command's stdout reports the run's own artifact directory; the
+  // impact and intent reports, when their lanes ran, land beside `report.json`
+  // inside it rather than in a directory of their own.
+  it('reads the impact and intent reports from the review run’s own artifact directory when present', async () => {
+    const { api, calls } = createFakeApi()
+    const { dependencies } = createDependencies({
+      api,
+      readArtifact: async (artifactPath) => {
+        if (artifactPath === `${ARTIFACT_DIR}/report.json`) {
+          return JSON.stringify(reviewReportFixture)
+        }
+        if (artifactPath === `${ARTIFACT_DIR}/review-comments.github.json`) {
+          return JSON.stringify(renderedGithubCommentsFixture)
+        }
+        if (artifactPath === `${ARTIFACT_DIR}/impact-report.json`) {
+          return JSON.stringify(impactReportFixture)
+        }
+        if (artifactPath === `${ARTIFACT_DIR}/intent-report.json`) {
+          return JSON.stringify(intentReportFixture)
+        }
+
+        return undefined
+      }
+    })
+
+    await runPipeline(dependencies)
+    const body = [...calls.created, ...calls.updated.map((entry) => entry.body)].join('\n')
+
+    expect(body).toContain('### Intent')
+    expect(body).toContain('### Impact')
+    expect(body).toContain('requireSession')
+  })
+
+  // The normal case: a lane that was never enabled writes no report file at
+  // all, and the comment must read exactly like a stage that produced
+  // nothing — no error, no "missing" note, just an absent section.
+  it('renders cleanly when the impact and intent reports are absent, the ordinary case for a disabled lane', async () => {
+    const { api, calls } = createFakeApi()
+    const { dependencies } = createDependencies({ api })
+
+    const result = await runPipeline(dependencies)
+    const body = [...calls.created, ...calls.updated.map((entry) => entry.body)].join('\n')
+
+    expect(result.exitCode).toBe(0)
+    expect(body).not.toContain('### Intent')
+    expect(body).not.toContain('### Impact')
   })
 
   it('creates the summary comment on the first run', async () => {
@@ -266,10 +300,10 @@ describe('runPipeline: the ordinary path', () => {
 })
 
 // Spec 30: a reply on a review comment nominates the finding that comment
-// carries for re-adjudication. The re-run is the SAME `review`/`intent`/`impact`
-// pipeline above, unchanged — these tests cover only what spec 30 adds: reading
-// the nomination off the parent comment, reporting each outcome, and never
-// letting the run block.
+// carries for re-adjudication. The re-run is the SAME `review` pipeline above,
+// unchanged — these tests cover only what spec 30 adds: reading the nomination
+// off the parent comment, reporting each outcome, and never letting the run
+// block.
 describe('runPipeline: review conversation (spec 30)', () => {
   it('reports a nominated finding that still reports as held', async () => {
     const { api, calls } = createFakeApi({
@@ -285,9 +319,10 @@ describe('runPipeline: review conversation (spec 30)', () => {
     const result = await runPipeline(dependencies)
     const body = [...calls.created, ...calls.updated.map((entry) => entry.body)].join('\n')
 
-    // The same three stages run — byte-identical to the push-triggered path,
-    // which is what makes the re-adjudication trustworthy in the first place.
-    expect(stageArgs.map((args) => args[0])).toEqual(['review', 'intent', 'impact'])
+    // The same one review stage runs — byte-identical to the push-triggered
+    // path, which is what makes the re-adjudication trustworthy in the first
+    // place.
+    expect(stageArgs.map((args) => args[0])).toEqual(['review'])
     expect(body).toContain('Review conversation (1)')
     expect(body).toContain('fp1')
     expect(body).toContain('held')
@@ -373,15 +408,13 @@ describe('runPipeline: review conversation (spec 30)', () => {
     const { dependencies } = createDependencies(
       { api, reviewConversation: { parentCommentId: 500 } },
       {
-        review: {
-          exitCode: 1,
-          stdout: JSON.stringify({
-            runId: 'run_abc123',
-            qualityGatePassed: false,
-            artifactDir: ARTIFACT_DIR
-          }),
-          stderr: ''
-        }
+        exitCode: 1,
+        stdout: JSON.stringify({
+          runId: 'run_abc123',
+          qualityGatePassed: false,
+          artifactDir: ARTIFACT_DIR
+        }),
+        stderr: ''
       }
     )
 
@@ -455,11 +488,9 @@ describe('runPipeline: failure modes', () => {
     const { dependencies } = createDependencies(
       { api },
       {
-        review: {
-          exitCode: 4,
-          stdout: '',
-          stderr: '{"code":"provider_error","message":"429 rate limit"}'
-        }
+        exitCode: 4,
+        stdout: '',
+        stderr: '{"code":"provider_error","message":"429 rate limit"}'
       }
     )
     const result = await runPipeline(dependencies)
@@ -474,15 +505,13 @@ describe('runPipeline: failure modes', () => {
     const { dependencies } = createDependencies(
       { api },
       {
-        review: {
-          exitCode: 1,
-          stdout: JSON.stringify({
-            runId: 'run_abc123',
-            qualityGatePassed: false,
-            artifactDir: ARTIFACT_DIR
-          }),
-          stderr: ''
-        }
+        exitCode: 1,
+        stdout: JSON.stringify({
+          runId: 'run_abc123',
+          qualityGatePassed: false,
+          artifactDir: ARTIFACT_DIR
+        }),
+        stderr: ''
       }
     )
     const result = await runPipeline(dependencies)
@@ -496,11 +525,9 @@ describe('runPipeline: failure modes', () => {
     const { dependencies } = createDependencies(
       { api },
       {
-        review: {
-          exitCode: 5,
-          stdout: '',
-          stderr: `{"code":"reporting_error","message":"render failed","artifactDir":"${ARTIFACT_DIR}"}`
-        }
+        exitCode: 5,
+        stdout: '',
+        stderr: `{"code":"reporting_error","message":"render failed","artifactDir":"${ARTIFACT_DIR}"}`
       }
     )
     const result = await runPipeline(dependencies)
@@ -509,21 +536,34 @@ describe('runPipeline: failure modes', () => {
     expect(calls.created[0]).toContain('Session check removed from the admin route')
   })
 
-  it('keeps the job green when every advisory stage failed', async () => {
-    const { api } = createFakeApi()
-    const failed: StageResult = {
-      exitCode: 3,
-      stdout: '',
-      stderr: '{"code":"repository_error","message":"no merge base"}'
+  // An advisory lane that fails does not get its own exit code any more — it
+  // never had its own process to fail with. `src/cli/advisory-lanes.ts` catches
+  // the throw and leaves a warning on `report.json`'s `run.warnings` instead
+  // (see `guardAdvisoryStage`), which is what this asserts arrives on the
+  // comment: the job still passes, and the failure is still visible.
+  it('keeps the job green and surfaces an advisory-lane failure as a warning from the review report', async () => {
+    const { api, calls } = createFakeApi()
+    const reportWithAdvisoryFailure = {
+      ...reviewReportFixture,
+      run: {
+        ...reviewReportFixture.run,
+        warnings: [
+          ...reviewReportFixture.run.warnings,
+          'The intent-fulfilment stage could not complete and produced no report for this run: no merge base'
+        ]
+      }
     }
-    const { dependencies } = createDependencies(
-      { api },
-      { intent: failed, impact: failed }
-    )
+    const { dependencies } = createDependencies({
+      api,
+      readArtifact: async (artifactPath) =>
+        artifactPath === `${ARTIFACT_DIR}/report.json`
+          ? JSON.stringify(reportWithAdvisoryFailure)
+          : undefined
+    })
     const result = await runPipeline(dependencies)
 
     expect(result.exitCode).toBe(0)
-    expect(result.commentBody).toContain('no merge base')
+    expect(calls.created[0]).toContain('no merge base')
   })
 
   it('falls back to the summary comment when inline comments are rejected', async () => {

@@ -3,29 +3,19 @@ import {
   classifyStageOutcome,
   jobExitCode,
   parseCliError,
-  skippedStage,
-  stageDefinitions,
-  type StageDefinition
+  reviewStageDefinition,
+  skippedStage
 } from './stage-outcomes.js'
 
-const stage = (id: string): StageDefinition =>
-  stageDefinitions.find((definition) => definition.id === id) as StageDefinition
-
-const review = stage('review')
-const intent = stage('intent')
+const review = reviewStageDefinition
 
 describe('stage definitions', () => {
-  it('marks exactly one stage as blocking', () => {
-    expect(
-      stageDefinitions.filter((definition) => definition.kind === 'blocking')
-    ).toHaveLength(1)
-    expect(stage('review').kind).toBe('blocking')
-  })
-
-  it('marks intent and impact advisory, as their specs require', () => {
-    for (const id of ['intent', 'impact']) {
-      expect(stage(id).kind).toBe('advisory')
-    }
+  // `review` is the only stage this workflow spawns — the two advisory reference
+  // lanes (specs 22, 23) run inside it now (`src/cli/advisory-lanes.ts`) and no
+  // longer produce a `StageOutcome` of their own to classify here.
+  it('the one spawned stage is the blocking one', () => {
+    expect(review.kind).toBe('blocking')
+    expect(review.command).toEqual(['review'])
   })
 })
 
@@ -95,15 +85,6 @@ describe('classifyStageOutcome', () => {
     expect(outcome.status).toBe('failed')
     expect(outcome.message).toContain('repository error')
   })
-
-  it('classifies an advisory exit code 1 as failed, never as a gate', () => {
-    // Only the blocking stage has a gate. An advisory command that exits
-    // non-zero did not "fail a check"; it failed to run.
-    expect(
-      classifyStageOutcome(intent, { exitCode: 1, stdout: '', stderr: '' })
-        .status
-    ).toBe('failed')
-  })
 })
 
 describe('parseCliError', () => {
@@ -137,27 +118,13 @@ describe('jobExitCode', () => {
     ).toBe(1)
   })
 
-  it('NEVER fails the job for an advisory stage, whatever it reported', () => {
-    const outcomes = [
-      classifyStageOutcome(review, { exitCode: 0, stdout: '{}', stderr: '' }),
-      ...['intent', 'impact'].map((id) =>
-        classifyStageOutcome(stage(id), {
-          exitCode: 3,
-          stdout: '',
-          stderr: '{"code":"repository_error","message":"no merge base"}'
-        })
-      )
-    ]
-
-    expect(jobExitCode(outcomes)).toBe(0)
-  })
-
-  it('passes when the review passed and nothing was skipped into a failure', () => {
-    expect(
-      jobExitCode([
-        classifyStageOutcome(review, { exitCode: 0, stdout: '{}', stderr: '' }),
-        skippedStage(intent, 'provider not configured')
-      ])
-    ).toBe(0)
+  // The advisory reference lanes (specs 22, 23) run inside `review` now
+  // (`src/cli/advisory-lanes.ts`) rather than as their own spawned stage, so a
+  // lane that could not run no longer produces a `StageOutcome` here at all —
+  // it surfaces as a warning on the review report instead. There is nothing
+  // left for `jobExitCode` to see from a failed lane; this is covered
+  // end-to-end in `pipeline.test.ts`.
+  it('passes when the review stage was skipped rather than run', () => {
+    expect(jobExitCode([skippedStage(review, 'fork pull request')])).toBe(0)
   })
 })

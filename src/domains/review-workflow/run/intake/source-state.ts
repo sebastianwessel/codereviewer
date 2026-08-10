@@ -1,4 +1,5 @@
 import type { Logger } from '@purista/harness'
+import type { GitCommandRunner } from '../../../repository-intake/index.js'
 import type { NoContentEventRecorder } from '../../../observability/index.js'
 import {
   collectReviewRunnerRepositoryIntake,
@@ -14,6 +15,7 @@ export type PrepareReviewRunnerSourceStateOptions =
   ReviewRunnerRepositoryInputOptions & {
     readonly observability: NoContentEventRecorder
     readonly logger: Logger
+    readonly runGit?: GitCommandRunner
     readonly collectRepositoryIntake?: CollectRepositoryIntake
     readonly readSourceInput?: ReadSourceInput
   }
@@ -45,7 +47,8 @@ export const prepareReviewRunnerSourceState = async (
     ...(options.explicitFiles === undefined
       ? {}
       : { explicitFiles: options.explicitFiles }),
-    ...(options.signal === undefined ? {} : { signal: options.signal })
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.runGit === undefined ? {} : { runGit: options.runGit })
   })
   intakeStep.end(repositoryIntake.intakeMetrics)
   options.logger.debug('Repository intake completed.', {
