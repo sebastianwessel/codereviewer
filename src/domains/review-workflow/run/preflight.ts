@@ -15,7 +15,7 @@ export const runReviewRunnerPreflight = async (
     readonly repositoryRoot: string
     readonly config: CodeReviewerConfig
     readonly observability: NoContentEventRecorder
-    readonly logger: Pick<Logger, 'debug'>
+    readonly logger: Pick<Logger, 'debug' | 'warn'>
     readonly runDriftCheck?: (
       options: {
         readonly repositoryRoot: string
@@ -60,8 +60,20 @@ export const runReviewRunnerPreflight = async (
     await configureOpenTelemetry({
       config: input.config.observability.openTelemetry
     })
-    telemetryStep.end({ enabled: true })
-    input.logger.debug('OpenTelemetry setup completed.', { enabled: true })
+    // What this actually did, said plainly, because the previous line said
+    // "setup completed" and meant something much smaller.
+    //
+    // `configureOpenTelemetry` imports the two OpenTelemetry packages to prove
+    // they are installed, and returns. NOTHING in this codebase creates a span --
+    // there is no `getTracer`, no `startSpan`, anywhere -- so no trace is ever
+    // exported to the configured endpoint. Logging "setup completed" told an
+    // operator their telemetry was working when the only thing that had happened
+    // was a dependency check.
+    telemetryStep.end({ dependenciesPresent: true, spansExported: false })
+    input.logger.warn(
+      'OpenTelemetry dependencies are present and the endpoint is configured, but this engine emits no spans yet, so nothing will arrive at the collector.',
+      { endpoint_configured: true, spans_exported: false }
+    )
   }
 
   return { drift }

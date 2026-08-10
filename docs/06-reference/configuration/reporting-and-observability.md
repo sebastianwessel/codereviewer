@@ -34,10 +34,22 @@ With `reviewComments.enabled`, two files are written per run:
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
 | `observability.logging.level` | `"trace"` \| `"debug"` \| `"info"` \| `"warn"` \| `"error"` \| `"fatal"` \| `"silent"` | **`"silent"`** | Level for sanitized operational logs. Overridden by `CODEREVIEWER_LOG_LEVEL`, then by `--log-level`, then by `--debug` (which forces `debug`). |
-| `observability.openTelemetry.enabled` | boolean | `false` | Enables OTLP export. |
+| `observability.openTelemetry.enabled` | boolean | `false` | Checks the OTLP packages are installed. **It does not export anything yet — see below.** |
 | `observability.openTelemetry.endpoint` | URL | *unset* | OTLP endpoint. **Required when `enabled` is `true`** — otherwise validation fails with `endpoint is required when OpenTelemetry is enabled` (and, at setup, `opentelemetry_endpoint_missing`, exit `2`). |
 | `observability.openTelemetry.headers` | record<string, string> | `{}` | Exporter headers. Always redacted in summaries and logs. |
 | `observability.openTelemetry.serviceName` | non-empty string | `"codereviewer"` | `service.name` resource attribute. |
+
+> **No spans are emitted yet.** Turning `openTelemetry.enabled` on verifies that
+> `@opentelemetry/sdk-trace-node` and `@opentelemetry/exporter-trace-otlp-http`
+> are installed and then stops. Nothing in this engine calls `getTracer` or
+> `startSpan`, so **no trace ever reaches the configured endpoint**, and neither
+> package is a dependency of this project — so with a default install, enabling
+> this fails the run with `opentelemetry_dependency_missing` (exit `2`).
+>
+> Until 2026-08-11 the run logged "OpenTelemetry setup completed" here, which read
+> as working telemetry. It now warns that nothing will arrive at the collector.
+> The structured run data that DOES exist is `observability.json` in the run
+> directory — see [artifacts.md](../artifacts.md).
 
 OpenTelemetry exporter packages are optional and dependency-isolated. If
 `enabled` is `true` and they are not installed, setup returns a recoverable

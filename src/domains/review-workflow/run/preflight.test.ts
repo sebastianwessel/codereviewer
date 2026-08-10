@@ -44,7 +44,8 @@ const failedDrift = {
 } satisfies DriftCheckResult
 
 const logger = {
-  debug: () => {}
+  debug: () => {},
+  warn: () => {}
 }
 
 const configFor = (input: {
@@ -106,7 +107,9 @@ describe('review runner preflight', () => {
       },
       {
         step: 'opentelemetry_setup',
-        attributes: { enabled: true }
+        // Not `{ enabled: true }`. The step proves the packages are installed; it
+        // does not export a span, and the attributes must not imply it did.
+        attributes: { dependenciesPresent: true, spansExported: false }
       }
     ])
   })

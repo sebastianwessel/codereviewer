@@ -485,3 +485,22 @@ The security model follows these external references as requirements inputs:
 - Permission default tests.
 - No-content telemetry tests.
 - Artifact filename tests.
+
+## OpenTelemetry Is A Dependency Check, Not Tracing
+
+`observability.openTelemetry.enabled` verifies the two OTLP packages are
+importable and returns. **No span is created anywhere in this engine**, so no
+trace reaches the configured endpoint, and neither package is a dependency of this
+project — a default install therefore fails the run with
+`opentelemetry_dependency_missing` when the key is set.
+
+The run used to log "OpenTelemetry setup completed" at that point, which stated a
+working exporter. It now warns that nothing will arrive, and the step attributes
+record `dependenciesPresent` / `spansExported` rather than a bare `enabled: true`.
+
+This is recorded rather than removed because the key, its validation, and its
+documentation span seventeen files: deleting a documented capability is a product
+decision, not a cleanup. What is NOT acceptable, and is fixed, is a run reporting
+success for something it did not do. Emitting real spans, or withdrawing the key,
+is the follow-up — either is fine; the current state must simply not lie about
+which one it is.
