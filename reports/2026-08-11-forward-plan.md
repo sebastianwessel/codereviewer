@@ -23,36 +23,46 @@ recorded in `eval/../reports/eval-results-ledger.md`; nothing here is projected.
    stops far short of any output budget — and 97% of corpus cases contain exactly
    one defect, so ~1 finding is the correct response. n=1 on the clean test.
 
-## Priority 1 — Out-of-diff attention, with the instrument that now exists
+## Priority 1 — CLOSED 2026-08-11 by the ledger search it required
 
-**Why now and not before.** Four mechanisms were already measured flat here. All
-four predate this evidence and were scored against expectations whose findability
-was unknown, so a flat result was uninterpretable — it could always have meant
-"those were hard". The `multi-defect-2026` corpus removes that: five defects with a
-proven in-diff hit rate and a **known ceiling of 5/5**. A null now means something.
+The mechanism this section named — a second additive discovery call with the diff
+withheld — **is spec 19's un-anchored discovery pass**, built on 2026-07-27,
+measured, and removed at +0.83pp (p = 0.82) for +136% cost, on a corpus recorded in
+advance as close to best case. The one design row that differs (whole file rather
+than bounded windows) makes it weaker, not different: the windowed version's
+candidate volume came from the windows, and discovery yield is call-bound.
 
-**Before anything is built, search the ledger.** Pre-registration does not protect
-against re-running an experiment already recorded, and this project has done that
-once. In particular the withdrawn *context scout* and the rejected *extra discovery
-passes* (a sweep and a lens, both at +40–47% cost) must be read first, and any
-proposal that is a restatement of either is dead on arrival.
+Dead on arrival by this section's own rule. **$0 spent.** Detail:
+`reports/2026-08-11-unanchored-pass-restatement.md`.
 
-**The mechanism worth proposing, stated so it is falsifiable.** Every previous
-attempt told the reviewer to look outside the diff, or gave it more to look at.
-Both are the closed family. The untried shape is to **remove the anchor rather than
-add an instruction**: a second, additive discovery call over the changed file with
-the diff withheld entirely, so there is no hunk to anchor on and the whole file is
-the subject. It is structurally the dedicated security pass — additive candidates,
-same refutation, same admission — with a different framing of what the call is
-*about*, not of what it should attend to.
+The ledger-search gate has now paid twice. It is a hard gate.
 
-Honest prior: additive passes have been rejected once on cost. This one must be
-priced against the 5/5 ceiling before any full run, and abandoned at the smoke if
-the ceiling is not moved.
+**What is closed with it.** Six structural interventions have failed against
+later-in-file recall — enumeration sweep, diverse-lens pass, cross-file retrieval,
+context scout, un-anchored pass, sub-file partitioning — and five pre-registered
+prompt clauses have failed on framing. Neither "show discovery more" nor "tell
+discovery differently" has an untried member. **Do not propose a seventh without a
+mechanism that is neither.**
 
-**Sequence:** ledger search → measurability precheck on the 5-case corpus (~$0.20)
-→ pre-registration with all four cells → 3 seeds/arm on the security corpus if and
-only if the precheck moved the 5.
+### What replaces it: the separator question, at n that can answer it
+
+The largest unclaimed number left is the parked artifact-only findings — roughly
+half real, worth ~10.3pp of recall — which cannot be promoted wholesale (genuine
+false positives go 3 → 24 per 216 reviews) and could not be separated at n = 12.
+
+The n problem is now solved for free. Pooling the ten sub-file control runs — one
+engine, one corpus, one metrics version — gives **135 artifact-only findings, 69
+distinct defects, zero label disagreements across seeds**, of which 82 are known
+real. The 53 remaining carry no label, because in all ten runs the plausibility
+judge never adjudicated an artifact-only false positive.
+
+**Sequence:** adjudicate those 53 through the existing plausibility judge (bounded,
+no review run) → pre-register a separator rule over the groundedness fields with all
+four cells → if a separator exists, a promotion rule scored against precision, not
+recall alone.
+
+Unlike Priority 1, this is not another attempt to make discovery produce more. The
+findings already exist and were already paid for.
 
 ## Priority 2 — CLOSED 2026-08-11
 
@@ -123,6 +133,7 @@ dependency bump.
 
 ## The one-line version
 
-Stop feeding the stages; go after where the reviewer *looks*, using the first
-instrument that can tell a real failure from a hard case — and in parallel ship the
-things that need a decision rather than an experiment.
+REVISED 2026-08-11, after the ledger search closed Priority 1: stop trying to make
+discovery produce more — eleven attempts across two families have failed — and go
+after the findings it already produced and parked, which are half real and cost
+nothing more to obtain.
