@@ -521,3 +521,118 @@ describe('SARIF reporter', () => {
     expect(sarif.runs[0].tool.driver.notifications).toBeUndefined()
   })
 })
+
+// Spec 03 requires related locations and data flow to be mapped into SARIF
+// locations and code flows. The reporter carried neither: it read only `cwe`,
+// `securitySeverity`, `helpUri` and `ruleId` off a finding, so a taint trace that
+// reached the finding contract stopped at `report.json`.
+describe('related locations and code flows', () => {
+  const withTrace = (report: ReturnType<typeof createReportFixture>) => ({
+    ...report,
+    admittedFindings: [
+      securityFinding({
+        relatedLocations: [
+          {
+            id: 'rel_sink',
+            location: { path: 'src/db/query.ts', startLine: 30, side: 'new' },
+            message: 'The statement is executed here.'
+          }
+        ],
+        dataFlow: [
+          {
+            id: 'flow_taint',
+            label: 'request query string to SQL statement',
+            steps: [
+              {
+                id: 'step_source',
+                location: { path: 'src/app.ts', startLine: 12, side: 'new' },
+                message: 'Untrusted request field read.'
+              },
+              {
+                id: 'step_sink',
+                location: { path: 'src/db/query.ts', startLine: 30, side: 'new' },
+                message: 'Concatenated into the statement.'
+              }
+            ]
+          }
+        ]
+      })
+    ]
+  })
+
+  test('projects both into the result', () => {
+    const sarif = JSON.parse(
+      renderSarifReport(withTrace(createReportFixture()), {
+        category: 'codereviewer',
+        maxResults: 50,
+        target: 'github'
+      })
+    )
+    const result = sarif.runs[0].results[0]
+
+    expect(result.relatedLocations).toHaveLength(1)
+    expect(
+      result.relatedLocations[0].physicalLocation.artifactLocation.uri
+    ).toBe('src/db/query.ts')
+    expect(result.relatedLocations[0].message.text).toBe(
+      'The statement is executed here.'
+    )
+
+    expect(result.codeFlows).toHaveLength(1)
+    expect(result.codeFlows[0].message.text).toBe(
+      'request query string to SQL statement'
+    )
+
+    const steps = result.codeFlows[0].threadFlows[0].locations
+
+    expect(steps).toHaveLength(2)
+    expect(steps[0].location.physicalLocation.region.startLine).toBe(12)
+    expect(steps[1].location.physicalLocation.artifactLocation.uri).toBe(
+      'src/db/query.ts'
+    )
+  })
+
+  // Absent, not empty: an empty `codeFlows` array reads to a viewer as "a flow was
+  // computed and it has no steps".
+  test('omits both when the finding carries neither', () => {
+    const sarif = JSON.parse(
+      renderSarifReport(createReportFixture(), {
+        category: 'codereviewer',
+        maxResults: 50,
+        target: 'github'
+      })
+    )
+
+    expect(sarif.runs[0].results[0]).not.toHaveProperty('relatedLocations')
+    expect(sarif.runs[0].results[0]).not.toHaveProperty('codeFlows')
+  })
+
+  test('redacts the messages a trace carries', () => {
+    const secret = 'AKIAIOSFODNN7EXAMPLE'
+    const sarif = renderSarifReport(
+      {
+        ...createReportFixture(),
+        admittedFindings: [
+          securityFinding({
+            relatedLocations: [
+              {
+                id: 'rel_sink',
+                location: {
+                  path: 'src/db/query.ts',
+                  startLine: 30,
+                  side: 'new'
+                },
+                message: `Executed with ${secret}.`
+              }
+            ]
+          })
+        ]
+      },
+      { category: 'codereviewer', maxResults: 50, target: 'github' }
+    )
+
+    expect(sarif).not.toContain(secret)
+    // Non-vacuous: the location is still rendered, with the rest of its message.
+    expect(sarif).toContain('Executed with')
+  })
+})

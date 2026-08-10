@@ -100,7 +100,27 @@ deterministic-signal candidate producer, or delete four mechanisms and their
 specs. Doing that immediately before a measurement would also change the very
 stage being measured. It should be decided deliberately, not as a side effect.
 
-**B. Analyzer metadata cannot reach a finding.** `analyzer-ingestion` builds rich
+**B. RESOLVED 2026-08-11 — and the audit's premise was half wrong.** The gap was
+real: `AdmittedFinding` declared `ruleId`/`helpUri`/`cwe`/`securitySeverity`/
+`relatedLocations`/`dataFlow` and `CandidateFinding` did not, and an admitted
+finding is built by spreading a candidate — so no run could produce one carrying
+any of them, and the SARIF reporter's security-rule projection was unreachable.
+The six fields are now declared on `CandidateFinding`, and the reporter maps
+`relatedLocations` into SARIF `relatedLocations` and `dataFlow` into `codeFlows`
+(a spec 03 requirement that had never been implemented). The admission gate redacts
+the caller-authored messages the same way it redacts a title.
+
+The premise that was wrong: this is NOT "incomplete analyzer wiring". Spec 15
+deliberately keeps an ingested alert's metadata on its own `EvidenceRecord`, and
+the join the audit implied — analyzer alert to finding by shared location — would
+attach one defect's CWE and taint path to another defect on the same line. The
+producer is the candidate's proposer, which for these fields means the caller
+seeding `ReviewWorkflowInput.candidates` (the same published surface item A above
+decided to keep).
+
+---
+
+**B (original, superseded). Analyzer metadata cannot reach a finding.** `analyzer-ingestion` builds rich
 `EvidenceRecord`s carrying `cwe`, `ruleId`, `helpUri`, `securitySeverity`,
 `relatedLocations`, `dataFlow` from real analyzer alerts, and they do inform the
 model as rendered prose. But `CandidateFinding` has no matching fields, so no

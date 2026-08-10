@@ -4,11 +4,13 @@ import {
   CandidateIdSchema,
   CodeLocationSchema,
   ContractIdSchema,
+  DataFlowPathSchema,
   EvidenceRecordSchema,
   FindingCategorySchema,
   FixEditSchema,
   FixProposalSchema,
   RejectedFindingSchema,
+  RelatedLocationSchema,
   severityMeetsThreshold,
   SeveritySchema,
   TaskIdSchema,
@@ -42,7 +44,32 @@ export const CandidateFindingSchema = z.strictObject({
   location: CodeLocationSchema,
   evidenceIds: z.array(ContractIdSchema),
   proposedBy: z.string().min(1),
-  fixProposal: FixProposalSchema.optional()
+  fixProposal: FixProposalSchema.optional(),
+  // Classification and trace metadata, carried from the candidate to the admitted
+  // finding by the spread in `admitCandidate` and consumed by the SARIF reporter.
+  //
+  // `AdmittedFinding` has declared all six since the contract was written, and the
+  // SARIF spec requires mapping the last two into locations and code flows — but
+  // `CandidateFinding` did not declare them, and `AdmittedFindingSchema` is built
+  // by spreading a candidate. So no run could produce a finding carrying any of
+  // them, and the reporter's whole security-rule projection was unreachable.
+  //
+  // The producer is the CALLER: `ReviewWorkflowInput.candidates` is a published
+  // surface (see the `proposedBy` decision in the 2026-08-10 flow audit), and a
+  // deterministic signal that proposes a candidate is exactly the thing a rule id,
+  // a CWE list, and a source-to-sink path describe.
+  //
+  // Analyzer ingestion deliberately does NOT write these. Spec 15 keeps an ingested
+  // alert on its `EvidenceRecord` and out of the finding contract: joining a
+  // third-party alert to a model-authored finding by location would attach one
+  // defect's CWE to another defect that happens to share a line. The evidence
+  // record already carries the alert's own metadata, under the analyzer's name.
+  ruleId: z.string().optional(),
+  helpUri: z.url().optional(),
+  cwe: z.array(z.string().regex(/^CWE-[0-9]+$/)).optional(),
+  securitySeverity: z.number().min(0).max(10).optional(),
+  relatedLocations: z.array(RelatedLocationSchema).optional(),
+  dataFlow: z.array(DataFlowPathSchema).optional()
 })
 
 export type CandidateFinding = z.infer<typeof CandidateFindingSchema>
@@ -408,8 +435,37 @@ const redactCandidateField = (
   field: BoundedStringField
 ): string => truncateToFieldBound(createRedactor().redact(value), field)
 
+// `relatedLocations` and `dataFlow` messages are caller-authored free text that
+// lands verbatim in the report and the SARIF artifact, so they go through the same
+// redactor as the title and description. Their paths and line numbers are already
+// constrained by `CodeLocationSchema`; only the prose can carry a secret.
+const redactedRelatedLocation = <TLocation extends { readonly message: string }>(
+  related: TLocation
+): TLocation => ({
+  ...related,
+  message: redactCandidateField(
+    related.message,
+    RelatedLocationSchema.shape.message
+  )
+})
+
 const redactedCandidate = (candidate: CandidateFinding): CandidateFinding => ({
   ...candidate,
+  ...(candidate.relatedLocations === undefined
+    ? {}
+    : { relatedLocations: candidate.relatedLocations.map(redactedRelatedLocation) }),
+  ...(candidate.dataFlow === undefined
+    ? {}
+    : {
+        dataFlow: candidate.dataFlow.map((path) => ({
+          ...path,
+          label: redactCandidateField(
+            path.label,
+            DataFlowPathSchema.shape.label
+          ),
+          steps: path.steps.map(redactedRelatedLocation)
+        }))
+      }),
   title: redactCandidateField(candidate.title, CandidateFindingSchema.shape.title),
   description: redactCandidateField(
     candidate.description,

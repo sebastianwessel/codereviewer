@@ -371,7 +371,12 @@ where it belongs — with the project being reviewed.
   producer supplies them. Each alert becomes an `EvidenceRecord` populating the
   previously unproduced contract fields `ruleId`, `cwe`, `helpUri`,
   `relatedLocations`, `dataFlow`, and `securitySeverity`. No tool-specific field
-  reaches the finding contract.
+  reaches the finding contract, and **no analyzer metadata is joined onto a
+  finding**: `CandidateFinding`/`AdmittedFinding` carry the same six field names,
+  filled only by the candidate's own proposer (spec 03), because attaching an alert
+  to a model-authored finding by shared location would give one defect's CWE and
+  taint path to another defect that happens to sit on the same line. The alert's
+  metadata stays on its evidence record, under the analyzer's name.
 - **Nothing is invented and nothing is dropped silently.** A field the producer did
   not supply stays absent; a severity outside 0–10 is dropped rather than clamped. A
   result that cannot be normalized, one whose path does not resolve, one held back by

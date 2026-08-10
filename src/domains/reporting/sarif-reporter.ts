@@ -27,6 +27,21 @@ export type SarifRenderOptions = {
 export const SARIF_INFORMATION_URI =
   'https://github.com/sebastianwessel/codereviewer#readme'
 
+type SarifPhysicalLocation = {
+  readonly physicalLocation: {
+    readonly artifactLocation: {
+      readonly uri: string
+    }
+    readonly region: {
+      readonly startLine: number
+      readonly endLine?: number
+    }
+  }
+  readonly message?: {
+    readonly text: string
+  }
+}
+
 type SarifResult = {
   readonly ruleId: string
   readonly level: 'error' | 'warning' | 'note'
@@ -49,6 +64,19 @@ type SarifResult = {
       }
     }
   ]
+  // Supporting locations for the same defect — the caller-supplied ones, in the
+  // order given. SARIF viewers render these as secondary highlights next to the
+  // primary location.
+  readonly relatedLocations?: readonly SarifPhysicalLocation[]
+  // Ordered source-to-sink paths. SARIF nests them three deep — a result has
+  // `codeFlows`, each has `threadFlows`, each has `locations` — and a single
+  // thread flow per path is the shape every viewer expects for a taint trace.
+  readonly codeFlows?: readonly {
+    readonly message: { readonly text: string }
+    readonly threadFlows: readonly [
+      { readonly locations: readonly { readonly location: SarifPhysicalLocation }[] }
+    ]
+  }[]
   readonly partialFingerprints: Readonly<Record<string, string>>
   readonly properties: {
     readonly category: string
@@ -125,6 +153,28 @@ const toArtifactUri = (repositoryRelativePath: string): string =>
     .map((segment) => encodeURIComponent(segment))
     .join('/')
 
+// One `RelatedLocation` as SARIF sees it. The path goes through the same
+// `toArtifactUri` as the primary location, and the message through the same
+// redactor as every other rendered string — a supporting location is not a
+// lesser-trust slot that gets to skip either.
+const renderRelatedLocation = (related: {
+  readonly location: AdmittedFinding['location']
+  readonly message: string
+}): SarifPhysicalLocation => ({
+  physicalLocation: {
+    artifactLocation: {
+      uri: toArtifactUri(related.location.path)
+    },
+    region: {
+      startLine: related.location.startLine,
+      ...(related.location.endLine === undefined
+        ? {}
+        : { endLine: related.location.endLine })
+    }
+  },
+  message: { text: safeRedactedText(related.message) }
+})
+
 const renderResult = (finding: AdmittedFinding): SarifResult => {
   const fixProposal =
     finding.fixProposal === undefined
@@ -171,6 +221,26 @@ const renderResult = (finding: AdmittedFinding): SarifResult => {
         }
       }
     ],
+    ...(finding.relatedLocations === undefined ||
+    finding.relatedLocations.length === 0
+      ? {}
+      : {
+          relatedLocations: finding.relatedLocations.map(renderRelatedLocation)
+        }),
+    ...(finding.dataFlow === undefined || finding.dataFlow.length === 0
+      ? {}
+      : {
+          codeFlows: finding.dataFlow.map((path) => ({
+            message: { text: safeRedactedText(path.label) },
+            threadFlows: [
+              {
+                locations: path.steps.map((step) => ({
+                  location: renderRelatedLocation(step)
+                }))
+              }
+            ] as const
+          }))
+        }),
     partialFingerprints: fingerprintsFor(finding.fingerprints),
     properties: {
       category: finding.category,

@@ -309,6 +309,25 @@ artifact-only output according to promotion policy.
 | `evidenceIds` | yes | string[] | References existing evidence when the candidate cites exact task evidence; may be empty before validation. |
 | `proposedBy` | yes | string | Agent or deterministic signal source ID. |
 | `fixProposal` | no | `FixProposal` | Evidence-linked manual fix proposal (summary and optional edits). The single fix contract. |
+| `securitySeverity` | no | number 0..10 | CVSS-like numeric severity when the proposer states one. |
+| `ruleId` | no | string | Stable signal or policy rule identifier when known. |
+| `helpUri` | no | URL | Rule help URL. |
+| `cwe` | no | string[] | CWE IDs when known. |
+| `relatedLocations` | no | `RelatedLocation[]` | Supporting locations. Messages are redacted at admission. |
+| `dataFlow` | no | `DataFlowPath[]` | Source-to-sink or cause-to-effect path. Labels and step messages are redacted at admission. |
+
+The last six fields are the ones `AdmittedFinding` carries and the SARIF reporter
+projects. They are declared HERE because an admitted finding is built by spreading
+its candidate: a field the candidate cannot hold is a field no run can produce, and
+these six went unproducible from the contract's first day until 2026-08-11.
+
+Their producer is the **caller**: a client seeding `ReviewWorkflowInput.candidates`
+with a deterministic signal's output is exactly the proposer that has a rule id, a
+CWE list, and a traced path to state. The holistic review does not fill them, and
+analyzer ingestion deliberately does not (see spec 15 — an ingested alert keeps its
+metadata on its own `EvidenceRecord`, because joining a third-party alert to a
+model-authored finding by shared location would attach one defect's classification
+to another).
 
 Model-origin candidates come directly from the holistic whole-file review. Task
 evidence and deterministic signals are optional corroborating inputs and must be
@@ -352,12 +371,12 @@ All `CandidateFinding` fields plus:
 | `refutationId` | conditional | `refutationId` | Required for model-origin admitted findings; references the proved refutation. |
 | `baselineStatus` | yes | `BaselineStatus` | `existing` when matched against the configured baseline, `unknown` when a baseline is explicitly configured but its file is missing/indeterminate, otherwise `new`. |
 | `fingerprints` | yes | non-empty `FindingFingerprint[]` | Used for de-duplication and baseline matching. |
-| `securitySeverity` | no | number 0..10 | CVSS-like numeric severity for security findings when available. |
-| `ruleId` | no | string | Stable signal or policy rule identifier when known. |
-| `helpUri` | no | URL | Rule help URL after allowlist validation. |
-| `cwe` | no | string[] | CWE IDs when known. |
-| `relatedLocations` | no | `RelatedLocation[]` | Supporting locations. |
-| `dataFlow` | no | `DataFlowPath[]` | Source-to-sink or cause-to-effect path. |
+
+`securitySeverity`, `ruleId`, `helpUri`, `cwe`, `relatedLocations` and `dataFlow`
+are inherited from `CandidateFinding` (see its table above for the rule and the
+producer) and are not restated here. The admission gate redacts the free text in
+`relatedLocations` and `dataFlow` on the way through, the same as it does the title
+and description.
 
 ## RejectedFinding
 

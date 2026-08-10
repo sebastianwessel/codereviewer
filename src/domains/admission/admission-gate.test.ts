@@ -976,3 +976,98 @@ describe('baseline and quality gate', () => {
     })
   })
 })
+
+// `AdmittedFinding` declared `ruleId`/`helpUri`/`cwe`/`securitySeverity`/
+// `relatedLocations`/`dataFlow` from the start and the SARIF reporter reads them,
+// but `CandidateFinding` did not declare them and the admitted finding is built by
+// spreading a candidate — so nothing could ever set one. The producer is the
+// caller seeding `ReviewWorkflowInput.candidates`.
+describe('classification and trace metadata', () => {
+  test('carries caller-supplied metadata through to the admitted finding', () => {
+    const result = admitCandidate({
+      candidate: {
+        ...candidate,
+        ruleId: 'signals/incorrect-return',
+        helpUri: 'https://example.test/rules/incorrect-return',
+        cwe: ['CWE-252'],
+        securitySeverity: 6.5,
+        relatedLocations: [
+          {
+            id: 'rel_caller',
+            location: { path: 'src/app.ts', startLine: 9, side: 'new' },
+            message: 'The caller that consumes the wrong value.'
+          }
+        ],
+        dataFlow: [
+          {
+            id: 'flow_1',
+            label: 'branch to caller',
+            steps: [
+              {
+                id: 'step_1',
+                location: { path: 'src/app.ts', startLine: 4, side: 'new' },
+                message: 'Wrong value returned here.'
+              }
+            ]
+          }
+        ]
+      },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy: diffBackedPolicy
+    })
+
+    expect(result.admittedFinding).toMatchObject({
+      ruleId: 'signals/incorrect-return',
+      helpUri: 'https://example.test/rules/incorrect-return',
+      cwe: ['CWE-252'],
+      securitySeverity: 6.5
+    })
+    expect(result.admittedFinding?.relatedLocations?.[0]?.message).toBe(
+      'The caller that consumes the wrong value.'
+    )
+    expect(result.admittedFinding?.dataFlow?.[0]?.steps).toHaveLength(1)
+  })
+
+  // The messages are caller-authored free text that lands verbatim in the report
+  // and the SARIF artifact, so they go through the same redactor as the title and
+  // description rather than around it.
+  test('redacts the caller-authored messages on both', () => {
+    const secret = 'AKIAIOSFODNN7EXAMPLE'
+    const result = admitCandidate({
+      candidate: {
+        ...candidate,
+        relatedLocations: [
+          {
+            id: 'rel_caller',
+            location: { path: 'src/app.ts', startLine: 9, side: 'new' },
+            message: `Reached with key ${secret} in scope.`
+          }
+        ],
+        dataFlow: [
+          {
+            id: 'flow_1',
+            label: `flow carrying ${secret}`,
+            steps: [
+              {
+                id: 'step_1',
+                location: { path: 'src/app.ts', startLine: 4, side: 'new' },
+                message: `Step leaks ${secret}.`
+              }
+            ]
+          }
+        ]
+      },
+      evidence: [diffEvidence],
+      existingAdmittedFindings: [],
+      policy: diffBackedPolicy
+    })
+
+    const finding = result.admittedFinding
+
+    expect(JSON.stringify(finding)).not.toContain(secret)
+    expect(finding?.relatedLocations?.[0]?.message).toContain('in scope')
+    expect(finding?.dataFlow?.[0]?.label).toContain('flow carrying')
+    expect(finding?.dataFlow?.[0]?.steps[0]?.message).toContain('Step leaks')
+  })
+})
