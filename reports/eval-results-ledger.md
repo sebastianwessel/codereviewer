@@ -3248,3 +3248,47 @@ $4.17 rather than $4.50 for an uninterpretable result: the capture was too thin
 29-60%, so the planned three-seed test would have produced a chance positive about
 half the time; and a $0.24 six-case smoke found five of seven new fields constant,
 collapsing the hypothesis space before the full spend.
+
+## 2026-08-10 — Signal-facts context: the sixth null on discovery framing
+
+`openai/gpt-5.3-codex`, engine `0da877a` (all six runs, dirty=0),
+`security-advisory-2026` (72 cases), 3 seeds per arm, arm order alternated
+(control 1/2/1, treatment 2/1/2), zero provider errors. **$4.43 + $5.94 = $10.37
+measured**, plus $0.15 of smokes. Full write-up:
+`reports/2026-08-10-signal-facts-result.md`, pre-registered in
+`reports/2026-08-10-signal-facts-prereg.md`.
+
+| | control | `review.signalFacts.enabled` |
+| --- | ---: | ---: |
+| recall (per seed) | 64.9 / 64.9 / 64.9 → **64.9%** | 66.2 / 62.2 / 56.8 → **61.7%** |
+| adjusted precision | 96.7% | 100.0% |
+| input tokens | 6,901,000 | 7,598,206 (+10.1%) |
+
+Pooled per-expectation paired sign test: **3 gained, 3 lost, 68 unchanged,
+p = 1.0000.**
+
+**NOT PROMOTED, stays shipped and disabled.** Promotion required a recall
+improvement; recall moved −3.2pp. Removal required adjusted precision to fall or
+errors to rise; precision rose and errors stayed at zero, so that trigger did not
+fire either.
+
+**The rule under-specified this cell.** Its "keep disabled" clause was written for
+favourable-but-not-significant, and the result was unfavourable-and-not-
+significant. The removal clause's rationale describes this run while its literal
+trigger does not. Decided by the literal triggers rather than by whichever reading
+the data favours; the next pre-registration on this stage must enumerate all four
+recall × significance cells in advance.
+
+**Two findings beyond the verdict.** Control recall was IDENTICAL across three
+seeds while raw discovery varied 93/86/84 — the stable expectations are found
+every seed and the marginal ones never, so the aggregate is far steadier than the
+finding stream. The treatment arm broke that (49/46/42): showing the reviewer more
+made it less consistent. And the low first-seed cache rate (46.7%) is not prompt
+instability — seeds 2 and 3 cached 87.0% and 85.7%, so the section caches normally
+after first exposure.
+
+**This closes the sixth intervention on discovery framing**: five prompt clauses
+(7/8, 7/8, 7/7, 12/12, 16/16), four attention mechanisms, and now real DATA
+through a channel structurally empty since inception. The pre-registration argued
+that was a mechanism no prior null covered. It was, and it landed in the same
+place. What discovery is SHOWN is not the binding constraint on what it finds.
