@@ -201,6 +201,9 @@ describe('digestIntentReport', () => {
 })
 
 describe('digestImpactReport', () => {
+  // The <= 1.1 shape, where each changed symbol carried its own references. Kept
+  // because this digest must also work against an installed engine older than the
+  // workflow it runs from.
   it('keeps only symbols that actually have dependents', () => {
     const digest = digestImpactReport(json(impactReportFixture))
 
@@ -210,6 +213,116 @@ describe('digestImpactReport', () => {
     expect(digest?.symbols[0]).toMatchObject({
       referenceCount: 2,
       testReferenceCount: 1
+    })
+  })
+
+  // The shape the engine ACTUALLY emits since schema 2.0: the changed symbols and
+  // the files they reach are two normalized lists, joined on the name/path/line
+  // triple. Nothing read `changedSymbols`, so between 2.0 and this test the Impact
+  // section silently vanished from every pull-request comment while the fixture
+  // above kept the unit suite green. `src/cli/review-e2e.test.ts` is what caught
+  // it; this is the same fact pinned where it is cheap to check.
+  it('joins the normalized >= 2.0 lists into per-symbol reference counts', () => {
+    const digest = digestImpactReport(
+      json({
+        schemaVersion: '3.0',
+        status: 'completed',
+        summary: {
+          changedSymbolCount: 2,
+          referenceCount: 2,
+          testReferenceCount: 1
+        },
+        changedSymbols: [
+          {
+            name: 'requireSession',
+            definitionPath: 'src/auth/session.ts',
+            definitionLine: 10,
+            changeKind: 'modified'
+          },
+          {
+            name: 'unusedHelper',
+            definitionPath: 'src/auth/session.ts',
+            definitionLine: 30,
+            changeKind: 'new'
+          }
+        ],
+        impactedFiles: [
+          {
+            path: 'src/routes/admin.ts',
+            symbols: [
+              {
+                name: 'requireSession',
+                definitionPath: 'src/auth/session.ts',
+                definitionLine: 10,
+                sites: [
+                  { line: 40, text: 'requireSession(request)' },
+                  { line: 41, text: 'requireSession(other)' }
+                ]
+              }
+            ]
+          }
+        ],
+        impactedTestFiles: [
+          {
+            path: 'src/auth/session.test.ts',
+            symbols: [
+              {
+                name: 'requireSession',
+                definitionPath: 'src/auth/session.ts',
+                definitionLine: 10,
+                sites: [{ line: 4, text: 'requireSession' }]
+              }
+            ]
+          }
+        ],
+        warnings: []
+      })
+    )
+
+    expect(digest?.symbols.map((symbol) => symbol.name)).toEqual([
+      'requireSession'
+    ])
+    expect(digest?.symbols[0]).toMatchObject({
+      referenceCount: 2,
+      testReferenceCount: 1
+    })
+  })
+
+  // Same name, same file, different declarations: the join key is the full triple
+  // for exactly this case, and a narrower key would give one symbol the other's
+  // callers.
+  it('does not give one symbol the callers of a same-named symbol', () => {
+    const digest = digestImpactReport(
+      json({
+        schemaVersion: '3.0',
+        status: 'completed',
+        summary: { changedSymbolCount: 2, referenceCount: 1 },
+        changedSymbols: [
+          { name: 'parse', definitionPath: 'src/a.ts', definitionLine: 1 },
+          { name: 'parse', definitionPath: 'src/a.ts', definitionLine: 9 }
+        ],
+        impactedFiles: [
+          {
+            path: 'src/b.ts',
+            symbols: [
+              {
+                name: 'parse',
+                definitionPath: 'src/a.ts',
+                definitionLine: 9,
+                sites: [{ line: 3, text: 'parse(input)' }]
+              }
+            ]
+          }
+        ],
+        impactedTestFiles: [],
+        warnings: []
+      })
+    )
+
+    expect(digest?.symbols).toHaveLength(1)
+    expect(digest?.symbols[0]).toMatchObject({
+      definitionPath: 'src/a.ts',
+      referenceCount: 1
     })
   })
 })

@@ -390,6 +390,22 @@ export const digestIntentReport = (raw: string): IntentDigest | undefined => {
   }
 }
 
+// One destination file in a schema >= 2.0 report: the changed symbols that reach
+// it, each with the sites they reach it at.
+const ImpactedFileSchema = z.object({
+  path: z.string(),
+  symbols: z
+    .array(
+      z.object({
+        name: z.string(),
+        definitionPath: z.string(),
+        definitionLine: z.number().int().nullish(),
+        sites: z.array(z.unknown()).nullish()
+      })
+    )
+    .nullish()
+})
+
 const ImpactReportSchema = z.object({
   status: z.string(),
   summary: z
@@ -400,6 +416,7 @@ const ImpactReportSchema = z.object({
       testReferenceCount: z.number().int().nullish()
     })
     .nullish(),
+  // Schema <= 1.1: one list of changed symbols, each carrying its own references.
   symbols: z
     .array(
       z.object({
@@ -411,8 +428,63 @@ const ImpactReportSchema = z.object({
       })
     )
     .nullish(),
+  // Schema >= 2.0 replaced the list above with a normalized pair: what changed,
+  // and which FILES it reaches. Both are read here because this digest is
+  // deliberately version-tolerant (see the note at the top of this file) — and
+  // because reading only the old spelling is what silently removed the Impact
+  // section from every comment between 2.0 and this fix.
+  changedSymbols: z
+    .array(
+      z.object({
+        name: z.string(),
+        definitionPath: z.string(),
+        definitionLine: z.number().int().nullish(),
+        changeKind: z.string().nullish()
+      })
+    )
+    .nullish(),
+  impactedFiles: z.array(ImpactedFileSchema).nullish(),
+  impactedTestFiles: z.array(ImpactedFileSchema).nullish(),
   warnings: z.array(z.string()).nullish()
 })
+
+type ImpactedFile = z.infer<typeof ImpactedFileSchema>
+
+// A character no path, identifier or number can contain, so two different triples
+// can never format to one key. Written as an escape rather than as a literal:
+// `grep` silently skips a source file carrying a raw NUL, which is how a live
+// capability in this repository was once nearly deleted as dead code.
+const SYMBOL_KEY_SEPARATOR = '\u0000'
+
+// The join key `impact-report.ts` prescribes: two symbols can share a name in one
+// file, and two files can each declare the same name, so nothing narrower is an
+// identity. `definitionLine` is nullish here only because every other field in
+// this digest is; a real report always carries it.
+const changedSymbolKey = (symbol: {
+  readonly name: string
+  readonly definitionPath: string
+  readonly definitionLine?: number | null | undefined
+}): string =>
+  [symbol.name, symbol.definitionPath, symbol.definitionLine ?? ''].join(
+    SYMBOL_KEY_SEPARATOR
+  )
+
+/** Reference SITES per changed symbol across one destination-file list. */
+const siteCountsBySymbol = (
+  files: readonly ImpactedFile[]
+): ReadonlyMap<string, number> => {
+  const counts = new Map<string, number>()
+
+  for (const file of files) {
+    for (const symbol of file.symbols ?? []) {
+      const key = changedSymbolKey(symbol)
+
+      counts.set(key, (counts.get(key) ?? 0) + (symbol.sites?.length ?? 0))
+    }
+  }
+
+  return counts
+}
 
 export type ImpactSymbolDigest = {
   readonly name: string
@@ -439,23 +511,39 @@ export const digestImpactReport = (raw: string): ImpactDigest | undefined => {
   }
 
   const report = parsed.data
+  // Schema >= 2.0 keeps the changed symbols and the files they reach in two
+  // normalized lists, so the per-symbol counts this comment renders are rebuilt
+  // by joining them. A <= 1.1 report has neither and falls through to `symbols`
+  // below, which carried its references inline.
+  const productionSites = siteCountsBySymbol(report.impactedFiles ?? [])
+  const testSites = siteCountsBySymbol(report.impactedTestFiles ?? [])
+  const symbols =
+    report.changedSymbols === undefined || report.changedSymbols === null
+      ? (report.symbols ?? []).map((symbol) => ({
+          name: symbol.name,
+          definitionPath: symbol.definitionPath,
+          changeKind: symbol.changeKind ?? 'modified',
+          referenceCount: symbol.references?.length ?? 0,
+          testReferenceCount: symbol.testReferences?.length ?? 0
+        }))
+      : report.changedSymbols.map((symbol) => ({
+          name: symbol.name,
+          definitionPath: symbol.definitionPath,
+          changeKind: symbol.changeKind ?? 'modified',
+          referenceCount: productionSites.get(changedSymbolKey(symbol)) ?? 0,
+          testReferenceCount: testSites.get(changedSymbolKey(symbol)) ?? 0
+        }))
 
   return {
     status: report.status,
     changedSymbolCount: report.summary?.changedSymbolCount ?? 0,
     referenceCount: report.summary?.referenceCount ?? 0,
     testReferenceCount: report.summary?.testReferenceCount ?? 0,
-    symbols: (report.symbols ?? [])
-      .map((symbol) => ({
-        name: symbol.name,
-        definitionPath: symbol.definitionPath,
-        changeKind: symbol.changeKind ?? 'modified',
-        referenceCount: symbol.references?.length ?? 0,
-        testReferenceCount: symbol.testReferences?.length ?? 0
-      }))
-      .filter(
-        (symbol) => symbol.referenceCount > 0 || symbol.testReferenceCount > 0
-      ),
+    // A symbol nothing references is dropped: the table answers "what else does
+    // this change reach", and a row with two zeroes answers nothing.
+    symbols: symbols.filter(
+      (symbol) => symbol.referenceCount > 0 || symbol.testReferenceCount > 0
+    ),
     warnings: report.warnings ?? []
   }
 }

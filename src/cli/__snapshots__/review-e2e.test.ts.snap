@@ -1,0 +1,265 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`review end to end > inline comments anchor to the reported line and only offer an apply that still fits 1`] = `
+[
+  {
+    "body": "**HIGH bug:** Discount is multiplied by a hundred
+
+applyDiscount multiplies the discounted total by 100, so every caller receives a total a hundred times too large.
+
+- **Why this holds:** The added return statement multiplies the discounted total by a hundred.
+- **Based on:** citation at \`src/pricing.ts:6\`; model-rationale at \`src/pricing.ts:6\`
+
+Suggested fix: Return the discounted total without the stray factor of a hundred.
+
+Finding: find_4945c4f21fdda7b2b02453ec
+
+\`\`\`suggestion
+  return order.total * factor
+\`\`\`
+
+<!-- codereviewer:finding:<fingerprint> -->",
+    "line": 6,
+    "path": "src/pricing.ts",
+  },
+  {
+    "body": "**HIGH bug:** A negative percent is accepted
+
+Nothing rejects a negative percent, so a negative discount raises the order total.
+
+- **Why this holds:** No guard rejects a negative percent.
+- **Based on:** citation at \`src/pricing.ts:5\`; model-rationale at \`src/pricing.ts:5\`
+
+Suggested fix: Reject a percent outside 0..100 before computing the factor.
+
+A concrete replacement was computed for this finding but does not have the shape a review comment can carry — it spans lines other than this comment's, or is more than one edit — so it is not offered as a one-click apply and was not checked against the file. It is recorded in full in \`report.json\` under this finding's \`fixProposal.edits\`.
+
+Finding: find_f6346826ca25577a0a8cf727
+
+<!-- codereviewer:finding:<fingerprint> -->",
+    "line": 5,
+    "path": "src/pricing.ts",
+  },
+]
+`;
+
+exports[`review end to end > report.md carries its sections in the order a reader works in 1`] = `
+"# Review Report
+
+This report lists DEFECTS THIS RUN COULD PROVE from the change it was shown. It is a diff-scoped search: attention follows the changed lines, and code the change did not touch is not searched for defects even when it was read in full. Every finding below survived an attempt to refute it and cites the lines it rests on, so it can be checked rather than believed. Nothing here is a certificate that the change is correct, and the absence of a finding is not the absence of a defect.
+
+Measured reliability, so these findings can be weighed rather than trusted. On a 37-case real-repository corpus with the engine pinned: about **7 in 10** defects sitting INSIDE the diff were found (in-diff recall mean 68.3% over three runs, standard deviation 2.89pp), and **0 of 27** defects sitting outside the diff in the very same changed files were found — a measured zero over a full denominator, and by design, since this stage is diff-scoped and \`impact check\` is the stage that covers that population. Of what it does report, roughly **19 in 20** stand up under review (adjusted precision mean 96.2%). Two runs over the same commit do not produce the same report. Measured on \`openai/gpt-5.3-codex\`. **This run used \`openai/fixture-model\`**, so the rates above were not measured on it and may not describe it — a different model changes what is found and what is proved, not just what it costs.
+
+## Scope of this search
+
+- Run: \`run-<id>\` (mode local, depth balanced)
+- Model: \`openai/fixture-model\`
+- Base: \`main\`
+- Head: \`HEAD\`
+- Merge base: \`<sha40>\`
+- Files read in full: 3 of 3 reviewable (440 of 440 bytes). Coverage status: complete — a statement that the source reached a model, not that every defect in it was found.
+- Files excluded before review even began: 1. They are NOT in the counts above. See "Skipped Files" for why.
+- Files never reviewed at all: 1, listed under "Skipped Files" below.
+
+## Summary
+
+- **Findings to act on: 2** (2 high)
+- By category: 2 bug
+- **Quality gate: FAILED.** 2 findings cross a configured threshold. Thresholds applied: maxCritical 0, maxHigh 0, maxMedium null, failOnProviderError true, failOnNewOnly true.
+- Unresolved, needing a human decision: 1
+- Candidates proposed and then rejected: 0
+
+## Bounds that bound
+
+- cost-unavailable
+
+## Actionable Findings (2)
+
+Ordered by severity, then by path and line. Each one survived an attempt to refute it, and the evidence it rests on is printed underneath so you can disagree with it.
+
+### HIGH: A negative percent is accepted
+
+- **This finding is why the quality gate failed.**
+- Location: \`src/pricing.ts:5\` (file side)
+- Category: bug
+- ID: \`find_f6346826ca25577a0a8cf727\`
+- Baseline: new
+- Survived refutation (proved): No guard rejects a negative percent.
+  - Check active-refutation: passed - The refuter was asked to disprove this candidate using only the code, diff ranges, and evidence it was shown. The verdict and its reasoning are recorded above. (evidence: ev_93d6de76ab1f362b73df908c, ev_876300865b8a47596fda53a5)
+- Evidence this rests on:
+  - citation at \`src/pricing.ts:5\`: // BUG: negative percents are not rejected
+  - model-rationale at \`src/pricing.ts:5\`: No guard rejects a negative percent.
+- Suggested fix (never applied automatically): Reject a percent outside 0..100 before computing the factor.
+- Fix evidence: ev_93d6de76ab1f362b73df908c, ev_876300865b8a47596fda53a5
+- Fix edits:
+  - \`src/pricing.ts:5-6\`: \`if (percent < 0 || percent > 100) throw new RangeError("percent") return order.total * factor\`
+
+Nothing rejects a negative percent, so a negative discount raises the order total.
+
+### HIGH: Discount is multiplied by a hundred
+
+- **This finding is why the quality gate failed.**
+- Location: \`src/pricing.ts:6\` (file side)
+- Category: bug
+- ID: \`find_4945c4f21fdda7b2b02453ec\`
+- Baseline: new
+- Survived refutation (proved): The added return statement multiplies the discounted total by a hundred.
+  - Check active-refutation: passed - The refuter was asked to disprove this candidate using only the code, diff ranges, and evidence it was shown. The verdict and its reasoning are recorded above. (evidence: ev_a2aa08b8d16b6efb0ac4e901, ev_614706ea05c49d24a167664a)
+- Evidence this rests on:
+  - citation at \`src/pricing.ts:6\`: return order.total \\* factor \\* 100
+  - model-rationale at \`src/pricing.ts:6\`: The added return statement multiplies the discounted total by a hundred.
+- Suggested fix (never applied automatically): Return the discounted total without the stray factor of a hundred.
+- Fix evidence: ev_a2aa08b8d16b6efb0ac4e901, ev_614706ea05c49d24a167664a
+- Fix edits:
+  - \`src/pricing.ts:6-6\`: \`return order.total * factor\`
+
+applyDiscount multiplies the discounted total by 100, so every caller receives a total a hundred times too large.
+
+## Unresolved - Needs Human Decision (1)
+
+These candidates were neither proved nor disproved from the available context, most often because the deciding evidence sits outside the files this run could reach. They do not affect the quality gate. Confirm or dismiss each one — skipping this section takes the strict half of a precision-first design without the half that compensates for it.
+
+### MEDIUM: Trimming the audit message drops meaningful whitespace
+
+- Location: \`src/audit.ts:2\` (file side)
+- Category: bug
+- ID: \`find_791ed6005e866872f1a960fb\`
+- Proposed by: review-agent
+- Why unresolved: needs-more-evidence - Whether any caller depends on the untrimmed message could not be settled from the files this run could reach.
+- Evidence gathered so far:
+  - citation: audit: \${message.trim\\(\\)}
+  - model-rationale: Whether any caller depends on the untrimmed message could not be settled from the files this run could reach.
+
+auditLine now trims the message, so a caller that pads it loses the padding.
+
+## Rejected Candidates (0)
+
+Nothing was proposed and then thrown out. On a run that also reports no finding, that means discovery proposed nothing — not that everything proposed was sound.
+
+## What Discovery Produced
+
+The reviewer made 2 discovery call(s) and proposed 3 finding(s), of which 3 became candidates for adjudication.
+
+- Dropped before adjudication: 0
+- Suppressed as duplicates or over a cap: 0 (0 by id, 0 by location, 0 over the per-call cap, 0 merged as the same defect)
+- Packets split because the provider refused the input: 0
+
+Read this next to the rejected-candidate count above. A quiet report with a low proposed count is a discovery problem; a quiet report with a high one is an adjudication problem.
+
+## Refutation Results (3)
+
+The complete adjudication ledger, one entry per candidate, so refutation can be audited without opening the JSON. The entries behind admitted findings are repeated on those findings above.
+
+- \`refute_da36359249a5ccc8\`: needs-more-evidence for \`cand_2ca695e6f29a361e\` - Whether any caller depends on the untrimmed message could not be settled from the files this run could reach.
+  - Refutation evidence: ev_574640cde30d4900dc36b7ad, ev_fa0dbf7170dd468d2c626171
+  - Refutation check active-refutation: unknown - The refuter was asked to disprove this candidate using only the code, diff ranges, and evidence it was shown. The verdict and its reasoning are recorded above. evidence: ev_574640cde30d4900dc36b7ad, ev_fa0dbf7170dd468d2c626171
+- \`refute_29e43976cc46d741\`: proved for \`cand_9270734a144b6b68\` - The added return statement multiplies the discounted total by a hundred.
+  - Refutation evidence: ev_a2aa08b8d16b6efb0ac4e901, ev_614706ea05c49d24a167664a
+  - Refutation check active-refutation: passed - The refuter was asked to disprove this candidate using only the code, diff ranges, and evidence it was shown. The verdict and its reasoning are recorded above. evidence: ev_a2aa08b8d16b6efb0ac4e901, ev_614706ea05c49d24a167664a
+- \`refute_0e516ee9189f968b\`: proved for \`cand_b16ff5aa10247b46\` - No guard rejects a negative percent.
+  - Refutation evidence: ev_93d6de76ab1f362b73df908c, ev_876300865b8a47596fda53a5
+  - Refutation check active-refutation: passed - The refuter was asked to disprove this candidate using only the code, diff ranges, and evidence it was shown. The verdict and its reasoning are recorded above. evidence: ev_93d6de76ab1f362b73df908c, ev_876300865b8a47596fda53a5
+
+## Skipped Files (1)
+
+Part of the change set, never reviewed. Nothing above says anything about these files.
+
+- \`.codereviewer/context/PROJ-1.md\`: excluded
+
+## Changed source files with no test file in this change (2)
+
+A free, deterministic observation about the change, and **not a finding**. It carries no severity, counts toward no threshold, and did not affect the quality gate above. It pairs a changed source file with a changed test file by each language's own naming and location convention, and it looked at nothing outside the files this change touched.
+
+**A file listed here may already be covered completely by an existing test that this change had no reason to touch — this signal cannot see that test, and does not claim the file is untested.** Read the list as "no test moved with these files", never as "these files have no tests".
+
+Of 2 changed source files this question could be asked of, 0 paired with a test file in this change. The change also touched 0 test-side files; a test file pairs by name only when it sits beside the code it exercises, so a change that keeps its tests in a tree of their own pairs nothing here.
+
+2 further changed files were not asked the question at all: 1 in a language this engine does not analyse, 1 never read for this run. They are unknown, not untested, and are not listed below.
+
+- \`src/audit.ts\`
+- \`src/pricing.ts\`
+
+## Cost And Timing
+
+- Duration: <duration>
+- Cost: unavailable (token counts or model prices were missing)
+- Input tokens: 60 (0 cached)
+- Output tokens: 30
+
+"
+`;
+
+exports[`review end to end > the pull-request comment puts what to fix above the fold and the engine below it 1`] = `
+"<!-- codereviewer:review-summary:default -->
+
+## Code review: quality gate failed, 2 findings to read
+
+_An automated review. It misses real defects, and some of what it reports will not hold up — read each finding as something to check, and an empty list as "this search found nothing", not "there is nothing to find". The measured rates, and the model they were measured on, are under "How this review was produced" below._
+
+### Intent
+
+2 obligations read from the description: 0 evidenced by the change, 2 not.
+
+Nothing in this change evidences these. That is a statement about the diff, not a claim that the work is undone — partial work is normal, and an obligation satisfied elsewhere leaves no trace here.
+
+- The discount must never exceed the order total. _(not-evidenced)_
+- Reject a negative percent. _(not-evidenced)_
+
+Neither obligation is evidenced by this change: the cap and the guard are both still missing.
+
+### Impact
+
+2 changed symbols, 2 production references outside the defining file.
+
+| Symbol | Defined in | Callers | Test callers |
+| --- | --- | --- | --- |
+| \`applyDiscount\` | \`src/pricing.ts\` | 2 | 0 |
+
+### Findings (2)
+
+2 high.
+
+- **high** · bug · \`src/pricing.ts:6\` **(blocks the gate)**
+  Discount is multiplied by a hundred
+  applyDiscount multiplies the discounted total by 100, so every caller receives a total a hundred times too large.
+- **high** · bug · \`src/pricing.ts:5\` **(blocks the gate)**
+  A negative percent is accepted
+  Nothing rejects a negative percent, so a negative discount raises the order total.
+
+### Worth a look (1)
+
+Open questions, not verdicts: this review could not settle these from what it could see. They do not affect the quality gate and are not posted as inline comments — confirm or dismiss each one yourself.
+
+- **medium** · bug · \`src/audit.ts:2\`
+  Trimming the audit message drops meaningful whitespace
+  _Whether any caller depends on the untrimmed message could not be settled from the files this run could reach._
+
+<details><summary>How this review was produced</summary>
+
+**How reliable this is**
+
+_Diff-scoped search, measured on \`openai/gpt-5.3-codex\`. On a 37-case real-repository corpus it finds about **7 in 10** defects inside the diff and **0 of 27** of those outside it, and about **19 in 20** of what it does report holds up. An empty list means this search found nothing, not that there is nothing to find._
+
+**What was checked against each finding**
+
+- \`src/pricing.ts:6\` — Survived refutation — proved: The added return statement multiplies the discounted total by a hundred.
+- \`src/pricing.ts:5\` — Survived refutation — proved: No guard rejects a negative percent.
+
+**Pipeline**
+
+| Stage | Role | Result | What it contributes |
+| --- | --- | --- | --- |
+| Review | blocking | blocked | Evidence-backed defects in the changed code. Blocks on the quality gate. |
+
+**Run details**
+
+- Head commit: \`<sha40>\`
+- Run id: \`run-<id>\`
+- Coverage: complete
+- Candidates: 3 examined, 3 admitted, 0 rejected, 0 merged as duplicates before that — reasons for each are in the run artifacts.
+- Skipped files: 1
+- Warning: cost-unavailable
+- Inline comments posted: 2
+
+</details>"
+`;
