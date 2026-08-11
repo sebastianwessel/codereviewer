@@ -24,6 +24,7 @@ import type {
   RejectedFinding,
   ReviewReport
 } from '../../shared/contracts/index.js'
+import { isUnrecoveredProviderIssue } from '../admission/index.js'
 import {
   adjustedPrecisionInTwenty,
   inDiffRecallInTen,
@@ -326,13 +327,31 @@ const renderGate = (report: ReviewReport): readonly string[] => {
   const against =
     thresholds.length === 0 ? '' : ` Thresholds applied: ${thresholds}.`
 
-  return gate.passed
-    ? [
-        `- **Quality gate: no reported finding crossed a configured threshold.**${against} That is a comparison against what this run found, not a judgement about the change.`
-      ]
-    : [
-        `- **Quality gate: FAILED.** ${pluralize(gate.failingFindingIds.length, 'finding crosses', 'findings cross')} a configured threshold.${against}`
-      ]
+  if (gate.passed) {
+    return [
+      `- **Quality gate: no reported finding crossed a configured threshold.**${against} That is a comparison against what this run found, not a judgement about the change.`
+    ]
+  }
+
+  // A gate failed by an unrecovered provider issue names NO finding, because the
+  // failure is that findings are missing (see `evaluateQualityGate`). Rendered
+  // through the findings sentence anyway, that printed "0 findings cross a
+  // configured threshold": a blocked merge, zero of the stated cause shown, and
+  // the real cause sitting in a Provider Issues section far below with nothing
+  // connecting the two.
+  const unrecoveredIssueCount = report.providerIssues.filter((issue) =>
+    isUnrecoveredProviderIssue(issue)
+  ).length
+
+  if (gate.failingFindingIds.length === 0 && unrecoveredIssueCount > 0) {
+    return [
+      `- **Quality gate: FAILED because the search did not finish.**${against} ${pluralize(unrecoveredIssueCount, 'provider issue was', 'provider issues were')} not recovered, so part of this change was never reviewed and no finding count can stand for what is missing. See Provider Issues below.`
+    ]
+  }
+
+  return [
+    `- **Quality gate: FAILED.** ${pluralize(gate.failingFindingIds.length, 'finding crosses', 'findings cross')} a configured threshold.${against}`
+  ]
 }
 
 // What the search covered, so a reader can discount it. Coverage is deliberately

@@ -22,6 +22,7 @@ import {
   readBudgetExhaustedCondition,
   searchBudgetExhaustedCondition
 } from './expected-conditions.js'
+import { sliceUtf8Bytes, utf8ByteLength } from '../../shared/text/utf8-bytes.js'
 import { createLineMatcher, type ContextRetrievalMatchMode } from './line-matching.js'
 import { resolveEligibleExistingPath, type RequestedEntryKind } from './path-safety.js'
 
@@ -253,8 +254,16 @@ export const createContextRetriever = (input: {
                 endLine === undefined ? lines.length : endLine
               )
               .join('\n')
-      const included = Buffer.from(ranged).subarray(0, budget.maxBytesPerRead)
-      const includedText = included.toString('utf8')
+      // Cut on a CHARACTER boundary, through the shared helper, not by slicing
+      // the encoded buffer. A buffer cut landing inside a multi-byte sequence
+      // decodes to U+FFFD — so the model was handed a line of "real source"
+      // ending in a replacement character, and a two-byte character cut in half
+      // was replaced by a three-byte U+FFFD, making `bytesIncluded` exceed
+      // `bytesConsidered` and `createContextLedgerEntry` throw. That reached the
+      // model as an unexplained tool failure rather than a disclosed condition.
+      // `sliceUtf8Bytes` exists for exactly this and its two sibling consumers
+      // already use it; this was the last private copy.
+      const includedText = sliceUtf8Bytes(ranged, budget.maxBytesPerRead)
       const rangeNote =
         startLine === undefined && endLine === undefined
           ? ''
@@ -276,8 +285,8 @@ export const createContextRetriever = (input: {
         ...(servedStartLine === undefined ? {} : { startLine: servedStartLine }),
         reason: 'context-retrieval-read',
         content: includedText,
-        bytesConsidered: Buffer.byteLength(ranged),
-        bytesIncluded: Buffer.byteLength(includedText),
+        bytesConsidered: utf8ByteLength(ranged),
+        bytesIncluded: utf8ByteLength(includedText),
         summary: `Read ${portablePath} for investigation context.${rangeNote} File has ${lines.length} lines. Preview hash ${sha256(
           linePreview(includedText)
         ).slice(0, 16)}.`,

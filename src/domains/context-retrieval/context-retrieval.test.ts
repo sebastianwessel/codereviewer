@@ -112,6 +112,39 @@ describe('context retrieval', () => {
     }
   })
 
+  // The mediated read kept its own `Buffer.subarray(0, n).toString('utf8')`
+  // truncation, which is the exact construction `sliceUtf8Bytes` was written to
+  // replace: a cut landing inside a multi-byte sequence decodes to U+FFFD. Two
+  // consequences, both live once `reduceReadBudget` tightens the cap on the spec
+  // 28 overflow retry. The model is handed a line ending in a replacement
+  // character, presented as real source; and a two-byte character cut in half is
+  // replaced by a THREE-byte U+FFFD, so `bytesIncluded` exceeds `bytesConsidered`
+  // and `createContextLedgerEntry` throws — surfacing to the model as an
+  // unexplained tool failure rather than a disclosed condition.
+  test('truncates a read on a character boundary, never mid-sequence', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'codereviewer-read-truncate-'))
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true })
+      // 10 ASCII bytes followed by a 2-byte character: cutting at 11 bytes lands
+      // between that character's two bytes.
+      await writeFile(join(root, 'src', 'wide.ts'), `${'a'.repeat(10)}é`)
+      const retriever = createContextRetriever({
+        repositoryRoot: root,
+        budget: { maxBytesPerRead: 11 }
+      })
+
+      const result = await retriever.readRepositoryFile({ path: 'src/wide.ts' })
+
+      expect(result.content).toBe('a'.repeat(10))
+      expect(result.ledgerEntry.bytesIncluded).toBeLessThanOrEqual(
+        result.ledgerEntry.bytesConsidered
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('rejects traversal and enforces read budgets', async () => {
     const root = await createTempRepo()
 

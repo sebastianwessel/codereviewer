@@ -31,7 +31,12 @@ const severityThresholdKey: Readonly<
 // from, meaning some part of the review did not happen. `recovered` is optional
 // on the contract, and an issue that does not say must be read as unrecovered --
 // the same rule the rest of this gate follows for an unknown baseline status.
-const isUnrecovered = (issue: {
+// Exported because the review report has to say WHY the gate failed, and the
+// gate result cannot tell it: a provider-error failure names no finding, so a
+// reader shown `failingFindingIds` alone was told "0 findings cross a threshold".
+// The report asks this same predicate rather than keeping its own copy — two
+// readings of "unrecovered" would eventually disagree about which run is blocked.
+export const isUnrecoveredProviderIssue = (issue: {
   readonly recovered?: boolean | undefined
 }): boolean => issue.recovered !== true
 
@@ -91,7 +96,9 @@ export const evaluateQualityGate = (
   const failOnProviderError = input.thresholds.failOnProviderError ?? true
   const unrecoveredProviderIssues =
     failOnProviderError &&
-    (input.providerIssues ?? []).some((issue) => isUnrecovered(issue))
+    (input.providerIssues ?? []).some((issue) =>
+      isUnrecoveredProviderIssue(issue)
+    )
 
   return {
     // An unrecovered provider issue fails the gate on its own: it has no

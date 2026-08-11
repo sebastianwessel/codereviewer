@@ -67,11 +67,29 @@ const buildProvider = (config: ContextProviderConfig): ContextProvider =>
     ? createInboxProvider(config)
     : createChangedFilesProvider(config)
 
+// Every string on a fragment that a model or a report can see.
+//
+// `origin` is one of them and was missed. Both summarizers use it as the section
+// heading whenever a fragment carries no title (`digest-summarizer.ts`,
+// `model-summarizer.ts`: `fragment.title ?? fragment.origin`), it is the citation
+// key the intent-fulfilment lane asks a model to answer with, and for the inbox
+// provider it is assembled out of untrusted frontmatter —
+// `inbox:${metadata.source}/${metadata.id}`. So a credential written in an inbox
+// file's frontmatter reached the summarizer prompt and the injected brief
+// verbatim, while the identical string in that file's body came out
+// `[REDACTED]`: two paths carrying the same bytes to the same model, one of them
+// redacting. Spec 07 names ingestion as a redaction point precisely so this
+// cannot happen, and `gatherContextFragments` says it redacts every fragment.
+//
+// `metadata` is deliberately not redacted: nothing renders it, and redacting a
+// map nothing reads would be a claim this module cannot keep. If a consumer for
+// it appears, it belongs here.
 const redactFragment = (
   fragment: ContextFragment,
   redact: (value: string) => string
 ): ContextFragment => ({
   ...fragment,
+  origin: redact(fragment.origin),
   ...(fragment.title === undefined ? {} : { title: redact(fragment.title) }),
   body: redact(fragment.body)
 })

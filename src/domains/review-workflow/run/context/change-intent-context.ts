@@ -367,11 +367,28 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     ...(input.signal === undefined ? {} : { signal: input.signal })
   })
 
-  // Kept separate from `warnings`: `failedProviders` feeds step/debug metrics
-  // that count ingestion providers specifically, and the summarizer-unavailable
-  // warning (prepended below) is not one of those providers.
+  // Kept separate from `warnings`: these counts feed step/debug metrics that count
+  // ingestion providers specifically, and the summarizer-unavailable warning
+  // (prepended below) is not one of those providers.
+  //
+  // Counted from the METRICS, not from the length of the warning list. Spec 11
+  // gives `failedProviders` one meaning — "a provider that fails at run time" —
+  // and states in the same breath that "a provider that finds nothing is not a
+  // failure and must not be worded as one". The warning list holds all three
+  // unused cases, so deriving the count from it reported every quiet provider as
+  // a failure; with the providers on by default that is the ordinary shape of a
+  // repository carrying no written intent, and `observability.json` recorded it
+  // as two failures on every such run. `providerStatus` below already draws this
+  // exact line for the per-provider event.
   const providerWarnings = warningsForUnusedProviders(result.providerMetrics)
-  const failedProviders = providerWarnings.length
+  const failedProviders = result.providerMetrics.filter(
+    (metric) => metric.failed
+  ).length
+  // Providers that contributed no fragment, for whatever reason — the quantity
+  // the warning list actually has one entry per. Reported alongside rather than
+  // folded in, because "nothing failed and nothing was found" and "something
+  // broke" call for different actions.
+  const unusedProviders = providerWarnings.length
 
   // Spec 11 requires per-provider observability. A single aggregate step reduced
   // every provider to one failure COUNT, so "which provider went quiet" and "which
@@ -412,7 +429,7 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     ),
     ...warningForSummarizerFallback(result.summarizerFallbackReason),
     ...providerWarnings,
-    // Deliberately not folded into `providerWarnings`: `failedProviders` counts
+    // Deliberately not folded into `providerWarnings`: `unusedProviders` counts
     // providers that gave nothing, and a bounded provider gave something.
     ...warningsForBoundedProviders(result.providerMetrics)
   ]
@@ -430,6 +447,7 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     step.end({
       fragmentCount: result.fragmentCount,
       failedProviders,
+      unusedProviders,
       injected: 0,
       summaryInputBytes: gatheredBytes,
       // NULL, not 0 or false. No brief exists, so neither its size nor whether it
@@ -440,40 +458,66 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     })
     input.logger.debug('Context ingestion produced no brief.', {
       fragment_count: result.fragmentCount,
-      failed_providers: failedProviders
+      failed_providers: failedProviders,
+      unused_providers: unusedProviders
     })
     return { assembledContext: input.assembledContext, usage, warnings }
   }
 
   const brief = result.brief
   const briefBytes = Buffer.byteLength(brief.text, 'utf8')
-  const ledgerEntry: ContextLedgerEntry = createContextLedgerEntry({
-    kind: 'support-signal-output',
-    decision: ledgerDecisionFor(brief.mode, brief.truncated),
-    reason: 'task-context-change-intent',
-    bytesConsidered: Math.max(gatheredBytes, briefBytes),
-    bytesIncluded: briefBytes,
-    content: brief.text
-  })
-
-  const changeIntentDocument = {
-    kind: 'change-intent' as const,
-    content: brief.text,
-    ledgerEntryId: ledgerEntry.id
-  }
-
+  // One ledger entry PER TASK, because the brief is sent per task.
+  //
+  // It used to be one entry for the whole run, carrying no `taskId`, while the
+  // same document was appended to every task's review context — so a run with
+  // twenty tasks sent the brief twenty times and accounted for it once, and any
+  // "how much context did this run send" answer read low by nineteen copies of
+  // it. Its two siblings already do this: the task diff is ledgered inside the
+  // per-task loop ("Recorded per task because that is how many times they are
+  // sent", `context.ts`) and the analyzer-signal document carries
+  // `taskId: task.id`.
+  //
+  // `bytesConsidered` is the brief's own size, not the summarizer's input. What
+  // this task considered was the brief, and it took all of it; the compression
+  // the summarizer performed is a property of the RUN, not of any task, and
+  // repeating `gatheredBytes` on every entry would overstate it by the task
+  // count. Spec 11 already requires that pair on the ingestion step, where it is
+  // reported once as `summaryInputBytes`/`briefBytes` — see `step.end` below.
+  // `decision` still carries whether the brief was summarized or truncated.
+  const briefLedgerEntries: ContextLedgerEntry[] = []
   const tasks: readonly WorkflowReviewTask[] = input.assembledContext.tasks.map(
-    (task) =>
-      WorkflowReviewTaskSchema.parse({
+    (task) => {
+      const ledgerEntry = createContextLedgerEntry({
+        kind: 'support-signal-output',
+        taskId: task.id,
+        decision: ledgerDecisionFor(brief.mode, brief.truncated),
+        reason: 'task-context-change-intent',
+        bytesConsidered: briefBytes,
+        bytesIncluded: briefBytes,
+        content: brief.text
+      })
+
+      briefLedgerEntries.push(ledgerEntry)
+
+      return WorkflowReviewTaskSchema.parse({
         ...task,
-        reviewContext: [...task.reviewContext, changeIntentDocument],
+        reviewContext: [
+          ...task.reviewContext,
+          {
+            kind: 'change-intent' as const,
+            content: brief.text,
+            ledgerEntryId: ledgerEntry.id
+          }
+        ],
         contextEntryIds: [...task.contextEntryIds, ledgerEntry.id]
       })
+    }
   )
 
   step.end({
     fragmentCount: result.fragmentCount,
     failedProviders,
+    unusedProviders,
     injected: tasks.length,
     summaryInputBytes: gatheredBytes,
     briefBytes,
@@ -484,6 +528,7 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
   input.logger.debug('Context ingestion completed.', {
     fragment_count: result.fragmentCount,
     failed_providers: failedProviders,
+    unused_providers: unusedProviders,
     brief_bytes: briefBytes,
     summary_mode: brief.mode
   })
@@ -492,7 +537,10 @@ export const prepareReviewRunnerChangeIntentContext = async (input: {
     assembledContext: {
       ...input.assembledContext,
       tasks,
-      contextLedger: [...input.assembledContext.contextLedger, ledgerEntry]
+      contextLedger: [
+        ...input.assembledContext.contextLedger,
+        ...briefLedgerEntries
+      ]
     },
     usage,
     warnings

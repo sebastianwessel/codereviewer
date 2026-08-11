@@ -305,10 +305,14 @@ describe('neutral review-comment drafts', () => {
     expect(drafts[0]!.body.length).toBeLessThanOrEqual(REVIEW_COMMENT_BODY_MAX)
   })
 
-  // The counterweight: a finding with no eligible replacement must NOT claim one
-  // was computed and withheld. A note that fires when nothing was lost is a note
-  // readers learn to skip.
-  test('a finding whose fix was never suggestion-eligible says nothing about one', async () => {
+  // `none` conflated two situations: a finding with no fix edit at all (nothing
+  // lost, so a note would be noise) and a finding whose concrete edits simply do
+  // not fit the one-edit-one-line suggestion shape. The second is the COMMON one
+  // — discovery never sets `endLine`, so the target range is always a single
+  // line, while the refuter and the fix lane both attach edits with arbitrary
+  // spans — and it lost a real, computed replacement with the body still reading
+  // "Suggested fix: <summary>" and nothing pointing at where the replacement went.
+  test('says so when concrete edits exist but none can be offered as a suggestion', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
     const drafts = await buildReviewCommentDrafts(
@@ -331,6 +335,40 @@ describe('neutral review-comment drafts', () => {
                 { path: 'src/app.ts', startLine: 12, endLine: 13, replacement: 'a' },
                 { path: 'src/app.ts', startLine: 20, endLine: 20, replacement: 'b' }
               ]
+            }
+          }
+        ]
+      },
+      { readCurrentFile }
+    )
+
+    expect(drafts[0]!.suggestion).toBeUndefined()
+    expect(drafts[0]!.body).toContain('was computed for this finding')
+    expect(drafts[0]!.body).toContain('fixProposal.edits')
+  })
+
+  // The counterweight, kept: a finding with NO replacement at all must not claim
+  // one was computed and withheld. A note that fires when nothing was lost is a
+  // note readers learn to skip.
+  test('a finding with no fix edit at all says nothing about a withheld one', async () => {
+    const report = createReportFixture()
+    const finding = report.admittedFindings[0]!
+    const drafts = await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [
+          {
+            ...finding,
+            location: {
+              path: 'src/app.ts',
+              startLine: 12,
+              endLine: 13,
+              side: 'new'
+            },
+            fixProposal: {
+              summary: 'Rework the branch by hand.',
+              evidenceIds: finding.admissionEvidenceIds,
+              safety: 'manual-review'
             }
           }
         ]

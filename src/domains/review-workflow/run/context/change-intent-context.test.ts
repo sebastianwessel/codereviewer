@@ -325,6 +325,85 @@ describe('prepareReviewRunnerChangeIntentContext — provider bounds', () => {
   })
 })
 
+// The ledger's one job is to say which bytes reached the model. The brief is
+// injected into EVERY task, so a run with N tasks sends it N times — and it was
+// recorded once, with no `taskId`, so neither the run total nor any per-task
+// figure could account for it. Its two siblings already get this right: the task
+// diff is ledgered inside the per-task loop ("Recorded per task because that is
+// how many times they are sent", context.ts) and the analyzer-signal document
+// carries `taskId: task.id`.
+describe('prepareReviewRunnerChangeIntentContext — ledger accounting', () => {
+  let root: string
+
+  beforeEach(async () => {
+    root = await mkdtemp(path.join(tmpdir(), 'change-intent-ledger-'))
+    await mkdir(path.join(root, '.codereviewer', 'context'), { recursive: true })
+    await writeFile(
+      path.join(root, '.codereviewer', 'context', 'ticket.md'),
+      '# Ticket\n\nRotate the session token on sign-in.\n'
+    )
+  })
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true })
+  })
+
+  const taskFixture = (id: string, filePath: string) => ({
+    id,
+    round: 1,
+    kind: 'file' as const,
+    paths: [filePath],
+    factIds: [],
+    evidenceIds: [],
+    candidateIds: [],
+    contextEntryIds: [],
+    priority: 1,
+    reviewContext: [],
+    instructions: []
+  })
+
+  test('ledgers the injected brief once per task that carries it', async () => {
+    const config = CodeReviewerConfigSchema.parse({
+      contextSources: {
+        enabled: true,
+        providers: [{ type: 'inbox', dir: '.codereviewer/context' }],
+        summary: { mode: 'digest' }
+      }
+    })
+
+    const result = await prepareReviewRunnerChangeIntentContext({
+      repositoryRoot: root,
+      config,
+      assembledContext: {
+        ...emptyAssembledContext,
+        tasks: [taskFixture('task_a', 'a.ts'), taskFixture('task_b', 'b.ts')]
+      },
+      sourceFiles: [],
+      environment: {},
+      observability: createNoContentEventRecorder(),
+      logger: createCapturingLogger().logger
+    })
+
+    const briefEntries = result.assembledContext.contextLedger.filter(
+      (entry) => entry.reason === 'task-context-change-intent'
+    )
+
+    expect(briefEntries.map((entry) => entry.taskId)).toEqual([
+      'task_a',
+      'task_b'
+    ])
+    // Each task's document points at its OWN entry, so a per-task reader can
+    // resolve the bytes that task sent.
+    expect(
+      result.assembledContext.tasks.map(
+        (task) =>
+          task.reviewContext.find((entry) => entry.kind === 'change-intent')
+            ?.ledgerEntryId
+      )
+    ).toEqual(briefEntries.map((entry) => entry.id))
+  })
+})
+
 // Spec 11 "Observability": a PER-PROVIDER no-content event carrying the origin
 // label, bytes gathered, status and duration, plus the summarizer's input byte
 // count and whether truncation occurred. One aggregate step reduced every provider
@@ -483,6 +562,48 @@ describe('prepareReviewRunnerChangeIntentContext — no-content observability', 
         summaryInputBytes: 0,
         briefBytes: null,
         summaryTruncated: null
+      }
+    })
+  })
+
+  // Spec 11 "Observability And Errors": a provider that fails at run time is
+  // "recorded as a failed provider in the `context_ingestion` observability step
+  // (`failedProviders` count)", while "a provider that finds nothing is not a
+  // failure and must not be worded as one". The count was derived from the length
+  // of the unused-provider WARNING list, which holds all three cases — so the
+  // default shape of an ordinary repository (providers on, no written intent)
+  // reported every provider as failed.
+  test('counts a provider that found nothing as empty, not as failed', async () => {
+    const snapshot = await runWith({
+      providers: [{ type: 'inbox', dir: '.codereviewer/context' }]
+    })
+    const ingestionEnd = snapshot.events.find(
+      (event) => event.type === 'step-ended' && event.step === 'context_ingestion'
+    )
+
+    expect(ingestionEnd).toMatchObject({
+      attributes: {
+        failedProviders: 0,
+        unusedProviders: 1
+      }
+    })
+  })
+
+  test('still counts a provider that threw as failed', async () => {
+    // `dir` points at a path that is not a directory, so the provider throws.
+    await writeFile(path.join(root, 'not-a-directory'), 'x\n')
+
+    const snapshot = await runWith({
+      providers: [{ type: 'inbox', dir: 'not-a-directory' }]
+    })
+    const ingestionEnd = snapshot.events.find(
+      (event) => event.type === 'step-ended' && event.step === 'context_ingestion'
+    )
+
+    expect(ingestionEnd).toMatchObject({
+      attributes: {
+        failedProviders: 1,
+        unusedProviders: 1
       }
     })
   })

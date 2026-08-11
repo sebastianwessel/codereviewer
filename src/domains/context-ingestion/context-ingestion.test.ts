@@ -299,6 +299,43 @@ describe('runContextIngestion', () => {
     expect(result.brief?.text).not.toContain('sk-abcdef')
   })
 
+  // Spec 07 requires redaction at "ingestion of external change-intent context,
+  // before it enters the summarizer call, the prompt, or the context ledger", and
+  // this function's own contract says it "redacts every gathered fragment". Only
+  // `title` and `body` were redacted. `origin` is model-facing — both summarizers
+  // use it as the section heading whenever a fragment carries no title — and for
+  // the inbox provider it is built out of untrusted frontmatter
+  // (`inbox:${metadata.source}/${metadata.id}`), so a secret written there reached
+  // the summarizer prompt and the injected brief verbatim while the identical
+  // string in the body came out `[REDACTED]`.
+  test('redacts the fragment origin, which is the heading of an untitled fragment', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-origin-'))
+
+    try {
+      await mkdir(path.join(root, 'inbox'), { recursive: true })
+      await writeFile(
+        path.join(root, 'inbox', 'ticket.md'),
+        '---\nsource: jira\nid: sk-abcdef0123456789abcdef0123\n---\nRotate the token.\n'
+      )
+
+      const result = await runContextIngestion({
+        providers: [{ type: 'inbox', dir: 'inbox', maxFiles: 10, maxFileBytes: 1000 }],
+        repositoryRoot: root,
+        changedFiles: [],
+        summarizer: createDigestSummarizer(),
+        maxBytes: 4000,
+        redact: (value) => value.replace(/sk-[A-Za-z0-9]+/gu, '[REDACTED]')
+      })
+
+      expect(result.brief?.text).not.toContain('sk-abcdef')
+      expect(result.brief?.origins).not.toContain(
+        'inbox:jira/sk-abcdef0123456789abcdef0123'
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('a failing provider is non-fatal and recorded as failed', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'codereviewer-fail-'))
 

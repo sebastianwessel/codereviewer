@@ -31,6 +31,7 @@ export {
 } from './baseline-writer.js'
 export {
   evaluateQualityGate,
+  isUnrecoveredProviderIssue,
   QualityGateThresholdsSchema,
   type QualityGateThresholds
 } from './quality-gate.js'

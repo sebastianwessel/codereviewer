@@ -165,6 +165,52 @@ describe('Markdown reporter', () => {
     expect(rendered).not.toContain('Passed: yes')
   })
 
+  // A gate failed by an unrecovered provider issue names no finding, because
+  // `evaluateQualityGate`'s own comment says the failure is that findings are
+  // MISSING. The renderer attributed every failure to findings anyway, so a run
+  // whose discovery call errored printed "0 findings cross a configured
+  // threshold" — a blocked merge, with zero of the stated cause shown, and the
+  // real cause in a section far below that the reader has no reason to connect.
+  test('says an incomplete search failed the gate, not zero findings', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      admittedFindings: [],
+      providerIssues: [
+        {
+          code: 'provider_error',
+          stage: 'holistic_review',
+          recovered: false,
+          message: 'The discovery call failed.'
+        }
+      ],
+      qualityGate: {
+        passed: false,
+        failingFindingIds: [],
+        thresholds: { maxHigh: 0, failOnProviderError: true },
+        baselineFilteringApplied: false
+      }
+    })
+
+    expect(rendered).not.toContain('0 findings cross a configured threshold')
+    expect(rendered).toContain('the search did not finish')
+  })
+
+  test('still attributes a gate failure to the findings that caused it', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      qualityGate: {
+        passed: false,
+        failingFindingIds: [report.admittedFindings[0]!.id],
+        thresholds: { maxHigh: 0 },
+        baselineFilteringApplied: false
+      }
+    })
+
+    expect(rendered).toContain('1 finding crosses a configured threshold')
+  })
+
   // Coverage `complete` is a statement that the source reached a model. Printed
   // as a bare status under a passing gate it reads as completeness of the search.
   test('does not present coverage as a completeness claim about defects', () => {

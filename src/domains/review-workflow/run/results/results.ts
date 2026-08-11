@@ -256,9 +256,11 @@ export const prepareReviewRunnerSuccessResult = (
     readonly contextLedger: readonly ContextLedgerEntry[]
     readonly skippedFiles: readonly ReviewReport['skippedFiles'][number][]
     readonly admission: ReviewRunnerAdmissionState
-    readonly resolvedBaselineEntries: readonly NonNullable<
-      ReviewReport['resolvedBaselineEntries']
-    >[number][]
+    // Undefined when the run did not compute it — no baseline to compare
+    // against — which the report must state as absence, never as a zero.
+    readonly resolvedBaselineEntries:
+      | readonly NonNullable<ReviewReport['resolvedBaselineEntries']>[number][]
+      | undefined
     readonly observability?: NoContentEventRecorder | undefined
     readonly logger?: Logger | undefined
   }
@@ -292,9 +294,9 @@ export const prepareReviewRunnerSuccessResult = (
     ...(input.admission.discovery === undefined
       ? {}
       : { discovery: input.admission.discovery }),
-    ...(input.config.baseline.includeResolvedInReport
-      ? { resolvedBaselineEntries: input.resolvedBaselineEntries }
-      : {})
+    ...(input.resolvedBaselineEntries === undefined
+      ? {}
+      : { resolvedBaselineEntries: input.resolvedBaselineEntries })
   })
   const sharedContext = createSharedContextSnapshot({
     analysis: input.analysis,

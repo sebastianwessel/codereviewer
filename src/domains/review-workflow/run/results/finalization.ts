@@ -29,14 +29,30 @@ export const prepareReviewRunFinalization = (
 ): {
   readonly runCost: RunCostSummary
   readonly warnings: readonly string[]
-  readonly resolvedBaselineEntries: readonly FindingFingerprint[]
+  // Undefined means "this run did not compute it", which is a different claim
+  // from an empty array and must stay tellable apart all the way to the report.
+  readonly resolvedBaselineEntries: readonly FindingFingerprint[] | undefined
 } => {
-  const resolvedBaselineEntries = input.config.baseline.includeResolvedInReport
-    ? resolveBaselineFingerprints(
-        input.baselineFingerprints ?? [],
-        input.admittedFindings
-      )
-    : []
+  // No baseline fingerprints means there was nothing to resolve AGAINST — a
+  // configured baseline file that does not exist yet (`run/baseline.ts` returns
+  // undefined on ENOENT), or no baseline at all. `?? []` turned that absence into
+  // a comparison against an empty set, and an empty set resolves nothing, so the
+  // report carried a COMPUTED zero. The pull-request digest reads a computed
+  // empty array as a real zero deliberately, so the comment stated that zero
+  // previously-flagged findings failed to come back — from a run that compared
+  // against nothing, and which said so everywhere else (`baselineStatus:
+  // unknown`, warning `baseline-missing`).
+  //
+  // A baseline that EXISTS and resolves nothing still returns `[]`, because that
+  // one is a measurement.
+  const resolvedBaselineEntries =
+    input.config.baseline.includeResolvedInReport &&
+    input.baselineFingerprints !== undefined
+      ? resolveBaselineFingerprints(
+          input.baselineFingerprints,
+          input.admittedFindings
+        )
+      : undefined
   const runCost = summarizeRunCost({
     providerConfigured: input.config.provider !== undefined,
     ...(input.config.provider === undefined

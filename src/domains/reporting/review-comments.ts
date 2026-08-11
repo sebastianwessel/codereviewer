@@ -131,8 +131,17 @@ export type ReviewCommentFileReader = (
 // arrived so NOTHING was verified. Both withhold the suggestion — absence of a
 // check is not a passing check — but they are different facts, and the reader is
 // told which one happened.
+// `none` means the finding carried NO replacement, so nothing was lost.
+// `not-representable` means it carried one and this comment cannot render it —
+// the two used to be one value, and the second is the common case, not the
+// exotic one: discovery never sets `endLine`, so a comment's target range is
+// always a single line, while both producers of `fixProposal.edits` (the
+// refuter, and the fix lane) attach edits with whatever span the model proposed.
+// A concrete, computed replacement was therefore dropped in silence under a body
+// that still read "Suggested fix: <summary>".
 type SuggestionOutcome =
   | { readonly kind: 'none' }
+  | { readonly kind: 'not-representable' }
   | { readonly kind: 'unchecked' }
   | { readonly kind: 'stale' }
   | { readonly kind: 'applies'; readonly replacement: string }
@@ -150,7 +159,14 @@ const suggestionOutcomeFor = async (
   const eligible = eligibleSuggestion(finding, targetRange)
 
   if (eligible === undefined) {
-    return { kind: 'none' }
+    // Which of the two absences this is decides whether the reader is owed a
+    // note. Asked of the edits themselves, not of `eligible`, because every
+    // reason `eligibleSuggestion` refuses — several edits, a span wider than the
+    // comment's line, a replacement carrying a fence — leaves the replacement
+    // sitting in the report where the reader can still use it.
+    return (finding.fixProposal?.edits ?? []).length === 0
+      ? { kind: 'none' }
+      : { kind: 'not-representable' }
   }
 
   if (readCurrentFile === undefined) {
@@ -195,6 +211,13 @@ const WITHHELD_RECORDED_IN_REPORT =
 const SUGGESTION_WITHHELD_TOO_LARGE = `A concrete apply-ready replacement was computed for this finding but does not fit a review comment. ${WITHHELD_RECORDED_IN_REPORT}`
 const SUGGESTION_WITHHELD_STALE = `A concrete replacement was computed for this finding but no longer applies to the file's current contents, so it is not offered as a one-click apply. ${WITHHELD_RECORDED_IN_REPORT}`
 const SUGGESTION_WITHHELD_UNCHECKED = `A concrete replacement was computed for this finding but could not be checked against the file's current contents, so it is not offered as a one-click apply. ${WITHHELD_RECORDED_IN_REPORT}`
+// The fourth reason, and the one that fires most: the replacement does not have
+// the shape a review comment can carry (more than one edit, or a span other than
+// the single line this comment is anchored to). Worded as "cannot be offered
+// here" rather than as a doubt about the edit, because unlike `stale` and
+// `unchecked` nothing is known to be wrong with it — it was simply never checked,
+// so the sentence must not imply it was.
+const SUGGESTION_WITHHELD_NOT_REPRESENTABLE = `A concrete replacement was computed for this finding but does not have the shape a review comment can carry — it spans lines other than this comment's, or is more than one edit — so it is not offered as a one-click apply and was not checked against the file. ${WITHHELD_RECORDED_IN_REPORT}`
 
 // What the body says about a replacement it is not carrying. `none` says nothing:
 // a note that fires when nothing was lost is a note readers learn to skip.
@@ -203,6 +226,8 @@ const withheldNoteFor = (outcome: SuggestionOutcome): string | undefined => {
   switch (outcome.kind) {
     case 'none':
       return undefined
+    case 'not-representable':
+      return SUGGESTION_WITHHELD_NOT_REPRESENTABLE
     case 'unchecked':
       return SUGGESTION_WITHHELD_UNCHECKED
     case 'stale':
