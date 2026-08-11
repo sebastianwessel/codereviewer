@@ -367,6 +367,33 @@ Keys are defined in `04-configuration-and-providers.md`:
 - Claim and finding inputs are untrusted and cannot alter admission, severity,
   gates, or baseline.
 
+## Measurement Plan
+
+This spec had no measurement plan until 2026-08-11, which is why it could carry an
+unverified precision claim for as long as it did. A capability whose spec asserts an
+effect and names no way to test it will stay unverified by default.
+
+**The fix lane can be measured today and has not been.** The eval already runs it
+per case (`eval-case-runner.ts`, gated on `fix.enabled`) and `fixLaneCaseTallies`
+scores it. What is missing is a run: an arm with `fix.enabled` true against a
+corpus whose findings have known real/false-positive ground truth. The endpoints
+already exist as metrics — `fixJudgmentAccuracy`, `fixFalsePositiveDetectionRate`,
+`fixProduceRate`, `fixApplyFailureRate` — and the pre-registration must fix a bar
+for the first of those BEFORE the run, because "the lane's judgement is better
+grounded" is the claim this spec was making.
+
+**Verification cannot be measured by `eval run` at all, and that is a corpus gap
+rather than a wiring bug.** `runVerificationForReview` is on the `review` command's
+lane, but wiring it into the eval would score nothing: this flow adjudicates
+external CLAIMS, and an eval case carries none. It needs its own corpus and its own
+entry point, the way change-impact has `eval impact` with
+`eval/corpora/change-impact-dependents` and intent-fulfilment has `intent check`
+with its own corpus. That corpus is claims paired with ground-truth verdicts, and
+it does not exist.
+
+Until each exists, the honest statement is that neither half of this flow has a
+measured effect, and no document may imply otherwise.
+
 ## Known Divergences From This Spec
 
 None. Both entries recorded on 2026-08-01 were resolved on 2026-08-06, in opposite
