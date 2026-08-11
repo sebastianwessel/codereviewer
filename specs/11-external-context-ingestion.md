@@ -259,28 +259,35 @@ reviewer prompt and the summarizer must enforce these principles:
   unreachable host, empty inbox, no matching changed files, timeout — emits a
   warning and the review continues without it. A provider failure never fails the
   review run.
-- **Evaluation and benchmark runs are not exempt, and no configuration makes them
-  so.** This paragraph used to claim they "use no context providers, as a property
-  of the committed evaluation configuration". No such committed configuration
-  exists; the claim held only while the block happened to be off by default, and
-  the 2026-08-11 flip removed the accident it rested on. An eval run now ingests
-  whatever the default providers find, unless the configuration it loads says
-  otherwise.
-  - What replaces prevention is **provenance**. Every eval report records the
-    effective `contextSources.enabled` under its capability flags
-    (`src/cli/eval-capability-flags.ts`), so two reports taken across the flip are
-    distinguishable by reading them. That is detection, not refusal: `eval
-    compare` WARNS on differing capability flags and pools anyway (spec 06),
-    unlike a mixed engine revision or a mismatched judge model, which it rejects.
-  - The variance is real rather than theoretical. `changed-files` reads the
-    reviewed diff, so on a corpus whose cases touch markdown the brief varies per
-    case; and `model` summarization adds a provider call, which is not
+- **`eval run` ingests no external context, and a committed file — not a default —
+  is what holds that.** This paragraph used to claim the property came from "the
+  committed evaluation configuration" while no such configuration existed: the
+  claim rested on `contextSources` happening to default OFF, and the 2026-08-11
+  flip removed the accident underneath it. The file now exists
+  (`src/cli/eval-capability-pins.ts`), it pins `contextSources.enabled` to
+  `false`, and `eval run` applies it itself, after everything the config loader
+  merged — so the pin holds against the discovered config file, the environment
+  and `--config` alike, and cannot be lost by forgetting to pass something.
+  - **Pinned OFF because the ledger is the population that matters.** Every figure
+    in `reports/eval-results-ledger.md` was measured before the flip, and the flip
+    is UNMEASURED by its own schema comment. A run that inherited it would compare
+    a reviewer shown the change intent against a population that never was.
+  - **The escape is explicit and recorded.** `eval run --capability
+    contextSources.enabled=true` runs the other arm; the run warns that it is no
+    longer comparable to a pinned baseline, and the report's capability provenance
+    records the value that actually applied. The owed on-vs-off A/B is run that
+    way, and a result that favours ON changes the pin in its own commit, followed
+    by a re-baseline.
+  - What the pin does not do is make the two comparable after the fact. That stays
+    **provenance**: every eval report records the effective
+    `contextSources.enabled` under its capability flags
+    (`src/cli/eval-capability-flags.ts`), and `eval compare` WARNS on differing
+    capability flags and pools anyway (spec 06), unlike a mixed engine revision or
+    a mismatched judge model, which it rejects.
+  - The variance the pin removes is real rather than theoretical. `changed-files`
+    reads the reviewed diff, so on a corpus whose cases touch markdown the brief
+    varies per case; and `model` summarization adds a provider call, which is not
     reproducible. `digest` mode is deterministic truncation.
-  - **Recommended, and deliberately not specified here:** commit an evaluation
-    configuration that pins `contextSources` explicitly — off, or on with a fixed
-    provider set and `digest` mode — so a reproduction does not silently inherit
-    whatever the default was on the day it ran. This spec does not own the eval
-    harness, so it recommends the file rather than defining it.
 - A provider that produces only PART of what it matched emits a warning too. Both
   per-provider bounds discard content, so nothing measured downstream can detect
   them — a body cut at the byte cap is by construction small enough to fit every

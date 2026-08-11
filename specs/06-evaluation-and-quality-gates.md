@@ -569,6 +569,45 @@ digest: its reports form one arm whose per-expectation hit rates share a
 denominator, so pooling different selections computes a rate over a population
 that never existed. Comparison tolerates a difference that pooling cannot.
 
+### The Capability Set Of An Eval Run Is Pinned By A Committed File
+
+Provenance answers "what was enabled" after the fact. It does not stop two runs
+from differing, and for a while nothing did: an `eval run` took whatever the
+schema defaults held on the day it started, plus whatever configuration file the
+working directory happened to contain. On 2026-08-11 four defaults flipped in one
+commit, one of them (`contextSources`) injecting new content into every discovery
+packet, and every archived figure became one flip away from incomparable with
+nothing in the run saying so.
+
+**`eval run` therefore pins its own capability set**, from a committed file
+(`src/cli/eval-capability-pins.ts`), applied AFTER the configuration loader has
+merged file, environment and CLI input — so the pinned value holds whatever a
+repository configuration or `--config` says, and no invocation can lose it by
+omission. Three rules govern the file:
+
+- **It pins only what an eval run can reach:** the toggles the review pipeline
+  reads plus the fix lane the case runner invokes. A capability no eval-run code
+  path reads cannot move a measured number, and pinning it would be maintenance
+  with no measurement behind it. The pin set is therefore a deliberate SUBSET of
+  `provenance.capabilities`, which stays closed and exhaustive for its own reason.
+- **Each flag is pinned at the value the ledger's live baselines were measured
+  under**, which is not always the shipped default. The eval is a longitudinal
+  instrument; one whose zero point follows the product default re-zeroes itself
+  every time a default moves. Where a pin and the shipped default disagree, the
+  disagreement is a committed, commented fact with an owed measurement attached.
+- **Leaving a pin is deliberate, single-run and loud.** `--capability
+  <flag>=<true|false>` overrides one pinned flag for one invocation; the run warns
+  that it is not comparable to a pinned baseline, and `provenance.capabilities`
+  records the value that actually applied, because it is read off the same
+  post-pin configuration the cases ran under. A flag outside the pin set is
+  refused rather than accepted, so there are never two ways to set one value.
+
+Changing a pin means running the A/B through `--capability`, recording it in the
+ledger, editing the file in its own commit, and re-baselining. Nothing here makes
+runs on either side of that commit comparable — `eval compare` still only warns —
+but it makes the difference a decision somebody made rather than a default that
+moved.
+
 ### Arm Order In An A/B Is A Confound, And Must Be Balanced
 
 Added 2026-08-07, from a measured artifact rather than from principle.

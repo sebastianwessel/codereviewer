@@ -136,9 +136,11 @@ validation with exit code `2`.
 
 None. There is no A/B for this capability, on any corpus, at any date.
 
-Note that **evaluation and benchmark runs use no context providers**, by design, so
-results stay reproducible — which is also why no measurement of this feature falls
-out of the existing eval runs for free.
+Note that **`eval run` pins `contextSources.enabled` to `false`**, from a committed
+pin set it applies over whatever configuration it loaded, so results stay
+comparable to every archived baseline — which is also why no measurement of this
+feature falls out of the existing eval runs for free. Measuring it means running
+the other arm on purpose, with `eval run --capability contextSources.enabled=true`.
 
 ## Verdict
 

@@ -65,24 +65,9 @@ const refutationCandidateIds = (request: ObjectRequest): readonly string[] => {
   return (payload.candidates ?? []).map((candidate) => candidate.id)
 }
 
-// Spec 11: "Evaluation and benchmark runs use no context providers so results stay
-// reproducible. This is a property of the committed evaluation configuration, not
-// of code: nothing forces `contextSources` off for an eval run." That sentence
-// became load-bearing on 2026-08-11, when the block was promoted to on by default
-// — before then an eval root with no config file satisfied it by accident. Every
-// eval root these tests build now says it out loud.
-const writeEvalRunConfig = async (root: string): Promise<void> => {
-  await mkdir(join(root, '.codereviewer'), { recursive: true })
-  await writeFile(
-    join(root, '.codereviewer', 'config.json'),
-    JSON.stringify({ contextSources: { enabled: false } })
-  )
-}
-
 const writeSampleEvalCases = async (root: string): Promise<void> => {
   const fixtureDirectory = join(root, 'eval', 'fixtures')
   await mkdir(fixtureDirectory, { recursive: true })
-  await writeEvalRunConfig(root)
   await mkdir(
     join(root, 'eval', 'fixtures', 'typescript', 'positive', 'src'),
     { recursive: true }
@@ -140,7 +125,6 @@ const writeSampleEvalCases = async (root: string): Promise<void> => {
 
 const writeSliceEvalCase = async (root: string): Promise<void> => {
   const sliceRoot = join(root, 'eval', 'fixtures', 'slices', 'typescript-slice')
-  await writeEvalRunConfig(root)
   await mkdir(join(sliceRoot, 'repo', 'src'), { recursive: true })
   await writeFile(join(sliceRoot, 'repo', 'src', 'app.ts'), 'export const value = ;\n')
   await writeFile(
@@ -403,6 +387,26 @@ class SemanticJudgeCliProvider implements ModelProvider {
   }
 }
 
+// Records the raw text of every request the run made, whatever its stage, so a
+// test can ask whether a piece of repository content reached the provider AT
+// ALL. Reading the capability flag back out of provenance proves the pin was
+// recorded; this proves it was obeyed — and the change-intent brief reaches the
+// model through the summarizer call before it ever reaches a discovery packet,
+// so a check scoped to review calls would miss half the exposure.
+class RequestTextRecordingProvider extends SemanticJudgeCliProvider {
+  readonly requestTexts: string[] = []
+
+  override async object<T extends JsonValue = JsonValue>(
+    request: ObjectRequest<T>
+  ): Promise<ObjectResponse<T>> {
+    this.requestTexts.push(
+      request.messages.map((message) => String(message.content)).join('\n')
+    )
+
+    return super.object(request)
+  }
+}
+
 // Records the model each call was made against, split by whether the call is a
 // judge call (semantic match / plausibility) or a review call. That split is the
 // only way to prove the scorer moved WITHOUT the subject moving with it, which
@@ -641,6 +645,31 @@ const writeSemanticJudgeSliceEvalCase = async (root: string): Promise<void> => {
       null,
       2
     )
+  )
+}
+
+// Change-intent content that exists in exactly one place, so finding it in a
+// request is proof that ingestion ran. The INBOX provider carries it rather than
+// the `changed-files` one: a changed markdown file is also a reviewed source
+// file, so its text would reach the packet whether ingestion ran or not, and the
+// assertion would prove nothing.
+const contextInboxMarker = 'INTENT-BRIEF-MARKER-9f2c'
+
+const writeContextInboxFile = async (root: string): Promise<void> => {
+  const inboxDirectory = join(
+    root,
+    'eval',
+    'benchmarks',
+    'semantic',
+    'semantic-local-1',
+    'repo',
+    '.codereviewer',
+    'context'
+  )
+  await mkdir(inboxDirectory, { recursive: true })
+  await writeFile(
+    join(inboxDirectory, 'ticket.md'),
+    `---\ntitle: Ticket\n---\n\n${contextInboxMarker}\n`
   )
 }
 
@@ -1096,6 +1125,133 @@ describe('eval CLI', () => {
 
       expect(report.provenance.modelName).toBe('reviewer-model')
       expect(report.provenance.judgeModelName).toBe('pinned-judge-model')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The committed evaluation configuration (`eval-capability-pins.ts`). Spec 11
+  // once claimed eval runs ingested no external context "as a property of the
+  // committed evaluation configuration"; there was no such file, and when
+  // `contextSources` went on by default on 2026-08-11 every eval run silently
+  // started injecting a change-intent brief into discovery. These two tests are
+  // the two halves the claim needs: the pin holds against a config that asks for
+  // the opposite, and the escape from it is explicit.
+  test('holds the pinned capability set against a repository config that asks for the opposite', async () => {
+    const root = await createTempDir()
+    const provider = new RequestTextRecordingProvider()
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: { id: 'openai', model: 'reviewer-model', maxRetries: 0 },
+          review: { depth: 'fast' },
+          drift: { enabled: false },
+          // Exactly what an ordinary repository config says today, since this is
+          // the shipped default.
+          contextSources: { enabled: true }
+        })
+      )
+      await writeSemanticJudgeSliceEvalCase(root)
+      await writeContextInboxFile(root)
+
+      const result = await runCli(
+        ['eval', 'run', '--slice-root', 'eval/benchmarks/semantic'],
+        {
+          cwd: root,
+          environment: { OPENAI_API_KEY: 'sk-test' },
+          providerImport: async () => ({ openai: () => provider })
+        }
+      )
+
+      expect(result.exitCode).toBe(0)
+
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+
+      // Observable in the artifact, not merely believed: the capability
+      // provenance is read off the same effective config the cases ran under.
+      expect(report.provenance.capabilities['contextSources.enabled']).toBe(false)
+      // And obeyed. The inbox file is the only place this marker exists, so its
+      // absence from every request proves no provider gathered it.
+      expect(provider.requestTexts.length).toBeGreaterThan(0)
+      expect(provider.requestTexts.join('\n')).not.toContain(contextInboxMarker)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // The other half. A pin a maintainer cannot leave deliberately is a pin that
+  // gets deleted the first time an A/B needs the other arm — and the owed
+  // `contextSources` on-vs-off comparison is exactly that A/B.
+  test('takes an explicit --capability override and records the overridden value', async () => {
+    const root = await createTempDir()
+    const provider = new RequestTextRecordingProvider()
+
+    try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({
+          provider: { id: 'openai', model: 'reviewer-model', maxRetries: 0 },
+          review: { depth: 'fast' },
+          drift: { enabled: false }
+        })
+      )
+      await writeSemanticJudgeSliceEvalCase(root)
+      await writeContextInboxFile(root)
+
+      const result = await runCli(
+        [
+          'eval',
+          'run',
+          '--slice-root',
+          'eval/benchmarks/semantic',
+          '--capability',
+          'contextSources.enabled=true'
+        ],
+        {
+          cwd: root,
+          environment: { OPENAI_API_KEY: 'sk-test' },
+          providerImport: async () => ({ openai: () => provider })
+        }
+      )
+
+      expect(result.exitCode).toBe(0)
+
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+
+      expect(report.provenance.capabilities['contextSources.enabled']).toBe(true)
+      expect(provider.requestTexts.join('\n')).toContain(contextInboxMarker)
+      // On stderr, not only in the log: the default logging level is `silent`,
+      // and a run that quietly left the pinned baseline is how an incomparable
+      // number gets into the ledger.
+      expect(result.stderr).toContain('not comparable to a pinned baseline')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('refuses a --capability flag the eval configuration does not pin', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeSampleEvalCases(root)
+
+      const result = await runCli(
+        ['eval', 'run', '--capability', 'drift.enabled=false'],
+        { cwd: root, environment: {} }
+      )
+
+      // Exit 2, not a silently ignored flag: `drift` is governed by the config
+      // file, and accepting it here would offer two ways to set one value.
+      expect(result.exitCode).toBe(2)
+      expect(result.stderr).toContain('does not pin')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

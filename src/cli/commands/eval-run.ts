@@ -50,6 +50,10 @@ import { createCliLogger, resolveLogSink } from '../command-logging.js'
 import { runEvalCase } from '../eval-case-runner.js'
 import { evalReportCapabilityFlags } from '../eval-capability-flags.js'
 import {
+  applyEvalCapabilityPins,
+  parseEvalCapabilityOverrides
+} from '../eval-capability-pins.js'
+import {
   evalGateExitCode,
   resolveEvalRegressionGateThresholds
 } from '../eval-regression-gate-policy.js'
@@ -66,6 +70,7 @@ export const runEval = async (
 ): Promise<CliResult> => {
   const unrecognized = unknownCliOption(args, [
     ...loggingCliOptions,
+    '--capability',
     '--case',
     '--gate-profile',
     '--max-concurrent-tasks',
@@ -144,15 +149,35 @@ export const runEval = async (
         ? {}
         : { evaluation: { regressionGate: { profile: gateProfile } } })
     }
+    const capabilityOverrides = parseEvalCapabilityOverrides(evalArgs)
     const loadedConfig = await loadConfigForCommand(evalArgs, options, {
       loadDotEnv: false,
       ...(Object.keys(cliConfig).length === 0 ? {} : { cliConfig })
     })
-    const logger = createCliLogger({
+    // The committed evaluation configuration, applied AFTER everything the
+    // loader merged, so the pinned capability set holds against the discovered
+    // config file, the environment and `--config` alike. `config` -- not
+    // `loadedConfig.config` -- is what the cases run under, what `configHash` is
+    // taken over, and what the capability provenance is read from: a pin nobody
+    // can read back out of the report would be a belief rather than a fact.
+    const pinnedCapabilities = applyEvalCapabilityPins({
       config: loadedConfig.config,
+      overrides: capabilityOverrides
+    })
+    const config = pinnedCapabilities.config
+    const logger = createCliLogger({
+      config,
       command: 'eval',
       sink: await resolveLogSink(options, logFileOverride.logFile)
     })
+
+    // Logged AND carried to stderr below. The default logging level is `silent`,
+    // so a run that only logged this would say nothing at all to the operator who
+    // just had a setting overruled or who just left the pinned baseline.
+    for (const warning of pinnedCapabilities.warnings) {
+      logger.warn(warning)
+    }
+
     const loadedEvalCases = await loadEvalCasesFromFixtures(options.cwd, {
       ...(sliceRoot === undefined ? {} : { sliceRoot })
     })
@@ -178,7 +203,7 @@ export const runEval = async (
     // The reviewer's own provider config. Every case's review resolves its model
     // from this, inside `runEvalCase`, and nothing below changes that: pinning
     // the judge moves the SCORER only.
-    const providerConfig = loadedConfig.config.provider
+    const providerConfig = config.provider
     // The judge model, pinnable independently of the reviewer's
     // (`evaluation.judgeModel`, `CODEREVIEWER_JUDGE_MODEL`). Unset resolves to
     // `providerConfig` UNCHANGED -- the same object, so an unpinned run performs
@@ -194,7 +219,7 @@ export const runEval = async (
     // Only `model` is overridden. Provider id, credentials, base URL, retry and
     // timeout stay the run's own, because the setting names a model and a second
     // provider account is not what it promises.
-    const judgeModelOverride = loadedConfig.config.evaluation.judgeModel
+    const judgeModelOverride = config.evaluation.judgeModel
     const judgeProviderConfig =
       providerConfig === undefined || judgeModelOverride === undefined
         ? providerConfig
@@ -258,7 +283,7 @@ export const runEval = async (
               providerConfigured: true,
               providerId: judgeProviderConfig.id,
               modelName: judgeProviderConfig.model,
-              prices: loadedConfig.config.costs,
+              prices: config.costs,
               usage: scoringUsageRecorder.usage()
             })
     // Reads the new-side content of a finding's file from the case's fixture
@@ -321,7 +346,7 @@ export const runEval = async (
       evalCases.map((evalCase) =>
         runEvalCase({
           root: options.cwd,
-          config: loadedConfig.config,
+          config,
           configWarnings: loadedConfig.warnings,
           baselineExplicitlyConfigured: loadedConfig.baselineExplicitlyConfigured,
           environment: loadedConfig.environment,
@@ -342,7 +367,7 @@ export const runEval = async (
       ...(plausibilityJudge === undefined
         ? {}
         : { plausibilityJudge, readFindingSource }),
-      judgeAgreementMinimum: loadedConfig.config.evaluation.minJudgeAgreement,
+      judgeAgreementMinimum: config.evaluation.minJudgeAgreement,
       logger,
       selection: {
         fixtureSource:
@@ -353,7 +378,7 @@ export const runEval = async (
         caseFilters,
         selectedCaseIds: evalCases.map((evalCase) => evalCase.id)
       },
-      thresholds: resolveEvalRegressionGateThresholds(loadedConfig.config),
+      thresholds: resolveEvalRegressionGateThresholds(config),
       // Production runs stamp the real time; a test passes `options.now` to
       // keep a saved report byte-for-byte reproducible (fix for the eval
       // report's `generatedAt` being frozen to a literal committed timestamp).
@@ -375,7 +400,7 @@ export const runEval = async (
       // from. `answerKeyDigest` is computed inside `runEvaluation` from the
       // selected cases, so it is not supplied here.
       provenance: {
-        configHash: stableJsonDigest(loadedConfig.config),
+        configHash: stableJsonDigest(config),
         ...(providerConfig === undefined
           ? {}
           : { providerId: providerConfig.id, modelName: providerConfig.model }
@@ -390,7 +415,7 @@ export const runEval = async (
         // The same effective config, read as VALUES rather than hashed. The
         // hash proves two runs shared a configuration; it cannot answer "was
         // the fix lane on?", because nothing can be read back out of a digest.
-        capabilities: evalReportCapabilityFlags(loadedConfig.config)
+        capabilities: evalReportCapabilityFlags(config)
       }
     }
     const result = await runEvaluation(evaluationInput)
@@ -484,7 +509,13 @@ export const runEval = async (
       // a quality failure. See `EvalRegressionGateSchema`.
       exitCode: evalGateExitCode(result.report.regressionGate.outcome),
       stdout: `${summary}\n`,
-      stderr: ''
+      // The capability-pin warnings, on stderr rather than folded into the
+      // summary: stdout is the artifact a comparison script reads, and a pin
+      // that overruled a setting is a message for the person, not for the parse.
+      stderr:
+        pinnedCapabilities.warnings.length === 0
+          ? ''
+          : `${pinnedCapabilities.warnings.join('\n')}\n`
     }
   } catch (error) {
     return mapErrorResult(error, 'internal')

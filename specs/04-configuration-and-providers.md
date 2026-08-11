@@ -112,10 +112,10 @@ This is why the generated JSON Schema carries no `default` object on `review`.
 | `costs` | no | object | detailed token/cost tracking enabled with no prices |
 | `aiReview` | no | object | holistic discovery + refutation defaults |
 | `promotionPolicy` | no | object | non-actionable model output disposition |
-| `contextSources` | no | object | external change-intent context disabled |
+| `contextSources` | no | object | external change-intent context enabled with the inbox and changed-files providers |
 | `verification` | no | object | agentic claim verification disabled |
-| `changeImpact` | no | object | change-impact review disabled |
-| `intentFulfilment` | no | object | intent-fulfilment review disabled |
+| `changeImpact` | no | object | change-impact review enabled; its model adjudication disabled |
+| `intentFulfilment` | no | object | intent-fulfilment review enabled |
 | `fix` | no | object | agentic finding investigation and fix disabled |
 
 ## Review Config

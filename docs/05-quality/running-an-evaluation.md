@@ -297,6 +297,7 @@ rejected with exit `2` before the run starts.
 | `--review-depth <depth>` | `fast` \| `balanced` \| `thorough` | Override `review.depth` for this invocation only |
 | `--max-concurrent-tasks <n>` | integer 1–32 | Override `review.maxConcurrentTasks` for this invocation only |
 | `--gate-profile <profile>` | `stable` \| `strict` | Override `evaluation.regressionGate.profile` for this invocation only |
+| `--capability <flag>=<bool>` | a pinned capability flag | Leave one capability pin for this invocation only. **Repeatable.** A flag the run does not pin → usage error, exit `2` |
 | `--log-level <level>` | log level | Override logging level |
 | `--debug` | — | Shorthand for `--log-level debug` |
 | `--log-file <path>` | path | Write logs to a file instead of the default sink |
@@ -305,6 +306,32 @@ The three review overrides merge **above** file and environment config, for this
 invocation only. They exist so benchmark comparisons are reproducible — in
 particular so the PR path can be forced to PR mode, thorough depth and serial
 provider calls without editing repository config.
+
+### The pinned capability set
+
+`eval run` does not take its capability toggles from your configuration. It
+applies a committed pin set (`src/cli/eval-capability-pins.ts`) after everything
+else has merged, so a run measures the same engine whatever the repository config
+or the schema defaults say. Two pins deliberately disagree with the shipped
+defaults — `contextSources.enabled` and `review.citations.enabled` are pinned
+`false`, because every baseline in the ledger was measured with them off. When
+your configuration asks for a value a pin refuses — and that value is not simply
+the shipped default, which the pin file already documents — the run names the pin
+on stderr and tells you how to leave it deliberately:
+
+```bash
+codereviewer eval run \
+  --slice-root .codereviewer/eval/security-cases/security-advisory-2026 \
+  --capability contextSources.enabled=true
+```
+
+An overridden run warns on stderr that it is no longer comparable to a pinned
+baseline, and `provenance.capabilities` in `eval-report.json` records the value
+that actually applied — which is the only place a config that spelled out the
+default value explicitly shows up, since the run cannot tell that apart from the
+default itself. Capabilities `eval run` cannot reach — `changeImpact`,
+`intentFulfilment`, `verification`, `reporting.reviewComments`, `drift`,
+`observability.openTelemetry` — are not pinned and stay governed by config.
 
 ### Flags that do **not** exist
 
@@ -323,7 +350,8 @@ serialize the cases themselves.
 
 ### Order of operations
 
-1. Parse flags, load config (never `.env`), build the logger.
+1. Parse flags, load config (never `.env`), apply the capability pins on top of
+   it, build the logger.
 2. Load cases — `sample-eval-cases.json` + `eval/fixtures/slices/` when no
    `--slice-root`, otherwise only the given slice root. Apply `--case` filters.
    Empty selection → usage error, exit `2`.
