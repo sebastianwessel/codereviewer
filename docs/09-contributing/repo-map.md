@@ -86,6 +86,7 @@ no logic of its own, so the dependency direction is one way: `index.ts` →
 | --- | --- |
 | `path-service.ts` | The repository-root containment boundary: resolve-for-read, resolve-for-write, normalization, portable paths, POSIX and Windows flavors |
 | `repository-path.ts` | Repository-relative path normalization |
+| `repository-file-reader.ts` | Reading one repository file's current bytes, containment-checked, resolving `undefined` rather than throwing when it cannot be read. One definition, because the fix lane and the review-comment layer must get the same answer to "does this edit still fit the file?" |
 
 Every filesystem operation in the product goes through here. If you add a new
 path input, route it through this module — see
@@ -101,7 +102,7 @@ path input, route it through this module — see
 | `errors/` | `error-normalizer.ts`: the `StructuredError` shape, category → exit-code mapping, provider error sub-classification, redaction of messages and details |
 | `redaction/` | The single redactor used before logs, errors, reports and model-bound context |
 | `diff/` | `git-diff-header.ts`: unified-diff header parsing (the `diff --git` path and the `@@` hunk ranges), shared so `repository-intake` and the evaluation corpus hydrator cannot disagree about what a diff changed |
-| `glob/`, `hash/`, `json/`, `schema/`, `text/` | Small focused helpers (glob matching, sha256, JSON value types, `stable-json-digest.ts`'s canonical-JSON hash, JSON-Schema conversion, UTF-8 byte slicing and truncation) |
+| `glob/`, `hash/`, `json/`, `schema/`, `text/` | Small focused helpers (glob matching, sha256, JSON value types, `stable-json-digest.ts`'s canonical-JSON hash, JSON-Schema conversion, UTF-8 byte slicing and truncation, and `apply-fix-edits.ts`'s deterministic fix-edit apply-check, which `verification` and `reporting` both ask the same question of) |
 | `testing/` | Test-only assets more than one suite needs: the prompt-genericity guard, the injected change-intent helper, and `report-fixture.ts` (the one valid `ReviewReport` the reporter suites and `cli/run-artifacts.test.ts` render from). Excluded from the published build. |
 
 Reuse these helpers rather than re-deriving path handling, redaction, schema
@@ -130,9 +131,9 @@ parsing, hashing or error normalization inside a domain.
 | `review-workflow/` | The pipeline itself. `harness/` wires the agent runtime; `pipeline/` holds discovery, refutation, admission and task queueing; `run/` orchestrates a run end to end (intake → planning → context → provider → completion) |
 | `admission/` | The admission gate, fingerprinting, baseline matching and writing, the quality gate |
 | `shared-context/` | The run's shared-context snapshot (candidates, verdicts, admission decisions) |
-| `verification/` | The optional verification and fix lanes: claim providers, the investigation agent, apply-checks, corroboration |
+| `verification/` | The optional verification and fix lanes: claim providers, the investigation agent, corroboration. The apply-check itself lives in `shared/text/`, because reporting gates every offered suggestion with the same primitive |
 
-### Advisory stages, reached only by their own command
+### Advisory stages, reached from `review` and from their own command
 
 | Domain | Owns |
 | --- | --- |

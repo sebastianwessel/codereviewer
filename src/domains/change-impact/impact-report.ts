@@ -379,9 +379,10 @@ export const ChangeImpactReferenceReportSchema = z.strictObject({
   // 2.0 moved the primary list from changed symbols to destination FILES and
   // resolved a removal against the declarations the same change adds.
   schemaVersion: z.literal('3.0'),
-  // `disabled` is a first-class outcome: the capability is off by default until
-  // measured (spec 22), and saying so plainly beats emitting an empty report that
-  // looks like "nothing depends on your change".
+  // `disabled` is a first-class outcome: the capability is on by default since
+  // 2026-08-11 but an operator can still switch it off (spec 22), and saying so
+  // plainly beats emitting an empty report that looks like "nothing depends on
+  // your change".
   status: z.enum(['completed', 'disabled']),
   adjudicationStatus: AdjudicationStatusSchema,
   generatedAt: z.iso.datetime(),

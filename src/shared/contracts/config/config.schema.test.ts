@@ -542,8 +542,10 @@ describe('CodeReviewerConfigSchema', () => {
   })
 
   // Spec 30: the lane ships disabled until the hold-rate-under-pushback
-  // measurement clears. Off by default, exactly like `changeImpact` and
-  // `intentFulfilment` above.
+  // measurement clears. It did NOT flip with `changeImpact` and
+  // `intentFulfilment` above on 2026-08-11 — beyond the missing measurement it
+  // needs a comment-event trigger and pull-request write permission, neither of
+  // which a default in the schema can grant.
   test('review conversation is disabled by default and carries no other key', () => {
     const disabled = CodeReviewerConfigSchema.parse({})
     expect(disabled.reviewConversation).toEqual({ enabled: false })

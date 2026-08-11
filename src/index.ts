@@ -346,6 +346,10 @@ export {
   renderSarifReport,
   type ReportArtifactWriter,
   type ResolvedPlatform,
+  // The seam `buildReviewCommentDrafts` and `writeReportingArtifacts` above both
+  // require: a caller outside this package has to state what file bytes it can
+  // supply for the suggestion apply-check, so it has to be able to name the type.
+  type ReviewCommentFileReader,
   type RunIndex,
   type RunIndexEntry,
   RunIndexEntrySchema,

@@ -146,7 +146,14 @@ claim in user-facing documentation.
   Non-Negotiable.
 - Failure MUST be recoverable: a failed impact review does not fail the pipeline
   or the diff review.
-- The capability is **disabled by default** until measured.
+- **On by default since 2026-08-11**, as a product decision about which questions a
+  review answers — not as a measurement result. What made it defensible is that
+  with `adjudication` off this lane makes **no provider call**: it is deterministic
+  reference traversal, and it feeds nothing back into discovery, so it can neither
+  help nor hurt review recall. `changeImpact.adjudication` remains **disabled**,
+  measured and rejected on 2026-08-09 (0/7 against a pre-registered 40% bar).
+  An operator can switch the lane off, and a run with it off is byte-identical to
+  one from before the flip.
 
 ## The Precision Bar Is Unfalsifiable On This Corpus
 

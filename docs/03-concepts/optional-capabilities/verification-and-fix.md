@@ -179,8 +179,13 @@ review can be — that is a design argument, and it has not been quantified.
 ## Where it lives
 
 - [`src/domains/verification/`](../../../src/domains/verification/) —
-  `investigate-claim-agent.ts`, `apply-check.ts`, `corroboration.ts`,
-  `fix-run.ts`, `verification-run.ts`, the claim providers
+  `investigate-claim-agent.ts`, `corroboration.ts`, `fix-run.ts`,
+  `verification-run.ts`, the claim providers
+- The deterministic apply-check itself is shared, not owned by this lane:
+  [`src/shared/text/apply-fix-edits.ts`](../../../src/shared/text/apply-fix-edits.ts).
+  Reporting runs the same check before a review comment may offer a one-click
+  suggestion, so the two surfaces cannot disagree about whether an edit still
+  fits the file
 - Lane wiring in
   [`src/cli/investigation-lanes.ts`](../../../src/cli/investigation-lanes.ts)
   (`runVerificationForReview`, `runFixForReview`)

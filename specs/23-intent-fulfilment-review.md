@@ -813,7 +813,12 @@ document. **That ingestion MUST be reused, not reimplemented.**
   from.
 - Instructions MUST remain generic and language-neutral, per spec 15's
   Non-Negotiable.
-- The capability is **disabled by default** until measured.
+- **On by default since 2026-08-11**, as a product decision about which questions a
+  review answers — not as a measurement result, and the measurement status of the
+  false-satisfied route below is unchanged by it. This lane DOES spend: obligation
+  extraction, one judgement per obligation, and an explanation call. What contains
+  it is that it cannot gate under any configuration and its output is advisory.
+  An operator can switch it off.
 
 ## The Failure Mode To Watch
 
@@ -883,7 +888,7 @@ recall compensates.
 | A `not-contradicted` verdict over a change not seen whole becomes `undetermined`, and says so | unit test on the verifier plus a run integration test asserting the warning |
 | The rendered prohibition section claims neither completion nor that the obligation holds at head | markdown test |
 | The explanation call may not write an absence of evidence as work left undone | prompt test |
-| Disabled by default | config schema test |
+| On by default, and switchable off | config schema test |
 | Instructions stay generic and language-neutral | prompt genericity guard |
 
 ## How The Lane Is Invoked
