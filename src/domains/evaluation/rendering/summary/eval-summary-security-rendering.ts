@@ -16,6 +16,19 @@ import { type EvalReport } from '../../report/eval-report-contracts.js'
 // and the note below the table says which case a reader is looking at. It is not
 // silently omitted: the whole point of attributing admitted findings to
 // mechanisms was to make the missing denominator visible.
+// A security recall cell. Null means the corpus expected nothing of this mechanism
+// or depth, and it renders as `n/a` — the same word the adjusted-precision column
+// beside it already uses for its own null.
+//
+// Both tables skip a row whose `expected` is 0, so today this cannot receive a
+// null: `rateOrNull` returns a number exactly when the denominator is non-empty.
+// The previous `?? 0` was therefore unreachable rather than wrong — and that is
+// the reason to remove it. It silently turns "not measured" into a measured 0 the
+// moment either invariant moves, which is precisely the defect these rates were
+// made nullable to end.
+const formatSecurityRecall = (rate: number | null | undefined): string =>
+  rate === null || rate === undefined ? 'n/a' : formatPercent(rate)
+
 export const appendEvalSummarySecurityByMechanism = (
   lines: string[],
   report: EvalReport
@@ -33,7 +46,7 @@ export const appendEvalSummarySecurityByMechanism = (
       report.metrics.securityAdjustedPrecisionByMechanism[mechanism]
 
     return [
-      `| ${mechanism} | ${formatPercent(report.metrics.securityRecallByMechanism[mechanism] ?? 0)} | ${counts.matched}/${counts.expected} | ${
+      `| ${mechanism} | ${formatSecurityRecall(report.metrics.securityRecallByMechanism[mechanism])} | ${counts.matched}/${counts.expected} | ${
         adjustedPrecision === null || adjustedPrecision === undefined
           ? 'n/a'
           : formatPercent(adjustedPrecision)
@@ -78,7 +91,7 @@ export const appendEvalSummarySecurityByContextDepth = (
       }
 
       return [
-        `| ${depth} | ${formatPercent(report.metrics.securityRecallByContextDepth[depth] ?? 0)} | ${counts.matched}/${counts.expected} |`
+        `| ${depth} | ${formatSecurityRecall(report.metrics.securityRecallByContextDepth[depth])} | ${counts.matched}/${counts.expected} |`
       ]
     })
   })

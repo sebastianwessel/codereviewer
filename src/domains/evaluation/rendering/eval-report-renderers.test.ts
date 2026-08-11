@@ -367,6 +367,60 @@ describe('eval report rendering', () => {
     )
   })
 
+  // The row-skipping above is the FIRST guard: an empty denominator never reaches
+  // the cell. This is the second, and it exists because the first can move. The
+  // cell used to read `?? 0`, so a null arriving by any route would have been
+  // rendered as a measured 0.0% -- reinstating, in the renderer, the exact defect
+  // the rates were made nullable to end. Constructed directly rather than through
+  // the computation, since the computation's own invariant is what this is
+  // insuring against.
+  test('renders a security recall of null as n/a, never as a measured zero', () => {
+    const summary = renderEvalSummary({
+      ...summaryInput,
+      report: {
+        ...summaryInput.report,
+        metrics: {
+          ...summaryInput.report.metrics,
+          securityMechanismCounts: {
+            ...summaryInput.report.metrics.securityMechanismCounts,
+            authorization: { expected: 2, matched: 0 }
+          },
+          securityRecallByMechanism: {
+            ...summaryInput.report.metrics.securityRecallByMechanism,
+            authorization: null
+          }
+        }
+      }
+    })
+
+    expect(summary).toContain('| authorization | n/a | 0/2 |')
+    expect(summary).not.toContain('| authorization | 0.0% | 0/2 |')
+  })
+
+  // The pair that keeps the assertion above honest: a real 0 over a real
+  // denominator is a measurement and must still print as one.
+  test('renders a real zero over a real denominator as 0.0%', () => {
+    const summary = renderEvalSummary({
+      ...summaryInput,
+      report: {
+        ...summaryInput.report,
+        metrics: {
+          ...summaryInput.report.metrics,
+          securityMechanismCounts: {
+            ...summaryInput.report.metrics.securityMechanismCounts,
+            authorization: { expected: 2, matched: 0 }
+          },
+          securityRecallByMechanism: {
+            ...summaryInput.report.metrics.securityRecallByMechanism,
+            authorization: 0
+          }
+        }
+      }
+    })
+
+    expect(summary).toContain('| authorization | 0.0% | 0/2 |')
+  })
+
   // The rule that retired `prompt-injection` is general, and the cost of it not
   // being general is paid by whoever adds the NEXT mechanism: a member with no
   // expectation anywhere would ride into the table as a `0.0%` row and read as a

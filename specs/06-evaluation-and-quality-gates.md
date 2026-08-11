@@ -706,9 +706,10 @@ change until that paired check is done.
 
 Empty denominators do not share one convention, and the difference is deliberate.
 Recall, precision, adjusted precision, the artifact-only rates, `recallByTier`, and
-`productRecall` use an empty value of `1`. The security recall metrics use `0`.
-`lineAccuracy`, `linePlacementRate`, `severityAccuracy`, and all four fix-lane
-rates use `null`, because a rate over no checks is undefined rather than zero.
+`productRecall` use an empty value of `1`. `lineAccuracy`, `linePlacementRate`,
+`severityAccuracy`, `recallByDiffScope`, all four fix-lane rates, and every security
+recall rate use `null`, because a rate over no checks is undefined rather than
+zero.
 
 The fix-lane rates moved from `0` to `null` on 2026-08-11 (metrics version
 `2026-08-11.fix-lane-rates-null-on-empty-denominator`). `fix.enabled` is off by
@@ -717,6 +718,31 @@ default, so every one of those denominators is empty on an ordinary run, and the
 ground truth on nothing would report. An archived report cannot be read for these
 four: its `0` is indistinguishable from a measurement and is not comparable
 against anything produced after that boundary.
+
+The **security recall rates moved the same way, the same day** (metrics version
+`2026-08-11.security-recall-null-on-empty-denominator`), and the reason is the
+stronger of the two. The schema comment that chose `0` argued only against `1` — a
+mechanism with no expected finding has no evidence of recall, so 100% would be a
+misleading perfect. That is right about `1` and treats the choice as though `0` and
+`1` were the only options. `0` is the value the metric also carries when the
+reviewer WAS tested on a mechanism and missed every instance of it.
+
+It was never hypothetical. The primary real-repository corpus carries no security
+expectation at all, so 23 archived reports publish `securityObviousRecall: 0.0%`
+for a question nobody asked the reviewer — a failed security grade invented by an
+empty denominator. This spec already recorded the same defect for one label:
+`prompt-injection` was removed from the mechanism enum because "every report
+published `prompt-injection: 0%` over an empty denominator, which reads as a
+measured failure rather than as an absent measurement". Removing the label cured
+that symptom and left the cause. **The label is not reinstated** — its removal
+rests on a second, independent argument that still holds, that reviewer resistance
+is a refusal behaviour no expected finding can express — but the argument it no
+longer needs is retired here.
+
+A real `0` over a real denominator is unchanged and still reported as `0`; only the
+empty case moved. The paired count records (`securityMechanismCounts`,
+`securityContextDepthCounts`, `securityObviousCount`, `securityHardCount`) are what
+make each `null` interpretable.
 
 ### Metric Definitions
 
@@ -778,15 +804,17 @@ against anything produced after that boundary.
 | `providerErrorRate` | Cases with an UNRECOVERED provider error divided by total cases. |
 | `providerIssueRate` | Cases carrying any provider issue, recovered or not, divided by total cases. Reported separately from `providerErrorRate` so a recovered retry stays visible without being counted as a case error. |
 | `providerIssueCount` | Total provider issues across cases. |
-| `securityRecallByMechanism` | Recall per CWE-family security mechanism (`authorization`, `injection`, `ssrf`, `open-redirect`, `xss`, `deserialization`, `secret-flow`, `cryptography`, `path-traversal`, `unsafe-config`, `concurrency-resource`). Empty value `0`. `open-redirect` was ADDED on 2026-08-07 (metrics version `2026-08-07.open-redirect-mechanism`): CWE-601 is a standard class this vocabulary claims alignment with, it is neither SSRF (there the SERVER issues the request) nor injection (there untrusted input changes a parsed STRUCTURE), and its absence made two curators bucket the same advisory two different wrong ways. `prompt-injection` was REMOVED from this set on 2026-08-06 and MUST NOT be reintroduced here: every other value names a defect class the reviewer should report, whereas prompt-injection resistance is whether the reviewer REFUSES an instruction planted in repository content — which no expected finding can express. Carried in the enum it had no expectation anywhere, so every report published `prompt-injection: 0%` over an empty denominator, which reads as a measured failure rather than as an absent measurement. It is verified behaviourally instead; see `15-security-focused-review.md` under *Mechanisms*. |
+| `securityRecallByMechanism` | Recall per CWE-family security mechanism (`authorization`, `injection`, `ssrf`, `open-redirect`, `xss`, `deserialization`, `secret-flow`, `cryptography`, `path-traversal`, `unsafe-config`, `concurrency-resource`). **`null` on an empty denominator** — see the
+empty-denominator rules above; a mechanism the corpus never tested must not read as
+one the reviewer failed. `open-redirect` was ADDED on 2026-08-07 (metrics version `2026-08-07.open-redirect-mechanism`): CWE-601 is a standard class this vocabulary claims alignment with, it is neither SSRF (there the SERVER issues the request) nor injection (there untrusted input changes a parsed STRUCTURE), and its absence made two curators bucket the same advisory two different wrong ways. `prompt-injection` was REMOVED from this set on 2026-08-06 and MUST NOT be reintroduced here: every other value names a defect class the reviewer should report, whereas prompt-injection resistance is whether the reviewer REFUSES an instruction planted in repository content — which no expected finding can express. Carried in the enum it had no expectation anywhere, so every report published `prompt-injection: 0%` over an empty denominator, which reads as a measured failure rather than as an absent measurement. It is verified behaviourally instead; see `15-security-focused-review.md` under *Mechanisms*. |
 | `securityMechanismCounts` | Expected-finding denominators behind `securityRecallByMechanism`. |
 | `securityAdjustedPrecisionByMechanism` | Matched divided by matched plus genuine false positives, per mechanism. **Nullable, and published only when bounded.** It is `null` when the mechanism's denominator is empty, and `null` for EVERY mechanism when any genuine security false positive in the run is unattributed — one unattributed false positive could belong to any mechanism, so it bounds all of them. A vacuous `100%` is never published. |
 | `securityFindingMechanismCounts` | `{matched, genuineFalsePositive}` per mechanism, plus an `unknown` bucket for findings no rule could attribute. The bucket is what makes an unbounded run visible rather than merely absent. |
 | `securityMechanismAttributionCounts` | `{expectation, cwe, unknown}` — where each label came from. A label read off a matched expectation is stronger evidence than one inferred from a finding's CWE tags, and pooling them would hide which. Attribution rules are specified in `15-security-focused-review.md` under *Attributing An Admitted Finding To A Mechanism*. |
-| `securityRecallByContextDepth` | Recall per declared context depth (`local`, `cross-function`, `callee`, `caller`, `implementation`, `cross-file`, `analyzer-path-dependent`), so a cross-file blind spot is readable separately from a local one. |
+| `securityRecallByContextDepth` | Recall per declared context depth (`local`, `cross-function`, `callee`, `caller`, `implementation`, `cross-file`, `analyzer-path-dependent`), so a cross-file blind spot is readable separately from a local one. **`null` on an empty denominator**, per the rules above. |
 | `securityContextDepthCounts` | Expected-finding denominators behind `securityRecallByContextDepth`. |
-| `securityObviousRecall` | Recall over security expectations whose context depth is `local` — the ones visible without leaving the changed file. |
-| `securityHardRecall` | Recall over security expectations at every other context depth. |
+| `securityObviousRecall` | Recall over security expectations whose context depth is `local` — the ones visible without leaving the changed file. **`null` on an empty denominator**, which is the ordinary case on a corpus carrying no security expectation. Interpreted with `securityObviousCount`. |
+| `securityHardRecall` | Recall over security expectations at every other context depth. **`null` on an empty denominator.** Interpreted with `securityHardCount`. |
 | `securityObviousCount` | Denominator of `securityObviousRecall`. |
 | `securityHardCount` | Denominator of `securityHardRecall`. |
 | `costUnavailableCount` | Cases whose cost is unknown: cost/token metadata was incomplete, or the case errored before any usage was surfaced. `costUsd` sums only the cases whose cost IS known, so a non-zero count here is what marks that total as partial rather than exact. |
