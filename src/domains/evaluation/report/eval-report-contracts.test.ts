@@ -1,12 +1,30 @@
 import { describe, expect, test } from 'vitest'
+import { FINDING_DESCRIPTION_MAX } from '../../../shared/contracts/index.js'
 import {
   EvalAgenticStageReportSchema,
   EvalContextLedgerEntrySchema,
   EvalExpectedFindingReportSchema,
+  EvalFindingSummaryReportSchema,
   EvalProviderIssueReportSchema,
   EvalReportProvenanceSchema,
   EvalReportSchema
 } from './eval-report-contracts.js'
+
+const findingSummary = (description: string) => ({
+  findingId: 'find_summary1',
+  severity: 'high',
+  category: 'bug',
+  path: 'src/app.ts',
+  line: 4,
+  title: 'Incorrect return value',
+  description,
+  proposedBy: 'review-agent',
+  evidenceCount: 1,
+  hasFixProposal: true,
+  relatedLocationCount: 0,
+  dataFlowCount: 0,
+  cweCount: 0
+})
 
 const missingKeysOf = (result: {
   readonly error?: { readonly issues: readonly { readonly path: PropertyKey[] }[] }
@@ -84,5 +102,31 @@ describe('eval report contracts', () => {
         })
       )
     ).toContain('diffScope')
+  })
+
+  // The description is what makes an ARCHIVED run re-adjudicable: every judge in
+  // this domain decides from it, so a summary without it can only be re-judged by
+  // paying for the run again. A cap below the producer's own bound would defeat
+  // that -- it would reject or truncate ordinary descriptions rather than guard
+  // against anything a finding can actually carry.
+  test('carries the finding description at the finding contract\'s own cap', () => {
+    expect(
+      EvalFindingSummaryReportSchema.parse(
+        findingSummary('x'.repeat(FINDING_DESCRIPTION_MAX))
+      ).description
+    ).toHaveLength(FINDING_DESCRIPTION_MAX)
+    expect(
+      EvalFindingSummaryReportSchema.safeParse(
+        findingSummary('x'.repeat(FINDING_DESCRIPTION_MAX + 1))
+      ).success
+    ).toBe(false)
+    expect(
+      missingKeysOf(
+        EvalFindingSummaryReportSchema.safeParse({
+          ...findingSummary('x'),
+          description: undefined
+        })
+      )
+    ).toContain('description')
   })
 })

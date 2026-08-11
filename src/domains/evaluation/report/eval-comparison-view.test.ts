@@ -31,6 +31,13 @@ const METRICS_DELIBERATELY_NOT_COMPARED: readonly string[] = [
   'artifactOnlyFindingCount',
   'artifactOnlyMatchedFindingCount',
   'artifactOnlyFalsePositiveCount',
+  // The artifact-only plausibility split. It joins the denominators above for a
+  // sharper reason than "not worth a row": these two feed no precision metric at
+  // all, so a delta between them adjudicates nothing. Comparing them would invite
+  // reading the artifact-only population as if it were scored, which is the exact
+  // promotion this split deliberately does not make.
+  'artifactOnlyUnlistedRealCount',
+  'artifactOnlyGenuineFalsePositiveCount',
   'inconclusiveMatchCount',
   'duplicateFindingCount',
   'noFindingZoneFalsePositiveCount',

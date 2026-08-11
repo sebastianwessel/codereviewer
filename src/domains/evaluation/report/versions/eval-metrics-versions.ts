@@ -115,6 +115,14 @@ export const EVAL_METRICS_VERSION_HISTORY: readonly MetricsVersionEntry<EvalComp
         'securityFindingMechanismCounts'
       ],
       note: 'The security mechanism vocabulary gained `open-redirect` (CWE-601), and CWE-601 stopped resolving to `ssrf`. The REMAP is the part that changes a number: an unmatched genuine security false positive tagged CWE-601 used to land in the `ssrf` precision denominator and now lands in `open-redirect`, so for identical engine output the two per-mechanism precision structures differ and neither may be compared across this boundary. Everything else is declared unaffected deliberately rather than by omission. `securityRecallByMechanism` and `securityMechanismCounts` gain a key whose value is 0 and {expected: 0, matched: 0}: they are computed from expectation labels only, no committed expectation carries the new label, and a new empty row changes no existing row\'s value -- claiming a break there would refuse a comparison the evidence supports. `securityMechanismAttributionCounts` is unchanged: a CWE-601 finding was attributed from its CWE tag before and still is, only into a different bucket. Nothing outside the security dimension reads the mechanism enum. One consequence is not a metric change but is worth knowing: `EvalReportSchema` is exhaustive over the enum, so a report archived before this boundary no longer parses as a PRODUCER report; `eval compare` is unaffected because it reads through the tolerant comparison view, which models no per-mechanism metric.'
+    },
+    {
+      id: '2026-08-11.artifact-only-plausibility',
+      affects: [
+        'artifactOnlyUnlistedRealCount',
+        'artifactOnlyGenuineFalsePositiveCount'
+      ],
+      note: 'The plausibility judge began running over the ARTIFACT-ONLY population too, into its own bucket. Both counts are new and cannot be recovered from an earlier report -- that run is over, and until this boundary its produced-finding summaries did not even record the descriptions a judge would need to decide -- so an older report reads as absent rather than 0. Every other metric is declared unaffected on purpose and not by omission: the new verdicts are threaded through a separate field that only these two counts read, so `adjustedPrecision`, `unlistedRealFindingCount`, `genuineFalsePositiveCount`, the fix-lane tallies and the per-mechanism precision counts all still derive from the ACTIONABLE pass alone and are byte-identical for identical review output. The produced-finding summary gaining a `description` changes the report SHAPE, not any metric; it is what makes a future re-adjudication possible without paying for the run again.'
     }
   ]
 

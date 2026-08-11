@@ -294,6 +294,14 @@ export const EvalMetricsSchema = z.strictObject({
   artifactOnlyFindingCount: z.int().min(0).default(0),
   artifactOnlyMatchedFindingCount: z.int().min(0).default(0),
   artifactOnlyFalsePositiveCount: z.int().min(0).default(0),
+  // The artifact-only plausibility split. Diagnostic in the strict sense: these
+  // two partition `artifactOnlyFalsePositiveCount` and feed NO precision metric,
+  // because the artifact-only population is excluded from `precision` and
+  // `adjustedPrecision` by construction. Promoting it would be a precision
+  // decision, and nobody has made one; until then, knowing how much of that
+  // output is real is worth recording and nothing more.
+  artifactOnlyUnlistedRealCount: z.int().min(0).default(0),
+  artifactOnlyGenuineFalsePositiveCount: z.int().min(0).default(0),
   // Rejections by reason, aggregated. Shows what the admission gate discarded
   // before anything downstream could see it.
   rejectionReasonCounts: z.record(z.string(), z.int().min(0)).default({}),
@@ -521,6 +529,12 @@ export type EvalMetricCaseResult = {
   readonly artifactOnlyFindingCount: number
   readonly artifactOnlyMatchedFindingCount: number
   readonly artifactOnlyFalsePositiveCount: number
+  // Artifact-only unmatched findings the plausibility judge affirmatively deemed
+  // real, and the complement that stays noise (including fail-closed ones). They
+  // partition `artifactOnlyFalsePositiveCount` and nothing reads them into a
+  // precision metric -- see `EvalMetricsSchema` for why that is deliberate.
+  readonly artifactOnlyUnlistedRealCount: number
+  readonly artifactOnlyGenuineFalsePositiveCount: number
   // Refutation results with a `proved` verdict. Used to derive the refutation
   // false-positive count (proved refutations whose finding never matched).
   readonly provedRefutationCount: number
@@ -1019,6 +1033,12 @@ export const calculateEvalMetrics = (
     artifactOnlyFindingCount: totalArtifactOnlyFindingCount,
     artifactOnlyMatchedFindingCount: totalArtifactOnlyMatchedFindingCount,
     artifactOnlyFalsePositiveCount: totalArtifactOnlyFalsePositiveCount,
+    artifactOnlyUnlistedRealCount: sum(
+      caseResults.map((result) => result.artifactOnlyUnlistedRealCount)
+    ),
+    artifactOnlyGenuineFalsePositiveCount: sum(
+      caseResults.map((result) => result.artifactOnlyGenuineFalsePositiveCount)
+    ),
     rejectionReasonCounts: caseResults.reduce<Record<string, number>>(
       (totals, result) => {
         for (const [reason, count] of Object.entries(

@@ -130,6 +130,7 @@ export const findingSummaries = (
       path: finding.location.path,
       line: finding.location.startLine,
       title: finding.title,
+      description: finding.description,
       proposedBy: finding.proposedBy,
       evidenceCount: finding.evidenceIds.length,
       hasFixProposal: finding.fixProposal !== undefined,

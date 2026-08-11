@@ -37,6 +37,8 @@ const caseResult = (
   artifactOnlyFindingCount: 0,
   artifactOnlyMatchedFindingCount: 0,
   artifactOnlyFalsePositiveCount: 0,
+  artifactOnlyUnlistedRealCount: 0,
+  artifactOnlyGenuineFalsePositiveCount: 0,
   provedRefutationCount: 0,
   rejectedFindingCount: 0,
   rejectionReasonCounts: {},

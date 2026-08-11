@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  FINDING_DESCRIPTION_MAX,
   RefutationVerdictSchema,
   ReviewReportSchema
 } from '../../../shared/contracts/index.js'
@@ -114,15 +115,28 @@ export const EvalFindingSummaryReportSchema = z.strictObject({
   path: z.string().min(1),
   line: z.int().min(1),
   title: z.string().min(1),
+  // The finding's own description, stored so an ARCHIVED run can be
+  // re-adjudicated. Every judge in this domain decides from the description; a
+  // report that keeps only the title cannot be re-judged at all, so a question
+  // asked of a finished run ("was this unmatched finding real?") can only be
+  // answered by paying for the whole run again. That is not hypothetical: 53
+  // archived artifact-only findings could not be labelled for exactly this
+  // reason, which is what made this field necessary.
+  //
+  // This reverses an earlier decision to omit it as model prose. The prose is
+  // already bounded and already redacted upstream -- it is the same text the
+  // review report itself publishes -- so the cost is artifact size, and the
+  // benefit is that a saved run stays answerable.
+  //
+  // Sized to the source's own cap rather than a smaller invented one: a tighter
+  // bound here would truncate ordinary descriptions instead of guarding against
+  // anything the producer can actually emit.
+  description: z.string().min(1).max(FINDING_DESCRIPTION_MAX),
   // How well GROUNDED the finding is, as structure rather than prose. Severity
   // and category describe what a finding CLAIMS; these describe what it brought
   // to support the claim, which is the axis a "could not prove it" population
   // varies along. Each is a plain scalar the producer already holds -- none costs
   // a call, and none is free text that would need a judge to interpret.
-  //
-  // Descriptions are omitted deliberately: the summary is report-safe, and
-  // widening it to model prose would put reviewed source into artifacts that are
-  // shared and archived.
   proposedBy: z.string().min(1),
   evidenceCount: z.int().min(0),
   hasFixProposal: z.boolean(),
@@ -216,6 +230,17 @@ export const EvalCaseReportSchema = z.strictObject({
   artifactOnlyFindingIds: z.array(z.string().min(1)).default([]),
   artifactOnlyMatchedFindings: z.array(EvalFindingMatchReportSchema).default([]),
   artifactOnlyFalsePositiveFindingIds: z.array(z.string().min(1)).default([]),
+  // The same plausibility split, run over the ARTIFACT-ONLY population and kept
+  // in its own bucket. These two feed no precision metric, deliberately: the
+  // artifact-only findings are excluded from `precision` and `adjustedPrecision`
+  // by construction, and folding a real/noise label for them into either number
+  // would silently promote a population nobody decided to promote. They exist so
+  // the question "how much of the artifact-only output is real?" is answerable
+  // from a saved report instead of only by re-running the corpus.
+  artifactOnlyUnlistedRealFindingIds: z.array(z.string().min(1)).default([]),
+  artifactOnlyGenuineFalsePositiveFindingIds: z
+    .array(z.string().min(1))
+    .default([]),
   refutationResults: z.array(EvalRefutationResultReportSchema).default([]),
   // Per-finding fix-lane outcomes for this case (spec 12), preserved so saved
   // reports are self-contained for fix-lane analysis.

@@ -371,6 +371,37 @@ plausibility judge is available the stage is a no-op: no finding is reclassified
 precision, never inflate it — but it means an adjusted-precision figure must not
 be compared between a run that had a plausibility judge and one that did not.
 
+### The Artifact-Only Population Is Judged Into A Separate Bucket
+
+The pass described above runs over the ACTIONABLE findings only. The artifact-only
+findings — the ones the reviewer could not post — are matched, but until 2026-08-11
+an artifact-only finding that matched nothing carried no real/noise label at all.
+That left the most interesting question about the population unanswerable: whether
+the output the engine refuses to post is mostly real or mostly noise.
+
+A second plausibility pass therefore runs over the artifact-only findings the
+artifact-only matcher left unmatched, seeded with the artifact-only MATCHED
+findings for restatement collapsing (never the actionable ones — restatement is
+judged within the population it belongs to). Its verdicts land in
+`artifactOnlyUnlistedRealFindingIds` / `artifactOnlyGenuineFalsePositiveFindingIds`
+per case and `artifactOnlyUnlistedRealCount` /
+`artifactOnlyGenuineFalsePositiveCount` in the metrics.
+
+**These verdicts feed no precision metric, and that is the point.** `precision`
+and `adjustedPrecision` exclude the artifact-only population by construction, and
+folding a real/noise label for it into either number would promote that population
+into the headline precision figure — a decision nobody has made, made silently by
+an instrumentation change. The bucket answers the question and stops there; if the
+population is ever promoted, that is a separate, deliberate change to what
+precision measures.
+
+Everything else is identical to the actionable pass, including fail-closed: an
+undecidable artifact-only verdict leaves the finding in the artifact-only genuine
+false positives, raises a provider issue, and is surfaced as the case warning
+`eval-artifact-only-plausibility-fail-closed:<n>` — its own prefix, because folding
+it into `eval-plausibility-fail-closed:<n>` would make that warning's claim about
+adjusted precision false for part of its count.
+
 ### Restatement Collapsing
 
 Judging every unmatched finding in total isolation has a second failure mode
@@ -700,6 +731,8 @@ use `null`, because a rate over no checks is undefined rather than zero.
 | `artifactOnlyFindingCount` | Count of admitted findings marked `reporterEligibility = "artifact-only"`. |
 | `artifactOnlyMatchedFindingCount` | Count of artifact-only findings matched to expected findings. |
 | `artifactOnlyFalsePositiveCount` | Count of artifact-only findings that neither match expected findings nor duplicate matched artifact-only findings. |
+| `artifactOnlyUnlistedRealCount` | Unmatched artifact-only findings the plausibility judge deemed genuine defects. Feeds no precision metric — see "The Artifact-Only Population Is Judged Into A Separate Bucket". |
+| `artifactOnlyGenuineFalsePositiveCount` | The complement within `artifactOnlyFalsePositiveCount`: artifact-only findings judged spurious, plus any whose judgment could not be completed. |
 | `trustedDeterministicFindingCount` | Count of actionable findings seeded by trusted deterministic-rule evidence rather than model review. |
 | `rejectionReasonCounts` | Rejected/demoted candidates tallied by `RejectReason`, aggregated across cases. Shows what the admission gate discarded before anything downstream could see it. |
 | `rejectionSeverityCounts` | The same rejected candidates tallied by the candidate's OWN severity instead of by reason. Without this, "is the model over-calling severity" is confounded by the admission floor deleting every model-origin `low` candidate before anyone downstream can observe it — the floor and the question it is suspected of confounding would otherwise share exactly one blind spot. A rejection whose candidate severity could not be recovered (currently: refutation-stage rejections, whose contract does not yet thread severity through) is bucketed under `unknown` rather than silently dropped, so these counts always sum to the case's rejected-candidate count. |
@@ -1170,8 +1203,9 @@ follow, and both are the reason for the shape:
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `producedFindings` | object[] | **Every finding the review produced for the case** — actionable and artifact-only alike — as a sanitized summary with ID, severity, category, path, line, and title. Every classification below is a list of IDs into this array; resolve a finding's attributes from here whichever bucket it fell in. |
-| `producedFindings[]` groundedness | `proposedBy`, `evidenceCount`, `hasFixProposal`, `relatedLocationCount`, `dataFlowCount`, `cweCount`, `securitySeverity` (optional) | What the finding brought to SUPPORT its claim, as scalars rather than prose. Severity and category describe what a finding claims; these describe how grounded it is, which is the axis a "could not prove it" population varies along. Descriptions are deliberately excluded — the summary is report-safe and must not carry model prose over reviewed source into shared artifacts. |
+| `producedFindings` | object[] | **Every finding the review produced for the case** — actionable and artifact-only alike — as a sanitized summary with ID, severity, category, path, line, title, and description. Every classification below is a list of IDs into this array; resolve a finding's attributes from here whichever bucket it fell in. |
+| `producedFindings[]` groundedness | `proposedBy`, `evidenceCount`, `hasFixProposal`, `relatedLocationCount`, `dataFlowCount`, `cweCount`, `securitySeverity` (optional) | What the finding brought to SUPPORT its claim, as scalars rather than prose. Severity and category describe what a finding claims; these describe how grounded it is, which is the axis a "could not prove it" population varies along. |
+| `producedFindings[].description` | string, bounded by the finding contract's own description cap | The finding's description, stored so an ARCHIVED run can be RE-ADJUDICATED. Every judge here decides from the description, so a summary without it can only be re-judged by paying for the whole run again — which is exactly what blocked labelling the archived artifact-only findings this bucket now labels. This reverses the earlier decision to exclude descriptions as model prose: the text is already bounded and redacted upstream and already published in the review report, so the cost is artifact size and the benefit is a saved run that stays answerable. |
 | `duplicateFindingIds` | string[] | Admitted findings at the same path and exact overlapping line range as a matched finding. These are review noise, but not separate false positives. |
 | `falsePositiveFindingIds` | string[] | Admitted findings that neither match an expected finding nor duplicate a matched finding. |
 | `unlistedRealFindingIds` | string[] | Unmatched findings the plausibility judge deemed genuine defects the fixture omitted. |
@@ -1181,11 +1215,13 @@ follow, and both are the reason for the shape:
 | `parseValid` | boolean | Whether the case's outputs validated against schema. |
 | `providerErrored` | boolean | Whether the case ended with an unrecovered provider error. |
 | `inlineFindingCount` | integer >= 0 | Admitted findings the case marked inline-eligible. |
-| `warnings` | string[] | Case-level warnings, including `cost-unavailable`, `eval-inconclusive-match:<n>`, and `eval-plausibility-fail-closed:<n>`. |
+| `warnings` | string[] | Case-level warnings, including `cost-unavailable`, `eval-inconclusive-match:<n>`, `eval-plausibility-fail-closed:<n>`, and `eval-artifact-only-plausibility-fail-closed:<n>`. |
 | `durationMs` | integer >= 0, optional | The case's own review duration. **Absent when the case produced no review report at all** (a provider-errored case), because no duration was ever measured. Absence is never written as `0`. |
 | `artifactOnlyFindingIds` | string[] | Admitted findings with `reporterEligibility = "artifact-only"`; these are diagnostic and excluded from main recall/precision gates. |
 | `artifactOnlyMatchedFindings` | object[] | Match records for artifact-only findings that overlap expected findings. |
 | `artifactOnlyFalsePositiveFindingIds` | string[] | Artifact-only findings that neither match an expected finding nor duplicate a matched artifact-only finding. |
+| `artifactOnlyUnlistedRealFindingIds` | string[] | Unmatched artifact-only findings the plausibility judge deemed genuine defects. A subset of `artifactOnlyFalsePositiveFindingIds`, and an input to no precision metric. |
+| `artifactOnlyGenuineFalsePositiveFindingIds` | string[] | The complement within `artifactOnlyFalsePositiveFindingIds`: judged spurious, or fail-closed. |
 | `matchedFindings[].semanticReason` | string | Concise report-safe rationale from the semantic judge that accepted the match. |
 | `artifactOnlyMatchedFindings[].semanticReason` | string | Same rationale field for artifact-only semantic judge matches. Every match is a judge decision, so the reason is always present. |
 | `inconclusiveExpectedIndexes` | integer[] | Expected findings whose verdict is unknown because a judge call failed. Excluded from the recall denominator and from `unmatchedExpectedIndexes`. |

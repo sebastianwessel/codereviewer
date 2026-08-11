@@ -163,6 +163,7 @@ refutation and admission to be admitted at all.
 | `severityWeightedF1` | Harmonic mean of the two severity-weighted rates | — | Same caveat. |
 | `artifactOnlyFindingCount` | Admitted findings marked `reporterEligibility = "artifact-only"` | — | |
 | `artifactOnlyMatchedFindingCount` / `artifactOnlyFalsePositiveCount` | Artifact-only findings that matched / did not | — | |
+| `artifactOnlyUnlistedRealCount` / `artifactOnlyGenuineFalsePositiveCount` | The plausibility split of the artifact-only false positives | — | Diagnostic only, and deliberately outside every precision metric: the artifact-only population is excluded from `precision` and `adjustedPrecision` by construction, so these answer how much of that output is real without promoting it into either number. |
 | `artifactOnlyPrecision` | Artifact-only matched | artifact-only matched + artifact-only false positives | Diagnostic only; does not satisfy any gate. |
 | `trustedDeterministicFindingCount` | Actionable findings seeded by `deterministic-trusted-rule` rather than model review | — | These are refutation-exempt; a high count means part of the score is not model quality. |
 

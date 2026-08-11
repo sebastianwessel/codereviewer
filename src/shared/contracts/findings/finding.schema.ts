@@ -215,13 +215,21 @@ export const FixProposalSchema = z.strictObject({
   edits: z.array(FixEditSchema).max(5).optional()
 })
 
+// Max length of a finding's description. Exported so a destination that MIRRORS
+// a finding's description — the eval report's produced-finding summary — sizes
+// itself to the source's own bound instead of picking its own smaller number. A
+// mirror capped below this does not bound anything the producer can emit; it
+// silently truncates ordinary output, which is the drift `REJECTED_FINDING_MESSAGE_MAX`
+// exists to prevent one contract over.
+export const FINDING_DESCRIPTION_MAX = 1200
+
 export const AdmittedFindingSchema = z.strictObject({
   id: ContractIdSchema,
   taskId: TaskIdSchema,
   category: FindingCategorySchema,
   severity: SeveritySchema,
   title: z.string().min(1).max(120),
-  description: z.string().min(1).max(1200),
+  description: z.string().min(1).max(FINDING_DESCRIPTION_MAX),
   location: CodeLocationSchema,
   evidenceIds: z.array(ContractIdSchema).min(1),
   proposedBy: z.string().min(1),

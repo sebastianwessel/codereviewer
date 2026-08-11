@@ -156,6 +156,16 @@ as false positives measures the fixture, not the reviewer.
 **What it decides.** For each unmatched actionable finding: does the shown code
 actually contain the defect the finding describes?
 
+It runs a **second, separate pass** over the unmatched ARTIFACT-ONLY findings,
+seeded with the artifact-only matches rather than the actionable ones. Those
+verdicts go to `artifactOnlyUnlistedRealCount` /
+`artifactOnlyGenuineFalsePositiveCount` (and the matching per-case ID lists) and
+**feed no precision metric**: `precision` and `adjustedPrecision` exclude the
+artifact-only population by construction, and promoting it into them is a
+precision decision nobody has made. The bucket exists so "is the output we refuse
+to post real?" is answerable from a saved report instead of only by re-running the
+corpus.
+
 **What it sees.** Unlike the match judge, this one must read code:
 
 - the finding's title, description, severity, category and `path:line`;
@@ -200,7 +210,9 @@ positive:
 | Judge call failed after retries | Genuine false positive + provider issue with the normalized error code |
 
 Fail-closed findings are surfaced as the case warning
-`eval-plausibility-fail-closed:<n>`.
+`eval-plausibility-fail-closed:<n>`, and the artifact-only pass under its own
+`eval-artifact-only-plausibility-fail-closed:<n>` — one prefix per population, so
+the actionable count keeps meaning "findings adjusted precision could not decide".
 
 The new-side content the judge reads always opens with a completeness marker. A
 file that fits is passed whole and says so; one that does not is passed as a

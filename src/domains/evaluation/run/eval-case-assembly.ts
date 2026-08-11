@@ -4,6 +4,7 @@ import type {
   ReviewReport
 } from '../../../shared/contracts/index.js'
 import {
+  artifactOnlyPlausibilityFailClosedWarnings,
   inconclusiveMatchWarnings,
   plausibilityFailClosedWarnings
 } from '../eval-warnings.js'
@@ -69,6 +70,11 @@ const buildMetricCase = (
     // Plausibility outcomes for the case's raw false-positive findings. Absent on
     // a provider-error case (no findings to judge), where it defaults to empty.
     readonly plausibility?: EvalPlausibilityResult
+    // The SEPARATE plausibility outcomes for the artifact-only population. It is
+    // a distinct field rather than a merge because nothing below may read the two
+    // together: every precision-bearing metric here reads `plausibility` alone,
+    // and this one may only ever reach the two artifact-only counts.
+    readonly artifactOnlyPlausibility?: EvalPlausibilityResult
     readonly reviewReport?: ReviewReport
   }
 ): EvalMetricCaseResult => {
@@ -192,6 +198,13 @@ const buildMetricCase = (
       input.artifactOnlyMatchResult.matches.length,
     artifactOnlyFalsePositiveCount:
       input.artifactOnlyMatchResult.falsePositiveFindingIds.length,
+    artifactOnlyUnlistedRealCount:
+      input.artifactOnlyPlausibility?.unlistedRealFindingIds.length ?? 0,
+    // The complement, so a fail-closed artifact-only verdict is noise by
+    // construction -- the same rule the actionable split follows.
+    artifactOnlyGenuineFalsePositiveCount:
+      input.artifactOnlyMatchResult.falsePositiveFindingIds.length -
+      (input.artifactOnlyPlausibility?.unlistedRealFindingIds.length ?? 0),
     provedRefutationCount: refutationResults.filter(
       (refutation) => refutation.verdict === 'proved'
     ).length,
@@ -260,6 +273,7 @@ const buildReportCase = (
     readonly matchResult: EvalMatcherResult
     readonly artifactOnlyMatchResult: EvalMatcherResult
     readonly plausibility: EvalPlausibilityResult
+    readonly artifactOnlyPlausibility: EvalPlausibilityResult
     readonly providerIssues: readonly z.infer<
       typeof EvalProviderIssueReportSchema
     >[]
@@ -317,6 +331,14 @@ const buildReportCase = (
   artifactOnlyFalsePositiveFindingIds: [
     ...input.artifactOnlyMatchResult.falsePositiveFindingIds
   ],
+  artifactOnlyUnlistedRealFindingIds: [
+    ...input.artifactOnlyPlausibility.unlistedRealFindingIds
+  ],
+  artifactOnlyGenuineFalsePositiveFindingIds:
+    input.artifactOnlyMatchResult.falsePositiveFindingIds.filter(
+      (findingId) =>
+        !input.artifactOnlyPlausibility.unlistedRealFindingIds.includes(findingId)
+    ),
   refutationResults: [...refutationResultSummaries(input.reviewReport)],
   inlineFindingCount: input.inlineFindingCount,
   providerIssues: [...input.providerIssues],
@@ -326,7 +348,10 @@ const buildReportCase = (
       input.matchResult.inconclusiveMatches.length +
         input.artifactOnlyMatchResult.inconclusiveMatches.length
     ),
-    ...plausibilityFailClosedWarnings(input.plausibility.failClosedFindingIds.length)
+    ...plausibilityFailClosedWarnings(input.plausibility.failClosedFindingIds.length),
+    ...artifactOnlyPlausibilityFailClosedWarnings(
+      input.artifactOnlyPlausibility.failClosedFindingIds.length
+    )
   ],
   ...spendReportFields(caseSpend(input.reviewReport))
 })
@@ -397,6 +422,8 @@ export const computeCaseResult = async (
         artifactOnlyFindingIds: [],
         artifactOnlyMatchedFindings: [],
         artifactOnlyFalsePositiveFindingIds: [],
+        artifactOnlyUnlistedRealFindingIds: [],
+        artifactOnlyGenuineFalsePositiveFindingIds: [],
         refutationResults: [],
         inlineFindingCount: 0,
         warnings: [],
@@ -460,6 +487,35 @@ export const computeCaseResult = async (
     readFileContent: input.readFindingSource
   })
 
+  // The SAME split over the artifact-only population, in its own pass and its own
+  // bucket. Before this, an artifact-only finding that matched nothing carried no
+  // real/noise label at all -- and because the eval never stored what would be
+  // needed to decide one later, the only way to ask was to re-run the corpus.
+  //
+  // It is a second pass rather than a wider first one because the two populations
+  // must not be pooled: the already-counted pool seeds from the artifact-only
+  // MATCHES, so a restatement is judged against the population it belongs to, and
+  // the verdicts reach only the artifact-only fields. Nothing here may move
+  // `adjustedPrecision`, which excludes artifact-only findings by construction --
+  // promoting them into it is a precision decision nobody has made.
+  const artifactOnlyFalsePositiveFindingIdSet = new Set(
+    artifactOnlyMatchResult.falsePositiveFindingIds
+  )
+  const artifactOnlyMatchedFindingIdSet = new Set(
+    artifactOnlyMatchResult.matches.map((match) => match.findingId)
+  )
+  const artifactOnlyPlausibility = await judgeUnmatchedFindingsPlausibility({
+    evalCase,
+    unmatchedFindings: artifactOnlyFindings.filter((finding) =>
+      artifactOnlyFalsePositiveFindingIdSet.has(finding.id)
+    ),
+    matchedFindings: artifactOnlyFindings.filter((finding) =>
+      artifactOnlyMatchedFindingIdSet.has(finding.id)
+    ),
+    judge: input.plausibilityJudge,
+    readFileContent: input.readFindingSource
+  })
+
   return {
     reportCase: buildReportCase({
       evalCase,
@@ -471,13 +527,17 @@ export const computeCaseResult = async (
       matchResult,
       artifactOnlyMatchResult,
       plausibility,
+      artifactOnlyPlausibility,
       providerIssues: [
         ...providerIssuesFromReport(reviewReport),
         ...judgeProviderIssuesFromMatchResults([
           matchResult,
           artifactOnlyMatchResult
         ]),
-        ...plausibility.providerIssues.map((issue) =>
+        ...[
+          ...plausibility.providerIssues,
+          ...artifactOnlyPlausibility.providerIssues
+        ].map((issue) =>
           EvalProviderIssueReportSchema.parse({
             code: issue.code,
             stage: issue.stage,
@@ -493,6 +553,7 @@ export const computeCaseResult = async (
       matchResult,
       artifactOnlyMatchResult,
       plausibility,
+      artifactOnlyPlausibility,
       reviewReport
     })
   }

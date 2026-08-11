@@ -6,7 +6,10 @@ import type {
   ReviewReport
 } from '../../../shared/contracts/index.js'
 import { parseEvalCases } from '../corpus/eval-fixture.schema.js'
-import { type EvalReport } from '../report/eval-report-contracts.js'
+import {
+  EvalReportSchema,
+  type EvalReport
+} from '../report/eval-report-contracts.js'
 import { evalJudgeCalibrationSet } from '../judging/eval-judge-calibration.js'
 import { evalPlausibilityCalibrationSet } from '../judging/eval-plausibility-calibration.js'
 import type {
@@ -2804,4 +2807,187 @@ describe('eval runner', () => {
     )
   })
 
+  // One matched actionable finding, one unmatched actionable finding, and one
+  // unmatched ARTIFACT-ONLY finding: the three populations the two plausibility
+  // passes have to keep apart.
+  const positiveWithArtifactOnlyNoiseOutput = () => ({
+    caseId: 'typescript-positive' as const,
+    changedLineCount: 50,
+    diffHunkCount: 2,
+    contextLedger: [],
+    result: {
+      status: 'ok' as const,
+      reviewReport: reviewReport([
+        admittedFinding(),
+        admittedFinding({
+          id: 'find_noise1',
+          title: 'Unlisted genuine defect',
+          description: 'A genuine bug the fixture did not list as expected.',
+          location: { path: 'src/app.ts', startLine: 40, side: 'new' },
+          fingerprints: [{ algorithm: 'test', value: 'noise1' }]
+        }),
+        admittedFinding({
+          id: 'find_artifactnoise1',
+          reporterEligibility: 'artifact-only',
+          title: 'Artifact-only observation',
+          description: 'An artifact-only finding that matched no expectation.',
+          location: { path: 'src/app.ts', startLine: 60, side: 'new' },
+          fingerprints: [{ algorithm: 'test', value: 'artifactnoise1' }]
+        })
+      ])
+    }
+  })
+
+  // The metrics an ARTIFACT-ONLY verdict is allowed to move. Everything else in
+  // the metrics object must be identical whichever way that verdict goes, which
+  // is what the run below asserts by comparing the two objects wholesale rather
+  // than field by field: a future metric that starts reading the artifact-only
+  // pass fails here without anyone having to remember to add it.
+  const withoutArtifactOnlyPlausibility = (
+    metrics: EvalReport['metrics']
+  ): Record<string, unknown> => {
+    const remaining: Record<string, unknown> = { ...metrics }
+    delete remaining.artifactOnlyUnlistedRealCount
+    delete remaining.artifactOnlyGenuineFalsePositiveCount
+
+    return remaining
+  }
+
+  // Both arms answer the ACTIONABLE unmatched finding identically and differ only
+  // on the artifact-only one.
+  const runWithArtifactOnlyVerdict = async (artifactOnlyPlausible: boolean) =>
+    runEvaluation({
+      cases: parseEvalCases([inlineEvalCases[0]]),
+      judge: acceptingJudge,
+      plausibilityJudge: plausibilityJudgeDeciding((input) => ({
+        plausible:
+          input.findingTitle === 'Artifact-only observation'
+            ? artifactOnlyPlausible
+            : true,
+        reason: 'Decided for the finding under test.'
+      })),
+      readFindingSource: constantSourceReader,
+      outputs: [positiveWithArtifactOnlyNoiseOutput()],
+      generatedAt: '2026-06-20T00:00:02.000Z',
+      evaluationElapsedMs: () => 42
+    })
+
+  test('judges artifact-only unmatched findings into their own bucket', async () => {
+    const result = await runWithArtifactOnlyVerdict(true)
+
+    expect(result.report.caseResults[0]).toMatchObject({
+      artifactOnlyFalsePositiveFindingIds: ['find_artifactnoise1'],
+      artifactOnlyUnlistedRealFindingIds: ['find_artifactnoise1'],
+      artifactOnlyGenuineFalsePositiveFindingIds: []
+    })
+    expect(result.report.metrics).toMatchObject({
+      artifactOnlyFalsePositiveCount: 1,
+      artifactOnlyUnlistedRealCount: 1,
+      artifactOnlyGenuineFalsePositiveCount: 0
+    })
+    // The artifact-only finding is judged, and it never enters the actionable
+    // buckets that feed the precision bracket.
+    expect(result.report.caseResults[0]?.unlistedRealFindingIds).toEqual([
+      'find_noise1'
+    ])
+  })
+
+  test('keeps a spurious artifact-only finding in the artifact-only genuine-false-positive bucket', async () => {
+    const result = await runWithArtifactOnlyVerdict(false)
+
+    expect(result.report.caseResults[0]).toMatchObject({
+      artifactOnlyUnlistedRealFindingIds: [],
+      artifactOnlyGenuineFalsePositiveFindingIds: ['find_artifactnoise1']
+    })
+    expect(result.report.metrics).toMatchObject({
+      artifactOnlyUnlistedRealCount: 0,
+      artifactOnlyGenuineFalsePositiveCount: 1
+    })
+  })
+
+  // THE CONSTRAINT. The artifact-only pass exists to answer a question about a
+  // population the precision metrics deliberately exclude; if one of its verdicts
+  // could move `adjustedPrecision` (or anything else), it would have promoted that
+  // population without anyone deciding to.
+  test('an artifact-only verdict moves no actionable metric', async () => {
+    const credited = await runWithArtifactOnlyVerdict(true)
+    const refused = await runWithArtifactOnlyVerdict(false)
+
+    expect(withoutArtifactOnlyPlausibility(refused.report.metrics)).toEqual(
+      withoutArtifactOnlyPlausibility(credited.report.metrics)
+    )
+    // Not a vacuous comparison: the actionable pass really did run and really did
+    // credit an unlisted-real finding in both arms.
+    expect(credited.report.metrics).toMatchObject({
+      precision: 0.5,
+      adjustedPrecision: 1,
+      unlistedRealFindingCount: 1,
+      genuineFalsePositiveCount: 0
+    })
+    // The per-case actionable classifications are equally untouched.
+    expect(refused.report.caseResults[0]?.unlistedRealFindingIds).toEqual(
+      credited.report.caseResults[0]?.unlistedRealFindingIds
+    )
+    expect(refused.report.caseResults[0]?.genuineFalsePositiveFindingIds).toEqual(
+      credited.report.caseResults[0]?.genuineFalsePositiveFindingIds
+    )
+  })
+
+  test('fails closed on the artifact-only pass under its own warning, leaving the actionable warning alone', async () => {
+    const result = await runEvaluation({
+      cases: parseEvalCases([inlineEvalCases[0]]),
+      judge: acceptingJudge,
+      // Only the artifact-only finding is undecidable; the actionable unmatched
+      // finding is judged normally, so the two failures cannot be confused.
+      plausibilityJudge: plausibilityJudgeDeciding((input) => {
+        if (input.findingTitle === 'Artifact-only observation') {
+          throw new Error('plausibility provider exploded')
+        }
+
+        return { plausible: true, reason: 'A real bug the fixture omitted.' }
+      }),
+      readFindingSource: constantSourceReader,
+      outputs: [positiveWithArtifactOnlyNoiseOutput()],
+      generatedAt: '2026-06-20T00:00:02.000Z'
+    })
+
+    expect(result.report.caseResults[0]?.warnings).toContain(
+      'eval-artifact-only-plausibility-fail-closed:1'
+    )
+    expect(result.report.caseResults[0]?.warnings).not.toContain(
+      'eval-plausibility-fail-closed:1'
+    )
+    expect(result.report.caseResults[0]?.providerIssues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stage: 'eval_plausibility_judge',
+          recovered: false
+        })
+      ])
+    )
+    // Fail-closed is never credited as real, here as everywhere else.
+    expect(result.report.caseResults[0]).toMatchObject({
+      artifactOnlyUnlistedRealFindingIds: [],
+      artifactOnlyGenuineFalsePositiveFindingIds: ['find_artifactnoise1']
+    })
+    expect(result.report.metrics.adjustedPrecision).toBe(1)
+  })
+
+  test('stores the finding description so an archived report can be re-adjudicated', async () => {
+    const result = await runWithArtifactOnlyVerdict(true)
+    // Through JSON and back through the PRODUCER contract: the description has to
+    // survive the artifact, not just the in-memory object.
+    const reparsed = EvalReportSchema.parse(
+      JSON.parse(JSON.stringify(result.report))
+    )
+    const descriptions = (reparsed.caseResults[0]?.producedFindings ?? []).map(
+      (finding) => [finding.findingId, finding.description]
+    )
+
+    expect(descriptions).toEqual([
+      ['find_eval1', 'The changed branch can return an incorrect value for callers.'],
+      ['find_noise1', 'A genuine bug the fixture did not list as expected.'],
+      ['find_artifactnoise1', 'An artifact-only finding that matched no expectation.']
+    ])
+  })
 })

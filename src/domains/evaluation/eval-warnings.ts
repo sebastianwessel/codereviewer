@@ -41,6 +41,25 @@ export const plausibilityFailClosedWarnings = (
     ? []
     : [`${EVAL_PLAUSIBILITY_FAIL_CLOSED_WARNING_PREFIX}${failClosedCount}`]
 
+// `eval-artifact-only-plausibility-fail-closed:` — the same failure on the
+// ARTIFACT-ONLY plausibility pass. It gets its own prefix rather than being
+// summed into the warning above because the two describe different populations:
+// the actionable count states how many findings adjusted precision could not
+// decide, and folding artifact-only findings into it would make that claim
+// false for part of the number. An artifact-only fail-closed verdict is
+// nonetheless as visible as an actionable one.
+export const EVAL_ARTIFACT_ONLY_PLAUSIBILITY_FAIL_CLOSED_WARNING_PREFIX =
+  'eval-artifact-only-plausibility-fail-closed:'
+
+export const artifactOnlyPlausibilityFailClosedWarnings = (
+  failClosedCount: number
+): readonly string[] =>
+  failClosedCount === 0
+    ? []
+    : [
+        `${EVAL_ARTIFACT_ONLY_PLAUSIBILITY_FAIL_CLOSED_WARNING_PREFIX}${failClosedCount}`
+      ]
+
 export const isProviderIssueWarning = (warning: string): boolean =>
   warning.startsWith(PROVIDER_ERROR_WARNING_PREFIX) ||
   warning.startsWith(EVAL_PROVIDER_RETRY_WARNING_PREFIX)
