@@ -192,10 +192,12 @@ const summaryInput = {
       artifactOnlyGenuineFalsePositiveCount: 0,
       refutationFalseNegativeCount: 0,
       refutationFalsePositiveCount: 0,
-      fixJudgmentAccuracy: 0,
-      fixFalsePositiveDetectionRate: 0,
-      fixProduceRate: 0,
-      fixApplyFailureRate: 0,
+      // The lane never ran, which is what every one of this project's runs has
+      // done so far, so every fix-lane rate is null rather than a floored 0.
+      fixJudgmentAccuracy: null,
+      fixFalsePositiveDetectionRate: null,
+      fixProduceRate: null,
+      fixApplyFailureRate: null,
       fixJudgedFindingCount: 0,
       fixGroundTruthFalsePositiveCount: 0,
       fixRealFindingCount: 0,
@@ -289,6 +291,16 @@ describe('eval report rendering', () => {
     // folded into either population.
     expect(summary).toContain('## Recall by Diff Scope')
     expect(summary).toContain('| undetermined | 100.0% (1 checked) | 1/1 |')
+    // Same rule for the fix lane, which is off by default: `0.0%` would read as
+    // a lane that ran and judged nothing correctly, produced no fix for any real
+    // defect, and caught no false positive. The denominator's own noun is kept
+    // per row so the four populations stay distinguishable.
+    expect(summary).toContain('| Fix judgment accuracy | n/a (0 judged) |')
+    expect(summary).toContain(
+      '| Fix false-positive detection rate | n/a (0 false positives) |'
+    )
+    expect(summary).toContain('| Fix produce rate | n/a (0 real) |')
+    expect(summary).toContain('| Fix apply failure rate | n/a (0 attempted) |')
     expect(summary).toContain('## Semantic Judge Matches')
     expect(summary).toContain('| Judge agreement | 100.0% (12 pairs) |')
     expect(summary).toContain('| Judge trustworthy | yes |')
@@ -300,6 +312,23 @@ describe('eval report rendering', () => {
     // No security expectation anywhere, so the mechanism table is ABSENT rather
     // than rendered as a wall of 0.0% rows over empty denominators.
     expect(summary).not.toContain('## Security by Mechanism')
+
+    // The other side of the same row: a rate the lane DID measure prints as a
+    // rate over its own denominator, so `n/a` above is a statement about the
+    // lane not having run rather than about the renderer.
+    expect(
+      renderEvalSummary({
+        ...summaryInput,
+        report: {
+          ...summaryInput.report,
+          metrics: {
+            ...summaryInput.report.metrics,
+            fixProduceRate: 0.5,
+            fixRealFindingCount: 2
+          }
+        }
+      })
+    ).toContain('| Fix produce rate | 50.0% (2 real) |')
 
     // An unattributed genuine security false positive bounds every mechanism at
     // once, so no rate is published and the summary says why. This is the branch

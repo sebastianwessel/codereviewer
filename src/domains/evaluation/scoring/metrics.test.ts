@@ -636,21 +636,51 @@ describe('eval metrics', () => {
     expect(metrics.refutationFalsePositiveCount).toBe(1)
   })
 
-  test('reports zero for every fix-lane metric when the lane never ran', () => {
-    // Divide-by-zero guard: all fix denominators are 0, so each rate is 0 (not
-    // the 1 recall/precision use for "nothing expected"), and counts are 0.
+  test('reports null, not zero, for every fix-lane rate when the lane never ran', () => {
+    // The default configuration: `fix.enabled` is off, so all four denominators
+    // are empty. Each rate must be null and NOT 0 -- a 0 here is the value a lane
+    // that ran and agreed with ground truth on nothing would also report, so the
+    // two states would be indistinguishable in an archived report. The four
+    // denominators stay honest 0 counts, which is what they are.
     const metrics = calculateEvalMetrics([caseResult()])
 
     expect(metrics).toMatchObject({
-      fixJudgmentAccuracy: 0,
-      fixFalsePositiveDetectionRate: 0,
-      fixProduceRate: 0,
-      fixApplyFailureRate: 0,
+      fixJudgmentAccuracy: null,
+      fixFalsePositiveDetectionRate: null,
+      fixProduceRate: null,
+      fixApplyFailureRate: null,
       fixJudgedFindingCount: 0,
       fixGroundTruthFalsePositiveCount: 0,
       fixRealFindingCount: 0,
       fixAttemptedCount: 0
     })
+  })
+
+  test('nulls only the fix-lane rates whose own denominator is empty', () => {
+    // The four rates are over four DIFFERENT populations, so a lane that judged
+    // findings but attempted no fix must report three numbers and one null
+    // rather than nulling or flooring the set together.
+    const metrics = calculateEvalMetrics([
+      caseResult({
+        fixJudgmentAgreementCount: 1,
+        fixJudgedLabeledCount: 2,
+        fixFalsePositiveDetectedCount: 1,
+        fixGroundTruthFalsePositiveCount: 1,
+        fixProducedForRealCount: 0,
+        fixRealFindingCount: 1,
+        fixApplyFailedCount: 0,
+        fixApplyAttemptedCount: 0
+      })
+    ])
+
+    expect(metrics.fixJudgmentAccuracy).toBe(0.5)
+    expect(metrics.fixFalsePositiveDetectionRate).toBe(1)
+    // A MEASURED zero: one eligible real finding received no apply-checked fix.
+    // It reads identically to the empty-denominator value the rates used to
+    // emit, which is exactly why that value had to stop being 0.
+    expect(metrics.fixProduceRate).toBe(0)
+    expect(metrics.fixApplyFailureRate).toBeNull()
+    expect(metrics.fixAttemptedCount).toBe(0)
   })
 
   test('computes fix-lane accuracy over mixed real and false-positive judgments', () => {

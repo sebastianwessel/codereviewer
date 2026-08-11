@@ -286,6 +286,17 @@ export const EvalMetricsSchema = z.strictObject({
   incompleteCoverageRate: RateSchema,
   contextMutationRate: RateSchema,
   providerErrorRate: RateSchema,
+  // DELIBERATELY NOT NULLABLE, unlike the fix-lane rates below, and the
+  // difference is the denominator. These two -- with `parseValidity` and
+  // `incompleteCoverageRate` -- are rated over TOTAL CASES, which is empty only
+  // for a run that scored no case at all, and such a run has no meaningful value
+  // for any metric in the report rather than a missing one here. The fix-lane
+  // denominators, by contrast, are empty in the DEFAULT configuration of a run
+  // that is otherwise entirely meaningful, which is what makes their floored 0 a
+  // lie about a real measurement. `providerIssueCount` beside this rate is an
+  // absolute count and is honestly 0 in the empty case, so nulling the rate would
+  // add a case every consumer must handle to describe a state the count already
+  // describes exactly.
   providerIssueRate: RateSchema.default(0),
   providerIssueCount: z.int().min(0).default(0),
   duplicateFindingCount: z.int().min(0).default(0),
@@ -327,10 +338,26 @@ export const EvalMetricsSchema = z.strictObject({
   // Fix-lane accuracy metrics (spec 12). All are measured over REAL runs of the
   // finding investigation-and-fix lane and are scored against the eval match
   // result as ground truth: a matched finding is a real defect, a false-positive
-  // finding is a non-defect. Unlike recall/precision (whose empty value is 1),
-  // every fix-lane rate uses an empty value of 0 so an eval that never exercised
-  // the lane reports 0, not a misleading "perfect", and the paired count fields
-  // (denominators) make each rate interpretable.
+  // finding is a non-defect. The paired count fields below are the denominators
+  // that make each rate interpretable.
+  //
+  // ALL FOUR ARE NULLABLE, and null is the value a run reports when the lane
+  // produced no population to score -- which is EVERY run in the default
+  // configuration, because `fix.enabled` is off. They used to default to 0, and
+  // that 0 was indistinguishable from a lane that ran and got everything wrong:
+  // `fixJudgmentAccuracy: 0` reads as "the lane agreed with ground truth on
+  // nothing", `fixProduceRate: 0` as "it fixed none of the real defects". That
+  // is this repository's own silent-optimism defect class -- absence producing a
+  // confident, plausible answer instead of an admission -- sitting inside the
+  // instrument built to detect it. Null cannot be misread, and it forces a
+  // consumer to handle the case, exactly as `lineAccuracy` and
+  // `linePlacementRate` above already do.
+  //
+  // The four are nullable TOGETHER even though only three of the empty-value
+  // zeros read as catastrophic (an empty `fixApplyFailureRate` of 0 reads as
+  // "nothing failed", which is flattering rather than damning). One family, one
+  // convention: three nulls beside one 0 would invite a reader to conclude the
+  // 0 was measured.
   //
   // All fix-lane rates are scored only over findings the lane was ELIGIBLE to act
   // on (at or above fix.minSeverity) — the lane produces an outcome only for
@@ -341,17 +368,17 @@ export const EvalMetricsSchema = z.strictObject({
   //
   // fixJudgmentAccuracy: over eligible findings the lane judged that carry a
   // ground-truth label, the fraction whose judgment agrees with ground truth.
-  fixJudgmentAccuracy: RateSchema.default(0),
+  fixJudgmentAccuracy: RateSchema.nullable(),
   // fixFalsePositiveDetectionRate: of eligible genuine-false-positive findings,
   // the fraction the lane judged 'false-positive' (recall on catching real noise).
-  fixFalsePositiveDetectionRate: RateSchema.default(0),
+  fixFalsePositiveDetectionRate: RateSchema.nullable(),
   // fixProduceRate: of eligible real findings (matched or unlisted-real), the
   // fraction that received an apply-checked fix (applyCheck 'passed').
-  fixProduceRate: RateSchema.default(0),
+  fixProduceRate: RateSchema.nullable(),
   // fixApplyFailureRate: of fixes the lane attempted (applyCheck 'passed' or
   // 'failed'), the fraction that FAILED the deterministic apply-check
   // (hallucinated / stale edits caught by code).
-  fixApplyFailureRate: RateSchema.default(0),
+  fixApplyFailureRate: RateSchema.nullable(),
   // Denominators, surfaced so the rates above are interpretable.
   fixJudgedFindingCount: z.int().min(0).default(0),
   fixGroundTruthFalsePositiveCount: z.int().min(0).default(0),
@@ -1112,28 +1139,27 @@ export const calculateEvalMetrics = (
         )
       )
     ),
-    // Fix-lane accuracy (spec 12). Every rate uses an empty value of 0: a run
-    // that never exercised the lane has zero denominators and must report 0, not
-    // the 1 that recall/precision use for "nothing expected".
-    fixJudgmentAccuracy: ratio(
+    // Fix-lane accuracy (spec 12), every rate through `rateOrNull` and none
+    // through `ratio`: a run that never exercised the lane -- the default, since
+    // `fix.enabled` is off -- has four empty denominators, and a rate over an
+    // empty denominator is undefined rather than 0. See the schema comment for
+    // why the floored 0 these used to emit was the failure mode, not the
+    // convention.
+    fixJudgmentAccuracy: rateOrNull(
       sum(caseResults.map((result) => result.fixJudgmentAgreementCount)),
-      sum(caseResults.map((result) => result.fixJudgedLabeledCount)),
-      0
+      sum(caseResults.map((result) => result.fixJudgedLabeledCount))
     ),
-    fixFalsePositiveDetectionRate: ratio(
+    fixFalsePositiveDetectionRate: rateOrNull(
       sum(caseResults.map((result) => result.fixFalsePositiveDetectedCount)),
-      sum(caseResults.map((result) => result.fixGroundTruthFalsePositiveCount)),
-      0
+      sum(caseResults.map((result) => result.fixGroundTruthFalsePositiveCount))
     ),
-    fixProduceRate: ratio(
+    fixProduceRate: rateOrNull(
       sum(caseResults.map((result) => result.fixProducedForRealCount)),
-      sum(caseResults.map((result) => result.fixRealFindingCount)),
-      0
+      sum(caseResults.map((result) => result.fixRealFindingCount))
     ),
-    fixApplyFailureRate: ratio(
+    fixApplyFailureRate: rateOrNull(
       sum(caseResults.map((result) => result.fixApplyFailedCount)),
-      sum(caseResults.map((result) => result.fixApplyAttemptedCount)),
-      0
+      sum(caseResults.map((result) => result.fixApplyAttemptedCount))
     ),
     fixJudgedFindingCount: sum(
       caseResults.map((result) => result.fixJudgedLabeledCount)

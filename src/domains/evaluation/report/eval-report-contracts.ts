@@ -349,6 +349,49 @@ export const EvalReportScoringSchema = z.strictObject({
   plausibilityJudged: z.boolean().optional()
 })
 
+// The optional-capability toggles a run was configured with, named rather than
+// hashed.
+//
+// KEYS ARE THE CONFIGURATION PATH OF THE TOGGLE, verbatim and including the
+// trailing `.enabled`, so a reader maps a key back to the setting without a
+// translation table and no capability can be recorded under two spellings.
+//
+// It is an EXPLICIT strict object and not a `Record<string, boolean>`. A
+// free-form record cannot say what the absence of a key means -- an off
+// capability and a capability the producer forgot to record would both be
+// missing -- and it would let a typo become a new capability. With a closed set,
+// every key is present on every report this build writes, so `false` means off
+// and a missing block means the whole field was never recorded.
+//
+// It is the COMPLETE set of `enabled` toggles in the configuration schema, not a
+// curated subset of the ones judged relevant to a measurement. A curated list
+// asks for that judgement to be re-made correctly on every new toggle, and "this
+// flag cannot affect the numbers" is exactly the kind of judgement this
+// repository has already got wrong (reviewer instructions were ledgered, hashed,
+// and then dropped before the discovery call, with nothing reporting it).
+// `eval-capability-flags.test.ts` derives the toggle set from the configuration
+// schema itself and fails when it does not match this list exactly.
+export const EvalReportCapabilityFlagsSchema = z.strictObject({
+  'review.crossFileRetrieval.enabled': z.boolean(),
+  'review.signalFacts.enabled': z.boolean(),
+  'review.citations.enabled': z.boolean(),
+  'skills.enabled': z.boolean(),
+  'baseline.enabled': z.boolean(),
+  'aiReview.enabled': z.boolean(),
+  'contextSources.enabled': z.boolean(),
+  'verification.enabled': z.boolean(),
+  'changeImpact.enabled': z.boolean(),
+  'changeImpact.adjudication.enabled': z.boolean(),
+  'intentFulfilment.enabled': z.boolean(),
+  'fix.enabled': z.boolean(),
+  'security.dedicatedPass.enabled': z.boolean(),
+  'security.signals.enabled': z.boolean(),
+  'reporting.reviewComments.enabled': z.boolean(),
+  'drift.enabled': z.boolean(),
+  'observability.openTelemetry.enabled': z.boolean(),
+  'reviewConversation.enabled': z.boolean()
+})
+
 // Provenance proves WHAT was scored and under WHAT configuration, which
 // `metricsVersion` alone does not: `metricsVersion` says how a metric is
 // computed from review output, but nothing before this recorded which answer
@@ -392,7 +435,23 @@ export const EvalReportProvenanceSchema = z.strictObject({
   // difference, which is exactly the failure the pinning exists to remove.
   // Optional for the same reason as the two above (an offline run has no
   // judge), and so a report archived before the field existed still parses.
-  judgeModelName: z.string().min(1).optional()
+  judgeModelName: z.string().min(1).optional(),
+  // Which optional capabilities the run actually had ENABLED.
+  //
+  // `configHash` above cannot answer that, and its own comment claims it exists
+  // "so an archived run can be read back and its configuration identity
+  // checked". A digest supports exactly one question -- did two runs share a
+  // configuration -- because no value can be read back out of it. So no archived
+  // report could say whether the fix lane was on, which is the first thing a
+  // reader asks of a fix-lane figure, and the hash still cannot: it is kept for
+  // identity, and this is kept for content.
+  //
+  // OPTIONAL, AND ABSENT MEANS "NOT RECORDED" -- NEVER "NOTHING WAS ENABLED". A
+  // report archived before this field existed was written by a build that did
+  // not know to record it, and defaulting it to an all-`false` set would
+  // fabricate an answer about a run nobody can re-interrogate. Same rule, and
+  // the same reason, as `scoring.plausibilityJudged`.
+  capabilities: EvalReportCapabilityFlagsSchema.optional()
 })
 
 export const EvalMetricGroupSchema = z.strictObject({
@@ -450,5 +509,8 @@ export type EvalRegressionGateOutcome = z.infer<
 >
 export type EvalReportSelection = z.infer<typeof EvalReportSelectionSchema>
 export type EvalReportScoring = z.infer<typeof EvalReportScoringSchema>
+export type EvalReportCapabilityFlags = z.infer<
+  typeof EvalReportCapabilityFlagsSchema
+>
 export type EvalReportProvenance = z.infer<typeof EvalReportProvenanceSchema>
 export type EvalReport = z.infer<typeof EvalReportSchema>

@@ -192,6 +192,13 @@ const metricSet = (overrides: Record<string, unknown> = {}): Record<string, unkn
   linePlacementRate: null,
   linePlacementCheckCount: 0,
   severityAccuracy: 1,
+  // Spelled out rather than left to a default, exactly like `linePlacementRate`
+  // above: a rate with an empty denominator is `null` in this contract and has
+  // no default to fall back on, so a fixture that omits it is not a report.
+  fixJudgmentAccuracy: null,
+  fixFalsePositiveDetectionRate: null,
+  fixProduceRate: null,
+  fixApplyFailureRate: null,
   falsePositiveCount: 0,
   noFindingZoneFalsePositiveCount: 0,
   actionableRate: 1,
@@ -2132,6 +2139,112 @@ describe('eval CLI', () => {
       )
 
       expect(result.exitCode).toBe(0)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // A capability difference is WARNED about, never refused: measuring what one
+  // flag does by running both sides is the comparison this command exists for.
+  // Staying silent is the failure mode — the difference explains every delta
+  // below it, and before provenance recorded the flags a reader had only two
+  // opaque config hashes to spot it with.
+  test('warns, without refusing, when the arms enabled different capabilities', async () => {
+    const root = await createTempDir()
+
+    try {
+      const withCapabilities = (
+        capabilities: Record<string, boolean>
+      ): Record<string, unknown> => ({
+        ...evalReport(),
+        provenance: { modelName: 'shared-model', capabilities }
+      })
+      await writeFile(
+        join(root, 'base-1.json'),
+        JSON.stringify(
+          withCapabilities({ 'fix.enabled': false, 'skills.enabled': false })
+        )
+      )
+      await writeFile(
+        join(root, 'head-1.json'),
+        JSON.stringify(
+          withCapabilities({ 'fix.enabled': true, 'skills.enabled': false })
+        )
+      )
+
+      const result = await runCli(
+        ['eval', 'compare', '--base', 'base-1.json', '--head', 'head-1.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain('# Evaluation Comparison')
+      expect(result.stderr).toContain('different capabilities')
+      expect(result.stderr).toContain('fix.enabled (true: head-1.json; false: base-1.json)')
+      // A capability both arms agree on is not a difference and must not be
+      // listed, or the warning becomes a config dump nobody reads.
+      expect(result.stderr).not.toContain('skills.enabled')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  test('says nothing when both arms enabled the same capabilities', async () => {
+    const root = await createTempDir()
+
+    try {
+      const report = {
+        ...evalReport(),
+        provenance: {
+          modelName: 'shared-model',
+          capabilities: { 'fix.enabled': false }
+        }
+      }
+      await writeFile(join(root, 'base-1.json'), JSON.stringify(report))
+      await writeFile(join(root, 'head-1.json'), JSON.stringify(report))
+
+      const result = await runCli(
+        ['eval', 'compare', '--base', 'base-1.json', '--head', 'head-1.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stderr).toBe('')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  // Absent capabilities mean NOT RECORDED, never "nothing was enabled". Silence
+  // there would let a report archived before the field existed pass as agreeing
+  // with a report that genuinely recorded every flag as off.
+  test('warns that a report recording no capabilities cannot rule a difference out', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeFile(
+        join(root, 'base-1.json'),
+        JSON.stringify({ ...evalReport(), provenance: { modelName: 'shared-model' } })
+      )
+      await writeFile(
+        join(root, 'head-1.json'),
+        JSON.stringify({
+          ...evalReport(),
+          provenance: {
+            modelName: 'shared-model',
+            capabilities: { 'fix.enabled': true }
+          }
+        })
+      )
+
+      const result = await runCli(
+        ['eval', 'compare', '--base', 'base-1.json', '--head', 'head-1.json'],
+        { cwd: root, environment: {} }
+      )
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stderr).toContain('record no capability flags')
+      expect(result.stderr).toContain('base-1.json')
     } finally {
       await rm(root, { recursive: true, force: true })
     }

@@ -541,6 +541,7 @@ artifact revealing that. Every report also records `provenance`:
 | `provenance.providerId` | string, omitted when no provider | The provider identity (`ProviderConfig.id`) the run resolved. One provider serves both the reviewer and the judges; only the MODEL is separately pinnable. Omitted for a fully offline run (no expected findings, no judge needed). |
 | `provenance.modelName` | string, omitted when no provider | The REVIEWER's model name (`ProviderConfig.model`) — the subject of the measurement. Omitted under the same condition as `providerId`. |
 | `provenance.judgeModelName` | string, omitted when no provider | The model the two judges actually scored with: `evaluation.judgeModel` when pinned, otherwise `provenance.modelName`. **Recorded either way, including when it equals the reviewer's model** — "same as the reviewer" is an answer, and a report that cannot name its own judge leaves every number in it ambiguous between a reviewer difference and a scorer difference (see "The Judge Must Be Pinnable Independently Of The Reviewer"). Empty for reports saved before the field existed, which is exactly the era whose model comparisons cannot be checked. |
+| `provenance.capabilities` | map of configuration path to boolean, omitted when not recorded | Every optional-capability toggle in the configuration schema — one entry per `enabled` key, named by its full configuration path (`fix.enabled`, `security.dedicatedPass.enabled`, …) — read as VALUES off the same effective config `configHash` is taken over. It exists because a digest supports exactly one question, "did two runs share a configuration", and no value can be read back out of it: before this field no archived report could answer "was the fix lane on?", which is the first thing a reader asks of a fix-lane figure. The key set is CLOSED and EXHAUSTIVE over the configuration schema, not a curated subset of the toggles judged relevant to a measurement — a curated list asks for that judgement to be re-made correctly on every new toggle. Every key is therefore present on every report a compatible build writes, so `false` means off; a key that is absent, or an invented key, is a parse failure rather than a partial answer. **Omitted means NOT RECORDED, never "nothing was enabled"**: a report archived before the field existed was written by a build that did not know to record it, and defaulting to an all-`false` set would fabricate an answer about a run nobody can re-interrogate. A capability added to the configuration schema without being added here MUST fail a test (`src/cli/eval-capability-flags.test.ts`), because no type can span the two shapes. |
 
 `eval compare` refuses to diff two reports when any case they BOTH scored was
 scored against different expectations, named individually in the error. It uses
@@ -551,6 +552,17 @@ covered by the differing-selection warning below; the shared cases having moved
 underneath the comparison is the stale-answer-key incident, which looks exactly
 like a real regression or win. A guard blunt enough to block the first would
 reasonably be deleted, and would take the second with it.
+
+`eval compare` WARNS, and never refuses, when the reports do not agree on
+`provenance.capabilities`. The reasoning is the one `configHash` already carries:
+running both sides of a deliberate flag change is exactly the comparison this
+command exists to make, so refusing would block its purpose. Staying silent is the
+failure mode — a capability difference is a candidate explanation for every delta
+in the report. Reports are pooled across both arms rather than compared arm to arm,
+matching the judge-model check, because a flag that differs BETWEEN the runs of one
+arm is at least as misleading as one that differs across arms. A report that records
+no capabilities at all is warned about separately, as one whose capability set could
+not be checked rather than as one that had everything off.
 
 The significance module is deliberately stricter and refuses on the aggregate
 digest: its reports form one arm whose per-expectation hit rates share a
@@ -694,9 +706,17 @@ change until that paired check is done.
 
 Empty denominators do not share one convention, and the difference is deliberate.
 Recall, precision, adjusted precision, the artifact-only rates, `recallByTier`, and
-`productRecall` use an empty value of `1`. The security recall metrics and all four
-fix-lane rates use `0`. `lineAccuracy`, `linePlacementRate`, and `severityAccuracy`
-use `null`, because a rate over no checks is undefined rather than zero.
+`productRecall` use an empty value of `1`. The security recall metrics use `0`.
+`lineAccuracy`, `linePlacementRate`, `severityAccuracy`, and all four fix-lane
+rates use `null`, because a rate over no checks is undefined rather than zero.
+
+The fix-lane rates moved from `0` to `null` on 2026-08-11 (metrics version
+`2026-08-11.fix-lane-rates-null-on-empty-denominator`). `fix.enabled` is off by
+default, so every one of those denominators is empty on an ordinary run, and the
+`0` those rates published was the same value a lane that ran and agreed with
+ground truth on nothing would report. An archived report cannot be read for these
+four: its `0` is indistinguishable from a measurement and is not comparable
+against anything produced after that boundary.
 
 ### Metric Definitions
 
@@ -739,10 +759,10 @@ use `null`, because a rate over no checks is undefined rather than zero.
 | `rejectionReasonBySeverityCounts` | `rejectionReasonCounts` cross-tabulated by severity: `{ [reason]: { [severity]: count } }`. Lets a spike in one rejection reason be attributed to a severity band instead of only read in aggregate. |
 | `refutationFalseNegativeCount` | **Upper bound, not a measurement.** Expected findings left unmatched in a case that also rejected at least one candidate, bounded by the unmatched-expected count. Whether the rejected candidate was actually the missing expectation is not established, because doing so would mean judging every rejected candidate against every expectation and the evaluation does not spend those provider calls. Rendered with its upper-bound label so it is not read as a count of proven refuter mistakes. |
 | `refutationFalsePositiveCount` | Candidates the refuter marked `proved` that were not real defects: unmatched findings the plausibility judge deemed spurious, bounded by the case's proved refutations so a refutation-exempt trusted deterministic finding is never charged to the refuter. Counting every unmatched proved finding instead — as this metric originally did — charges the refuter for the genuine defects the fixture never listed, which is exactly what the plausibility judge exists to exonerate, and made the metric numerically identical to `unlistedRealFindingCount` on a clean run. |
-| `fixJudgmentAccuracy` | Fix lane (spec 12) accuracy over the findings it was **eligible** to act on (at or above `fix.minSeverity` — the only ones it judges) that carry a ground-truth label: the fraction whose judgment agrees with ground truth. Ground truth is corrected by the plausibility judge: a matched finding **or** an unmatched-but-plausible (unlisted-real) finding is `real`; a genuine false positive is `false-positive`. Empty value is `0`. Interpreted with `fixJudgedFindingCount`. |
-| `fixFalsePositiveDetectionRate` | Of eligible genuine-false-positive findings, the fraction the fix lane judged `false-positive`. Recall on catching real noise. Empty value is `0`. Interpreted with `fixGroundTruthFalsePositiveCount`. |
-| `fixProduceRate` | Of eligible real findings (matched or unlisted-real), the fraction that received an apply-checked fix (`applyCheck = "passed"`). Empty value is `0`. Interpreted with `fixRealFindingCount`. |
-| `fixApplyFailureRate` | Of fixes the lane attempted (`applyCheck` `passed` or `failed`), the fraction that FAILED the deterministic apply-check — hallucinated or stale edits caught by code. Empty value is `0`. Interpreted with `fixAttemptedCount`. |
+| `fixJudgmentAccuracy` | Fix lane (spec 12) accuracy over the findings it was **eligible** to act on (at or above `fix.minSeverity` — the only ones it judges) that carry a ground-truth label: the fraction whose judgment agrees with ground truth. Ground truth is corrected by the plausibility judge: a matched finding **or** an unmatched-but-plausible (unlisted-real) finding is `real`; a genuine false positive is `false-positive`. **`null` on an empty denominator** — a lane that never ran did not score 0. Interpreted with `fixJudgedFindingCount`. |
+| `fixFalsePositiveDetectionRate` | Of eligible genuine-false-positive findings, the fraction the fix lane judged `false-positive`. Recall on catching real noise. **`null` on an empty denominator.** Interpreted with `fixGroundTruthFalsePositiveCount`. |
+| `fixProduceRate` | Of eligible real findings (matched or unlisted-real), the fraction that received an apply-checked fix (`applyCheck = "passed"`). **`null` on an empty denominator.** Interpreted with `fixRealFindingCount`. |
+| `fixApplyFailureRate` | Of fixes the lane attempted (`applyCheck` `passed` or `failed`), the fraction that FAILED the deterministic apply-check — hallucinated or stale edits caught by code. **`null` on an empty denominator**, together with the three above rather than on its own merits: an empty `0` here reads as flattering ("nothing failed") rather than damning, but three nulls beside one `0` would invite a reader to conclude the `0` was measured. Interpreted with `fixAttemptedCount`. |
 | `fixJudgedFindingCount` | Denominator of `fixJudgmentAccuracy`: judged findings that carry a ground-truth label. |
 | `fixGroundTruthFalsePositiveCount` | Denominator of `fixFalsePositiveDetectionRate`: eligible genuine-false-positive findings. |
 | `fixRealFindingCount` | Denominator of `fixProduceRate`: eligible real findings (matched or unlisted-real). |
@@ -853,8 +873,8 @@ Each `FixOutcome` is joined to its finding by `findingId` and scored against the
 match result as ground truth — a matched finding is a real defect, an unmatched
 actionable admitted finding is a false positive — to compute
 `fixJudgmentAccuracy`, `fixFalsePositiveDetectionRate`, `fixProduceRate`, and
-`fixApplyFailureRate` (and their denominator counts). All four rates use an
-empty value of `0`, unlike recall/precision. The lane never changes admission,
+`fixApplyFailureRate` (and their denominator counts). All four rates are `null`
+when their own denominator is empty, which is every run with the lane off. The lane never changes admission,
 severity, or the quality gate; these metrics are advisory precision/fix-quality
 signals only. The fix lane also appears as a `fix` entry in each case's
 `agenticStages` (active with its outcome count, or skipped) alongside

@@ -495,6 +495,14 @@ Then `## Headline`: product recall, all-tier recall, unlisted real findings, the
 alone), genuine false positives, duplicates, severity accuracy, provider error
 rate, cost.
 
+The summary is rendered from `eval-report.json`, which carries one thing the
+summary does not: `provenance.capabilities`, a per-flag record of every optional
+capability the run had enabled, named by its configuration path (`fix.enabled`,
+`security.dedicatedPass.enabled`, …). Read it whenever a number depends on a lane
+being on. `provenance.configHash` cannot answer that — nothing can be read back
+out of a digest — and a report archived before the field existed **omits** it,
+which means *not recorded*, never that everything was off.
+
 ---
 
 ## Exit codes

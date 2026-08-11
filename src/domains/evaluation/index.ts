@@ -256,12 +256,14 @@ export { renderEvalRecallReport } from './rendering/eval-recall-report-rendering
 export {
   EVAL_METRICS_VERSION,
   EvalRegressionThresholdsSchema,
+  EvalReportCapabilityFlagsSchema,
   EvalReportSchema,
   type EvalCaseOutput,
   type EvalContextLedgerEntry,
   type EvalRegressionGateOutcome,
   type EvalRegressionThresholds,
   type EvalReport,
+  type EvalReportCapabilityFlags,
   type EvalReportProvenance
 } from './report/eval-report-contracts.js'
 export {

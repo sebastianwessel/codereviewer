@@ -1,12 +1,96 @@
 // `eval compare` — adjudicates one arm of eval runs against another.
 import {
   renderEvalComparison,
-  type EvalComparisonReport
+  type EvalComparisonReport,
+  type EvalComparisonRun
 } from '../../domains/evaluation/index.js'
 import { parseOptionValues, unknownCliOption } from '../args.js'
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
 import { mapErrorResult, usageError } from '../cli-error-results.js'
 import { readEvalComparisonReport } from '../eval-report-files.js'
+
+// A capability difference between the reports is WARNED about and never
+// refused, and the reasoning is the one `provenance.configHash` already carries:
+// running both sides of a deliberate flag change is exactly the comparison this
+// command exists to make, so refusing it would block the command's purpose. That
+// is the opposite of the judge-model check above, where the difference makes the
+// numbers uninterpretable rather than merely explicable.
+//
+// What it must not do is stay silent. A capability difference is a candidate
+// explanation for every delta the report prints, and until provenance recorded
+// the flags a reader had only two opaque config hashes to notice it with.
+//
+// Reports are pooled across both arms rather than compared arm to arm, matching
+// the judge check: a flag that differs BETWEEN the runs of one arm is at least as
+// misleading as one that differs across arms, and pooling catches both.
+const capabilityDifferenceWarnings = (
+  runs: readonly EvalComparisonRun[]
+): readonly string[] => {
+  const unrecorded = runs
+    .filter(({ report }) => report.provenance?.capabilities === undefined)
+    .map(({ label }) => label)
+  const recorded = runs.filter(
+    ({ report }) => report.provenance?.capabilities !== undefined
+  )
+  const valuesByCapability = new Map<string, Map<boolean, string[]>>()
+
+  for (const { label, report } of recorded) {
+    for (const [capability, enabled] of Object.entries(
+      report.provenance?.capabilities ?? {}
+    )) {
+      const labelsByValue = valuesByCapability.get(capability) ?? new Map()
+      labelsByValue.set(enabled, [...(labelsByValue.get(enabled) ?? []), label])
+      valuesByCapability.set(capability, labelsByValue)
+    }
+  }
+
+  // A capability recorded by only SOME of the reports differs too: the reports
+  // that omit it were produced by a build whose capability set was different, so
+  // the key's absence is itself the difference and is reported as `not recorded`
+  // rather than assumed to be `false`.
+  const differing = [...valuesByCapability.entries()]
+    .filter(
+      ([, labelsByValue]) =>
+        labelsByValue.size > 1 ||
+        [...labelsByValue.values()].flat().length !== recorded.length
+    )
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([capability, labelsByValue]) => {
+      const stated = [...labelsByValue.values()].flat()
+      const missing = recorded
+        .map(({ label }) => label)
+        .filter((label) => !stated.includes(label))
+
+      // `true` before `false` so the enabled side reads first, then the reports
+      // that never stated the capability at all.
+      return `${capability} (${[
+        ...[...labelsByValue.entries()]
+          .sort(([left], [right]) => Number(right) - Number(left))
+          .map(([enabled, labels]) => `${enabled}: ${labels.join(', ')}`),
+        ...(missing.length === 0 ? [] : [`not recorded: ${missing.join(', ')}`])
+      ].join('; ')})`
+    })
+  const warnings: string[] = []
+
+  if (differing.length > 0) {
+    warnings.push(
+      'Warning: these reports were produced under different capabilities. That is ' +
+        'legitimate — measuring what one flag does by running both sides is what ' +
+        'this command is for — but it is a candidate explanation for every delta ' +
+        `below: ${differing.join('; ')}`
+    )
+  }
+
+  if (unrecorded.length > 0) {
+    warnings.push(
+      'Warning: these reports record no capability flags, so a capability ' +
+        'difference cannot be ruled out for them — absent means not recorded, ' +
+        `never that nothing was enabled: ${unrecorded.join(', ')}`
+    )
+  }
+
+  return warnings
+}
 
 export const runEvalCompare = async (
   args: readonly string[],
@@ -110,7 +194,7 @@ export const runEvalCompare = async (
     return {
       exitCode: 0,
       stdout: `${renderEvalComparison({ base, head })}\n`,
-      stderr: ''
+      stderr: capabilityDifferenceWarnings([...base, ...head]).join('\n')
     }
   } catch (error) {
     return mapErrorResult(error, 'config')

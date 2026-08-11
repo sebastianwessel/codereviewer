@@ -204,6 +204,10 @@ the inputs its status derives from renders `unknown`, never `PASS`.
 - **An arm mixes scoring rules, answer keys, or scored expectations across its
   own runs** — see above. Pooling a heterogeneous arm is never right.
 
+A *capability* difference is deliberately not on this list: it is warned about
+instead, for the same reason a `configHash` difference is tolerated. See
+"Warnings that invalidate the deltas" below.
+
 None can be bypassed with a flag. A differing case *selection* between the arms
 is not this — see the warning below.
 
@@ -325,6 +329,19 @@ same-dataset comparable:
   reflect judge variance rather than review quality.
 
 Treat any of these as a stop sign, not a footnote.
+
+Two further warnings are written to **stderr** rather than into the report, both
+about `provenance.capabilities` — the per-flag record of which optional
+capabilities each run had enabled:
+
+- **The reports do not agree on a capability**, named with which reports held
+  which value. This is *not* a stop sign: running both sides of a deliberate flag
+  change is exactly what the command is for. It is a candidate explanation for
+  every delta below it, and it is stated because a `configHash` difference alone
+  never said *what* differed.
+- **A report records no capability flags at all** — it was archived before the
+  field existed, so a capability difference cannot be ruled out for it. Absent
+  means not recorded; it never means nothing was enabled.
 
 > A differing case selection is a warning, not a refusal. The hard refusal fires
 > only when a case BOTH runs scored was scored against different expectations,

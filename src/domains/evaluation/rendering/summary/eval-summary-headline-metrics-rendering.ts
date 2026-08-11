@@ -73,6 +73,24 @@ const formatPlausibilityJudgeAgreement = (report: EvalReport): string =>
     ? 'not scored'
     : `${formatPercent(report.metrics.plausibilityJudgeAgreement)} (${report.metrics.plausibilityJudgeAgreementPairCount} pairs)`
 
+// A fix-lane rate (spec 12) is `null` whenever the lane produced no population
+// to score, which is every run with `fix.enabled` off. `n/a` says that; `0.0%`
+// said "the lane ran and got nothing right", which is a different claim about a
+// lane that never ran.
+//
+// The denominator's NOUN is kept per row -- judged, false positives, real,
+// attempted -- rather than routing these through `formatRateOverCount`, whose
+// fixed "checked" would erase which of four different populations each rate is
+// over. The n/a wording matches that helper's so a reader learns one phrase.
+const formatFixLaneRate = (
+  value: number | null,
+  denominatorCount: number,
+  denominatorNoun: string
+): string =>
+  value === null || denominatorCount === 0
+    ? `n/a (0 ${denominatorNoun})`
+    : `${formatPercent(value)} (${denominatorCount} ${denominatorNoun})`
+
 // Shared formatter for a `Record<string, number>` tally rendered as an inline
 // comma-joined summary (e.g. rejection reason or severity counts). Reused so
 // the reason and severity rows can never drift into two different renderings
@@ -234,10 +252,10 @@ export const appendEvalSummaryMetrics = (
       `| Rejected candidates by severity | ${formatCountRecord(report.metrics.rejectionSeverityCounts)} |`,
       `| Refutation false negatives (upper bound) | ${report.metrics.refutationFalseNegativeCount} |`,
       `| Refutation false positives | ${report.metrics.refutationFalsePositiveCount} |`,
-      `| Fix judgment accuracy | ${formatPercent(report.metrics.fixJudgmentAccuracy)} (${report.metrics.fixJudgedFindingCount} judged) |`,
-      `| Fix false-positive detection rate | ${formatPercent(report.metrics.fixFalsePositiveDetectionRate)} (${report.metrics.fixGroundTruthFalsePositiveCount} false positives) |`,
-      `| Fix produce rate | ${formatPercent(report.metrics.fixProduceRate)} (${report.metrics.fixRealFindingCount} real) |`,
-      `| Fix apply failure rate | ${formatPercent(report.metrics.fixApplyFailureRate)} (${report.metrics.fixAttemptedCount} attempted) |`,
+      `| Fix judgment accuracy | ${formatFixLaneRate(report.metrics.fixJudgmentAccuracy, report.metrics.fixJudgedFindingCount, 'judged')} |`,
+      `| Fix false-positive detection rate | ${formatFixLaneRate(report.metrics.fixFalsePositiveDetectionRate, report.metrics.fixGroundTruthFalsePositiveCount, 'false positives')} |`,
+      `| Fix produce rate | ${formatFixLaneRate(report.metrics.fixProduceRate, report.metrics.fixRealFindingCount, 'real')} |`,
+      `| Fix apply failure rate | ${formatFixLaneRate(report.metrics.fixApplyFailureRate, report.metrics.fixAttemptedCount, 'attempted')} |`,
       `| Duplicate findings | ${report.metrics.duplicateFindingCount} |`,
       `| No-finding-zone hits | ${report.metrics.noFindingZoneFalsePositiveCount} |`,
       `| Actionable rate | ${formatPercent(report.metrics.actionableRate)} |`,

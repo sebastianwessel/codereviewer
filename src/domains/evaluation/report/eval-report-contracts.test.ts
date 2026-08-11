@@ -104,6 +104,74 @@ describe('eval report contracts', () => {
     ).toContain('diffScope')
   })
 
+  // `configHash` proves two runs shared a configuration and can answer nothing
+  // else, because no value can be read back out of a digest. These record the
+  // capability VALUES beside it so an archived report can say whether the fix
+  // lane was on.
+  describe('capability flags in provenance', () => {
+    const capabilities = {
+      'review.crossFileRetrieval.enabled': true,
+      'review.signalFacts.enabled': false,
+      'review.citations.enabled': true,
+      'skills.enabled': false,
+      'baseline.enabled': true,
+      'aiReview.enabled': true,
+      'contextSources.enabled': false,
+      'verification.enabled': false,
+      'changeImpact.enabled': false,
+      'changeImpact.adjudication.enabled': false,
+      'intentFulfilment.enabled': false,
+      'fix.enabled': true,
+      'security.dedicatedPass.enabled': false,
+      'security.signals.enabled': false,
+      'reporting.reviewComments.enabled': false,
+      'drift.enabled': true,
+      'observability.openTelemetry.enabled': false,
+      'reviewConversation.enabled': false
+    }
+    const provenance = {
+      answerKeyDigest: 'a'.repeat(64),
+      answerKeyDigestByCase: {},
+      configHash: 'b'.repeat(64)
+    }
+
+    test('round-trips every flag through a serialized report', () => {
+      const parsed = EvalReportProvenanceSchema.parse(
+        JSON.parse(JSON.stringify({ ...provenance, capabilities }))
+      )
+
+      expect(parsed.capabilities).toEqual(capabilities)
+      expect(parsed.capabilities?.['fix.enabled']).toBe(true)
+    })
+
+    // A report archived before the field existed must still parse, and must come
+    // back ABSENT rather than as an all-off set: nobody recorded those flags, and
+    // inventing `false` for each would answer a question the run never asked.
+    test('parses a report archived without them as not recorded, not as all-off', () => {
+      expect(
+        EvalReportProvenanceSchema.parse(provenance).capabilities
+      ).toBeUndefined()
+    })
+
+    // The keys are a closed set precisely so `false` means off and a missing key
+    // cannot mean anything at all. A partial or invented record is refused rather
+    // than read as a partial answer.
+    test('refuses an invented key and refuses a partial record', () => {
+      expect(
+        EvalReportProvenanceSchema.safeParse({
+          ...provenance,
+          capabilities: { ...capabilities, 'invented.enabled': true }
+        }).success
+      ).toBe(false)
+      expect(
+        EvalReportProvenanceSchema.safeParse({
+          ...provenance,
+          capabilities: { 'fix.enabled': true }
+        }).success
+      ).toBe(false)
+    })
+  })
+
   // The description is what makes an ARCHIVED run re-adjudicable: every judge in
   // this domain decides from it, so a summary without it can only be re-judged by
   // paying for the run again. A cap below the producer's own bound would defeat

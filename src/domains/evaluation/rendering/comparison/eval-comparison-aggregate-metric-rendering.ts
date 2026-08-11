@@ -44,14 +44,33 @@ const formatRow = (
 ): string =>
   `| ${input.metric} | ${input.base} | ${input.head} | ${input.delta} |`
 
-// Metrics of the view that are a plain number, so one row renderer can serve
-// them all. Derived from the view rather than listed, so a metric added there
-// with the wrong shape cannot be routed through a numeric row by mistake.
+// Metrics of the view that are a plain number and never `null`, so one row
+// renderer can serve them all. Derived from the view rather than listed, so a
+// metric added there with the wrong shape cannot be routed through a numeric row
+// by mistake.
+//
+// `Exclude<..., undefined>` rather than `NonNullable<...>`: a NULLABLE rate
+// (`number | null | undefined`) must NOT land here, because these rows print a
+// number for every recorded value and would render "not measured" as 0.0% --
+// which is the exact defect the nullable rates exist to remove. `NonNullable`
+// strips the `null` too and would have admitted them silently.
 type ScalarMetricKey = {
-  [Key in keyof EvalComparisonMetrics]-?: NonNullable<
-    EvalComparisonMetrics[Key]
+  [Key in keyof EvalComparisonMetrics]-?: Exclude<
+    EvalComparisonMetrics[Key],
+    undefined
   > extends number
     ? Key
+    : never
+}[keyof EvalComparisonMetrics]
+
+// The complement: metrics whose recorded value may be `null`. Kept as its own
+// key set so a nullable rate can only be rendered by the row below, which
+// distinguishes "measured nothing" from "never recorded" from a real rate.
+type NullableRateMetricKey = {
+  [Key in keyof EvalComparisonMetrics]-?: null extends EvalComparisonMetrics[Key]
+    ? NonNullable<EvalComparisonMetrics[Key]> extends number
+      ? Key
+      : never
     : never
 }[keyof EvalComparisonMetrics]
 
@@ -113,6 +132,38 @@ const countRow: ScalarMetricRowRenderer = (input, comparability) =>
     },
     comparability
   )
+
+// A nullable rate, rendered on the same three-way terms `diffScopeRecallRow`
+// below uses: `null` is "the run measured nothing here" (`n/a`), `undefined` is
+// "the report never recorded it" (unknown), and only two real numbers produce a
+// delta. Differencing against a null would publish movement between a
+// measurement and its absence.
+const nullableRateRow = (
+  input: {
+    readonly metric: string
+    readonly key: NullableRateMetricKey
+    readonly base: number | null | undefined
+    readonly head: number | null | undefined
+  },
+  comparability: MetricComparability
+): string => {
+  const formatSide = (value: number | null | undefined): string =>
+    value === undefined ? UNKNOWN_VALUE : value === null ? 'n/a' : formatPercent(value)
+
+  return formatRow({
+    metric: input.metric,
+    base: formatSide(input.base),
+    head: formatSide(input.head),
+    delta:
+      comparability.refusalReason(input.key) !== undefined
+        ? NOT_COMPARABLE
+        : input.base === undefined || input.head === undefined
+          ? UNKNOWN_VALUE
+          : input.base === null || input.head === null
+            ? 'n/a'
+            : formatPercentagePointDelta(input.base, input.head)
+  })
+}
 
 // Diff-scope recall (spec 17) is nullable per side: a run whose fixture set
 // carries no expectation in a population measured nothing there. `null` (nothing
@@ -313,6 +364,11 @@ export const appendEvalComparisonMetricDeltas = (
     render: ScalarMetricRowRenderer
   ): string =>
     render({ metric, key, base: base?.[key], head: head?.[key] }, comparability)
+  const nullableRate = (metric: string, key: NullableRateMetricKey): string =>
+    nullableRateRow(
+      { metric, key, base: base?.[key], head: head?.[key] },
+      comparability
+    )
 
   appendMarkdownTable(lines, {
     heading: '## Metric Deltas',
@@ -372,14 +428,13 @@ export const appendEvalComparisonMetricDeltas = (
         'refutationFalsePositiveCount',
         countRow
       ),
-      scalar('Fix judgment accuracy', 'fixJudgmentAccuracy', percentRow),
-      scalar(
+      nullableRate('Fix judgment accuracy', 'fixJudgmentAccuracy'),
+      nullableRate(
         'Fix false-positive detection rate',
-        'fixFalsePositiveDetectionRate',
-        percentRow
+        'fixFalsePositiveDetectionRate'
       ),
-      scalar('Fix produce rate', 'fixProduceRate', percentRow),
-      scalar('Fix apply failure rate', 'fixApplyFailureRate', percentRow),
+      nullableRate('Fix produce rate', 'fixProduceRate'),
+      nullableRate('Fix apply failure rate', 'fixApplyFailureRate'),
       durationRow(input),
       scalar(
         'Duration unavailable cases',

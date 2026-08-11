@@ -37,6 +37,7 @@ import {
   type EvalCaseOutput,
   type EvalRegressionThresholds,
   type EvalReport,
+  type EvalReportCapabilityFlags,
   type EvalReportProvenance,
   type EvalReportScoring,
   type EvalReportSelection
@@ -125,6 +126,11 @@ type RunEvaluationInput = {
     // apart from the reviewer's. Supplied by the CLI for the same reason as the
     // two above.
     readonly judgeModelName?: string
+    // The run's effective optional-capability flags, resolved from the same
+    // merged config `configHash` is taken over. Supplied by the CLI for the same
+    // reason as everything else here: this module does not import the
+    // configuration domain, so it cannot read a flag off a config itself.
+    readonly capabilities?: EvalReportCapabilityFlags
   }
 }
 
@@ -422,7 +428,13 @@ export const runEvaluation = async (
         : { modelName: input.provenance.modelName }),
       ...(input.provenance?.judgeModelName === undefined
         ? {}
-        : { judgeModelName: input.provenance.judgeModelName })
+        : { judgeModelName: input.provenance.judgeModelName }),
+      // Omitted rather than substituted when the caller supplies none: an
+      // all-`false` stand-in would state that every capability was off, which is
+      // a measurement nobody took. Absent means not recorded.
+      ...(input.provenance?.capabilities === undefined
+        ? {}
+        : { capabilities: input.provenance.capabilities })
     }
   })
 }

@@ -114,13 +114,20 @@ A ratio with a zero denominator is undefined. The code substitutes a fixed
 | Family | Empty value | Why |
 | --- | --- | --- |
 | `parseValidity`, `recall`, `recallByTier`, `productRecall`, `nitRecall`, `precision`, `adjustedPrecision`, severity-weighted rates, `lineAccuracy`, `severityAccuracy`, `artifactOnlyRecall`, `artifactOnlyPrecision` | `1` | "Nothing was expected, so nothing was missed." |
-| `securityRecallByMechanism`, `securityRecallByContextDepth`, `securityObviousRecall`, `securityHardRecall`, all `fix*` rates | `0` | A mechanism with no expected findings has **no evidence** of recall; reporting 100% would be a misleading perfect. |
+| `securityRecallByMechanism`, `securityRecallByContextDepth`, `securityObviousRecall`, `securityHardRecall` | `0` | A mechanism with no expected findings has **no evidence** of recall; reporting 100% would be a misleading perfect. |
 | `providerErrorRate`, `providerIssueRate`, `incompleteCoverageRate`, `contextMutationRate`, `commentsPerDiffHunk`, `commentsPerKloc` | `0` | Absence of a problem. |
-| `lineAccuracy`, `linePlacementRate`, `recallByDiffScope`, `securityAdjustedPrecisionByMechanism` | `null` | "Nobody measured this." A number here would be indistinguishable from a measured one. |
+| `lineAccuracy`, `linePlacementRate`, `recallByDiffScope`, `securityAdjustedPrecisionByMechanism`, all `fix*` rates | `null` | "Nobody measured this." A number here would be indistinguishable from a measured one. |
 
 Neither `1` nor `0` from an empty denominator is an achievement. Every rate that
 can be empty ships with its denominator as a separate count field — read them
 together, always.
+
+The four `fix*` rates moved from `0` to `null` on 2026-08-11 (metrics version
+`2026-08-11.fix-lane-rates-null-on-empty-denominator`). The lane is off by
+default, so their denominators are empty on every ordinary run, and the `0` they
+used to publish is the same value a lane that ran and got everything wrong would
+report. **Do not read those four out of a report archived before that boundary,
+and do not difference them across it.**
 
 ---
 
@@ -381,9 +388,10 @@ actionability gains.
 All fix-lane rates are scored only over findings the lane was **eligible** to act
 on (at or above `fix.minSeverity`), and their ground truth is corrected by the
 plausibility judge: a matched **or** unlisted-real finding is `real`; only a
-genuine false positive is `false-positive`. Empty value `0` — a run that never
-exercised the lane reports `0`, not a misleading perfect. The lane is off by
-default.
+genuine false positive is `false-positive`. Each rate is `null` when its own
+denominator is empty, which is every run with the lane off — the four are over
+four different populations, so a lane that judged findings but attempted no fix
+reports three numbers and one `null`. The lane is off by default.
 
 ---
 

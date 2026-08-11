@@ -123,6 +123,16 @@ export const EVAL_METRICS_VERSION_HISTORY: readonly MetricsVersionEntry<EvalComp
         'artifactOnlyGenuineFalsePositiveCount'
       ],
       note: 'The plausibility judge began running over the ARTIFACT-ONLY population too, into its own bucket. Both counts are new and cannot be recovered from an earlier report -- that run is over, and until this boundary its produced-finding summaries did not even record the descriptions a judge would need to decide -- so an older report reads as absent rather than 0. Every other metric is declared unaffected on purpose and not by omission: the new verdicts are threaded through a separate field that only these two counts read, so `adjustedPrecision`, `unlistedRealFindingCount`, `genuineFalsePositiveCount`, the fix-lane tallies and the per-mechanism precision counts all still derive from the ACTIONABLE pass alone and are byte-identical for identical review output. The produced-finding summary gaining a `description` changes the report SHAPE, not any metric; it is what makes a future re-adjudication possible without paying for the run again.'
+    },
+    {
+      id: '2026-08-11.fix-lane-rates-null-on-empty-denominator',
+      affects: [
+        'fixJudgmentAccuracy',
+        'fixFalsePositiveDetectionRate',
+        'fixProduceRate',
+        'fixApplyFailureRate'
+      ],
+      note: 'The four fix-lane rates stopped emitting a confident 0 over an empty denominator and now emit `null`. This IS a reported-value change and not merely a shape change: `fix.enabled` is off by default and has never been switched on with a real corpus, so EVERY archived report emits 0 for all four, and each of those zeros is the value the metric would also carry if the lane had run and failed completely. No archived 0 can be told apart from a measurement, so none of them is comparable against a value produced after this boundary. Nothing else moves: the four denominators (`fixJudgedFindingCount`, `fixGroundTruthFalsePositiveCount`, `fixRealFindingCount`, `fixAttemptedCount`) are counts and are unchanged, and no other metric reads a fix-lane rate. The provenance gaining a `capabilities` record landed with this entry and affects no metric at all -- it records WHICH capabilities a run had enabled, which is a fact about the run rather than a quantity computed from review output -- so it is deliberately absent from `affects` rather than declared `all`.'
     }
   ]
 

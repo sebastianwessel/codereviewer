@@ -64,10 +64,16 @@ export const ComparisonMetricsSchema = z.object({
   providerIssueCount: optionalInteger,
   refutationFalseNegativeCount: optionalInteger,
   refutationFalsePositiveCount: optionalInteger,
-  fixJudgmentAccuracy: optionalNumber,
-  fixFalsePositiveDetectionRate: optionalNumber,
-  fixProduceRate: optionalNumber,
-  fixApplyFailureRate: optionalNumber,
+  // Nullable AND optional, for the same reason `recallByDiffScope` below is:
+  // `null` is a rate the run scored over an empty denominator (the fix lane
+  // produced nothing to measure, which is every run with `fix.enabled` off),
+  // `undefined` is a rate the report never recorded. A report archived while
+  // these were floored to 0 records a number, and it is the WRONG number -- the
+  // scoring-rule history is what refuses that delta, not this view.
+  fixJudgmentAccuracy: optionalNullableNumber,
+  fixFalsePositiveDetectionRate: optionalNullableNumber,
+  fixProduceRate: optionalNullableNumber,
+  fixApplyFailureRate: optionalNullableNumber,
   durationMs: optionalInteger,
   durationUnavailableCount: optionalInteger,
   usageUnavailableCount: optionalInteger,
@@ -159,7 +165,15 @@ export const EvalComparisonReportSchema = z.object({
       // reviewer's model -- so `modelName` is the correct fallback identity, not
       // an unknown.
       modelName: z.string().min(1).optional(),
-      judgeModelName: z.string().min(1).optional()
+      judgeModelName: z.string().min(1).optional(),
+      // The run's optional-capability flags. Read as a free-form
+      // `Record<string, boolean>` and NOT as the producer's closed key set, for
+      // the same reason `diffScope` above is read as a free string: a capability
+      // a later build adds must show up in the difference report rather than
+      // fail the whole report's parse. Absent means the report never recorded
+      // its capabilities, which is a different statement from "none were
+      // enabled" and is reported as such.
+      capabilities: z.record(z.string(), z.boolean()).optional()
     })
     .optional(),
   scoring: z

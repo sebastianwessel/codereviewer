@@ -48,6 +48,7 @@ import { mapErrorResult, usageError } from '../cli-error-results.js'
 import { loadConfigForCommand } from '../command-config.js'
 import { createCliLogger, resolveLogSink } from '../command-logging.js'
 import { runEvalCase } from '../eval-case-runner.js'
+import { evalReportCapabilityFlags } from '../eval-capability-flags.js'
 import {
   evalGateExitCode,
   resolveEvalRegressionGateThresholds
@@ -385,7 +386,11 @@ export const runEval = async (
         // of making the judge pinnable.
         ...(judgeProviderConfig === undefined
           ? {}
-          : { judgeModelName: judgeProviderConfig.model })
+          : { judgeModelName: judgeProviderConfig.model }),
+        // The same effective config, read as VALUES rather than hashed. The
+        // hash proves two runs shared a configuration; it cannot answer "was
+        // the fix lane on?", because nothing can be read back out of a digest.
+        capabilities: evalReportCapabilityFlags(loadedConfig.config)
       }
     }
     const result = await runEvaluation(evaluationInput)
