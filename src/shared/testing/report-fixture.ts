@@ -31,6 +31,11 @@ export const createReportFixture = (): ReviewReport =>
       configHash: hash,
       provider: 'openai',
       model: 'gpt-5-mini',
+      // A model DID search this run. Stated rather than left absent, because
+      // every reporting surface now decides whether it may print a measured rate
+      // from this field, and a fixture that omitted it would exercise the
+      // "the report does not say" path while reading like the ordinary one.
+      modelSearch: 'performed',
       durationMs: 1000,
       warnings: []
     },

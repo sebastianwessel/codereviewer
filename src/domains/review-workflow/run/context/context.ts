@@ -61,6 +61,7 @@ export type ContextAssemblyResult = {
   readonly skillIds: readonly string[]
   readonly contextLedger: readonly ContextLedgerEntry[]
   readonly referencedDefinitionsDroppedCount: number
+  readonly referencedDefinitionsUnreadableCount: number
 }
 
 export type ReviewRunnerContextStateMetrics = {
@@ -74,6 +75,12 @@ export type ReviewRunnerContextStateMetrics = {
   // different from one whose was not, and before this the difference was
   // invisible — the counts were computed and discarded at the call site.
   readonly referencedDefinitionsDroppedCount: number
+  // Dependencies that resolved and then failed to read, summed over every task.
+  // Separate from the dropped count because the two ask for different actions:
+  // a cap that bound is answered by raising a bound, an unreadable dependency is
+  // answered by looking at the repository. Summing them would put a filesystem
+  // failure behind a message that says the caps were too tight.
+  readonly referencedDefinitionsUnreadableCount: number
 }
 
 export type ReviewRunnerContextState = ReviewRunnerProvenanceHashes & {
@@ -353,6 +360,7 @@ export const assembleContext = async (
 
   const tasks: WorkflowReviewTask[] = []
   let referencedDefinitionsDropped = 0
+  let referencedDefinitionsUnreadable = 0
   // Shared by every task in this assembly. Tasks legitimately import the same
   // dependencies, and without this each one re-probed the same import candidates
   // and re-ran the extractor over the same dependency files.
@@ -539,7 +547,12 @@ export const assembleContext = async (
     // dependency view was cut looked exactly like one with no dependencies.
     const referenced =
       input.config.aiReview.deterministicSignalMode === 'disabled'
-        ? { digests: [], droppedByFileCap: 0, droppedByBudget: 0 }
+        ? {
+            digests: [],
+            droppedByFileCap: 0,
+            droppedByBudget: 0,
+            droppedByReadFailure: 0
+          }
         : await collectReferencedDefinitions({
             repositoryRoot: input.repositoryRoot,
             taskPaths: task.paths,
@@ -548,8 +561,12 @@ export const assembleContext = async (
             cache: referencedDefinitionCache
           })
 
+    // The two caps sum into one "dropped" count because they say the same thing
+    // to a reader — the section was too small for this task's dependencies. A read
+    // failure does not, so it is carried on its own.
     referencedDefinitionsDropped +=
       referenced.droppedByFileCap + referenced.droppedByBudget
+    referencedDefinitionsUnreadable += referenced.droppedByReadFailure
 
     const referencedDefinitionContexts: ContextInput[] = referenced.digests.map(
       (digest) => ({
@@ -588,7 +605,8 @@ export const assembleContext = async (
     skillDefinitions: staticContext.skillDefinitions,
     skillIds: staticContext.skillIds,
     contextLedger,
-    referencedDefinitionsDroppedCount: referencedDefinitionsDropped
+    referencedDefinitionsDroppedCount: referencedDefinitionsDropped,
+    referencedDefinitionsUnreadableCount: referencedDefinitionsUnreadable
   }
 }
 
@@ -606,7 +624,9 @@ export const prepareReviewRunnerContextState = async (
       instructionCount: assembledContext.instructions.length,
       skillCount: assembledContext.skills.length,
       referencedDefinitionsDroppedCount:
-        assembledContext.referencedDefinitionsDroppedCount
+        assembledContext.referencedDefinitionsDroppedCount,
+      referencedDefinitionsUnreadableCount:
+        assembledContext.referencedDefinitionsUnreadableCount
     }
   }
 }

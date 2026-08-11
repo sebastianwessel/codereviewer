@@ -107,6 +107,8 @@ Provider setup problems are **config** errors (exit `2`), not provider errors:
 | `analyzer_artifact_unreadable` | A `security.signals.artifacts` entry does not exist, is not a regular file, or does not resolve inside the repository. |
 | `analyzer_artifact_too_large` | An analyzer artifact exceeds `security.signals.maxArtifactBytes`, or carries more results than the engine normalizes. It is never read partially. |
 | `analyzer_artifact_invalid` | An analyzer artifact is not valid JSON, or is not a SARIF 2.1.0 document this engine reads. |
+| `redaction_secret_env_unset` | A `security.redaction.secretEnvVars` entry names an environment variable that is unset or empty. The run stops rather than emit artifacts that look redacted and are not. Names the variable, never a value. |
+| `redaction_secret_env_too_short` | A named variable holds fewer than 8 characters. Such a value would be replaced everywhere it occurs and corrupt the output instead of protecting it. Names the variable, never a value. |
 | `opentelemetry_endpoint_missing` | `openTelemetry.enabled` is `true` with no `endpoint`. |
 | `opentelemetry_dependency_missing` | OpenTelemetry enabled but the optional exporter packages are not installed. |
 | `eval_semantic_judge_missing` | An eval case with expected findings was scored without the semantic judge (no provider). |

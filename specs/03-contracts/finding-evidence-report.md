@@ -478,8 +478,9 @@ JSON file to callers, but that JSON self-entry is not embedded in `report.json`.
 | `headRef` | no | string |
 | `mergeBaseRef` | no | string (resolved merge base the diff was taken against, present when intake resolved one) |
 | `configHash` | yes | SHA-256 |
-| `provider` | no | provider ID |
-| `model` | no | string |
+| `provider` | no | provider ID of the model that PRODUCED this run's findings; absent when no model search ran, and never copied from configuration on a run that performed none |
+| `model` | no | string, on the same terms as `provider` |
+| `modelSearch` | no | `performed` \| `not-performed` — whether a model actually searched this change. Absent means the report does not say (it predates the field), which a consumer must not read as `performed` |
 | `durationMs` | yes | integer >= 0 |
 | `costUsd` | no | number >= 0 |
 | `inputTokens` | no | integer >= 0 |
@@ -500,6 +501,14 @@ Markdown rendering must be deterministic from `ReviewReport`:
 7. Cost/timing summary.
 
 Markdown must not include raw source snippets by default.
+
+A run that performed no model search (`run.modelSearch` is `not-performed`) must
+say so where the reader is, must not name a model as having produced the report,
+and must not print the measured recall and precision rates. Those rates describe
+how often a model search finds a defect; over a run that performed none they are
+a flattering claim about a search that did not happen, and an empty findings list
+under them reads as a clearance. The same rule binds every surface that carries
+the claim — `report.json` provenance, SARIF, and the pull-request comment.
 
 ## SARIF Report
 
@@ -531,9 +540,16 @@ Rules:
   descriptor defined in `tool.driver.notifications`. The disclosure is required
   because a code-scanning consumer treats a result absent from a run under the
   same `automationDetails.id` as RESOLVED, so a silent cut reports withheld
-  findings as fixed. `invocations` is emitted only when the cap withholds results;
-  `executionSuccessful` stays `true`, since the run succeeded and only results
-  were withheld;
+  findings as fixed. `executionSuccessful` stays `true`, since the run succeeded
+  and only results were withheld;
+- DISCLOSE a run that performed no model search (`run.modelSearch` is
+  `not-performed`) in the same channel: one `toolExecutionNotifications` entry at
+  level `warning`, with its descriptor defined in `tool.driver.notifications`,
+  stating that no model searched the change and that an absent result therefore
+  means nothing was searched for. An empty SARIF run is the strongest clean bill
+  of health this engine emits, and a code-scanning dashboard never sees
+  `report.md`'s disclosure. `invocations` is emitted only when at least one
+  disclosure applies, and carries every one that does;
 - define every referenced `ruleId` in `tool.driver.rules`;
 - validate the rendered file before writing it.
 

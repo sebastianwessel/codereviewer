@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test } from 'vitest'
+import { setConfiguredExactSecrets } from './configured-secrets.js'
 import { createRedactor, redactText } from './redactor.js'
 
 describe('redactor', () => {
@@ -21,16 +22,6 @@ describe('redactor', () => {
     expect(redacted).not.toContain('glpat-abcdefghijklmnopqrstuvwxyz')
     expect(redacted).not.toContain('AKIAIOSFODNN7EXAMPLE')
     expect(redacted).toContain('[REDACTED]')
-  })
-
-  test('redacts configured exact secret values', () => {
-    const redactor = createRedactor({
-      exactSecrets: ['configured-secret-value']
-    })
-
-    expect(redactor.redact('token=configured-secret-value')).toBe(
-      'token=[REDACTED]'
-    )
   })
 
   test('redacts additional enterprise credential formats', () => {
@@ -84,5 +75,47 @@ describe('redactor', () => {
 
     expect(redacted).not.toContain('dummyKeyMaterial')
     expect(redacted).toContain('[REDACTED]')
+  })
+
+  // The configured secrets are process state (see `configured-secrets.ts`), so
+  // every seam gets them without being handed options — which is the only reason
+  // the capability is reachable at all, since no seam that redacts takes any.
+  describe('the configured exact secrets', () => {
+    afterEach(() => {
+      setConfiguredExactSecrets([])
+    })
+
+    test('reach a redactor built with no options, and the shared one', () => {
+      setConfiguredExactSecrets(['ACME-INTERNAL-9d41f0c2b7'])
+
+      expect(createRedactor().redact('token=ACME-INTERNAL-9d41f0c2b7')).toBe(
+        'token=[REDACTED]'
+      )
+      expect(redactText('token=ACME-INTERNAL-9d41f0c2b7')).toBe(
+        'token=[REDACTED]'
+      )
+    })
+
+    test('replace the previous list rather than accumulating', () => {
+      setConfiguredExactSecrets(['first-secret-value'])
+      expect(redactText('first-secret-value')).toBe('[REDACTED]')
+
+      // The shared redactor caches its compiled patterns; a policy change has to
+      // invalidate that cache, or the first configuration read would hold for the
+      // whole process.
+      setConfiguredExactSecrets(['second-secret-value'])
+      expect(redactText('first-secret-value')).toBe('first-secret-value')
+      expect(redactText('second-secret-value')).toBe('[REDACTED]')
+    })
+
+    test('apply alongside the built-in patterns, not instead of them', () => {
+      setConfiguredExactSecrets(['configured-secret-value'])
+
+      expect(
+        createRedactor().redact(
+          'a=configured-secret-value\nAuthorization: Bearer abc'
+        )
+      ).toBe('a=[REDACTED]\nAuthorization: Bearer [REDACTED]')
+    })
   })
 })

@@ -161,7 +161,7 @@ the block. What it was and why it went:
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `aiReview.enabled` | boolean | `true` | Model-backed review runs when this is `true` **and** a `provider` is configured. Set `false` to force a deterministic-only run even with a provider present. It is a plain boolean, not a tri-state: it used to be optional, which made `undefined` and `true` behave identically and forced every reader to test `=== false`. |
+| `aiReview.enabled` | boolean | `true` | Model-backed review runs when this is `true` **and** a `provider` is configured. Set `false` to force a deterministic-only run even with a provider present — the report then records `run.modelSearch: "not-performed"`, names no model and prints no measured rates, because nothing searched the change. It is a plain boolean, not a tri-state: it used to be optional, which made `undefined` and `true` behave identically and forced every reader to test `=== false`. |
 | `aiReview.maxFilesPerDiscoveryCall` | integer ≥ 1 | `2` | Changed files one discovery call reviews; a task covering more is partitioned across several calls. See above. |
 | `aiReview.requireRefutation` | `true` (literal) | `true` | Every model candidate must survive the refutation pass before admission. `false` is not an accepted value. |
 | `aiReview.deterministicSignalMode` | `"support"` \| `"disabled"` | `"support"` | `support` injects deterministic facts into model packets (materially better recall). `disabled` keeps the facts for task clustering and admission contradiction checks but sends none to the model — cheaper, lower recall. |

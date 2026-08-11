@@ -1,5 +1,8 @@
 import path from 'node:path'
-import type { CodeReviewerConfig } from '../../../../shared/contracts/index.js'
+import type {
+  CodeReviewerConfig,
+  ReviewReport
+} from '../../../../shared/contracts/index.js'
 import type { StructuredError } from '../../../../shared/errors/error-normalizer.js'
 import type { RunCostSummary } from '../../../costs/index.js'
 import type { NoContentObservabilitySnapshot } from '../../../observability/index.js'
@@ -21,6 +24,13 @@ export const createPartialReviewRunFailedError = (
     readonly completedAt: Date
     readonly configHash: string
     readonly warnings: readonly string[]
+    // Optional here alone. A run that died INSIDE the provider workflow reaches
+    // this through `provider-failures.ts`, and on that path a model search was at
+    // least attempted — `runProviderWorkflow` returns before throwing anything
+    // when the review is switched off — so neither value is a fact that path
+    // holds. It states nothing rather than guessing, and the callers that do know
+    // (the coverage and cost gates) pass it.
+    readonly modelSearch?: ReviewReport['run']['modelSearch']
     readonly runCost?: RunCostSummary | undefined
     readonly contextLedger: readonly ContextLedgerEntry[]
     readonly sharedContext: ReviewSharedContextSnapshot
@@ -41,6 +51,7 @@ export const createPartialReviewRunFailedError = (
         completedAt: input.completedAt,
         configHash: input.configHash,
         warnings: input.warnings,
+        modelSearch: input.modelSearch,
         ...(input.runCost === undefined ? {} : { runCost: input.runCost })
       }),
       contextLedger: input.contextLedger,

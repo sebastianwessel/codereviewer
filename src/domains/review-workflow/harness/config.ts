@@ -1,23 +1,47 @@
 import { type BuiltinToolName } from '@purista/harness'
 import { REPO_TOOL_IDS } from '../../context-retrieval/index.js'
+import { MAX_PATHS_PER_REVIEW_TASK } from '../../review-planning/index.js'
 import {
   HOLISTIC_MAX_CANDIDATES,
   SECURITY_MAX_CANDIDATES
 } from '../pipeline/discovery/holistic-task-review.js'
+import { MAX_REACTIVE_SPLIT_DEPTH } from '../pipeline/discovery/reactive-split.js'
 import { type CrossFileRetrievalConfig } from '../../../shared/contracts/index.js'
 
 const defaultMaxConcurrentTasks = 4
 const defaultRunTimeoutMs = 0
 const defaultMaxChildAgentCalls = 16
-const maxChildAgentCallCap = 2048
+// A runaway guard on an absurd `taskCount`, not a ration — the same shape as
+// `MAX_REACTIVE_SPLIT_DEPTH`. It moved with the reactive-split factor below: at
+// 2048 it covered roughly 185 tasks when a task cost about 11 calls, and leaving
+// it there once one discovery call could cost 127 would have clamped every review
+// above eight tasks with the security pass on, converting the reservation this
+// budget exists to make back into the under-reservation it exists to prevent.
+// 32768 covers roughly the same review size it always did (about 240 tasks, or
+// 120 with the security pass).
+const maxChildAgentCallCap = 32_768
 const readonlySkillTools = ['read', 'list', 'grep'] as const satisfies readonly BuiltinToolName[]
 const compactAgentMaxSteps = 1
 // Head-room for refutation batches that exceed the provider input budget and split
 // into halves. Splitting is bounded and rare, so a small constant is enough.
 const refutationBatchSplitAllowance = 3
-// The task planner's own cap on paths per clustered task. Mirrored here because the
-// call budget must bound the worst case a planned task can present.
-const maxPathsPerReviewTask = 8
+// What ONE discovery call can cost when the provider refuses its packet (spec 26).
+//
+// A reactive split does not retry the call — it spends it and issues two more. The
+// harness charges the child-agent budget before dispatch, so the refused call is
+// already paid for, and each half can be refused in turn until
+// MAX_REACTIVE_SPLIT_DEPTH stops the recursion. The worst case is therefore a full
+// binary tree of that depth: 2^(depth+1) - 1 calls.
+//
+// That tree is not a theoretical shape. It is what a model whose context is small
+// enough to refuse every half produces, and that is exactly the run that must reach
+// spec 26's loud, attributable "cannot be split further" failure rather than dying
+// first on a generic child-agent budget error that names the wrong cause.
+//
+// Derived from the depth constant, never restated: this is the same rule the split
+// guard enforces, and a second copy of it would drift toward under-reserving.
+const reactiveSplitCallsPerDiscoveryCall =
+  2 ** (MAX_REACTIVE_SPLIT_DEPTH + 1) - 1
 const contextHeavyAgentMaxSteps = 4
 
 // The agents that share the skill/tool option builder below. `semantic_merge` is
@@ -49,9 +73,16 @@ export const maxChildAgentCallsForReview = (
   const partitionsPerTask =
     input.maxFilesPerDiscoveryCall === undefined
       ? 1
-      : Math.ceil(maxPathsPerReviewTask / input.maxFilesPerDiscoveryCall)
+      : Math.ceil(MAX_PATHS_PER_REVIEW_TASK / input.maxFilesPerDiscoveryCall)
+  // Spec 26 multiplies DISCOVERY only. A split's halves are their own model calls,
+  // but their findings are collected against the partition whose call was issued
+  // (see `collectDiscoveryPass`), so a split task still carries one task id, one
+  // batched refutation, and one per-call candidate cap — the two terms below are
+  // untouched by it.
   const discoveryCallsPerTask =
-    partitionsPerTask * (1 + (input.securityPassEnabled === true ? 1 : 0))
+    partitionsPerTask *
+    (1 + (input.securityPassEnabled === true ? 1 : 0)) *
+    reactiveSplitCallsPerDiscoveryCall
   const refutationCallsPerTask =
     partitionsPerTask * (1 + refutationBatchSplitAllowance)
   // Spec 05: the semantic finding merge issues at most one call per FILE that

@@ -208,9 +208,32 @@ describe('the change section of a split task', () => {
     '+export const nearTheBottom = 1'
   ].join('\n')
 
-  const halfSection = (startLine: number, endLine: number): string => {
+  // The reviewed diff ranges intake derives from that same diff. They are what the
+  // change section falls back to when no hunk survives clipping, so they have to be
+  // the real ones for the fallback claims below to mean anything.
+  const reviewedDiffRanges = [
+    { path: 'src/big.ts', startLine: 5, endLine: 5 },
+    { path: 'src/big.ts', startLine: 900, endLine: 900 }
+  ]
+
+  // Either shape of the change section: the clipped diff, or the prose ranges it
+  // falls back to. A helper that looked only for the diff heading would read a
+  // fallback that leaked out-of-chunk lines as no section at all.
+  const halfSection = (
+    startLine: number,
+    endLine: number,
+    input: {
+      readonly rawDiff?: string
+      readonly ranges?: readonly {
+        readonly path: string
+        readonly startLine: number
+        readonly endLine: number
+      }[]
+    } = {}
+  ): string => {
     const taskInput = TaskReviewInputSchema.parse({
       ...taskInputFor(['src/big.ts']),
+      reviewedDiffRanges: input.ranges ?? reviewedDiffRanges,
       task: {
         ...taskInputFor(['src/big.ts']).task,
         reviewContext: [
@@ -227,8 +250,10 @@ describe('the change section of a split task', () => {
     })
 
     return (
-      buildContextSections(taskInput, splitDiff).find((section) =>
-        section.includes('## What this change modified')
+      buildContextSections(taskInput, input.rawDiff ?? splitDiff).find(
+        (section) =>
+          section.includes('## What this change modified') ||
+          section.includes('## Reviewed diff ranges')
       ) ?? ''
     )
   }
@@ -250,5 +275,47 @@ describe('the change section of a split task', () => {
 
     expect(whole).toContain('nearTheTop = 1')
     expect(whole).toContain('nearTheBottom = 1')
+  })
+
+  // The FALLBACK path of the same section, and the same rule. Clipping can leave a
+  // half no hunk at all, and the section then renders the reviewed diff ranges in
+  // prose instead — ranges selected by PATH. Unclipped, that hands the half exactly
+  // the out-of-chunk change the diff clipping just took away, written out rather
+  // than shown as a diff.
+  test('says nothing to a half whose chunk holds no changed line', () => {
+    // Both hunks (lines 5 and 900) sit outside this chunk, so no diff survives and
+    // the prose ranges are all this half could be told.
+    expect(halfSection(200, 400)).toBe('')
+  })
+
+  test('clips a reviewed range that straddles the chunk boundary', () => {
+    // No diff at all — the explicit-file run shape, where the change section has
+    // only ever been the ranges.
+    const section = halfSection(501, 1000, {
+      rawDiff: '',
+      ranges: [{ path: 'src/big.ts', startLine: 490, endLine: 510 }]
+    })
+
+    expect(section).toContain('src/big.ts lines 501-510')
+    expect(section).not.toContain('490')
+  })
+})
+
+// A task that was never split carries no chunk bounds — its document spans the
+// file — so the fallback must still name the whole reviewed range.
+describe('the change-range fallback of an unsplit task', () => {
+  test('renders the reviewed ranges whole', () => {
+    const taskInput = TaskReviewInputSchema.parse({
+      ...taskInputFor(['src/plain.ts']),
+      reviewedDiffRanges: [
+        { path: 'src/plain.ts', startLine: 12, endLine: 40, changeKind: 'new' }
+      ]
+    })
+
+    expect(
+      buildContextSections(taskInput, '').find((section) =>
+        section.includes('## Reviewed diff ranges')
+      ) ?? ''
+    ).toContain('src/plain.ts lines 12-40 (new)')
   })
 })

@@ -55,6 +55,14 @@ export type ReferencedDefinitionResult = {
   // capability's limits on 2026-08-01 and had not looked for here.
   readonly droppedByFileCap: number
   readonly droppedByBudget: number
+  // Dependencies that resolved and then failed to read (vanished between the
+  // probe and the read, permissions, an I/O error). Counted apart from the two
+  // cap counters because it is a different fact about the run: a cap that binds
+  // is the design working, an unreadable dependency is the repository or the
+  // filesystem surprising us, and only one of the two is answered by raising a
+  // bound. `droppedByBudget` used to absorb these, which reported a read failure
+  // as a budget cut.
+  readonly droppedByReadFailure: number
 }
 
 const isRelativeSpecifier = (moduleSpecifier: string): boolean =>
@@ -398,8 +406,9 @@ export const collectReferencedDefinitions = async (
   const digests: ReferencedDefinitionDigest[] = []
   let usedBytes = 0
   let droppedByBudget = 0
+  let droppedByReadFailure = 0
 
-  for (const dependencyPath of rankedPaths) {
+  for (const [rankedIndex, dependencyPath] of rankedPaths.entries()) {
     // The digest is a pure function of the dependency file, so a dependency two
     // tasks share is read once and extracted once. A read that FAILS is not
     // cached: the next task retries it rather than inheriting a verdict this one
@@ -416,7 +425,9 @@ export const collectReferencedDefinitions = async (
         )
         content = await readDependencyFile(absolutePath)
       } catch {
-        // Best-effort: a file that vanished or failed to read is simply skipped.
+        // Best-effort: a file that vanished or failed to read is skipped — but
+        // under its OWN cause, so the budget counter is not asked to explain it.
+        droppedByReadFailure += 1
         continue
       }
 
@@ -427,13 +438,23 @@ export const collectReferencedDefinitions = async (
     const digestBytes = utf8ByteLength(digest)
 
     if (digestBytes === 0) {
+      // The extractor found nothing to show for this dependency. Deliberately
+      // uncounted: the counters report context this run HAD and did not send, and
+      // there was none here — a file with no extractable definitions is nothing to
+      // add, not something dropped.
       continue
     }
 
     if (usedBytes + digestBytes > REFERENCED_DEFINITIONS_TOTAL_BYTE_BUDGET) {
-      // Section byte budget exhausted: skip remaining (lower-ranked) deps, and
-      // count them so the omission is reportable.
-      droppedByBudget = rankedPaths.length - digests.length
+      // Section byte budget exhausted: skip this dependency and every
+      // lower-ranked one after it, and count them so the omission is reportable.
+      //
+      // Counted from the RANK POSITION, not from `digests.length`. The two differ
+      // by every file skipped earlier in this loop for a reason that is not the
+      // budget — a failed read, or a digest with no content — and deriving the
+      // count from `digests.length` handed those to the budget counter, which is
+      // the one counter that exists to say the caps are too tight.
+      droppedByBudget = rankedPaths.length - rankedIndex
       break
     }
 
@@ -441,7 +462,7 @@ export const collectReferencedDefinitions = async (
     usedBytes += digestBytes
   }
 
-  return { digests, droppedByFileCap, droppedByBudget }
+  return { digests, droppedByFileCap, droppedByBudget, droppedByReadFailure }
 }
 
 export const referencedDefinitionBounds = {

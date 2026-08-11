@@ -171,7 +171,8 @@ file with a test named after it, not a file with a test for this change.
 | `repositoryRootHash`, `configHash` | SHA-256 | The config is recorded as a hash plus a redacted summary — never raw. |
 | `baseRef`, `headRef` | string, optional | |
 | `mergeBaseRef` | string, optional | The commit the diff was actually taken against. **Absent for explicit-file runs**, which bypass git entirely. |
-| `provider`, `model` | string, optional | |
+| `provider`, `model` | string, optional | The model that **produced** the findings — not the one configuration names. Both are absent on a run that performed no model search, so provenance never asserts a model was used when none was. |
+| `modelSearch` | `performed` \| `not-performed`, optional | Whether a model actually searched the change. `not-performed` means the model-backed review was off or no provider was configured: the report then prints no measured rates and states that no search ran, so an empty findings list cannot read as a clean bill of health. Absent on reports written before the field existed — which is "this report does not say", not "a search ran". |
 | `durationMs` | integer | |
 | `costUsd` | number, optional | Omitted when tokens or prices are unavailable (with the `cost-unavailable` warning). |
 | `inputTokens`, `cachedInputTokens`, `outputTokens` | integer, optional | `cachedInputTokens` is a **subset** of `inputTokens`. |

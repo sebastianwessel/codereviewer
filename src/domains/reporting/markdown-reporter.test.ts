@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'vitest'
 import { renderMarkdownReport } from './index.js'
 import { createReportFixture } from '../../shared/testing/report-fixture.js'
+import {
+  MEASURED_ON_MODEL,
+  MEASURED_ON_PROVIDER,
+  NO_MODEL_SEARCH,
+  NOTHING_PROVED,
+  NOTHING_SEARCHED
+} from './measured-reliability.js'
 
 describe('Markdown reporter', () => {
   test('renders deterministic report sections and escapes user-controlled text', () => {
@@ -139,6 +146,61 @@ describe('Markdown reporter', () => {
     expect(rendered).toContain('did not record which model produced it')
     expect(rendered).toContain('- Model: not recorded')
     expect(rendered).not.toContain('which is the model this run used')
+  })
+
+  // The silent-optimism case this document is least able to survive: with
+  // `aiReview.enabled: false` nothing searched the change, and the report still
+  // printed the measured recall and precision of a model search plus the model
+  // it was measured on. Rates describe how often a SEARCH finds a defect; over a
+  // run that performed none they are not irrelevant, they flatter.
+  test('a run that performed no model search prints no rates and no model', () => {
+    const report = createReportFixture()
+    const { provider: _provider, model: _model, ...run } = report.run
+    const rendered = renderMarkdownReport({
+      ...report,
+      run: { ...run, modelSearch: 'not-performed' }
+    })
+
+    expect(rendered).toContain(NO_MODEL_SEARCH)
+    expect(rendered).not.toContain('in-diff recall mean')
+    expect(rendered).not.toContain('adjusted precision mean')
+    expect(rendered).not.toContain(`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}`)
+    expect(rendered).not.toContain('did not record which model produced it')
+    expect(rendered).toContain('- Model: none — this run performed no model search')
+  })
+
+  // "No findings" and "nothing was looked for" are the two readings this section
+  // must keep apart, and the sentence it prints for a searched run says the
+  // measured corpus misses roughly three in ten — a figure about a search that,
+  // here, did not happen.
+  test('an empty findings list on a run with no model search does not borrow the search sentence', () => {
+    const report = createReportFixture()
+    const { provider: _provider, model: _model, ...run } = report.run
+    const rendered = renderMarkdownReport({
+      ...report,
+      run: { ...run, modelSearch: 'not-performed' },
+      admittedFindings: [],
+      qualityGate: { passed: true, failingFindingIds: [], thresholds: {} }
+    })
+
+    expect(rendered).toContain(NOTHING_SEARCHED)
+    expect(rendered).not.toContain(NOTHING_PROVED)
+  })
+
+  // The honest case, kept honest: a run that DID search and found nothing still
+  // owes the reader its rates and still has to say the search found nothing.
+  test('a run that searched and found nothing keeps its rates and its sentence', () => {
+    const report = createReportFixture()
+    const rendered = renderMarkdownReport({
+      ...report,
+      run: { ...report.run, modelSearch: 'performed' },
+      admittedFindings: [],
+      qualityGate: { passed: true, failingFindingIds: [], thresholds: {} }
+    })
+
+    expect(rendered).toContain(NOTHING_PROVED)
+    expect(rendered).toContain('in-diff recall mean')
+    expect(rendered).not.toContain(NO_MODEL_SEARCH)
   })
 
   // The most expensive thing this document can do is read as a clearance. It

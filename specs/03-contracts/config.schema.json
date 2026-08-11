@@ -786,6 +786,21 @@
             }
           },
           "additionalProperties": false
+        },
+        "redaction": {
+          "default": {},
+          "type": "object",
+          "properties": {
+            "secretEnvVars": {
+              "default": [],
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              }
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

@@ -127,7 +127,27 @@ Minimum secret patterns:
 - AWS access key IDs;
 - user-configured exact secret values.
 
-Tests must prove known tokens are removed from logs and reports.
+User-configured exact secrets are supplied as `security.redaction.secretEnvVars`:
+a list of ENVIRONMENT VARIABLE NAMES, never literal values. Each name is resolved
+once where configuration and environment meet (`loadCodeReviewerConfig`) and the
+value applies to every redactor for the rest of the process, because no seam that
+redacts takes configuration. A literal list would commit the secret to the
+repository in order to keep it out of a run's artifacts, and the value is already
+in the environment of the job that leaks it; a variable name is not a secret, so
+it stays printable in the config summary and in errors.
+
+A named variable that is unset, empty, or shorter than 8 characters fails the run
+(`redaction_secret_env_unset`, `redaction_secret_env_too_short`) instead of being
+skipped: an operator naming a value has stated it must never appear in output, and
+a run that continues without it emits artifacts that look redacted and are not,
+while a two-character value would be replaced everywhere it occurs. An empty or
+absent list is the built-in floor and nothing else.
+
+Tests must prove known tokens are removed from logs and reports, and that a
+configured exact secret is removed at a production seam that constructs its own
+redactor — a capability no production call site can reach is not a capability, and
+this one was reachable only from its own unit test until 2026-08-11
+(`src/domains/configuration/secret-redaction.test.ts`).
 
 ## Prompt Injection And Model Boundary
 

@@ -1,6 +1,7 @@
 import type {
   CodeReviewerConfig,
-  CoverageSummary
+  CoverageSummary,
+  ReviewReport
 } from '../../../../shared/contracts/index.js'
 import type { RunCostSummary } from '../../../costs/index.js'
 import type { DeterministicSignalExtraction } from '../../../deterministic-signals/index.js'
@@ -26,6 +27,9 @@ type ReviewRunnerQualityFailureInput = {
   readonly configHash: string
   readonly warnings: readonly string[]
   readonly runCost: RunCostSummary
+  // A run can fail its coverage or cost gate with the model-backed review
+  // switched off, and its `run-summary.json` must not name a model either.
+  readonly modelSearch: NonNullable<ReviewReport['run']['modelSearch']>
   readonly analysis: DeterministicSignalExtraction
   readonly admission: ReviewRunnerAdmissionState
   readonly contextLedger: readonly ContextLedgerEntry[]
@@ -69,6 +73,7 @@ const createQualityFailure = (
     configHash: input.configHash,
     warnings: input.warnings,
     runCost: input.runCost,
+    modelSearch: input.modelSearch,
     contextLedger: input.contextLedger,
     sharedContext: createAdmissionSharedContext(input),
     observability: input.observability

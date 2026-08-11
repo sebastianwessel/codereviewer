@@ -20,6 +20,7 @@ here. See [review.md](./review.md).
 | `security.signals.artifacts` | array of `{ path, format }` | `[]` | The artifacts to read. `path` is repository-relative; `format` is `"sarif"`. |
 | `security.signals.maxArtifactBytes` | integer 1–50000000 | `4000000` | Size ceiling per artifact, checked before the file is read. Exceeding it fails the run. |
 | `security.signals.maxAlerts` | integer 1–500 | `40` | Cap on analyzer results shown to the review after attribution. When it binds, the count held back is reported. |
+| `security.redaction.secretEnvVars` | array of env var **names** | `[]` | Extra exact values to redact from everything the engine emits. Each entry is the NAME of an environment variable; its value is read at load and never stored in the config. |
 
 `security.dedicatedPass` candidates are *additive*: they merge with the general
 pass's candidates and never displace them, so the pass can raise security recall
@@ -86,6 +87,47 @@ Two limits worth knowing before you turn it on:
   it.** Removing an authorization wrapper elsewhere, widening a route, or
   relaxing a setting can make a pre-existing result newly reachable while every
   location the analyzer names sits in untouched code. Those are not reported.
+
+### `security.redaction` — your own secret values
+
+The redactor recognises the credential formats named in
+[specs/07](../../../specs/07-security-privacy-operations.md) — auth headers,
+`sk-`/`gh*_`/`glpat-` tokens, AWS key IDs, PEM blocks, JWTs, URL userinfo — and
+runs before every log, error, report, and model-bound packet. It cannot recognise
+a token shape your organization invented. This key is how you add one.
+
+```json config
+{
+  "security": {
+    "redaction": {
+      "secretEnvVars": ["ACME_DEPLOY_TOKEN", "INTERNAL_SIGNING_KEY"]
+    }
+  }
+}
+```
+
+**You list variable names, not secrets.** Writing the value here would commit the
+secret to your repository in order to keep it out of a run's artifacts — trading a
+per-run file you can delete for git history you cannot, in the one file people
+copy between repositories and paste into issues. The value is already in the
+environment of the CI job that would leak it, so the name points at where it lives
+instead of making a second copy. A consequence worth relying on: a variable name
+is not a secret, so the config summary and any validation error can print it, and
+they do — the value never appears in either.
+
+Each named variable is read once, when configuration loads, and its value is
+redacted from everything the engine emits from then on: reports, logs, errors,
+inline review comments, provider-bound context, and the context ledger.
+
+Failure is loud, never quiet. A name whose variable is unset or empty fails the
+run with exit `2` (`redaction_secret_env_unset`), and so does a value shorter than
+8 characters (`redaction_secret_env_too_short`) — that one would be replaced
+everywhere it occurred and corrupt the output rather than protect it. Continuing
+in either case would produce artifacts that look redacted and are not, which is
+worse than refusing.
+
+An empty or absent list changes nothing: redaction is the built-in floor, exactly
+as it was.
 
 ## `verification`
 

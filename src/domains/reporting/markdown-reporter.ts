@@ -29,7 +29,9 @@ import {
   adjustedPrecisionInTwenty,
   inDiffRecallInTen,
   measuredReliability,
+  NO_MODEL_SEARCH,
   NOTHING_PROVED,
+  NOTHING_SEARCHED,
   numberWord
 } from './measured-reliability.js'
 import {
@@ -82,6 +84,14 @@ const WHAT_THIS_IS =
 // measured 2026-08-02 on that command's deterministic core), so it is named here
 // rather than left as an unexplained hole.
 const MEASURED_RELIABILITY = `Measured reliability, so these findings can be weighed rather than trusted. On a ${measuredReliability.corpusCaseCount}-case real-repository corpus with the engine pinned: about **${inDiffRecallInTen} in 10** defects sitting INSIDE the diff were found (in-diff recall mean ${measuredReliability.inDiffRecallPercent}% over ${numberWord(measuredReliability.runCount)} runs, standard deviation ${measuredReliability.inDiffRecallStandardDeviationPp}pp), and **${measuredReliability.outOfDiffRecallFound} of ${measuredReliability.outOfDiffRecallTotal}** defects sitting outside the diff in the very same changed files were found — a measured zero over a full denominator, and by design, since this stage is diff-scoped and \`impact check\` is the stage that covers that population. Of what it does report, roughly **${adjustedPrecisionInTwenty} in 20** stand up under review (adjusted precision mean ${measuredReliability.adjustedPrecisionPercent}%). Two runs over the same commit do not produce the same report.`
+
+// Whether this report may state anything about a model search. Only an explicit
+// `not-performed` withholds the rates: the field is optional on the contract, and
+// a report that does not carry it (one written before the field existed) has not
+// said that no search ran — treating its silence as the claim would strip a
+// genuinely searched run of the rates it is owed.
+const performedNoModelSearch = (report: ReviewReport): boolean =>
+  report.run.modelSearch === 'not-performed'
 
 const countBy = <T extends string>(
   values: readonly T[]
@@ -370,7 +380,17 @@ const renderScope = (report: ReviewReport): readonly string[] => {
     // model name: every rate and every price this document quotes is a property
     // of one specific model, so a report that cannot say which one has to say
     // THAT rather than leave the reader to assume the measured one.
-    `- Model: ${run.model === undefined ? 'not recorded' : inlineCode(`${run.provider ?? 'unknown provider'}/${run.model}`)}`,
+    // Three states, never two. "No model was used" and "which model was used was
+    // not recorded" are different facts, and the first one used to be rendered as
+    // the configured model's name because the run summary copied it out of
+    // configuration whether or not a model ever ran.
+    `- Model: ${
+      performedNoModelSearch(report)
+        ? 'none — this run performed no model search'
+        : run.model === undefined
+          ? 'not recorded'
+          : inlineCode(`${run.provider ?? 'unknown provider'}/${run.model}`)
+    }`,
     ...(run.baseRef === undefined
       ? []
       : [`- Base: ${inlineCode(run.baseRef)}`]),
@@ -700,7 +720,13 @@ export const renderMarkdownReport = (input: unknown): string => {
     '',
     WHAT_THIS_IS,
     '',
-    `${MEASURED_RELIABILITY} ${renderMeasuredOn(report.run)}`,
+    // The rates, or the statement that replaces them. A run that performed no
+    // model search gets no rate and no model name here: both would describe a
+    // search it did not perform, and this is the line a reader uses to decide how
+    // much of the document to believe.
+    performedNoModelSearch(report)
+      ? NO_MODEL_SEARCH
+      : `${MEASURED_RELIABILITY} ${renderMeasuredOn(report.run)}`,
     '',
     ...renderScope(report),
     ...renderSummary(report, { actionable, unresolved }),
@@ -711,7 +737,10 @@ export const renderMarkdownReport = (input: unknown): string => {
   ]
 
   if (actionable.length === 0) {
-    lines.push(NOTHING_PROVED, '')
+    lines.push(
+      performedNoModelSearch(report) ? NOTHING_SEARCHED : NOTHING_PROVED,
+      ''
+    )
   } else {
     lines.push(
       'Ordered by severity, then by path and line. Each one survived an attempt to refute it, and the evidence it rests on is printed underneath so you can disagree with it.',

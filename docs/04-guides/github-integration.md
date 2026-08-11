@@ -252,8 +252,13 @@ Top level, in this order:
 - **The headline** — `Code review: no threshold crossed, N findings to read`,
   or `quality gate failed, …`, or `did not run` / `could not complete`. It
   states what the run *did*: neither "no findings" nor "the gate passed" appears,
-  because both read as a clearance of the change.
-- **One sentence about confidence**, carrying no number. It says a finding is
+  because both read as a clearance of the change. A run that performed no model
+  search at all (`aiReview.enabled: false`, or no provider configured) says
+  `Code review: no model search ran` — "this search reported nothing" would be
+  true of a search that never happened, and on the one line every reader sees
+  that is a clearance.
+- **One sentence about confidence**, carrying no number, replaced on a run with
+  no model search by the statement that nothing searched the change. It says a finding is
   something to check and an empty list means *this search* found nothing. The
   measured rates, with the provider and model they were measured on, are in the
   collapsed block — a rate without its model means nothing, and that sentence is
@@ -286,6 +291,9 @@ Inside **How this review was produced** (one `<details>` block at the end):
 - **How reliable this is** — the measured recall and adjusted-precision rates,
   naming the provider and model they were measured on. They are here rather than
   above the findings because a reviewer opened this comment to learn what to fix.
+  A run that performed no model search prints the statement of that fact in their
+  place: the rates are a property of a model search, and there was none for them
+  to describe.
 - **What was checked against each finding** — the refuter's own account, keyed
   by the location the finding was listed under. It is evidence and is never
   dropped; it is written in the engine's vocabulary ("Survived refutation —

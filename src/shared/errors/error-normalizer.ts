@@ -1,4 +1,4 @@
-import { createRedactor, type RedactorOptions } from '../redaction/redactor.js'
+import { createRedactor } from '../redaction/redactor.js'
 
 type ZodLikeIssue = {
   readonly path?: ReadonlyArray<string | number>
@@ -109,7 +109,7 @@ export type StructuredError = {
   readonly details: StructuredErrorDetails
 }
 
-export type NormalizeErrorOptions = RedactorOptions & {
+export type NormalizeErrorOptions = {
   readonly source?: ErrorSource
   readonly operation?: string
   readonly details?: StructuredErrorDetails
@@ -372,11 +372,7 @@ export const normalizeError = (
   error: unknown,
   options: NormalizeErrorOptions = {}
 ): StructuredError => {
-  const redactorOptions: RedactorOptions =
-    options.exactSecrets === undefined
-      ? {}
-      : { exactSecrets: options.exactSecrets }
-  const redactor = createRedactor(redactorOptions)
+  const redactor = createRedactor()
   const redact = redactor.redact
 
   if (isStructuredError(error)) {

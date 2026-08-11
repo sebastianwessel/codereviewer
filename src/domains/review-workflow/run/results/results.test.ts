@@ -80,6 +80,7 @@ describe('review runner results', () => {
         completedAt,
         configHash: sha256('config'),
         warnings: ['cost-unavailable'],
+        modelSearch: 'performed',
         runCost: {
           warnings: [],
           costUsd: 0.0123,
@@ -99,12 +100,39 @@ describe('review runner results', () => {
       configHash: sha256('config'),
       provider: 'openai',
       model: 'review-model',
+      modelSearch: 'performed',
       durationMs: 2500,
       costUsd: 0.0123,
       inputTokens: 1000,
       outputTokens: 250,
       warnings: ['cost-unavailable']
     })
+  })
+
+  // With `aiReview.enabled: false` no model ever ran, and this summary stamped the
+  // CONFIGURED provider and model onto the run anyway. Every surface downstream
+  // reads those two fields as "the model that produced these findings", so the
+  // report asserted a model had searched a change no model had seen. Config states
+  // which model WOULD be used; provenance may only state which one WAS.
+  test('a run that performed no model search names no model as having produced it', () => {
+    const config = CodeReviewerConfigSchema.parse({
+      aiReview: { enabled: false },
+      provider: { id: 'openai', model: 'review-model' }
+    })
+    const summary = createReviewRunSummary({
+      repositoryRoot: '/repo/project',
+      config,
+      runId: 'run_test',
+      startedAt: new Date('2026-06-22T10:00:00.000Z'),
+      completedAt: new Date('2026-06-22T10:00:02.500Z'),
+      configHash: sha256('config'),
+      warnings: [],
+      modelSearch: 'not-performed'
+    })
+
+    expect(summary.modelSearch).toBe('not-performed')
+    expect(summary).not.toHaveProperty('provider')
+    expect(summary).not.toHaveProperty('model')
   })
 
   // A certificate that counts only the files which REACHED review can read
@@ -258,7 +286,8 @@ describe('review runner results', () => {
       startedAt: new Date('2026-06-22T10:00:00.000Z'),
       completedAt: new Date('2026-06-22T10:00:01.000Z'),
       configHash: sha256('config'),
-      warnings: []
+      warnings: [],
+      modelSearch: 'performed'
     })
     const coverage = createCoverageSummary({
       sourceFiles: [{ path: 'src/a.ts', content: 'let a=1' }],
@@ -410,6 +439,7 @@ describe('review runner results', () => {
       completedAt: new Date('2026-06-22T10:00:01.000Z'),
       configHash: sha256('config'),
       warnings: ['drift:documentation'],
+      modelSearch: 'performed',
       runCost: { warnings: [] },
       analysis,
       coverage,

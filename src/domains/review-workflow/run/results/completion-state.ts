@@ -75,6 +75,16 @@ export const prepareReviewRunnerCompletionState = (
   }
 ): ReviewRunnerSuccessResult => {
   const providerWorkflowOutput = input.providerWorkflow?.output
+  // The exact fact, taken at its source. `runProviderWorkflow` returns undefined
+  // for exactly one reason — `aiReview.enabled` is false or no provider is
+  // configured — so an absent workflow is proof that no model looked at this
+  // change, and a present one is proof that one did. Nothing downstream can
+  // reconstruct this: `report.discovery` is also absent for a run that recorded
+  // no telemetry, and `run.model` is also absent for a run that did not record it.
+  const modelSearch =
+    input.providerWorkflow === undefined
+      ? ('not-performed' as const)
+      : ('performed' as const)
   const { admission } = prepareReviewRunnerAdmissionState({
     providerWorkflowOutput,
     reviewedPaths: input.reviewedPaths,
@@ -142,6 +152,7 @@ export const prepareReviewRunnerCompletionState = (
       configHash: input.configHash,
       warnings,
       runCost,
+      modelSearch,
       analysis: input.analysis,
       admission,
       coverage,
@@ -165,6 +176,7 @@ export const prepareReviewRunnerCompletionState = (
       configHash: input.configHash,
       warnings,
       runCost,
+      modelSearch,
       analysis: input.analysis,
       admission,
       maxCostUsd: input.config.review.maxCostUsd,
@@ -186,6 +198,7 @@ export const prepareReviewRunnerCompletionState = (
     configHash: input.configHash,
     warnings,
     runCost,
+    modelSearch,
     analysis: input.analysis,
     coverage,
     // Computed over exactly the files the registry analysed and exactly the files

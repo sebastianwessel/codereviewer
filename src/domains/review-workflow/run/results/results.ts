@@ -34,6 +34,11 @@ type ReviewRunSummaryInput = {
   readonly completedAt: Date
   readonly configHash: string
   readonly warnings: readonly string[]
+  // Whether a model actually searched this change. The KEY is required even
+  // though the value may be undefined: a caller that cannot say has to say so
+  // deliberately, because the field that gets forgotten is the one whose absence
+  // used to be filled in from configuration.
+  readonly modelSearch: ReviewReport['run']['modelSearch']
   readonly runCost?: RunCostSummary
 }
 
@@ -52,12 +57,21 @@ export const createReviewRunSummary = (
     ? {}
     : { mergeBaseRef: input.mergeBaseRef }),
   configHash: input.configHash,
-  ...(input.config.provider === undefined
+  // Provenance, not configuration. `config.provider` names the model that WOULD
+  // have been used; stamping it on a run that issued no model call turned it into
+  // a claim that one had produced the findings, and `report.md` printed the
+  // measured reliability of a model search directly underneath it. A run with no
+  // search names no model — the configured one is still recoverable from
+  // `configHash` and the config artifact, where it is a setting rather than a
+  // record of what happened.
+  ...(input.config.provider === undefined ||
+  input.modelSearch === 'not-performed'
     ? {}
     : {
         provider: input.config.provider.id,
         model: input.config.provider.model
       }),
+  ...(input.modelSearch === undefined ? {} : { modelSearch: input.modelSearch }),
   durationMs: Math.max(
     0,
     input.completedAt.getTime() - input.startedAt.getTime()
@@ -249,6 +263,9 @@ export const prepareReviewRunnerSuccessResult = (
     readonly completedAt: Date
     readonly configHash: string
     readonly warnings: readonly string[]
+    // Required, and stated by the caller rather than derived here: only the
+    // runner knows whether the provider workflow actually ran.
+    readonly modelSearch: NonNullable<ReviewReport['run']['modelSearch']>
     readonly runCost?: RunCostSummary | undefined
     readonly analysis: DeterministicSignalExtraction
     readonly coverage: CoverageSummary
@@ -280,6 +297,7 @@ export const prepareReviewRunnerSuccessResult = (
       completedAt: input.completedAt,
       configHash: input.configHash,
       warnings: input.warnings,
+      modelSearch: input.modelSearch,
       ...(input.runCost === undefined ? {} : { runCost: input.runCost })
     }),
     coverage: input.coverage,

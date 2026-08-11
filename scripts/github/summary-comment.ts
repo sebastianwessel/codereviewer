@@ -13,7 +13,9 @@
 // escapes every `<`.
 import {
   adjustedPrecisionInTwenty,
+  NO_MODEL_SEARCH,
   NOTHING_PROVED,
+  NOTHING_SEARCHED,
   inDiffRecallInTen,
   measuredReliability,
   MEASURED_ON_MODEL,
@@ -111,6 +113,13 @@ const isUnresolvedFinding = (finding: FindingDigest): boolean =>
 const actionableFindings = (review: ReviewDigest): readonly FindingDigest[] =>
   review.findings.filter((finding) => !isUnresolvedFinding(finding))
 
+// Whether this comment may say anything about a model search. Only an explicit
+// `not-performed` withholds the rates: a report that does not carry the field has
+// not claimed a search ran, and reading its silence as the claim would strip a
+// genuinely searched run of the numbers a reviewer needs to weigh it.
+const performedNoModelSearch = (input: SummaryCommentInput): boolean =>
+  input.review?.modelSearch === 'not-performed'
+
 const unresolvedFindings = (review: ReviewDigest): readonly FindingDigest[] =>
   review.findings.filter(isUnresolvedFinding)
 
@@ -182,6 +191,14 @@ const verdictHeadline = (input: SummaryCommentInput): string => {
 
   if (review.status === 'failed') {
     return 'Code review could not complete'
+  }
+
+  // The same rule one step further: with the model-backed review switched off,
+  // "this search reported nothing" is true of a search that never happened, and
+  // on the one line every reader sees that reads as a clearance. What the run did
+  // is that it did not look.
+  if (performedNoModelSearch(input)) {
+    return 'Code review: no model search ran'
   }
 
   // Unresolved (`artifact-only`) findings are open questions, not verdicts, so
@@ -260,6 +277,10 @@ const stageTable = (input: SummaryCommentInput): string => {
 
 const findingsSection = (review: ReviewDigest): string => {
   const findings = actionableFindings(review)
+  // A run that searched nothing gets the sentence for that, not the one whose
+  // reassurance rests on a measured miss rate.
+  const emptyListMeans =
+    review.modelSearch === 'not-performed' ? NOTHING_SEARCHED : NOTHING_PROVED
   // An empty findings list used to render as no section at all, which left the
   // headline as the only statement about the review and let it be read as a
   // clearance. What the silence means is said out loud instead.
@@ -269,7 +290,7 @@ const findingsSection = (review: ReviewDigest): string => {
       '',
       // The one shared sentence. It lived here as a second copy that had already
       // drifted from the reporter's wording; it is imported now so it cannot again.
-      NOTHING_PROVED
+      emptyListMeans
     ].join('\n')
   }
 
@@ -624,9 +645,17 @@ const detailsSection = (input: SummaryCommentInput): string => {
     '',
     // The measured rates, still naming the provider and model they were measured
     // on. Placement moved; the guarantee did not.
+    //
+    // A run that performed no model search gets the statement of that fact in
+    // their place, not a shortened version of them: these rates are a property of
+    // a model search, and there was none to be a property of. It is the same
+    // sentence the top of the comment carries, and the repetition is deliberate —
+    // each one replaces a different claim (there, that a search found nothing;
+    // here, how often that search finds a defect), and a reader who expands only
+    // this block must not find the reliability heading standing over silence.
     '**How reliable this is**',
     '',
-    MEASURED_RELIABILITY,
+    performedNoModelSearch(input) ? NO_MODEL_SEARCH : MEASURED_RELIABILITY,
     '',
     ...(input.review === undefined ? [] : refutationSection(input.review)),
     '**Pipeline**',
@@ -728,7 +757,14 @@ export const renderSummaryComment = (input: SummaryCommentInput): string => {
   // of the change (4-5), and the machinery last (6).
   const sections: readonly (CommentSection | undefined)[] = [
     { text: `## ${verdictHeadline(input)}`, keepRank: 0 },
-    { text: CONFIDENCE_NOTE, keepRank: 1 },
+    // The caveat above the fold, or — when nothing searched the change — the
+    // statement that replaces it. `CONFIDENCE_NOTE` describes an automated review
+    // that misses defects and points at the rates below; both halves of that
+    // sentence are about a search this run did not perform.
+    {
+      text: performedNoModelSearch(input) ? NO_MODEL_SEARCH : CONFIDENCE_NOTE,
+      keepRank: 1
+    },
     section(stageProblemNote(input), 1),
     notes.length === 0
       ? undefined

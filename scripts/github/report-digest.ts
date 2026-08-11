@@ -68,6 +68,11 @@ const ReviewReportSchema = z.object({
   run: z.object({
     runId: z.string(),
     costUsd: z.number().nullish(),
+    // Whether a model actually searched the change. Loose like every other field
+    // here — an engine older than the field says nothing, and saying nothing is
+    // not the same as saying a search ran, so only the explicit 'not-performed'
+    // changes what this comment claims.
+    modelSearch: z.string().nullish(),
     warnings: z.array(z.string()).nullish()
   }),
   coverage: z.object({ status: z.string() }).nullish(),
@@ -179,6 +184,17 @@ export type ReviewDigest = {
    * it was.
    */
   readonly resolvedBaselineEntryCount?: number
+  /**
+   * `'performed'` or `'not-performed'`: whether a model searched this change at
+   * all. Undefined when the report does not say — an older engine, or one that
+   * predates the field — which the renderer must treat as "no claim", never as a
+   * search having run.
+   *
+   * It is carried because a run with `aiReview.enabled: false` reports zero
+   * findings and passes its gate, and this comment used to hand a reviewer the
+   * measured rates of a diff-scoped model search over exactly that.
+   */
+  readonly modelSearch?: string
 }
 
 const parseJson = (raw: string): unknown => {
@@ -277,6 +293,9 @@ export const digestReviewReport = (raw: string): ReviewDigest | undefined => {
     ...(report.run.costUsd === undefined || report.run.costUsd === null
       ? {}
       : { costUsd: report.run.costUsd }),
+    ...(report.run.modelSearch === undefined || report.run.modelSearch === null
+      ? {}
+      : { modelSearch: report.run.modelSearch }),
     ...(mergedAwayCount === undefined || mergedAwayCount === null
       ? {}
       : { mergedAwayCount }),

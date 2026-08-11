@@ -63,6 +63,13 @@
         "model": {
           "type": "string"
         },
+        "modelSearch": {
+          "type": "string",
+          "enum": [
+            "performed",
+            "not-performed"
+          ]
+        },
         "durationMs": {
           "type": "integer",
           "minimum": 0,

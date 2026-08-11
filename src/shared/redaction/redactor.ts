@@ -1,3 +1,5 @@
+import { currentConfiguredExactSecrets } from './configured-secrets.js'
+
 const redactionMarker = '[REDACTED]'
 
 type SecretPattern = {
@@ -67,10 +69,6 @@ const builtInSecretPatterns: readonly SecretPattern[] = [
   }
 ] as const
 
-export type RedactorOptions = {
-  readonly exactSecrets?: readonly string[]
-}
-
 export type Redactor = {
   readonly redact: (value: string) => string
 }
@@ -85,8 +83,16 @@ const createExactSecretPatterns = (
     .filter((secret) => secret.length > 0)
     .map((secret) => new RegExp(escapeRegExp(secret), 'gu'))
 
-export const createRedactor = (options: RedactorOptions = {}): Redactor => {
-  const exactSecretPatterns = createExactSecretPatterns(options.exactSecrets ?? [])
+// Every redactor gets the run's configured secrets. There is deliberately no
+// per-call way to add more: an operator naming a secret names it for the run, and
+// a seam that builds its own redactor is not opting out of the security floor.
+// One option used to exist, reachable only through `normalizeError`, and no
+// production caller ever passed it — a second unreachable path to the same
+// capability is not a second capability.
+export const createRedactor = (): Redactor => {
+  const exactSecretPatterns = createExactSecretPatterns(
+    currentConfiguredExactSecrets()
+  )
 
   return {
     redact: (value) => {
@@ -105,6 +111,23 @@ export const createRedactor = (options: RedactorOptions = {}): Redactor => {
   }
 }
 
-const defaultRedactor = createRedactor()
+// The shared redactor behind `redactText`, rebuilt when — and only when — the
+// configured secrets change. It cannot simply be built once at module load: this
+// module is imported long before configuration is read, so a redactor frozen
+// there would compile the empty policy and hold it for the whole process, which
+// is a quieter version of the unreachable capability this exists to fix.
+// Rebuilding per call instead would recompile every pattern for every string
+// redacted, and redaction runs over whole files.
+let defaultRedactorSecrets = currentConfiguredExactSecrets()
+let defaultRedactor = createRedactor()
 
-export const redactText = (value: string): string => defaultRedactor.redact(value)
+export const redactText = (value: string): string => {
+  const configuredSecrets = currentConfiguredExactSecrets()
+
+  if (configuredSecrets !== defaultRedactorSecrets) {
+    defaultRedactorSecrets = configuredSecrets
+    defaultRedactor = createRedactor()
+  }
+
+  return defaultRedactor.redact(value)
+}

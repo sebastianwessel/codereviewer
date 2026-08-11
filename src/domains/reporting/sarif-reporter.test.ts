@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, test } from 'vitest'
 import { renderSarifReport } from './index.js'
-import { SARIF_INFORMATION_URI } from './sarif-reporter.js'
+import {
+  NO_MODEL_SEARCH_NOTIFICATION_ID,
+  SARIF_INFORMATION_URI
+} from './sarif-reporter.js'
 import { validateSarifDocument } from './sarif-validation.js'
 import { createReportFixture } from '../../shared/testing/report-fixture.js'
 
@@ -504,6 +507,37 @@ describe('SARIF reporter', () => {
     // The descriptor reference resolves against the driver instead of dangling.
     expect(sarif.runs[0].tool.driver.notifications).toEqual([
       expect.objectContaining({ id: notification.descriptor.id })
+    ])
+  })
+
+  // An empty SARIF run is the strongest clean bill of health this project emits:
+  // code scanning shows no alert at all, and nothing in the document says whether
+  // anything was searched for. A run with the model-backed review switched off
+  // has to say so in the one channel a consumer of this file reads.
+  test('a run that performed no model search says so in the SARIF run itself', () => {
+    const report = createReportFixture()
+    const { provider: _provider, model: _model, ...run } = report.run
+    const sarif = JSON.parse(
+      renderSarifReport(
+        {
+          ...report,
+          run: { ...run, modelSearch: 'not-performed' },
+          admittedFindings: []
+        },
+        {
+          category: 'codereviewer',
+          maxResults: 25,
+          target: 'github'
+        }
+      )
+    )
+    const notification =
+      sarif.runs[0].invocations[0].toolExecutionNotifications[0]
+
+    expect(notification.descriptor.id).toBe(NO_MODEL_SEARCH_NOTIFICATION_ID)
+    expect(notification.message.text).toContain('no model search')
+    expect(sarif.runs[0].tool.driver.notifications).toEqual([
+      expect.objectContaining({ id: NO_MODEL_SEARCH_NOTIFICATION_ID })
     ])
   })
 

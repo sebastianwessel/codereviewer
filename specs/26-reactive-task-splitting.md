@@ -66,6 +66,12 @@ better than the alternative, which is a silently degraded review.
   halved the source and not the diff, and each half was told about changes at lines
   it was not given, which invites a finding outside the chunk that admission rejects
   as out of range. A task that was not split spans its whole file and is unaffected.
+  The rule binds on whichever form the change section takes: when no hunk falls
+  inside a half's chunk the section falls back to the reviewed line ranges in prose,
+  and those MUST be clipped by the same chunk bounds — a half told in prose about a
+  change it cannot see is the same defect written a different way. Testable without a
+  provider: build the packet for a half whose chunk holds no changed line and assert
+  the change section names none.
 - Split halves MUST keep their absolute line origins. A finding's reported line must
   be the file's real line — the fingerprint anchors on it, so a wrong line silently
   gives the finding a wrong identity. This was a fixed defect once already.

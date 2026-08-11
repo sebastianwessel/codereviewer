@@ -174,6 +174,34 @@ const taskChunkLineRanges = (
   return ranges
 }
 
+type ReviewedRange = TaskReviewInput['reviewedDiffRanges'][number]
+
+// The prose form of the same statement, for when clipping leaves a half no hunk to
+// show. It is rendered from `reviewedDiffRanges`, which is selected by PATH alone,
+// so it has to be clipped by the SAME bounds the diff is — otherwise the fallback
+// hands the half exactly the out-of-chunk change the clipping just took away,
+// written out instead of shown as a diff, and every reason the clipping exists
+// applies again. The bounds are the ones the clipping already computed rather than
+// derived a second way: two computations of one rule drift.
+//
+// A path with no chunk entry is an unsplit task, whose document spans the file, and
+// its range is emitted whole.
+const reviewedRangeWithinChunk = (
+  range: ReviewedRange,
+  chunk: DiffLineRange | undefined
+): ReviewedRange | undefined => {
+  if (chunk === undefined) {
+    return range
+  }
+
+  const startLine = Math.max(range.startLine, chunk.startLine)
+  const endLine = Math.min(range.endLine, chunk.endLine)
+
+  // Entirely outside this half: the half cannot see one line of it, so saying it
+  // changed is the leak, not the omission.
+  return startLine > endLine ? undefined : { ...range, startLine, endLine }
+}
+
 const numberedChangedFiles = (
   taskInput: TaskReviewInput
 ): readonly NumberedFile[] =>
@@ -306,13 +334,24 @@ export const buildContextSections = (
     .join('\n\n')
 
   // Prefer the actual unified diff (before/after); fall back to line ranges when
-  // the raw diff is unavailable (e.g. explicit-file runs with no diff).
+  // the raw diff is unavailable (e.g. explicit-file runs with no diff) or when no
+  // hunk falls inside this task's chunk. Both readings of the change are clipped by
+  // the same bounds, computed once.
+  const chunkLineRanges = taskChunkLineRanges(taskInput)
   const diffText = diffSegmentsForPaths(
     rawDiff,
     taskInput.task.paths,
-    taskChunkLineRanges(taskInput)
+    chunkLineRanges
   )
   const diffRanges = taskInput.reviewedDiffRanges
+    .flatMap((range) => {
+      const clipped = reviewedRangeWithinChunk(
+        range,
+        chunkLineRanges.get(range.path)
+      )
+
+      return clipped === undefined ? [] : [clipped]
+    })
     .map(
       (range) =>
         `${range.path} lines ${range.startLine}-${range.endLine}${

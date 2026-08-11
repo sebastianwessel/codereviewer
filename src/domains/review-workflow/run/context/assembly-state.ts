@@ -37,7 +37,9 @@ export const prepareReviewRunnerContextAssemblyState = async (input: {
   contextAssemblyStep.end({
     ledgerEntryCount: contextState.metrics.ledgerEntryCount,
     referencedDefinitionsDroppedCount:
-      contextState.metrics.referencedDefinitionsDroppedCount
+      contextState.metrics.referencedDefinitionsDroppedCount,
+    referencedDefinitionsUnreadableCount:
+      contextState.metrics.referencedDefinitionsUnreadableCount
   })
   input.logger.debug('Context assembly completed.', {
     ledger_entry_count: contextState.metrics.ledgerEntryCount,
@@ -45,7 +47,9 @@ export const prepareReviewRunnerContextAssemblyState = async (input: {
     instruction_count: contextState.metrics.instructionCount,
     skill_count: contextState.metrics.skillCount,
     referenced_definitions_dropped_count:
-      contextState.metrics.referencedDefinitionsDroppedCount
+      contextState.metrics.referencedDefinitionsDroppedCount,
+    referenced_definitions_unreadable_count:
+      contextState.metrics.referencedDefinitionsUnreadableCount
   })
 
   // Warned rather than left to a debug line, because it changes what the
@@ -58,6 +62,21 @@ export const prepareReviewRunnerContextAssemblyState = async (input: {
       {
         referenced_definitions_dropped_count:
           contextState.metrics.referencedDefinitionsDroppedCount
+      }
+    )
+  }
+
+  // A dependency that resolved and then failed to read gets its own line rather
+  // than joining the count above. Both end with context the reviewer never saw,
+  // but only one of them is this engine's caps binding; saying "capped" about a
+  // file that vanished or could not be opened points the reader at the wrong
+  // knob, and the caps are what the message above exists to report.
+  if (contextState.metrics.referencedDefinitionsUnreadableCount > 0) {
+    input.logger.warn(
+      'Referenced-definition dependencies resolved but could not be read; they were not shown to the reviewer.',
+      {
+        referenced_definitions_unreadable_count:
+          contextState.metrics.referencedDefinitionsUnreadableCount
       }
     )
   }

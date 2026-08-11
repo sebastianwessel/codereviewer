@@ -305,6 +305,57 @@ describe('collectReferencedDefinitions', () => {
       )
     })
 
+    test('counts a dependency that failed to read as its own cause, not as budget', async () => {
+      const facts: SupportSignalFact[] = []
+      // Each dependency is large enough that the total budget runs out before the
+      // last one, so both causes are live in the same call.
+      const largeBody = `export const value = '${'x'.repeat(3000)}'\n`
+
+      for (let index = 0; index < referencedDefinitionBounds.maxFiles; index += 1) {
+        const name = `dep${index}`
+        await writeFile(
+          path.join(repositoryRoot, 'src', `${name}.ts`),
+          largeBody,
+          'utf8'
+        )
+        facts.push(importFact('src/changed.ts', `./${name}.js`, index + 1))
+      }
+
+      await writeFile(
+        path.join(repositoryRoot, 'src', 'changed.ts'),
+        facts.map((fact) => `import x from '${fact.moduleSpecifier}'`).join('\n'),
+        'utf8'
+      )
+
+      const result = await collectReferencedDefinitions({
+        repositoryRoot,
+        taskPaths: ['src/changed.ts'],
+        facts,
+        knownPaths: new Set(['src/changed.ts']),
+        // The highest-ranked dependency resolves and then fails to read. That is
+        // not the byte budget's doing, and the budget counter must not claim it.
+        readDependencyFile: async (absolutePath) => {
+          if (absolutePath.endsWith('dep0.ts')) {
+            throw new Error('read failure')
+          }
+
+          return largeBody
+        }
+      })
+
+      expect(result.droppedByReadFailure).toBe(1)
+      // One file was reached and refused by the budget — not two, which is what
+      // deriving the count from `digests.length` reported while the read failure
+      // was invisible.
+      expect(result.droppedByBudget).toBe(1)
+      // Every ranked dependency is accounted for by exactly one cause.
+      expect(
+        result.digests.length +
+          result.droppedByBudget +
+          result.droppedByReadFailure
+      ).toBe(referencedDefinitionBounds.maxFiles)
+    })
+
     test('reports zero dropped when everything fits', async () => {
       await writeFile(
         path.join(repositoryRoot, 'src', 'changed.ts'),
@@ -326,6 +377,7 @@ describe('collectReferencedDefinitions', () => {
 
       expect(result.droppedByFileCap).toBe(0)
       expect(result.droppedByBudget).toBe(0)
+      expect(result.droppedByReadFailure).toBe(0)
     })
   })
 

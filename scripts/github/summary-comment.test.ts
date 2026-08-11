@@ -5,6 +5,7 @@ import {
   measuredReliability,
   MEASURED_ON_MODEL,
   MEASURED_ON_PROVIDER,
+  NO_MODEL_SEARCH,
   NOTHING_PROVED
 } from '../../src/domains/reporting/measured-reliability.js'
 import {
@@ -141,6 +142,30 @@ describe('renderSummaryComment', () => {
     // assume it holds for theirs. This is the standing decision, and it is
     // asserted on the text that carries the numbers, not on the body.
     expect(collapsed).toContain(`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}`)
+  })
+
+  // The same rates over a run that searched nothing. `aiReview.enabled: false`
+  // makes the engine report zero findings and pass its gate, and this comment
+  // then told the reviewer that a diff-scoped search finding seven in ten
+  // in-diff defects had reported nothing — a measured rate standing in for a
+  // search that never ran. The reviewer is the one person who can still look.
+  it('says no model searched the change instead of quoting rates for a search that did not happen', () => {
+    const body = renderSummaryComment(
+      baseInput({
+        review: digestReviewReport(
+          JSON.stringify({
+            ...reviewReportFixture,
+            run: { ...reviewReportFixture.run, modelSearch: 'not-performed' },
+            admittedFindings: []
+          })
+        ) as never
+      })
+    )
+
+    expect(body).toContain(NO_MODEL_SEARCH)
+    expect(body).toContain('Code review: no model search ran')
+    expect(body).not.toContain(`**${inDiffRecallInTen} in 10**`)
+    expect(body).not.toContain(`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}`)
   })
 
   // The numbers moved down; the caveat did not. A reader who expands nothing must

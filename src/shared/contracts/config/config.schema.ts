@@ -427,13 +427,56 @@ export const SecuritySignalsConfigSchema = z
     }
   })
 
+// Secret values the operator wants removed from everything this engine emits,
+// beyond the credential formats the redactor recognises on its own: an
+// org-specific token shape, an internal hostname, a customer identifier. This is
+// spec 07's "user-configured exact secret values" — the last entry in the minimum
+// pattern list, and the one that had no way to be configured at all.
+//
+// THE CONFIGURATION NAMES ENVIRONMENT VARIABLES, NEVER THE SECRET. A literal list
+// would commit the secret to the repository in order to keep it out of the run's
+// artifacts, which trades a per-run, deletable artifact for git history that is
+// neither — and `.codereviewer/config.json` is exactly the file an operator
+// copies between repositories and pastes into an issue. The value is already in
+// the environment of the process that would leak it, because that is how CI hands
+// a credential to a job, so naming the variable points at where the secret lives
+// instead of making a second copy of it. It also keeps this key's own value safe
+// to print: a variable NAME is not a secret, so the config summary, the ledger and
+// a schema-validation error can all show it.
+//
+// A named variable that is unset, empty, or too short to be a credential is
+// REJECTED at load (`redaction_secret_env_unset`, `redaction_secret_env_too_short`)
+// rather than skipped. The operator's statement is "this value must never appear
+// in output"; carrying on without it produces artifacts that look redacted and are
+// not, and a two-character value would replace its every occurrence in every
+// report. Both refusals name the variable and never its value.
+//
+// An empty or absent list is the ground state and changes nothing: no exact-secret
+// pattern is compiled, and redaction is the built-in floor exactly as it was.
+export const SecretRedactionConfigSchema = z.strictObject({
+  // POSIX environment variable names. The pattern is here so a pasted secret is
+  // rejected as a name at validation instead of being resolved as a variable and
+  // failing later as "unset".
+  secretEnvVars: z
+    .array(
+      z
+        .string()
+        .regex(
+          /^[A-Za-z_][A-Za-z0-9_]*$/u,
+          'must be an environment variable NAME (letters, digits, underscore), not a secret value'
+        )
+    )
+    .default([])
+})
+
 export const SecurityConfigSchema = z.strictObject({
   allowShell: z.literal(false).default(false),
   allowNetwork: z.literal(false).default(false),
   allowFilesystemWrite: z.literal(false).default(false),
   captureContentTelemetry: z.literal(false).default(false),
   dedicatedPass: SecurityDedicatedPassConfigSchema.prefault({}),
-  signals: SecuritySignalsConfigSchema.prefault({})
+  signals: SecuritySignalsConfigSchema.prefault({}),
+  redaction: SecretRedactionConfigSchema.prefault({})
 })
 
 export const QualityGateConfigSchema = z.strictObject({
@@ -1074,6 +1117,7 @@ export type SecuritySignalsConfig = z.infer<typeof SecuritySignalsConfigSchema>
 export type SecurityAnalyzerArtifactConfig = z.infer<
   typeof SecurityAnalyzerArtifactConfigSchema
 >
+export type SecretRedactionConfig = z.infer<typeof SecretRedactionConfigSchema>
 export type DriftCategory = z.infer<typeof DriftCategorySchema>
 export type DriftConfig = z.infer<typeof DriftConfigSchema>
 export type ReportingConfig = z.infer<typeof ReportingConfigSchema>

@@ -208,6 +208,8 @@ export {
   type RunSummary,
   RunSummarySchema,
   SarifReportingConfigSchema,
+  type SecretRedactionConfig,
+  SecretRedactionConfigSchema,
   type SecurityAnalyzerArtifactConfig,
   SecurityAnalyzerArtifactConfigSchema,
   type SecurityConfig,

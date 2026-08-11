@@ -89,6 +89,9 @@ const commonInput = {
   },
   analysis,
   admission,
+  // These fixtures fail their gate on a run that DID search; the no-search case
+  // is covered where the fact is established, in `results.test.ts`.
+  modelSearch: 'performed',
   contextLedger: [],
   observability: { events: [] }
 } as const

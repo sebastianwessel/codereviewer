@@ -53,6 +53,10 @@ flowchart TD
 Without a configured `provider` (or with `aiReview.enabled: false`) the two
 model stages are skipped entirely: the run goes intake → signals → clustering →
 context → admission → gate → reporting and admits only deterministic candidates.
+Every report from such a run records `run.modelSearch: "not-performed"`, names no
+model, withholds the measured recall and precision rates, and states that no
+model search ran — so its (usually empty) findings list cannot be read as a clean
+bill of health. The gate and the exit code are unchanged.
 See [Two flows](two-flows.md).
 
 ## The stages

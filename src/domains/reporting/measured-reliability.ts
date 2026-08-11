@@ -201,6 +201,36 @@ export const numberWord = (value: number): string =>
  * clearance, so the wording that refuses that reading is the last thing that
  * should exist in two editable copies.
  */
+/**
+ * What every reader-facing surface says INSTEAD of the rates when the run
+ * performed no model search at all (`run.modelSearch === 'not-performed'`).
+ *
+ * A run with `aiReview.enabled: false`, or with no provider configured, reports
+ * zero findings, passes its quality gate and exits 0. Printing the measured
+ * recall and precision over that is worse than printing nothing: those rates
+ * describe how often a MODEL SEARCH finds a defect, so quoting them where no
+ * search happened lends a run that looked at nothing the credibility of one that
+ * looked. The rates are therefore withheld and this sentence takes their place —
+ * the same slot, the same prominence, so the disclosure cannot be missed by a
+ * reader who reads exactly as much as they read before.
+ *
+ * Shared for the reason `NOTHING_PROVED` below is shared: the report and the
+ * pull-request comment both print it, and a sentence whose whole job is to refuse
+ * a flattering reading is the last one that should exist in two editable copies.
+ */
+export const NO_MODEL_SEARCH = `NO MODEL SEARCHED THIS CHANGE. The model-backed review did not run — it is switched off, or no provider is configured — so nothing here rests on a model having looked for defects, and anything reported came from the deterministic signals alone. The measured recall and precision this surface prints for a review are deliberately absent: they describe how often a model search finds a defect, and this run performed no search for them to describe. Read an empty list as "nothing was searched for", never as "there is nothing to find".`
+
+/**
+ * What an empty findings list means on a run that performed NO model search.
+ *
+ * `NOTHING_PROVED` is the sentence for a search that ran and found nothing, and
+ * it earns its reading by quoting the measured miss rate. Over a run with no
+ * search that rate is a claim about something that did not happen, so the
+ * distinction the empty-list sentence exists to draw needs its own wording here:
+ * the reason this list is empty is not that a search came back empty.
+ */
+export const NOTHING_SEARCHED = `No defect is reported, and none was searched for. The model-backed review did not run, so the only things that could have been reported are what the deterministic signals name outright — no defect requiring a model to notice it could have been found here, at any severity. Read it as "nothing was searched for", never as "there is nothing to find".`
+
 export const NOTHING_PROVED = `This run proved no defect it could act on. That is a statement about this search and not about the change: roughly ${numberWord(inDiffMissesInTen)} in ten defects inside the diff are missed on the measured corpus, and defects outside the diff are not looked for at all. Read it as "this search found nothing", never as "there is nothing to find".`
 
 /**

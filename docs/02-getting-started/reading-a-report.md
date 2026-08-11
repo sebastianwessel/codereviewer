@@ -63,6 +63,15 @@ not touch, rose across that same boundary. See [Current
 results](../05-quality/current-results.md#current-headline) for the full
 accounting.
 
+**A run that performed no model search prints neither of these paragraphs' rates
+and names no model.** With `aiReview.enabled: false`, or with no provider
+configured, nothing searched the change: the header says so in place of the
+rates, the model line reads `none`, and the findings section says nothing was
+searched for rather than that nothing was proved. Rates describe how often a
+model search finds a defect, so over a run that performed none they would flatter
+it. Everything else in the document — deterministic signals, coverage, skipped
+files — is unchanged, and so are the quality gate and the exit code.
+
 Two consequences worth stating plainly, because they are what the rates mean for
 a reviewer:
 
@@ -100,6 +109,11 @@ a reviewer:
 - Files read in full: 3 of 3 reviewable (48,120 of 48,120 bytes). Coverage status: complete — a statement that the source reached a model, not that every defect in it was found.
 - Files never reviewed at all: 2, listed under "Skipped Files" below.
 ```
+
+The **model line has three states**, and they are three different facts: the
+model that produced the report; `not recorded` when the run did not record one;
+and `none — this run performed no model search` when no model looked at the
+change at all. It never names the configured model on a run that did not use it.
 
 `Mode` (`local` / `ci` / `pr` / `full`) and `Depth` (`fast` / `balanced` /
 `thorough`) record the posture the run actually used, after config, environment,

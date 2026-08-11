@@ -49,7 +49,8 @@ const emptyAssembledContext: ContextAssemblyResult = {
   skillDefinitions: {},
   skillIds: [],
   contextLedger: [],
-  referencedDefinitionsDroppedCount: 0
+  referencedDefinitionsDroppedCount: 0,
+  referencedDefinitionsUnreadableCount: 0
 }
 
 describe('prepareReviewRunnerChangeIntentContext — model summarizer availability', () => {

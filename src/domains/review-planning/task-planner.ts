@@ -208,15 +208,19 @@ const connectedPathGroups = (
   return groups.sort((left, right) => left[0]!.localeCompare(right[0]!))
 }
 
-const maxPathsPerCluster = 8
+// The most paths any planned task can carry. Exported because the harness's
+// child-agent call budget has to bound the worst case a planned task presents, and
+// it used to mirror this number in a comment — a mirror agrees until it does not,
+// and the direction that disagreement fails in is a budget that under-reserves.
+export const MAX_PATHS_PER_REVIEW_TASK = 8
 
 const splitGroupIntoBoundedChunks = (
   group: readonly string[]
 ): readonly (readonly string[])[] => {
   const chunks: string[][] = []
 
-  for (let index = 0; index < group.length; index += maxPathsPerCluster) {
-    chunks.push(group.slice(index, index + maxPathsPerCluster))
+  for (let index = 0; index < group.length; index += MAX_PATHS_PER_REVIEW_TASK) {
+    chunks.push(group.slice(index, index + MAX_PATHS_PER_REVIEW_TASK))
   }
 
   return chunks
@@ -230,8 +234,8 @@ const packPathGroups = (
 
   const flushSingletons = (): void => {
     while (pendingSingletons.length > 0) {
-      packedGroups.push(pendingSingletons.slice(0, maxPathsPerCluster))
-      pendingSingletons = pendingSingletons.slice(maxPathsPerCluster)
+      packedGroups.push(pendingSingletons.slice(0, MAX_PATHS_PER_REVIEW_TASK))
+      pendingSingletons = pendingSingletons.slice(MAX_PATHS_PER_REVIEW_TASK)
     }
   }
 

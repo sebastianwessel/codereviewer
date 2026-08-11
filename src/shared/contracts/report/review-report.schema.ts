@@ -29,8 +29,33 @@ export const RunSummarySchema = z.strictObject({
   // headRef. Absent for explicit-file runs, which bypass git entirely.
   mergeBaseRef: z.string().optional(),
   configHash: Sha256Schema,
+  // The provider and model that PRODUCED this run's findings — never the ones
+  // configuration merely names. They used to be copied off `config.provider`
+  // unconditionally, so a run with `aiReview.enabled: false` reported a model for
+  // a change no model had seen, and every surface reads these two as provenance.
   provider: z.string().optional(),
   model: z.string().optional(),
+  // Whether a model actually searched this change for defects.
+  //
+  // WHY THIS IS A FIELD AND NOT AN INFERENCE. `aiReview.enabled: false` (or no
+  // configured provider) produces a run with zero findings, a passing gate and
+  // exit 0 — a clean bill of health for a search that never happened. Every
+  // reader-facing surface then printed the measured recall and precision of a
+  // model search over it. The surfaces need a signal to refuse that, and the two
+  // signals already on the report cannot carry it:
+  //
+  //   - `discovery` is absent both for a run that issued no discovery call AND
+  //     for one this engine wrote before spec 27 added the field, so reading its
+  //     absence as "no search ran" would strip an older, genuinely searched run
+  //     of its rates and accuse it of not having looked.
+  //   - `model` is absent for a run that did not RECORD its model, which is a
+  //     different fact from a run that used none.
+  //
+  // Optional for reports written before this field existed: absent means THIS
+  // REPORT DOES NOT SAY, which is not the same claim as `performed`, so a surface
+  // may only suppress its rates on an explicit `not-performed`. Every report this
+  // engine writes states it.
+  modelSearch: z.enum(['performed', 'not-performed']).optional(),
   durationMs: z.int().min(0),
   costUsd: z.number().min(0).optional(),
   inputTokens: z.int().min(0).optional(),

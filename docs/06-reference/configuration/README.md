@@ -100,6 +100,7 @@ appear in the normalized config or its hash.
 | Git ref | Non-empty, must not start with `-`. |
 | Severity | `critical` > `high` > `medium` > `low` > `info`. Thresholds are inclusive floors. |
 | URL | Parsed as an absolute URL (`z.url()`). |
+| Environment variable name | Letters, digits and underscore, not starting with a digit. Used by `security.redaction.secretEnvVars`, which names variables and never holds their values — the pattern is what turns a pasted secret into a validation error instead of a lookup that fails later. |
 | Booleans typed `false` | `security.allowShell`, `allowNetwork`, `allowFilesystemWrite`, `captureContentTelemetry` and `aiReview.requireRefutation` are literal types — the only accepted values are `false`, `false`, `false`, `false`, and `true` respectively. |
 
 ## Minimal example

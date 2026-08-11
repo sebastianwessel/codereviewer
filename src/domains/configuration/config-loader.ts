@@ -5,6 +5,7 @@ import {
   type CodeReviewerConfig
 } from '../../shared/contracts/index.js'
 import { createStructuredError } from '../../shared/errors/error-normalizer.js'
+import { applyConfiguredSecretRedaction } from './secret-redaction.js'
 
 type JsonPrimitive = string | number | boolean | null
 type JsonValue = JsonPrimitive | JsonObject | JsonValue[]
@@ -393,9 +394,19 @@ export const loadCodeReviewerConfig = async (
   const baselineExplicitlyConfigured =
     isJsonObject(baselineRaw) &&
     ('path' in baselineRaw || 'enabled' in baselineRaw)
+  const config = CodeReviewerConfigSchema.parse(mergedConfig)
+
+  // The one effect this loader has beyond returning a value, and it is here
+  // because this is the only place configuration and environment are both in
+  // hand. Redaction is ambient — no seam that redacts takes configuration — so
+  // the configured secrets have to be established once, on the path every entry
+  // point already takes, rather than by each caller remembering to. A run that
+  // loaded configuration and did not apply it would emit artifacts that look
+  // redacted and are not.
+  applyConfiguredSecretRedaction({ config, environment })
 
   return {
-    config: CodeReviewerConfigSchema.parse(mergedConfig),
+    config,
     environment,
     warnings,
     baselineExplicitlyConfigured

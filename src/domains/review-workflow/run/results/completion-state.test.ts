@@ -110,6 +110,12 @@ describe('review runner completion state', () => {
 
     expect(result.report.coverage.status).toBe('complete')
     expect(result.report.run.runId).toBe('run_completion')
+    // An absent provider workflow is the ONE fact that proves no model searched
+    // this change, and it is only available here. The report carries it out so no
+    // surface has to infer it from `discovery` or `model`, both of which are also
+    // absent for reasons that have nothing to do with whether a search ran.
+    expect(result.report.run.modelSearch).toBe('not-performed')
+    expect(result.report.run).not.toHaveProperty('model')
     expect(result.contextLedger).toEqual(contextLedger)
     expect(result.sharedContext.taskEvents.map((event) => event.state)).toEqual([
       'planned',

@@ -384,6 +384,11 @@ const buildRules = (
 // reference resolves instead of dangling.
 const RESULTS_WITHHELD_NOTIFICATION_ID = 'codereviewer/sarif-results-withheld'
 
+// The notification id the no-model-search disclosure reports under. Exported
+// because a consumer wiring this into code scanning has to be able to match it,
+// and because the test asserts the id rather than the prose.
+export const NO_MODEL_SEARCH_NOTIFICATION_ID = 'codereviewer/no-model-search'
+
 type SarifNotificationDescriptor = {
   readonly id: string
   readonly shortDescription: {
@@ -391,16 +396,41 @@ type SarifNotificationDescriptor = {
   }
 }
 
+type SarifRunNotification = {
+  readonly descriptor: { readonly id: string }
+  readonly level: 'warning'
+  readonly message: { readonly text: string }
+}
+
 type SarifInvocation = {
   readonly executionSuccessful: boolean
-  readonly toolExecutionNotifications: readonly [
-    {
-      readonly descriptor: { readonly id: string }
-      readonly level: 'warning'
-      readonly message: { readonly text: string }
-    }
-  ]
+  readonly toolExecutionNotifications: readonly SarifRunNotification[]
 }
+
+// One thing this run has to say about ITSELF rather than about the code: a
+// descriptor for the driver to define, and the notification that references it.
+// They travel as a pair so a reference can never be emitted without the
+// definition it resolves against.
+type SarifRunDisclosure = {
+  readonly descriptor: SarifNotificationDescriptor
+  readonly notification: SarifRunNotification
+}
+
+const runDisclosure = (input: {
+  readonly id: string
+  readonly shortDescription: string
+  readonly text: string
+}): SarifRunDisclosure => ({
+  descriptor: {
+    id: input.id,
+    shortDescription: { text: input.shortDescription }
+  },
+  notification: {
+    descriptor: { id: input.id },
+    level: 'warning',
+    message: { text: input.text }
+  }
+})
 
 // A capped result list is not read as "there is more". Code scanning resolves any
 // alert whose result is ABSENT from a later run under the same
@@ -416,36 +446,56 @@ const resultsWithheldDisclosure = (input: {
   readonly withheld: number
   readonly eligible: number
   readonly maxResults: number
-}): {
-  readonly notifications: readonly [SarifNotificationDescriptor]
-  readonly invocations: readonly [SarifInvocation]
-} => ({
-  notifications: [
-    {
-      id: RESULTS_WITHHELD_NOTIFICATION_ID,
-      shortDescription: {
-        text: 'Some findings were withheld from this SARIF run by the configured result cap.'
-      }
+}): SarifRunDisclosure =>
+  runDisclosure({
+    id: RESULTS_WITHHELD_NOTIFICATION_ID,
+    shortDescription:
+      'Some findings were withheld from this SARIF run by the configured result cap.',
+    text: `${input.withheld} of ${input.eligible} findings are withheld from this SARIF run because reporting.sarif.maxResults is ${input.maxResults}. A consumer that treats a result missing from a run as resolved will report those findings as fixed; they are not. Raise reporting.sarif.maxResults to emit them, and read report.json or report.md for the complete set.`
+  })
+
+// An empty SARIF run is the strongest clean bill of health this project can
+// produce: code scanning shows no alert, and a document listing zero results says
+// nothing about whether anything was ever searched for. When the model-backed
+// review did not run, that has to be stated in the file itself — the consumer of
+// this artifact is a dashboard, and it will never see `report.md`'s disclosure.
+const noModelSearchDisclosure = (): SarifRunDisclosure =>
+  runDisclosure({
+    id: NO_MODEL_SEARCH_NOTIFICATION_ID,
+    shortDescription:
+      'This run performed no model search, so its results come from deterministic signals alone.',
+    text: 'This run performed no model search: the model-backed review was switched off, or no provider was configured. Any results below come from deterministic signals alone, and their absence means nothing was searched for rather than that nothing is wrong. Do not read this run as a clean analysis of the change.'
+  })
+
+// The whole disclosure block, or nothing when the run has nothing to disclose.
+// Assembled in one place because the notification list and the invocation list
+// are two halves of one statement: emitting a notification whose descriptor is
+// not defined leaves a dangling reference, and defining one nothing references is
+// noise.
+const runDisclosures = (
+  disclosures: readonly SarifRunDisclosure[]
+):
+  | {
+      readonly notifications: readonly SarifNotificationDescriptor[]
+      readonly invocations: readonly [SarifInvocation]
     }
-  ],
-  invocations: [
-    {
-      // The run itself succeeded; what failed to arrive is results, and that is
-      // what the notification says. Reporting `false` here would make a code
-      // scanning upload read as a failed analysis, which is a different claim.
-      executionSuccessful: true,
-      toolExecutionNotifications: [
-        {
-          descriptor: { id: RESULTS_WITHHELD_NOTIFICATION_ID },
-          level: 'warning',
-          message: {
-            text: `${input.withheld} of ${input.eligible} findings are withheld from this SARIF run because reporting.sarif.maxResults is ${input.maxResults}. A consumer that treats a result missing from a run as resolved will report those findings as fixed; they are not. Raise reporting.sarif.maxResults to emit them, and read report.json or report.md for the complete set.`
+  | undefined =>
+  disclosures.length === 0
+    ? undefined
+    : {
+        notifications: disclosures.map((entry) => entry.descriptor),
+        invocations: [
+          {
+            // The run itself succeeded; what it reports is something about that
+            // run. Reporting `false` here would make a code scanning upload read
+            // as a failed analysis, which is a different claim.
+            executionSuccessful: true,
+            toolExecutionNotifications: disclosures.map(
+              (entry) => entry.notification
+            )
           }
-        }
-      ]
-    }
-  ]
-})
+        ]
+      }
 
 export const renderSarifReport = (
   input: unknown,
@@ -459,14 +509,22 @@ export const renderSarifReport = (
   )
   const includedFindings = eligibleFindings.slice(0, options.maxResults)
   const withheld = eligibleFindings.length - includedFindings.length
-  const disclosure =
-    withheld === 0
-      ? undefined
-      : resultsWithheldDisclosure({
-          withheld,
-          eligible: eligibleFindings.length,
-          maxResults: options.maxResults
-        })
+  // The run-level statement comes first: it frames every result under it, where
+  // the cap only explains which results are missing.
+  const disclosure = runDisclosures([
+    ...(report.run.modelSearch === 'not-performed'
+      ? [noModelSearchDisclosure()]
+      : []),
+    ...(withheld === 0
+      ? []
+      : [
+          resultsWithheldDisclosure({
+            withheld,
+            eligible: eligibleFindings.length,
+            maxResults: options.maxResults
+          })
+        ])
+  ])
   const results = includedFindings.map(renderResult)
   const rules = buildRules(includedFindings)
   const properties =

@@ -336,7 +336,10 @@ describe('review runner context assembly', () => {
         // absent. The collector counted its own omissions all along; the call
         // site discarded them, so a run whose dependency context was cut looked
         // identical to one with no dependencies to add.
-        referencedDefinitionsDroppedCount: 0
+        referencedDefinitionsDroppedCount: 0,
+        // Same reasoning for the read-failure count, which the dropped count used
+        // to absorb whenever the byte budget also bound.
+        referencedDefinitionsUnreadableCount: 0
       })
       const instructionHash = result.assembledContext.contextLedger.find(
         (entry) => entry.kind === 'instruction'
