@@ -260,23 +260,27 @@ consumer. Artifact names are fixed; see
 
 ## Recipe: emit inline review comments for your platform
 
+**On by default.** `reporting.reviewComments.enabled` is `true` out of the box,
+so a default run already writes a neutral `review-comments.json` plus a rendered
+`review-comments.<platform>.json`. It publishes nothing — posting the comments
+is your pipeline's job. The recipe below is for pinning the platform instead of
+relying on auto-detection:
+
 ```json
 {
   "reporting": {
     "reviewComments": {
-      "enabled": true,
-      "platform": "auto"
+      "platform": "github"
     }
   }
 }
 ```
 
-The run writes a neutral `review-comments.json` plus a rendered
-`review-comments.<platform>.json`. It publishes nothing — posting the comments
-is your pipeline's job. `auto` detection is local only (CI environment
-variables, then the `origin` git remote host, then `generic`); it makes no
-network call. Pin the value to `github`, `gitlab`, `bitbucket` or `generic` to
-skip detection. Details in [ci-cd.md](ci-cd.md).
+`auto` (the default) detection is local only (CI environment variables, then the
+`origin` git remote host, then `generic`); it makes no network call. Pin the
+value to `github`, `gitlab`, `bitbucket` or `generic` to skip detection, or set
+`"reviewComments": { "enabled": false }` to turn the drafts off entirely.
+Details in [ci-cd.md](ci-cd.md).
 
 ---
 
@@ -353,13 +357,20 @@ Persist the level instead:
 
 ## Recipe: feed pull-request or ticket context into the review
 
-Off by default. Your pipeline writes markdown files into an inbox directory
-before the run, or you select changed repository files:
+**On by default.** `contextSources.enabled` is `true` out of the box, with two
+providers already configured: an `inbox` reading `.codereviewer/context`, and a
+`changed-files` provider matching `**/*.md` in the reviewed diff. Neither needs
+any config to work — write a markdown file into the inbox directory before the
+run, or just let a changed `.md` file in the diff supply the brief. Both are
+no-ops, not errors, when they find nothing: a missing inbox directory or a diff
+with no matching Markdown is an ordinary review with no intent brief.
+
+The recipe below is for **customizing** the default — narrowing the
+`changed-files` globs to your own docs/specs layout, or raising the byte caps:
 
 ```json
 {
   "contextSources": {
-    "enabled": true,
     "providers": [
       { "type": "inbox", "dir": ".codereviewer/context", "maxFiles": 20, "maxFileBytes": 64000 },
       { "type": "changed-files", "include": ["docs/**/*.md", "specs/**/*.md"] }
@@ -369,14 +380,24 @@ before the run, or you select changed repository files:
 }
 ```
 
+Set `"contextSources": { "enabled": false }` to turn the whole capability off.
+
 Both providers are filesystem-only: the product performs no tracker or platform
 fetch and holds no tracker credentials. An inbox file is plain markdown with an
 optional `---` frontmatter block (`id`, `title`, `source` are read). Gathered
 text is redacted, bounded, summarized into a brief of at most `summary.maxBytes`
 bytes, and injected as untrusted, informational context that cannot approve or
 suppress a finding. With `summary.mode` unset the mode resolves at runtime to
-`model` when a provider is configured and `digest` (deterministic, no model
-call) otherwise.
+`model` when a **model provider** (`provider`) is configured and `digest`
+(deterministic, no model call) otherwise — it is `provider` that decides, not
+these context providers. So a default run with a model configured resolves to
+`model` mode, and spends a summarizer call whenever the providers actually find
+something: zero fragments means no call at all. See
+[Controlling cost](controlling-cost.md).
+
+This flip is **not** a measured quality lever: enabling `contextSources` was not
+gated on an A/B, and whether it helps or hurts recall or precision is unmeasured
+either way. See [Status and limitations](../01-overview/status-and-limitations.md).
 
 ---
 
@@ -401,29 +422,45 @@ adds to the bill.
 
 ---
 
-## Recipe: enable an advisory stage
+## Recipe: the advisory lanes are on by default
 
-The two `check` commands are off by default and reached only by their own
-command — never by `review`. Neither can fail a pipeline on what it reports, and
-**neither has an accuracy measurement**. `intent check` does exit `4` when one of
-its three input limits binds, refusing to judge an input it cannot see whole; see
+`changeImpact.enabled` and `intentFulfilment.enabled` are both `true` out of the
+box. Two things follow from that:
+
+- The standalone `impact check` and `intent check` commands work with no config
+  change.
+- `review` itself now runs both lanes **in-process**, over the context it already
+  built for the review, and writes `impact-report.json` / `intent-report.json`
+  into the same run directory — not a separate one. Neither lane's report can
+  fail the pipeline: nothing either one reports sets a non-zero exit code.
+
+**Neither lane has an accuracy measurement.** `intent check` does exit `4` when
+one of its three input limits binds, refusing to judge an input it cannot see
+whole; see
 [the CLI reference](../06-reference/cli.md#exit-codes-and-the-three-input-limits).
 
 ```json
 {
-  "changeImpact": { "enabled": true },
-  "intentFulfilment": { "enabled": true }
+  "changeImpact": { "enabled": false },
+  "intentFulfilment": { "enabled": false }
 }
 ```
 
-`changeImpact` makes no provider call in this shape, so it costs nothing and its
-output is reproducible. Its adjudication layer is a second switch
-(`changeImpact.adjudication.enabled`, default `false`) and is the only part of the
-command that can spend.
+Set either to `false` to turn that lane off — in `review` and in its standalone
+command alike.
 
-`intentFulfilment` additionally needs a change-intent source, or it will exit `0`
-with `status: "no-intent"` and a warning saying so — see the change-intent recipe
-above.
+`changeImpact` makes no provider call in its default shape, so it costs nothing
+and its output is reproducible. Its adjudication layer is a second switch
+(`changeImpact.adjudication.enabled`, default `false`) and is the only part of it
+that can spend.
+
+`intentFulfilment` additionally needs a change-intent source, or it reports
+`status: "no-intent"` (a warning, exit `0`) instead of running — see the
+change-intent recipe above. Because `contextSources` is also on by default now,
+an ordinary change that touches a Markdown file can supply that source with no
+configuration at all, which means `intentFulfilment`'s extraction/judgement
+calls are a real, non-zero cost on some default runs. See
+[Controlling cost](controlling-cost.md).
 
 Every limit inside these blocks is a **runaway guard, not a ration**. Two of them
 were set as rations and both were measured as harmful: the old obligation cap was

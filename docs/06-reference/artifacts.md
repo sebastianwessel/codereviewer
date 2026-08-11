@@ -13,7 +13,7 @@ Two important artifact groups live **outside** it:
 ```
 .codereviewer/
 ├── config.json                 # user-owned config (input)
-├── context/                    # contextSources inbox provider (input)
+├── context/                    # contextSources inbox provider — default input, read even with no config file
 ├── skills/                     # skills.directories default (input)
 ├── baseline.json               # baseline.path — OUTSIDE artifactDir
 ├── eval/                       # eval artifacts — OUTSIDE artifactDir
@@ -38,8 +38,8 @@ Two important artifact groups live **outside** it:
     │   ├── observability.json
     │   ├── fix-report.json
     │   ├── verification-report.json
-    │   ├── impact-report.json  # changeImpact.enabled — in-process lane, JSON only, no .md
-    │   ├── intent-report.json  # intentFulfilment.enabled — in-process lane, JSON only, no .md
+    │   ├── impact-report.json  # changeImpact.enabled (default true) — in-process lane, JSON only, no .md
+    │   ├── intent-report.json  # intentFulfilment.enabled (default true) — in-process lane, JSON only, no .md
     │   └── error.json
     ├── impact-<uuid>/          # one completed STANDALONE `impact check`
     │   ├── impact-report.md
@@ -52,6 +52,19 @@ Two important artifact groups live **outside** it:
 `.codereviewer/**` is in the default [`paths.exclude`](./configuration/review.md#paths),
 so artifacts are never fed back into a review.
 
+`review-comments.json`, `review-comments.<platform>.json`, `impact-report.json`
+and `intent-report.json` are all written on a **default, zero-config `review`
+run** — `reporting.reviewComments.enabled`, `changeImpact.enabled` and
+`intentFulfilment.enabled` all default to `true`. A default run is therefore
+not defect-finding only: it also drafts inline review comments and runs both
+advisory lanes in-process, writing their reports alongside `report.json`. The
+`.codereviewer/context/` inbox is a default input for the same reason —
+`contextSources.enabled` defaults to `true` with an `inbox` provider already
+configured, so a run picks up whatever is in that directory even with no
+config file at all; an absent directory is silently a run with no
+change-intent brief, not an error. See
+[`contextSources`](./configuration/context-and-evaluation.md#contextsources).
+
 ## Per-run artifacts
 
 | File | Written when | Contents |
@@ -59,16 +72,16 @@ so artifacts are never fed back into a review.
 | `report.json` | always | The canonical machine-readable review report. Written even if `"json"` is absent from `reporting.formats`. |
 | `report.md` | `reporting.formats` includes `markdown` | Human-readable report. |
 | `report.sarif` | `reporting.formats` includes `sarif` | SARIF 2.1.0, shaped by `reporting.sarif.*`. |
-| `review-comments.json` | `reporting.reviewComments.enabled` | Platform-neutral inline comment drafts — the source of truth. |
-| `review-comments.<platform>.json` | `reporting.reviewComments.enabled` | Rendered for the resolved platform (`github`, `gitlab`, `bitbucket`, or `generic`). Detection reads CI env and the git `origin` remote only; no network. |
+| `review-comments.json` | `reporting.reviewComments.enabled` (default `true`) | Platform-neutral inline comment drafts — the source of truth. |
+| `review-comments.<platform>.json` | `reporting.reviewComments.enabled` (default `true`) | Rendered for the resolved platform (`github`, `gitlab`, `bitbucket`, or `generic`). Detection reads CI env and the git `origin` remote only; no network. |
 | `run-summary.json` | always | The `run` block on its own (see fields below). |
 | `context-ledger.json` | always | Every context admission decision. |
 | `shared-context.json` | always | Cross-task shared-context snapshot. |
 | `observability.json` | always | No-content run events (`{ "events": [...] }`): step/task/error records with no source, prompt, or model output. Includes one `context_ingestion_provider` step per configured change-intent provider, and a `review_comments` step when review-comment drafting ran. An attribute the no-content guard refuses keeps its name and reports `[dropped: …]` in place of its value, so a filtered field is never mistaken for one the step had nothing to say about. |
-| `fix-report.json` | `fix.enabled` **and** the lane produced a report | Advisory fix-lane outcomes. |
-| `verification-report.json` | `verification.enabled` | Claim verdicts, observations, corroborations. |
-| `impact-report.json` | `changeImpact.enabled` **and** the lane produced a report | The change-impact reference report, run in-process by `review` over its own run context ([`src/cli/advisory-lanes.ts`](../../src/cli/advisory-lanes.ts)). JSON only — no `.md` sibling, unlike a standalone `impact check` run. |
-| `intent-report.json` | `intentFulfilment.enabled` **and** the lane produced a report | The intent-fulfilment mapping report, run in-process by `review` the same way. JSON only — no `.md` sibling. |
+| `fix-report.json` | `fix.enabled` (default `false`) **and** the lane produced a report | Advisory fix-lane outcomes. |
+| `verification-report.json` | `verification.enabled` (default `false`) | Claim verdicts, observations, corroborations. |
+| `impact-report.json` | `changeImpact.enabled` (default `true`) **and** the lane produced a report | The change-impact reference report, run in-process by `review` over its own run context ([`src/cli/advisory-lanes.ts`](../../src/cli/advisory-lanes.ts)). JSON only — no `.md` sibling, unlike a standalone `impact check` run. |
+| `intent-report.json` | `intentFulfilment.enabled` (default `true`) **and** the lane produced a report | The intent-fulfilment mapping report, run in-process by `review` the same way. JSON only — no `.md` sibling. |
 | `error.json` | only on a failed run | `code`, `message`, `category`, `recoverable`. |
 
 **Two different homes for the same two reports.** `review` running the two

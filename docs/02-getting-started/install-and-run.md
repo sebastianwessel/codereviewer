@@ -206,8 +206,8 @@ A configuration error exits `2` with a JSON error on stderr.
 | Command | Purpose | Can it block? |
 | --- | --- | --- |
 | `review` | Run a review. See [Your first review](first-review.md). | **Yes** (exit `1`) |
-| `intent check` | Map a stated intent to the change. Needs `intentFulfilment.enabled` plus a `contextSources` provider. | No — nothing it reports sets a non-zero exit. It does exit `4` when an input limit binds, rather than judging part of the input |
-| `impact check` | Reference report for the changed symbols, plus the dependents shown to rely on what changed. Needs `changeImpact.enabled`. Makes no provider call unless `changeImpact.adjudication.enabled` is also set. | No |
+| `intent check` | Map a stated intent to the change. Needs `intentFulfilment.enabled` (on by default) plus a `contextSources` provider that finds something — `contextSources` is also on by default, with an `inbox` and a `changed-files` provider already configured (see Step 3 below). | No — nothing it reports sets a non-zero exit. It does exit `4` when an input limit binds, rather than judging part of the input |
+| `impact check` | Reference report for the changed symbols, plus the dependents shown to rely on what changed. Needs `changeImpact.enabled` (on by default). Makes no provider call unless `changeImpact.adjudication.enabled` is also set (off by default). | No |
 | `config validate` | Print the effective, redacted configuration. | — |
 | `baseline write` | Write `baseline.path` from a completed report. | — |
 | `drift check` | Run the deterministic documentation/spec/implementation drift check on its own. | Yes (exit `1`) |
@@ -218,8 +218,11 @@ A configuration error exits `2` with a JSON error on stderr.
 
 Anything else exits `2` with a usage error. Each of the two advisory commands
 requires the literal subcommand `check`, accepts `--base-ref`, `--head-ref` and
-`--format` beyond `--config`, and reports its own disabled state as a warning
-inside an exit-`0` report rather than as an error:
+`--format` beyond `--config`, and — if its capability is turned off — reports
+that disabled state as a warning inside an exit-`0` report rather than as an
+error. Both `changeImpact.enabled` and `intentFulfilment.enabled` are **on by
+default**, so this is what you would see only after explicitly disabling the
+capability:
 
 ```bash
 codereviewer impact check --base-ref origin/main --head-ref HEAD

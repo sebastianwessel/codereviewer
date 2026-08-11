@@ -98,6 +98,44 @@ protection rules for your default branch.
 > silently win over both the workflow's variables and
 > `codereviewer.github.json`. Never ship one into a CI image.
 
+### 4. The stage config, and why it is eight lines
+
+[`scripts/github/codereviewer.github.json`](../../scripts/github/codereviewer.github.json)
+is the whole of it:
+
+```json
+{
+  "review": {
+    "mode": "pr"
+  },
+  "reporting": {
+    "sarif": { "target": "github" },
+    "reviewComments": { "platform": "github" }
+  }
+}
+```
+
+It used to be twenty-one lines, and what it lost is everything the defaults now
+say: change-intent ingestion and its providers, the impact lane, the intent lane,
+and inline review comments. **That shrinkage is the test of the defaults** — if
+the file a pull-request pipeline needs is not nearly empty, the defaults are
+describing a narrower tool than the one that exists.
+
+What survives is only deployment-specific:
+
+- `review.mode: "pr"` — this is a pull request, not a local working-tree run.
+- `reporting.sarif.target: "github"` — the SARIF dialect GitHub code scanning
+  accepts.
+- `reporting.reviewComments.platform: "github"` — **load-bearing, not
+  decorative.** The default is `auto`, which detects correctly under GitHub
+  Actions; pinning it means `scripts/github/` reads `review-comments.github.json`
+  by exact filename and can never silently find nothing because detection
+  resolved to `generic`.
+
+Add `review.maxCostUsd` here if you want a spend ceiling, and anything else you
+want to differ from the defaults; the full key list is in
+[configuration reference](../06-reference/configuration/README.md).
+
 ---
 
 ## What each stage contributes
@@ -113,8 +151,8 @@ subprocess any more.
 | Stage | Role | Spec | What it adds |
 | --- | --- | --- | --- |
 | `review` | **blocking** | 05 | Evidence-backed defects in the changed code, filtered by refutation and a deterministic admission gate. Exit code `1` means the quality gate failed. This is the only row in the comment's stage table — it is the only stage with a process of its own to report a status for. |
-| Intent (`intentFulfilment.enabled`) | advisory | [23](../../specs/23-intent-fulfilment-review.md) | Reads obligations out of the pull-request description and maps each to the changed lines that evidence it — or to nothing. Rendered as its own `### Intent` section in the comment when its report is present; absent (not an error) when the lane is disabled. |
-| Impact (`changeImpact.enabled`) | advisory | [22](../../specs/22-change-impact-review.md) | Lists the callers of every symbol the change touched, and — behind `changeImpact.adjudication.enabled` — which of them rely on what changed. Makes no model call with that switch off. Rendered as its own `### Impact` section under the same rule. |
+| Intent (`intentFulfilment.enabled`, on by default) | advisory | [23](../../specs/23-intent-fulfilment-review.md) | Reads obligations out of the pull-request description and maps each to the changed lines that evidence it — or to nothing. Rendered as its own `### Intent` section in the comment when its report is present; absent (not an error) when the lane is disabled. |
+| Impact (`changeImpact.enabled`, on by default) | advisory | [22](../../specs/22-change-impact-review.md) | Lists the callers of every symbol the change touched, and — behind `changeImpact.adjudication.enabled`, which stays off — which of them rely on what changed. Makes no model call with that switch off. Rendered as its own `### Impact` section under the same rule. |
 
 **The two advisory lanes can never fail the job.** That is a specification
 requirement, not a configuration default — spec 23 states it outright: the
@@ -202,29 +240,76 @@ The comment is not a shortened `report.md`; it renders the same underlying
 `report.json` so that a reviewer who never opens the run artifacts still gets
 an honest picture, not a rosier one.
 
+**It is ordered the way a human reviewer works** (restructured 2026-08-11): what
+happened, what the change was for and whether it got there, what it might affect,
+what is wrong with it, and last what is only *maybe* wrong with it. Everything
+describing the engine that produced it moved into one collapsed block — moved,
+not deleted, because a reader who wants the stage result, the error rates or the
+refuter's reasoning is one click from all three.
+
+Top level, in this order:
+
+- **The headline** — `Code review: no threshold crossed, N findings to read`,
+  or `quality gate failed, …`, or `did not run` / `could not complete`. It
+  states what the run *did*: neither "no findings" nor "the gate passed" appears,
+  because both read as a clearance of the change.
+- **One sentence about confidence**, carrying no number. It says a finding is
+  something to check and an empty list means *this search* found nothing. The
+  measured rates, with the provider and model they were measured on, are in the
+  collapsed block — a rate without its model means nothing, and that sentence is
+  too long to open a comment somebody reads in ten seconds.
+- **Why you are seeing less than a review**, when a stage did not run or could
+  not complete, and any operational note (a fork pull request, a missing
+  provider).
+- **Review conversation** — only on a run a reply triggered; see below.
+- **Intent** — the obligations read from the description and which changed lines
+  evidence them. Present when the lane produced a report.
+- **Impact** — the changed symbols and their callers, same rule.
 - **Findings** — every admitted finding whose `reporterEligibility` is
-  `inline` or `summary-only`: the ones this run is prepared to stand behind.
-- **Unresolved - Needs Human Decision** — findings admission marked
-  `artifact-only`: a real suspicion refutation could neither prove nor
-  disprove (verdict `needs-more-evidence`), kept as an open question instead
-  of being dropped. Rendered in its own section, never mixed into the
-  findings above — folding it in would read an undecided suspicion as a
-  proved defect. It does not affect the quality gate and is never posted as
-  an inline comment. This section is present only when the run produced at
-  least one such finding.
-- **Resolved since baseline** — a count, in the collapsed "Run details"
-  block, of baseline entries that no longer match any current finding, i.e.
-  fixed since the baseline was recorded. Shown only when
-  `baseline.includeResolvedInReport` was enabled for the run; a run that
-  never computed it shows nothing, not a zero. The baseline stores
-  fingerprints only, never source, path, or finding text, so a count is
-  genuinely all this line can say — it does not name which defect was fixed.
-- **Candidates** — one line, also in "Run details", giving the precision
-  story behind a short findings list: how many candidates were examined in
-  total, how many were admitted, how many refutation or the deterministic
-  admission gate rejected, and — when the run's discovery telemetry is
-  present — how many were merged away as duplicates before that. The reasons
-  for each rejection are not repeated here; they are in `report.json`'s
+  `inline` or `summary-only`: the ones this run is prepared to stand behind. A
+  run with none renders the section anyway and says what the silence means.
+- **Worth a look** — findings admission marked `artifact-only`: a real suspicion
+  refutation could neither prove nor disprove (verdict `needs-more-evidence`),
+  kept as an open question instead of being dropped. Never mixed into the
+  findings above — folding it in would read an undecided suspicion as a proved
+  defect. It does not affect the quality gate and is never posted as an inline
+  comment, and the section is present only when the run produced one.
+  `report.md` heads the same set **"Unresolved - Needs Human Decision"**; the
+  divergence is deliberate, because this surface is read by someone deciding
+  whether to spend two minutes and the heading is the whole invitation.
+- **No longer reported** — findings this pull request's own earlier inline
+  comments carry that this run did not report again. Never called fixed: this
+  comparison cannot tell a repair from a finding the run did not reproduce.
+
+Inside **How this review was produced** (one `<details>` block at the end):
+
+- **How reliable this is** — the measured recall and adjusted-precision rates,
+  naming the provider and model they were measured on. They are here rather than
+  above the findings because a reviewer opened this comment to learn what to fix.
+- **What was checked against each finding** — the refuter's own account, keyed
+  by the location the finding was listed under. It is evidence and is never
+  dropped; it is written in the engine's vocabulary ("Survived refutation —
+  proved: …"), which is why it is one expand away rather than beside the finding.
+- **Pipeline** — the one-row stage table. One row because one process runs; the
+  advisory lanes report through their own sections above, and a row claiming they
+  were separately executed would describe a pipeline that no longer exists.
+- **Run details** — head commit, run id, coverage, the candidate line, the
+  baseline count, skipped files, cost, warnings, provider issues, inline comments
+  posted, and a link to the full artifacts.
+
+Two of those run-details lines are worth stating in full:
+
+- **The baseline count** — baseline entries that no longer match any current
+  finding. Shown only when `baseline.includeResolvedInReport` was enabled for the
+  run; a run that never computed it shows nothing, not a zero. The baseline
+  stores fingerprints only, never source, path, or finding text, so a count is
+  genuinely all this line can say — it does not name which defect was fixed, and
+  it does not claim one was.
+- **Candidates** — the precision story behind a short findings list: how many
+  candidates were examined in total, how many were admitted, how many refutation
+  or the deterministic admission gate rejected, and — when the run's discovery
+  telemetry is present — how many were merged away as duplicates before that. The
+  reasons for each rejection are not repeated here; they are in `report.json`'s
   `rejectedFindings`.
 
 ---
@@ -232,9 +317,8 @@ an honest picture, not a rosier one.
 ## Inline comments
 
 When [`reporting.reviewComments`](../../specs/13-review-comments-and-suggestions.md)
-is enabled — it is, in the shipped config — the run writes
-`review-comments.github.json`, and the workflow posts those as a single
-pull-request review (`event: COMMENT`).
+is enabled — it is by default — the run writes `review-comments.github.json`, and
+the workflow posts those as a single pull-request review (`event: COMMENT`).
 
 - **No line position is invented.** The anchor is whatever spec 13's GitHub
   renderer produced: `line` at the target range's end with `side: RIGHT`, plus
@@ -251,6 +335,13 @@ pull-request review (`event: COMMENT`).
   re-escaped, because a ` ```suggestion ` block is code GitHub applies to the
   file and escaping it would silently corrupt every one-click fix. Spec 13's
   neutral layer has already escaped the prose and guarded the fence.
+- **A suggestion you can click has been checked.** Since 2026-08-11 the engine
+  re-applies the finding's edits to the file's current bytes before offering the
+  block, and drops the suggestion — keeping the prose, and saying the replacement
+  was computed and where it is recorded — when they no longer fit. The check is
+  deterministic and needs no model, so it runs whether or not the
+  [fix lane](../06-reference/configuration/security-and-verification.md) is on.
+  Expect fewer suggestion blocks than before, and trust the ones you get.
 - **Re-runs do not repeat themselves.** Each comment carries a hidden marker
   keyed on the finding's content-anchored **fingerprint** — not its id, which is
   generated per run — and a finding already commented on is skipped.
@@ -390,7 +481,8 @@ and building it is not a small change.
 | No provider configured | Comment and log name the missing variables. **Nothing is reviewed, and the job fails** — a green tick for an empty review is the worst outcome available. | fails (`2`) |
 | Provider error (auth, rate limit, context length) | Comment shows `Review — error` with the engine's message; advisory stages still reported. | fails |
 | Quality gate failed | Comment headline says so; the findings that block are marked. | fails |
-| Advisory stage errored (bad config, no merge base) | Comment shows that stage as `error` with its message. | passes |
+| Advisory lane errored (bad config, provider outage) | The lane's section is absent and the run carries a warning naming it, in the collapsed run details. There is no stage row for it: the lanes run inside `review`. | passes |
+| Advisory lane had nothing to compare (no merge base) | Warning worded as what it is — no change set could be resolved — not as a stage failure. On this workflow it should not arise: `fetch-depth: 0` gives both refs their history. | passes |
 | Inline comments rejected by GitHub | Note in the comment; every finding listed in the summary instead. | unchanged |
 | Shallow checkout | `merge_base_unavailable`, exit `3`. `fetch-depth: 0` is set in the workflow; keep it. | fails |
 | Comment body over GitHub's size limit | Trailing sections dropped whole, with a pointer to the artifacts. | unchanged |
@@ -409,11 +501,19 @@ The blocking review dominates: two provider calls per discovery partition
 (discovery and a batched refutation), where a partition is
 `aiReview.maxFilesPerDiscoveryCall` changed files of a task, default `2`. Cost
 therefore scales with changed files, not with findings.
-`intent check` adds one extraction call, one judgement call per obligation, and
-one explanation call — measured at roughly $0.008 per obligation on
-`openai/gpt-5.3-codex`, which is the model every cost figure in these docs was
-measured on. `impact check` makes **no** provider call at all unless
-`changeImpact.adjudication.enabled` is set, which it is not by default.
+Both advisory lanes are **on by default** since 2026-08-11, so their cost is part
+of every run rather than something you opted into. The intent lane adds one
+extraction call, one judgement call per obligation, and one explanation call —
+measured at roughly $0.008 per obligation on `openai/gpt-5.3-codex`, which is the
+model every cost figure in these docs was measured on. The impact lane makes
+**no** provider call at all unless `changeImpact.adjudication.enabled` is set,
+which it is not by default. Change-intent ingestion adds one summarizer call in
+`model` mode, and none when its providers found nothing.
+
+**There is no measured per-pull-request cost for the default run as a whole, and
+none is estimated here.** If that number matters to you, measure it on your own
+repository; the arithmetic to do so is in
+[controlling-cost.md](controlling-cost.md).
 
 Set `review.maxCostUsd` in `codereviewer.github.json` so a pathological change
 fails the job instead of quietly spending. Full arithmetic:

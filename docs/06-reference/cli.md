@@ -308,14 +308,15 @@ and nothing can block a pipeline — a breaking change is frequently intentional
 and the command's job is to show you the dependents, not to decide whether
 breaking them is acceptable.
 
-The command is **disabled by default**, and its adjudication layer is disabled
-separately:
+The command is **enabled by default**, but its adjudication layer is a
+**separate switch that stays off** — turning adjudication on is the one line
+worth writing explicitly, since `changeImpact.enabled` itself no longer is:
 
 ```json
-{ "changeImpact": { "enabled": true, "adjudication": { "enabled": true } } }
+{ "changeImpact": { "adjudication": { "enabled": true } } }
 ```
 
-With `changeImpact.enabled` left at `false` the command exits `0` and reports
+With `changeImpact.enabled` set to `false` the command exits `0` and reports
 `"status": "disabled"` rather than an empty result, so a disabled run can never be
 mistaken for "nothing depends on your change".
 
@@ -822,19 +823,15 @@ One extraction call, one judgement call per obligation, and one explanation call
 per run. Bound it with
 [`intentFulfilment.maxObligations`](./configuration/intent-fulfilment.md).
 
-It is **disabled by default**. With `intentFulfilment.enabled` left at `false`
-the command exits `0` and reports `"status": "disabled"` rather than an empty
-result. Enable it with:
+It is **enabled by default**, and so is `contextSources`, whose default
+`providers` already include an `inbox` reading `.codereviewer/context`. With
+`intentFulfilment.enabled` set to `false` the command exits `0` and reports
+`"status": "disabled"` rather than an empty result. What actually needs
+setting is a model provider — without one the command exits `0` and reports
+`"status": "provider-unavailable"` instead:
 
 ```json
-{
-  "provider": { "id": "openai", "model": "your-model" },
-  "intentFulfilment": { "enabled": true },
-  "contextSources": {
-    "enabled": true,
-    "providers": [{ "type": "inbox", "dir": ".codereviewer/context" }]
-  }
-}
+{ "provider": { "id": "openai", "model": "your-model" } }
 ```
 
 ### When there is nothing to map

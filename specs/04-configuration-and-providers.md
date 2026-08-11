@@ -528,12 +528,14 @@ Rules:
 ## Context Sources
 
 Controls external change-intent context ingestion
-(`11-external-context-ingestion.md`). Disabled by default.
+(`11-external-context-ingestion.md`). **Enabled by default** since 2026-08-11,
+with a provider set that yields nothing — silently, and without a failure — on a
+repository that has neither an inbox directory nor changed markdown.
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `contextSources.enabled` | boolean | `false` |
-| `contextSources.providers` | array of provider objects | `[]` |
+| `contextSources.enabled` | boolean | `true` |
+| `contextSources.providers` | array of provider objects | `[{ "type": "inbox", "dir": ".codereviewer/context" }, { "type": "changed-files", "include": ["**/*.md"] }]`, each at the per-provider defaults below |
 | `contextSources.summary.mode` | `"model" \| "digest"` | *unset*; resolved at runtime to `"model"` when a provider is configured, else `"digest"` |
 | `contextSources.summary.maxBytes` | integer 256..20000 | `4000` |
 
@@ -549,15 +551,21 @@ implementations and the required security controls ship.
 
 Rules:
 
-- the block is off unless `enabled` is `true`; a disabled block yields a review
-  identical to one with no external context;
+- setting `enabled` to `false` yields a review identical to one with no external
+  context, byte for byte. The block defaults on, so this is now the opt-OUT;
+- **replacing `providers` replaces the default pair outright** — an array is not
+  merged into the default. A configuration naming only an `inbox` provider
+  therefore turns the `changed-files` one off, which is the intended behaviour
+  but is worth knowing before it surprises someone;
 - `inbox.dir` resolves under the repository root (default `.codereviewer/context`)
   and is bounded by file-count and per-file byte caps;
 - `changed-files.include` selects PR-changed files by glob (for example
   `specs/**`, `docs/**`, `**/*.md`), bounded by file-count and byte caps;
-- `summary.mode` defaults to `model` when a provider is configured and `digest`
-  otherwise; `model` distills through a dedicated provider call and falls back to
-  `digest` if that call fails;
+- `summary.mode` defaults to `model` when a **model provider** (`provider`) is
+  configured and `digest` otherwise. It is decided by `provider`, never by
+  `contextSources.providers` — which now always has entries, so the two readings
+  are no longer interchangeable. `model` distills through a dedicated provider
+  call and falls back to `digest` if that call fails;
 - an unknown `type` or a missing required key fails `config validate` with exit
   code 2.
 
@@ -593,12 +601,13 @@ Rules:
 
 ## Change Impact
 
-Controls change-impact review (`22-change-impact-review.md`). Disabled by default
-and reached only by `codereviewer impact check` — never by `review`.
+Controls change-impact review (`22-change-impact-review.md`). **Enabled by
+default** since 2026-08-11, and reached both by `codereviewer impact check` and
+by the in-process advisory lane `review` runs (`src/cli/advisory-lanes.ts`).
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `changeImpact.enabled` | boolean | `false` |
+| `changeImpact.enabled` | boolean | `true` |
 | `changeImpact.maxChangedSymbols` | integer 1..500 | `50` |
 | `changeImpact.maxReferencesPerSymbol` | integer 1..500 | `25` |
 | `changeImpact.maxReferenceCandidatesPerSymbol` | integer 1..5000 | `500` |
@@ -630,12 +639,13 @@ Rules:
 
 ## Intent Fulfilment
 
-Controls intent-fulfilment review (`23-intent-fulfilment-review.md`). Disabled by
-default and reached only by `codereviewer intent check` — never by `review`.
+Controls intent-fulfilment review (`23-intent-fulfilment-review.md`). **Enabled by
+default** since 2026-08-11, and reached both by `codereviewer intent check` and
+by the in-process advisory lane `review` runs (`src/cli/advisory-lanes.ts`).
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `intentFulfilment.enabled` | boolean | `false` |
+| `intentFulfilment.enabled` | boolean | `true` |
 | `intentFulfilment.maxObligations` | integer 1..100 | `100` |
 | `intentFulfilment.maxIntentBytes` | integer 256..200000 | `100000` |
 | `intentFulfilment.maxChangeLines` | integer 1..5000 | `5000` |
@@ -812,7 +822,7 @@ Rules:
 | `sarif.target` | `"generic" | "github"` | `"generic"` |
 | `sarif.category` | string | `"codereviewer"` |
 | `sarif.maxResults` | integer 1..25000 | `5000` |
-| `reviewComments.enabled` | boolean | `false` |
+| `reviewComments.enabled` | boolean | `true` (since 2026-08-11) |
 | `reviewComments.platform` | `"github" | "gitlab" | "bitbucket" | "generic" | "auto"` | `"auto"` |
 
 JSON is always generated even if omitted from `formats`, because it is the
@@ -825,7 +835,10 @@ never reads would be a switch that lies about doing something.
 
 `reviewComments` writes platform-neutral inline review-comment drafts, including
 one-click fix suggestions, as local artifacts only — it performs no network
-publishing (`13-review-comments-and-suggestions.md`). `platform` selects the
+publishing (`13-review-comments-and-suggestions.md`). That "publishes nothing"
+property is what makes defaulting it on safe; the flip carries no accuracy claim,
+because the block is a renderer and not a lever. A suggestion is offered only
+when its edits still apply to the file's current bytes. `platform` selects the
 renderer; `auto` resolves it from CI environment, then the git remote host, then
 `generic`. An explicit value overrides detection.
 

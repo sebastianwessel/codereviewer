@@ -83,6 +83,81 @@ describe('runAdvisoryStagesForReview', () => {
     expect(results.warnings[0]).toContain('produced no report')
   })
 
+  // A scratch directory and a shallow CI clone both land here, and BOTH stages
+  // land here at once — so on a default run this is the text a reader sees twice.
+  // It must not read as a malfunction, and it must still be said: the reader
+  // expected an impact report and is owed the reason there is none.
+  test('an unresolvable merge base reads as no change set, not as a failure', async () => {
+    const results = await runAdvisoryStagesForReview(
+      inputFor(
+        { changeImpact: { enabled: true }, intentFulfilment: { enabled: true } },
+        // What git prints in a repository whose refs share no history: exit 0,
+        // no commit id. Intake turns that into `merge_base_unavailable`.
+        async () => ''
+      )
+    )
+
+    expect(results.impact).toBeUndefined()
+    expect(results.intent).toBeUndefined()
+    expect(results.warnings).toHaveLength(2)
+
+    for (const warning of results.warnings) {
+      expect(warning).toContain('no change set to compare')
+      expect(warning).toContain('merge base')
+      // The failure vocabulary belongs to the other path, and so does intake's
+      // "fetch enough history and retry" remediation, which is advice for a
+      // command that stopped — this one did not.
+      expect(warning).not.toContain('could not complete')
+      expect(warning).not.toContain('retry')
+    }
+  })
+
+  // The OTHER ordinary code, and the one the merge-base test does not reach.
+  // Removing `no_reviewable_change` from the ordinary set broke no test until this
+  // one existed, so the widening past merge-base was unpinned: a refactor could
+  // have dropped it back into failure wording silently.
+  //
+  // Reaching it needs a merge base that RESOLVES and a diff that is empty — the
+  // refs the wrong way round, or a head already contained in the base — which is
+  // exactly the shape a person hits on a re-run of an already-merged branch.
+  test('an empty diff over a resolvable merge base also reads as no change set', async () => {
+    const results = await runAdvisoryStagesForReview(
+      inputFor(
+        { changeImpact: { enabled: true }, intentFulfilment: { enabled: true } },
+        async (args) =>
+          args.includes('merge-base') ? 'a'.repeat(40) : ''
+      )
+    )
+
+    expect(results.warnings).toHaveLength(2)
+
+    for (const warning of results.warnings) {
+      expect(warning).toContain('no change set to compare')
+      expect(warning).toContain('differ by no files')
+      expect(warning).not.toContain('could not complete')
+      // Intake's own remediation is advice for a command that STOPPED. This one
+      // carried on and produced a review; repeating it would misdescribe the run.
+      expect(warning).not.toContain('Refused rather than reported')
+    }
+  })
+
+  // The narrowness is the point: `repository` also covers timeouts and unknown
+  // refs, and softening those would hide a real fault behind an ordinary phrase.
+  test('a repository failure that is not an empty change set keeps failure wording', async () => {
+    const results = await runAdvisoryStagesForReview(
+      inputFor(
+        { changeImpact: { enabled: true }, intentFulfilment: { enabled: false } },
+        async () => {
+          throw new Error('git process timed out')
+        }
+      )
+    )
+
+    expect(results.warnings).toHaveLength(1)
+    expect(results.warnings[0]).toContain('could not complete')
+    expect(results.warnings[0]).not.toContain('no change set to compare')
+  })
+
   // One failing stage must not take the other down with it.
   test('the second stage still runs after the first one fails', async () => {
     let gitCalls = 0

@@ -33,6 +33,12 @@ Mean of three runs at one pinned engine, with the dependency tree pinned too.
 Run-to-run standard deviation is **0.66pp** on recall, so a difference under about
 2pp between two runs is not a difference.
 
+A rate is also a property of the configuration it was measured in: **none of the
+figures on this page were measured with change-intent context enabled**, which
+became a default on 2026-08-11. That flip changes what discovery is shown, so it
+could move these numbers in either direction, and the A/B that would say which is
+owed rather than done.
+
 Split by where the defect lives:
 
 | Where the defect is | Expected | Recall |
@@ -75,13 +81,16 @@ rejected — is in [Current results](docs/05-quality/current-results.md) and
 
 ### Two advisory stages, none of them measured
 
-Alongside `review` there are two independently runnable advisory commands:
-`intent check` (does the change do what the ticket said?) and `impact check` (who
-depends on what changed?). Neither can fail a pipeline — that is a spec
-requirement, not a default.
+Alongside the defect search, `review` runs two advisory lanes in the same
+process: intent (does the change do what the ticket said?) and impact (who
+depends on what changed?). Both are **on by default since 2026-08-11**, and both
+remain independently runnable as `intent check` and `impact check`. Neither can
+fail a pipeline — that is a spec requirement, not a default.
 
 **They have no accuracy measurement at all.** They are shipped and runnable; they
 are not validated. Treat their output as a prompt for a human, not a result.
+Defaulting them on was a product decision about what a review should answer, and
+it makes no claim about how well they answer it.
 
 A third, `conformance check`, was removed on 2026-08-02: its own firing-rate
 measurement put it at 7.0 reports per PR-sized range against a pre-registered
@@ -142,7 +151,8 @@ Open `.codereviewer/runs/<run-id>/report.md` and check that **Coverage** lists t
 files you expected and **Skipped Files** holds no surprises.
 
 **2.** Name a provider and a model in `.codereviewer/config.json`. That is the
-whole configuration — everything else has a measured default.
+whole configuration — every other key has a default, and the defaults are the
+product rather than a starting point.
 
 ```json
 {
@@ -176,9 +186,9 @@ gate ordering — in the right order.
 
 | Command | What it does | Can it block? |
 | --- | --- | --- |
-| `review` | The review. Discovery → refutation → admission → report → quality gate. | **Yes**, exit `1` |
-| `intent check` | Maps a stated intent to the change: obligations, and the changed lines that evidence each. | No, always exits `0` |
-| `impact check` | Deterministic reference report for the symbols the change touched. Makes no provider call. | No |
+| `review` | The review. Discovery → refutation → admission → report → quality gate, plus both advisory lanes below in the same process. | **Yes**, exit `1` |
+| `intent check` | Maps a stated intent to the change: obligations, and the changed lines that evidence each. Also a lane inside `review`. | No, always exits `0` |
+| `impact check` | Deterministic reference report for the symbols the change touched. Makes no provider call. Also a lane inside `review`. | No |
 | `config validate` | Prints the fully merged configuration with secrets masked. | — |
 | `baseline write` | Writes the fingerprints of a completed report's findings to the baseline. | — |
 | `drift check` | The deterministic docs/spec/generated-artifact drift check, on its own. | Yes, exit `1` |
@@ -192,8 +202,13 @@ purpose. Full reference: [CLI](docs/06-reference/cli.md).
 
 ## Configuration in one line
 
-Naming a provider and a model is enough. Everything else has a default that was
-set by measurement — several of them measured *against* the intuitive value.
+Naming a provider and a model is enough. Most defaults were set by measurement —
+several of them measured *against* the intuitive value — and the rest were set by
+a product decision that is labelled as one. Which kind a given default is matters
+more than its value, so the [optional-capability decision
+table](docs/03-concepts/optional-capabilities/README.md) says for every switch
+whether a measurement, an absent measurement, or a product judgement put it where
+it is.
 
 Configuration merges lowest-to-highest: built-in defaults → `.codereviewer/config.json`
 → process environment → `.env` → CLI flags. Every object is a strict schema, so a
@@ -204,6 +219,8 @@ Defaults worth knowing:
 | Default | Value |
 | --- | --- |
 | Cross-file retrieval | **on** |
+| Change-intent context, impact lane, intent lane, inline comments | **on** — the four flipped on 2026-08-11 for the product, with no accuracy claim |
+| Fix lane, verification, skills, review conversation, dedicated security pass, signal facts, impact adjudication | **off** — each for a reason recorded in the decision table |
 | Discovery partitioning | 2 changed files per call |
 | Proactive byte caps | none, anywhere |
 | Time bounds | `provider.timeoutMs` only — there is no whole-run deadline |

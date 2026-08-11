@@ -1,8 +1,12 @@
 # Change-Intent Context
 
-> **Verdict: unmeasured.** No A/B has been run. The rationale below is design
-> reasoning, not evidence. Enable it if your pipeline already has PR or ticket
-> text to hand; do not expect a measured recall number.
+> **Verdict: unmeasured, and on by default since 2026-08-11.** No A/B has been
+> run — enabling this capability by default was not a measured decision, and
+> whether it moves recall or precision in either direction is still unknown.
+> The rationale below is design reasoning, not evidence. Both default providers
+> are no-ops when they find nothing, so leaving this on costs nothing on a
+> pipeline with no PR or ticket text to hand; do not expect a measured recall
+> number either way.
 
 Spec: [`specs/11-external-context-ingestion.md`](../../../specs/11-external-context-ingestion.md), 2026-07-22.
 
@@ -86,9 +90,9 @@ the prompt, or any log.
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `contextSources.enabled` | boolean | `false` |
-| `contextSources.providers` | array | `[]` |
-| `contextSources.summary.mode` | `model` \| `digest` | unset → `model` when a provider is configured, else `digest` |
+| `contextSources.enabled` | boolean | `true` |
+| `contextSources.providers` | array | `[{ "type": "inbox" }, { "type": "changed-files" }]` — an inbox reading `.codereviewer/context` and a changed-files provider matching `**/*.md`, both at their own field defaults below |
+| `contextSources.summary.mode` | `model` \| `digest` | unset → `model` when a **model provider** is configured, else `digest`. It is `provider` that decides, not `contextSources.providers` — which now always has entries, so reading it as "a context provider is configured" would be wrong |
 | `contextSources.summary.maxBytes` | integer 256–20000 | `4000` |
 
 `inbox` provider:
@@ -107,10 +111,13 @@ the prompt, or any log.
 | `maxFiles` | integer 1–200 | `20` |
 | `maxFileBytes` | integer 1–1000000 | `64000` |
 
+The block above is already the shipped default in substance; this example only
+narrows `changed-files`' `include` globs to a project's actual docs/specs
+layout:
+
 ```json
 {
   "contextSources": {
-    "enabled": true,
     "providers": [
       { "type": "inbox", "dir": ".codereviewer/context" },
       { "type": "changed-files", "include": ["specs/**/*.md", "docs/**/*.md"] }
@@ -119,6 +126,8 @@ the prompt, or any log.
   }
 }
 ```
+
+Set `"contextSources": { "enabled": false }` to turn the whole capability off.
 
 An unknown provider `type` or a missing required per-provider field fails
 validation with exit code `2`.
@@ -134,12 +143,16 @@ out of the existing eval runs for free.
 ## Verdict
 
 - **What we know:** it is bounded, redacted, non-fatal, and cannot move admission,
-  severity, gates, or the baseline. Enabling it is safe.
+  severity, gates, or the baseline. Leaving it on is safe, and each provider is a
+  no-op — not an error — when it finds nothing.
 - **What we do not know:** whether it actually reduces false positives, and what it
-  costs in recall if the brief is vague or wrong.
-- Reasonable to enable when your pipeline already produces the context and you care
-  about false positives from misread intent. Not something to enable expecting a
-  measured quality delta.
+  costs in recall if the brief is vague or wrong. This also covers the decision to
+  turn it on by default: that flip was not gated on an A/B either.
+- Reasonable to leave on when your pipeline already produces the context, or can,
+  and you care about false positives from misread intent. Not something to enable
+  — or leave enabled — expecting a measured quality delta. Turn it off
+  (`contextSources.enabled: false`) if you would rather the review run without any
+  external brief at all.
 
 ## Where it lives
 

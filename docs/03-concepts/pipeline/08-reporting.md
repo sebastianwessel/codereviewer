@@ -160,7 +160,7 @@ and the structured error's exit code on failure.
 | `reporting.sarif.target` | `generic` | `github` enables GitHub-specific rule handling |
 | `reporting.sarif.category` | `codereviewer` | SARIF automation category |
 | `reporting.sarif.maxResults` | `5000` | Truncates the SARIF result list |
-| `reporting.reviewComments.enabled` | `false` | Emit inline comment drafts |
+| `reporting.reviewComments.enabled` | `true` | Emit inline comment drafts |
 | `reporting.reviewComments.platform` | `auto` | Pin a renderer instead of detecting |
 
 > There is no `reporting.sarif.redact` key. The SARIF renderer, like every other

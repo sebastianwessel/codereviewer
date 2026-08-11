@@ -1,16 +1,28 @@
 # Optional Capabilities
 
-Every capability here is optional and most are **off by default**. Two are on:
-cross-file retrieval, which was off on a verdict that turned out to be measuring a
-bug, and citations, turned on for comment quality rather than accuracy.
+Every capability here is optional, and since 2026-08-11 the split is roughly even
+rather than "most are off". **On by default:** cross-file retrieval, citations,
+change-intent context, change-impact review, intent-fulfilment review, and inline
+review comments. **Off by default:** the dedicated security pass, verification,
+the fix lane, signal facts, impact adjudication, skills, analyzer signals, and the
+review conversation.
 
-**Off does not mean the same thing in every row, and the difference matters more
-than the flag.** Some were built, measured, and left off *because the measurement
-said so* — signal facts, impact adjudication. Others have **never been measured at
-all**: verification, the fix lane, skills, analyzer signals, change-intent context,
-review comments, and the review conversation. For those, "off by default" is
-containment of cost and non-determinism, and nothing has been established about
-what turning them on would do — in either direction.
+**What a default means here is not one thing, and the difference matters more
+than the flag.**
+
+- Some are off *because a measurement said so* — signal facts, impact
+  adjudication. Those do not move for product reasons.
+- Some are off because they have **never been measured at all**: verification, the
+  fix lane, skills, analyzer signals, and the review conversation. For those, off
+  is containment of cost and non-determinism, and nothing has been established
+  about what turning them on would do — in either direction.
+- Four were turned **on** on 2026-08-11 as a **product decision, not an accuracy
+  claim**: change-intent context, change-impact, intent-fulfilment, and review
+  comments. They are what the reviewer is for — why the change was made, what it
+  might break, whether it did what it set out to do, and a note on the line. None
+  of the four was measured as a quality lever, and change-intent context in
+  particular feeds discovery's packet, so it can move recall in either direction
+  and **nobody has measured which**.
 
 Two of those are worth naming, because the reason they are unmeasured is
 structural rather than a missing decision. **Verification cannot be reached from
@@ -44,7 +56,7 @@ models judging requirement conformance, not from a run of this engine.
 
 | Capability | Config key | Default | What it buys | Cost | Measured verdict |
 | --- | --- | --- | --- | --- | --- |
-| [Change-intent context](change-intent-context.md) | `contextSources.enabled` | `false` | Orientation: the reviewer learns *why* the change was made, which should reduce misunderstanding-driven false positives | One summarizer call per run (`model` mode); zero with `digest` | **Unmeasured.** No A/B exists. Rationale is design, not evidence. Enable if your pipeline already has PR/ticket text; do not expect a measured recall number |
+| [Change-intent context](change-intent-context.md) | `contextSources.enabled` | **`true`** | Orientation: the reviewer learns *why* the change was made, which should reduce misunderstanding-driven false positives | One summarizer call per run (`model` mode); zero with `digest`, and zero when the default providers find nothing | **Unmeasured.** No A/B exists. Rationale is design, not evidence. **ON BY DEFAULT since 2026-08-11 as a product decision** — it is the input the intent lane and the reviewer's orientation both depend on — and that flip makes no recall claim whatsoever. It changes what discovery is shown, so it can move recall either way; the A/B that would settle it is owed. The separately measured intent-*framing* prompt clause was REJECTED, which is a reason for humility here rather than confidence |
 | [Cross-file retrieval](cross-file-retrieval.md) | `review.crossFileRetrieval.enabled` | **`true`** | Lets discovery read other-file code on demand through mediated tools | Measured *lower* (−8%, −5%) in the two runs that reversed the verdict | **Verdict withdrawn.** The three losing arms were measuring a per-read cut the model was never told about. With the cut disclosed, two independent re-runs led on every measured dimension. No specific gain is claimed: the recall difference is inside noise |
 | [Dedicated security pass](dedicated-security-pass.md) | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task (generic OWASP/CWE checklist), merged additively | +61% | **Mixed.** 2026-07-24, full benchmark, n=1: overall recall 24.8% → 29.3%, +22 unlisted-real findings (trustworthy, large denominator). But labeled security recall 14 → 12 and authorization 8 → 6. The **security-specific lift it was built for is unproven** |
 | [Verification](verification-and-fix.md) | `verification.enabled` | `false` | Investigates external/prior claims against the real code and returns verdicts; corroborates findings | Bounded agent run per claim | **Never measured, and structurally unmeasurable as it stands.** `runVerificationForReview` lives on the `review` command's lane and `eval run` never calls it, so no corpus can score this today. It is a distinct product feature, not a recall knob; its outputs never touch the gate |
@@ -85,24 +97,31 @@ It is the one removal without a failed measurement behind it: its only A/B was r
 against a non-conforming build and is **void**, so it went on mechanism instead —
 see [context scout (removed)](context-scout.md).
 
-**Change-impact review** (`changeImpact.enabled`) is also off by default, but it
-does not belong in the table above: it is a separate command
-([`impact check`](../../06-reference/cli.md#codereviewer-impact-check)), not a
-capability inside `review`. It names the symbols a change touched and where they
-are referenced — deliberately the floor a fuller capability would have to beat, so
-it ships as a useful baseline rather than as a lever — and in that shape it makes
-no model call at all, so it has no cost and no recall figure to report.
+**Change-impact review** (`changeImpact.enabled`) is **on by default since
+2026-08-11**, but it does not belong in the table above: it is its own lane with
+its own report, reachable both as
+[`impact check`](../../06-reference/cli.md#codereviewer-impact-check) and as a
+stage `review` runs in-process. It names the symbols a change touched and where
+they are referenced — deliberately the floor a fuller capability would have to
+beat, so it ships as a useful baseline rather than as a lever — and in that shape
+it makes no model call at all, so it has no cost and no recall figure to report.
+Being deterministic and free is why defaulting it on needed no measurement: there
+is no accuracy claim to make about it, and its output is a separate deliverable
+rather than an input to the review.
 
 Its **adjudication layer** (`changeImpact.adjudication.enabled`) is a second
-switch, also off by default, and is the only part of the command that can spend.
+switch, and it stays **off** — the parent flipping on did not carry it — because
+it is the only part of the lane that can spend.
 It decides, per dependent, whether that file relies on the part of the contract
 that changed; most of that is settled in code, and only a symbol whose *behaviour*
 moved costs a call. **It is unmeasured** — no accuracy figure for it exists, and
 none may be quoted.
 
-**Intent-fulfilment review** (`intentFulfilment.enabled`) is a separate command
-too ([`intent check`](../../06-reference/cli.md#codereviewer-intent-check)), off
-by default, with no recall figure yet. It reads the change's stated intent
+**Intent-fulfilment review** (`intentFulfilment.enabled`) is its own lane too
+([`intent check`](../../06-reference/cli.md#codereviewer-intent-check), and a
+stage `review` runs in-process), **on by default since 2026-08-11**, with no
+recall figure — and none is owed, because it answers a different question from
+the review and is scored separately. It reads the change's stated intent
 through the same [change-intent ingestion](change-intent-context.md) `review`
 uses, turns it into discrete obligations each citing the line of the ticket it
 came from, and says for each one either which changed lines address it or that
@@ -118,6 +137,21 @@ already-frozen mapping. The one output it must never produce is a confident
 "satisfied" that is not, because that stops a human looking; an `addressed`
 verdict whose cited lines are not lines the change touched is downgraded and
 counted.
+
+**Inline review comments** (`reporting.reviewComments.enabled`) are **on by
+default since 2026-08-11**, and they are a renderer rather than a lever: they
+write `review-comments.json` and its per-platform rendering into the run
+directory, publish nothing, and cannot change a finding, a severity or the gate.
+There is no accuracy claim attached and none is possible.
+
+One thing about them did change behaviour, and it is worth thirty seconds. A
+` ```suggestion ` block carries a one-click **Apply**, and its edits come from the
+refuter. Since 2026-08-11 the engine re-applies those edits to the file's current
+bytes before offering the block, and drops the suggestion — keeping the prose —
+when they no longer fit. The check is deterministic and model-free, so it costs a
+file read; it may mean you see fewer suggestions than before, which is the point.
+The [fix lane](verification-and-fix.md#the-fix-lane) is now a quality upgrade on
+top of that, not a prerequisite for the suggestion being safe to click.
 
 **Review conversation** (`reviewConversation.enabled`) is not a capability
 inside `review` either — it is read only by the
@@ -165,6 +199,11 @@ cross-file retrieval became defaults and are not a reading of today's
 configuration; the current one is on
 [Current results](../../05-quality/current-results.md).
 
+The 2026-08-11 flips sharpen that caveat rather than softening it: **no published
+figure on this site was measured with change-intent context on**, and that flip
+is the one of the four that can move a recall number. Read every rate here as a
+rate for the configuration it names.
+
 Turn something on when you have a specific reason and, ideally, when you are
 willing to measure it on your own repositories.
 
@@ -179,13 +218,18 @@ no-op — flip the one you want:
 ```json
 {
   "review": {
-    "crossFileRetrieval": { "enabled": true }
+    "crossFileRetrieval": { "enabled": true },
+    "citations": { "enabled": true },
+    "signalFacts": { "enabled": false }
   },
   "security": { "dedicatedPass": { "enabled": false } },
-  "contextSources": { "enabled": false },
+  "contextSources": { "enabled": true },
   "verification": { "enabled": false },
   "fix": { "enabled": false },
-  "changeImpact": { "enabled": false }
+  "changeImpact": { "enabled": true, "adjudication": { "enabled": false } },
+  "intentFulfilment": { "enabled": true },
+  "reporting": { "reviewComments": { "enabled": true } },
+  "reviewConversation": { "enabled": false }
 }
 ```
 

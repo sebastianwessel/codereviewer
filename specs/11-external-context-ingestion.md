@@ -8,8 +8,15 @@ Date: 2026-07-22
 Assemble a change-intent brief before the review from authorized sources —
 pull/merge-request metadata, pipeline-provided context files, and change-relevant
 repository files — summarize it with a dedicated model call, and inject it as one
-bounded, redacted, context-only document. The feature is optional and off by
-default.
+bounded, redacted, context-only document.
+
+The feature is optional and **on by default** (2026-08-11). It can default on
+only because every shipped provider no-ops silently when its inputs are absent:
+an inbox directory that does not exist is a review with no intent brief, not an
+error. Nothing about that flip was measured — the brief reaches discovery's
+packet, so it changes what the reviewer is shown and could move recall in either
+direction. It is on because it is the input the rest of the flow depends on, not
+because it was shown to help.
 
 User-facing documentation for the implemented phase:
 [`docs/03-concepts/optional-capabilities/change-intent-context.md`](../docs/03-concepts/optional-capabilities/change-intent-context.md).
@@ -161,7 +168,9 @@ proceeds unchanged.
 ## Context Providers
 
 Each provider is independent and bounded, and emits `ContextFragment`s tagged
-with an origin label. Zero or more providers are configured.
+with an origin label. Zero or more providers are configured; the default set is
+`inbox` over `.codereviewer/context/` plus `changed-files` over `**/*.md`, which
+is the pair that costs nothing on a repository that has neither.
 
 ### `inbox`
 
@@ -193,11 +202,12 @@ with an origin label. Zero or more providers are configured.
   bounded token budget, sends only redacted fragments to the provider, and is
   recorded in the context ledger and cost accounting.
 - Two modes:
-  - `model` (default when a provider is configured): the dedicated summarizer
-    call.
+  - `model` (default when a **model provider** is configured — the review's own
+    `provider` block, not the context providers, which are never empty now): the
+    dedicated summarizer call.
   - `digest`: deterministic ordered per-origin bounded truncation. No provider
     call, fully reproducible.
-- The digest mode is used when no provider is configured, when `digest` is
+- The digest mode is used when no context provider is configured, when `digest` is
   selected, when no model provider is configured, when the AI review lane itself is
   disabled, and as the fallback when a `model` summarization call fails. A failed
   summarization never fails the review.
@@ -249,9 +259,28 @@ reviewer prompt and the summarizer must enforce these principles:
   unreachable host, empty inbox, no matching changed files, timeout — emits a
   warning and the review continues without it. A provider failure never fails the
   review run.
-- Evaluation and benchmark runs use no context providers so results stay
-  reproducible. This is a property of the committed evaluation configuration, not of
-  code: nothing forces `contextSources` off for an eval run.
+- **Evaluation and benchmark runs are not exempt, and no configuration makes them
+  so.** This paragraph used to claim they "use no context providers, as a property
+  of the committed evaluation configuration". No such committed configuration
+  exists; the claim held only while the block happened to be off by default, and
+  the 2026-08-11 flip removed the accident it rested on. An eval run now ingests
+  whatever the default providers find, unless the configuration it loads says
+  otherwise.
+  - What replaces prevention is **provenance**. Every eval report records the
+    effective `contextSources.enabled` under its capability flags
+    (`src/cli/eval-capability-flags.ts`), so two reports taken across the flip are
+    distinguishable by reading them. That is detection, not refusal: `eval
+    compare` WARNS on differing capability flags and pools anyway (spec 06),
+    unlike a mixed engine revision or a mismatched judge model, which it rejects.
+  - The variance is real rather than theoretical. `changed-files` reads the
+    reviewed diff, so on a corpus whose cases touch markdown the brief varies per
+    case; and `model` summarization adds a provider call, which is not
+    reproducible. `digest` mode is deterministic truncation.
+  - **Recommended, and deliberately not specified here:** commit an evaluation
+    configuration that pins `contextSources` explicitly — off, or on with a fixed
+    provider set and `digest` mode — so a reproduction does not silently inherit
+    whatever the default was on the day it ran. This spec does not own the eval
+    harness, so it recommends the file rather than defining it.
 - A provider that produces only PART of what it matched emits a warning too. Both
   per-provider bounds discard content, so nothing measured downstream can detect
   them — a body cut at the byte cap is by construction small enough to fit every
@@ -272,9 +301,11 @@ reviewer prompt and the summarizer must enforce these principles:
 ## Configuration
 
 Configuration lives under a `contextSources` block; keys are defined in
-`04-configuration-and-providers.md`. The block is disabled by default. Enabling
-it, selecting providers, choosing the summarization mode, and setting byte caps
-are explicit configuration choices. An invalid provider (unknown `type`, missing
+`04-configuration-and-providers.md`. The block is **enabled by default**, with
+the default provider set named under *Context Providers* above. Replacing the
+providers, choosing the summarization mode, and setting byte caps remain explicit
+configuration choices, and so does turning the block off. An invalid provider
+(unknown `type`, missing
 required per-provider field) fails `config validate` with exit code 2 through
 standard schema validation.
 
@@ -292,8 +323,10 @@ Concretely: one `context_ingestion_provider` step per configured provider, carry
 `truncatedFragmentCount`, `bytes`, and the duration the ingestion loop measured
 around that provider. `status` distinguishes `included`, `empty` and `failed`:
 a provider that ran cleanly and found nothing is the shape a misconfigured
-directory produces, and folding it into `included` would make the most common
-misconfiguration read as a success.
+directory produces, and folding it into `included` would make the two
+indistinguishable. Since the defaults turned the providers on, `empty` is the
+ORDINARY result on a repository with no written change intent — which is why it
+is its own status rather than a failure, and why the warning for it says so.
 
 The aggregate `context_ingestion` step carries the summarizer's record —
 `summaryMode` when it starts, and `summaryInputBytes`, `briefBytes` and
@@ -337,12 +370,21 @@ hid it is what this requirement removes.
 - An invalid provider configuration fails `config validate` with exit code 2
   through standard schema validation (the discriminated `type` union rejects an
   unknown provider and reports the missing field).
-- A provider that fails at run time — missing directory, unreadable file, empty
-  result — is non-fatal. It is recorded as a failed provider in the
-  `context_ingestion` observability step (`failedProviders` count) and surfaced
-  as a run warning in the report, so the degradation is visible rather than
-  silent, and the review proceeds without that provider's context. A source
-  failure never changes the review exit code.
+- A provider that fails at run time — an unreadable file, a provider that throws
+  — is non-fatal. It is recorded as a failed provider in the `context_ingestion`
+  observability step (`failedProviders` count) and surfaced as a run warning in
+  the report, so the degradation is visible rather than silent, and the review
+  proceeds without that provider's context. A source failure never changes the
+  review exit code.
+- A provider that finds **nothing** is not a failure and must not be worded as
+  one. A missing inbox directory and a diff with no matching changed file both
+  yield zero fragments through the ordinary path, and with the providers on by
+  default that is what a repository carrying no written intent produces on every
+  run. It still warns — absence must not read as a brief that was used — but the
+  warning states the ordinary reading first and names the pointer second, so a
+  mistyped directory, which produces the identical shape, stays diagnosable. A
+  provider that matched sources and extracted no usable text from any of them
+  gets its own wording again, because that one is genuinely odd.
 - Resolving the `model` summarizer itself can fail before any provider ever
   runs — a missing optional provider package, invalid credentials, a network
   failure, or an adapter that resolves with no callable model. This is

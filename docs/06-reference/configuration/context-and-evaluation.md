@@ -5,15 +5,23 @@ External change-intent context ingestion, and the evaluation harness settings.
 ## `contextSources`
 
 Ingests external change-intent (what the change is *supposed* to do) so the
-reviewer can judge code against stated intent. Disabled by default; a disabled
-block yields a review identical to one with no external context. All shipped
-providers are filesystem-only — no network.
+reviewer can judge code against stated intent. Enabled by default, with two
+providers configured out of the box (below); a disabled block yields a review
+identical to one with no external context. All shipped providers are
+filesystem-only — no network.
+
+Both default providers no-op silently when their input is absent: an
+`inbox` directory that does not exist, or no changed file matching
+`changed-files`' globs, is a review with no intent brief, not an error. That
+property is what makes the zero-config default work — an ordinary repository
+with no `.codereviewer/context` directory and no changed Markdown sees plain
+"no intent" warnings (below), not failures.
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `contextSources.enabled` | boolean | `false` | Master switch. |
-| `contextSources.providers` | array of provider objects | `[]` | See the union below. |
-| `contextSources.summary.mode` | `"model"` \| `"digest"` | *unset* | When unset, resolved at runtime: `model` if a provider is configured, else `digest`. `model` runs a dedicated summarizer call and falls back to `digest` if that call fails; `digest` is fully deterministic. |
+| `contextSources.enabled` | boolean | `true` | Master switch. |
+| `contextSources.providers` | array of provider objects | see below | See the union below. |
+| `contextSources.summary.mode` | `"model"` \| `"digest"` | *unset* | When unset, resolved at runtime from whether a **model provider** (`provider`) is configured — not from `contextSources.providers`, which now always has entries. With one: `model`, a dedicated summarizer call that falls back to `digest` if it fails. Without one: `digest`, fully deterministic. |
 | `contextSources.summary.maxBytes` | integer 256–20000 | `4000` | Byte cap on the change-intent brief injected into review packets. |
 
 ### Context-provider union
@@ -36,6 +44,15 @@ a missing required key fails validation with exit `2`. The network providers
 - `changed-files` surfaces PR-changed repository files matching `include` (for
   example changed specs or docs that explain the code change).
 
+`contextSources.providers` itself defaults to both providers at their own
+defaults — `{ "type": "inbox" }` reading `.codereviewer/context`, plus
+`{ "type": "changed-files" }` matching `**/*.md` — so a zero-config run already
+picks up an inbox directory or a changed Markdown file if either exists.
+Setting `providers` explicitly **replaces** that pair rather than adding to it.
+The example below is deployment-specific — it narrows `changed-files` to
+`specs/**` and `docs/**` instead of every Markdown file, which only makes sense
+to write once you know what a project's intent documents actually live under:
+
 ```json
 {
   "contextSources": {
@@ -53,15 +70,22 @@ Ingested context is **untrusted input**. It informs the review but cannot change
 scope, severity, admission, the baseline, or the gate.
 
 A provider that does not contribute is non-fatal and surfaces as a run warning,
-in one of two wordings, because the two call for different actions:
+in one of three wordings, because they call for different actions:
 
 - *"…failed and was skipped."* — the provider errored.
-- *"…produced nothing and was skipped. Check that it points at content this
-  change has."* — the provider worked and had nothing to give. An empty inbox, a
-  mistyped `dir`, or `include` globs no changed file matches all land here. This
+- *"…found no change-intent source, so the review ran without one."* — the
+  provider ran and matched nothing: no inbox directory, no changed file matching
+  its `include` globs. With both providers on by default, **this is the
+  ordinary result on a repository with no written intent for the change** — it
+  is not an error or a misconfiguration, and must not be read as one. A
+  mistyped `dir` produces exactly the same shape, which is why the warning
+  still says to check where the provider points if content was expected. This
   case used to be silent: a misconfigured source was indistinguishable from one
-  that was never configured, and the review ran with no change-intent context and
-  said so nowhere.
+  that was never configured, and the review ran with no change-intent context
+  and said so nowhere.
+- *"…matched N sources but none carried usable text, so the review ran without
+  them."* — the provider found sources and none of them had a body below their
+  frontmatter. Genuinely odd, since something did match.
 
 A provider that contributes only **part** of what it matched warns as well, once
 per bound that actually bound:

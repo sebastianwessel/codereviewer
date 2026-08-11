@@ -10,7 +10,7 @@ except `enabled` is a bound on that spend.
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `intentFulfilment.enabled` | boolean | `false` | Master switch. With `false`, `intent check` exits `0` and reports `"status": "disabled"` instead of an empty result. |
+| `intentFulfilment.enabled` | boolean | `true` | Master switch. With `false`, `intent check` exits `0` and reports `"status": "disabled"` instead of an empty result. |
 | `intentFulfilment.maxObligations` | integer 1–100 | `100` | Cap on the obligations read out of the stated intent, and therefore on judgement calls — one call judges one obligation. This is the primary spend bound. |
 | `intentFulfilment.maxIntentBytes` | integer 256–200000 | `100000` | Cap on the redacted change-intent text handed to the extraction call. The ingestion providers bound themselves per file; this bounds the sum, because a pipeline can configure several of them. |
 | `intentFulfilment.maxChangeLines` | integer 1–5000 | `5000` | Cap on the changed lines each judgement call sees. A judgement may only cite a line the change touched, so this also bounds the evidence a judgement can draw on. |
@@ -22,14 +22,15 @@ refusal, because only the refusal is visible. The error also says what you can
 actually do about it — and where a limit is already at its maximum, it says that
 rather than advising you to raise it.
 
+`intentFulfilment.enabled` and `contextSources.enabled` are both `true` by
+default, and the default `contextSources.providers` already includes an
+`inbox` provider reading `.codereviewer/context`, so the one thing genuinely
+deployment-specific to set is the model provider — `intent check` reports
+`"status": "provider-unavailable"` without one:
+
 ```json
 {
-  "provider": { "id": "openai", "model": "your-model" },
-  "intentFulfilment": { "enabled": true },
-  "contextSources": {
-    "enabled": true,
-    "providers": [{ "type": "inbox", "dir": ".codereviewer/context" }]
-  }
+  "provider": { "id": "openai", "model": "your-model" }
 }
 ```
 
@@ -103,7 +104,7 @@ words are chosen so that it cannot be read as a claim that they are undone.
 `review` — the same providers, the same redaction. There is no second set of
 keys and no second fetch.
 
-Two consequences worth knowing before you enable it:
+Two consequences worth knowing before you run it:
 
 - With `contextSources` disabled or empty, the command exits `0` and reports
   `"status": "no-intent"`. That is the ordinary case, not an error.

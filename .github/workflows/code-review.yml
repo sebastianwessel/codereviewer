@@ -92,8 +92,11 @@ jobs:
           # entry point detects and reports rather than failing on.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          # Which stages run, and how they report. See
-          # scripts/github/codereviewer.github.json.
+          # Only what is deployment-specific: pull-request mode, the SARIF
+          # dialect, and the comment platform. Which stages run is no longer
+          # stated here — the engine defaults already run the review, both
+          # advisory lanes, change-intent ingestion and inline comments, and a
+          # config file that restated them would be the first thing to go stale.
           CODEREVIEWER_GITHUB_CONFIG: scripts/github/codereviewer.github.json
 
           # Provider selection lives in repository variables so the model can be

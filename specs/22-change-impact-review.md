@@ -104,9 +104,12 @@ the audit table below. (2) shipped as `impact-report.md` and `impact-report.json
 written into an `impact-<uuid>` run directory under `paths.artifactDir` — the same
 place `review` writes `report.md` — with the Markdown path printed to stderr so
 stdout stays exactly one JSON document. A disabled run writes nothing, because a
-capability that is off by default must not accumulate empty run directories in a
-repository whose owner never asked for it, and impact runs are deliberately absent
-from the run index, which feeds baseline resolution and expects a review report.
+capability an operator has switched off must not accumulate empty run directories
+in a repository whose owner asked for nothing, and impact runs are deliberately
+absent from the run index, which feeds baseline resolution and expects a review
+report. (The capability is on by default since 2026-08-11; when `review` runs the
+lane in-process it writes `impact-report.json` beside the review's own artifacts
+instead of into a directory of its own.)
 
 The 74.1% remains a scope measurement quoted in this spec and NOT a capability
 claim in user-facing documentation.

@@ -25,9 +25,10 @@ already run CodeQL, linters, formatters, tests, and build checks.
 - resolves OpenAI/OpenAI-compatible, AWS Bedrock, and Azure providers through
   optional adapter packages only when configured;
 - runs deterministic evaluation fixtures and quality gates;
-- offers two separate advisory commands — `impact check` and `intent check` —
-  that are off by default, never run inside `review`, and cannot fail a pipeline
-  on their own findings;
+- answers, on a default run, what the change was for and whether it got there
+  (intent) and what it might break (impact) — two advisory lanes, on by default
+  since 2026-08-11, runnable on their own as `intent check` and `impact check`,
+  and unable to fail a pipeline on their own findings under any configuration;
 - denies publishing, shell execution, broad network access, and fix application.
   The optional fix lane produces apply-checked edit suggestions in memory only:
   it never writes a source file.

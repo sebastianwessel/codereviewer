@@ -332,7 +332,7 @@ reports what was spent rather than stopping it. See
 | --- | --- |
 | Too many low-value findings | Raise `aiReview.actionableSeverityThreshold`; set `promotionPolicy.modelWeakOrRefuted` to `rejected` |
 | Report has a large "needs more evidence" section | Same: `promotionPolicy.modelWeakOrRefuted: "rejected"` |
-| Findings exist but no inline comments | `reporting.reviewComments.enabled` must be true, and a finding needs a reported line that falls inside a reviewed hunk. Lower `review.inlineSeverityThreshold` |
+| Findings exist but no inline comments | `reporting.reviewComments.enabled` is true by default — check it was not explicitly turned off. A finding also needs a reported line that falls inside a reviewed hunk and severity at or above `review.inlineSeverityThreshold` (default `high`); lower the threshold to widen it |
 | Misses a second defect in a file where it found one | Known limitation, no dial. Three passes built for it were measured and [removed](../03-concepts/optional-capabilities/extra-discovery-passes.md) |
 | Misses security issues specifically | `security.dedicatedPass.enabled: true` |
 | Misses defects that depend on unchanged code | `review.crossFileRetrieval` is the dial and is **on by default** — its old net-negative verdict was measuring a truncation bug and does not stand. But out-of-diff recall is 0 of 27 on the 37-case corpus, and every miss sat in a file shown in full, so this is attention, not information. The context scout was [removed](../03-concepts/optional-capabilities/context-scout.md) for the same reason |

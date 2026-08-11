@@ -9,11 +9,14 @@ deliberately does not do. Read it before anything else in these docs.
 
 CodeReviewer is a local-first, LLM-centric **semantic** code review engine that
 runs as a command-line tool. It takes a git diff (or an explicit file list),
-reviews the changed files with a model, then puts every proposed problem through
-an independent verification step and a deterministic gate before it is allowed
-into the report. It writes JSON, Markdown, and SARIF artifacts to a local
-directory. It never publishes anything, never modifies your code, and never
-executes it.
+reads whatever change-intent brief it can find for the change, reviews the
+changed files with a model, and puts every proposed problem through an
+independent verification step and a deterministic gate before it is allowed
+into the report. Out of the box that same `review` run also reports what the
+change might break and whether it did what it set out to do, and drafts an
+inline comment for each finding — not only a defect list. It writes JSON,
+Markdown, and SARIF artifacts to a local directory. It never publishes
+anything, never modifies your code, and never executes it.
 
 ---
 
@@ -64,9 +67,16 @@ Every run writes a directory under `.codereviewer/runs/<run-id>/`:
 | `shared-context.json` | Append-only task events, candidates, refutation results, admission decisions. |
 | `observability.json` | No-content pipeline step and task-event trace. |
 
-`review-comments.json` and `review-comments.<platform>.json` are written only
-when `reporting.reviewComments.enabled` is true. The engine *renders* inline
-comment drafts; publishing them is your pipeline's job.
+`review-comments.json` and `review-comments.<platform>.json` are written when
+`reporting.reviewComments.enabled` is true — the default. The engine *renders*
+inline comment drafts; publishing them is your pipeline's job.
+
+`impact-report.json` and `intent-report.json` are written when `changeImpact.enabled`
+and `intentFulfilment.enabled` respectively are true — both are also the default,
+so both files appear in a default run's directory. `intent-report.json`'s content
+depends on whether a change-intent source resolved: with none, it records
+`status: "no-intent"` rather than an obligation mapping. See [Two advisory
+commands](#two-advisory-commands-alongside-the-review) below.
 
 The default report formats are `json`, `markdown`, and `sarif`
 (`reporting.formats`).
@@ -107,11 +117,12 @@ inside it, and none outside it — even in a file it was shown in full. →
 `review` is the only command that can block, and **nothing either advisory
 stage reports can set a non-zero exit code**. Run standalone, `intent check`
 and `impact check` are independent of `review` and of each other, each with its
-own isolated run and context. But when `changeImpact.enabled` /
-`intentFulfilment.enabled` are on, `review` also runs both lanes itself —
-**in the same process, over the run context it already built for the
-review** — and writes their reports into its own run directory rather than a
-separate one. Either way, neither can fail the pipeline:
+own isolated run and context. `changeImpact.enabled` and `intentFulfilment.enabled`
+are both **on by default**, so `review` also runs both lanes itself, out of the
+box — **in the same process, over the run context it already built for the
+review** — and writes their reports (`impact-report.json`, `intent-report.json`)
+into its own run directory rather than a separate one. Either way, neither can
+fail the pipeline:
 
 | Command | What it produces |
 | --- | --- |

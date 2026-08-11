@@ -3,6 +3,8 @@
 Status: Approved
 Date: 2026-07-23
 Amended: 2026-08-03 — the comment body carries its proof (see *Amendment* below)
+Amended: 2026-08-11 — a suggestion is apply-checked before it is offered, and the
+block is enabled by default (see *Amendment* below)
 
 ## Amendment (2026-08-03): the comment body carries its proof
 
@@ -95,6 +97,55 @@ never end inside a Markdown escape or an HTML entity.
 Renderers are unaffected: the proof is assembled once in the neutral layer, and a
 platform renderer still only turns the structured suggestion into native syntax.
 
+## Amendment (2026-08-11): a suggestion is apply-checked before it is offered
+
+A ` ```suggestion ` block renders a one-click **Apply**. Its edits come from the
+refuter, and until this amendment nothing verified that they still fit the file:
+the deterministic apply-check that catches hallucinated line numbers, stale
+locations and overlapping edits lived in the fix lane (spec 12), which is off by
+default. The engine therefore offered a human a one-click apply of an edit no
+code had checked.
+
+**Requirement.** A draft MUST NOT carry a `suggestion` unless the finding's edit
+set has been re-applied to the file's CURRENT bytes and applied cleanly. A set
+that no longer applies is dropped and the draft keeps its prose.
+
+Four properties make this a requirement rather than an option:
+
+- The check is **pure, deterministic and model-free**
+  (`src/shared/text/apply-fix-edits.ts`). It needs no provider, no agent, and no
+  fix lane, so it costs a file read and applies to every run. The primitive is
+  shared rather than reimplemented: the fix lane runs the identical check before
+  it enriches a `fixProposal`, and two notions of "does this still apply" would
+  be worse than one.
+- It is enforced in the **neutral layer**, beside the other eligibility rules,
+  never in a renderer. A guard a renderer can skip is a guard that will be
+  skipped, and all four platforms pass through the neutral layer.
+- **"Could not be checked" is not "checked and passed".** Three states are
+  distinct and MUST stay distinct in the body: the fix was never suggestion-shaped
+  at all (say nothing — a note that fires when nothing was lost is a note readers
+  learn to skip); the edits were checked against current bytes and no longer
+  apply; and the bytes never arrived, so nothing was verified. The last two both
+  withhold the suggestion — absence of a check is not a passing check — and each
+  says which happened, because a replacement that is known-stale must not be
+  copied by hand while one that is merely unchecked may be.
+- The check reads file bytes **for the check only**. Nothing read this way reaches
+  a rendered comment; the suggestion still carries the model's replacement text,
+  redacted on its own way in.
+
+**Consequence, stated rather than discovered:** this can reduce how often a
+suggestion appears. That is the correct trade — the alternative is offering more
+suggestions that do not apply — and it makes the fix lane a quality upgrade
+rather than a prerequisite for not misleading someone.
+
+### The block is enabled by default
+
+`reporting.reviewComments.enabled` defaults to `true` (2026-08-11). It is the
+delivery mechanism for the per-finding inline note, and it is a renderer rather
+than an accuracy lever: **no recall or precision claim attaches to this flip.**
+It writes local artifacts only; the "no network call, publishes nothing" rule
+below is what makes defaulting it on safe.
+
 ## Purpose
 
 Emit inline review-comment drafts — including one-click fix suggestions — as a
@@ -162,6 +213,12 @@ Suggestion eligibility, in the neutral layer: exactly one fix edit,
 `targetRange` exactly, and the replacement contains no triple-backtick fence.
 When any of those fails, the fix could never be a suggestion and the draft
 carries the prose fix summary alone.
+
+Eligibility is a question about the edit's SHAPE, answerable from the report
+alone. The apply-check required by the 2026-08-11 amendment is a question about
+the FILE, and the two are kept apart deliberately: a caller holding no file bytes
+must still be able to tell "there was never a suggestion here" from "there was
+one and it could not be checked".
 
 Fitting the body cap is NOT one of those checks, and must not be treated as one.
 Eligibility asks whether the fix can be represented; fitting is a budgeting
@@ -253,7 +310,7 @@ Both are local artifacts only; neither publishes.
 A `reporting.reviewComments` block, keys defined in
 [04-configuration-and-providers.md](04-configuration-and-providers.md):
 
-- `enabled` — default `false`.
+- `enabled` — default `true` (2026-08-11; see the amendment above).
 - `platform` — `github | gitlab | bitbucket | generic | auto`, default `auto`
   (run the detection order above). An explicit value overrides detection.
 
@@ -289,6 +346,9 @@ the feature never ran.
 - Unit: neutral draft assembly and suggestion eligibility; each renderer's
   platform syntax against fixtures; platform detection precedence (env over
   remote over generic) and explicit override.
+- Both directions of the apply-check: a clean edit set survives and renders its
+  block, a stale one is dropped with the prose kept, and a run with no file reader
+  reports "not checked" rather than either of the other two.
 - Snapshot: rendered output excludes raw source beyond the redacted,
   eligibility-checked replacement, and never emits an unterminated fence.
 - Proof (2026-08-03 amendment): a finding with a recorded verdict and one without
@@ -308,6 +368,11 @@ the feature never ran.
 - The core issues no network request and publishes nothing.
 - A replacement containing a code fence, or an edit that does not map exactly to
   the comment range, yields a prose summary and no suggestion block.
+- An eligible edit set that no longer applies to the file's current bytes yields a
+  prose summary and no suggestion block, and the body says the replacement was
+  computed and no longer applies. The same run with the file unchanged yields the
+  suggestion. A run that could not read the bytes at all withholds the suggestion
+  too, and says that it was not checked rather than that it failed.
 - Every draft states what its finding survived, or that no verdict was recorded
   against it, and the addresses it rests on — on every platform, because the
   proof is assembled once in the neutral layer.

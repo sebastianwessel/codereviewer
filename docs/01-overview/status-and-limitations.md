@@ -41,7 +41,7 @@ contracts, provider resolution for OpenAI/OpenAI-compatible/Bedrock/Azure throug
 optional packages, holistic discovery + refutation, JSON/Markdown/SARIF reports,
 local review-comment drafts, an evaluation runner with quality gates, two
 independently runnable advisory commands (`intent check`, `impact check`) that
-are off by default and cannot fail a pipeline, and a reference GitHub Actions
+are on by default and cannot fail a pipeline, and a reference GitHub Actions
 integration (`.github/workflows/code-review.yml` plus `scripts/github/`) that
 posts and edits a pull-request summary comment and inline review comments
 through the GitHub API. That integration is not part of the published npm
@@ -71,10 +71,8 @@ unfinished. Enabling them is a deliberate, measured choice.
 | Config key | Default | Why it is off |
 | --- | --- | --- |
 | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task. Additive by construction, but it costs an extra discovery call per task and has not cleared a held-out A/B showing net recall gain without an authorization regression. |
-| `contextSources.enabled` | `false` | External change-intent ingestion (ticket/PR context). Off unless you configure providers. |
 | `verification.enabled` | `false` | A separate agentic flow that verifies specific claims — see [two flows](../03-concepts/two-flows.md). |
 | `fix.enabled` | `false` | Advisory finding-investigation and fix-proposal lane. |
-| `reporting.reviewComments.enabled` | `false` | Writes inline review-comment draft artifacts. |
 | `skills.enabled` | `false` | Mounted reviewer skill directory with bounded read/list/grep tools. |
 | `observability.openTelemetry.enabled` | `false` | No-content telemetry export. |
 | `security.signals.enabled` | `false` | Ingests already-produced analyzer artifacts (SARIF 2.1.0) as evidence — spec 15, Mechanism 2. Its recall contribution is still unmeasured, but its **reach** now is: a public analyzer flags the vulnerable line of a real advisory 3.0% of the time, which bounds the layer below the threshold it would have to clear (below). It also does nothing without `security.signals.artifacts`, and a run that enables it with no artifact configured is rejected rather than quietly reviewing nothing. |
@@ -149,6 +147,19 @@ Defaults that are **on**: `aiReview.requireRefutation` (a literal `true` — not
 toggle), `aiReview.deterministicSignalMode: 'support'`,
 `review.crossFileRetrieval.enabled`, `baseline.enabled`, `drift.enabled`, and the
 strict quality gate (`maxCritical: 0`, `maxHigh: 0`).
+
+Four more defaults flipped to **on**: `contextSources.enabled` (with two default
+providers — `inbox` reading `.codereviewer/context`, and `changed-files` matching
+`**/*.md` in the reviewed diff), `changeImpact.enabled`, `intentFulfilment.enabled`,
+and `reporting.reviewComments.enabled`. Out of the box `review` now reads whatever
+change-intent brief those providers find, runs the impact and intent lanes itself
+inside the same run, and writes inline review-comment drafts alongside the report —
+not just a defect list. Each provider is a no-op when its input is absent: a missing
+inbox directory or a diff with no matching Markdown is an ordinary run with no
+intent brief, not an error or a misconfiguration. **`contextSources` being on is not
+a measured quality lever** — unlike the capabilities in the table above, this flip
+was not gated on an A/B, and whether it moves recall or precision in either
+direction is unmeasured.
 
 There are also **no proactive byte caps anywhere** by default —
 `review.contextMaxBytes` and `review.crossFileRetrieval.maxBytesPerRead` are both

@@ -138,8 +138,17 @@ Three things worth knowing on a first run:
 └── observability.json    # no-content step and task-event trace
 ```
 
-Plus `review-comments.json` and `review-comments.<platform>.json` when
-`reporting.reviewComments.enabled` is true.
+Plus `review-comments.json` and `review-comments.<platform>.json`, written by
+default since `reporting.reviewComments.enabled` is now `true` out of the box.
+
+Also plus `impact-report.json` and `intent-report.json` — `changeImpact.enabled`
+and `intentFulfilment.enabled` are on by default too, so `review` runs those two
+advisory lanes itself, in-process, and writes their reports into this same
+directory. `impact-report.json` costs nothing to produce. `intent-report.json`
+is always written when the lane is enabled, but only carries a real obligation
+mapping once a change-intent source resolves; with none, it records
+`status: "no-intent"` instead (see [Configuration](../04-guides/configuration.md)
+and [Controlling cost](../04-guides/controlling-cost.md)).
 
 An `index.json` at the root of the artifact directory lists recent runs (newest
 first, capped at 50 entries) so tooling can find the latest report.

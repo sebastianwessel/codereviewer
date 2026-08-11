@@ -11,7 +11,7 @@ the first three bounds below are what limit it.
 
 | Key | Type | Default | What it does |
 | --- | --- | --- | --- |
-| `changeImpact.enabled` | boolean | `false` | Master switch. With `false`, `impact check` exits `0` and reports `"status": "disabled"` instead of an empty result. |
+| `changeImpact.enabled` | boolean | `true` | Master switch. With `false`, `impact check` exits `0` and reports `"status": "disabled"` instead of an empty result. |
 | `changeImpact.maxChangedSymbols` | integer 1–500 | `50` | Upper bound on the symbols seeded from the diff. Each seed costs exactly one repository search, so this is what bounds total traversal. Exceeding it sets `summary.changedSymbolsTruncated`. |
 | `changeImpact.maxReferencesPerSymbol` | integer 1–500 | `25` | Cap on reference sites **reported** per symbol. A symbol with more sets `referencesTruncated` rather than being silently shortened. Per-symbol rather than one shared pool, so a change touching forty symbols cannot let the first one consume everyone's budget. |
 | `changeImpact.maxReferenceCandidatesPerSymbol` | integer 1–5000 | `500` | Bound on the raw matches the search **collects** per symbol, from which the cap above selects. Reaching it sets `referenceSearchTruncated`. Raising it does not make the report longer; it widens what the report gets to choose from, at the cost of traversal and memory. |

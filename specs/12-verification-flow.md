@@ -193,6 +193,15 @@ dropped, and the fix is recorded as not produced. This rejects hallucinated line
 numbers and stale-location edits without a model call. Fixes are always
 `safety: manual-review`; the flow never applies an edit to the working tree.
 
+**This lane uses the check; it no longer owns it.** The function is
+`applyFixEdits` in `src/shared/text/apply-fix-edits.ts` — pure, deterministic and
+model-free, so it needs neither an agent nor a provider. Spec 13's comment layer
+calls the same function to gate every ` ```suggestion ` block it offers, which is
+what stopped a one-click apply from being unchecked whenever this lane was off
+(2026-08-11). Two implementations of "does this edit still fit the file" would be
+strictly worse than one, so a change to the semantics here changes both surfaces
+and must be considered against both.
+
 ### A Fix Stays In The Finding's Own File, And Says When It Did Not
 
 A fix set whose edits touch any file other than the finding's own `location.path`

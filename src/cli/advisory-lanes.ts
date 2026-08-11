@@ -51,9 +51,30 @@ export type AdvisoryLaneResults = {
   readonly warnings: readonly string[]
 }
 
-// The stage ran and threw. Its report is lost, the review is not, and the reader
-// is told which stage went missing and why — an advisory stage that vanishes
-// without a word is indistinguishable from one that found nothing.
+// "There was no change set to reason about" is NOT "the stage broke", and both
+// stages hit it at the same moment: a scratch directory, a shallow CI clone, or
+// a `review --files …` run whose refs share no history reaches intake with
+// nothing to diff. Before this distinction existed, the default run reported
+// twice that a stage "could not complete", followed by intake's own remediation
+// sentence — text that reads like the engine failed on an ordinary repository.
+//
+// The warning is NOT removed. Absence must never produce a clean answer here: a
+// reader who expected an impact or intent report is still told there is none,
+// and why. Only the sentence changes, and only for the codes below — every other
+// failure keeps the language of a failure.
+//
+// Keyed by code rather than by category because the whole point is to be narrow:
+// `repository` also covers a timeout, an unknown ref and an unreadable file,
+// none of which are ordinary.
+const ordinaryEmptyChangeSetReasons: Readonly<Record<string, string>> = {
+  merge_base_unavailable:
+    'git could not resolve a merge base for the base and head refs, which is ordinary in a shallow clone or a checkout without their shared history',
+  no_reviewable_change: 'the base and head refs differ by no files'
+}
+
+// The stage did not produce a report, and the reader is told which one and why —
+// an advisory stage that vanishes without a word is indistinguishable from one
+// that found nothing.
 const guardAdvisoryStage = async <TReport>(
   input: {
     readonly name: string
@@ -68,6 +89,24 @@ const guardAdvisoryStage = async <TReport>(
     return { report: await input.run(), warnings: [] }
   } catch (error) {
     const normalized = normalizeError(error, { source: 'repository' })
+    const ordinaryReason = ordinaryEmptyChangeSetReasons[normalized.code]
+
+    if (ordinaryReason !== undefined) {
+      // `info`, not `warn`: nothing here needs an operator's attention, and a
+      // warn-level log on every scratch-directory run trains readers to ignore
+      // the level that does matter.
+      input.logger.info(
+        `The ${input.name} stage had no change set to work from and produced no report.`,
+        { stage: input.name, error_code: normalized.code }
+      )
+
+      return {
+        report: undefined,
+        warnings: [
+          `The ${input.name} stage produced no report because this run has no change set to compare: ${ordinaryReason}.`
+        ]
+      }
+    }
 
     input.logger.warn(`The ${input.name} stage failed and was skipped.`, {
       stage: input.name,

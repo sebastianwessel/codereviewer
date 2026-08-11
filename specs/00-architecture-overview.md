@@ -29,9 +29,12 @@ CLI
   -> quality gate
 ```
 
-The separate `impact check` and `intent check` commands are advisory lanes
-reachable only from the CLI. They never run inside `review`, and
-`review-workflow` neither imports them nor can be failed by them.
+`impact check` and `intent check` are advisory lanes with their own reports. Each
+is runnable as its own command, and each also runs inside `review` when enabled —
+on by default since 2026-08-11 — through `src/cli/advisory-lanes.ts`, which is a
+CLI-level composition: `review-workflow` still neither imports them nor can be
+failed by them, and a lane that throws becomes a warning on the review report
+rather than an exit code.
 
 ## Boundary Decisions
 

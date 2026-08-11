@@ -203,7 +203,8 @@ directory — it is the audit trail:
 | `shared-context.json` | Candidates, verdicts, admission decisions |
 | `observability.json` | No-content run events |
 | `error.json` | Present only on a failed run |
-| `review-comments.json`, `review-comments.<platform>.json` | Present when review comments are enabled |
+| `review-comments.json`, `review-comments.<platform>.json` | Present when review comments are enabled — the default |
+| `impact-report.json`, `intent-report.json` | Present when the change-impact / intent-fulfilment lanes are enabled — both are also the default |
 
 See [artifacts.md](../06-reference/artifacts.md) and
 [partial-and-failed-runs.md](../08-operations/partial-and-failed-runs.md).
@@ -257,10 +258,16 @@ The engine never calls a tracker or a forge API: **your pipeline fetches the
 context and writes it to disk**, so it owns the credentials and the engine
 holds none.
 
+`contextSources.enabled` is **on by default**, with an `inbox` provider already
+pointed at `.codereviewer/context` and a `changed-files` provider already
+matching `**/*.md` in the reviewed diff — so writing a markdown file into the
+inbox before the run (below) works with no config change at all. The block
+below is for customizing that default, for example narrowing `changed-files` to
+your own docs/specs layout:
+
 ```json
 {
   "contextSources": {
-    "enabled": true,
     "providers": [
       { "type": "inbox", "dir": ".codereviewer/context" },
       { "type": "changed-files", "include": ["docs/**/*.md", "specs/**/*.md"] }
@@ -286,30 +293,42 @@ is injected as **untrusted, informational context**. It cannot approve a
 finding, change a severity, or affect the baseline or the gate. See
 [prompt-injection-and-untrusted-input.md](../07-security/prompt-injection-and-untrusted-input.md).
 
-**Check `run.warnings` after wiring this up.** A provider that contributed
-nothing says so — *"External change-intent provider "…" produced nothing and was
-skipped. Check that it points at content this change has."* — which is what a
-mistyped `dir` or a non-matching `include` glob looks like. A provider that
-errored says *"failed and was skipped"* instead. Either way the review runs
-without the brief and exits normally, so the warning is the only signal that the
-context you paid a pipeline step to fetch never reached the reviewer.
+**Check `run.warnings` if you expected a brief and did not get one.** With
+`contextSources` on by default, a provider finding nothing is the *ordinary*
+result on a repository with no written intent, not a misconfiguration — so the
+warning text is deliberately calm about it: *"External change-intent provider
+"…" found no change-intent source, so the review ran without one. This is the
+ordinary result when a change has no written intent; if you expected content,
+check where the provider points."* Two other warnings cover the cases that
+**are** worth investigating: a provider that matched files but found nothing
+readable in them — *"External change-intent provider "…" matched N sources but
+none carried usable text, so the review ran without them. Check that those
+sources have a body below their frontmatter."* — and a provider that errored
+outright — *"External change-intent provider "…" failed and was skipped."* All
+three leave the review running without the brief and exiting normally, so the
+warning is the only signal that the context you paid a pipeline step to fetch
+never reached the reviewer.
 
 ---
 
 ## Inline review comments on GitHub, GitLab and Bitbucket
 
+`reporting.reviewComments.enabled` is **on by default**, so a run already writes
+a neutral `review-comments.json` and a rendered `review-comments.<platform>.json`
+with `platform` auto-detected. Set the block below only to pin the platform
+instead of relying on detection, or to turn the drafts off:
+
 ```json
 {
   "reporting": {
-    "reviewComments": { "enabled": true, "platform": "auto" }
+    "reviewComments": { "platform": "github" }
   }
 }
 ```
 
-The run writes a neutral `review-comments.json` and a rendered
-`review-comments.<platform>.json`. **It publishes nothing** — no network call,
-no forge API. Posting is your pipeline's step, which keeps report generation
-and publishing on separate permissions.
+**It publishes nothing** — no network call, no forge API. Posting is your
+pipeline's step, which keeps report generation and publishing on separate
+permissions.
 
 `platform: "auto"` resolves locally, first match wins:
 
@@ -491,11 +510,20 @@ for `merge-base` to resolve. `BITBUCKET_PIPELINE_UUID` and
 
 ## The advisory stages in CI
 
-`intent check` and `impact check` are separate commands and separate jobs.
+`intent check` and `impact check` are separate commands and separate jobs, each
+with its own isolated run and context — useful when you want their output
+without paying for a full review, or in a job with different permissions.
 **Nothing either reports can set a non-zero exit code** — that is a spec
 requirement, not a default, and there is no `blocking` key to change it. So a
 pipeline consumes them by reading the JSON on stdout, not by branching on the
 exit code.
+
+`changeImpact.enabled` and `intentFulfilment.enabled` are both on by default,
+so you do not need either of these as a separate job just to get their output:
+a plain `review` job already runs both lanes in-process and writes
+`impact-report.json` / `intent-report.json` into its own run directory. Run
+them standalone when you want the report without the cost and time of a full
+review, or before `review` is trusted enough to gate on.
 
 The exception is not a verdict: `intent check` exits `4` when the change, the
 stated intent, or the extracted obligation count exceeds one of its three input
@@ -518,9 +546,10 @@ change-intent source configured — see
 [Supplying change intent](#supplying-change-intent) — and without one it exits
 `0` with `status: "no-intent"` and a warning saying so.
 
-Each command needs its capability enabled in config, or it reports
-`status: "disabled"` and a warning. That is the intended shape: an advisory stage
-that cannot run says so in its report rather than failing a job.
+Each command's capability is enabled by default; set it to `false` and the
+command reports `status: "disabled"` and a warning instead of running. That is
+the intended shape: an advisory stage that cannot run says so in its report
+rather than failing a job.
 
 ---
 
@@ -537,7 +566,19 @@ roughly one candidate per file.
 
 Enabling the dedicated security pass adds another call per partition. Set
 `review.maxCostUsd` so a pathological change fails the job instead of quietly
-spending. Full arithmetic: [controlling-cost.md](controlling-cost.md).
+spending.
+
+That arithmetic no longer describes the whole bill. `changeImpact.enabled`,
+`intentFulfilment.enabled` and `contextSources.enabled` are all on by default
+now, and `review` runs the impact and intent lanes in-process. `changeImpact`
+stays free by default; `intentFulfilment` spends an extraction call, a
+judgement call per obligation, and an explanation call, but only once a
+change-intent source resolves — which the default `changed-files` provider
+(matching `**/*.md`) can now do on an ordinary pull request with no config
+change at all. **There is no measured per-PR cost figure for a default run with
+this combination on** — do not extend the numbers above to cover it, and do not
+estimate one. Full arithmetic and the free/costly split:
+[controlling-cost.md](controlling-cost.md).
 
 ---
 

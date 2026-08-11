@@ -59,7 +59,7 @@ bounded `reviewContext`. What goes in:
 | Changed files | Full file content, line-numbered | Sent WHOLE; split only if the provider refuses the packet |
 | Support-signal output | Serialized facts + test mappings | Only when `aiReview.deterministicSignalMode: 'support'` |
 | Referenced definitions | Bounded digests of imported, **unchanged** files | Context only — never review targets |
-| Change intent | External ticket/PR brief | Only when `contextSources.enabled` |
+| Change intent | External ticket/PR brief | When `contextSources.enabled` (the default) finds a brief; a no-op section otherwise |
 
 Everything is redacted before it becomes a context document.
 
@@ -174,4 +174,4 @@ success.
 | `aiReview.deterministicSignalMode` | `support` | Whether facts, test mappings, and referenced definitions enter the packet |
 | `instructions.files` / `instructions.inline` | `[]` / `""` | Reviewer instructions added to every packet |
 | `skills.enabled` / `skills.directories` / `skills.allowTools` | `false` / `.codereviewer/skills` / read,list,grep | Optional skill documents |
-| `contextSources.*` | disabled | External change-intent brief — see [Optional capabilities](../optional-capabilities/README.md) |
+| `contextSources.*` | enabled, with an `inbox` and a `changed-files` (`**/*.md`) provider configured | External change-intent brief — see [Optional capabilities](../optional-capabilities/README.md) |

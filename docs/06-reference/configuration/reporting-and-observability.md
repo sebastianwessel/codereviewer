@@ -10,7 +10,7 @@ Output formats, logs and traces, and the prices used to compute run cost.
 | `reporting.sarif.target` | `"generic"` \| `"github"` | `"generic"` | SARIF dialect. `github` shapes the output for GitHub code scanning. |
 | `reporting.sarif.category` | non-empty string | `"codereviewer"` | SARIF run category. |
 | `reporting.sarif.maxResults` | integer 1–25000 | `5000` | Cap on SARIF results emitted. When it withholds findings, `report.sarif` says so in `runs[].invocations[].toolExecutionNotifications` — see below. |
-| `reporting.reviewComments.enabled` | boolean | `false` | Writes platform-neutral inline review-comment drafts (including one-click fix suggestions) as **local artifacts only**. No network publishing happens, ever. |
+| `reporting.reviewComments.enabled` | boolean | `true` | Writes platform-neutral inline review-comment drafts (including one-click fix suggestions) as **local artifacts only**. No network publishing happens, ever. |
 | `reporting.reviewComments.platform` | `"github"` \| `"gitlab"` \| `"bitbucket"` \| `"generic"` \| `"auto"` | `"auto"` | Renderer selection. `auto` detects from CI environment, then the git `origin` remote host, then falls back to `generic`. An explicit value skips detection. |
 
 There is no `reporting.sarif.redact` key. Every rendered report format redacts

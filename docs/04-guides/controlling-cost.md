@@ -26,9 +26,33 @@ not the finding. A task at or below that width is a single partition.
 | Dedicated security pass | 1 per partition | `security.dedicatedPass.enabled` |
 | Semantic finding merge | 1 per file that has ≥ 2 candidates | Always — and today that is almost never, because discovery averages about one candidate per file |
 | **Refutation** | **1 per partition** | Always, whenever the partition produced candidates |
-| Change-intent summarizer | 1 per run | `contextSources.enabled` and the summary mode resolves to `model` |
+| Change-intent summarizer | 1 per run, and **0 when the providers gathered nothing** | `contextSources.enabled` (on by default) and the summary mode resolves to `model` — which it does whenever a model `provider` is configured, since `contextSources.summary.mode` is unset by default |
 | Verification lane | 1 bounded agent loop per claim (≤ `verification.maxToolCallsPerClaim` tool calls) | `verification.enabled` |
 | Fix lane | 1 bounded agent loop per eligible admitted finding | `fix.enabled` |
+| Change-impact lane (run in-process by `review`) | 0 | `changeImpact.enabled` — the lane's own core is deterministic and calls no provider; only its second switch, `changeImpact.adjudication.enabled` (default `false`), spends |
+| Intent-fulfilment lane (run in-process by `review`) | 1 extraction call, 1 judgement call per obligation, 1 explanation call per run | `intentFulfilment.enabled` **and** a change-intent source resolved something (see the change-intent summarizer row above) |
+
+### Two lanes now run inside every default `review`, and one of them is not free
+
+Since 2026-08-11, `contextSources.enabled`, `changeImpact.enabled` and
+`intentFulfilment.enabled` are all **on by default** — `review` runs the impact
+and intent lanes itself, in the same process, over the context it already
+assembled for the review, and writes their reports (`impact-report.json`,
+`intent-report.json`) into the run directory without any config change.
+
+`changeImpact` costs nothing in this shape: its default core is deterministic.
+`intentFulfilment` is not free once it has something to work with. It needs a
+change-intent source, and `contextSources`' own default providers — an `inbox`
+directory and a `changed-files` provider matching `**/*.md` — mean an ordinary
+pull request that touches a README or a doc file can now supply one without any
+configuration at all. When that happens, the extraction/judgement/explanation
+calls under "What is free" below stop being free, on a run where nothing was
+explicitly turned on.
+
+**There is no measured per-PR cost figure for this combined default
+configuration.** The dollar figures elsewhere in these docs were measured before
+this flip; do not extend them to cover it, and do not estimate a replacement
+number — none has been produced.
 
 ### Refutation is batched — one call per partition, not per candidate
 
@@ -49,7 +73,8 @@ with fewer than two candidates issues no call at all. That is the common case
 today, which makes the stage close to free; it starts costing real calls only
 when discovery produces several candidates for one file.
 
-So the baseline cost of a default run is:
+So the baseline cost of the review itself — discovery and refutation, before
+either advisory lane is counted — is:
 
 ```
 partitions ≈ Σ ceil(changedFilesInTask / aiReview.maxFilesPerDiscoveryCall)
@@ -58,7 +83,10 @@ calls      ≈ 2 × partitions   (one discovery + one refutation each)
 
 Each optional pass you enable adds `1 × partitions` to the discovery side. The
 security pass is the only one that remains, and enabling it takes a partition
-from 2 calls to 3.
+from 2 calls to 3. This formula does **not** include the change-intent
+summarizer or the intent-fulfilment lane described above — both are on by
+default now, and add calls on top of this baseline whenever they have
+something to work with.
 
 Partitioning is where the calls go, and it is deliberate — it is the only
 measured lever on recall. A task of eight changed files is four partitions at the
@@ -196,6 +224,11 @@ npm run update:model-pricing:write
    the diff is against the merge base, not a stale branch point.
 7. **Set `review.maxCostUsd`** so a runaway change fails loudly instead of
    quietly.
+8. **Turn off `intentFulfilment.enabled`** (on by default) if you do not read
+   its output, since it is the one default-on capability that can add real
+   provider spend — an extraction call, a judgement call per obligation, and an
+   explanation call — whenever `contextSources` (also on by default) hands it a
+   change-intent source to work with.
 
 ---
 
@@ -206,22 +239,24 @@ These paths make no provider call at all:
 - `config validate`
 - `drift check` (also run as a preflight step inside `review`)
 - `baseline write`
-- `impact check` while `changeImpact.adjudication.enabled` is false (the default,
-  even when the command itself is enabled), or when no provider resolves — it
-  still reports every dependent it can settle deterministically, and counts the
-  rest as unadjudicated
-- `intent check` while `intentFulfilment.enabled` is false, or when no provider
-  resolves — it reports the reason as a warning and still exits `0`
+- `impact check`, and the equivalent lane `review` now runs in-process by
+  default, while `changeImpact.adjudication.enabled` is false (the default), or
+  when no provider resolves — it still reports every dependent it can settle
+  deterministically, and counts the rest as unadjudicated
+- `intent check`, and the equivalent lane `review` now runs in-process by
+  default, while `intentFulfilment.enabled` is false, or when no change-intent
+  source resolves — it reports the reason as a warning and still exits `0`
 - `eval compare`, `eval recall-report`, `eval slice-manifest`
 - Corpus and benchmark hydration (git fetches only)
 - Any `review` run with no `provider` configured
 - The change-intent summarizer in `digest` mode
 - `npm test` — the default suite is hermetic and never calls a real provider
 
-`intent check` **with** the capability enabled and a provider configured is the
-one advisory stage that spends real money: one extraction call, one judgement call
-per obligation, and one explanation call per run. The obligation count is set by
-the stated intent rather than by a configured cap, so a small ticket cannot become
+`intent check` — and, since `intentFulfilment.enabled` is on by default, the
+same lane running in-process inside an ordinary `review` — spends real money once
+a change-intent source resolves: one extraction call, one judgement call per
+obligation, and one explanation call per run. The obligation count is set by the
+stated intent rather than by a configured cap, so a small ticket cannot become
 expensive by raising a limit.
 
 `eval run` **is** costly: it runs a full review per case plus the semantic and

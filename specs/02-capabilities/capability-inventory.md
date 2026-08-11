@@ -31,10 +31,10 @@ task.
 | CAP-REP-001 | JSON report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-002 | Markdown report | ACT-DEV, ACT-REVIEWER | Yes | `03-contracts/finding-evidence-report.md` |
 | CAP-REP-003 | SARIF report | ACT-DEV, ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md` |
-| CAP-REP-004 | Platform-neutral review-comment artifacts (GitHub/GitLab/Bitbucket/generic renderers) | ACT-DEV, ACT-CI, ACT-REVIEWER | Yes | `13-review-comments-and-suggestions.md`, `03-contracts/finding-evidence-report.md` |
+| CAP-REP-004 | Platform-neutral review-comment artifacts (GitHub/GitLab/Bitbucket/generic renderers; on by default since 2026-08-11, every offered suggestion apply-checked against current bytes) | ACT-DEV, ACT-CI, ACT-REVIEWER | Yes | `13-review-comments-and-suggestions.md`, `03-contracts/finding-evidence-report.md` |
 | CAP-BASE-001 | Baseline matching | ACT-CI | Yes | `03-contracts/finding-evidence-report.md`, `04-configuration-and-providers.md`, `05-review-workflow-and-runtime.md` |
 | CAP-CTX-001 | Context ledger | ACT-OPS, ACT-DEV | Yes | `05-review-workflow-and-runtime.md`, `07-security-privacy-operations.md` |
-| CAP-CTX-002 | External change-intent context ingestion (inbox + changed-files providers, digest/model summarizer, change-intent injection) | ACT-CI, ACT-DEV | Yes | `11-external-context-ingestion.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
+| CAP-CTX-002 | External change-intent context ingestion (inbox + changed-files providers, digest/model summarizer, change-intent injection; on by default since 2026-08-11 with a provider set that no-ops when its inputs are absent — a product decision, UNMEASURED for recall) | ACT-CI, ACT-DEV | Yes | `11-external-context-ingestion.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
 | CAP-CTX-003 | Platform PR/MR context adapters (GitHub/GitLab/Bitbucket) | ACT-CI, ACT-DEV | No | Later phase — `11-external-context-ingestion.md` |
 | CAP-CTX-005 | Read-only MCP context provider (e.g. JIRA) with tool-name allowlist | ACT-CI, ACT-DEV | No | Later phase — `11-external-context-ingestion.md`, `07-security-privacy-operations.md` |
 | CAP-VERIFY-001 | Agentic verification flow (bounded read/list/grep agent, claim verdicts, corroboration) | ACT-CI, ACT-DEV, ACT-MODEL | Yes | `12-verification-flow.md`, `07-security-privacy-operations.md`, `04-configuration-and-providers.md` |
@@ -49,8 +49,8 @@ task.
 | CAP-EVAL-004 | Per-mechanism security measurement (recall/precision by CWE mechanism + context-depth, held-out anti-contamination) | ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `15-security-focused-review.md` |
 | CAP-SEC-001 | Security review lens (generic OWASP/CWE checklist discovery, refutation-gated) | ACT-MODEL, ACT-REVIEWER | Yes | `15-security-focused-review.md`, `05-review-workflow-and-runtime.md` |
 | CAP-SEC-002 | Deterministic security-signal evidence (source/sink, CWE/data-flow) | ACT-MODEL, ACT-DEV | Yes | `15-security-focused-review.md`, `03-contracts/finding-evidence-report.md` |
-| CAP-IMPACT-001 | Change-impact review (`impact check`, deterministic reference traversal, off by default) | ACT-DEV, ACT-CI | Yes | `22-change-impact-review.md` |
-| CAP-INTENT-001 | Intent-fulfilment review (`intent check`, obligation extraction and per-obligation judgement, advisory-only, off by default) | ACT-DEV, ACT-CI, ACT-MODEL | Yes | `23-intent-fulfilment-review.md` |
+| CAP-IMPACT-001 | Change-impact review (`impact check` and an in-process lane of `review`, deterministic reference traversal, on by default since 2026-08-11) | ACT-DEV, ACT-CI | Yes | `22-change-impact-review.md` |
+| CAP-INTENT-001 | Intent-fulfilment review (`intent check` and an in-process lane of `review`, obligation extraction and per-obligation judgement, advisory-only, on by default since 2026-08-11) | ACT-DEV, ACT-CI, ACT-MODEL | Yes | `23-intent-fulfilment-review.md` |
 | CAP-GATE-001 | Quality gate result | ACT-CI | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-OPS-001 | Run observability | ACT-OPS | Yes | `07-security-privacy-operations.md` |
 | CAP-DRIFT-001 | Drift, gap, and ambiguity checks | ACT-DEV, ACT-CI, ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `07-security-privacy-operations.md` |
@@ -359,14 +359,18 @@ the same spec.
   one), a `proved` refutation result, and severity at or above the configured
   inline threshold.
 - Side effects: writes the artifacts in the run artifact directory only. It
-  reads environment variables and the git remote for detection, performs no
-  network IO, and does not publish comments.
+  reads environment variables and the git remote for detection, and the current
+  bytes of a file a suggestion would edit — for the apply-check and nothing
+  else. No network IO, and it does not publish comments.
 - Final state: each neutral draft carries repository-relative path, new-side
   target range, redacted body, source finding ID, and a structured suggestion
-  when a single safe fix edit maps to the range; renderers add per-platform
-  syntax.
+  when a single safe fix edit maps to the range **and still applies to the file
+  as it is now**; renderers add per-platform syntax. A set that no longer applies,
+  or that could not be checked, is withheld with the body saying which of the two
+  happened.
 - Verification: renderer tests for actionable, artifact-only, refuted,
-  ineligible, old-side, and unsafe multi-edit fix cases.
+  ineligible, old-side, and unsafe multi-edit fix cases, plus both directions of
+  the apply-check.
 
 ### CAP-BASE-001 Baseline Matching
 
@@ -457,14 +461,16 @@ the same spec.
 
 ### CAP-IMPACT-001 Change-Impact Review
 
-- Trigger: `codereviewer impact check` CLI command. Never reached by `review`.
+- Trigger: `codereviewer impact check`, and — since the lane moved in-process —
+  every `review` run with the capability enabled (`src/cli/advisory-lanes.ts`).
 - Contracts: `22-change-impact-review.md`. Deterministic reference traversal only;
   no provider call. Bounded by `changeImpact.maxChangedSymbols`,
   `maxReferenceCandidatesPerSymbol` (what the search collects),
   `maxReferencesPerSymbol` (what the report lists, selected from those), and
   `maxSearchDepth`.
-- Preconditions: `changeImpact.enabled`, off by default. When disabled the
-  command still exits `0` and reports itself disabled rather than erroring.
+- Preconditions: `changeImpact.enabled`, **on by default since 2026-08-11**. When
+  disabled the command still exits `0` and reports itself disabled rather than
+  erroring, and the in-process lane runs nothing at all — not even a git call.
 - Side effects: repository reads only, all through the mediated retriever so
   path containment, the eligibility gate, and redaction apply. A completed run
   also writes `impact-report.md` and `impact-report.json` into an
@@ -475,13 +481,15 @@ the same spec.
 
 ### CAP-INTENT-001 Intent-Fulfilment Review
 
-- Trigger: `codereviewer intent check` CLI command. Never reached by `review`.
+- Trigger: `codereviewer intent check`, and — since the lane moved in-process —
+  every `review` run with the capability enabled (`src/cli/advisory-lanes.ts`).
 - Contracts: `23-intent-fulfilment-review.md`. One extraction call, one judgement
   call per obligation, one explanation call per run. `maxObligations` is the
   primary spend bound and refuses rather than truncating when it binds.
-- Preconditions: `intentFulfilment.enabled`, off by default. When disabled, or
-  enabled with no provider configured, the lane reports that rather than failing:
-  nothing in it can fail the run.
+- Preconditions: `intentFulfilment.enabled`, **on by default since 2026-08-11**.
+  When disabled, or enabled with no provider configured, the lane reports that
+  rather than failing: nothing in it can fail the run. Defaulting it on therefore
+  costs a repository without a model provider nothing but a stated status.
 - Side effects: provider calls, and on a completed run `intent-report.md` and
   `intent-report.json` written into an `<artifactDir>/intent-<uuid>/` run
   directory, which is not entered in the run index. Every non-completed outcome

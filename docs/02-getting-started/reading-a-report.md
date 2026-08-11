@@ -461,7 +461,8 @@ the whole record.
 | --- | --- |
 | `report.json` | Canonical. Everything above, plus candidates, evidence, admission decisions, and coverage detail. |
 | `report.sarif` | SARIF 2.1.0. **Excludes artifact-only findings** so unresolved suspicions cannot become code-scanning alerts. Provider issues appear as run metadata. |
-| `review-comments*.json` | Inline comment drafts, gated by `review.inlineSeverityThreshold` (default `high`) and by overlap with a changed diff hunk. Written only when `reporting.reviewComments.enabled` is true. The engine never publishes them. |
+| `review-comments*.json` | Inline comment drafts, gated by `review.inlineSeverityThreshold` (default `high`) and by overlap with a changed diff hunk. Written when `reporting.reviewComments.enabled` is true — the default. The engine never publishes them. |
+| `impact-report.json`, `intent-report.json` | The change-impact and intent-fulfilment lanes, run in-process alongside the review and written into the same run directory when `changeImpact.enabled` / `intentFulfilment.enabled` are true — both are also the default. Neither is a `review` finding: they are separate, advisory reports that cannot affect admission, severity, or the quality gate. See [What it is](../01-overview/what-it-is.md#two-advisory-commands-alongside-the-review). |
 
 See [Reference](../06-reference/) for the full artifact and schema contracts.
 

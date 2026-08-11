@@ -166,7 +166,8 @@ them, because it holds no network or write permission.
 | Lane | When | Where |
 | --- | --- | --- |
 | Drift check | Preflight, before any provider call; can abort the run | [01](pipeline/01-configuration-and-intake.md) |
-| Change-intent ingestion | Between context assembly and the model stages; off by default | [Optional capabilities](optional-capabilities/README.md) |
+| Change-intent ingestion | Between context assembly and the model stages; **on by default**, and yields nothing without complaint when its providers find no source | [Optional capabilities](optional-capabilities/README.md) |
+| Impact and intent lanes | After the review completes, in the same process; **on by default**, and neither can fail the run | [Optional capabilities](optional-capabilities/README.md) |
 | Fix lane, verification flow | After admission, before the reporters render; off by default | [Optional capabilities](optional-capabilities/README.md) |
 | Evaluation harness | Separate command; runs the same pipeline over a corpus | [Quality](../05-quality/README.md) |
 

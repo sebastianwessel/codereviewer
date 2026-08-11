@@ -497,10 +497,20 @@ rate falling 33.3% → 0.0%. The check cannot improve a citation, only reject it
 ### Consequence for the capability
 
 The false-satisfied route documented below is **open and unmitigated for `evidenced`
-verdicts**, and no design tried so far mitigates it at a price worth paying. `intent
-check` remains **off by default** with a measured, named failure mode — which is a
-better state than a mitigation that costs five good verdicts per bad one caught, or
-one that spends a call per obligation to add 18.1% of the lane's false positives.
+verdicts**, and no design tried so far mitigates it at a price worth paying. The
+lane therefore ships with a measured, named failure mode rather than a mitigation
+— a better state than one that costs five good verdicts per bad one caught, or one
+that spends a call per obligation to add 18.1% of the lane's false positives.
+
+**The default changed on 2026-08-11 and the measurement did not.** The lane is now
+on by default, so this failure mode reaches every reader instead of only the ones
+who opted in. That is a product decision about which questions a review answers,
+made with the route above known and unfixed; what contains it is unchanged and is
+what makes the decision defensible — the lane cannot gate under any configuration,
+its output is advisory, an `evidenced` verdict whose cited lines are not lines the
+change touched is downgraded and counted, and the judgement call returns no free
+text. Nothing here reduces the obligation to fix the route, and nothing about the
+flip is evidence that it is smaller than measured.
 
 **What changed on 2026-08-06, and what did not.** The largest bucket of false
 positives — 33 of 83, obligations satisfied by absence — is addressed at the

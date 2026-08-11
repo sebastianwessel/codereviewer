@@ -253,8 +253,10 @@ Network is off unless a provider-backed review is explicitly configured.
 
 External context source requirements (`11-external-context-ingestion.md`):
 
-- context providers are off by default; enabling them is an explicit
-  configuration choice;
+- context providers are on by default (2026-08-11), and the default pair is
+  filesystem-only under the repository root — so the default posture still opens
+  no network path. A provider that CAN reach the network is a later phase and
+  remains an explicit configuration choice;
 - the current-phase providers (`inbox`, `changed-files`) are filesystem-only
   under the repository root: the pipeline performs any external fetch and owns
   its credentials, so no external credential enters the product;
