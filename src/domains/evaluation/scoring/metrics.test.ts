@@ -363,9 +363,11 @@ describe('eval metrics', () => {
       expected: 2,
       matched: 0
     })
-    // A mechanism with no expected finding: divide-by-zero -> 0 with count 0, not
-    // a misleading 100%.
-    expect(metrics.securityRecallByMechanism.ssrf).toBe(0)
+    // A mechanism with no expected finding is NULL, not 0 and not the misleading
+    // 100% that recall's "nothing expected" convention would give. Note the
+    // contrast with `injection` above, which is a real 0 over a real denominator
+    // of 2 -- that is the distinction the null exists to preserve.
+    expect(metrics.securityRecallByMechanism.ssrf).toBeNull()
     expect(metrics.securityMechanismCounts.ssrf).toEqual({
       expected: 0,
       matched: 0
@@ -376,7 +378,7 @@ describe('eval metrics', () => {
     expect(metrics.securityRecallByContextDepth['cross-file']).toBe(0)
     expect(
       metrics.securityRecallByContextDepth['analyzer-path-dependent']
-    ).toBe(0)
+    ).toBeNull()
     expect(
       metrics.securityContextDepthCounts['analyzer-path-dependent']
     ).toEqual({ expected: 0, matched: 0 })
@@ -389,16 +391,26 @@ describe('eval metrics', () => {
     expect(metrics.securityHardCount).toBe(3)
   })
 
-  test('reports zero security recall with zero counts when no security finding was expected', () => {
+  // A corpus that tested no security defect and a reviewer that missed every one
+  // are different facts, and until 2026-08-11 they printed the same 0. This is the
+  // common case, not an edge: the primary real-repository corpus carries no
+  // security expectation at all, so 23 archived reports publish
+  // `securityObviousRecall: 0` for a question nobody asked.
+  test('reports security recall as null when no security finding was expected', () => {
     const metrics = calculateEvalMetrics([caseResult()])
 
-    expect(metrics.securityObviousRecall).toBe(0)
-    expect(metrics.securityHardRecall).toBe(0)
+    expect(metrics.securityObviousRecall).toBeNull()
+    expect(metrics.securityHardRecall).toBeNull()
     expect(metrics.securityObviousCount).toBe(0)
     expect(metrics.securityHardCount).toBe(0)
     expect(
       Object.values(metrics.securityRecallByMechanism).every(
-        (rate) => rate === 0
+        (rate) => rate === null
+      )
+    ).toBe(true)
+    expect(
+      Object.values(metrics.securityRecallByContextDepth).every(
+        (rate) => rate === null
       )
     ).toBe(true)
     expect(
@@ -406,6 +418,21 @@ describe('eval metrics', () => {
         (counts) => counts.expected === 0 && counts.matched === 0
       )
     ).toBe(true)
+  })
+
+  // The other half of the pair, and the one that makes the first non-vacuous: a
+  // real 0 over a real denominator must survive. If nulling had swallowed this,
+  // the fix would have traded a false failure for a hidden one.
+  test('keeps a real zero when a security defect was expected and missed', () => {
+    const counts = emptySecurityMechanismCounts()
+    counts.authorization = { expected: 3, matched: 0 }
+    const metrics = calculateEvalMetrics([
+      caseResult({ securityMechanismCounts: counts })
+    ])
+
+    expect(metrics.securityRecallByMechanism.authorization).toBe(0)
+    expect(metrics.securityMechanismCounts.authorization.expected).toBe(3)
+    expect(metrics.securityRecallByMechanism.xss).toBeNull()
   })
 
   test('aggregates security mechanism denominators across cases', () => {

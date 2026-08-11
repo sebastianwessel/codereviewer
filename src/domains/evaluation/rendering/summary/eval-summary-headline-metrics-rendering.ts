@@ -79,10 +79,10 @@ const formatPlausibilityJudgeAgreement = (report: EvalReport): string =>
 // lane that never ran.
 //
 // The denominator's NOUN is kept per row -- judged, false positives, real,
-// attempted -- rather than routing these through `formatRateOverCount`, whose
-// fixed "checked" would erase which of four different populations each rate is
-// over. The n/a wording matches that helper's so a reader learns one phrase.
-const formatFixLaneRate = (
+// attempted, expected -- rather than routing these through `formatRateOverCount`,
+// whose fixed "checked" would erase which population each rate is over. The n/a
+// wording matches that helper's so a reader learns one phrase.
+const formatRateOverNamedCount = (
   value: number | null,
   denominatorCount: number,
   denominatorNoun: string
@@ -208,8 +208,22 @@ export const appendEvalSummaryMetrics = (
       `| Nit recall | ${formatPercent(report.metrics.nitRecall)} |`,
       `| In-diff recall | ${formatDiffScopeRecall(report.metrics, 'in-diff')} |`,
       `| Out-of-diff recall | ${formatDiffScopeRecall(report.metrics, 'out-of-diff')} |`,
-      `| Security obvious recall | ${formatPercent(report.metrics.securityObviousRecall)} (${report.metrics.securityObviousCount} expected) |`,
-      `| Security hard recall | ${formatPercent(report.metrics.securityHardRecall)} (${report.metrics.securityHardCount} expected) |`,
+      // `n/a` when the corpus expected no security finding, for the reason
+      // diff-scope recall above is: this project's primary corpus carries no
+      // security expectation at all, so these two printed a flat 0.0% that read as
+      // the reviewer having missed every security defect. The denominator's noun
+      // stays "expected" -- it counts expected findings, not checks -- following
+      // the same rule as the fix-lane rates.
+      `| Security obvious recall | ${formatRateOverNamedCount(
+        report.metrics.securityObviousRecall,
+        report.metrics.securityObviousCount,
+        'expected'
+      )} |`,
+      `| Security hard recall | ${formatRateOverNamedCount(
+        report.metrics.securityHardRecall,
+        report.metrics.securityHardCount,
+        'expected'
+      )} |`,
       `| Precision (raw to adjusted bracket) | ${formatPrecisionBracket(
         evalReportPrecisionBracket(report)
       )} |`,
@@ -252,10 +266,10 @@ export const appendEvalSummaryMetrics = (
       `| Rejected candidates by severity | ${formatCountRecord(report.metrics.rejectionSeverityCounts)} |`,
       `| Refutation false negatives (upper bound) | ${report.metrics.refutationFalseNegativeCount} |`,
       `| Refutation false positives | ${report.metrics.refutationFalsePositiveCount} |`,
-      `| Fix judgment accuracy | ${formatFixLaneRate(report.metrics.fixJudgmentAccuracy, report.metrics.fixJudgedFindingCount, 'judged')} |`,
-      `| Fix false-positive detection rate | ${formatFixLaneRate(report.metrics.fixFalsePositiveDetectionRate, report.metrics.fixGroundTruthFalsePositiveCount, 'false positives')} |`,
-      `| Fix produce rate | ${formatFixLaneRate(report.metrics.fixProduceRate, report.metrics.fixRealFindingCount, 'real')} |`,
-      `| Fix apply failure rate | ${formatFixLaneRate(report.metrics.fixApplyFailureRate, report.metrics.fixAttemptedCount, 'attempted')} |`,
+      `| Fix judgment accuracy | ${formatRateOverNamedCount(report.metrics.fixJudgmentAccuracy, report.metrics.fixJudgedFindingCount, 'judged')} |`,
+      `| Fix false-positive detection rate | ${formatRateOverNamedCount(report.metrics.fixFalsePositiveDetectionRate, report.metrics.fixGroundTruthFalsePositiveCount, 'false positives')} |`,
+      `| Fix produce rate | ${formatRateOverNamedCount(report.metrics.fixProduceRate, report.metrics.fixRealFindingCount, 'real')} |`,
+      `| Fix apply failure rate | ${formatRateOverNamedCount(report.metrics.fixApplyFailureRate, report.metrics.fixAttemptedCount, 'attempted')} |`,
       `| Duplicate findings | ${report.metrics.duplicateFindingCount} |`,
       `| No-finding-zone hits | ${report.metrics.noFindingZoneFalsePositiveCount} |`,
       `| Actionable rate | ${formatPercent(report.metrics.actionableRate)} |`,

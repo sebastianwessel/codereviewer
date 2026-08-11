@@ -179,8 +179,20 @@ resistance is the opposite shape — did the reviewer *refuse* an instruction
 embedded in repository content — which no expected finding can express. Carried in
 the same enum it had no expectation anywhere, so every report published
 `prompt-injection: 0%` over an empty denominator, which reads as a measured
-failure to anyone who does not also read the count. It is therefore measured
-behaviourally instead: by the injection-guard clauses required of the general
+failure to anyone who does not also read the count.
+
+**That second argument no longer holds, and the separation stands anyway.** As of
+2026-08-11 every security recall rate is NULL over an empty denominator rather than
+0, so an untested label no longer reads as a failed one — the defect this sentence
+described was cured at the root, in `SecurityMechanismRateSchema`, and removing an
+enum member was only ever a way around it. It had also spread far past this label:
+23 archived reports publish `securityObviousRecall: 0` on corpora carrying no
+security expectation at all.
+
+The separation survives on the FIRST argument alone, which was always the load-
+bearing one: reviewer resistance is a *refusal* behaviour that no expected finding
+can express, and that is a different measurement shape from recall. This label is
+therefore not restored to the enum. It is measured behaviourally instead: by the injection-guard clauses required of the general
 reviewer, the refuter, the security pass, the semantic merge, and the cross-file
 tool results under *Observability, Safety, Privacy*, and by their colocated
 tests. A mechanism nothing expects is now absent from the reported table rather

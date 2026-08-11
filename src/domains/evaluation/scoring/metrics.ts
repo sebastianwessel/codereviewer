@@ -115,17 +115,31 @@ const SecurityFindingCountsSchema = z.strictObject({
   matched: z.int().min(0)
 })
 
-// Security recall records use an empty value of 0, not the 1 recall/recallByTier
-// use for "nothing expected": a mechanism with no expected findings has NO
-// evidence of recall, and reporting 100% would be a misleading perfect. The
-// paired count records (denominators) make each rate interpretable so a
-// small-sample mechanism is never over-read.
+// NULLABLE, for the same reason `DiffScopeRateSchema` below is.
+//
+// This comment used to argue that the empty value is 0 rather than the 1 that
+// `recall`/`recallByTier` use for "nothing expected" — a mechanism with no expected
+// finding has no evidence of recall, so 100% would be a misleading perfect. That is
+// right about 1 and wrong about 0, and it framed the choice as though those were
+// the only two: a mechanism the corpus never tested reported the same 0 as one the
+// reviewer genuinely missed every time.
+//
+// It was not hypothetical. 23 archived reports publish `securityObviousRecall: 0`
+// on corpora carrying no security expectation at all. Spec 15 diagnosed exactly
+// this for the `prompt-injection` label — "every report published
+// `prompt-injection: 0%` over an empty denominator, which reads as a measured
+// failure" — and removed that enum member, which cured the one symptom and left
+// the disease.
+//
+// Null means "nobody measured this", as it does for `lineAccuracy` and diff scope.
+// The paired count records carry the denominators, so a small-sample mechanism is
+// still never over-read.
 const SecurityMechanismRateSchema = z
-  .record(SecurityMechanismSchema, RateSchema)
+  .record(SecurityMechanismSchema, RateSchema.nullable())
   .default(() =>
     Object.fromEntries(
-      allSecurityMechanisms.map((mechanism) => [mechanism, 0])
-    ) as Record<SecurityMechanism, number>
+      allSecurityMechanisms.map((mechanism) => [mechanism, null])
+    ) as Record<SecurityMechanism, number | null>
   )
 
 const SecurityMechanismCountsSchema = z
@@ -169,12 +183,15 @@ const SecurityMechanismAttributionCountsSchema = z
   })
   .default({ expectation: 0, cwe: 0, unknown: 0 })
 
+// Nullable for the same reason as `SecurityMechanismRateSchema` above: a depth the
+// corpus never tested and a depth the reviewer missed every time are different
+// facts and must not print the same number.
 const SecurityContextDepthRateSchema = z
-  .record(SecurityContextDepthSchema, RateSchema)
+  .record(SecurityContextDepthSchema, RateSchema.nullable())
   .default(() =>
     Object.fromEntries(
-      allSecurityContextDepths.map((depth) => [depth, 0])
-    ) as Record<SecurityContextDepth, number>
+      allSecurityContextDepths.map((depth) => [depth, null])
+    ) as Record<SecurityContextDepth, number | null>
   )
 
 const SecurityContextDepthCountsSchema = z
@@ -424,7 +441,7 @@ export const EvalMetricsSchema = z.strictObject({
   // population of ADMITTED findings rather than of expectations.
   //
   // securityRecallByMechanism: matched / expected security findings, per
-  // mechanism. Empty value 0 (see SecurityMechanismRateSchema).
+  // mechanism. NULL where the corpus expected none (see SecurityMechanismRateSchema).
   securityRecallByMechanism: SecurityMechanismRateSchema,
   // Per-mechanism {expected, matched} denominators so a small sample is not
   // over-read and the report can show matched/expected.
@@ -436,9 +453,16 @@ export const EvalMetricsSchema = z.strictObject({
   securityContextDepthCounts: SecurityContextDepthCountsSchema,
   // Obvious-vs-hard split, tracked separately so aced trivial (local) sinks
   // never mask the hard-class gap. Obvious = `local` context depth; hard = every
-  // other depth. The counts are the expected denominators. Empty value 0.
-  securityObviousRecall: RateSchema.default(0),
-  securityHardRecall: RateSchema.default(0),
+  // other depth. The counts are the expected denominators, and the rates are NULL
+  // when those denominators are empty — a corpus with no security expectation is
+  // the common case for this project's primary corpus, and it used to publish a
+  // flat 0 that read as a measured failure of the reviewer.
+  // `.default(null)` rather than no default, following `DiffScopeRateSchema`: a
+  // report that omits the field never measured it, which is the same claim null
+  // makes. An archived report that recorded a floored 0 still parses as 0 -- the
+  // metrics-version boundary is what refuses to pool it, not this schema.
+  securityObviousRecall: RateSchema.nullable().default(null),
+  securityHardRecall: RateSchema.nullable().default(null),
   securityObviousCount: z.int().min(0).default(0),
   securityHardCount: z.int().min(0).default(0),
   // Per-mechanism ADJUSTED PRECISION (spec 15 *Acceptance*). The denominator
@@ -814,9 +838,9 @@ export const calculateEvalMetrics = (
   const securityRecallByMechanism = Object.fromEntries(
     securityMechanismTotals.map(({ mechanism, expected, matched }) => [
       mechanism,
-      ratio(matched, expected, 0)
+      rateOrNull(matched, expected)
     ])
-  ) as Record<SecurityMechanism, number>
+  ) as Record<SecurityMechanism, number | null>
   const securityMechanismCounts = Object.fromEntries(
     securityMechanismTotals.map(({ mechanism, expected, matched }) => [
       mechanism,
@@ -839,9 +863,9 @@ export const calculateEvalMetrics = (
   const securityRecallByContextDepth = Object.fromEntries(
     securityContextDepthTotals.map(({ depth, expected, matched }) => [
       depth,
-      ratio(matched, expected, 0)
+      rateOrNull(matched, expected)
     ])
-  ) as Record<SecurityContextDepth, number>
+  ) as Record<SecurityContextDepth, number | null>
   const securityContextDepthCounts = Object.fromEntries(
     securityContextDepthTotals.map(({ depth, expected, matched }) => [
       depth,
@@ -858,15 +882,13 @@ export const calculateEvalMetrics = (
     obviousDepthTotals.map((entry) => entry.expected)
   )
   const securityHardExpected = sum(hardDepthTotals.map((entry) => entry.expected))
-  const securityObviousRecall = ratio(
+  const securityObviousRecall = rateOrNull(
     sum(obviousDepthTotals.map((entry) => entry.matched)),
-    securityObviousExpected,
-    0
+    securityObviousExpected
   )
-  const securityHardRecall = ratio(
+  const securityHardRecall = rateOrNull(
     sum(hardDepthTotals.map((entry) => entry.matched)),
-    securityHardExpected,
-    0
+    securityHardExpected
   )
   // Per-mechanism adjusted precision (spec 15 *Acceptance*). Aggregate the
   // per-case admitted-finding tallies, then publish a rate ONLY where it is

@@ -57,8 +57,13 @@ export const ComparisonMetricsSchema = z.object({
   genuineFalsePositiveCount: optionalInteger,
   unlistedRealFindingCount: optionalInteger,
   plausibilityJudgeAgreement: optionalNumber,
-  securityObviousRecall: optionalNumber,
-  securityHardRecall: optionalNumber,
+  // Nullable since 2026-08-11, for the reason diff-scope recall already was: this
+  // project's primary corpus carries no security expectation, so a floored 0 read
+  // as the reviewer having missed every security defect. A report archived before
+  // that records a number over an empty denominator, and it is the wrong number;
+  // the scoring-rule history is what refuses the delta, not this view.
+  securityObviousRecall: optionalNullableNumber,
+  securityHardRecall: optionalNullableNumber,
   providerErrorRate: optionalNumber,
   providerIssueRate: optionalNumber,
   providerIssueCount: optionalInteger,

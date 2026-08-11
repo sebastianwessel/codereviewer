@@ -133,6 +133,16 @@ export const EVAL_METRICS_VERSION_HISTORY: readonly MetricsVersionEntry<EvalComp
         'fixApplyFailureRate'
       ],
       note: 'The four fix-lane rates stopped emitting a confident 0 over an empty denominator and now emit `null`. This IS a reported-value change and not merely a shape change: `fix.enabled` is off by default and has never been switched on with a real corpus, so EVERY archived report emits 0 for all four, and each of those zeros is the value the metric would also carry if the lane had run and failed completely. No archived 0 can be told apart from a measurement, so none of them is comparable against a value produced after this boundary. Nothing else moves: the four denominators (`fixJudgedFindingCount`, `fixGroundTruthFalsePositiveCount`, `fixRealFindingCount`, `fixAttemptedCount`) are counts and are unchanged, and no other metric reads a fix-lane rate. The provenance gaining a `capabilities` record landed with this entry and affects no metric at all -- it records WHICH capabilities a run had enabled, which is a fact about the run rather than a quantity computed from review output -- so it is deliberately absent from `affects` rather than declared `all`.'
+    },
+    {
+      id: '2026-08-11.security-recall-null-on-empty-denominator',
+      affects: [
+        'securityRecallByMechanism',
+        'securityRecallByContextDepth',
+        'securityObviousRecall',
+        'securityHardRecall'
+      ],
+      note: 'Security recall stopped emitting 0 over an empty denominator and now emits `null`, matching diff-scope recall and the fix-lane rates. This IS a reported-value change: 23 archived reports publish `securityObviousRecall: 0` on corpora that carry NO security expectation at all, and that 0 is the same value the metric would carry if the reviewer had missed every security defect it was tested on -- so no archived 0 can be told apart from a measurement and none is comparable across this boundary. A real 0 over a real denominator is unaffected and still reported as 0; only the empty-denominator case moves. The paired count records are counts, are unchanged, and are what make each null interpretable. Spec 15 had already diagnosed this exact defect for the `prompt-injection` label and removed that enum member to escape it; the removal stands on its own separate and still-correct argument, but the reason it cited is fixed here at the root.'
     }
   ]
 

@@ -413,8 +413,8 @@ export const appendEvalComparisonMetricDeltas = (
         'plausibilityJudgeAgreement',
         percentRow
       ),
-      scalar('Security obvious recall', 'securityObviousRecall', percentRow),
-      scalar('Security hard recall', 'securityHardRecall', percentRow),
+      nullableRate('Security obvious recall', 'securityObviousRecall'),
+      nullableRate('Security hard recall', 'securityHardRecall'),
       scalar('Provider error rate', 'providerErrorRate', percentRow),
       scalar('Provider issue rate', 'providerIssueRate', percentRow),
       scalar('Provider issue cases', 'providerIssueCount', countRow),

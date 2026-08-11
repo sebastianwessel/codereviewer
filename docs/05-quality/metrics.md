@@ -114,9 +114,17 @@ A ratio with a zero denominator is undefined. The code substitutes a fixed
 | Family | Empty value | Why |
 | --- | --- | --- |
 | `parseValidity`, `recall`, `recallByTier`, `productRecall`, `nitRecall`, `precision`, `adjustedPrecision`, severity-weighted rates, `lineAccuracy`, `severityAccuracy`, `artifactOnlyRecall`, `artifactOnlyPrecision` | `1` | "Nothing was expected, so nothing was missed." |
-| `securityRecallByMechanism`, `securityRecallByContextDepth`, `securityObviousRecall`, `securityHardRecall` | `0` | A mechanism with no expected findings has **no evidence** of recall; reporting 100% would be a misleading perfect. |
 | `providerErrorRate`, `providerIssueRate`, `incompleteCoverageRate`, `contextMutationRate`, `commentsPerDiffHunk`, `commentsPerKloc` | `0` | Absence of a problem. |
-| `lineAccuracy`, `linePlacementRate`, `recallByDiffScope`, `securityAdjustedPrecisionByMechanism`, all `fix*` rates | `null` | "Nobody measured this." A number here would be indistinguishable from a measured one. |
+| `lineAccuracy`, `linePlacementRate`, `recallByDiffScope`, `securityAdjustedPrecisionByMechanism`, all `fix*` rates, and **all security recall rates** (`securityRecallByMechanism`, `securityRecallByContextDepth`, `securityObviousRecall`, `securityHardRecall`) | `null` | "Nobody measured this." A number here would be indistinguishable from a measured one. |
+
+The security recall rates moved into that last family on 2026-08-11. They used to
+report `0`, on the argument that a mechanism with no expected finding has no
+evidence of recall and that `1` would be a misleading perfect. The first half was
+right and the second was a false choice: `0` is the value the metric also carries
+when the reviewer was tested and missed everything. It was not theoretical — 23
+archived reports publish `securityObviousRecall: 0` on corpora with no security
+expectation at all. A real `0` over a real denominator is still reported as `0`;
+only the empty case moved.
 
 Neither `1` nor `0` from an empty denominator is an achievement. Every rate that
 can be empty ships with its denominator as a separate count field — read them
