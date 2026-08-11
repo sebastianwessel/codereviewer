@@ -69,6 +69,95 @@ describe('CodeReviewerConfigSchema', () => {
     })
   })
 
+  // THE PRODUCT IS THE DEFAULT, as of 2026-08-11. A reviewer that reads what a
+  // change is FOR, finds defects in it, says what it might break, and answers
+  // whether the change did what it set out to do — with a note on each defect's own
+  // line — used to require a configuration file, and appeared only when a run went
+  // through `scripts/github/`. Four booleans were the entire gap.
+  //
+  // Asserted from `{}` rather than from a fixture because `{}` is the zero-config
+  // case a first-time user actually gets.
+  test('an empty config yields the whole default review experience', () => {
+    const parsed = CodeReviewerConfigSchema.parse({})
+
+    // What the change is FOR.
+    expect(parsed.contextSources.enabled).toBe(true)
+    // What it might break.
+    expect(parsed.changeImpact.enabled).toBe(true)
+    // Whether it did what it set out to do.
+    expect(parsed.intentFulfilment.enabled).toBe(true)
+    // A note on the line each defect is on.
+    expect(parsed.reporting.reviewComments.enabled).toBe(true)
+  })
+
+  // `contextSources.enabled: true` over an empty provider list would be a switch
+  // that is on and does nothing — the shape `security.signals` above records this
+  // file having shipped once. So the default carries the provider set the GitHub
+  // pipeline used to spell out, and each entry must arrive FULLY DEFAULTED: a
+  // `.default([...])` literal would be returned verbatim without parsing, leaving
+  // `dir`, `include` and both caps undefined while the type claimed otherwise.
+  test('the default provider set is present and fully parsed, not a verbatim literal', () => {
+    const parsed = CodeReviewerConfigSchema.parse({})
+
+    expect(parsed.contextSources.providers).toEqual([
+      {
+        type: 'inbox',
+        dir: '.codereviewer/context',
+        maxFiles: 20,
+        maxFileBytes: 64_000
+      },
+      {
+        type: 'changed-files',
+        include: ['**/*.md'],
+        maxFiles: 20,
+        maxFileBytes: 64_000
+      }
+    ])
+
+    // An explicit list replaces the default outright rather than merging with it,
+    // so an operator who names one provider gets one provider.
+    expect(
+      CodeReviewerConfigSchema.parse({
+        contextSources: { providers: [{ type: 'inbox', dir: 'context' }] }
+      }).contextSources.providers
+    ).toEqual([
+      { type: 'inbox', dir: 'context', maxFiles: 20, maxFileBytes: 64_000 }
+    ])
+  })
+
+  // THE GUARD AGAINST A SILENT FLIP. Every capability below is off for a reason
+  // that was written down — a measurement that failed, a cost that was never
+  // justified, or a dependency that does not exist — and this project's standing
+  // rule is that a capability measured and rejected stays off however much the
+  // product would prefer it on. Four defaults were promoted on 2026-08-11 on
+  // product grounds; naming these here is what makes a fifth promotion a visible
+  // test change rather than a one-character edit nobody reviews.
+  test('an empty config leaves every measured-off capability off, by name', () => {
+    const parsed = CodeReviewerConfigSchema.parse({})
+
+    // Measured null (2026-08-10): recall 64.9% -> 61.7%, sign test 3/3, p = 1.0.
+    expect(parsed.review.signalFacts.enabled).toBe(false)
+    // Measured and rejected (2026-08-09): 0 of 7 against a pre-registered 40% bar.
+    expect(parsed.changeImpact.adjudication.enabled).toBe(false)
+    // Mixed and unproven at n=1, for +61% cost; the security lift it exists for
+    // was not shown.
+    expect(parsed.security.dedicatedPass.enabled).toBe(false)
+    // A different product (external claims), and `eval run` cannot score it.
+    expect(parsed.verification.enabled).toBe(false)
+    // Unmeasured, and one agent run per eligible finding.
+    expect(parsed.fix.enabled).toBe(false)
+    // Unmeasured, and needs a comment-event trigger and write permission that no
+    // default in the schema can grant.
+    expect(parsed.reviewConversation.enabled).toBe(false)
+    // Operator content that does not exist until somebody writes it.
+    expect(parsed.skills.enabled).toBe(false)
+    // Emits no spans; enabling it exports nothing.
+    expect(parsed.observability.openTelemetry.enabled).toBe(false)
+    // Off because it ships no artifact to read, and the schema rejects the block
+    // being enabled without one.
+    expect(parsed.security.signals.enabled).toBe(false)
+  })
+
   test('cross-file retrieval defaults to ON, with no proactive per-read cap', () => {
     const defaults = CodeReviewerConfigSchema.parse({})
     // Enabled: two runs put it ahead on recall, false alarms, cost and reliability.
@@ -264,10 +353,14 @@ describe('CodeReviewerConfigSchema', () => {
     expect(enabled.verification.maxMatches).toBe(20)
   })
 
-  test('change impact is disabled by default with bounded discovery limits', () => {
-    const disabled = CodeReviewerConfigSchema.parse({})
-    expect(disabled.changeImpact).toEqual({
-      enabled: false,
+  // ON since 2026-08-11, with its ADJUDICATION still off — which is the pairing
+  // worth pinning. The lane on and adjudication off is the only combination that
+  // makes no provider call at all, so this assertion is what says the promoted
+  // default is the free one.
+  test('change impact is enabled by default with bounded discovery limits and no spend', () => {
+    const defaults = CodeReviewerConfigSchema.parse({})
+    expect(defaults.changeImpact).toEqual({
+      enabled: true,
       maxChangedSymbols: 50,
       maxReferencesPerSymbol: 25,
       maxReferenceCandidatesPerSymbol: 500,
@@ -275,15 +368,14 @@ describe('CodeReviewerConfigSchema', () => {
       adjudication: { enabled: false, maxCalls: 40 }
     })
 
-    const enabled = CodeReviewerConfigSchema.parse({
+    const tuned = CodeReviewerConfigSchema.parse({
       changeImpact: {
-        enabled: true,
         maxChangedSymbols: 10,
         maxReferencesPerSymbol: 5,
         maxSearchDepth: 3
       }
     })
-    expect(enabled.changeImpact).toEqual({
+    expect(tuned.changeImpact).toEqual({
       enabled: true,
       maxChangedSymbols: 10,
       maxReferencesPerSymbol: 5,
@@ -291,6 +383,13 @@ describe('CodeReviewerConfigSchema', () => {
       maxSearchDepth: 3,
       adjudication: { enabled: false, maxCalls: 40 }
     })
+
+    // The opt-out is the half that matters to an operator who wants the defect
+    // finder alone, so it is asserted rather than assumed.
+    expect(
+      CodeReviewerConfigSchema.parse({ changeImpact: { enabled: false } })
+        .changeImpact.enabled
+    ).toBe(false)
   })
 
   // The two reference bounds answer different questions and must stay
@@ -320,11 +419,12 @@ describe('CodeReviewerConfigSchema', () => {
     ).toThrow()
   })
 
-  // ADJUDICATION IS SEPARATELY OFF, and that is the point of the second switch.
-  // Everything else `impact check` does is deterministic and free; adjudication is
-  // the only part that can reach a provider, so enabling the command must not
-  // silently start billing an operator who asked for the reference list.
-  test('change impact adjudication stays off when the command is turned on', () => {
+  // ADJUDICATION IS SEPARATELY OFF, and that is the point of the second switch —
+  // now more so than before, because the lane hosting it is on by default. It was
+  // MEASURED AND REJECTED on 2026-08-09 (0 of 7 pairs against a pre-registered 40%
+  // bar), and it is also the only part of the lane that can reach a provider, so
+  // promoting the lane must not silently start billing an operator.
+  test('change impact adjudication stays off when the lane is on', () => {
     const enabled = CodeReviewerConfigSchema.parse({
       changeImpact: { enabled: true }
     })
@@ -377,29 +477,35 @@ describe('CodeReviewerConfigSchema', () => {
   // exceed the old maxChangeLines of 400. Every one of these limits degrades the
   // answer SILENTLY when it binds, so a value real input reaches makes the
   // capability report "nothing left" because it could not see.
-  test('intent fulfilment is disabled by default with runaway-guard limits', () => {
-    const disabled = CodeReviewerConfigSchema.parse({})
-    expect(disabled.intentFulfilment).toEqual({
-      enabled: false,
+  test('intent fulfilment is enabled by default with runaway-guard limits', () => {
+    const defaults = CodeReviewerConfigSchema.parse({})
+    expect(defaults.intentFulfilment).toEqual({
+      enabled: true,
       maxObligations: 100,
       maxIntentBytes: 100_000,
       maxChangeLines: 5000
     })
 
-    const enabled = CodeReviewerConfigSchema.parse({
+    const tuned = CodeReviewerConfigSchema.parse({
       intentFulfilment: {
-        enabled: true,
         maxObligations: 5,
         maxIntentBytes: 1_000,
         maxChangeLines: 50
       }
     })
-    expect(enabled.intentFulfilment).toEqual({
+    expect(tuned.intentFulfilment).toEqual({
       enabled: true,
       maxObligations: 5,
       maxIntentBytes: 1_000,
       maxChangeLines: 50
     })
+
+    // This is the one promoted default that SPENDS, so the opt-out an operator
+    // reaches for when they want the defect finder alone is pinned.
+    expect(
+      CodeReviewerConfigSchema.parse({ intentFulfilment: { enabled: false } })
+        .intentFulfilment.enabled
+    ).toBe(false)
   })
 
   // Spec 23 says the command MUST NOT be able to fail a pipeline on fulfilment

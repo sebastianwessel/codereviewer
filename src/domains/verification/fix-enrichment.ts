@@ -19,9 +19,9 @@ import {
 } from '../../shared/contracts/findings/finding.schema.js'
 import type { Verdict } from '../../shared/contracts/verification/verification.schema.js'
 import { createRedactor } from '../../shared/redaction/redactor.js'
+import { applyFixEdits } from '../../shared/text/apply-fix-edits.js'
 import { truncateToFieldBound } from '../../shared/text/truncate.js'
 import { currentFindingClaimId } from './current-findings-provider.js'
-import { applyFixEdits } from './apply-check.js'
 import type {
   ApplyCheckOutcome,
   ClaimObservation,

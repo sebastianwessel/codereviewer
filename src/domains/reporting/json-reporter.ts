@@ -11,7 +11,10 @@ import type {
 import { redactText } from '../../shared/redaction/redactor.js'
 import type { JsonValue } from '../../shared/json/json-value.js'
 import { createReportArtifact, validateReviewReport } from './reporting-utils.js'
-import { buildReviewCommentDrafts } from './review-comments.js'
+import {
+  buildReviewCommentDrafts,
+  type ReviewCommentFileReader
+} from './review-comments.js'
 import { renderReviewComments } from './review-comment-renderers.js'
 import { renderMarkdownReport } from './markdown-reporter.js'
 import { renderSarifReport, type SarifRenderOptions } from './sarif-reporter.js'
@@ -74,7 +77,14 @@ export const writeReportingArtifacts = async (
     readonly sarif?: SarifRenderOptions
     // Presence enables review-comment rendering; `platform` is already resolved
     // (never `auto`) by the caller's detection.
-    readonly reviewComments?: { readonly platform: PlatformTarget }
+    //
+    // `readCurrentFile` is required rather than optional so that no caller can
+    // reach the suggestion apply-check by accident. Supplying `undefined` means
+    // "these bytes are not available here", and the drafts fail closed on it.
+    readonly reviewComments?: {
+      readonly platform: PlatformTarget
+      readonly readCurrentFile: ReviewCommentFileReader | undefined
+    }
     // Spec 13 "Observability And Errors": the drafting step reports how many drafts
     // and how many suggestions it produced. The counts exist only here, where the
     // drafts are built, and building them twice to count them elsewhere would let
@@ -111,7 +121,9 @@ export const writeReportingArtifacts = async (
   }
 
   if (input.reviewComments !== undefined) {
-    const drafts = buildReviewCommentDrafts(report)
+    const drafts = await buildReviewCommentDrafts(report, {
+      readCurrentFile: input.reviewComments.readCurrentFile
+    })
     input.onReviewComments?.({
       draftCount: drafts.length,
       suggestionCount: drafts.filter((draft) => draft.suggestion !== undefined)

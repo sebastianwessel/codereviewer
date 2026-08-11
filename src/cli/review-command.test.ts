@@ -16,6 +16,23 @@ const createTempDir = async (): Promise<string> => {
   return directory
 }
 
+// The three capabilities promoted to on by default on 2026-08-11, switched back off
+// for tests that assert an EXACT warning list.
+//
+// These tests run over a scratch directory that is not a git repository, so all
+// three have something true and unhelpful to say about it: no inbox and no changed
+// markdown means no change intent, and no `.git` means neither advisory lane can
+// resolve a diff to work from. Each warning is correct and each is noise relative to
+// what the test is about — a context budget, a file cap, an empty verification
+// report. Turning them off keeps every one of those assertions about its own
+// subject; `context-ingestion.test.ts` is where the defaulted providers' own
+// behaviour on absent inputs is pinned.
+const promotedDefaultsOff = {
+  contextSources: { enabled: false },
+  changeImpact: { enabled: false },
+  intentFulfilment: { enabled: false }
+} as const
+
 // A resolvable model provider whose model methods are never expected to run in
 // these tests: the general review keeps AI review disabled and verification
 // gathers no claims (its only claim provider fails), so no request is issued.
@@ -257,6 +274,7 @@ describe('review CLI', () => {
       await writeFile(
         join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
+          ...promotedDefaultsOff,
           review: {
             contextMaxBytes: 10000
           }
@@ -312,6 +330,7 @@ describe('review CLI', () => {
       await writeFile(
         join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
+          ...promotedDefaultsOff,
           review: {
             maxFileBytes: 2000000
           }
@@ -461,6 +480,7 @@ describe('review CLI', () => {
       await writeFile(
         join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
+          ...promotedDefaultsOff,
           verification: {
             enabled: true,
             providers: [

@@ -1,13 +1,19 @@
-// Deterministic apply-check for the fix lane (spec 12 "Deterministic Apply-Check").
-// Before a produced `fixEdits` set enriches a finding's `fixProposal`, CODE (never
-// the model) re-applies it to the current file bytes. An edit that does not apply
-// cleanly — a line range out of bounds, or edits that overlap — makes the whole
-// set not apply, and the fix is recorded as not produced. This rejects
-// hallucinated line numbers and stale-location edits without a model call. The
-// flow NEVER writes the result to the working tree; the check only proves the
-// edits are coherent.
+// The deterministic apply-check: CODE (never the model) re-applies a proposed
+// `fixEdits` set to the current file bytes. An edit that does not apply cleanly —
+// a line range out of bounds, or edits that overlap — makes the whole set not
+// apply. This rejects hallucinated line numbers and stale-location edits without a
+// model call, and it NEVER writes to the working tree: it only proves the edits
+// are coherent against the file as it is now.
+//
+// Shared, not owned by one domain, because two of them ask the same question of
+// the same bytes and must get the same answer. The fix lane asks it before an
+// agent-produced edit set may enrich a finding's `fixProposal` (spec 12
+// "Deterministic Apply-Check"). Reporting asks it again before a review comment
+// may offer that edit set as a one-click apply — the fix lane is optional, and a
+// suggestion block a human can apply in one click must be checked whether or not
+// the lane ran.
 
-import type { FixEdit } from '../../shared/contracts/findings/finding.schema.js'
+import type { FixEdit } from '../contracts/findings/finding.schema.js'
 
 // Splits into lines preserving the ability to rejoin; line ranges in a `FixEdit`
 // are 1-based and inclusive over these lines.

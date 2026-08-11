@@ -18,7 +18,6 @@ export {
   eligibleCurrentFindings,
   type CurrentFindingsProviderConfig
 } from './current-findings-provider.js'
-export { applyFixEdits, type ApplyCheckResult } from './apply-check.js'
 export {
   enrichFindingsWithFixes,
   type CurrentFileReader,

@@ -1,8 +1,14 @@
 // Platform-neutral review-comment drafts (spec 13). This layer owns every safety
 // guard once — inline eligibility, new-side only, redaction, Markdown escaping,
-// and suggestion eligibility — so the per-platform renderers stay pure and
-// inherit the guards. The neutral draft carries a STRUCTURED suggestion (the
-// replacement text + target range), never a pre-rendered fenced block.
+// suggestion eligibility, and the apply-check below — so the per-platform
+// renderers stay pure and inherit the guards. The neutral draft carries a
+// STRUCTURED suggestion (the replacement text + target range), never a
+// pre-rendered fenced block.
+//
+// The apply-check is here, on the neutral draft, and not in a renderer, because a
+// renderer that forgot it would offer a human a one-click apply of an edit no code
+// had checked. A guard a renderer can skip is a guard that will be skipped: this
+// layer is the only place all four platforms pass through.
 //
 // It also owns the PROOF join. A finding names its refutation and its evidence by
 // id; the records live on the report. Resolving them here, once, is what lets
@@ -20,6 +26,7 @@ import {
   type ReviewReport
 } from '../../shared/contracts/index.js'
 import { redactText } from '../../shared/redaction/redactor.js'
+import { applyFixEdits } from '../../shared/text/apply-fix-edits.js'
 import {
   inlineCode,
   NO_REFUTATION_VERDICT,
@@ -59,6 +66,12 @@ const editMatchesTargetRange = (
   edit.endLine === targetRange.endLine &&
   edit.endLine >= edit.startLine
 
+// The edit a suggestion would carry, with the replacement text it would render.
+type EligibleSuggestion = {
+  readonly edit: FixEdit
+  readonly replacement: string
+}
+
 // Whether a finding's fix can be represented as a structured suggestion AT ALL:
 // a single admitted edit mapping exactly to the comment range, manual-review
 // safety, and a redacted replacement carrying no triple-backtick fence (which
@@ -70,23 +83,93 @@ const editMatchesTargetRange = (
 // landed AT the cap and no block could ever be appended. A finding with a long
 // description silently lost its apply-ready fix on every platform, while the body
 // still read "Suggested fix: <summary>".
-const eligibleReplacement = (
+//
+// Deliberately NOT the apply-check either: this is a question about the edit's
+// SHAPE, answerable from the report alone, while the apply-check is a question
+// about the FILE. Keeping them apart is what lets a caller with no file bytes
+// still tell "there was never a suggestion here" from "there was one and it could
+// not be checked".
+const eligibleSuggestion = (
   finding: AdmittedFinding,
   targetRange: ReviewCommentTargetRange
-): string | undefined => {
+): EligibleSuggestion | undefined => {
   const edits = finding.fixProposal?.edits ?? []
+  const edit = edits[0]
 
   if (
     finding.fixProposal?.safety !== 'manual-review' ||
     edits.length !== 1 ||
-    !editMatchesTargetRange(edits[0]!, finding, targetRange)
+    edit === undefined ||
+    !editMatchesTargetRange(edit, finding, targetRange)
   ) {
     return undefined
   }
 
-  const replacement = normalizedReplacement(edits[0]!)
+  const replacement = normalizedReplacement(edit)
 
-  return replacement.includes(CODE_FENCE) ? undefined : replacement
+  return replacement.includes(CODE_FENCE) ? undefined : { edit, replacement }
+}
+
+/**
+ * Reads the CURRENT bytes of one repository file, or resolves `undefined` when
+ * they cannot be read. Injected rather than imported so this layer stays pure and
+ * platform-free; the CLI supplies the real filesystem reader.
+ *
+ * The bytes are used for the apply-check ONLY. Nothing read here reaches a
+ * rendered comment — the suggestion a comment carries is the model's replacement
+ * text, redacted on its own way in.
+ */
+export type ReviewCommentFileReader = (
+  path: string
+) => Promise<string | undefined>
+
+// Why a finding is, or is not, offered a one-click apply.
+//
+// `unchecked` and `stale` are separate states on purpose, and the distinction is
+// the point of this whole mechanism: `stale` means the edits were re-applied to
+// the file's current bytes and did not fit, `unchecked` means those bytes never
+// arrived so NOTHING was verified. Both withhold the suggestion — absence of a
+// check is not a passing check — but they are different facts, and the reader is
+// told which one happened.
+type SuggestionOutcome =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'unchecked' }
+  | { readonly kind: 'stale' }
+  | { readonly kind: 'applies'; readonly replacement: string }
+
+// Re-applies the finding's own edit to the file as it is now. The fix lane runs
+// the identical check before it enriches a `fixProposal` (spec 12), but that lane
+// is optional and this surface is not: whatever produced the edits — the fix lane,
+// or the refuter on a run with the lane off — a block GitHub renders with an
+// Apply button is checked here before a human is offered the click.
+const suggestionOutcomeFor = async (
+  finding: AdmittedFinding,
+  targetRange: ReviewCommentTargetRange,
+  readCurrentFile: ReviewCommentFileReader | undefined
+): Promise<SuggestionOutcome> => {
+  const eligible = eligibleSuggestion(finding, targetRange)
+
+  if (eligible === undefined) {
+    return { kind: 'none' }
+  }
+
+  if (readCurrentFile === undefined) {
+    return { kind: 'unchecked' }
+  }
+
+  // A reader that throws is a reader that could not answer, which is exactly the
+  // `undefined` case; it must not take the whole report down with it.
+  const content = await readCurrentFile(finding.location.path).catch(
+    () => undefined
+  )
+
+  if (content === undefined) {
+    return { kind: 'unchecked' }
+  }
+
+  return applyFixEdits(content, [eligible.edit]).ok
+    ? { kind: 'applies', replacement: eligible.replacement }
+    : { kind: 'stale' }
 }
 
 // What appending the canonical (```suggestion) block costs a body. Measured
@@ -96,12 +179,38 @@ const eligibleReplacement = (
 const fencedBlockCost = (replacement: string): number =>
   `\n\n${renderFencedBlock(`${CODE_FENCE}suggestion`, replacement)}`.length
 
-// Said in the body when a replacement WAS computed and could not be carried. The
-// pointer is `report.json`, not `review-comments.json`: when this layer drops the
-// suggestion the neutral artifact has no `suggestion` field either, so the only
-// place the replacement survives is the finding's `fixProposal.edits`.
-const SUGGESTION_WITHHELD_NOTE =
-  'A concrete apply-ready replacement was computed for this finding but does not fit a review comment. It is recorded in full in `report.json` under this finding\'s `fixProposal.edits`.'
+// Where a withheld replacement can still be read, said the same way whatever
+// withheld it. The pointer is `report.json`, not `review-comments.json`: when this
+// layer drops the suggestion the neutral artifact has no `suggestion` field
+// either, so the only place the replacement survives is the finding's
+// `fixProposal.edits`.
+const WITHHELD_RECORDED_IN_REPORT =
+  'It is recorded in full in `report.json` under this finding\'s `fixProposal.edits`.'
+
+// One sentence per reason, because they ask different things of the reader. A
+// replacement that does not fit is still known-good and worth copying by hand; one
+// that no longer applies is known-stale and must not be; one that could not be
+// checked is unknown, and saying so is what stops it from being read as either of
+// the other two.
+const SUGGESTION_WITHHELD_TOO_LARGE = `A concrete apply-ready replacement was computed for this finding but does not fit a review comment. ${WITHHELD_RECORDED_IN_REPORT}`
+const SUGGESTION_WITHHELD_STALE = `A concrete replacement was computed for this finding but no longer applies to the file's current contents, so it is not offered as a one-click apply. ${WITHHELD_RECORDED_IN_REPORT}`
+const SUGGESTION_WITHHELD_UNCHECKED = `A concrete replacement was computed for this finding but could not be checked against the file's current contents, so it is not offered as a one-click apply. ${WITHHELD_RECORDED_IN_REPORT}`
+
+// What the body says about a replacement it is not carrying. `none` says nothing:
+// a note that fires when nothing was lost is a note readers learn to skip.
+// `applies` is only ever passed here after the fit check has already failed.
+const withheldNoteFor = (outcome: SuggestionOutcome): string | undefined => {
+  switch (outcome.kind) {
+    case 'none':
+      return undefined
+    case 'unchecked':
+      return SUGGESTION_WITHHELD_UNCHECKED
+    case 'stale':
+      return SUGGESTION_WITHHELD_STALE
+    case 'applies':
+      return SUGGESTION_WITHHELD_TOO_LARGE
+  }
+}
 
 // Rendered-length caps for the prose this body carries. They are stated in the
 // RENDERED domain — escaping can grow a string severalfold, so a cap applied to
@@ -201,11 +310,27 @@ const proofLines = (
   // A two-item list, not two bare lines. GitHub renders a single newline inside a
   // comment as a line break; a strict CommonMark renderer joins the two into one
   // paragraph. The list reads the same on every platform this spec targets.
+  // WORDED FOR THE PERSON READING A PULL REQUEST, which is a different audience
+  // from `report.md`. That file is the audit trail and keeps the engine's own
+  // vocabulary ("survived refutation"); this comment is a note left on someone's
+  // change, and a human reviewer writes "here is why this holds", not the name of
+  // the stage that decided it. The SUBSTANCE is identical -- the same verdict
+  // summary and the same cited evidence -- so this is the wording differing by
+  // audience, not the two surfaces claiming different things.
+  //
+  // The verdict name is shown only when it is NOT `proved`. An inline comment is
+  // posted for a finding that cleared refutation and the severity threshold, so
+  // `proved` is the ordinary case and naming it adds a word that means nothing to
+  // the reader; anything else is a qualification they need.
   return [
     refutation === undefined
-      ? `- **Survived refutation:** ${NO_REFUTATION_VERDICT}`
-      : `- **Survived refutation** (${safeText(refutation.verdict)}): ${clampRendered(refutation.summary, PROOF_SUMMARY_MAX)}`,
-    `- **Rests on:** ${citedEvidence(finding, input.evidenceById)}`
+      ? `- **Why this holds:** ${NO_REFUTATION_VERDICT}`
+      : `- **Why this holds:**${
+          refutation.verdict === 'proved'
+            ? ''
+            : ` (${safeText(refutation.verdict)})`
+        } ${clampRendered(refutation.summary, PROOF_SUMMARY_MAX)}`,
+    `- **Based on:** ${citedEvidence(finding, input.evidenceById)}`
   ]
 }
 
@@ -242,7 +367,7 @@ const bodyFor = (
     readonly evidenceById: ReadonlyMap<string, EvidenceRecord>
     readonly refutationById: ReadonlyMap<string, RefutationResult>
     readonly reservedForSuggestion: number
-    readonly suggestionWithheld: boolean
+    readonly withheldNote: string | undefined
   }
 ): string => {
   const assemble = (description: string): string =>
@@ -262,7 +387,7 @@ const bodyFor = (
       // part. Added as a note rather than left out: "Suggested fix: <summary>"
       // above it otherwise tells the reader a fix exists and never tells them a
       // concrete one was computed and dropped.
-      ...(input.suggestionWithheld ? ['', SUGGESTION_WITHHELD_NOTE] : []),
+      ...(input.withheldNote === undefined ? [] : ['', input.withheldNote]),
       '',
       `Finding: ${safeText(finding.id)}`
     ].join('\n')
@@ -284,13 +409,14 @@ const bodyFor = (
 // draft and the surface produced nothing on real runs. What remains here is the
 // one claim this layer can check on its own: an old-side location names a line
 // that no longer exists on the new side, so it can never be anchored.
-const draftFor = (
+const draftFor = async (
   finding: AdmittedFinding,
   input: {
     readonly evidenceById: ReadonlyMap<string, EvidenceRecord>
     readonly refutationById: ReadonlyMap<string, RefutationResult>
+    readonly readCurrentFile: ReviewCommentFileReader | undefined
   }
-): ReviewCommentDraft | undefined => {
+): Promise<ReviewCommentDraft | undefined> => {
   if (
     finding.reporterEligibility !== 'inline' ||
     finding.location.side === 'old'
@@ -299,13 +425,19 @@ const draftFor = (
   }
 
   const targetRange = targetRangeFor(finding)
-  const replacement = eligibleReplacement(finding, targetRange)
+  const outcome = await suggestionOutcomeFor(
+    finding,
+    targetRange,
+    input.readCurrentFile
+  )
+  const replacement =
+    outcome.kind === 'applies' ? outcome.replacement : undefined
   const reservedForSuggestion =
     replacement === undefined ? 0 : fencedBlockCost(replacement)
   const reservedBody = bodyFor(finding, {
     ...input,
     reservedForSuggestion,
-    suggestionWithheld: false
+    withheldNote: undefined
   })
   // Even with the reservation a replacement can be too large to carry — the cap
   // bounds the whole comment, and a very long replacement exceeds it on its own.
@@ -319,7 +451,10 @@ const draftFor = (
     : bodyFor(finding, {
         ...input,
         reservedForSuggestion: 0,
-        suggestionWithheld: replacement !== undefined
+        // `applies` reaches here only when the fit check above failed, so each
+        // outcome maps to the one thing that actually happened to this finding's
+        // replacement.
+        withheldNote: withheldNoteFor(outcome)
       })
 
   return ReviewCommentDraftSchema.parse({
@@ -333,9 +468,21 @@ const draftFor = (
   })
 }
 
-export const buildReviewCommentDrafts = (
-  input: unknown
-): readonly ReviewCommentDraft[] => {
+/**
+ * Builds the neutral drafts for a report.
+ *
+ * `readCurrentFile` is a REQUIRED property whose value may be `undefined`, so a
+ * caller has to state what it has rather than inherit a default. Passing
+ * `undefined` is a legitimate answer — a caller holding a report and no working
+ * tree cannot check anything — and it costs exactly what it should: every
+ * suggestion is withheld, and each affected comment says why.
+ */
+export const buildReviewCommentDrafts = async (
+  input: unknown,
+  options: {
+    readonly readCurrentFile: ReviewCommentFileReader | undefined
+  }
+): Promise<readonly ReviewCommentDraft[]> => {
   const report: ReviewReport = validateReviewReport(input)
   // The proof a comment cites lives in the report, not on the finding: the
   // finding carries ids into `evidence` and `refutationResults`. Resolving them
@@ -348,7 +495,18 @@ export const buildReviewCommentDrafts = (
     report.refutationResults.map((refutation) => [refutation.id, refutation])
   )
 
-  return report.admittedFindings
-    .map((finding) => draftFor(finding, { evidenceById, refutationById }))
-    .filter((draft): draft is ReviewCommentDraft => draft !== undefined)
+  // Each finding's draft depends only on that finding and the file it names, so
+  // the per-finding reads are issued together and `Promise.all` keeps the drafts
+  // in admitted-finding order.
+  const drafts = await Promise.all(
+    report.admittedFindings.map(async (finding) =>
+      draftFor(finding, {
+        evidenceById,
+        refutationById,
+        readCurrentFile: options.readCurrentFile
+      })
+    )
+  )
+
+  return drafts.filter((draft): draft is ReviewCommentDraft => draft !== undefined)
 }

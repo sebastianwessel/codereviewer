@@ -32,14 +32,25 @@ describe('runAdvisoryStagesForReview', () => {
   // The flags are the operator's statement about which questions to ask. Being
   // invoked from `review` rather than from its own command must not turn a stage
   // on, and a stage that is off must not touch the repository at all.
+  //
+  // Both stages are ON by default since 2026-08-11, so the opt-out is now written
+  // out. That makes this test sharper rather than weaker: what it pins is that an
+  // operator who says `false` gets NO git subprocess, which is the guarantee the
+  // in-process move could plausibly have broken.
   test('a disabled stage runs nothing and reaches no git', async () => {
     let gitCalls = 0
     const results = await runAdvisoryStagesForReview(
-      inputFor({}, async () => {
-        gitCalls += 1
+      inputFor(
+        {
+          changeImpact: { enabled: false },
+          intentFulfilment: { enabled: false }
+        },
+        async () => {
+          gitCalls += 1
 
-        return ''
-      })
+          return ''
+        }
+      )
     )
 
     expect(results.impact).toBeUndefined()
@@ -53,9 +64,17 @@ describe('runAdvisoryStagesForReview', () => {
   // failure has to surface as a warning on the review the reader already has.
   test('a stage that throws yields a warning, not a thrown review', async () => {
     const results = await runAdvisoryStagesForReview(
-      inputFor({ changeImpact: { enabled: true } }, async () => {
-        throw new Error('git exploded')
-      })
+      inputFor(
+        {
+          changeImpact: { enabled: true },
+          // Off so exactly ONE stage can produce a warning and the assertion below
+          // names the stage that failed rather than counting whatever ran.
+          intentFulfilment: { enabled: false }
+        },
+        async () => {
+          throw new Error('git exploded')
+        }
+      )
     )
 
     expect(results.impact).toBeUndefined()

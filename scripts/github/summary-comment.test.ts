@@ -122,17 +122,42 @@ describe('renderSummaryComment', () => {
   // the comment said "3 in 5" long after the measurement said 68.3%, and CI
   // defended it. What it checks now is that the rates REACH this surface, derived
   // from the one module that holds them.
+  //
+  // WHERE they reach it moved: the numbers are inside the collapsed block now,
+  // because a reviewer opens this comment for the findings. The guarantee did not
+  // move — a rate still names the provider and model it was measured on, and the
+  // assertion below is written against the collapsed block so that "moved" can
+  // never quietly become "dropped".
   it('states the measured error rates where the reader is', () => {
     const body = renderSummaryComment(baseInput())
+    const collapsed = body.slice(body.indexOf('<details>'))
 
-    expect(body).toContain(`**${inDiffRecallInTen} in 10**`)
-    expect(body).toContain(
+    expect(collapsed).toContain(`**${inDiffRecallInTen} in 10**`)
+    expect(collapsed).toContain(
       `**${measuredReliability.outOfDiffRecallFound} of ${measuredReliability.outOfDiffRecallTotal}** of those outside it`
     )
-    expect(body).toContain(`**${adjustedPrecisionInTwenty} in 20**`)
+    expect(collapsed).toContain(`**${adjustedPrecisionInTwenty} in 20**`)
     // A rate published without the model it was measured on invites the reader to
-    // assume it holds for theirs.
-    expect(body).toContain(`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}`)
+    // assume it holds for theirs. This is the standing decision, and it is
+    // asserted on the text that carries the numbers, not on the body.
+    expect(collapsed).toContain(`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}`)
+  })
+
+  // The numbers moved down; the caveat did not. A reader who expands nothing must
+  // still be told that a finding is a lead and an empty list is not a clearance.
+  it('states the confidence caveat in plain language above the findings', () => {
+    const body = renderSummaryComment(
+      baseInput({
+        review: digestReviewReport(JSON.stringify(reviewReportFixture)) as never
+      })
+    )
+    const caveat = body.indexOf('read each finding as something to check')
+
+    expect(caveat).toBeGreaterThan(-1)
+    expect(caveat).toBeLessThan(body.indexOf('### Findings'))
+    // No rate above the fold: a number without the model it was measured on is
+    // exactly what the collapsed block exists to hold.
+    expect(body.slice(0, body.indexOf('<details>'))).not.toContain(' in 10**')
   })
 
   it('shows what refutation could not do, so a finding can be checked', () => {
@@ -142,14 +167,19 @@ describe('renderSummaryComment', () => {
       })
     )
 
-    expect(body).toContain(
+    // Kept as evidence, moved out of the findings list: "Survived refutation" is
+    // the engine's vocabulary, not a sentence a human reviewer writes.
+    expect(body.slice(body.indexOf('<details>'))).toContain(
       'Survived refutation — proved: Searched the route table'
+    )
+    expect(body.slice(0, body.indexOf('<details>'))).not.toContain(
+      'Survived refutation'
     )
   })
 
   // The findings are what a reviewer must act on; the stage table describes the
   // machinery. Reading order is a product decision, so it is asserted.
-  it('puts the findings above the description of the pipeline', () => {
+  it('puts the findings above the description of the pipeline, which is collapsed', () => {
     const body = renderSummaryComment(
       baseInput({
         review: digestReviewReport(JSON.stringify(reviewReportFixture)) as never
@@ -159,12 +189,58 @@ describe('renderSummaryComment', () => {
     expect(body.indexOf('### Findings')).toBeLessThan(
       body.indexOf('| Stage | Role |')
     )
+    expect(body.indexOf('<details>')).toBeLessThan(
+      body.indexOf('| Stage | Role |')
+    )
+  })
+
+  // What the change was for and what it might affect are context for reading the
+  // findings, so they precede them — the order a human reviewer works in.
+  it('reads verdict, intent, impact, findings, then the lower-confidence items', () => {
+    const body = renderSummaryComment(
+      baseInput({
+        review: digestReviewReport(
+          JSON.stringify(reviewReportWithFullAccountingFixture)
+        ) as never,
+        intent: digestIntentReport(JSON.stringify(intentReportFixture)) as never,
+        impact: digestImpactReport(JSON.stringify(impactReportFixture)) as never
+      })
+    )
+    const order = [
+      '## Code review',
+      '### Intent',
+      '### Impact',
+      '### Findings',
+      '### Worth a look',
+      '<details>'
+    ].map((heading) => body.indexOf(heading))
+
+    expect(order).toEqual([...order].sort((left, right) => left - right))
+    expect(order.every((index) => index >= 0)).toBe(true)
   })
 
   it('renders the review stage with its role, so it cannot read as anything but the gate', () => {
     const body = renderSummaryComment(baseInput())
 
     expect(body).toContain('| Review | blocking |')
+  })
+
+  // A stage that could not run is the case where the reason matters most, and it
+  // is the one thing the collapsed stage table must not be the only home for.
+  it('says at the top why a run that could not complete produced no findings', () => {
+    const body = renderSummaryComment(
+      baseInput({
+        outcomes: [
+          classifyStageOutcome(reviewStageDefinition, {
+            exitCode: 4,
+            stdout: '',
+            stderr: '{"code":"provider_error","message":"429 rate limit"}'
+          })
+        ]
+      })
+    )
+
+    expect(body.indexOf('429 rate limit')).toBeLessThan(body.indexOf('<details>'))
   })
 
   it('renders findings, obligations and callers from real report shapes', () => {
@@ -244,6 +320,44 @@ describe('renderSummaryComment', () => {
     expect(body.length).toBeLessThanOrEqual(MAX_ISSUE_COMMENT_BODY)
   })
 
+  // Reading order puts intent and impact above the findings. Drop order must not:
+  // a findings list at the size limit would otherwise be pushed out by the summary
+  // of what the change was for, leaving the reader the half they cannot act on.
+  it('drops the change summary before the findings when the body will not fit', () => {
+    const many = {
+      ...reviewReportFixture,
+      admittedFindings: Array.from({ length: 50 }, (_unused, index) => ({
+        ...reviewReportFixture.admittedFindings[0],
+        id: `find_${index}`,
+        location: { path: `src/${'d'.repeat(180)}.ts`, startLine: 42 },
+        title: 'T'.repeat(200),
+        description: 'D'.repeat(1200),
+        fingerprints: [{ algorithm: 'sha256', value: `fp${index}` }]
+      }))
+    }
+    const wordyIntent = {
+      ...intentReportFixture,
+      obligations: Array.from({ length: 20 }, (_unused, index) => ({
+        statement: `O${index} ${'o'.repeat(300)}`,
+        status: 'not-evidenced'
+      }))
+    }
+    const body = renderSummaryComment(
+      baseInput({
+        review: digestReviewReport(JSON.stringify(many)) as never,
+        intent: digestIntentReport(JSON.stringify(wordyIntent)) as never,
+        // Enough operational notes to put the findings and the intent summary
+        // together over the limit, so one of the two must go.
+        notes: Array.from({ length: 8 }, () => 'N'.repeat(500))
+      })
+    )
+
+    // Something was dropped, so the assertion below is about a real choice.
+    expect(body).toContain('reached GitHub')
+    expect(body).toContain('### Findings')
+    expect(body).not.toContain('### Intent')
+  })
+
   it('renders operational notes, which is how a skipped run explains itself', () => {
     const body = renderSummaryComment(
       baseInput({ notes: ['This pull request comes from a fork.'] })
@@ -261,11 +375,26 @@ describe('renderSummaryComment', () => {
       JSON.stringify(reviewReportWithFullAccountingFixture)
     ) as never
 
+    // Headed "Worth a look" on this surface. `report.md` keeps "Unresolved -
+    // Needs Human Decision"; a pull-request comment is read by someone deciding
+    // whether to spend two minutes, and the heading is the whole invitation.
     it('renders unresolved findings in their own section, separate from actionable findings', () => {
       const body = renderSummaryComment(baseInput({ review: reviewWithUnresolved }))
 
-      expect(body).toContain('### Unresolved - Needs Human Decision (1)')
+      expect(body).toContain('### Worth a look (1)')
       expect(body).toContain('Possible SSRF via the fetched webhook URL')
+    })
+
+    // The reason it could not be settled is the useful half of the line. The
+    // verdict label in front of it names an engine state and nothing a reviewer
+    // can act on.
+    it('gives the reason without the refutation verdict label', () => {
+      const body = renderSummaryComment(baseInput({ review: reviewWithUnresolved }))
+
+      expect(body).toContain(
+        '_The allow-list this depends on is defined in a config file outside the reviewed diff._'
+      )
+      expect(body).not.toContain('needs-more-evidence')
     })
 
     it('does not count an unresolved finding in the actionable Findings section', () => {
@@ -276,7 +405,7 @@ describe('renderSummaryComment', () => {
       expect(body).toContain('### Findings (2)')
       expect(
         body.indexOf('### Findings (2)')
-      ).toBeLessThan(body.indexOf('### Unresolved'))
+      ).toBeLessThan(body.indexOf('### Worth a look'))
     })
 
     it('frames unresolved findings as open questions, not verdicts', () => {
@@ -293,7 +422,7 @@ describe('renderSummaryComment', () => {
         })
       )
 
-      expect(body).not.toContain('Unresolved - Needs Human Decision')
+      expect(body).not.toContain('Worth a look')
     })
   })
 

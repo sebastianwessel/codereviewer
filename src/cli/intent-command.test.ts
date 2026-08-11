@@ -189,10 +189,20 @@ describe('intent CLI', { timeout: 20_000 }, () => {
     expect(JSON.parse(result.stderr).message).toBe('Expected command: intent check')
   })
 
-  test('reports disabled, and exits 0, when the capability is off by default', async () => {
+  // The lane became ON by default on 2026-08-11, so the switch is written out
+  // here. What this test pins is unchanged: an operator who turns the lane OFF
+  // gets `disabled` and exit 0 — distinct from `no-intent`, which is the lane
+  // running and finding nothing to hold the change to.
+  test('reports disabled, and exits 0, when the capability is switched off', async () => {
     const root = await createRepository()
 
     try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({ intentFulfilment: { enabled: false } })
+      )
+
       const result = await check(root)
 
       expect(result.exitCode).toBe(0)

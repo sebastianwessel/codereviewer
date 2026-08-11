@@ -427,11 +427,18 @@
       "type": "object",
       "properties": {
         "enabled": {
-          "default": false,
+          "default": true,
           "type": "boolean"
         },
         "providers": {
-          "default": [],
+          "default": [
+            {
+              "type": "inbox"
+            },
+            {
+              "type": "changed-files"
+            }
+          ],
           "type": "array",
           "items": {
             "oneOf": [
@@ -603,7 +610,7 @@
       "type": "object",
       "properties": {
         "enabled": {
-          "default": false,
+          "default": true,
           "type": "boolean"
         },
         "maxChangedSymbols": {
@@ -655,7 +662,7 @@
       "type": "object",
       "properties": {
         "enabled": {
-          "default": false,
+          "default": true,
           "type": "boolean"
         },
         "maxObligations": {
@@ -834,7 +841,7 @@
           "type": "object",
           "properties": {
             "enabled": {
-              "default": false,
+              "default": true,
               "type": "boolean"
             },
             "platform": {

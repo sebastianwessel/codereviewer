@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import type { FixEdit } from '../../shared/contracts/findings/finding.schema.js'
-import { applyFixEdits } from './apply-check.js'
+import type { FixEdit } from '../contracts/findings/finding.schema.js'
+import { applyFixEdits } from './apply-fix-edits.js'
 
 const edit = (over: Partial<FixEdit>): FixEdit => ({
   path: 'src/app.ts',

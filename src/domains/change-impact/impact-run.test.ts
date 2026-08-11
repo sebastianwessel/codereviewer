@@ -85,10 +85,14 @@ const gitOutputs: Readonly<Record<string, string>> = {
 }
 
 describe('change impact run', () => {
+  // The lane is ON by default since 2026-08-11, so the opt-out has to be spelled
+  // out here. This test used to lean on the default being `false`.
   test('reports disabled plainly rather than emitting an empty completed report', async () => {
     const report = await runChangeImpact({
       repositoryRoot: '/repo',
-      config: CodeReviewerConfigSchema.parse({}),
+      config: CodeReviewerConfigSchema.parse({
+        changeImpact: { enabled: false }
+      }),
       generatedAt,
       readChangedFile: async () => undefined,
       runGit: scriptedGit({})

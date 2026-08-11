@@ -1,21 +1,9 @@
 {
   "review": {
-    "mode": "pr",
-    "depth": "balanced"
+    "mode": "pr"
   },
-  "contextSources": {
-    "enabled": true,
-    "providers": [
-      { "type": "inbox", "dir": ".codereviewer/context" },
-      { "type": "changed-files", "include": ["docs/**/*.md", "specs/**/*.md"] }
-    ],
-    "summary": { "mode": "model", "maxBytes": 4000 }
-  },
-  "intentFulfilment": { "enabled": true },
-  "changeImpact": { "enabled": true },
   "reporting": {
-    "formats": ["json", "markdown", "sarif"],
     "sarif": { "target": "github" },
-    "reviewComments": { "enabled": true, "platform": "github" }
+    "reviewComments": { "platform": "github" }
   }
 }

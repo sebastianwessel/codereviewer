@@ -47,19 +47,36 @@ export type ChangeIntentContextResult = {
 // the review runs with no change-intent context and says so nowhere. The user
 // configured a source and was never told it contributed nothing.
 //
-// The two cases are worded apart because they call for different actions:
-// "failed" means the provider errored, "produced nothing" means it worked and
-// had nothing to give -- most often because it is pointed at the wrong place.
+// THREE cases, worded apart because each calls for a different action -- and
+// because since 2026-08-11 the providers are ON BY DEFAULT, so the third one is
+// what an ordinary repository sees on an ordinary run and must not read like a
+// fault the reader is expected to fix:
+//
+//   failed          -- the provider errored. Something is broken.
+//   matched nothing -- it ran and found no source at all: no inbox directory, or
+//                      no changed file matching its globs. For a defaulted
+//                      provider set that is simply "this change has no written
+//                      intent", which is the common case and not a mistake. The
+//                      pointer is still named, because a MISTYPED directory
+//                      produces exactly this shape and the reader needs to be
+//                      able to tell.
+//   matched, gave 0 -- it found sources and none of them yielded usable text
+//                      (empty bodies, frontmatter only). That is genuinely odd
+//                      and stays worded as such.
 const warningsForUnusedProviders = (
   providerMetrics: ContextIngestionResult['providerMetrics']
 ): readonly string[] =>
   providerMetrics
     .filter((metric) => metric.failed || metric.fragmentCount === 0)
-    .map((metric) =>
-      metric.failed
-        ? `External change-intent provider "${metric.id}" failed and was skipped.`
-        : `External change-intent provider "${metric.id}" produced nothing and was skipped. Check that it points at content this change has.`
-    )
+    .map((metric) => {
+      if (metric.failed) {
+        return `External change-intent provider "${metric.id}" failed and was skipped.`
+      }
+
+      return metric.matchedCount === 0
+        ? `External change-intent provider "${metric.id}" found no change-intent source, so the review ran without one. This is the ordinary result when a change has no written intent; if you expected content, check where the provider points.`
+        : `External change-intent provider "${metric.id}" matched ${metric.matchedCount} sources but none carried usable text, so the review ran without them. Check that those sources have a body below their frontmatter.`
+    })
 
 // The other half of the same principle, for a provider that produced SOMETHING.
 //

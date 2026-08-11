@@ -114,12 +114,19 @@ const actionableFindings = (review: ReviewDigest): readonly FindingDigest[] =>
 const unresolvedFindings = (review: ReviewDigest): readonly FindingDigest[] =>
   review.findings.filter(isUnresolvedFinding)
 
-// The measured error rates, on the comment itself rather than in an evaluation
-// report nobody opens. This is the surface most likely to be the ONLY thing a
-// reviewer reads — it sits on the pull request, above the diff — so it is the
-// surface where an unstated recall figure does the most damage: a reader who sees
-// a short list and no caveat supplies their own, and the one they supply is
-// optimistic.
+// `report-digest.ts` composes `whySurvived` as `<verdict>: <summary>`, and the
+// verdict is the refuter's closed vocabulary — `needs-more-evidence:` in front of
+// a sentence that already says what evidence was missing tells a reviewer
+// nothing they cannot read for themselves. Stripped only where the sentence is
+// shown OUTSIDE the collapsed block; `refutationSection` keeps the label, because
+// there the engine's own words are the point.
+const withoutVerdictLabel = (whySurvived: string): string =>
+  whySurvived.replace(/^[a-z][a-z-]*: /u, '')
+
+// The measured error rates, on the pull request itself rather than in an
+// evaluation report nobody opens — but inside the collapsed block, not above the
+// findings. A reviewer opening this comment came for what to fix; the engine's
+// error bars are the answer to a question they ask second, if at all.
 //
 // THE SAME MEASUREMENT `report.md` PRINTS, from the same place: every figure below
 // is derived from `src/domains/reporting/measured-reliability.ts`, which names the
@@ -130,8 +137,22 @@ const unresolvedFindings = (review: ReviewDigest): readonly FindingDigest[] =>
 // and left both copies here quoting a superseded sweep, and the summary above was
 // a blend of two sweeps matching neither. Two surfaces, one set of numbers.
 //
-// The model is named because a rate is a property of the model that produced it.
+// The model is named because a rate is a property of the model that produced it,
+// and this sentence is the reason the rule exists: it once sat here quoting a
+// superseded sweep with its own test pinning it in place. Moving it down the
+// comment must never mean loosening that — the numbers and the model they were
+// measured on travel together, wherever they are rendered.
 const MEASURED_RELIABILITY = `_Diff-scoped search, measured on \`${MEASURED_ON_PROVIDER}/${MEASURED_ON_MODEL}\`. On a ${measuredReliability.corpusCaseCount}-case real-repository corpus it finds about **${inDiffRecallInTen} in 10** defects inside the diff and **${measuredReliability.outOfDiffRecallFound} of ${measuredReliability.outOfDiffRecallTotal}** of those outside it, and about **${adjustedPrecisionInTwenty} in 20** of what it does report holds up. An empty list means this search found nothing, not that there is nothing to find._`
+
+// The one thing about confidence a reader gets without expanding anything.
+//
+// It carries NO rate, deliberately. A published rate has to name the model it was
+// measured on to mean anything, and that sentence is too long to open a comment a
+// human reads in ten seconds — so the numbers, with their model, sit in the
+// collapsed block and this line says the part that changes behaviour: a finding
+// is a lead to check, and a short list is not a clearance. It names where the
+// numbers went, so nothing here is hidden, only moved.
+const CONFIDENCE_NOTE = `_An automated review. It misses real defects, and some of what it reports will not hold up — read each finding as something to check, and an empty list as "this search found nothing", not "there is nothing to find". The measured rates, and the model they were measured on, are under "How this review was produced" below._`
 
 // Shared by every surface that reports a finding dropping out between runs
 // (`noLongerReportedSection`, `detailsSection`'s baseline line, and
@@ -178,10 +199,48 @@ const verdictHeadline = (input: SummaryCommentInput): string => {
     : `Code review: no threshold crossed, ${reported}`
 }
 
+// Why the reader is seeing less than a review, said in a sentence at the top.
+//
+// The stage table carries the same message, but it lives in the collapsed block
+// now, and a run that could not complete is exactly the case where the reason is
+// the most useful thing in the comment — a reader must not have to expand
+// anything to learn that nothing was reviewed.
+//
+// Suppressed when the caller supplied operational notes, because those explain
+// the same interruption at more length (a fork pull request, a missing provider);
+// printing both reads as two separate problems.
+const stageProblemNote = (input: SummaryCommentInput): string | undefined => {
+  if (input.notes.length > 0) {
+    return undefined
+  }
+
+  const outcome = input.outcomes.find(
+    (entry) => entry.id === reviewStageDefinition.id
+  )
+
+  if (
+    outcome === undefined ||
+    outcome.message === undefined ||
+    (outcome.status !== 'failed' && outcome.status !== 'skipped')
+  ) {
+    return undefined
+  }
+
+  const lead =
+    outcome.status === 'skipped'
+      ? 'The review did not run'
+      : 'The review could not complete'
+
+  return `> ${lead}: ${sanitizeLine(outcome.message, 300)}`
+}
+
 // One row, because one process runs. The advisory lanes report through their own
-// sections below rather than as stages here: they run INSIDE the review now, and
+// sections above rather than as stages here: they run INSIDE the review now, and
 // a table row claiming they were separately executed would describe a pipeline
 // shape that no longer exists.
+//
+// Rendered inside the collapsed block: it describes the machinery, which is not
+// what a reviewer opened the comment for.
 const stageTable = (input: SummaryCommentInput): string => {
   const stage = reviewStageDefinition
   const outcome = input.outcomes.find((entry) => entry.id === stage.id)
@@ -230,15 +289,12 @@ const findingsSection = (review: ReviewDigest): string => {
       `  ${sanitizeLine(finding.title, MAX_TITLE)}`,
       ...(finding.description.length === 0
         ? []
-        : [`  ${sanitizeText(finding.description, MAX_DESCRIPTION).replaceAll('\n', ' ')}`]),
-      // Why the reader should believe it. Without this the comment asserts a
-      // defect and offers nothing to check it against, which is the same as
-      // asking to be trusted.
-      ...(finding.whySurvived === undefined
-        ? []
-        : [
-            `  _Survived refutation — ${sanitizeLine(finding.whySurvived, MAX_WHY_SURVIVED)}_`
-          ])
+        : [`  ${sanitizeText(finding.description, MAX_DESCRIPTION).replaceAll('\n', ' ')}`])
+      // What refutation could not do against this finding used to be quoted here,
+      // in the refuter's vocabulary ("Survived refutation — proved: …"). It is
+      // still rendered, in `refutationSection` inside the collapsed block: a
+      // reviewer must be able to check the claim, but the sentence that lets them
+      // is written in the engine's terms and belongs where engine output belongs.
     ].join('\n')
   })
   const counts = severityOrder
@@ -252,16 +308,18 @@ const findingsSection = (review: ReviewDigest): string => {
         ]
       : []
 
+  // The blank lines are structural, not decoration: a heading, a paragraph and a
+  // list run together render as one blob on a strict CommonMark renderer. The
+  // severity counts are dropped WITH their blank line when there are none, rather
+  // than by filtering empty strings out of the whole section — that filter took
+  // every separator with it.
   return [
     `### Findings (${findings.length})`,
     '',
-    counts.length === 0 ? '' : `${counts}.`,
-    '',
+    ...(counts.length === 0 ? [] : [`${counts}.`, '']),
     ...lines,
     ...truncated
-  ]
-    .filter((line) => line !== '')
-    .join('\n')
+  ].join('\n')
 }
 
 // A finding here is a real suspicion the refuter could neither prove nor
@@ -271,8 +329,13 @@ const findingsSection = (review: ReviewDigest): string => {
 // purpose, and it must stay visibly separate from the findings above: folding
 // it into that list would read a "could not decide" as a "confirmed defect",
 // and dropping it would make the omission indistinguishable from "nothing
-// like this exists". Wording follows `report.md`'s "Unresolved - Needs Human
-// Decision" section, shortened for a space-constrained surface.
+// like this exists".
+//
+// HEADED "Worth a look", not `report.md`'s "Unresolved - Needs Human Decision",
+// and the divergence is deliberate: this surface is read by someone deciding
+// whether to spend two minutes, and the heading is the whole invitation. The
+// framing underneath it — open questions, not verdicts — is what carries the
+// meaning, and it is unchanged.
 const unresolvedSection = (review: ReviewDigest): string | undefined => {
   const findings = unresolvedFindings(review)
 
@@ -289,28 +352,31 @@ const unresolvedSection = (review: ReviewDigest): string | undefined => {
     [
       `- **${finding.severity}** · ${sanitizeLine(finding.category, 40)} · \`${sanitizeLine(finding.path, 200)}:${finding.startLine}\``,
       `  ${sanitizeLine(finding.title, MAX_TITLE)}`,
+      // What stopped this from being settled is the useful half of the line, so
+      // it is kept — without the verdict label in front of it, which names an
+      // engine state rather than telling the reader anything.
       ...(finding.whySurvived === undefined
         ? []
-        : [`  _${sanitizeLine(finding.whySurvived, MAX_WHY_SURVIVED)}_`])
+        : [
+            `  _${sanitizeLine(withoutVerdictLabel(finding.whySurvived), MAX_WHY_SURVIVED)}_`
+          ])
     ].join('\n')
   )
   const truncated =
     ordered.length > shown.length
       ? [
-          `\n_${ordered.length - shown.length} further unresolved findings are in the run artifacts._`
+          `\n_${ordered.length - shown.length} further open questions are in the run artifacts._`
         ]
       : []
 
   return [
-    `### Unresolved - Needs Human Decision (${findings.length})`,
+    `### Worth a look (${findings.length})`,
     '',
-    'Open questions, not verdicts: refutation could neither prove nor disprove these from what this run could reach. They do not affect the quality gate and are not posted as inline comments — confirm or dismiss each one yourself.',
+    'Open questions, not verdicts: this review could not settle these from what it could see. They do not affect the quality gate and are not posted as inline comments — confirm or dismiss each one yourself.',
     '',
     ...lines,
     ...truncated
-  ]
-    .filter((line) => line !== '')
-    .join('\n')
+  ].join('\n')
 }
 
 const intentSection = (intent: IntentDigest): string | undefined => {
@@ -461,6 +527,39 @@ const noLongerReportedSection = (
   ].join('\n')
 }
 
+// What refutation tried against each reported finding, in the refuter's own
+// words.
+//
+// It is EVIDENCE, and it must not be dropped: without it the comment asserts a
+// defect and offers nothing to check it against, which is the same as asking to
+// be trusted. But it is written in the engine's vocabulary — "Survived refutation
+// — proved: …" is a sentence no human reviewer writes — so it lives here, one
+// expand away from the finding it belongs to, keyed by the location the finding
+// was listed under so the two can be matched by eye.
+//
+// Unresolved findings are excluded: their reason is already rendered beside them
+// under "Worth a look", where it is the point rather than a footnote.
+const refutationSection = (review: ReviewDigest): readonly string[] => {
+  const lines = actionableFindings(review)
+    .filter((finding) => finding.whySurvived !== undefined)
+    .slice(0, MAX_LISTED_FINDINGS)
+    .map(
+      (finding) =>
+        `- \`${sanitizeLine(finding.path, 200)}:${finding.startLine}\` — Survived refutation — ${sanitizeLine(finding.whySurvived as string, MAX_WHY_SURVIVED)}`
+    )
+
+  return lines.length === 0
+    ? []
+    : ['**What was checked against each finding**', '', ...lines, '']
+}
+
+// Everything the run did rather than found: the machinery, the measurement and
+// the bookkeeping, in one collapsed block.
+//
+// COLLAPSED IS THE PRODUCT DECISION. None of this is removed — a reader who wants
+// the stage result, the error rates or the refuter's reasoning is one click away
+// from all three — but none of it competes with the findings for the attention of
+// a reader who came to review a change.
 const detailsSection = (input: SummaryCommentInput): string => {
   const rows: string[] = [
     `- Head commit: \`${sanitizeLine(input.headSha, 64)}\``
@@ -520,67 +619,151 @@ const detailsSection = (input: SummaryCommentInput): string => {
     rows.push(`- [Full artifacts](${sanitizeLine(input.runUrl, 400)})`)
   }
 
-  return ['<details><summary>Run details</summary>', '', ...rows, '</details>'].join(
-    '\n'
-  )
+  return [
+    '<details><summary>How this review was produced</summary>',
+    '',
+    // The measured rates, still naming the provider and model they were measured
+    // on. Placement moved; the guarantee did not.
+    '**How reliable this is**',
+    '',
+    MEASURED_RELIABILITY,
+    '',
+    ...(input.review === undefined ? [] : refutationSection(input.review)),
+    '**Pipeline**',
+    '',
+    stageTable(input),
+    '',
+    '**Run details**',
+    '',
+    ...rows,
+    '',
+    '</details>'
+  ].join('\n')
 }
+
+type CommentSection = {
+  readonly text: string
+  /**
+   * Which sections survive when the body would overflow: lower is kept first.
+   * Sections at the same rank are kept in reading order.
+   */
+  readonly keepRank: number
+}
+
+/** A section that renders to nothing stays absent rather than becoming empty. */
+const section = (
+  text: string | undefined,
+  keepRank: number
+): CommentSection | undefined =>
+  text === undefined ? undefined : { text, keepRank }
 
 /**
  * Assemble the sections that fit inside GitHub's comment-body limit.
  *
- * Sections are added in priority order and a section that would overflow is
- * dropped whole rather than cut mid-sentence, because half a finding is worse
- * than a pointer to the artifacts.
+ * A section that would overflow is dropped WHOLE rather than cut mid-sentence,
+ * because half a finding is worse than a pointer to the artifacts.
+ *
+ * Reading order and drop order are two different orders, which is why the rank
+ * exists. Intent and impact are read BEFORE the findings and dropped AFTER them:
+ * a 60 000-character findings list would otherwise be pushed out by the summary
+ * of what the change was for, leaving the half a reviewer cannot act on.
  */
-const assemble = (marker: string, sections: readonly string[]): string => {
+const assemble = (
+  marker: string,
+  sections: readonly CommentSection[]
+): string => {
   const separator = '\n\n'
   const overflowNote =
     '_This comment reached GitHub\'s size limit. The remaining detail is in the run artifacts._'
-  let body = marker
-  let dropped = false
+  const byRank = sections
+    .map((section, index) => ({ section, index }))
+    // Stable, so equal ranks keep reading order.
+    .sort((left, right) => left.section.keepRank - right.section.keepRank)
+  const kept = new Set<number>()
+  // Room for the overflow note is reserved unconditionally, so admitting a
+  // section can never be the thing that leaves no room to say one was dropped.
+  let length = marker.length + separator.length + overflowNote.length
 
-  for (const section of sections) {
-    const candidate = `${body}${separator}${section}`
+  for (const { section, index } of byRank) {
+    const candidate = length + separator.length + section.text.length
 
-    if (
-      candidate.length + separator.length + overflowNote.length >
-      MAX_ISSUE_COMMENT_BODY
-    ) {
-      dropped = true
+    if (candidate > MAX_ISSUE_COMMENT_BODY) {
       continue
     }
 
-    body = candidate
+    kept.add(index)
+    length = candidate
   }
 
-  return dropped ? `${body}${separator}${overflowNote}` : body
+  const body = [
+    marker,
+    ...sections
+      .filter((_section, index) => kept.has(index))
+      .map((section) => section.text)
+  ].join(separator)
+
+  return kept.size === sections.length
+    ? body
+    : `${body}${separator}${overflowNote}`
 }
 
 export const renderSummaryComment = (input: SummaryCommentInput): string => {
   const marker = summaryCommentMarker(input.markerKey)
   const notes = input.notes.map((note) => `> ${sanitizeLine(note, 500)}`)
-  // Ordered by what a reviewer must act on, not by what the pipeline did. The
-  // findings used to sit below the stage table, so the first thing under the
-  // headline was a description of the machinery.
-  const sections: readonly (string | undefined)[] = [
-    `## ${verdictHeadline(input)}`,
-    MEASURED_RELIABILITY,
-    notes.length === 0 ? undefined : notes.join('\n>\n'),
-    input.reviewConversation === undefined
+  // THE READING ORDER IS THE PRODUCT, and it is the order a human reviewer works
+  // in: what happened, what the change was for and whether it got there, what it
+  // might affect, what is wrong with it, and last what is only maybe wrong with
+  // it. Everything describing the engine that produced all this — the stage
+  // table, the measured rates, the refuter's reasoning, the run bookkeeping —
+  // sits in one collapsed block at the end, because a reviewer reads this comment
+  // to review a change, not to audit a pipeline.
+  //
+  // A review conversation is answered before any of it: it is present only on a
+  // run someone triggered by asking for a second look, and their question is
+  // owed an answer before the standing sections repeat themselves.
+  //
+  // The keep ranks are what survives an over-long body, and they are NOT this
+  // order: the verdict and why the reader is seeing it (0-1), then the answers to
+  // a direct question and the findings (2), the open questions (3), the summary
+  // of the change (4-5), and the machinery last (6).
+  const sections: readonly (CommentSection | undefined)[] = [
+    { text: `## ${verdictHeadline(input)}`, keepRank: 0 },
+    { text: CONFIDENCE_NOTE, keepRank: 1 },
+    section(stageProblemNote(input), 1),
+    notes.length === 0
       ? undefined
-      : reviewConversationSection(input.reviewConversation),
-    input.review === undefined ? undefined : findingsSection(input.review),
-    input.review === undefined ? undefined : unresolvedSection(input.review),
-    input.intent === undefined ? undefined : intentSection(input.intent),
-    input.impact === undefined ? undefined : impactSection(input.impact),
-    noLongerReportedSection(input),
-    stageTable(input),
-    detailsSection(input)
+      : { text: notes.join('\n>\n'), keepRank: 1 },
+    section(
+      input.reviewConversation === undefined
+        ? undefined
+        : reviewConversationSection(input.reviewConversation),
+      2
+    ),
+    section(
+      input.intent === undefined ? undefined : intentSection(input.intent),
+      4
+    ),
+    section(
+      input.impact === undefined ? undefined : impactSection(input.impact),
+      4
+    ),
+    section(
+      input.review === undefined ? undefined : findingsSection(input.review),
+      2
+    ),
+    section(
+      input.review === undefined ? undefined : unresolvedSection(input.review),
+      3
+    ),
+    section(noLongerReportedSection(input), 5),
+    { text: detailsSection(input), keepRank: 6 }
   ]
 
   return assemble(
     marker,
-    sections.filter((section): section is string => section !== undefined)
+    sections.filter(
+      (entry): entry is CommentSection => entry !== undefined
+    )
   )
 }
 

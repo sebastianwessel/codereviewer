@@ -4,7 +4,7 @@
 // detection `source` only to throw it away, so a run that resolved `generic` and
 // produced zero drafts was byte-identical in the observability artifact to one
 // where the feature never ran at all.
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
@@ -43,6 +43,18 @@ describe('writeReviewArtifacts — review-comment observability', () => {
     root = await mkdtemp(path.join(tmpdir(), 'run-artifacts-'))
   })
 
+  // The fixture's finding proposes an edit to `src/app.ts:4`. A suggestion is only
+  // counted once that edit has been apply-checked against the file's real bytes,
+  // so the file has to exist in the repository root under test.
+  const writeReviewedFile = async (lineCount: number): Promise<void> => {
+    await mkdir(path.join(root, 'src'), { recursive: true })
+    await writeFile(
+      path.join(root, 'src', 'app.ts'),
+      Array.from({ length: lineCount }, (_, index) => `const l${index} = ${index}`)
+        .join('\n')
+    )
+  }
+
   afterEach(async () => {
     await rm(root, { recursive: true, force: true })
   })
@@ -68,6 +80,7 @@ describe('writeReviewArtifacts — review-comment observability', () => {
   }
 
   test('records the drafts, the suggestions, the platform and what detected it', async () => {
+    await writeReviewedFile(10)
     const events = await runWith({ enabled: true, platform: 'github' })
 
     expect(events).toHaveLength(1)
@@ -85,6 +98,28 @@ describe('writeReviewArtifacts — review-comment observability', () => {
       }
     })
     expect(events[0]).toHaveProperty('durationMs')
+  })
+
+  // The wiring proof for the apply-check: the ONLY difference from the test above
+  // is the file the edit targets. Same report, same platform, same drafting — one
+  // draft either way, and the suggestion count is what moves. Without the reader
+  // reaching the real working tree, both runs would report the same count.
+  test('a suggestion whose target file no longer has those lines is not counted', async () => {
+    await writeReviewedFile(2)
+    const events = await runWith({ enabled: true, platform: 'github' })
+
+    expect(events[0]).toMatchObject({
+      attributes: { draftCount: 1, suggestionCount: 0 }
+    })
+  })
+
+  test('a suggestion whose target file is gone is not counted either', async () => {
+    // Nothing written: the repository root under test has no `src/app.ts` at all.
+    const events = await runWith({ enabled: true, platform: 'github' })
+
+    expect(events[0]).toMatchObject({
+      attributes: { draftCount: 1, suggestionCount: 0 }
+    })
   })
 
   test('a run that resolved generic still names the platform it resolved to', async () => {

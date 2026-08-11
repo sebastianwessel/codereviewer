@@ -144,12 +144,16 @@ export const maxConcurrentTasksBounds = { min: 1, max: 32 } as const
 // rendered this document into it. So the engine paid for the extraction and then
 // showed the result only to the stage that adjudicates, not the stage that looks.
 //
-// Off by default because closing that gap adds a section to every discovery
-// prompt, and this project promotes a prompt-shaped change on measurement, never
-// on the argument that it ought to help. Four attention mechanisms and five
-// prompt clauses have already been measured flat here; the difference this time
-// is that the change ships data the run already computed rather than new wording,
-// which is a different mechanism but not yet a different result.
+// OFF because it was MEASURED AND FAILED (2026-08-10): recall 64.9% -> 61.7%,
+// sign test 3 gained / 3 lost, p = 1.0. The argument for it was good — it ships
+// data the run already computed rather than new wording, which is a different
+// mechanism from the four attention mechanisms and five prompt clauses already
+// measured flat here — and it still moved nothing.
+//
+// It stays in the schema rather than being removed because the extraction it
+// consumes is not going anywhere (refutation reads the same facts), so the key
+// costs a boolean and lets a future model be re-measured against it. It does not
+// get to be on by default on the strength of the argument.
 export const SignalFactContextConfigSchema = z.strictObject({
   enabled: z.boolean().default(false)
 })
@@ -296,6 +300,12 @@ export const InstructionsConfigSchema = z.strictObject({
   inline: z.string().default('')
 })
 
+// Operator-authored review skills read from `directories`. OFF by default, and
+// unlike the measured-off switches below the reason is not evidence but content:
+// there is nothing to load. `.codereviewer/skills` does not exist in a repository
+// that has not written one, so a default `true` would scan an absent directory on
+// every run and change nothing. It has also never been measured, so there is no
+// case for turning it on ahead of the operator writing the first skill.
 export const SkillsConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
   directories: z.array(RepositoryRelativePathSchema).default(['.codereviewer/skills']),
@@ -345,7 +355,15 @@ export const BaselineConfigSchema = z.strictObject({
   includeResolvedInReport: z.boolean().default(true)
 })
 
-// Dedicated additive security review pass (spec 15, Mechanism 1). Off by default.
+// Dedicated additive security review pass (spec 15, Mechanism 1).
+//
+// OFF because the security lift it exists for was NOT SHOWN and it costs +61%.
+// Its one A/B moved overall recall up (+4.5pp, +22 unlisted-real findings) while
+// LABELLED security findings went 14 -> 12 and the dominant authorization class
+// went 8 -> 6 — a mixed result at n=1, on denominators small enough that run-to-run
+// non-determinism swamps them. A capability may not be defaulted on by the number
+// that happened to move; it has to be defaulted on by the number it was built for.
+//
 // When enabled, each review task issues a SECOND, security-only discovery call that
 // applies a generic OWASP/CWE checklist to the changed code. Its candidates are
 // additive: they merge with the general pass's candidates and never displace them,
@@ -506,17 +524,53 @@ export const ContextSummaryConfigSchema = z.strictObject({
   maxBytes: z.int().min(256).max(20_000).default(4_000)
 })
 
+// ON by default since 2026-08-11, and this is the one flip in that batch that is
+// ACCURACY-RELEVANT AND UNMEASURED. The brief it produces is injected into every
+// discovery packet, so it changes what the reviewer is shown and could move recall
+// in either direction; the in-prompt intent-framing clause was separately measured
+// and REJECTED, which is a reason for humility here rather than confidence. It is
+// on because without it the reviewer never learns what the change is FOR — there is
+// no stated intent to check the change against, and `intentFulfilment` below has
+// nothing to read. NO ACCURACY CLAIM IS MADE. The pre-registered A/B (on vs off, on
+// the security corpus) is owed, and if it comes back negative this is the first
+// switch to flip.
+//
+// IT COSTS NOTHING WHEN THERE IS NOTHING TO INGEST, and that property is what makes
+// the default defensible rather than presumptuous. Both shipped providers no-op on
+// absent inputs — a missing inbox directory resolves to no fragments, and a change
+// touching no markdown matches none — and `runContextIngestion` returns before the
+// summarizer whenever no fragment was gathered, so a repository that writes no
+// change intent pays zero provider calls. Only a run that actually gathered
+// something pays for the one summarizer call.
+//
+// `providers` is defaulted rather than left empty because `enabled: true` over an
+// empty list would be a switch that is on and does nothing — the exact shape
+// `SecuritySignalsConfigSchema` above records this file having already shipped
+// once. The default set is what the shipped GitHub pipeline used to spell out.
+//
+// `.prefault`, NOT `.default`: `.default` returns the literal VERBATIM without
+// parsing it, so each entry's own `dir`, `include` and cap defaults would be absent
+// from the parsed config while the type claimed they were there. That is the same
+// trap the note on `CodeReviewerConfigSchema` at the bottom of this file records.
 export const ContextSourcesConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false),
-  providers: z.array(ContextProviderConfigSchema).default([]),
+  enabled: z.boolean().default(true),
+  providers: z
+    .array(ContextProviderConfigSchema)
+    .prefault([{ type: 'inbox' }, { type: 'changed-files' }]),
   summary: ContextSummaryConfigSchema.prefault({})
 })
 
-// Agentic verification flow (spec 12). Off by default: with `enabled: false` no
-// claim provider runs and the general review is byte-for-byte unchanged. Claim
-// providers mirror the context-ingestion provider pattern (spec 11) — filesystem
-// only, no network — and are added to the discriminated union without changing
-// the flow when a new provider type ships.
+// Agentic verification flow (spec 12).
+//
+// OFF because it is a DIFFERENT PRODUCT — it adjudicates external claims, not the
+// change — and because `eval run` cannot score it: there is no corpus of claims
+// with known verdicts, so turning it on would ship a capability whose accuracy no
+// gate in this repository can observe. Its own corpus has to exist first.
+//
+// With `enabled: false` no claim provider runs and the general review is
+// byte-for-byte unchanged. Claim providers mirror the context-ingestion provider
+// pattern (spec 11) — filesystem only, no network — and are added to the
+// discriminated union without changing the flow when a new provider type ships.
 export const VerificationClaimsFileProviderSchema = z.strictObject({
   type: z.literal('claims-file'),
   // Neutral claims file a pipeline writes before the run.
@@ -562,15 +616,19 @@ export const VerificationConfigSchema = z.strictObject({
   maxMatches: z.int().min(1).default(20)
 })
 
-// Change-impact adjudication (spec 22 design step 3). Off by default, and
-// SEPARATELY off from the command that hosts it.
+// Change-impact adjudication (spec 22 design step 3). OFF, and separately off from
+// the lane that hosts it — which is now on by default, so the separation is doing
+// real work rather than describing two switches that happened to agree.
 //
-// The second switch is not redundant. Everything else `impact check` does is
-// deterministic and free; adjudication is the only part that can reach a provider,
-// and turning `changeImpact.enabled` on must not silently start billing an
-// operator who asked for the reference list. It also stays off for spec 22's own
-// reason — the capability stays disabled until measured, and this layer is the
-// unmeasured one.
+// It is off because it was MEASURED AND REJECTED (2026-08-09): 0 of 7 adjudicated
+// pairs cleared the 40% bar pre-registered before the run. Nothing about the lane
+// being promoted changes that; a capability measured and rejected stays off however
+// much the product would prefer it.
+//
+// The second switch also remains the spend boundary. Everything else the lane does
+// is deterministic and free; adjudication is the only part that can reach a
+// provider, so turning `changeImpact.enabled` on must not silently start billing an
+// operator who asked for the reference list.
 const ChangeImpactAdjudicationConfigSchema = z.strictObject({
   enabled: z.boolean().default(false),
   // Upper bound on MODEL calls per run. Deterministic verdicts — a removed,
@@ -583,8 +641,18 @@ const ChangeImpactAdjudicationConfigSchema = z.strictObject({
   maxCalls: z.int().min(1).max(500).default(40)
 })
 
-// Change-impact review (spec 22). Off by default until measured. When enabled it
-// is reached BOTH ways: `review` runs the lane in-process after the review, over
+// Change-impact review (spec 22). ON by default since 2026-08-11: "what might this
+// break" is one half of what this product answers, and answering it is not an
+// accuracy claim about the review — the lane produces its own deliverable and feeds
+// nothing back into discovery, so it can neither help nor hurt recall.
+//
+// It is the CHEAP half. With `adjudication` below off, as it is by default, the
+// lane makes NO provider call at all: it is reference traversal over the
+// repository, bounded by the numbers below, and its entire cost is filesystem work.
+// A default that spends nothing and answers a question the reader has anyway does
+// not need a measurement to justify it.
+//
+// It is reached BOTH ways: `review` runs the lane in-process after the review, over
 // the same run context (`src/cli/advisory-lanes.ts`), and `impact check` still
 // runs it alone. This comment said "never by `review`" until 2026-08-11, which was
 // true when written and false the moment the lane moved in-process.
@@ -606,7 +674,7 @@ const ChangeImpactAdjudicationConfigSchema = z.strictObject({
 // configuration error rather than a silent no-op, which is the mistake
 // `SecurityConfigSchema` above records having already made once.
 export const ChangeImpactConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   // Upper bound on the changed symbols seeded from the diff. Each seed costs one
   // repository search, so this is what bounds total traversal.
   maxChangedSymbols: z.int().min(1).max(500).default(50),
@@ -633,13 +701,23 @@ export const ChangeImpactConfigSchema = z.strictObject({
   adjudication: ChangeImpactAdjudicationConfigSchema.prefault({})
 })
 
-// Intent-fulfilment review (spec 23). Off by default until measured. Reached both
-// ways, exactly as `changeImpact` above: in-process from `review`, and alone from
-// `intent check`.
+// Intent-fulfilment review (spec 23). ON by default since 2026-08-11: "did the
+// change do what it set out to do" is the other half of what this product answers,
+// and it is the only consumer of the change-intent brief `contextSources` above now
+// gathers — the two flip together or neither is worth having. No accuracy claim is
+// made for the review: this lane answers its own question and feeds nothing back
+// into discovery. Reached both ways, exactly as `changeImpact` above: in-process
+// from `review`, and alone from `intent check`.
 //
-// The bounds here are the whole cost model, and unlike change-impact this
-// capability does spend: one extraction call, one judgement call per obligation,
-// and one explanation call per run. `maxObligations` is therefore the primary
+// THIS IS THE DEFAULT THAT SPENDS. Unlike change-impact, whose deterministic core
+// is free, this capability issues one extraction call, one judgement call per
+// obligation, and one explanation call per run. Measured at ~$0.008 per obligation
+// over 37 runs; the per-pull-request cost of the whole default run is owed and is
+// deliberately NOT estimated here. A change with no stated intent extracts no
+// obligations and therefore costs the extraction call and nothing more, which is
+// most changes. An operator who wants the defect finder alone sets `enabled: false`.
+//
+// The bounds here are the rest of the cost model. `maxObligations` is the primary
 // spend bound — it caps both how many obligations are reported and how many
 // judgement calls the run can issue.
 //
@@ -652,7 +730,7 @@ export const ChangeImpactConfigSchema = z.strictObject({
 // `blocking` key would be accepted and then silently ignored, which is the
 // mistake `SecurityConfigSchema` above records having already made once.
 export const IntentFulfilmentConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   // EVERY LIMIT BELOW IS A RUNAWAY GUARD, NOT A RATION. The distinction is not
   // stylistic: all three degrade the answer SILENTLY when they bind, so a limit set
   // where real inputs reach it turns this capability into one that reports "nothing
@@ -708,8 +786,14 @@ export const IntentFulfilmentConfigSchema = z.strictObject({
   maxChangeLines: z.int().min(1).max(5_000).default(5_000)
 })
 
-// Agentic finding investigation-and-fix job (spec 12). Off by default. Reuses the
-// same investigation agent, mediated tools, and per-claim bounds as
+// Agentic finding investigation-and-fix job (spec 12).
+//
+// OFF because it is UNMEASURED and costs one agent run per eligible finding — the
+// most expensive thing this engine can be asked to do per unit of output, on a lane
+// whose quality no measurement has yet established. Its first real measurement is
+// suggestion yield, whose plan spec 12 carries.
+//
+// Reuses the same investigation agent, mediated tools, and per-claim bounds as
 // `verification`; `enabled` is the single switch for the whole single pass
 // (judgment and fix together). `minSeverity` gates which admitted findings the
 // lane runs on. It is left optional here and resolved at runtime to
@@ -748,11 +832,22 @@ export const SarifReportingConfigSchema = z.strictObject({
   maxResults: z.int().min(1).max(25000).default(5000)
 })
 
-// Platform-neutral inline review comments (spec 13). Disabled by default. When
-// enabled, the run writes a neutral `review-comments.json` plus a rendered
-// `review-comments.<platform>.json`; it performs no network publishing.
+// Platform-neutral inline review comments (spec 13). ON by default since
+// 2026-08-11: a note on the line it concerns is how a human reviewer leaves
+// feedback, and this is the only thing that produces one. It is a RENDERER, not a
+// lever — it reads admitted findings and writes them out, so it cannot change what
+// was found and no accuracy claim is made or possible.
+//
+// It costs no provider call. The run writes a neutral `review-comments.json` plus a
+// rendered `review-comments.<platform>.json` and performs NO network publishing, so
+// a pipeline that never reads them pays two files and nothing else. Publishing
+// stays the deployment's job.
+//
+// `platform` stays `auto`, which resolves by detection (CI env, then git remote
+// host, then `generic`). Pinning a renderer is deployment-specific and belongs in
+// the deployment's own config, not in a default.
 export const ReviewCommentsConfigSchema = z.strictObject({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean().default(true),
   platform: ReviewCommentPlatformSchema.default('auto')
 })
 
@@ -832,6 +927,12 @@ export const EvaluationConfigSchema = z.strictObject({
   regressionGate: EvalRegressionGateConfigSchema.prefault({})
 })
 
+// OFF, and this one is not a measurement question: NOTHING IN THE ENGINE EMITS A
+// SPAN. `configureOpenTelemetry` imports the two OpenTelemetry packages to prove
+// they are installed and returns; no tracer provider is registered and no exporter
+// is wired, so enabling it exports nothing to the endpoint it then insists on. The
+// key is the seam an exporter would be attached to, not a working export. Turning it
+// on by default would give an operator a configured collector and silence.
 export const OpenTelemetryConfigSchema = z
   .strictObject({
     enabled: z.boolean().default(false),
@@ -869,13 +970,19 @@ export const CostConfigSchema = z.strictObject({
   outputPerMillion: z.number().min(0).optional()
 })
 
-// The review-conversation lane (spec 30). Off by default until measured, exactly
-// like `changeImpact` and `intentFulfilment` above — and for the sharpest version
-// of their reason: spec 30's own "Measurement, before promotion" section requires
-// the hold rate under a plausible-but-wrong pushback reply to be indistinguishable
-// from the no-reply baseline before this may ship on. Nothing here is a knob to
-// tune; the single key exists so an operator can turn the whole lane on once that
-// is true and off again without redeploying the workflow.
+// The review-conversation lane (spec 30). OFF, and it did NOT flip with
+// `changeImpact` and `intentFulfilment` on 2026-08-11, for two independent reasons.
+//
+// First, it is gated on a measurement that has not run: spec 30's own "Measurement,
+// before promotion" section requires the hold rate under a plausible-but-wrong
+// pushback reply to be indistinguishable from the no-reply baseline before this may
+// ship on. Second, it cannot be a default even once that clears — the lane needs a
+// separate workflow trigger (a comment event, not a push) and write permission on
+// the pull request, neither of which a default in this file can grant. It is a
+// documented one-line opt-in beside a workflow change, by construction.
+//
+// Nothing here is a knob to tune; the single key exists so an operator can turn the
+// whole lane on and off again without redeploying the workflow.
 //
 // THERE IS NO OTHER KEY, AND THAT IS THE POINT. Spec 30's threat model is that a
 // reply is written after the finding exists, by anyone with comment access, in the

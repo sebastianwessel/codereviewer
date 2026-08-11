@@ -65,9 +65,24 @@ const refutationCandidateIds = (request: ObjectRequest): readonly string[] => {
   return (payload.candidates ?? []).map((candidate) => candidate.id)
 }
 
+// Spec 11: "Evaluation and benchmark runs use no context providers so results stay
+// reproducible. This is a property of the committed evaluation configuration, not
+// of code: nothing forces `contextSources` off for an eval run." That sentence
+// became load-bearing on 2026-08-11, when the block was promoted to on by default
+// — before then an eval root with no config file satisfied it by accident. Every
+// eval root these tests build now says it out loud.
+const writeEvalRunConfig = async (root: string): Promise<void> => {
+  await mkdir(join(root, '.codereviewer'), { recursive: true })
+  await writeFile(
+    join(root, '.codereviewer', 'config.json'),
+    JSON.stringify({ contextSources: { enabled: false } })
+  )
+}
+
 const writeSampleEvalCases = async (root: string): Promise<void> => {
   const fixtureDirectory = join(root, 'eval', 'fixtures')
   await mkdir(fixtureDirectory, { recursive: true })
+  await writeEvalRunConfig(root)
   await mkdir(
     join(root, 'eval', 'fixtures', 'typescript', 'positive', 'src'),
     { recursive: true }
@@ -125,6 +140,7 @@ const writeSampleEvalCases = async (root: string): Promise<void> => {
 
 const writeSliceEvalCase = async (root: string): Promise<void> => {
   const sliceRoot = join(root, 'eval', 'fixtures', 'slices', 'typescript-slice')
+  await writeEvalRunConfig(root)
   await mkdir(join(sliceRoot, 'repo', 'src'), { recursive: true })
   await writeFile(join(sliceRoot, 'repo', 'src', 'app.ts'), 'export const value = ;\n')
   await writeFile(

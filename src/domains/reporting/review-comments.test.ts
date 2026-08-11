@@ -10,40 +10,58 @@ import {
 } from '../admission/index.js'
 import { createReportFixture } from '../../shared/testing/report-fixture.js'
 import { renderReviewComments } from './review-comment-renderers.js'
-import { buildReviewCommentDrafts } from './review-comments.js'
+import {
+  buildReviewCommentDrafts,
+  type ReviewCommentFileReader
+} from './review-comments.js'
+
+// The reviewed file as it currently is on disk. Long enough that every target
+// range these tests use sits inside it, so the apply-check passes and each test
+// exercises the guard it is actually about.
+const currentFileLines = 40
+const currentFile = Array.from(
+  { length: currentFileLines },
+  (_, index) => `const line${index + 1} = ${index + 1}`
+).join('\n')
+
+const readCurrentFile: ReviewCommentFileReader = async (path) =>
+  path === 'src/app.ts' ? currentFile : undefined
 
 describe('neutral review-comment drafts', () => {
-  test('builds an inline new-side draft with a structured single-edit suggestion', () => {
+  test('builds an inline new-side draft with a structured single-edit suggestion', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
-    const drafts = buildReviewCommentDrafts({
-      ...report,
-      admittedFindings: [
-        {
-          ...finding,
-          location: {
-            path: 'src/app.ts',
-            startLine: 12,
-            endLine: 13,
-            side: 'new'
-          },
-          fixProposal: {
-            summary: 'Guard the nullable order before reading items.',
-            evidenceIds: finding.admissionEvidenceIds,
-            safety: 'manual-review',
-            edits: [
-              {
-                path: 'src/app.ts',
-                startLine: 12,
-                endLine: 13,
-                replacement:
-                  'if (order === null) {\n  return []\n}\nreturn order.items'
-              }
-            ]
+    const drafts = await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [
+          {
+            ...finding,
+            location: {
+              path: 'src/app.ts',
+              startLine: 12,
+              endLine: 13,
+              side: 'new'
+            },
+            fixProposal: {
+              summary: 'Guard the nullable order before reading items.',
+              evidenceIds: finding.admissionEvidenceIds,
+              safety: 'manual-review',
+              edits: [
+                {
+                  path: 'src/app.ts',
+                  startLine: 12,
+                  endLine: 13,
+                  replacement:
+                    'if (order === null) {\n  return []\n}\nreturn order.items'
+                }
+              ]
+            }
           }
-        }
-      ]
-    })
+        ]
+      },
+      { readCurrentFile }
+    )
 
     expect(drafts).toHaveLength(1)
     const draft = drafts[0]!
@@ -65,49 +83,52 @@ describe('neutral review-comment drafts', () => {
     expect(draft.body).not.toContain('```')
   })
 
-  test('drops summary-only, old-side, and multi-edit suggestions', () => {
+  test('drops summary-only, old-side, and multi-edit suggestions', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
-    const drafts = buildReviewCommentDrafts({
-      ...report,
-      admittedFindings: [
-        {
-          ...finding,
-          id: 'find_summary1',
-          reporterEligibility: 'summary-only'
-        },
-        {
-          ...finding,
-          id: 'find_old1',
-          reporterEligibility: 'inline',
-          location: { path: 'src/app.ts', startLine: 10, side: 'old' }
-        },
-        {
-          ...finding,
-          id: 'find_multi1',
-          reporterEligibility: 'inline',
-          fixProposal: {
-            summary: 'Two edits need human review.',
-            evidenceIds: finding.admissionEvidenceIds,
-            safety: 'manual-review',
-            edits: [
-              {
-                path: finding.location.path,
-                startLine: finding.location.startLine,
-                endLine: finding.location.startLine,
-                replacement: 'first'
-              },
-              {
-                path: finding.location.path,
-                startLine: finding.location.startLine + 1,
-                endLine: finding.location.startLine + 1,
-                replacement: 'second'
-              }
-            ]
+    const drafts = await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [
+          {
+            ...finding,
+            id: 'find_summary1',
+            reporterEligibility: 'summary-only'
+          },
+          {
+            ...finding,
+            id: 'find_old1',
+            reporterEligibility: 'inline',
+            location: { path: 'src/app.ts', startLine: 10, side: 'old' }
+          },
+          {
+            ...finding,
+            id: 'find_multi1',
+            reporterEligibility: 'inline',
+            fixProposal: {
+              summary: 'Two edits need human review.',
+              evidenceIds: finding.admissionEvidenceIds,
+              safety: 'manual-review',
+              edits: [
+                {
+                  path: finding.location.path,
+                  startLine: finding.location.startLine,
+                  endLine: finding.location.startLine,
+                  replacement: 'first'
+                },
+                {
+                  path: finding.location.path,
+                  startLine: finding.location.startLine + 1,
+                  endLine: finding.location.startLine + 1,
+                  replacement: 'second'
+                }
+              ]
+            }
           }
-        }
-      ]
-    })
+        ]
+      },
+      { readCurrentFile }
+    )
 
     // Only the multi-edit inline finding is emitted, and without a suggestion.
     expect(drafts).toHaveLength(1)
@@ -115,61 +136,77 @@ describe('neutral review-comment drafts', () => {
     expect(drafts[0]!.suggestion).toBeUndefined()
   })
 
-  test('drops a suggestion whose edit range does not map to the target range', () => {
+  test('drops a suggestion whose edit range does not map to the target range', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
-    const drafts = buildReviewCommentDrafts({
-      ...report,
-      admittedFindings: [
-        {
-          ...finding,
-          location: { path: 'src/app.ts', startLine: 12, endLine: 13, side: 'new' },
-          fixProposal: {
-            summary: 'Range mismatch.',
-            evidenceIds: finding.admissionEvidenceIds,
-            safety: 'manual-review',
-            edits: [
-              {
-                path: 'src/app.ts',
-                startLine: 12,
-                endLine: 14,
-                replacement: 'mismatched'
-              }
-            ]
+    const drafts = await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [
+          {
+            ...finding,
+            location: {
+              path: 'src/app.ts',
+              startLine: 12,
+              endLine: 13,
+              side: 'new'
+            },
+            fixProposal: {
+              summary: 'Range mismatch.',
+              evidenceIds: finding.admissionEvidenceIds,
+              safety: 'manual-review',
+              edits: [
+                {
+                  path: 'src/app.ts',
+                  startLine: 12,
+                  endLine: 14,
+                  replacement: 'mismatched'
+                }
+              ]
+            }
           }
-        }
-      ]
-    })
+        ]
+      },
+      { readCurrentFile }
+    )
 
     expect(drafts[0]!.suggestion).toBeUndefined()
     expect(drafts[0]!.body).toContain('Range mismatch.')
   })
 
-  test('drops a suggestion whose replacement contains a code fence', () => {
+  test('drops a suggestion whose replacement contains a code fence', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
-    const drafts = buildReviewCommentDrafts({
-      ...report,
-      admittedFindings: [
-        {
-          ...finding,
-          location: { path: 'src/app.ts', startLine: 12, endLine: 13, side: 'new' },
-          fixProposal: {
-            summary: 'Fence in replacement.',
-            evidenceIds: finding.admissionEvidenceIds,
-            safety: 'manual-review',
-            edits: [
-              {
-                path: 'src/app.ts',
-                startLine: 12,
-                endLine: 13,
-                replacement: 'const x = 1\n```\nbreakout'
-              }
-            ]
+    const drafts = await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [
+          {
+            ...finding,
+            location: {
+              path: 'src/app.ts',
+              startLine: 12,
+              endLine: 13,
+              side: 'new'
+            },
+            fixProposal: {
+              summary: 'Fence in replacement.',
+              evidenceIds: finding.admissionEvidenceIds,
+              safety: 'manual-review',
+              edits: [
+                {
+                  path: 'src/app.ts',
+                  startLine: 12,
+                  endLine: 13,
+                  replacement: 'const x = 1\n```\nbreakout'
+                }
+              ]
+            }
           }
-        }
-      ]
-    })
+        ]
+      },
+      { readCurrentFile }
+    )
 
     expect(drafts[0]!.suggestion).toBeUndefined()
   })
@@ -178,35 +215,45 @@ describe('neutral review-comment drafts', () => {
   // body to the cap and the apply-ready block had nowhere to go — dropped for
   // EVERY platform, with the body still reading "Suggested fix: <summary>". The
   // suggestion's room is now reserved before the description is sized.
-  test('a long description does not cost the finding its suggestion', () => {
+  test('a long description does not cost the finding its suggestion', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
-    const drafts = buildReviewCommentDrafts({
-      ...report,
-      admittedFindings: [
-        {
-          ...finding,
-          // At the contract's own 1200-char bound, with a replacement large
-          // enough that the two together exceed the body cap. Something has to
-          // give, and it must not be the fix.
-          description: 'This description is very long. '.repeat(40).slice(0, 1200),
-          location: { path: 'src/app.ts', startLine: 12, endLine: 13, side: 'new' },
-          fixProposal: {
-            summary: 'Guard the null case.',
-            evidenceIds: finding.admissionEvidenceIds,
-            safety: 'manual-review',
-            edits: [
-              {
-                path: 'src/app.ts',
-                startLine: 12,
-                endLine: 13,
-                replacement: 'const line = 1\n'.repeat(120)
-              }
-            ]
+    const drafts = await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [
+          {
+            ...finding,
+            // At the contract's own 1200-char bound, with a replacement large
+            // enough that the two together exceed the body cap. Something has to
+            // give, and it must not be the fix.
+            description: 'This description is very long. '
+              .repeat(40)
+              .slice(0, 1200),
+            location: {
+              path: 'src/app.ts',
+              startLine: 12,
+              endLine: 13,
+              side: 'new'
+            },
+            fixProposal: {
+              summary: 'Guard the null case.',
+              evidenceIds: finding.admissionEvidenceIds,
+              safety: 'manual-review',
+              edits: [
+                {
+                  path: 'src/app.ts',
+                  startLine: 12,
+                  endLine: 13,
+                  replacement: 'const line = 1\n'.repeat(120)
+                }
+              ]
+            }
           }
-        }
-      ]
-    })
+        ]
+      },
+      { readCurrentFile }
+    )
 
     expect(drafts[0]!.suggestion?.replacement).toBe('const line = 1\n'.repeat(120))
     expect(drafts[0]!.body.length).toBeLessThanOrEqual(REVIEW_COMMENT_BODY_MAX)
@@ -218,34 +265,42 @@ describe('neutral review-comment drafts', () => {
   // withheld — and the body says so, and says where the replacement survives. It
   // is NOT `review-comments.json`: when this layer drops the suggestion, the
   // neutral artifact has no `suggestion` field either.
-  test('a suggestion too large to carry is disclosed, not silently dropped', () => {
+  test('a suggestion too large to carry is disclosed, not silently dropped', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
-    const drafts = buildReviewCommentDrafts({
-      ...report,
-      admittedFindings: [
-        {
-          ...finding,
-          location: { path: 'src/app.ts', startLine: 12, endLine: 13, side: 'new' },
-          fixProposal: {
-            summary: 'Replace the whole block.',
-            evidenceIds: finding.admissionEvidenceIds,
-            safety: 'manual-review',
-            edits: [
-              {
-                path: 'src/app.ts',
-                startLine: 12,
-                endLine: 13,
-                replacement: 'const line = 1\n'.repeat(260)
-              }
-            ]
+    const drafts = await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [
+          {
+            ...finding,
+            location: {
+              path: 'src/app.ts',
+              startLine: 12,
+              endLine: 13,
+              side: 'new'
+            },
+            fixProposal: {
+              summary: 'Replace the whole block.',
+              evidenceIds: finding.admissionEvidenceIds,
+              safety: 'manual-review',
+              edits: [
+                {
+                  path: 'src/app.ts',
+                  startLine: 12,
+                  endLine: 13,
+                  replacement: 'const line = 1\n'.repeat(260)
+                }
+              ]
+            }
           }
-        }
-      ]
-    })
+        ]
+      },
+      { readCurrentFile }
+    )
 
     expect(drafts[0]!.suggestion).toBeUndefined()
-    expect(drafts[0]!.body).toContain('was computed for this finding')
+    expect(drafts[0]!.body).toContain('does not fit a review comment')
     expect(drafts[0]!.body).toContain('fixProposal.edits')
     expect(drafts[0]!.body.length).toBeLessThanOrEqual(REVIEW_COMMENT_BODY_MAX)
   })
@@ -253,73 +308,220 @@ describe('neutral review-comment drafts', () => {
   // The counterweight: a finding with no eligible replacement must NOT claim one
   // was computed and withheld. A note that fires when nothing was lost is a note
   // readers learn to skip.
-  test('a finding whose fix was never suggestion-eligible says nothing about one', () => {
+  test('a finding whose fix was never suggestion-eligible says nothing about one', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
-    const drafts = buildReviewCommentDrafts({
-      ...report,
-      admittedFindings: [
-        {
-          ...finding,
-          location: { path: 'src/app.ts', startLine: 12, endLine: 13, side: 'new' },
-          fixProposal: {
-            summary: 'Two separate edits.',
-            evidenceIds: finding.admissionEvidenceIds,
-            safety: 'manual-review',
-            edits: [
-              { path: 'src/app.ts', startLine: 12, endLine: 13, replacement: 'a' },
-              { path: 'src/app.ts', startLine: 20, endLine: 20, replacement: 'b' }
-            ]
+    const drafts = await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [
+          {
+            ...finding,
+            location: {
+              path: 'src/app.ts',
+              startLine: 12,
+              endLine: 13,
+              side: 'new'
+            },
+            fixProposal: {
+              summary: 'Two separate edits.',
+              evidenceIds: finding.admissionEvidenceIds,
+              safety: 'manual-review',
+              edits: [
+                { path: 'src/app.ts', startLine: 12, endLine: 13, replacement: 'a' },
+                { path: 'src/app.ts', startLine: 20, endLine: 20, replacement: 'b' }
+              ]
+            }
           }
-        }
-      ]
-    })
+        ]
+      },
+      { readCurrentFile }
+    )
 
     expect(drafts[0]!.suggestion).toBeUndefined()
     expect(drafts[0]!.body).not.toContain('was computed for this finding')
   })
 
-  test('escapes Markdown metacharacters in untrusted body text', () => {
+  test('escapes Markdown metacharacters in untrusted body text', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
-    const drafts = buildReviewCommentDrafts({
-      ...report,
-      admittedFindings: [
-        {
-          ...finding,
-          title: 'Bug ```injected``` [x](javascript:alert(1))',
-          description: 'See ```suggestion\nmalicious()\n``` here.',
-          location: { path: 'src/app.ts', startLine: 12, endLine: 13, side: 'new' }
-        }
-      ]
-    })
+    const drafts = await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [
+          {
+            ...finding,
+            title: 'Bug ```injected``` [x](javascript:alert(1))',
+            description: 'See ```suggestion\nmalicious()\n``` here.',
+            location: {
+              path: 'src/app.ts',
+              startLine: 12,
+              endLine: 13,
+              side: 'new'
+            }
+          }
+        ]
+      },
+      { readCurrentFile }
+    )
 
     const body = drafts[0]!.body
     expect(body).not.toContain('```')
     expect(body).not.toContain('](javascript:')
   })
 
-  test('drafts a whole-file finding that admission marked inline', () => {
+  test('drafts a whole-file finding that admission marked inline', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
-    const drafts = buildReviewCommentDrafts({
-      ...report,
-      admittedFindings: [
-        {
-          ...finding,
-          // Model-origin findings carry `side: 'file'`; admission decides whether
-          // the line sits in a changed hunk, and this layer must honour that
-          // decision instead of dropping every non-`new` location.
-          location: { path: 'src/app.ts', startLine: 4, side: 'file' }
-        }
-      ]
-    })
+    const drafts = await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [
+          {
+            ...finding,
+            // Model-origin findings carry `side: 'file'`; admission decides whether
+            // the line sits in a changed hunk, and this layer must honour that
+            // decision instead of dropping every non-`new` location.
+            location: { path: 'src/app.ts', startLine: 4, side: 'file' }
+          }
+        ]
+      },
+      { readCurrentFile }
+    )
 
     expect(drafts).toHaveLength(1)
     expect(drafts[0]).toMatchObject({
       path: 'src/app.ts',
       targetRange: { startLine: 4, endLine: 4 }
     })
+  })
+})
+
+// A ```suggestion block renders a one-click Apply. Its content comes from the
+// model — the refuter on a default run, the fix lane when it is enabled — and
+// until the apply-check below ran here, NOTHING verified that those edits still
+// fit the file. The fix lane runs the identical check, but it is off by default,
+// so the safety of the one-click apply cannot depend on it.
+describe('a suggestion is apply-checked against the file it targets', () => {
+  const report = createReportFixture()
+  const finding = report.admittedFindings[0]!
+  // One report, reused by every case below, so the ONLY thing that varies between
+  // them is what the file reader answers.
+  const reportWithFix = {
+    ...report,
+    admittedFindings: [
+      {
+        ...finding,
+        location: { path: 'src/app.ts', startLine: 12, endLine: 13, side: 'new' },
+        description: 'The nullable order is read without a guard.',
+        fixProposal: {
+          summary: 'Guard the nullable order before reading items.',
+          evidenceIds: finding.admissionEvidenceIds,
+          safety: 'manual-review',
+          edits: [
+            {
+              path: 'src/app.ts',
+              startLine: 12,
+              endLine: 13,
+              replacement: 'return order?.items ?? []'
+            }
+          ]
+        }
+      }
+    ]
+  }
+
+  // The control, and the proof that the three cases below are not passing
+  // vacuously: this edit set is suggestion-eligible in every way the pre-existing
+  // guards check, so the ONLY thing that can drop it is the apply-check — which
+  // this file satisfies.
+  test('a set that applies to the current bytes keeps its suggestion', async () => {
+    const drafts = await buildReviewCommentDrafts(reportWithFix, {
+      readCurrentFile
+    })
+
+    expect(drafts[0]!.suggestion).toEqual({
+      replacement: 'return order?.items ?? []'
+    })
+    expect(drafts[0]!.body).not.toContain('one-click apply')
+  })
+
+  test('a set that no longer fits the file is dropped, and the prose is kept', async () => {
+    // The same file, since shortened to three lines: the finding's 12-13 range no
+    // longer exists, which is exactly the stale-location case the check is for.
+    const drafts = await buildReviewCommentDrafts(reportWithFix, {
+      readCurrentFile: async () => 'const a = 1\nconst b = 2\nconst c = 3'
+    })
+
+    expect(drafts).toHaveLength(1)
+    expect(drafts[0]!.suggestion).toBeUndefined()
+    // The finding is still reported in full — it only loses the one-click apply.
+    expect(drafts[0]!.body).toContain('The nullable order is read without a guard.')
+    expect(drafts[0]!.body).toContain(
+      'Suggested fix: Guard the nullable order before reading items.'
+    )
+    expect(drafts[0]!.body).toContain(`Finding: ${finding.id}`)
+    // Stale, and said as stale: this replacement must not be applied by hand
+    // either.
+    expect(drafts[0]!.body).toContain(
+      "no longer applies to the file's current contents"
+    )
+  })
+
+  // Fail closed. An absent check is not a passing check, and the body must not
+  // report it as the stale case — nothing was checked, which is a different fact.
+  test('unreadable bytes withhold the suggestion and say it was not checked', async () => {
+    const drafts = await buildReviewCommentDrafts(reportWithFix, {
+      readCurrentFile: async () => undefined
+    })
+
+    expect(drafts[0]!.suggestion).toBeUndefined()
+    expect(drafts[0]!.body).toContain(
+      "could not be checked against the file's current contents"
+    )
+    expect(drafts[0]!.body).not.toContain('no longer applies')
+  })
+
+  test('no reader at all withholds the suggestion the same way', async () => {
+    const drafts = await buildReviewCommentDrafts(reportWithFix, {
+      readCurrentFile: undefined
+    })
+
+    expect(drafts[0]!.suggestion).toBeUndefined()
+    expect(drafts[0]!.body).toContain(
+      "could not be checked against the file's current contents"
+    )
+  })
+
+  // A reader is an I/O boundary and I/O throws. One unreadable file must not fail
+  // the whole report; it costs that finding its suggestion and nothing more.
+  test('a reader that throws costs the suggestion, not the report', async () => {
+    const drafts = await buildReviewCommentDrafts(reportWithFix, {
+      readCurrentFile: async () => {
+        throw new Error('EACCES')
+      }
+    })
+
+    expect(drafts).toHaveLength(1)
+    expect(drafts[0]!.suggestion).toBeUndefined()
+  })
+
+  // The whole point of the check is a platform-rendered Apply button, so assert on
+  // what the platform renderer emits, not only on the neutral draft.
+  test('no ```suggestion fence reaches GitHub for a stale edit set', async () => {
+    const stale = await buildReviewCommentDrafts(reportWithFix, {
+      readCurrentFile: async () => 'const a = 1\nconst b = 2\nconst c = 3'
+    })
+    const clean = await buildReviewCommentDrafts(reportWithFix, {
+      readCurrentFile
+    })
+
+    expect(renderReviewComments(stale, 'github')[0]!.body).not.toContain(
+      '```suggestion'
+    )
+    expect(renderReviewComments(clean, 'github')[0]!.body).toContain(
+      '```suggestion\nreturn order?.items ?? []\n```'
+    )
   })
 })
 
@@ -344,17 +546,17 @@ describe('the proof an inline comment carries', () => {
     ]
   }
 
-  const bodyFor = (report: unknown): string => {
-    const drafts = buildReviewCommentDrafts(report)
+  const bodyFor = async (report: unknown): Promise<string> => {
+    const drafts = await buildReviewCommentDrafts(report, { readCurrentFile })
 
     expect(drafts).toHaveLength(1)
 
     return drafts[0]!.body
   }
 
-  test('states the verdict it survived and the address it rests on', () => {
+  test('states the verdict it survived and the address it rests on', async () => {
     const report = createReportFixture()
-    const body = bodyFor({
+    const body = await bodyFor({
       ...report,
       refutationResults: [refutation],
       admittedFindings: [
@@ -363,45 +565,45 @@ describe('the proof an inline comment carries', () => {
     })
 
     expect(body).toContain(
-      '- **Survived refutation** (proved): Looked for a caller-side guard; none exists.'
+      '- **Why this holds:** Looked for a caller-side guard; none exists.'
     )
     // The evidence ADDRESS, not the bare id the body never resolved.
-    expect(body).toContain('- **Rests on:** file at `src/app.ts:4`')
+    expect(body).toContain('- **Based on:** file at `src/app.ts:4`')
   })
 
   // The failure this surface is being fixed for: with no verdict line at all, a
   // finding that survived refutation and one that was never adjudicated rendered
   // as the same comment.
-  test('says a missing verdict is missing instead of omitting the line', () => {
+  test('says a missing verdict is missing instead of omitting the line', async () => {
     const report = createReportFixture()
-    const withRefutation = bodyFor({
+    const withRefutation = await bodyFor({
       ...report,
       refutationResults: [refutation],
       admittedFindings: [
         { ...report.admittedFindings[0]!, refutationId: 'refute_join1' }
       ]
     })
-    const withoutRefutation = bodyFor(report)
+    const withoutRefutation = await bodyFor(report)
 
     expect(withoutRefutation).toContain(
-      '- **Survived refutation:** no verdict was recorded against this finding, so what it survived cannot be shown here.'
+      '- **Why this holds:** no verdict was recorded against this finding, so what it survived cannot be shown here.'
     )
     expect(withoutRefutation).not.toBe(withRefutation)
   })
 
-  test('names an evidence id whose record is missing rather than dropping it', () => {
-    const body = bodyFor({ ...createReportFixture(), evidence: [] })
+  test('names an evidence id whose record is missing rather than dropping it', async () => {
+    const body = await bodyFor({ ...createReportFixture(), evidence: [] })
 
     expect(body).toContain(
       '`ev_diff1` (no evidence record for this id is in the report)'
     )
   })
 
-  test('cites at most three addresses and points at the report for the rest', () => {
+  test('cites at most three addresses and points at the report for the rest', async () => {
     const report = createReportFixture()
     const evidenceRecord = report.evidence[0]!
     const evidenceIds = ['ev_diff1', 'ev_diff2', 'ev_diff3', 'ev_diff4', 'ev_diff5']
-    const body = bodyFor({
+    const body = await bodyFor({
       ...report,
       evidence: evidenceIds.map((id, index) => ({
         ...evidenceRecord,
@@ -412,7 +614,7 @@ describe('the proof an inline comment carries', () => {
     })
 
     expect(body).toContain(
-      '- **Rests on:** file at `src/app.ts:1`; file at `src/app.ts:2`; file at `src/app.ts:3`; and 2 more in the run report'
+      '- **Based on:** file at `src/app.ts:1`; file at `src/app.ts:2`; file at `src/app.ts:3`; and 2 more in the run report'
     )
     expect(body).not.toContain('src/app.ts:4')
   })
@@ -420,12 +622,12 @@ describe('the proof an inline comment carries', () => {
   // The body has a hard cap, and the proof sits after the description. A blind
   // tail truncation would therefore take the proof off exactly the findings with
   // the most to say, so the description is what gives way instead.
-  test('a description that fills the cap loses its own tail, never the proof', () => {
+  test('a description that fills the cap loses its own tail, never the proof', async () => {
     const report = createReportFixture()
     const finding = report.admittedFindings[0]!
     // Worst case for the cap: every character escapes to five (`&` -> `&amp;`),
     // at the contract's maximum description length.
-    const body = bodyFor({
+    const body = await bodyFor({
       ...report,
       refutationResults: [refutation],
       admittedFindings: [
@@ -438,8 +640,8 @@ describe('the proof an inline comment carries', () => {
     })
 
     expect(body.length).toBeLessThanOrEqual(3000)
-    expect(body).toContain('- **Survived refutation** (proved):')
-    expect(body).toContain('- **Rests on:** file at `src/app.ts:4`')
+    expect(body).toContain('- **Why this holds:** ')
+    expect(body).toContain('- **Based on:** file at `src/app.ts:4`')
     expect(body).toContain(`Finding: ${finding.id}`)
     // Cut short, and cut where a reader can see it — never mid-entity, which
     // would render as a literal `&amp`.
@@ -447,9 +649,9 @@ describe('the proof an inline comment carries', () => {
     expect(body).not.toMatch(/&[A-Za-z#][A-Za-z0-9]*…/u)
   })
 
-  test('bounds a refutation summary that would crowd out the finding', () => {
+  test('bounds a refutation summary that would crowd out the finding', async () => {
     const report = createReportFixture()
-    const body = bodyFor({
+    const body = await bodyFor({
       ...report,
       refutationResults: [
         { ...refutation, summary: `${'r'.repeat(999)}!` }
@@ -515,7 +717,7 @@ describe('model-origin finding to platform review comment', () => {
     admittedAt: '2026-06-20T00:00:00.000Z'
   }
 
-  const draftsForRun = (): ReturnType<typeof buildReviewCommentDrafts> => {
+  const draftsForRun = async (): ReturnType<typeof buildReviewCommentDrafts> => {
     const report = createReportFixture()
     const admission = admitCandidate({
       candidate: modelCandidate,
@@ -526,18 +728,21 @@ describe('model-origin finding to platform review comment', () => {
 
     expect(admission.status).toBe('admitted')
 
-    return buildReviewCommentDrafts({
-      ...report,
-      admittedFindings: [admission.admittedFinding!],
-      qualityGate: {
-        ...report.qualityGate,
-        failingFindingIds: []
-      }
-    })
+    return await buildReviewCommentDrafts(
+      {
+        ...report,
+        admittedFindings: [admission.admittedFinding!],
+        qualityGate: {
+          ...report.qualityGate,
+          failingFindingIds: []
+        }
+      },
+      { readCurrentFile }
+    )
   }
 
-  test('produces one neutral draft with a structured suggestion', () => {
-    const drafts = draftsForRun()
+  test('produces one neutral draft with a structured suggestion', async () => {
+    const drafts = await draftsForRun()
 
     expect(drafts).toHaveLength(1)
     expect(drafts[0]).toMatchObject({
@@ -547,8 +752,8 @@ describe('model-origin finding to platform review comment', () => {
     })
   })
 
-  test('renders on every comment platform with its own suggestion syntax', () => {
-    const drafts = draftsForRun()
+  test('renders on every comment platform with its own suggestion syntax', async () => {
+    const drafts = await draftsForRun()
 
     const [github] = renderReviewComments(drafts, 'github')
     expect(github).toMatchObject({ line: 4, side: 'RIGHT' })

@@ -8,6 +8,7 @@ import {
   resolveExistingPathInsideRoot,
   resolveWritePathInsideRoot
 } from '../platform/path-service.js'
+import { createRepositoryFileReader } from '../platform/repository-file-reader.js'
 import {
   detectPlatformTarget,
   parseRunIndex,
@@ -143,7 +144,16 @@ export const writeReviewArtifacts = async (
     sarif: input.config.reporting.sarif,
     ...(resolvedPlatform === undefined
       ? {}
-      : { reviewComments: { platform: resolvedPlatform.platform } }),
+      : {
+          reviewComments: {
+            platform: resolvedPlatform.platform,
+            // The working tree this run reviewed, read raw and whole: the
+            // suggestion apply-check compares an edit's line range against the
+            // file's real line count, so a budgeted or truncated read would make
+            // a good edit look out of range.
+            readCurrentFile: createRepositoryFileReader(input.repositoryRoot)
+          }
+        }),
     onReviewComments: (metrics) => {
       reviewCommentEvents = [
         createNoContentStepEvent({

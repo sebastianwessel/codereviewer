@@ -2640,7 +2640,8 @@ describe('review workflow', () => {
       })
     ])
     expect(
-      buildReviewCommentDrafts({
+      await buildReviewCommentDrafts(
+        {
           schemaVersion: '1.0',
           run: {
             runId: 'test-run',
@@ -2681,7 +2682,11 @@ describe('review workflow', () => {
           providerIssues: [],
           skippedFiles: [],
           artifacts: []
-        })
+        },
+        // The report admits nothing, so there is no draft to apply-check and no
+        // file to read for one.
+        { readCurrentFile: undefined }
+      )
     ).toEqual([])
 
     await harness.shutdown()
@@ -2888,6 +2893,13 @@ describe('review workflow', () => {
           depth: 'balanced'
         },
         aiReview: {
+        },
+        // Off so the warning list below stays about THIS test's subject. The
+        // default provider set (on since 2026-08-11) finds no change intent in a
+        // scratch repository and says so once per provider, which is correct and
+        // has nothing to do with whether a large file was sent whole.
+        contextSources: {
+          enabled: false
         },
         drift: {
           enabled: false

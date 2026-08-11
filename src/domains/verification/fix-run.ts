@@ -9,22 +9,18 @@
 // unresolved provider, it returns the findings unchanged and an empty report. It
 // never changes a finding's category, severity, admission, or the quality gate.
 
-import { readFile } from 'node:fs/promises'
 import type {
   CodeReviewerConfig,
   Severity
 } from '../../shared/contracts/index.js'
 import type { AdmittedFinding } from '../../shared/contracts/findings/finding.schema.js'
 import type { RunTokenUsage } from '../costs/index.js'
-import { resolveExistingPathInsideRoot } from '../../platform/path-service.js'
+import { createRepositoryFileReader } from '../../platform/repository-file-reader.js'
 import {
   createCurrentFindingsProvider,
   eligibleCurrentFindings
 } from './current-findings-provider.js'
-import {
-  enrichFindingsWithFixes,
-  type CurrentFileReader
-} from './fix-enrichment.js'
+import { enrichFindingsWithFixes } from './fix-enrichment.js'
 import {
   runInvestigationFlow,
   type InvestigationRunContext
@@ -51,20 +47,6 @@ export type FixRunResult = {
  */
 export const resolveFixMinSeverity = (config: CodeReviewerConfig): Severity =>
   config.fix.minSeverity ?? config.aiReview.actionableSeverityThreshold
-
-const currentFileReaderFor = (repositoryRoot: string): CurrentFileReader => async (
-  repositoryRelativePath
-) => {
-  try {
-    return await readFile(
-      await resolveExistingPathInsideRoot(repositoryRoot, repositoryRelativePath),
-      'utf8'
-    )
-  } catch {
-    // A deleted or ineligible file makes the apply-check fail closed.
-    return undefined
-  }
-}
 
 export const runFixRun = async (
   input: InvestigationRunContext & {
@@ -96,7 +78,9 @@ export const runFixRun = async (
     findings: input.admittedFindings,
     verdicts: report.verdicts,
     observations: report.observations,
-    readFile: currentFileReaderFor(input.repositoryRoot)
+    // A deleted or unreadable file makes the apply-check fail closed and the fix
+    // not produced.
+    readFile: createRepositoryFileReader(input.repositoryRoot)
   })
 
   const fixReport = VerificationReportSchema.parse({

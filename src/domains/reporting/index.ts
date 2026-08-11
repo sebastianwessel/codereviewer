@@ -12,7 +12,8 @@ export {
 export {
   buildReviewCommentDrafts,
   CODE_FENCE,
-  renderFencedBlock
+  renderFencedBlock,
+  type ReviewCommentFileReader
 } from './review-comments.js'
 export {
   detectPlatformTarget,

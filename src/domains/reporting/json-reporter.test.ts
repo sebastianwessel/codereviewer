@@ -7,6 +7,13 @@ import {
 } from './index.js'
 import { createReportFixture } from '../../shared/testing/report-fixture.js'
 
+// The fixture finding's edit targets `src/app.ts:4`, so the apply-check needs a
+// file with at least that many lines for a suggestion to survive to the artifacts.
+const readCurrentFile = async (path: string): Promise<string | undefined> =>
+  path === 'src/app.ts'
+    ? ['one', 'two', 'three', 'return staleValue', 'five'].join('\n')
+    : undefined
+
 describe('JSON reporter', () => {
   test('renders canonical JSON that validates against the report schema', () => {
     const rendered = renderJsonReport(createReportFixture())
@@ -79,7 +86,7 @@ describe('JSON reporter', () => {
         }
       },
       formats: ['json', 'sarif'],
-      reviewComments: { platform: 'github' },
+      reviewComments: { platform: 'github', readCurrentFile },
       writer: async (artifactPath, content) => {
         writes.set(artifactPath, content)
       }
@@ -131,7 +138,7 @@ describe('JSON reporter', () => {
     const artifacts = await writeReportingArtifacts({
       report: createReportFixture(),
       formats: ['json'],
-      reviewComments: { platform: 'github' },
+      reviewComments: { platform: 'github', readCurrentFile },
       writer: async (artifactPath, content) => {
         writes.set(artifactPath, content)
       }

@@ -151,10 +151,20 @@ describe('impact CLI', { timeout: 20_000 }, () => {
     )
   })
 
-  test('reports disabled, and exits 0, when the capability is off by default', async () => {
+  // The lane became ON by default on 2026-08-11, so the switch is written out
+  // here. What this test pins is unchanged and still worth pinning: an operator
+  // who turns the lane OFF gets a report that says `disabled` and exit 0, not an
+  // empty `completed` report that reads like a clean bill of health.
+  test('reports disabled, and exits 0, when the capability is switched off', async () => {
     const root = await createRepository()
 
     try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify({ changeImpact: { enabled: false } })
+      )
+
       const result = await runCli(
         ['impact', 'check', '--base-ref', 'main~1', '--head-ref', 'HEAD'],
         { cwd: root, environment: {} }
@@ -162,9 +172,8 @@ describe('impact CLI', { timeout: 20_000 }, () => {
 
       expect(result.exitCode).toBe(0)
       expect(parseReport(result.stdout).status).toBe('disabled')
-      // A stage that analysed nothing leaves nothing behind: a capability that is
-      // off by default must not accumulate run directories in a repository whose
-      // owner never enabled it.
+      // A stage that analysed nothing leaves nothing behind: a capability an
+      // operator switched off must not accumulate run directories anyway.
       await expect(readdir(join(root, '.codereviewer', 'runs'))).rejects.toThrow()
     } finally {
       await rm(root, { recursive: true, force: true })
