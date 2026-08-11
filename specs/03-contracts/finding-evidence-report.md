@@ -480,7 +480,7 @@ JSON file to callers, but that JSON self-entry is not embedded in `report.json`.
 | `configHash` | yes | SHA-256 |
 | `provider` | no | provider ID of the model that PRODUCED this run's findings; absent when no model search ran, and never copied from configuration on a run that performed none |
 | `model` | no | string, on the same terms as `provider` |
-| `modelSearch` | no | `performed` \| `not-performed` — whether a model actually searched this change. Absent means the report does not say (it predates the field), which a consumer must not read as `performed` |
+| `modelSearch` | no | `performed` \| `not-performed` — whether a model actually searched this change. Absent means the report does not say (it predates the field), which a consumer must not read as `performed`. A run that failed INSIDE the model stages records `performed`: it resolved its model and dispatched tasks to it, and the incompleteness is carried by the `partial-run` warning and the run error, not by this field |
 | `durationMs` | yes | integer >= 0 |
 | `costUsd` | no | number >= 0 |
 | `inputTokens` | no | integer >= 0 |

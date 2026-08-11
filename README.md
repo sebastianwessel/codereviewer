@@ -136,8 +136,16 @@ build step.
 
 From inside the repository you want reviewed:
 
-**1.** Run it with no provider first. This costs nothing and makes no network
+**1.** Run it deterministic-only first. This costs nothing and makes no network
 call — it proves your refs, paths and scope are right before you spend anything.
+Say so in `.codereviewer/config.json`, because leaving `provider` unset is not
+the same statement: `aiReview.enabled` defaults to `true`, and a run that asks
+for a model review with no model is refused (exit `2`) rather than handed back as
+a passing, empty review.
+
+```json
+{ "aiReview": { "enabled": false } }
+```
 
 ```bash
 codereviewer review --base-ref origin/main --head-ref HEAD
@@ -150,9 +158,10 @@ codereviewer review --base-ref origin/main --head-ref HEAD
 Open `.codereviewer/runs/<run-id>/report.md` and check that **Coverage** lists the
 files you expected and **Skipped Files** holds no surprises.
 
-**2.** Name a provider and a model in `.codereviewer/config.json`. That is the
-whole configuration — every other key has a default, and the defaults are the
-product rather than a starting point.
+**2.** Name a provider and a model in `.codereviewer/config.json`, replacing the
+`aiReview.enabled: false` from step 1. That is the whole configuration — every
+other key has a default, and the defaults are the product rather than a starting
+point.
 
 ```json
 {

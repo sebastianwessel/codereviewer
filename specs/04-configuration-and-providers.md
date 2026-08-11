@@ -167,11 +167,40 @@ or publishing.
 
 | Key | Type | Default | Rule |
 | --- | --- | --- | --- |
-| `enabled` | boolean | *unset* | A provider-backed review runs when `provider` is configured and this is not explicitly `false`. Set it to `false` to run the deterministic path with a provider still configured. |
+| `enabled` | boolean | `true` | A provider-backed review runs when `provider` is configured and this is `true`. `true` with no `provider` is REFUSED — see *A Run Asked For A Model Review Must Have One* below. Set it to `false` to run the deterministic path, with or without a provider configured. |
 | `requireRefutation` | boolean (always `true`) | `true` | Every model candidate must survive the refutation pass before admission. |
 | `actionableSeverityThreshold` | severity | `medium` | Minimum severity for a MODEL-origin finding to be admitted as actionable. Below this it is rejected as `below-threshold` (still recorded as a rejected finding). Trusted deterministic-rule findings are exempt. Keeps the engine focused on impactful runtime/security defects over low-severity nits. |
 | `deterministicSignalMode` | `"support" | "disabled"` | `"support"` | `support` injects deterministic facts as model context (materially improves recall). `disabled` keeps facts for free task clustering and admission contradiction checks but does NOT inject support-signal context into model packets — lower token cost, lower recall. Override with `CODEREVIEWER_AI_DETERMINISTIC_SIGNAL_MODE`. |
 | `maxFilesPerDiscoveryCall` | integer >= 1 | `2` | How many changed files ONE discovery call may review (spec 27). A task covering more is partitioned across several calls whose candidates are unioned; every partition receives the same shared context the undivided task would have. Partitioning engages only above this many changed files, so a small change is unaffected. When the dedicated security pass is on, it is partitioned on the same terms. |
+
+### A Run Asked For A Model Review Must Have One
+
+`aiReview.enabled: true` with no `provider` configured is a contradiction, and it
+is the SHIPPED DEFAULT: `enabled` defaults to `true` and `provider` has no
+default, so an unconfigured repository asks for a model review that cannot
+happen. Such a run must be refused with a structured `config` error
+(`model_review_provider_missing`, exit `2`) in the review runner's preflight —
+before intake, planning, or any artifact is written — and the message must name
+both remedies: configure a provider, or set `aiReview.enabled: false`.
+
+The refusal belongs to the pipeline, not to a command, so every entry point that
+runs a review is bound by it: the `review` command, the library's `runReview`,
+and `eval run`.
+
+`aiReview.enabled: false` is NOT this case and must keep completing at exit `0`.
+That operator switched the model review off; the run is deterministic-only on
+purpose and discloses it through `run.modelSearch: "not-performed"`. The
+difference between the two is the whole rule: a run that searched nothing on
+purpose is a choice, and a run that searched nothing because it had no model was
+an empty passing review indistinguishable from a clean change.
+
+`eval run` satisfies the rule by stating the same thing rather than being exempt
+from it: with no provider configured it resolves the effective review
+configuration to `aiReview.enabled: false`, warns on stderr, and records the
+value in the report's capability provenance — so an offline scoring run over
+cases that expect no finding stays possible, and cannot be mistaken for a run a
+model took part in. A case that DOES declare expected findings still fails with
+`eval_semantic_judge_missing`, because the judge needs the same provider.
 
 Holistic discovery and refutation packets reuse the provider task-input budget
 instead of introducing stage-specific public settings. Each stage is measured

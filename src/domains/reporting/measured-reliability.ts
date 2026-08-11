@@ -205,8 +205,11 @@ export const numberWord = (value: number): string =>
  * What every reader-facing surface says INSTEAD of the rates when the run
  * performed no model search at all (`run.modelSearch === 'not-performed'`).
  *
- * A run with `aiReview.enabled: false`, or with no provider configured, reports
- * zero findings, passes its quality gate and exits 0. Printing the measured
+ * A run with `aiReview.enabled: false` reports zero findings, passes its quality
+ * gate and exits 0 — deliberately, which is the only way this state is now
+ * reachable: a run that leaves `aiReview.enabled` at its default `true` with no
+ * provider is refused before it starts (`model_review_provider_missing`).
+ * Printing the measured
  * recall and precision over that is worse than printing nothing: those rates
  * describe how often a MODEL SEARCH finds a defect, so quoting them where no
  * search happened lends a run that looked at nothing the credibility of one that
@@ -218,7 +221,7 @@ export const numberWord = (value: number): string =>
  * pull-request comment both print it, and a sentence whose whole job is to refuse
  * a flattering reading is the last one that should exist in two editable copies.
  */
-export const NO_MODEL_SEARCH = `NO MODEL SEARCHED THIS CHANGE. The model-backed review did not run — it is switched off, or no provider is configured — so nothing here rests on a model having looked for defects, and anything reported came from the deterministic signals alone. The measured recall and precision this surface prints for a review are deliberately absent: they describe how often a model search finds a defect, and this run performed no search for them to describe. Read an empty list as "nothing was searched for", never as "there is nothing to find".`
+export const NO_MODEL_SEARCH = `NO MODEL SEARCHED THIS CHANGE. The model-backed review is switched off (\`aiReview.enabled: false\`), so nothing here rests on a model having looked for defects, and anything reported came from the deterministic signals alone. The measured recall and precision this surface prints for a review are deliberately absent: they describe how often a model search finds a defect, and this run performed no search for them to describe. Read an empty list as "nothing was searched for", never as "there is nothing to find".`
 
 /**
  * What an empty findings list means on a run that performed NO model search.

@@ -101,6 +101,7 @@ Provider setup problems are **config** errors (exit `2`), not provider errors:
 | Code | When |
 | --- | --- |
 | `config_error` | Config file or CLI argument invalid; schema validation failed. |
+| `model_review_provider_missing` | `aiReview.enabled` is `true` and no `provider` is configured, so the run was asked for a model review it has no model to perform. Refused in preflight, before any repository work — it is the default configuration, and it used to produce an empty review at exit `0`. Configure a provider, or set `aiReview.enabled: false` to run deterministic-only on purpose. |
 | `invalid_git_ref` | `baseRef`/`headRef` is not a valid or safe git ref. |
 | `instruction_read_denied` | An `instructions.files` entry could not be read within the allowed boundary. |
 | `skill_read_denied` | A mounted skill file could not be read within the allowed boundary. |

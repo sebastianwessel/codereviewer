@@ -63,7 +63,9 @@ A perfect score here is not a result — it is the absence of one.
 > semantic-match call, so the pack is the one corpus that scores fully
 > deterministically with no provider at all — and in that configuration
 > `scoring.judgeTrustworthy: true` means "there was no semantic authority to
-> distrust", not "the judge was verified". Note that if a provider *is*
+> distrust", not "the judge was verified". Such a run says so rather than looking
+> like a measured one: it warns on stderr that no model reviewed any case, and
+> the report records `provenance.capabilities["aiReview.enabled"]: false`. Note that if a provider *is*
 > configured, both judges are still constructed and still calibrated (23 judge
 > calls), so a "free" smoke run is not free.
 

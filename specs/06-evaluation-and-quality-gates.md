@@ -611,6 +611,17 @@ omission. Three rules govern the file:
   records the value that actually applied, because it is read off the same
   post-pin configuration the cases ran under. A flag outside the pin set is
   refused rather than accepted, so there are never two ways to set one value.
+- **A run with no provider records `aiReview.enabled: false`, and it is not a
+  pin violation.** `aiReview.enabled` is pinned ON so a repository configuration
+  cannot turn an eval into a zero-recall report, but no pin can supply a model:
+  with no provider configured the effective review configuration resolves that
+  flag to `false`, the run warns on stderr that it measures nothing about the
+  reviewer, and `provenance.capabilities` records the `false` that applied. This
+  is what keeps a fully offline run (no expected findings, no judge needed)
+  possible while the review pipeline refuses every other run that asks for a
+  model review without one (spec 04, *A Run Asked For A Model Review Must Have
+  One*). A case that declares expected findings still fails with
+  `eval_semantic_judge_missing`.
 
 Changing a pin means running the A/B through `--capability`, recording it in the
 ledger, editing the file in its own commit, and re-baselining. Nothing here makes

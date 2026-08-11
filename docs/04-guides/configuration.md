@@ -73,10 +73,18 @@ provider. Omit the `provider` block entirely — it is optional.
 }
 ```
 
-With no provider configured the run performs no network IO: it collects the
-diff, computes deterministic support signals, plans tasks, writes artifacts and
-evaluates the gate. No model discovery or refutation runs, so the report
-contains no model-origin findings.
+With `aiReview.enabled: false` and no provider configured the run performs no
+network IO: it collects the diff, computes deterministic support signals, plans
+tasks, writes artifacts and evaluates the gate. No model discovery or refutation
+runs, so the report contains no model-origin findings, and it records
+`run.modelSearch: "not-performed"` so an empty findings list cannot be read as a
+clean bill of health.
+
+Leaving `aiReview.enabled` at its default `true` with no provider is **refused**
+(`model_review_provider_missing`, exit `2`) rather than run: that configuration
+asks for a model review and has no model, and it used to produce a passing,
+empty review at exit `0`. Deterministic-only is a choice you state, not one you
+fall into.
 
 ---
 

@@ -24,13 +24,15 @@ export const createPartialReviewRunFailedError = (
     readonly completedAt: Date
     readonly configHash: string
     readonly warnings: readonly string[]
-    // Optional here alone. A run that died INSIDE the provider workflow reaches
-    // this through `provider-failures.ts`, and on that path a model search was at
-    // least attempted — `runProviderWorkflow` returns before throwing anything
-    // when the review is switched off — so neither value is a fact that path
-    // holds. It states nothing rather than guessing, and the callers that do know
-    // (the coverage and cost gates) pass it.
-    readonly modelSearch?: ReviewReport['run']['modelSearch']
+    // Required, like everywhere else this summary is built. It was optional here
+    // alone, on the reading that a run dying inside the provider workflow could
+    // not know whether a model had searched — and the consequence of saying
+    // nothing was that `createReviewRunSummary` stamped the configured provider
+    // and model by default, which is the claim the field exists to stop. Both
+    // callers do know: the coverage and cost gates carry the run's own value, and
+    // a provider-workflow failure is only ever raised after tasks reached the
+    // model (see `provider-failures.ts`).
+    readonly modelSearch: NonNullable<ReviewReport['run']['modelSearch']>
     readonly runCost?: RunCostSummary | undefined
     readonly contextLedger: readonly ContextLedgerEntry[]
     readonly sharedContext: ReviewSharedContextSnapshot

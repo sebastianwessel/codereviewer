@@ -78,6 +78,28 @@ export const createProviderTaskExecutionFailure = (
     completedAt: input.completedAt,
     configHash: input.configHash,
     warnings: partialWarningsFor(input),
+    // A model search WAS performed, and this is the only value that is true.
+    //
+    // The path is narrower than "the provider workflow threw": it is reached
+    // only for a `ReviewTaskExecutionError`, which the task queue raises after
+    // the provider was resolved, the harness was built and tasks were dispatched
+    // to the model — a resolution failure never gets here, it rethrows and the
+    // run ends with no summary at all. `partialResults` on this error can even
+    // carry candidates a model produced.
+    //
+    // So `not-performed` would be false, and it is the one value with
+    // consequences: it suppresses the model name and every measured rate, on the
+    // grounds that nothing looked. Something did, and the model it used is
+    // exactly what the reader of a failed run needs named.
+    //
+    // The vocabulary is not extended to a third `interrupted` value, though the
+    // search was interrupted. That fact is already in this artifact twice — the
+    // `partial-run` warning above and the `error.json` written beside the
+    // summary — and this field answers a different question ("did a model search
+    // this change") for surfaces that all key on an explicit `not-performed`. A
+    // third value would encode incompleteness a second time, in the one field
+    // that exists to keep an unsearched run from reading as a clean one.
+    modelSearch: 'performed',
     contextLedger: input.contextLedger,
     sharedContext: createSharedContextSnapshot({
       analysis: input.analysis,

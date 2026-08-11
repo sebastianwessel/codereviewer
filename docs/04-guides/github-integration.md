@@ -253,7 +253,7 @@ Top level, in this order:
   or `quality gate failed, …`, or `did not run` / `could not complete`. It
   states what the run *did*: neither "no findings" nor "the gate passed" appears,
   because both read as a clearance of the change. A run that performed no model
-  search at all (`aiReview.enabled: false`, or no provider configured) says
+  search at all (`aiReview.enabled: false`) says
   `Code review: no model search ran` — "this search reported nothing" would be
   true of a search that never happened, and on the one line every reader sees
   that is a clearance.

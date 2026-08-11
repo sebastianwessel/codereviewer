@@ -714,6 +714,41 @@ describe('eval CLI', () => {
     }
   })
 
+  // The review runner refuses a run that asks for a model review and has no
+  // model. `eval run` keeps working without a provider — a corpus whose cases
+  // expect no finding is scoreable offline — by making that intent explicit
+  // rather than inheriting the pinned `aiReview.enabled: true` it cannot honour.
+  // The saved report has to SAY so, or an offline run is indistinguishable from
+  // a measured one.
+  test('records that an eval run without a provider performed no model review', async () => {
+    const root = await createTempDir()
+
+    try {
+      await writeSampleEvalCases(root)
+      const result = await runCli(['eval', 'run'], {
+        cwd: root,
+        environment: {}
+      })
+
+      expect(result.exitCode).toBe(0)
+      expect(result.stderr).toContain('No provider is configured')
+
+      const report = JSON.parse(
+        await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
+      )
+      expect(report.provenance.capabilities['aiReview.enabled']).toBe(false)
+      expect(report.provenance.providerId).toBeUndefined()
+      expect(
+        report.caseResults.every(
+          (caseResult: { readonly providerErrored: boolean }) =>
+            caseResult.providerErrored === false
+        )
+      ).toBe(true)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   test('archives each eval run while preserving latest artifact paths', async () => {
     const root = await createTempDir()
 
@@ -770,7 +805,9 @@ describe('eval CLI', () => {
       })
 
       expect(result.exitCode).toBe(0)
-      expect(result.stderr).toBe('')
+      // These fixtures run without a provider, which the run now discloses on
+      // stderr instead of leaving the operator to infer it from a perfect score.
+      expect(result.stderr).toContain('No provider is configured')
       expect(logs).toContain('Eval run started.')
       expect(logs).toContain('Repository intake completed.')
       expect(logs).toContain('Eval run completed.')
@@ -801,7 +838,7 @@ describe('eval CLI', () => {
       )
 
       expect(result.exitCode).toBe(0)
-      expect(result.stderr).toBe('')
+      expect(result.stderr).toContain('No provider is configured')
       expect(result.stdout).toContain('# Evaluation Summary')
 
       const logs = await readFile(

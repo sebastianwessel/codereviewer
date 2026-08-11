@@ -25,6 +25,12 @@ const seedRepo = async (root: string): Promise<void> => {
   )
 }
 
+// Every review in this file runs without a provider, because the subject is
+// change-intent ingestion and not the model review. A run that asks for a model
+// review it has no model for is refused in preflight, so each config states the
+// deterministic-only intent the runs already had.
+const deterministicOnly = { aiReview: { enabled: false } } as const
+
 const readLedger = async (
   root: string,
   artifactDir: string
@@ -44,6 +50,7 @@ describe('context ingestion CLI', () => {
       await writeFile(
         join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
+          ...deterministicOnly,
           contextSources: {
             enabled: true,
             providers: [
@@ -80,7 +87,7 @@ describe('context ingestion CLI', () => {
       await seedRepo(root)
       await writeFile(
         join(root, '.codereviewer', 'config.json'),
-        JSON.stringify({ contextSources: { enabled: false } })
+        JSON.stringify({ ...deterministicOnly, contextSources: { enabled: false } })
       )
       const result = await runCli(
         ['review', '--file', 'src/app.ts', '--file', 'docs/intent.md'],
@@ -109,9 +116,18 @@ describe('context ingestion CLI', () => {
     const root = await createTempDir()
 
     try {
+      await mkdir(join(root, '.codereviewer'), { recursive: true })
       await mkdir(join(root, 'src'), { recursive: true })
       await writeFile(join(root, 'src', 'app.ts'), 'export const value = 1\n')
-      // No `.codereviewer/` at all: no config file, no context directory.
+      // Zero CONTEXT configuration: no `contextSources` key and no context
+      // directory, so both promoted providers run on their defaults. The config
+      // file carries the deterministic-only switch and nothing else, because a
+      // run with no provider that still asks for a model review is refused
+      // before any of this is reached.
+      await writeFile(
+        join(root, '.codereviewer', 'config.json'),
+        JSON.stringify(deterministicOnly)
+      )
 
       const result = await runCli(['review', '--file', 'src/app.ts'], {
         cwd: root,
@@ -158,6 +174,7 @@ describe('context ingestion CLI', () => {
       await writeFile(
         join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
+          ...deterministicOnly,
           contextSources: {
             enabled: true,
             providers: [{ type: 'inbox', dir: 'not-a-dir' }]
@@ -205,6 +222,7 @@ describe('context ingestion CLI', () => {
       await writeFile(
         join(root, '.codereviewer', 'config.json'),
         JSON.stringify({
+          ...deterministicOnly,
           contextSources: {
             enabled: true,
             providers: [{ type: 'inbox', dir: 'no-such-directory' }]

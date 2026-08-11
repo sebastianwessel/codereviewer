@@ -12,6 +12,10 @@ import {
 } from './provider-failures.js'
 
 const config = CodeReviewerConfigSchema.parse({
+  provider: {
+    id: 'openai',
+    model: 'review-model'
+  },
   review: {
     mode: 'pr',
     depth: 'balanced',
@@ -143,6 +147,15 @@ describe('review runner provider failure helpers', () => {
       'drift:documentation-drift',
       'partial-run'
     ])
+    // A task-execution failure is the ONLY error this path shapes into a run
+    // summary, and it can only be thrown after the provider was resolved and
+    // tasks were dispatched to it. So the run performed a model search — an
+    // interrupted one, which `partial-run` and `error.json` already record —
+    // and the summary states it rather than leaving the field silent and
+    // stamping the model by default.
+    expect(failure.partialState.runSummary.modelSearch).toBe('performed')
+    expect(failure.partialState.runSummary.provider).toBe('openai')
+    expect(failure.partialState.runSummary.model).toBe('review-model')
   })
 
   test('classifies task-execution workflow errors as recoverable provider partial failures', () => {

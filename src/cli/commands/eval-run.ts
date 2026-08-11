@@ -164,7 +164,42 @@ export const runEval = async (
       config: loadedConfig.config,
       overrides: capabilityOverrides
     })
-    const config = pinnedCapabilities.config
+    // AN EVAL RUN WITH NO PROVIDER STATES THAT, INSTEAD OF ASKING FOR A MODEL IT
+    // HAS NOT GOT.
+    //
+    // `aiReview.enabled` is pinned ON above so a repository config cannot turn an
+    // eval into a zero-recall report; a missing provider produces that same
+    // report and no pin can repair it, because there is no model to enable. The
+    // review runner refuses the contradiction outright
+    // (`model_review_provider_missing`) — right for a review whose report a human
+    // reads as a verdict on their change, and wrong for the offline eval this
+    // command still supports, where the fixtures are the audience: a corpus whose
+    // cases expect no finding is scoreable without a model, and any case that
+    // DOES expect one already fails loudly at `eval_semantic_judge_missing`,
+    // because the judge is missing for exactly the same reason.
+    //
+    // So the contradiction is resolved once, here, and it is RECORDED rather than
+    // quietly applied: `configHash` and `provenance.capabilities` are both read
+    // from this config, so the saved report says `aiReview.enabled: false` and no
+    // reader can mistake the run for one a model took part in. The warning below
+    // says the same thing to the operator.
+    const pinnedConfig = pinnedCapabilities.config
+    const modelReviewHasNoModel =
+      pinnedConfig.aiReview.enabled && pinnedConfig.provider === undefined
+    const config = modelReviewHasNoModel
+      ? {
+          ...pinnedConfig,
+          aiReview: { ...pinnedConfig.aiReview, enabled: false }
+        }
+      : pinnedConfig
+    const runWarnings = [
+      ...pinnedCapabilities.warnings,
+      ...(modelReviewHasNoModel
+        ? [
+            'No provider is configured, so no model reviewed any eval case and this run measures nothing about the reviewer. The report records aiReview.enabled: false. Configure `provider` to measure a model; a case with expected findings fails with eval_semantic_judge_missing regardless, because the judge needs the same provider.'
+          ]
+        : [])
+    ]
     const logger = createCliLogger({
       config,
       command: 'eval',
@@ -174,7 +209,7 @@ export const runEval = async (
     // Logged AND carried to stderr below. The default logging level is `silent`,
     // so a run that only logged this would say nothing at all to the operator who
     // just had a setting overruled or who just left the pinned baseline.
-    for (const warning of pinnedCapabilities.warnings) {
+    for (const warning of runWarnings) {
       logger.warn(warning)
     }
 
@@ -509,13 +544,11 @@ export const runEval = async (
       // a quality failure. See `EvalRegressionGateSchema`.
       exitCode: evalGateExitCode(result.report.regressionGate.outcome),
       stdout: `${summary}\n`,
-      // The capability-pin warnings, on stderr rather than folded into the
-      // summary: stdout is the artifact a comparison script reads, and a pin
-      // that overruled a setting is a message for the person, not for the parse.
-      stderr:
-        pinnedCapabilities.warnings.length === 0
-          ? ''
-          : `${pinnedCapabilities.warnings.join('\n')}\n`
+      // The capability-pin warnings and the no-provider disclosure, on stderr
+      // rather than folded into the summary: stdout is the artifact a comparison
+      // script reads, and a pin that overruled a setting — or a run that had no
+      // model — is a message for the person, not for the parse.
+      stderr: runWarnings.length === 0 ? '' : `${runWarnings.join('\n')}\n`
     }
   } catch (error) {
     return mapErrorResult(error, 'internal')

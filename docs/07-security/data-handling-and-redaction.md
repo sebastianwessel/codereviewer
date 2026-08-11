@@ -34,9 +34,12 @@ flowchart LR
   PK -.->|"never"| LOG
 ```
 
-**With no provider configured, nothing leaves the machine.** The run reads the
-diff, computes deterministic signals, plans tasks, writes artifacts and
-evaluates the gate with zero network IO.
+**With `aiReview.enabled: false` and no provider configured, nothing leaves the
+machine.** The run reads the diff, computes deterministic signals, plans tasks,
+writes artifacts and evaluates the gate with zero network IO. Both halves are
+required: `aiReview.enabled` defaults to `true`, and a run that asks for a model
+review with no provider is refused (`model_review_provider_missing`, exit `2`)
+instead of quietly reviewing nothing.
 
 **With a provider configured**, the only network destination is that provider's
 endpoint. Every item considered for transfer gets a context-ledger entry
@@ -79,7 +82,7 @@ today**, so a credential shaped unlike every pattern above is not caught.
 > The pattern set is a security floor, not a classifier. It will not detect a
 > password that looks like an ordinary word, a customer identifier, or a
 > proprietary token format. If your repository must not leave the machine, run
-> with no provider configured.
+> with `aiReview.enabled: false` and no provider configured.
 
 Because redaction can *lengthen* text (a short secret becomes `[REDACTED]`),
 redacted finding titles, descriptions and fix text are truncated back to their

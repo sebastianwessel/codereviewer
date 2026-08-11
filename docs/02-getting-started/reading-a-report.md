@@ -64,8 +64,8 @@ results](../05-quality/current-results.md#current-headline) for the full
 accounting.
 
 **A run that performed no model search prints neither of these paragraphs' rates
-and names no model.** With `aiReview.enabled: false`, or with no provider
-configured, nothing searched the change: the header says so in place of the
+and names no model.** With `aiReview.enabled: false`, nothing searched the
+change: the header says so in place of the
 rates, the model line reads `none`, and the findings section says nothing was
 searched for rather than that nothing was proved. Rates describe how often a
 model search finds a defect, so over a run that performed none they would flatter

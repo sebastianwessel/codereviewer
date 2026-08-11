@@ -15,7 +15,15 @@ describe('baseline write CLI', () => {
     const root = await createTempDir()
 
     await mkdir(join(root, 'src'), { recursive: true })
+    await mkdir(join(root, '.codereviewer'), { recursive: true })
     await writeFile(join(root, 'src', 'app.ts'), 'export const value = ;\n')
+    // Deterministic-only on purpose: this test needs a completed run to write a
+    // baseline from, not a model search, and it configures no provider — which a
+    // run that still asked for a model review would be refused for.
+    await writeFile(
+      join(root, '.codereviewer', 'config.json'),
+      JSON.stringify({ aiReview: { enabled: false } })
+    )
 
     const review = await runCli(['review', '--file', 'src/app.ts'], {
       cwd: root,

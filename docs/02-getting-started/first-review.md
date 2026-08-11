@@ -8,11 +8,21 @@ with the exit code. Assumes you have followed
 
 ## Step 1 — Run without a provider first
 
-Do this before spending any tokens. With no `provider` configured, the run
-executes intake, deterministic support signals, task planning, admission,
-reporting, the quality gate, and the drift preflight — everything except
-model-backed discovery. It is the cheapest way to prove your wiring, paths, and
-git refs are right.
+Do this before spending any tokens. A deterministic-only run executes intake,
+deterministic support signals, task planning, admission, reporting, the quality
+gate, and the drift preflight — everything except model-backed discovery. It is
+the cheapest way to prove your wiring, paths, and git refs are right.
+
+Say so explicitly, in `.codereviewer/config.json`:
+
+```json
+{ "aiReview": { "enabled": false } }
+```
+
+Simply leaving `provider` unset is **not** the way to do this: `aiReview.enabled`
+defaults to `true`, so that configuration asks for a model review with no model,
+and the run is refused (`model_review_provider_missing`, exit `2`) rather than
+returning a passing, empty review you could mistake for a clean change.
 
 ```bash
 codereviewer review --base-ref origin/main --head-ref HEAD
@@ -31,8 +41,9 @@ On success the command prints JSON to stdout:
 }
 ```
 
-Expect **no findings**: without a provider there is no model-backed discovery, so
-`report.md` says so in as many words rather than rendering an empty section. What
+Expect **no findings**: with the model review switched off there is no
+model-backed discovery, so `report.md` says so in as many words rather than
+rendering an empty section. What
 you are checking is that the run completed, that `report.md` shows the file count
 you expected under `Scope of this search`, and that nothing landed in `Skipped
 Files` by surprise:
@@ -52,8 +63,8 @@ discovered after a paid run is the same information for money.
 ## Step 2 — Add a provider and review for real
 
 Configure `provider.id` and `provider.model` (plus credentials) as described in
-[Install and run](install-and-run.md) — that is the whole configuration needed —
-then run the same command. Useful variations:
+[Install and run](install-and-run.md), and drop the `aiReview.enabled: false`
+from step 1 — that is the whole configuration needed — then run the same command. Useful variations:
 
 ```bash
 # Review specific files, bypassing the git diff entirely

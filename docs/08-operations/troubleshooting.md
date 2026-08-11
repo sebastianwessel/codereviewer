@@ -86,6 +86,22 @@ Config precedence, from weakest to strongest: built-in defaults →
 If a value is not what you set, something later in that chain overrode it. A
 stray `.env` in the working tree beating a CI variable is the classic case.
 
+### `model_review_provider_missing` — exit 2
+
+`aiReview.enabled` is `true` (its default) and no `provider` is configured, so
+the run was asked for a model review it has no model to perform. It is refused in
+preflight, before any repository work, because the alternative was what it used
+to do: zero findings, a passing quality gate and exit `0` — a review that
+searched nothing, reported as one that found nothing.
+
+Two ways out, and they are different runs:
+
+- configure `provider.id`, `provider.model` and the credentials the adapter
+  names, to get the model review you asked for; or
+- set `aiReview.enabled: false` to run deterministic-only on purpose. That run
+  completes at exit `0` and its report records `run.modelSearch: "not-performed"`
+  and states that no model searched the change.
+
 ### `invalid_git_ref` — exit 2
 
 A ref is empty or starts with `-`. This is deliberate: it blocks argument

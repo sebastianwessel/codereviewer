@@ -57,6 +57,7 @@ describe('review runner partial state helper', () => {
       configHash:
         '1111111111111111111111111111111111111111111111111111111111111111',
       warnings: ['partial-run'],
+      modelSearch: 'performed',
       contextLedger: [],
       sharedContext,
       observability: {
@@ -81,6 +82,10 @@ describe('review runner partial state helper', () => {
         headRef: 'head',
         provider: 'openai',
         model: 'gpt-5.3-codex',
+        // Named because the run says a model searched, not because a provider
+        // sits in the configuration: `modelSearch: 'not-performed'` withholds
+        // both fields even here.
+        modelSearch: 'performed',
         durationMs: 1250,
         warnings: ['partial-run']
       })

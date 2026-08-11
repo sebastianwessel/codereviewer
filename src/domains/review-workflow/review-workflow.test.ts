@@ -3525,6 +3525,12 @@ describe('review workflow', () => {
           depth: 'fast',
           maxConcurrentTasks: 1
         },
+        // Deterministic-only ON PURPOSE: this test asserts support-signal
+        // behaviour and configures no provider, which is a run the preflight
+        // refuses unless the model review is switched off deliberately.
+        aiReview: {
+          enabled: false
+        },
         drift: {
           enabled: false
         }
@@ -3585,6 +3591,12 @@ describe('review workflow', () => {
         review: {
           depth: 'fast',
           maxConcurrentTasks: 1
+        },
+        // Deterministic-only ON PURPOSE: this test asserts support-signal
+        // behaviour and configures no provider, which is a run the preflight
+        // refuses unless the model review is switched off deliberately.
+        aiReview: {
+          enabled: false
         },
         drift: {
           enabled: false
@@ -3697,6 +3709,12 @@ describe('review workflow', () => {
           depth: 'balanced',
           contextMaxBytes: 10000
         },
+        // Deterministic-only ON PURPOSE: this test asserts support-signal
+        // behaviour and configures no provider, which is a run the preflight
+        // refuses unless the model review is switched off deliberately.
+        aiReview: {
+          enabled: false
+        },
         drift: {
           enabled: false
         }
@@ -3746,6 +3764,12 @@ describe('review workflow', () => {
         review: {
           depth: 'fast'
         },
+        // Deterministic-only ON PURPOSE: this test asserts support-signal
+        // behaviour and configures no provider, which is a run the preflight
+        // refuses unless the model review is switched off deliberately.
+        aiReview: {
+          enabled: false
+        },
         drift: {
           enabled: false
         }
@@ -3789,6 +3813,12 @@ describe('review workflow', () => {
       const config = CodeReviewerConfigSchema.parse({
         review: {
           depth: 'fast'
+        },
+        // Deterministic-only ON PURPOSE: this test asserts support-signal
+        // behaviour and configures no provider, which is a run the preflight
+        // refuses unless the model review is switched off deliberately.
+        aiReview: {
+          enabled: false
         },
         drift: {
           enabled: false

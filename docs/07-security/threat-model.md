@@ -107,8 +107,10 @@ useless:
 - **The provider sees your code.** A provider-backed run transmits bounded,
   redacted source to the configured endpoint. Redaction is a pattern-based
   floor, not a classifier — it will not catch a credential shaped like ordinary
-  text. If your source must not leave the machine, run with no provider
-  configured.
+  text. If your source must not leave the machine, set `aiReview.enabled:
+  false` and configure no provider — a run that asks for a model review without
+  one is refused (`model_review_provider_missing`, exit `2`), so the offline mode
+  is stated rather than inferred from an absent key.
 - **Redaction is best-effort by pattern.** The built-in set covers auth headers,
   URL userinfo, PEM private keys, JWTs, OpenAI, GitHub, GitLab, Slack, Google
   and AWS key formats. The redactor also accepts a list of exact secret values
@@ -137,8 +139,8 @@ Print the effective, redacted configuration and confirm the permission flags:
 npm run cli -- config validate
 ```
 
-Run a review with no provider configured and confirm no network destination is
-possible:
+Run a review with `aiReview.enabled: false` and no provider configured, and
+confirm no network destination is possible:
 
 ```bash
 npm run cli -- review --base-ref origin/main --head-ref HEAD

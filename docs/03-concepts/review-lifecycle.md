@@ -50,13 +50,20 @@ flowchart TD
   Ctx -. "same context is re-used by the refuter" .-> Ref
 ```
 
-Without a configured `provider` (or with `aiReview.enabled: false`) the two
-model stages are skipped entirely: the run goes intake → signals → clustering →
-context → admission → gate → reporting and admits only deterministic candidates.
-Every report from such a run records `run.modelSearch: "not-performed"`, names no
-model, withholds the measured recall and precision rates, and states that no
-model search ran — so its (usually empty) findings list cannot be read as a clean
-bill of health. The gate and the exit code are unchanged.
+With `aiReview.enabled: false` the two model stages are skipped entirely: the run
+goes intake → signals → clustering → context → admission → gate → reporting and
+admits only deterministic candidates. Every report from such a run records
+`run.modelSearch: "not-performed"`, names no model, withholds the measured recall
+and precision rates, and states that no model search ran — so its (usually empty)
+findings list cannot be read as a clean bill of health. The gate and the exit
+code are unchanged.
+
+Leaving `aiReview.enabled` at its default `true` with no `provider` configured is
+the other case, and it is **refused before the run starts**
+(`model_review_provider_missing`, exit `2`): the run was asked for a model review
+it has no model to perform, and the empty passing report it used to produce was
+indistinguishable from a change nothing was wrong with. Configure a provider, or
+say `aiReview.enabled: false` and get the deterministic-only run above.
 See [Two flows](two-flows.md).
 
 ## The stages
