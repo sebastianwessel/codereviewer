@@ -6,7 +6,7 @@ import { isFileSystemError } from '../../shared/errors/error-normalizer.js'
 import { parseOptionValues, unknownCliOption } from '../args.js'
 import type { CliResult, CliRunOptions } from '../cli-contract.js'
 import { mapErrorResult, usageError } from '../cli-error-results.js'
-import { readEvalReport } from '../eval-report-files.js'
+import { readEvalRecallView } from '../eval-report-files.js'
 
 export const runEvalRecallReport = async (
   args: readonly string[],
@@ -28,7 +28,7 @@ export const runEvalRecallReport = async (
     const reports = await Promise.all(
       selectedReportPaths.map(async (reportPath) => ({
         label: reportPath,
-        report: await readEvalReport(options.cwd, reportPath)
+        report: await readEvalRecallView(options.cwd, reportPath)
       }))
     )
 

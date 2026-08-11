@@ -449,6 +449,16 @@ written in. It is bumped whenever a change alters what a metric would report for
 identical review output — expectation assignment and the model category taxonomy
 have each done so.
 
+**`schemaVersion` MUST be bumped whenever a field is added, removed or reshaped
+anywhere in the report**, and it is `"2.0"` since 2026-08-11. It was not bumped when
+the case result's four per-classification finding arrays became one
+`producedFindings`, nor when that gained a `description`, so one literal described
+three incompatible payloads. A version that does not move when the payload does is
+worse than no version: it asserts a compatibility that does not hold. The cost here
+was concrete — roughly a hundred engine-pinned archives, the evidence base this
+ledger is written from, declared the version the reader expected and were then
+rejected on unknown keys.
+
 A version is not a bare string. `eval-metrics-versions.ts` holds an ORDERED
 history in which every entry declares its id, a note, and the metrics that entry
 changed for identical review output. `EVAL_METRICS_VERSION` is derived as the
@@ -1372,6 +1382,20 @@ The flag may be repeated. When omitted, the command reads
 sets are identical across reports, aggregate always-detected/never-detected/
 flaky counts, and a per-expected table with case ID, expected index, severity,
 location, match mode, summary, detection rate, and run marks.
+
+**Both read-only analyses read through a TOLERANT VIEW, never through the producer
+contract.** `eval compare` and `eval recall-report` exist to answer questions about
+finished runs without paying for them again, and a producer change is exactly what
+makes an archived payload differ from today's contract — so validating an archive
+against it defeats the purpose of the command. Each view declares only the fields
+its analysis consumes and requires all of them: an older report is a report, but one
+missing the fields the analysis computes FROM is broken, and a recall figure derived
+from absent matches would be wrong in the direction that flatters the engine.
+
+Reading an archive is deliberately NOT a migration. Converting a legacy case result
+into today's `producedFindings` would have to supply `proposedBy`, `evidenceCount`
+and `description`, which that payload never recorded; inventing them would
+manufacture measurement data, which is a worse failure than the one it fixes.
 
 ## Matching Rules
 

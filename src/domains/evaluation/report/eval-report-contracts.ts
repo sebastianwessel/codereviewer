@@ -476,7 +476,24 @@ export const EvalMetricGroupSchema = z.strictObject({
 export { EVAL_METRICS_VERSION } from './versions/eval-metrics-versions.js'
 
 export const EvalReportSchema = z.strictObject({
-  schemaVersion: z.literal('1.0'),
+  // '2.0' since 2026-08-11. It moved because the case result's SHAPE moved twice
+  // that day — the four per-classification finding arrays became one
+  // `producedFindings`, which then gained `description` — while this literal went
+  // on claiming '1.0'.
+  //
+  // A version that does not change when the payload does is worse than no version:
+  // it asserts compatibility that does not hold, and here it did real damage. Every
+  // archive written before that day declares the version this reader expects and is
+  // then rejected on unknown keys, so about a hundred engine-pinned runs — the
+  // evidence base the ledger is written from — stopped opening. `eval compare`
+  // survived because it reads through a tolerant view; `eval recall-report` did
+  // not, and its analysis had to be redone by hand.
+  //
+  // The rule this encodes: bump it whenever a field is added, removed or reshaped
+  // here or in anything it contains. `metricsVersion` is a different question and
+  // answers it separately — that one says how the numbers were COMPUTED, this one
+  // says what shape they arrive in.
+  schemaVersion: z.literal('2.0'),
   // This is the PRODUCER contract, and it carries no tolerance for an artifact an
   // older build wrote: a report that does not satisfy it was not written by a
   // compatible build and cannot be rendered field-for-field. Reading across

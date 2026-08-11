@@ -231,6 +231,11 @@ export {
   type EvalComparisonRun
 } from './report/eval-comparison-view.js'
 export {
+  EvalRecallViewSchema,
+  parseEvalRecallView,
+  type EvalRecallView
+} from './report/eval-recall-view.js'
+export {
   EVAL_METRICS_VERSION_HISTORY,
   metricComparability,
   metricsAffectedBetween,

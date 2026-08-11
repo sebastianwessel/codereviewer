@@ -49,7 +49,7 @@ const summaryInput = {
     }
   ],
   report: {
-    schemaVersion: '1.0',
+    schemaVersion: '2.0',
   metricsVersion: 'test-metrics-version',
     generatedAt: '2026-06-20T00:00:02.000Z',
     fixtureCount: 1,

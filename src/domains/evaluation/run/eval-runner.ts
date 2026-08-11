@@ -181,7 +181,7 @@ const buildEvaluationResult = (
     caseResults: metricCases
   })
   const report = EvalReportSchema.parse({
-    schemaVersion: '1.0',
+    schemaVersion: '2.0',
     metricsVersion: EVAL_METRICS_VERSION,
     generatedAt: input.generatedAt ?? new Date().toISOString(),
     fixtureCount: input.cases.length,

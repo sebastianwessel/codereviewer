@@ -1,13 +1,21 @@
-import { EvalReportSchema, type EvalReport } from '../report/eval-report-contracts.js'
+import {
+  parseEvalRecallView,
+  type EvalRecallView
+} from '../report/eval-recall-view.js'
 import { expectedLocationLabel } from './eval-report-expected-finding-labels.js'
 import {
   appendMarkdownTable,
   escapeMarkdownCell
 } from './eval-report-markdown-formatting.js'
 
+// The RECALL VIEW, not the producer contract. Recall is computed from four fields
+// that have never changed shape, and validating a finished run against today's
+// whole contract is what made every pre-2026-08-11 archive unopenable here the day
+// the case result gained a field. See `eval-recall-view.ts` for why this is a view
+// rather than a migration.
 type LabeledEvalReport = {
   readonly label: string
-  readonly report: EvalReport
+  readonly report: EvalRecallView
 }
 
 type RecallRunState = {
@@ -16,11 +24,11 @@ type RecallRunState = {
 
 type RecallEntry = {
   readonly caseId: string
-  readonly expected: EvalReport['caseResults'][number]['expectedFindings'][number]
+  readonly expected: EvalRecallView['caseResults'][number]['expectedFindings'][number]
   readonly runs: RecallRunState[]
 }
 
-const selectedCaseKey = (report: EvalReport): string =>
+const selectedCaseKey = (report: EvalRecallView): string =>
   report.selection.selectedCaseIds.join('\u0000')
 
 const caseSetsMatch = (reports: readonly LabeledEvalReport[]): boolean => {
@@ -196,7 +204,7 @@ export const renderEvalRecallReport = (
 ): string => {
   const reports = input.reports.map(({ label, report }) => ({
     label,
-    report: EvalReportSchema.parse(report)
+    report: parseEvalRecallView(report)
   }))
   const entries = collectRecallEntries(reports)
   const summary = recallSummary(entries)

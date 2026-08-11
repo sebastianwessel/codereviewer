@@ -3,10 +3,10 @@
 // contract each validates against is the difference.
 import { readFile } from 'node:fs/promises'
 import {
-  EvalReportSchema,
   parseEvalComparisonReport,
+  parseEvalRecallView,
   type EvalComparisonReport,
-  type EvalReport
+  type EvalRecallView
 } from '../domains/evaluation/index.js'
 import { resolveExistingPathInsideRoot } from '../platform/path-service.js'
 
@@ -21,14 +21,18 @@ const readEvalReportJson = async (
     )
   )
 
-// The recall report renders one run's own numbers, so it validates against the
-// PRODUCER contract: a report that does not satisfy it was not written by a
-// compatible build and cannot be rendered field-for-field.
-export const readEvalReport = async (
+// Recall analysis reads through its own tolerant view, for the reason comparison
+// does. It USED to validate against the producer contract, on the argument that a
+// report failing it "was not written by a compatible build" -- which is true and
+// beside the point: recall is computed from four fields that have never changed,
+// and holding an archive to today's whole contract made a hundred finished runs
+// unreadable the day the case result gained a field. Absence of the four fields it
+// does need is still a hard failure.
+export const readEvalRecallView = async (
   repositoryRoot: string,
   reportPath: string
-): Promise<EvalReport> =>
-  EvalReportSchema.parse(await readEvalReportJson(repositoryRoot, reportPath))
+): Promise<EvalRecallView> =>
+  parseEvalRecallView(await readEvalReportJson(repositoryRoot, reportPath))
 
 // Comparison reads through the tolerant comparison view instead. Its whole job
 // is to span engine changes, and an engine change is what adds a field to the

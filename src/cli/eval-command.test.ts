@@ -224,7 +224,7 @@ const evalReport = (
     readonly scoring?: Record<string, unknown>
   } = {}
 ): Record<string, unknown> => ({
-  schemaVersion: '1.0',
+  schemaVersion: '2.0',
   // The producer contract requires both: it carries no defaults for a report an
   // older build wrote, so a fixture that omits them is not a report this build
   // could have produced and must not stand in for one.
@@ -698,7 +698,7 @@ describe('eval CLI', () => {
       const report = JSON.parse(
         await readFile(join(root, '.codereviewer/eval/eval-report.json'), 'utf8')
       )
-      expect(report.schemaVersion).toBe('1.0')
+      expect(report.schemaVersion).toBe('2.0')
       expect(report.regressionGate.outcome).toBe('passed')
       expect(report.metrics.recall).toBe(1)
       expect(report.metrics.falsePositiveCount).toBe(0)
