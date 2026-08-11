@@ -54,9 +54,9 @@ task.
 | CAP-GATE-001 | Quality gate result | ACT-CI | Yes | `06-evaluation-and-quality-gates.md` |
 | CAP-OPS-001 | Run observability | ACT-OPS | Yes | `07-security-privacy-operations.md` |
 | CAP-DRIFT-001 | Drift, gap, and ambiguity checks | ACT-DEV, ACT-CI, ACT-OPS | Yes | `06-evaluation-and-quality-gates.md`, `07-security-privacy-operations.md` |
-| CAP-DISC-002 | Discovery citations — the reviewer quotes the line a finding rests on and a deterministic verifier checks it (`review.citations`, off by default, measured null 2026-08-10) | ACT-DEV, ACT-MODEL | Yes | `05-review-workflow-and-runtime.md` |
+| CAP-DISC-002 | Discovery citations — the reviewer quotes the line a finding rests on and a deterministic verifier checks it (`review.citations`, ON by default since 2026-08-11 on a readability judgement, measured null for accuracy 2026-08-10) | ACT-DEV, ACT-MODEL | Yes | `05-review-workflow-and-runtime.md` |
 | CAP-DISC-003 | Deterministic signal facts shown to discovery (`review.signalFacts`, off by default, measured null 2026-08-10) | ACT-MODEL | Yes | `05-review-workflow-and-runtime.md` |
-| CAP-CONV-001 | Review conversation — a reply nominates its finding for one independent re-adjudication (`reviewConversation`, off by default, unmeasured) | ACT-REVIEWER | Yes | `30-review-conversation.md` |
+| CAP-CONV-001 | Review conversation — a reply nominates its finding for one independent re-adjudication (`reviewConversation`, off by default, unmeasured; the key is consumed by the GitHub pipeline in `scripts/github/`, not by the engine, so `eval run` cannot exercise it) | ACT-REVIEWER | Yes | `30-review-conversation.md` |
 | CAP-TEST-001 | Test-adequacy signal — changed source files with no paired test | ACT-DEV, ACT-REVIEWER | Yes | `29-test-adequacy-signal.md` |
 | CAP-PR-001 | Network PR comment publishing | ACT-REVIEWER | No | Future spec required |
 | CAP-FIX-001 | Automatic fix application | ACT-DEV | No | Future spec required |

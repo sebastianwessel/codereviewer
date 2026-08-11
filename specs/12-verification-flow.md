@@ -18,14 +18,26 @@ whole-file discovery. One agent serves two jobs:
    precise, apply-checked fix.
 
 Both jobs run through the same bounded agent, tools, and bounds; only the prompt
-and which output fields are populated differ. Because this agent reads the actual
-files instead of relying on the single-shot review packet, its false-positive
-judgment is better grounded than the deterministic review can be — so the flow
-raises precision as well as producing apply-ready fixes.
+and which output fields are populated differ.
 
-The flow is optional and off by default. Its agentic behavior, cost, and
-non-determinism are quarantined to it; the general review keeps every guarantee
-it has today.
+**The design hypothesis, stated as one:** because this agent reads the actual files
+instead of relying on the single-shot review packet, its false-positive judgment
+should be better grounded than the deterministic review can be, so the flow should
+raise precision as well as producing apply-ready fixes.
+
+**That hypothesis is UNTESTED, and this section previously asserted it as fact.**
+As of 2026-08-11 no run has scored the fix lane on a real corpus. The eval wires it
+deliberately (`eval-case-runner.ts` runs it per case, gated on `fix.enabled`) and
+`fixLaneCaseTallies` scores it, but the flag has been off in every recorded run;
+the only outcomes on disk are two 2026-07-23 smoke runs of a single judged finding
+each — one agreeing with ground truth and one disagreeing — against fixtures that
+no longer exist. Nothing about this flow's effect on precision is established, in
+either direction, and no document may claim otherwise until a measurement exists.
+
+The flow is optional and off by default. **The reason is containment, not a failed
+measurement**: its agentic behavior, cost, and non-determinism are quarantined to
+it, and the general review keeps every guarantee it has today. Those are different
+claims and were previously easy to confuse.
 
 ## Relationship To The General Review
 

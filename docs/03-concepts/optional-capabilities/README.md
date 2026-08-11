@@ -1,9 +1,28 @@
 # Optional Capabilities
 
-Every capability here is optional, and all but one are **off by default**. That
-is not caution or incompleteness — most of them were built, measured, and left
-off *because the measurement said so*. The exception is cross-file retrieval,
-which was off on a verdict that turned out to be measuring a bug and is now on.
+Every capability here is optional and most are **off by default**. Two are on:
+cross-file retrieval, which was off on a verdict that turned out to be measuring a
+bug, and citations, turned on for comment quality rather than accuracy.
+
+**Off does not mean the same thing in every row, and the difference matters more
+than the flag.** Some were built, measured, and left off *because the measurement
+said so* — signal facts, impact adjudication. Others have **never been measured at
+all**: verification, the fix lane, skills, analyzer signals, change-intent context,
+review comments, and the review conversation. For those, "off by default" is
+containment of cost and non-determinism, and nothing has been established about
+what turning them on would do — in either direction.
+
+Two of those are worth naming, because the reason they are unmeasured is
+structural rather than a missing decision. **Verification cannot be reached from
+`eval run` at all** — it lives on the `review` command's lane, so no corpus can
+score it as it stands. And **the review conversation's config key is consumed by
+`scripts/github/`, not by the engine**, so it is outside the eval by construction.
+The fix lane is the opposite case: its eval scoring is wired and deliberate, and
+has simply never been switched on with a corpus behind it.
+
+The Evidence column below says which row is which. Read it before you read the
+flag.
+
 This page exists so you can decide in thirty seconds whether to turn one on.
 
 The house rule, from [`specs/06-evaluation-and-quality-gates.md`](../../../specs/06-evaluation-and-quality-gates.md):
@@ -28,10 +47,10 @@ models judging requirement conformance, not from a run of this engine.
 | [Change-intent context](change-intent-context.md) | `contextSources.enabled` | `false` | Orientation: the reviewer learns *why* the change was made, which should reduce misunderstanding-driven false positives | One summarizer call per run (`model` mode); zero with `digest` | **Unmeasured.** No A/B exists. Rationale is design, not evidence. Enable if your pipeline already has PR/ticket text; do not expect a measured recall number |
 | [Cross-file retrieval](cross-file-retrieval.md) | `review.crossFileRetrieval.enabled` | **`true`** | Lets discovery read other-file code on demand through mediated tools | Measured *lower* (−8%, −5%) in the two runs that reversed the verdict | **Verdict withdrawn.** The three losing arms were measuring a per-read cut the model was never told about. With the cut disclosed, two independent re-runs led on every measured dimension. No specific gain is claimed: the recall difference is inside noise |
 | [Dedicated security pass](dedicated-security-pass.md) | `security.dedicatedPass.enabled` | `false` | A second, security-only discovery call per task (generic OWASP/CWE checklist), merged additively | +61% | **Mixed.** 2026-07-24, full benchmark, n=1: overall recall 24.8% → 29.3%, +22 unlisted-real findings (trustworthy, large denominator). But labeled security recall 14 → 12 and authorization 8 → 6. The **security-specific lift it was built for is unproven** |
-| [Verification](verification-and-fix.md) | `verification.enabled` | `false` | Investigates external/prior claims against the real code and returns verdicts; corroborates findings | Bounded agent run per claim | **Unmeasured as a quality lever.** It is a distinct product feature, not a recall knob; its outputs never touch the gate |
-| [Fix lane](verification-and-fix.md#the-fix-lane) | `fix.enabled` | `false` | Real-file-grounded `real`/`false-positive` judgment plus an apply-checked fix per admitted finding | One bounded agent run per eligible finding | **Unmeasured as a quality lever.** Advisory: it enriches `fixProposal`, never admission, severity, or the gate |
+| [Verification](verification-and-fix.md) | `verification.enabled` | `false` | Investigates external/prior claims against the real code and returns verdicts; corroborates findings | Bounded agent run per claim | **Never measured, and structurally unmeasurable as it stands.** `runVerificationForReview` lives on the `review` command's lane and `eval run` never calls it, so no corpus can score this today. It is a distinct product feature, not a recall knob; its outputs never touch the gate |
+| [Fix lane](verification-and-fix.md#the-fix-lane) | `fix.enabled` | `false` | Real-file-grounded `real`/`false-positive` judgment plus an apply-checked fix per admitted finding | One bounded agent run per eligible finding | **Never measured on a real corpus**, though the eval DOES wire it (`eval-case-runner.ts` runs it per case, gated on this flag). The only outcomes on disk are two 2026-07-23 smoke runs of one judged finding each — one agreeing with ground truth, one disagreeing — against fixtures that no longer exist. Advisory: it enriches `fixProposal`, never admission, severity, or the gate |
 | Signal facts context | `review.signalFacts.enabled` | `false` | Shows discovery the deterministic signal facts already extracted every run — previously rendered only into refutation's context, never discovery's | +10.1% input tokens, +34% cost | **No measurable gain.** Measured 2026-08-10 on the security-advisory corpus (72 cases, not comparable to the real-repository figures elsewhere on this site): recall 64.9% → 61.7%, pooled sign test 3 gained / 3 lost, p = 1.0000. Adjusted precision rose (96.7% → 100.0%) but that alone does not clear the promotion bar. Not promoted, stays disabled. See `reports/2026-08-10-signal-facts-result.md` |
-| Citations | `review.citations.enabled` | `false` | Asks discovery to cite the source line grounding each finding; a citation is deterministically verified before being added as evidence, and a bad one costs nothing | No extra call — folded into the existing discovery response | **Neutral.** Measured 2026-08-10 on the security-advisory corpus (72 cases, not comparable to the real-repository figures elsewhere on this site): recall 63.1% → 62.2%, pooled sign test 3 gained / 7 lost, p = 0.3438; adjusted precision rose 98.6% → 99.3%. Neither move clears the promotion bar. **The mechanism did engage** — findings carrying evidence went 0% → 90%, from a channel that had been structurally empty — but that engagement did not move recall or precision far enough to promote. Not promoted, stays disabled. See `reports/2026-08-10-citations-result.md` |
+| Citations | `review.citations.enabled` | **`true`** | Asks discovery to cite the source line grounding each finding; a citation is deterministically verified before being added as evidence, and a bad one costs nothing | No extra call — folded into the existing discovery response | **Neutral.** Measured 2026-08-10 on the security-advisory corpus (72 cases, not comparable to the real-repository figures elsewhere on this site): recall 63.1% → 62.2%, pooled sign test 3 gained / 7 lost, p = 0.3438; adjusted precision rose 98.6% → 99.3%. Neither move clears the promotion bar. **The mechanism did engage** — findings carrying evidence went 0% → 90%, from a channel that had been structurally empty — but that engagement did not move recall or precision far enough to promote. Not promoted ON ACCURACY, and it is nonetheless ON BY DEFAULT since 2026-08-11 — a separate product judgement about comment quality, made as one: a reader gets the source line a finding rests on instead of the verifier's prose, at +5.6% input tokens and no measured precision harm. The accuracy verdict above is unchanged and no recall claim is made from it. See `reports/2026-08-10-citations-result.md` |
 
 Two further discovery passes — an enumeration sweep and a diverse-lens pass — were
 built, measured, and **removed**; their configuration keys no longer exist. See

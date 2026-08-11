@@ -285,8 +285,10 @@ documentation), turning this on moved in-diff recall from 63.1% to 62.2%
 precision rose 98.6% → 99.3%; neither movement clears the promotion bar. **The
 mechanism did engage** — findings carrying an evidence record went from 0% to
 90%, closing the empty-evidence gap described above at scale — but that
-engagement did not move recall or precision far enough to promote. The key
-stays off by default. See [the decision
+engagement did not move recall or precision far enough to promote **on accuracy**.
+The key is nevertheless ON by default since 2026-08-11, on the separate readability
+judgement recorded above — the two decisions are independent, and no accuracy claim
+follows from the default. See [the decision
 table](../../03-concepts/optional-capabilities/README.md#decision-table) and
 `reports/2026-08-10-citations-result.md`.
 
