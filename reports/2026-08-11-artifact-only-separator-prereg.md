@@ -28,22 +28,72 @@ decision.
 
 ## Population and unit of analysis
 
+**AMENDED 2026-08-11, before any data exists**, after a free precheck against the
+ten archived runs. Two numbers in the first draft were wrong and the corpus is now
+restricted. Both changes are recorded here rather than silently applied.
+
 - Corpus `security-advisory-2026`, engine pinned to one SHA for all seeds, judge
   model pinned via `evaluation.judgeModel` and recorded in `provenance`.
 - Reviewer model `openai/gpt-5.3-codex`. Every rate below is a property of that
   model and must be published with it.
-- **10 seeds.** Fewer is not defensible: the pooled archive gives ~13.5 artifact-only
-  findings per run, and the unit below collapses that further.
-- **The unit of analysis is the DISTINCT DEFECT, not the finding instance.**
-  `(caseId, path, line, title)`. The archive shows the same defect recurring in up
-  to 7 of 10 seeds; counting instances would pseudo-replicate and inflate n roughly
-  2×. Expected n ≈ **69**.
-  - Justification that this is safe: across the ten archived runs, the number of
-    distinct defects whose label DISAGREES between seeds is **0**. A defect's label
-    is stable, so collapsing instances loses nothing.
-  - A defect whose label does disagree across seeds in the new data is **excluded**
-    and the count of exclusions is reported. If exclusions exceed 10% of distinct
-    defects, the primary analysis is void and reported as void.
+- **Seed 1 runs the full 70 cases. Seeds 2-10 run only the 31 cases that have ever
+  produced an artifact-only finding.** Over ten archived runs those 31 cases
+  produced **135 of 135** artifact-only findings; the other 39 produced none, and a
+  case that produces none contributes nothing to this question at full price.
+  - Seed 1 is deliberately unrestricted: the engine has changed since the archive
+    (citations are on), so the producing set could have moved. Seed 1 both tests
+    that and contributes population. **If seed 1 finds artifact-only findings in
+    cases outside the 31, the restriction is void** and the remaining seeds run the
+    full corpus at full price.
+  - Selection-bias check, run before deciding this: matched-rate is **59%** in
+    high-yield cases and **62%** in low-yield ones. Restricting by yield does not
+    select for realness.
+
+### The unit is the distinct code location, and the first draft got this wrong
+
+**Primary unit: `(caseId, path, line)`. Expected n ≈ 49 at ten seeds.**
+
+The first draft said n ≈ 69 from a key of `(caseId, path, line, title)`. That was a
+**keying bug in the counting script**, not a design choice: a matched artifact-only
+finding is recorded as a MATCH record carrying `producedPath`/`producedStartLine`,
+not a finding summary carrying `path`/`title`, so all 82 matched rows collapsed into
+a handful of degenerate `(case, None, None, None)` keys. Corrected counts over the
+same ten runs:
+
+| unit | n | label conflicts |
+| --- | ---: | ---: |
+| finding instances | 135 | — |
+| distinct finding ids | 115 | 0 |
+| **distinct `(caseId, path, line)`** | **49** | 3 |
+
+`(caseId, path, line)` is chosen as primary because it is the **conservative** one.
+A finding id is content-derived, so the same defect described with a different title
+in a different seed gets a different id — 115 over-counts distinct defects, and an
+AUC built on it would be inflated by repeated measurement of the same code location.
+
+- **Sensitivity analysis, reported alongside and labelled anti-conservative:** the
+  same AUC over distinct finding ids (n ≈ 115). If the two disagree about which cell
+  the result falls in, the conservative one governs and the disagreement is reported
+  as the headline.
+- The 3 locations whose label conflicts across seeds are **excluded**, and exclusions
+  are reported. Exclusions above 10% of units void the primary analysis.
+
+### Power, stated before the run rather than discovered after
+
+n ≈ 49 is thin. At roughly 30 real / 19 noise the standard error on AUC is about
+0.085, so a true AUC of 0.70 yields a 95% CI of roughly [0.53, 0.87] — it clears the
+"excludes 0.50" bar, but only just. **Cell 2 below exists for exactly this**, and
+landing in it is an acceptable outcome, not a failure to be argued around.
+
+More seeds do not fix it cheaply. The rarefaction over distinct locations saturates:
+
+| seeds | 1 | 3 | 5 | 7 | 10 |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| distinct locations | 13.5 | 26.2 | 34.5 | 41.6 | 49.0 |
+
+The tenth seed buys 2.2 units. Doubling to twenty seeds would buy perhaps eleven
+more for another $8. That trade is **not** taken now; if the result lands in cell 2,
+this table is what the decision to extend must be argued from.
 
 ## Labels
 
@@ -104,14 +154,33 @@ investigative arm's precision movement.
 A change to the corpus answer key, the engine, the judge model, or
 `EVAL_METRICS_VERSION`. Results across any of those boundaries do not pool.
 
-## Cost, from a real measurement not an estimate
+## Cost, from real per-case measurements
 
-The sub-file A/B's control arm was **10 seeds of this exact corpus at $18.42**. The
-new artifact-only judge pass adds roughly 5 judge calls per run (~50 total), each
-re-sending up to 64 KB of file body. **Budget ~$20.** This is disclosed before the
-spend, and it is 20× my earlier "~$1" figure — that estimate assumed the archived
-findings could be re-adjudicated from disk, and they cannot: the eval never stored
-the descriptions.
+Per-case costs are the mean over the ten archived runs, so this is measured
+arithmetic rather than a scaling guess.
+
+| plan | $/seed | 10 seeds |
+| --- | ---: | ---: |
+| full 70-case corpus | $1.84 | $18.42 |
+| 31 producing cases | $0.80 | $8.02 |
+| **seed 1 full + seeds 2-10 restricted** | — | **~$9.04** |
+
+**Budget ~$9**, down from the ~$20 first registered, at no loss of population.
+
+### Two other levers, measured and rejected
+
+- **Reordering the plausibility judge's prompt so the 64 KB file body comes first**
+  (it currently comes last, behind fields that mutate per call, so it prefix-caches
+  nothing). `reports/2026-08-07-token-levers-remaining.md` calls this "a large share
+  of the ~22% judge spend". **For this workload it is not:** across 700 archived
+  case-runs, 125 judge a single finding per file, 19 judge two, and 2 judge four. A
+  prefix cache has almost nothing to share, and reordering a prompt can move the
+  verdicts of the very instrument this study depends on. Not taken.
+- **A cheaper judge model.** It would change the instrument mid-question, and the
+  base-rate sanity check compares against an archived figure the current judge
+  produced. Not worth ~20% of $9.
+- The fix lane was checked and is already off: `fixOutcomes` is empty across all
+  700 archived case-runs. No saving available.
 
 ## What is NOT being done
 
